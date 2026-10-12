@@ -1,10 +1,12 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Web", "src\BarberSearch.Web\BarberSearch.Web.csproj", "{0B95925B-AF3C-4DF2-8901-33C3DB06B8E4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Domain", "src\BarberSearch.Domain\BarberSearch.Domain.csproj", "{AE9D8ADA-B053-41C0-A026-3319510D035B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "src\Shared\Shared.csproj", "{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Domain.UnitTests", "..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj", "{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -24,5 +26,9 @@ Global
 		{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
