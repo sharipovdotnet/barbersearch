@@ -1,4 +1,4 @@
-﻿using CSharpFunctionalExtensions;
+using CSharpFunctionalExtensions;
 using Shared;
 
 namespace BarberSearch.Domain.BarberProfiles.ValueObjects;
@@ -18,7 +18,8 @@ public class YearsOfExperience
         {
             return Error.Validation(
                 "barberProfile.yearsOfExperience",
-                $"Years of experience must be between {MinValue} and {MaxValue}, got {value}.");
+                $"Years of experience must be between {MinValue} and {MaxValue}, got {value}.",
+                nameof(value));
         }
 
         return new YearsOfExperience(value);

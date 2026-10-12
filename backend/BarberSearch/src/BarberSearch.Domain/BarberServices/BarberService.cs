@@ -1,9 +1,15 @@
-﻿using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Common;
-using BarberSearch.Domain.HairServices;
+using CSharpFunctionalExtensions;
+using Shared;
+using Entity = BarberSearch.Domain.Common.Entity;
 
 namespace BarberSearch.Domain.BarberServices;
 
+/// <summary>
+/// Услуга конкретного барбера: цена и длительность. Дочерняя сущность агрегата
+/// <see cref="BarberProfile"/>: создаётся только методами агрегата.
+/// </summary>
 public class BarberService : Entity
 {
     public Guid BarberProfileId { get; private set; }
@@ -14,25 +20,20 @@ public class BarberService : Entity
 
     public bool IsActive { get; private set; }
 
+    // Навигация внутри агрегата (ребёнок -> родитель): нужна EF Core для связи.
+    // Ссылки на HairService здесь нет — это граница другого агрегата.
     public BarberProfile BarberProfile { get; private set; } = null!;
-    public HairService HairService { get; private set; } = null!;
 
     private BarberService()
     {
     }
 
-    public BarberService(
+    private BarberService(
         Guid barberProfileId,
         Guid hairServiceId,
         decimal price,
         int durationMinutes)
     {
-        if (price < 0)
-            throw new ArgumentOutOfRangeException(nameof(price));
-
-        if (durationMinutes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(durationMinutes));
-
         BarberProfileId = barberProfileId;
         HairServiceId = hairServiceId;
         Price = price;
@@ -41,27 +42,55 @@ public class BarberService : Entity
         IsActive = true;
     }
 
-    public void UpdatePrice(decimal price)
+    /// <summary>
+    /// Создаёт услугу от имени агрегата <c>BarberProfile</c>.
+    /// </summary>
+    internal static BarberService Create(
+        Guid barberProfileId,
+        Guid hairServiceId,
+        decimal price,
+        int durationMinutes)
+        => new(barberProfileId, hairServiceId, price, durationMinutes);
+
+    public UnitResult<Failure> UpdatePrice(decimal price)
     {
-        if (price < 0)
-            throw new ArgumentOutOfRangeException(nameof(price));
+        if (DomainErrors.NegativePrice(price, "barberService.updatePrice") is { } error)
+        {
+            return DomainErrors.Fail(error);
+        }
 
         Price = price;
         MarkUpdated();
+
+        return DomainErrors.Ok();
     }
 
-    public void UpdateDuration(int durationMinutes)
+    public UnitResult<Failure> UpdateDuration(int durationMinutes)
     {
-        if (durationMinutes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(durationMinutes));
+        if (DomainErrors.InvalidDuration(durationMinutes, "barberService.updateDuration") is { } error)
+        {
+            return DomainErrors.Fail(error);
+        }
 
         DurationMinutes = durationMinutes;
         MarkUpdated();
+
+        return DomainErrors.Ok();
     }
 
-    public void Deactivate()
+    public UnitResult<Failure> Activate()
+    {
+        IsActive = true;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    public UnitResult<Failure> Deactivate()
     {
         IsActive = false;
         MarkUpdated();
+
+        return DomainErrors.Ok();
     }
 }

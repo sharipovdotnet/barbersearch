@@ -1,26 +1,34 @@
-﻿using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Common;
-using BarberSearch.Domain.Users;
 
 namespace BarberSearch.Domain.FavoriteBarbers;
 
+/// <summary>
+/// Избранный барбер пользователя. Дочерняя сущность агрегата <c>User</c>:
+/// создаётся только методами агрегата.
+/// </summary>
 public class FavoriteBarber : Entity
 {
     public Guid UserId { get; private set; }
     public Guid BarberProfileId { get; private set; }
 
-    public User User { get; private set; } = null!;
-    public BarberProfile BarberProfile { get; private set; } = null!;
+    // Навигация внутри агрегата (ребёнок -> родитель): нужна EF Core для связи.
+    // Ссылки на BarberProfile здесь нет — это граница другого агрегата.
+    public Users.User User { get; private set; } = null!;
 
     private FavoriteBarber()
     {
     }
 
-    public FavoriteBarber(
-        Guid userId,
-        Guid barberProfileId)
+    private FavoriteBarber(Guid userId, Guid barberProfileId)
     {
         UserId = userId;
         BarberProfileId = barberProfileId;
     }
+
+    /// <summary>
+    /// Создаёт запись от имени агрегата <c>User</c>.
+    /// </summary>
+    internal static FavoriteBarber Create(Guid userId, Guid barberProfileId)
+        => new(userId, barberProfileId);
 }

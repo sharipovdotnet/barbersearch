@@ -1,4 +1,4 @@
-﻿namespace BarberSearch.Domain.HairServices;
+namespace BarberSearch.Domain.HairServices;
 
 public enum ServiceCategory
 {

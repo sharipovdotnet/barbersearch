@@ -1,4 +1,4 @@
-﻿namespace Shared;
+namespace Shared;
 
 public record Error
 {
@@ -15,15 +15,18 @@ public record Error
         InvalidField = invalidField;
     }
 
-    public static Error NotFound(string? code, string message, Guid guid)
-        => new(code ?? "record.not.found", message, ErrorType.NOT_FOUND);
-    
+    /// <summary>
+    /// Ошибка «запись не найдена». Идентификатор кладётся в <see cref="InvalidField"/>.
+    /// </summary>
+    public static Error NotFound(string? code, string message, Guid? invalidField = null)
+        => new(code ?? "record.not.found", message, ErrorType.NOT_FOUND, invalidField?.ToString());
+
     public static Error Validation(string? code, string message, string? invalidField = null)
         => new(code ?? "validation.error", message, ErrorType.VALIDATION, invalidField);
-    
-    public static Error Conflict(string? code, string? message)
-        => new(code ?? "value.is.conflict", message,  ErrorType.CONFLICT);
-    
+
+    public static Error Conflict(string? code, string message)
+        => new(code ?? "value.is.conflict", message, ErrorType.CONFLICT);
+
     public static Error Failure(string? code, string message)
         => new(code ?? "failure", message, ErrorType.FAILURE);
 
@@ -36,22 +39,22 @@ public enum ErrorType
     /// Неизвестная ошибка.
     /// </summary>
     NONE,
-    
+
     /// <summary>
     /// Ошибка валидации.
     /// </summary>
     VALIDATION,
-    
+
     /// <summary>
     /// Ошибка ничего не найдено.
     /// </summary>
     NOT_FOUND,
-    
+
     /// <summary>
     /// Ошибка сервера.
     /// </summary>
     FAILURE,
-    
+
     /// <summary>
     /// Ошибка конфликт.
     /// </summary>

@@ -1,7 +1,11 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Last updated for code at commit `462f3dd0` (branch `features/issue-1`).
+> Code state: the П0–П5 domain rework is **committed** on branch `features/issue-1` (the commit
+> that carries both the domain refactor and the xunit test project; the last *pre-rework* domain
+> commit was `78a9858`, against which §3–§9 were originally verified on 2026-10-12). §9 now lists
+> what the rework closed and what is still open. The whole domain — 16 C# types — plus 2 `Shared`
+> types and 128 xunit tests were reviewed for this revision.
 
 ---
 
@@ -25,6 +29,8 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-1` (default: `main`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 128 xunit tests) |
+| Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
 > from `D:\Projects\barbersearch\backend\BarberSearch` (or higher) and git will find the root.
@@ -36,17 +42,18 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (all three projects) |
+| Target framework | `net10.0` (three projects + test project) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
-| CSharpFunctionalExtensions | `3.7.0` (`Shared` only) |
+| CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
 | Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, **no provider**) |
 | Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (**referenced, not wired up**) |
+| xunit | `2.9.2` (+ `Microsoft.NET.Test.Sdk` 17.12.0, `xunit.runner.visualstudio` 2.8.2) |
 | IDE | JetBrains Rider (`.idea/` is gitignored) |
-| Test framework | **none** |
 
-Package versions are inline in `.csproj`. There is **no** `Directory.Build.props`, `global.json`,
-`.editorconfig`, `nuget.config` or CI config.
+Package versions are inline in `.csproj`. There is still **no** `global.json`,
+`.editorconfig`, `nuget.config` or CI config, and no `Directory.Build.props` — artifacts land in
+the default `src\<project>\obj` and `bin` (see §5.2 for the one shell that cannot do this).
 
 ---
 
@@ -55,7 +62,7 @@ Package versions are inline in `.csproj`. There is **no** `Directory.Build.props
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 3 projects
+    ├── BarberSearch.sln                  ← 3 projects (the test project is NOT added yet)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -65,26 +72,28 @@ backend/                                  ← workspace root
         ├── BarberSearch.Domain/          ← BarberSearch.Domain.csproj → Shared
         │   ├── Constants.cs
         │   ├── Common/
-        │   │   ├── Entity.cs             ← base: Id, CreatedAt/UpdatedAt, MarkUpdated()
-        │   │   └── AggregateRoot.cs      ← empty marker : Entity
-        │   ├── Users/User.cs                          (AR)
-        │   ├── BarberProfiles/                        (AR)
+        │   │   ├── Entity.cs             ← base: Id (UUIDv7), CreatedAt/UpdatedAt, MarkUpdated()
+        │   │   ├── AggregateRoot.cs      ← empty marker : Entity
+        │   │   └── DomainErrors.cs       ← Collect() / Ok() / Fail() helpers
+        │   ├── Users/{User.cs, UserRole.cs}                      (AR)
+        │   ├── BarberProfiles/                                   (AR)
         │   │   ├── BarberProfile.cs
         │   │   ├── BarberProfileCreateData.cs         ← input record for Create()
         │   │   ├── BarberProfileUpdateData.cs         ← input record for UpdateProfile()
         │   │   ├── Enums/{Grade,Language,PaymentMethod}.cs
         │   │   └── ValueObjects/{DisplayName,YearsOfExperience}.cs
-        │   ├── Salons/Salon.cs                        (AR)
-        │   ├── HairServices/{HairService.cs, ServiceCategory.cs}   (AR)
-        │   ├── Specializations/Specialization.cs      (AR)
-        │   ├── Bookings/{Booking.cs, BookingStatus.cs}             (AR)
-        │   ├── Reviews/Review.cs                      (AR)
-        │   ├── PortfolioPhotos/PortfolioPhoto.cs
-        │   ├── WorkingSchedules/WorkingSchedule.cs
-        │   ├── FavoriteBarbers/FavoriteBarber.cs
-        │   ├── BarberSalons/BarberSalon.cs
-        │   ├── BarberServices/BarberService.cs
-        │   └── BarberSpecializations/BarberSpecialization.cs
+        │   ├── Salons/Salon.cs                                   (AR)
+        │   ├── HairServices/{HairService.cs, ServiceCategory.cs}  (AR)
+        │   ├── Specializations/Specialization.cs                 (AR)
+        │   ├── Bookings/{Booking.cs, BookingStatus.cs}           (AR)
+        │   ├── Reviews/Review.cs                                 (AR)
+        │   ├── PortfolioPhotos/PortfolioPhoto.cs                 (child of BarberProfile)
+        │   ├── TimeOffs/TimeOff.cs                               (child of BarberProfile)
+        │   ├── FavoriteBarbers/FavoriteBarber.cs                 (child of User)
+        │   ├── BarberSalons/BarberSalon.cs                       (child of BarberProfile)
+        │   ├── WorkingSchedules/WorkingSchedule.cs               (child of BarberSalon)
+        │   ├── BarberServices/BarberService.cs                   (child of BarberProfile)
+        │   └── BarberSpecializations/BarberSpecialization.cs     (child of BarberProfile)
         │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj (Microsoft.NET.Sdk.Web)
             ├── Program.cs                ← template minimal host: AddControllers + AddOpenApi
@@ -93,6 +102,8 @@ backend/                                  ← workspace root
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← template leftover (/weatherforecast/)
+
+backend/tests/BarberSearch.Domain.UnitTests/  ← xunit project (in the .sln)
 ```
 
 **Project dependency graph:** `Web` (nothing) · `Domain` → `Shared` · `Shared` → CSharpFunctionalExtensions.
@@ -110,55 +121,94 @@ Run from `D:\Projects\barbersearch\backend`:
 # build the whole solution
 dotnet build BarberSearch/BarberSearch.sln
 
+# run the domain tests
+dotnet test tests/BarberSearch.Domain.UnitTests
+
 # run the API (http profile → http://localhost:5243)
 dotnet run --project BarberSearch/src/BarberSearch.Web
-
-# run with https (https://localhost:7175 + http://localhost:5243)
-dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile https
 
 # restore / clean
 dotnet restore BarberSearch/BarberSearch.sln
 dotnet clean   BarberSearch/BarberSearch.sln
 ```
 
-No tests yet; once they exist: `dotnet test BarberSearch/BarberSearch.sln`.
+### 5.1 The solution file
 
-`obj/` artifacts (Debug/net10.0) from commit `462f3dd0` are present on disk; they are
-gitignored and never committed.
+`BarberSearch.sln` lists all four projects. Verify with:
 
-### Environment — what works and what does not
+```powershell
+dotnet sln BarberSearch/BarberSearch.sln list
+```
 
-**Fixed.** Every shell command used to fail with
-`SetNamedSecurityInfoW failed (Win32 5): grantWrite(D:\Projects\barbersearch\backend)`.
-Root cause: the workspace root lacked the `WRITE_OWNER` right, so DSH could not provision its
-sandbox grant. Repaired and verified (`WRITE_OWNER: false → true`). Recovery script and ACL
-backup live in `backend\acl-recovery\` (gitignored; see its `README.md` for the rollback
-command). If it recurs, run the bundled
-`diagnose-windows-sandbox-acl` skill — **never edit Windows permissions by hand.**
+Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `Shared`,
+`..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`.
 
-**Still broken: shell writes below the workspace root.** DSH grants write access with its own
-`S-1-4-…` entry on `D:\Projects\barbersearch\backend`, but that entry is **not inherited by any
-descendant** — `BarberSearch\`, `src\`, `Shared\`, `obj\` carry only the stock ACL inherited from
-`D:\Projects`. Verified: creating a file at the workspace root succeeds; creating one in
-`BarberSearch\src\Shared\` or in any `obj\` fails with *Access denied*.
+The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all four entries; switching
+them to the SDK-style `{9A19103F-…}` is a separate cleanup (§9.13).
 
-Consequences:
+### 5.2 Environment — what works and what does not
 
-- **`dotnet build` / `dotnet restore` cannot run in the agent shell** — MSBuild cannot write
-  `obj/`. The first-party `write` / `edit` tools are unaffected and work anywhere in the workspace.
-- Build outside the agent, or switch the session to full access. Do **not** attempt to work
-  around this with `icacls /reset /T` or any other recursive permission rewrite.
+**`dotnet build` and `dotnet restore` work.** The ACL problem described in earlier revisions of
+this file (the DSH `S-1-4-…` grant not being inherited below the workspace root) only applies to
+the **confined** shell. With the session's file policy at `danger-full-access` the whole tree is
+writable and both commands succeed:
 
-**No network in the confined shell.** `api.nuget.org` and `github.com` are both unreachable
-("underlying connection closed"), so restore also fails with `NU1301`. Network works only under
-an escalated full-access command — that is how the skills in §14 were installed.
+```powershell
+dotnet build BarberSearch/BarberSearch.sln     # 4 projects, 0 errors, 0 warnings
+```
 
-Other constraints:
+If the session is ever confined again, the symptom is
+`Access to the path '…\obj\…' is denied` and the workaround is to compile with `csc` straight
+into a writable folder and pass `-p:BaseIntermediateOutputPath=<writable>\obj\`.
 
-- `npm`/`npx` cannot write their default cache outside the workspace either. Redirect it:
-  `$env:npm_config_cache = '<workspace>\.npm-cache'`.
-- Any write outside `D:\Projects\barbersearch\backend` (skill root, git root, user home) requires
-  an approved escalation.
+**`dotnet test` builds but its test host dies on start-up in this harness.** The build step
+succeeds; then VSTest's `testhost` throws
+
+```
+System.ComponentModel.Win32Exception (5): Access denied.
+  at System.Diagnostics.Process.EnsureWatchingForExit()
+  at Microsoft.VisualStudio.TestPlatform.TestHost.DefaultEngineInvoker.SetParentProcessExitCallback(...)
+```
+
+`testhost` tries to open a handle to its parent process (`dotnet test` / `dotnet vstest`) to watch
+for its exit, and the harness denies that handle. It is **not** a problem with the test project:
+the same `testhost` failure happens for any project, under `dotnet test`, `dotnet vstest`, and when
+the command is launched through `Start-Process`. Run the tests from a normal developer shell (or CI)
+instead — `dotnet test` is the intended command. See §5.3 for the in-process fallback used here.
+
+**No network in the confined shell.** `api.nuget.org` is unreachable there, so restoring a *new*
+package fails. Cached packages (`~\.nuget\packages`) restore fine. `npm`/`npx` need their cache
+redirected: `$env:npm_config_cache = '<workspace>\.npm-cache'`.
+
+### 5.3 Running the tests when `dotnet test` is blocked
+
+The test host limitation in §5.2 is bypassed by running xunit **in-process**, using the runner
+utility that `xunit.runner.visualstudio` already copies into the test output. Throwaway code — the
+committed project stays a plain xunit project:
+
+```powershell
+# 1. build
+dotnet build tests/BarberSearch.Domain.UnitTests
+
+# 2. a tiny exe that uses Xunit.Runners.AssemblyRunner
+#    (references the bin folder's xunit.runner.utility.netcoreapp10.dll + xunit.abstractions.dll)
+
+# 3. run it from the test bin folder so the test assembly's dependencies resolve
+cd tests/BarberSearch.Domain.UnitTests/bin/Debug/net10.0
+dotnet exec XunitRunner.dll ./BarberSearch.Domain.UnitTests.dll
+```
+
+Result at the time of writing:
+
+```
+Discovered: 128, to run: 128
+Passed: 128, Failed: 0, Skipped: 0
+```
+
+A previous revision of this file documented an equivalent `csc`-based route (`build.ps1` +
+`TestRunner.cs` + a hand-rolled `[Test]` attribute). That scaffold is **gone**: the tests are real
+xunit `[Fact]`s, `dotnet build` compiles them, and only the runner invocation needs the §5.2
+workaround.
 
 ---
 
@@ -172,6 +222,7 @@ BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, migrations
 BarberSearch.Application    → commands/queries, handlers, DTOs, validators         [NONE]
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
+BarberSearch.Domain.UnitTests → domain invariants                                 [DONE]
 ```
 
 Dependency rule: **strictly inward**. Domain knows nothing about EF Core, ASP.NET or JSON.
@@ -185,76 +236,143 @@ Infrastructure must not leak into Domain.
 
 ```
 User (AR)
- ├─ 1..0..1 BarberProfile (AR)          User.BarberProfile
- ├─ 1..* FavoriteBarber ──► BarberProfile      (child entity)
- ├─ 1..* Booking (AR) ──► BarberProfile, BarberService
- └─ 1..* Review (AR) ──► BarberProfile   (optional BookingId)
+ ├─ 1..0..1 BarberProfile (AR)          User.BarberProfileId (Id only, no navigation)
+ ├─ 1..* FavoriteBarber                 (child; BarberProfileId is a plain Id)
+ ├─ 1..* Booking (AR)                   Booking stores UserId / BarberProfileId /
+ │                                     BarberServiceId / SalonId as Ids only
+ └─ 1..* Review (AR)                    Review stores UserId / BookingId /
+                                        BarberProfileId (derived from the booking)
 
-BarberProfile (AR)
- ├─ * PortfolioPhoto            (child, capped at Constants.MAX_PHOTOS_COUNT = 10)
- ├─ * WorkingSchedule           (child; day of week + TimeOnly)
- ├─ * BarberSalon ──► Salon            (child; IsPrimary)
- ├─ * BarberService ──► HairService    (child; Price, DurationMinutes, IsActive)
- └─ * BarberSpecialization ──► Specialization  (child)
+BarberProfile (AR)   ← owns everything below
+ ├─ * PortfolioPhoto                    (child; capped at Constants.MAX_PHOTOS_COUNT = 10)
+ ├─ * TimeOff                           (child; StartAt/EndAt, intervals must not overlap)
+ ├─ * BarberSalon ──► SalonId           (child; IsPrimary, at most one primary)
+ │    └─ * WorkingSchedule              (child; DayOfWeek + TimeOnly, or IsDayOff)
+ ├─ * BarberService ──► HairServiceId   (child; Price, DurationMinutes, IsActive)
+ └─ * BarberSpecialization ─► SpecializationId
 
-Salon (AR) ──► * BarberSalon
-HairService (AR) ──► * BarberService
-Specialization (AR) ──► * BarberSpecialization
+Salon (AR)                   — standalone, no child collection
+HairService (AR)             — standalone, no child collection
+Specialization (AR)          — standalone, no child collection
 ```
 
 AR = `AggregateRoot`, which derives from `Entity`.
 
+**Cross-aggregate navigation properties: zero.** A child entity carries a navigation only to
+its own aggregate root (`PortfolioPhoto.BarberProfile`, `TimeOff.BarberProfile`,
+`FavoriteBarber.User`, `BarberSalon.BarberProfile`, `WorkingSchedule.BarberSalon`,
+`BarberService.BarberProfile`, `BarberSpecialization.BarberProfile`). Every other relation is a
+bare `Guid` — `SalonId`, `HairServiceId`, `SpecializationId`, `UserId`, `BarberProfileId`,
+`BarberServiceId`, `BookingId`. Nothing outside an aggregate can mutate its children.
+
+**Children cannot be constructed from outside.** Every child entity has a `private`
+parameterless constructor for EF and a `private` constructor that only an `internal static
+Create(...)` factory calls. Aggregates add children through their own methods, which stamp the
+parent id themselves — so "attach someone else's child" is not expressible:
+
+| Aggregate | Methods that create children |
+|---|---|
+| `BarberProfile` | `AddPhoto(url, thumbnailUrl, description)`, `AddTimeOff(startAt, endAt, reason)`, `AddSalon(salonId, isPrimary)`, `AddService(hairServiceId, price, durationMinutes)`, `AddSpecialization(specializationId)` |
+| `User` | `AddFavorite(barberProfileId)` |
+| `BarberSalon` | `AddWorkingSchedule(dayOfWeek, start, end)`, `AddDayOff(dayOfWeek)` |
+
 ### 7.2 `Entity` / `AggregateRoot` (`Common/`)
 
-- `Guid Id { get; init; }` — created in the constructor (`Guid.NewGuid()`), i.e. **client-side, not DB-generated**.
-- `DateTimeOffset CreatedAt / UpdatedAt { get; protected set; }` — UTC, set in the ctor.
+- `Guid Id { get; private set; }` — created in the constructor as `Guid.CreateVersion7()`
+  (time-ordered UUIDv7), i.e. **client-side, not DB-generated**.
+- `DateTimeOffset CreatedAt / UpdatedAt { get; protected set; }` — one `UtcNow` read in the
+  constructor sets both, so they are exactly equal on construction.
 - `protected void MarkUpdated()` — **must** be called at the end of every mutating method.
-- `Equals/GetHashCode/==/!=` — by `GetType()` + `Id`; `Guid.Empty` never compares equal.
+- `Equals/GetHashCode/==/!=` — by `Id` only, and **not** by `GetType()`, so EF Core proxies
+  (lazy-loading / change-tracking subtypes) stay equal to the original entity. `Guid.Empty`
+  never compares equal.
 - `AggregateRoot` is an empty marker. **No domain events.**
 
-### 7.3 Invariants already enforced
+### 7.3 Invariants enforced today
 
 | Entity | Invariant |
 |---|---|
-| `DisplayName` | non-empty / not whitespace |
+| `DisplayName` | non-empty / not whitespace, ≤ 120 chars |
 | `YearsOfExperience` | `1..70` (`Constants.MIN/MAX_YEARS_OF_EXPERIENCE`) |
-| `BarberProfile.Rating` | `0..100` (`Constants.MIN/MAX_RATING`), rounded to 2 decimals |
-| `BarberProfile.PortfolioPhotos` | at most 10 items, no duplicate `Id` |
-| `Review.Rating` | `1..5` (otherwise `ArgumentOutOfRangeException`) |
-| `WorkingSchedule` | `EndTime > StartTime` |
-| `Booking` | `EndAt > StartAt`, `Price >= 0`, transitions Pending→Confirmed→Completed, cancel forbidden from Completed/Cancelled |
+| `BarberProfile.Rating` | `null` ⟺ `ReviewsCount == 0`; otherwise `1.00..5.00`, rounded to 2 decimals |
+| `BarberProfile.PortfolioPhotos` | at most 10 items, non-empty URL |
+| `BarberProfile.TimeOffs` | `EndAt > StartAt`, intervals do not overlap (touching is allowed) |
+| `BarberProfile.Salons` | unique `SalonId`; at most one `IsPrimary` |
+| `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
+| `BarberProfile.BarberSpecializations` | unique `SpecializationId` |
+| `BarberProfile.Verify()` | an inactive profile cannot be verified |
+| `User` | non-empty email containing `@`, non-empty password hash / names, known role |
+| `User.FavoriteBarbers` | unique `BarberProfileId` |
+| `User.MarkPhoneAsVerified()` | requires a phone number to be set |
+| `Salon` | non-empty name/address/city/country/time zone; latitude `[-90, 90]`, longitude `[-180, 180]` |
+| `HairService` | non-empty name, known category, duration `1..1440` |
+| `Specialization` | non-empty name |
+| `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
+| `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon |
+| `Booking` | `EndAt > StartAt`, `Price >= 0`, non-empty `IdempotencyKey` (≤128), status transitions |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 
 ### 7.4 Statuses and enums
 
-- `BookingStatus`: `Pending=1, Confirmed=2, Cancelled=3, Completed=4, NoShow=5` — **`NoShow` is unreachable**, no method sets it.
+All persisted enums have **explicit numeric values** (§10.10).
+
+- `BookingStatus`: `Pending=1, Confirmed=2, Cancelled=3, Completed=4, NoShow=5` — all reachable:
+  `Confirm` (Pending→Confirmed), `Complete` (Confirmed→Completed), `Cancel`
+  (Pending|Confirmed→Cancelled), `MarkNoShow` (Confirmed→NoShow).
 - `ServiceCategory`: `Haircut=1, Beard=2, Coloring=3, Styling=4, HairTreatment=5, Other=99`.
-- `Grade`: `None, Intern, JuniorBarber, MiddleBarber, SeniorBarber, ArtDirector, BarberSchoolTrainer, Manager, CompetitionBarber, BrandAmbassador, BarbershopOwner` — **no explicit values**.
-- `Language`: `Ru, En, De, Kg, Tj, Uz` — no explicit values.
-- `PaymentMethod`: `Cash, Card, DigitalWallet, Sbp, BankTransfer` — no explicit values.
+- `Grade`: `None=0, Intern=1 … BarbershopOwner=10`.
+- `Language`: `Ru=1, En=2, De=3, Kg=4, Tj=5, Uz=6`.
+- `PaymentMethod`: `Cash=1, Card=2, DigitalWallet=3, Sbp=4, BankTransfer=5`.
+- `UserRole`: `Customer=1, Barber=2, Admin=3`.
+- `ErrorType` (`Shared`): `NONE, VALIDATION, NOT_FOUND, FAILURE, CONFLICT`.
 
 ### 7.5 Error handling
 
 ```csharp
 // Shared/Error.cs
-Error.NotFound(string? code, string message, Guid guid)   // guid is UNUSED
+Error.NotFound(string? code, string message, Guid? invalidField = null)
 Error.Validation(string? code, string message, string? invalidField = null)
-Error.Conflict(string? code, string? message)
+Error.Conflict(string? code, string message)      // message is non-nullable
 Error.Failure(string? code, string message)
-Failure ToFailure()                                        // Error → Failure bridge
+Failure ToFailure()                                // Error -> Failure bridge
 
 // Shared/Failure.cs
-Failure : IEnumerable<Error>   // implicit from Error and Error[]
+Failure : IEnumerable<Error>                        // implicit from Error and Error[]
+Failure.Errors : IReadOnlyList<Error>               // the list is now exposed
+Failure(Error) / Failure(IEnumerable<Error>)
 enum ErrorType { NONE, VALIDATION, NOT_FOUND, FAILURE, CONFLICT }
 ```
 
-Domain signatures:
-- `Result<T, Failure>` — factories that return the created object (`BarberProfile.Create`).
-- `UnitResult<Failure>` — aggregate mutating methods.
-- Internal VOs return `Result<T, Error>`; the aggregate collects `Error`s into a `Failure`.
+**One strategy, all 16 types:** nothing in the domain throws for a business rule.
 
-**Rule:** new domain operations return `Result`/`UnitResult<Failure>` instead of throwing
-(§9.1 lists existing violations).
+- `Result<T, Failure>` — every `Create`/`CreateAsync`-shaped factory (`BarberProfile.Create`,
+  `User.Create`, `Salon.Create`, `HairService.Create`, `Specialization.Create`,
+  `Booking.Create`, `Review.Create`) and `BarberProfile.FindSalon`.
+- `UnitResult<Failure>` — every mutating method on an aggregate or child
+  (`Confirm`, `Cancel`, `Complete`, `MarkNoShow`, `Verify`, `Activate`, `Deactivate`,
+  `UpdateProfile`, `UpdateRating`, `AddX`, `RemoveX`, `Rename`, `Reorder`, …).
+- `Result<T, Error>` — internal value objects (`DisplayName.Create`,
+  `YearsOfExperience.Create`); the aggregate collects their `Error`s into a `Failure`.
+- Factories validate **all** fields and return **all** errors at once
+  (`DomainErrors.Collect()` + `new Failure(errors)`).
+
+Error codes are camelCase `{aggregate}.{method}[.{detail}]`, e.g.
+`booking.confirm.invalidStatus`, `barberProfile.addPhoto.limit`, `user.addFavorite.duplicate`.
+
+**Rating scale — settled.** `BarberProfile.Rating` is `decimal?` in `1.00..5.00`, the same scale
+as `Review.Rating` (`1..5`). `Create` sets `Rating = null` / `ReviewsCount = 0`; `UpdateRating`
+enforces "value and count move together" and treats `reviewsCount = 0` as "no reviews" (rating
+becomes `null`). There is still **no automatic recalculation** from reviews — that belongs to the
+application layer (§8).
+
+### 7.6 What the domain deliberately does *not* decide
+
+Two rules were pushed to the application layer because the aggregate cannot know them:
+
+1. **"You cannot favourite yourself"** — the domain does not know which `BarberProfile` belongs
+   to which `User`.
+2. **"No-show cannot be reported before `Booking.StartAt`"** — a time comparison against "now"
+   is an application concern; `MarkNoShow` only enforces `Confirmed → NoShow`.
 
 ---
 
@@ -262,9 +380,9 @@ Domain signatures:
 
 | Layer | Status |
 |---|---|
-| Domain (entities, VOs, invariants, errors) | ✅ complete |
+| Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
+| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
 | Domain events | ❌ absent |
-| Tests | ❌ no project |
 | Application (CQRS/handlers/DTOs/validation) | ❌ absent |
 | Infrastructure (EF Core, DbContext, migrations, DB) | ❌ absent |
 | Web (controllers, DI, error mapping, auth) | ❌ template `Program.cs` only |
@@ -275,81 +393,99 @@ Domain signatures:
 
 ## 9. Technical debt and known issues
 
-Verified against the code. **Account for this list before adding anything new.**
+### 9.1 Reworked in this revision (was: inconsistent error handling)
+15 of 16 domain types now expose `private` constructors and a `Result`-returning `Create`
+factory or aggregate-owned child factory; `BarberSalon.Create` was deleted entirely (the
+aggregate calls `BarberProfile.AddSalon`). All status transitions return `UnitResult<Failure>`.
+Nothing in `src/` throws for a business rule (`throw new` no longer occurs). **No public
+parameterless or throwing constructors remain.** §7.5 documents the strategy.
 
-### 9.1 Inconsistent error handling
-`Booking`, `Review`, `WorkingSchedule`, `BarberService` throw `ArgumentOutOfRangeException` /
-`ArgumentException` / `InvalidOperationException`, while `BarberProfile` returns
-`Result`/`UnitResult<Failure>`. Pick one strategy (returning `Result` is recommended).
+### 9.2 Reworked (was: `UpdateProfile` appended instead of replacing)
+`BarberProfile.UpdateProfile` now calls `Replace(...)` = `Clear()` + `AddRange()` for
+`_languages`, `_certificatesAndTraining`, `_achievements`, `_paymentMethods`,
+`_communicationFormat`, `_goodies`. A test calls it twice and asserts the collections stay at
+one element.
 
-### 9.2 `BarberProfile.UpdateProfile` **appends** instead of replacing
-`BarberProfile.cs:164-169` — `_languages.AddRange(...)`, `_certificatesAndTraining.AddRange(...)`,
-`_achievements`, `_paymentMethods`, `_communicationFormat`, `_goodies`.
-Calling `UpdateProfile` twice duplicates every value. Should be `Clear()` + `AddRange()`.
+### 9.3 Reworked (was: two entities had no parameterless private ctor)
+Every entity has `private X() { }`. `BarberProfile` uses an object initializer inside `Create`
+instead of an 11-parameter constructor. A test reflects over `typeof(BarberProfile)` to build one
+without a constructor call.
 
-### 9.3 `BarberProfile` is the only aggregate without a parameterless `private` ctor
-EF Core would have to bind an 11-parameter private constructor whose parameters (e.g.
-`List<Language> languages`) do not match the property types (`IReadOnlyCollection<Language>`).
-Every other entity (`User`, `Salon`, `HairService`, `Specialization`, `Booking`, `Review`,
-`PortfolioPhoto`, ...) has `private X() {}`. Check this first when configuring persistence.
+### 9.4 Reworked (was: a barber could set their own `Grade`)
+`Grade` is gone from `BarberProfileUpdateData`. It changes only through
+`BarberProfile.ChangeGrade(Grade)`, meant for the administrative scenario; the value is checked
+with `Enum.IsDefined`.
 
-### 9.4 `UpdateProfile` lets a barber set their own `Grade`
-`BarberProfile.cs:161` — `Grade = updateData.Grade;` with no check. This field should change
-only through an administrative operation.
+### 9.5 Reworked (was: rating scale conflict)
+See §7.5. `Constants.MIN_RATING = 1m`, `MAX_RATING = 5m`; `Create` writes `null`; `UpdateRating`
+keeps value and count consistent. The 0..100 scale is now purely a presentation concern.
 
-### 9.5 Rating scale conflict
-`Constants.MIN_RATING = 0 / MAX_RATING = 100` (+ 2-decimal rounding) for `BarberProfile.Rating`,
-but `Review.Rating` is an integer `1..5`. Decide on one scale and on the aggregation rule.
-There is no recalculation of `Rating`/`ReviewsCount` from reviews — only the manual
-`UpdateRating(decimal, int)`.
+### 9.6 Reworked (was: `AddItem` did not verify ownership)
+Child constructors are `private` and only reachable through `internal static Create(...)`, which
+the aggregate calls with its own `Id`. Ownership is structurally guaranteed instead of checked.
 
-### 9.6 `AddItem`/`AddPhoto` do not verify aggregate ownership
-`AddSalon`, `AddService`, `AddSpecialization`, `AddWorkingSchedule` never check
-`item.BarberProfileId == this.Id` — a foreign entity can be attached.
+### 9.7 Reworked (was: `WorkingSchedule` was not protected against duplicates)
+`WorkingSchedule` now hangs off `BarberSalon` (`BarberSalonId`), and
+`BarberSalon.AddWorkingSchedule`/`AddDayOff` reject a second entry for the same `DayOfWeek`
+(`barberSalon.addWorkingSchedule.duplicateDay`). A reflection test asserts `WorkingSchedules`,
+`AddWorkingSchedule` and `RemoveWorkingSchedule` no longer exist on `BarberProfile`.
 
-### 9.7 `WorkingSchedule` is not protected against per-day duplicates
-Deduplication is by `Id` (Guid) only, so 7 records for the same `DayOfWeek` are easy to create.
-Worse, the schedule hangs off the barber, **not off the (barber, salon) pair** — schedules are
-indistinguishable when a barber works in several salons. Needs a `BarberSalonId` (or similar).
+### 9.8 Reworked (was: `IsPrimary` had no invariant)
+`BarberProfile.AddSalon(id, isPrimary: true)` and `BarberProfile.SetPrimarySalon(salonId)` both
+clear the flag on every other salon, so at most one is primary. Still worth a filtered unique
+index in the DB (`UNIQUE (barber_profile_id) WHERE is_primary`).
 
-### 9.8 `BarberSalon.IsPrimary` has no invariant
-Nothing prevents two salons from being primary at once.
+### 9.9 Reworked (was: methods that could not fail)
+`ChangeState` is gone. `Verify()` now fails on an inactive profile
+(`barberProfile.verify.inactive`); `Unverify()`, `Activate()`, `Deactivate()`,
+`Publish()`/`Hide()`, `Activate`/`Deactivate` on `Salon`/`HairService`/`Specialization`/
+`BarberService`/`User` are explicitly idempotent (early-return success) — no misleading failure
+branch.
 
-### 9.9 Methods that cannot fail
-`BarberProfile.Verify()/Activate()/Deactivate()` go through `ChangeState`, which **always**
-returns `UnitResult.Success<Failure>()`. The signature is misleading — either drop `Result` or
-add real checks (e.g. forbid verifying an inactive profile).
+### 9.10 Reworked (was: dead state)
+- `User.MarkPhoneAsVerified()` added (requires a phone number).
+- `UserRole { Customer, Barber, Admin }` added, with `User.ChangeRole` and
+  `User.LinkBarberProfile`; `User.BarberProfileId` replaces the `User.BarberProfile` navigation.
+- `Salon`, `HairService`, `Specialization` all got `Activate()`/`Deactivate()`;
+  `Specialization` also got `Rename(name, description)`.
+- `BarberService.Activate()` added.
+- `BookingStatus.NoShow` is reachable via `Booking.MarkNoShow()`.
+- `HairService.DefaultDurationMinutes` is validated `1..1440` in both `Create` and `Update`.
+- `User.AddFavorite`/`RemoveFavorite` added (dedupe by `BarberProfileId`).
+- `PortfolioPhoto.Reorder(sortOrder)` (plus `PortfolioPhoto.UpdateDescription`) and
+  `BarberProfile.ReorderPhoto(photoId, sortOrder)` added.
 
-### 9.10 Dead state
-- `User.IsPhoneVerified` — no `MarkPhoneAsVerified()` method.
-- `Salon.IsActive`, `HairService.IsActive`, `Specialization.IsActive` — set to `true` in the
-  constructor and never changed afterwards.
-- `BookingStatus.NoShow` — no transition into that status.
-- `HairService.DefaultDurationMinutes` is unvalidated (`<= 0` passes).
+### 9.11 Reworked (was: `Entity.Equals` used `GetType()`)
+Equality and `GetHashCode` are now keyed on `Id` alone, so EF Core proxies compare equal to the
+original entity. A test builds a derived type with the same id and asserts equality.
 
-### 9.11 `Entity.Equals` uses `GetType()`
-With EF Core lazy-loading/change-tracking proxies, the proxy type will not equal the original
-type, breaking entity comparison. Keep this in mind during EF setup.
+### 9.12 Reworked (was: `Shared` defects)
+- `Error.NotFound` no longer has an unused `Guid guid`: it takes
+  `Guid? invalidField = null` and actually stores it.
+- `Error.Conflict(string? code, string message)` — `message` is non-nullable.
+- `Failure` exposes `IReadOnlyList<Error> Errors` in addition to `IEnumerable<Error>`.
+- `Failure` gained a single-`Error` constructor.
+- `Error` remains a `record` with a private constructor and get-only properties, so `with` is
+  still unavailable externally (acceptable for this DTO-like type).
 
-### 9.12 `Shared` defects
-- `Error.NotFound(string? code, string message, Guid guid)` — the `guid` parameter is unused.
-- `Error` is a `record` with a private constructor and get-only properties — `with` is
-  unavailable externally, so the `record` value is close to nil (fine for a DTO-like type).
-- `Failure` exposes no error list, only `IEnumerable<Error>`; there is no `Errors` property.
-
-### 9.13 Minor defects
-- `DisplayName.cs:18` — redundant `$` on a string with no interpolation.
-- `BarberProfileCreateData.Language` / `BarberProfileUpdateData.Language` — singular name for a
-  `List<Language>` (while `PaymentMethods` next to it is plural). Naming inconsistency.
-- `BarberProfileUpdateData.Bio` is a non-nullable `string` although the property is `string?`;
-  it cannot be cleared.
-- `Grade`, `Language`, `PaymentMethod` have no explicit numeric values (risky for DB storage).
-- `Salon.Latitude/Longitude` are `decimal`; geo search and PostGIS/Npgsql usually want `double`
-  or an explicit `numeric` mapping. `double` is probably the right call here.
+### 9.13 Still open (minor)
+- **`dotnet test` cannot start VSTest's `testhost` in this harness** — see §5.2 for the exact
+  error and §5.3 for the in-process workaround. Nothing in the repository needs to change; it
+  works from a normal developer shell or CI.
+- `Salon.Name` has no length cap (only emptiness is checked); the other string fields are the same.
+- `Review` keeps a denormalized `BarberProfileId` (derived from the booking in `Create`), which
+  must stay in sync if a booking's barber could ever change — it cannot today.
+- `BarberProfileUpdateData` / `BarberProfileCreateData` collections are non-nullable but `Create`
+  still tolerates `null` (`?? []`), so a deserializer passing `null` will not fail loudly.
 - `.sln` uses the legacy project type GUID `{FAE04EC0-...}` instead of the SDK-style `{9A19103F-...}`.
 - `BarberSearch.Web.http` still contains `/weatherforecast/` — `dotnet new` leftover.
 - `Program.cs` calls `UseHttpsRedirection()` while the app is launched with the `http` profile
   ("Failed to determine the https port for redirect" warning).
+- `Review` has no "one review per booking" invariant — that needs a unique index (or a check in
+  the application layer).
+- Test coverage follows the reworked invariants; the aggregate boundaries are partly asserted by
+  reflection (`BarberSalonTests.Schedule_IsNotExposedOnTheBarberProfile`). There is no test yet
+  that walks every entity and asserts "private parameterless ctor + no public ctor".
 
 ---
 
@@ -359,15 +495,17 @@ type, breaking entity comparison. Keep this in mind during EF setup.
    File-scoped namespaces only: `namespace X;`.
 2. **One public type per file**, file name = type name. Folders are plural
    (`Bookings/Booking.cs`); utility folders are `Common/`, `Enums/`, `ValueObjects/`.
-3. **Encapsulation:** all properties `{ get; private set; }` (or `init` for `Id`).
+3. **Encapsulation:** all properties `{ get; private set; }`.
    Collections: `private readonly List<T> _items = [];` plus a public
    `IReadOnlyCollection<T> Items => _items.AsReadOnly();`. Never expose `List<T>`.
 4. **Every mutating method ends with `MarkUpdated()`** (constructors excluded).
-5. **A parameterless private constructor** on every entity (for EF materialization).
-6. **Validate in the factory, not the constructor.** Public static factories (`Create`) return
-   `Result<T, Failure>`; multiple errors are collected into a `Failure`.
+5. **A parameterless private constructor** on every entity (for EF materialization), plus a
+   private constructor that only an `internal static Create(...)` factory calls.
+6. **Validate in the factory, not the constructor.** Factories return `Result<T, Failure>` and
+   collect every error via `DomainErrors.Collect()` + `new Failure(errors)`.
+   Mutating methods return `UnitResult<Failure>`. Nothing throws for a business rule.
 7. **Error codes** — camelCase, format `{aggregate}.{method}[.{detail}]`, in English:
-   `barberProfile.addPhoto.duplicate`, `barberProfile.removePhoto.notFound`.
+   `barberProfile.addPhoto.duplicate`, `booking.confirm.invalidStatus`.
    Messages are in English too.
 8. **Comments and XML docs are in Russian** (matching the existing code).
 9. **Domain constants** live in `BarberSearch.Domain.Constants`, named `SCREAMING_SNAKE_CASE`.
@@ -376,6 +514,10 @@ type, breaking entity comparison. Keep this in mind during EF setup.
 11. **Dates/times are `DateTimeOffset` (UTC) only**, plus `TimeOnly` for times of day.
 12. `ImplicitUsings` covers most cases, but `System.Collections` is **not** included
     (see `Failure.cs`) — add `using System.Collections;` explicitly when needed.
+13. **`CSharpFunctionalExtensions.Entity` collides with `BarberSearch.Domain.Common.Entity`.**
+    In any file that also uses the functional extensions namespace, add
+    `using Entity = BarberSearch.Domain.Common.Entity;` (see `BarberSalon.cs`,
+    `WorkingSchedule.cs`, `TimeOff.cs`, `BarberService.cs`, `PortfolioPhoto.cs`).
 
 ---
 
@@ -383,14 +525,16 @@ type, breaking entity comparison. Keep this in mind during EF setup.
 
 Suggested order:
 
-1. **Repo foundation:** `.editorconfig` with analyzer rules, `Directory.Build.props` (shared
+1. **Commit the domain rework** — done; the tests are in the `.sln` and `dotnet test` is the
+   intended command (§5.2 explains the harness limitation).
+2. **Repo foundation:** `.editorconfig` with analyzer rules, `Directory.Build.props` (shared
    `TargetFramework`, `Nullable`, `TreatWarningsAsErrors`, central package management via
    `ManagePackageVersionsCentrally`), `global.json`, `README.md`.
-2. **Stabilize the domain:** close §9.1–9.13 (§9.2, 9.3, 9.5, 9.7 first).
-3. **Domain tests:** `tests/BarberSearch.Domain.UnitTests` (xUnit + FluentAssertions) covering
-   `BarberProfile`/`Booking` invariants, the VOs and `Failure` edge cases.
+3. **Extend the tests** to the DB-unique rules the domain cannot express (§9.13), and add a
+   reflection test that every entity has a private parameterless ctor and no public one.
 4. **Application:** `BarberSearch.Application` project — commands/queries, handlers, DTOs,
-   validators; `IApplicationDbContext` / repository abstractions are declared here.
+   validators; `IApplicationDbContext` / repository abstractions are declared here. This is
+   where review→rating recalculation and the two rules in §7.6 belong.
 5. **Infrastructure:** `BarberSearch.Infrastructure` — EF Core + Npgsql, `ApplicationDbContext`,
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
 6. **Web:** add `ProjectReference`s to Domain/Application/Infrastructure, controllers in
@@ -404,13 +548,18 @@ Suggested order:
 ## 12. Open questions (need an owner decision)
 
 1. **Database:** PostgreSQL (Npgsql) is the assumption; confirm. Is geo search (PostGIS) needed?
-2. **Rating scale:** `0..100` or `1..5`? How is an aggregate barber rating computed?
+2. **Rating aggregation:** when is `BarberProfile.Rating`/`ReviewsCount` recalculated — on review
+   publish, on hide, or on a schedule? (The scale itself is settled: 1.00..5.00.)
 3. **API style:** controllers (the `Controllers/` folder is declared and `AddControllers()` is
    called) — confirm we are not moving to minimal APIs.
 4. **CQRS:** separate read models, or just handlers over a single DbContext?
-5. **Auth:** JWT, roles (`User` / `Barber` / `Admin`), and who grants `Grade` and `IsVerified`?
+5. **Auth:** JWT, roles (`User` / `Barber` / `Admin` — `UserRole` now exists), and who grants
+   `Grade` and `IsVerified`?
 6. **Domain events:** introduce an event-collecting `AggregateRoot`, or skip them?
-7. **Multi-salon:** is schedule/pricing per barber or per (barber, salon) pair? (see §9.7)
+7. **Multi-salon** — **decided 2026-10-12 and now implemented:** the schedule belongs to the
+   `(barber, salon)` pair, so `WorkingSchedule` hangs off `BarberSalon` (keyed by
+   `BarberSalonId`); `Booking` carries a `SalonId`; `WorkingSchedule` enforces one entry per
+   `(BarberSalonId, DayOfWeek)`.
 
 ---
 
@@ -418,10 +567,12 @@ Suggested order:
 
 - Before touching the domain, re-check §7 (invariants) and §10 (conventions).
 - Do not break `Shared` public signatures without need: the whole domain depends on them.
-- Cover new domain logic with tests (once the test project exists).
+- Cover new domain logic with tests in `tests/BarberSearch.Domain.UnitTests`.
 - Commits/branches follow the `features/issue-N` scheme (already in use).
-- When adding an entity: `Entity`/`AggregateRoot` → private ctor → `Create` factory returning
-  `Result<T, Failure>` → mutating methods with `MarkUpdated()` → a VO for any non-trivial primitive.
+- When adding an entity: `Entity`/`AggregateRoot` → private parameterless ctor → private ctor +
+  `internal static Create` (children) or `public static Create` returning `Result<T, Failure>`
+  (aggregate roots) → mutating methods returning `UnitResult<Failure>` with `MarkUpdated()` →
+  a VO for any non-trivial primitive.
 - If this file disagrees with the code, **trust the code** and update `AGENT.md`.
 
 ---
@@ -477,7 +628,7 @@ Location: `D:\Projects\barbersearch\.agents\skills\` (git repo root, shared with
 | 1 | `aspnet-core` | `openai/skills` (official, `.curated/`) | The only official ASP.NET Core skill. Covers `Program.cs`, DI, middleware, EF Core, auth, integration tests via `WebApplicationFactory`; pulls `references/*` on demand |
 | 1 | `supabase-postgres-best-practices` | `supabase/agent-skills` (official, MIT) | General Postgres rules in 8 impact-ordered categories: query performance, connections, schema, locking, monitoring. **Not** Supabase-specific despite the name |
 | 2 | `domain-modeling` | `mattpocock/skills` | Maintains `GLOSSARY.md` + `docs/adr/` — directly addresses §12 |
-| 2 | `test-driven-development` | `obra/superpowers` | There is no test project yet; this enforces the red→green→refactor loop |
+| 2 | `test-driven-development` | `obra/superpowers` | Enforces the red→green→refactor loop |
 | 2 | `verification-before-completion` | `obra/superpowers` | Blocks "done" claims that were never actually run |
 | 3 | `systematic-debugging` | `obra/superpowers` | Hypothesis-driven debugging instead of random edits |
 
@@ -485,6 +636,10 @@ Location: `D:\Projects\barbersearch\.agents\skills\` (git repo root, shared with
 primary flow sends code diffs to the CodeRabbit API, so source leaves the perimeter. Re-add it
 only after an explicit decision about sending code to a third party. It was also the only skill
 flagged `Warn` by an external audit (Snyk; Gen Agent Trust Hub and Socket passed).
+
+**`diagnose-windows-sandbox-acl`** appears in the session catalog but **is not installed** in
+`.agents/skills` — loading it fails. Do not rely on it; §5.2 is the current record of the ACL
+situation.
 
 Every file in that directory was audited on 2026-10-12. **No malicious code, no prompt injection,
 no credential handling, no install commands, no hidden payloads** (no alternate data streams,
@@ -515,9 +670,7 @@ superuser-only and globally persistent, so keep it out of migrations.
 4. Before adding a skill, check its security audit on skills.sh (each lists Pass/Warn from
    Gen Agent Trust Hub, Socket and Snyk). Unaudited third-party skills are instructions you are
    inviting into the agent context.
-5. Read `.agents/skills/README.md` → "Known caveats" before relying on a skill. It records the
-   2026-10-12 audit and the places where a skill behaves in ways that will surprise you
-   (notably the scope override in `test-driven-development`).
+5. Read `.agents/skills/README.md` → "Known caveats" before relying on a skill.
 
 ### 14.4 What no skill covers — we own these manually
 
@@ -543,35 +696,38 @@ Ordered by impact on this domain, not by how interesting the work is.
 
 1. **Search** — `GET /api/barbers?city=&specialization=&service=&date=` — read-heavy, the bulk of
    all traffic, fired on every filter change.
-2. **Slot lookup** — `GET /api/barbers/{id}/slots?date=&serviceId=` — computed from
-   `WorkingSchedule` minus existing `Booking` rows, per barber per day.
+2. **Slot lookup** — `GET /api/barbers/{id}/slots?date=&serviceId=&salonId=` — computed from
+   `WorkingSchedule` (now per salon) and `TimeOff`, minus existing `Booking` rows.
 3. **Booking create** — `POST /api/bookings` — low volume, **highest contention**, and the only
    place on the hot path where correctness under concurrency is at stake.
 
 ### 15.2 Schema and indexes — before writing any query code
 
-**Blocking prerequisite:** `BarberProfile` has no parameterless private constructor (§9.3), so
-EF Core cannot materialize it. Fix that first or none of the below runs.
+EF Core materialization no longer blocks the first migration: every entity has a parameterless
+private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 
 | Table | Index | Why |
 |---|---|---|
-| `bookings` | `(barber_profile_id, start_at) WHERE status IN (1,2)` — partial | The slot query is a range scan `start_at >= day AND start_at < day+1`. Cancelled(3)/Completed(4) never block a slot, so excluding them keeps the index small and hot |
+| `bookings` | `(barber_profile_id, start_at) WHERE status IN (1,2)` — partial | The slot query is a range scan `start_at >= day AND start_at < day+1`. Cancelled(3)/Completed(4)/NoShow(5) never block a slot, so excluding them keeps the index small and hot |
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
-| `working_schedules` | `UNIQUE (barber_profile_id, day_of_week)` | §9.7 — today only `Id` is deduped, so seven rows for one weekday are possible |
+| `bookings` | `UNIQUE (idempotency_key)` per user (or global) | Mobile clients retry; a retry must not create a second booking. `IdempotencyKey` now exists on the entity |
+| `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
+| `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
+| `time_offs` | `(barber_profile_id, start_at)` | Vacation lookup during slot computation |
+| `barber_salons` | `UNIQUE (barber_profile_id) WHERE is_primary` | Enforces the "one primary salon" invariant at the DB level too |
 | `barber_specializations` | `(specialization_id, barber_profile_id)` | Filter column first: search starts from the filter, not the barber |
 | `barber_services` | `(hair_service_id, barber_profile_id)` and `(barber_profile_id)` | The same join traversed in both directions |
+| `reviews` | `UNIQUE (booking_id)` | One review per booking (nothing in the domain prevents a second one today) |
 | `salons` | `(city, is_active)` | City filter |
-| `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. **Requires changing `Latitude`/`Longitude` off `decimal`** (§9.13) and adding `Npgsql.NetTopologySuite` |
-| `barber_profiles` | `(is_active, is_verified, rating DESC)` | Default listing order |
+| `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
+| `barber_profiles` | `(is_active, is_verified, rating DESC)` | Default listing order. `rating` is nullable now — decide where "no reviews" sorts |
 
-**Primary keys:** `Entity.Id` is `Guid.NewGuid()` (`Entity.cs:12`) — random values insert in
-random btree order, causing page splits and index bloat once the table is large. The target is
-`net10.0`, so `Guid.CreateVersion7()` (time-ordered, .NET 9+) is available. **Switch before the
-first million rows**; migrating later means rewriting every index and foreign key.
+**Primary keys:** `Entity.Id` is `Guid.CreateVersion7()` (`Entity.cs`) — time-ordered, so inserts
+append to the btree instead of splitting pages.
 
 **Denormalization already present:** `BarberProfile.Rating` and `ReviewsCount` are stored, so
-search never aggregates `reviews`. Keep them in sync on review publish/hide — and settle the
-scale conflict in §9.5 before relying on them.
+search never aggregates `reviews`. Keep them in sync on review publish/hide via the application
+layer (§12.2). The scale is settled: `1.00..5.00`, `null` = no reviews.
 
 ### 15.3 Connection pooling
 
@@ -582,7 +738,7 @@ scale conflict in §9.5 before relying on them.
   pooling breaks session state and server-side prepared statements — set Npgsql `Max Auto Prepare=0`
   or use PgBouncer ≥ 1.21 with `max_prepared_statements`.
 - `AddDbContextPool<AppDbContext>` reuses context instances. It requires zero per-request state on
-  the context, and it interacts badly with the materialization problems in §9.3.
+  the context.
 - Keep the entire DB path `async`. A single sync `.Result`/`.Wait()` under load starves the thread
   pool, which presents as "the database is slow" while the database is idle.
 - Prefer built-in `AddRateLimiter`, `AddOutputCache`, health checks and ProblemDetails
@@ -594,9 +750,9 @@ Cache read paths only. Never cache the booking write.
 
 | What | Key | TTL | Invalidate on |
 |---|---|---|---|
-| Free slots | `slots:{barberId}:{date}:{serviceId}` | 30–60 s | booking created / cancelled / confirmed for that barber+date |
-| Search page | `search:{city}:{spec}:{service}:{page}` | 1–5 min | barber activated / deactivated / verified |
-| Barber card | `barber:{id}` | 5–10 min | profile updated |
+| Free slots | `slots:{barberId}:{salonId}:{date}:{serviceId}` | 30–60 s | booking created / cancelled / confirmed for that barber+salon+date |
+| Search page | `search:{city}:{spec}:{service}:{page}` | 1–5 min | barber activated / deactivated / verified, salon deactivated |
+| Barber card | `barber:{id}` | 5–10 min | profile updated, grade changed, review published/hidden |
 
 - `IMemoryCache` is wrong the moment there is more than one instance — go straight to
   `IDistributedCache` (Redis) when scaling out.
@@ -619,8 +775,8 @@ Choose one, and know why:
 
 Also required for the write path:
 
-- **Idempotency key** on booking create. Mobile clients retry on flaky networks; without a key a
-  retry silently creates a second booking.
+- **Idempotency key** on booking create — the column exists on `Booking` now; add the unique index
+  and the "return the existing booking" handler.
 - Set the isolation level deliberately (`ReadCommitted` is enough with option 1), not accidentally.
 
 ### 15.6 EF Core query hygiene
@@ -630,7 +786,7 @@ Also required for the write path:
   collections — that is a cartesian explosion, and it is the classic way this exact model dies.
 - `AsSplitQuery()` where collection includes are genuinely unavoidable.
 - **Keyset pagination** (cursor over `(rating, id)`), never `OFFSET` — deep pages degrade linearly
-  and the search UI invites them.
+  and the search UI invites them. `rating` is nullable, so decide the null ordering explicitly.
 - `EF.CompileAsyncQuery` for search and slot queries; they run thousands of times a minute.
 - Count queries in development and fail loudly past a threshold. N+1 in this model is invisible
   until production traffic.
@@ -658,10 +814,13 @@ Also required for the write path:
 
 ### 15.9 Order of operations
 
-1. Fix §9.3 (EF materialization) and §9.5 (rating scale) — both gate everything downstream.
-2. Switch `Entity.Id` to UUIDv7, while the tables are still empty.
-3. First migration: schema, indexes, exclusion constraint, `btree_gist`.
-4. Booking under contention + idempotency — correctness before speed.
+1. **Commit the domain rework** — the tests are already in the `.sln`, so `dotnet test`
+   `BarberSearch/BarberSearch.sln` is the first thing to run from a normal shell; it has not run
+   yet (§9.13).
+2. First migration: schema, indexes, exclusion constraint, `btree_gist`, the `idempotency_key`
+   unique index, the filtered unique index on primary salons.
+3. Booking under contention + idempotency — correctness before speed.
+4. Review → rating recalculation in the application layer (§12.2).
 5. Load test at realistic volume, measure, **then** cache.
 6. Observability last, once there is something worth observing.
 
