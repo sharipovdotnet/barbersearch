@@ -1,0 +1,19 @@
+# Repository-wide ignores.
+# The .NET-specific rules (bin/, obj/, .idea/) live in BarberSearch/.gitignore.
+
+# ACL recovery artifacts written by the DSH sandbox repair on 2026-10-12.
+# They contain the pre-repair permission backup and the rollback script.
+# Keep them on disk until the workspace permission fix is confirmed stable, but never commit.
+acl-recovery/
+
+# Local tool caches (created when the agent shell has to keep caches inside the workspace)
+.npm-cache/
+.nuget-packages/
+.dotnet-home/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.user
+*.suo
+.vs/
