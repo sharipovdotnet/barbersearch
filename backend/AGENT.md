@@ -480,7 +480,29 @@ Location: `D:\Projects\barbersearch\.agents\skills\` (git repo root, shared with
 | 2 | `test-driven-development` | `obra/superpowers` | There is no test project yet; this enforces the red→green→refactor loop |
 | 2 | `verification-before-completion` | `obra/superpowers` | Blocks "done" claims that were never actually run |
 | 3 | `systematic-debugging` | `obra/superpowers` | Hypothesis-driven debugging instead of random edits |
-| 3 | `code-review` | `coderabbitai/skills` | Review pass on PRs. Its primary flow drives the **CodeRabbit CLI**, which needs separate auth; the generic "review this" trigger works without it |
+
+`code-review` (`coderabbitai/skills`) was installed and then **removed on 2026-10-12** — its
+primary flow sends code diffs to the CodeRabbit API, so source leaves the perimeter. Re-add it
+only after an explicit decision about sending code to a third party. It was also the only skill
+flagged `Warn` by an external audit (Snyk; Gen Agent Trust Hub and Socket passed).
+
+Every file in that directory was audited on 2026-10-12. **No malicious code, no prompt injection,
+no credential handling, no install commands, no hidden payloads** (no alternate data streams,
+hidden attributes, zero-width/bidi characters or encoded blobs); all external links resolve to
+documentation domains. The audit did surface four behavioural caveats — recorded in
+`.agents/skills/README.md` under "Known caveats", because an agent that follows a skill literally
+will hit them. The two that touch this project directly:
+
+- `test-driven-development` (`SKILL.md:185-193`) states that *"a scope statement in your task
+  bounds the deliverable, not your verification"* — a one-file change will trigger a whole-suite
+  run and a report of unrelated failures. Intentional upstream, not a defect.
+- `supabase-postgres-best-practices` (`references/security-rls-basics.md:29-31`) labels an
+  insecure RLS policy as `Correct`: the tenant id comes from a **client-settable** GUC, so any
+  role can impersonate another tenant. **Never copy that pattern**; the same file shows the
+  correct `auth.uid()` form at line 47.
+
+Same file, `references/conn-idle-timeout.md` and `conn-limits.md`, teaches `alter system set` —
+superuser-only and globally persistent, so keep it out of migrations.
 
 ### 14.3 Rules of engagement
 
@@ -493,6 +515,9 @@ Location: `D:\Projects\barbersearch\.agents\skills\` (git repo root, shared with
 4. Before adding a skill, check its security audit on skills.sh (each lists Pass/Warn from
    Gen Agent Trust Hub, Socket and Snyk). Unaudited third-party skills are instructions you are
    inviting into the agent context.
+5. Read `.agents/skills/README.md` → "Known caveats" before relying on a skill. It records the
+   2026-10-12 audit and the places where a skill behaves in ways that will surprise you
+   (notably the scope override in `test-driven-development`).
 
 ### 14.4 What no skill covers — we own these manually
 

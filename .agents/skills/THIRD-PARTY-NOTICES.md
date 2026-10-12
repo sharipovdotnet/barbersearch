@@ -11,7 +11,9 @@ redistributed here unmodified, apart from this directory's own documentation fil
 | `test-driven-development` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
 | `verification-before-completion` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
 | `systematic-debugging` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
-| `code-review` | [coderabbitai/skills](https://github.com/coderabbitai/skills) | MIT | © 2026 CodeRabbit AI |
+
+`code-review` (coderabbitai/skills) was installed on 2026-10-12 and removed the same day — see
+"Removed after the audit" in `README.md`. No part of it remains in this directory.
 
 ---
 
@@ -36,7 +38,6 @@ The following copyright notices apply to the MIT-licensed skills listed above:
 Copyright (c) 2026 Supabase
 Copyright (c) 2026 Matt Pocock
 Copyright (c) 2025 Jesse Vincent
-Copyright (c) 2026 CodeRabbit AI
 ```
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
