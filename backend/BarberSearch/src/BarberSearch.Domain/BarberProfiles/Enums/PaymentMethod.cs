@@ -2,5 +2,9 @@
 
 public enum PaymentMethod
 {
-    
+    Cash,
+    Card,
+    DigitalWallet,
+    Sbp,
+    BankTransfer
 }

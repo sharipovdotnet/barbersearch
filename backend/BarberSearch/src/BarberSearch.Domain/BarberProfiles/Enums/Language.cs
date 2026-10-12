@@ -2,5 +2,11 @@
 
 public enum Language
 {
+    Ru,
+    En,
+    De,
+    Kg,
+    Tj,
+    Uz
     
 }

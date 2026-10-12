@@ -1,6 +1,5 @@
 ﻿namespace BarberSearch.Domain.Common;
 
-public class AggregateRoot
+public abstract class AggregateRoot : Entity
 {
-    
 }

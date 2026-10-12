@@ -1,15 +1,16 @@
-﻿namespace BarberSearch.Domain.BarberProfiles;
+﻿using BarberSearch.Domain.BarberProfiles.Enums;
 
-public record BarberProfileCreationData(
+namespace BarberSearch.Domain.BarberProfiles;
+
+public record BarberProfileCreateData(
     Guid UserId,
     string DisplayName,
     int YearsOfExperience,
-    string? Status,
     string? Bio,
-    string? Language,
-    string? CertificatesAndTraining,
-    string? Achievements,
-    string? PaymentMethods,
-    string? CommunicationFormat,
-    string? Goodies,
+    List<Language> Language,
+    List<string>? CertificatesAndTraining,
+    List<string>? Achievements,
+    List<PaymentMethod> PaymentMethods,
+    List<string>? CommunicationFormat,
+    List<string>? Goodies,
     string? LatePolicy);

@@ -1,7 +1,7 @@
 ﻿using CSharpFunctionalExtensions;
 using Shared;
 
-namespace BarberSearch.Domain.Shared.ValueObject;
+namespace BarberSearch.Domain.BarberProfiles.ValueObjects;
 
 public class DisplayName
 {

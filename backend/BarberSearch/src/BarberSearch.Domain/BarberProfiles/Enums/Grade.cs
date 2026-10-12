@@ -1,6 +1,6 @@
 ﻿namespace BarberSearch.Domain.BarberProfiles.Enums;
 
-public enum Status
+public enum Grade
 {
     None,
     Intern,
