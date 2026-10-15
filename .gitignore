@@ -1,0 +1,25 @@
+# Repository-wide ignores.
+# The .NET-specific rules (bin/, obj/, .idea/) live in BarberSearch/.gitignore.
+
+# ACL recovery artifacts written by the DSH sandbox repair on 2026-10-12.
+# They hold the pre-repair permission backup and the rollback script for the workspace root.
+# Pattern has no inner slash, so it matches at any depth. Keep the files until the workspace
+# permission fix is confirmed stable, but never commit them.
+acl-recovery/
+
+# Local tool caches (created when the agent shell has to keep caches inside the workspace)
+.npm-cache/
+.nuget-packages/
+.dotnet-home/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.user
+*.suo
+.vs/
+
+# .NET build output. BarberSearch/.gitignore covers only its own subtree, so the
+# test project under backend/tests/ needs the rules at the repository root.
+[Bb]in/
+[Oo]bj/
