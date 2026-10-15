@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using BarberSearch.Domain.Users;
 using Xunit;
 

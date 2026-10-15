@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using BarberSearch.Domain.BarberProfiles.Enums;
 
 namespace BarberSearch.Domain.BarberProfiles;

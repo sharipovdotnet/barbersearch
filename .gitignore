@@ -18,3 +18,8 @@ Thumbs.db
 *.user
 *.suo
 .vs/
+
+# .NET build output. BarberSearch/.gitignore covers only its own subtree, so the
+# test project under backend/tests/ needs the rules at the repository root.
+[Bb]in/
+[Oo]bj/

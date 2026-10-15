@@ -1,7 +1,5 @@
-using BarberSearch.Domain.BarberProfiles;
-using BarberSearch.Domain.BarberServices;
+using System;
 using BarberSearch.Domain.Common;
-using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
 

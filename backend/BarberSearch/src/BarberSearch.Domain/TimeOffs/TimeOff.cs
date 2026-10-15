@@ -1,7 +1,4 @@
-using BarberSearch.Domain.Common;
-using CSharpFunctionalExtensions;
-using Shared;
-using Entity = BarberSearch.Domain.Common.Entity;
+using System;
 
 namespace BarberSearch.Domain.TimeOffs;
 

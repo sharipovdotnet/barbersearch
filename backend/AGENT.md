@@ -46,7 +46,8 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
-| Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, **no provider**) |
+| Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, on Web; the provider now lives in Infrastructure) |
+| Npgsql.EntityFrameworkCore.PostgreSQL | `10.0.3` (`BarberSearch.Infrastructure.Postgresql` only) |
 | Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (**referenced, not wired up**) |
 | xunit | `2.9.2` (+ `Microsoft.NET.Test.Sdk` 17.12.0, `xunit.runner.visualstudio` 2.8.2) |
 | IDE | JetBrains Rider (`.idea/` is gitignored) |
@@ -62,8 +63,10 @@ the default `src\<project>\obj` and `bin` (see §5.2 for the one shell that cann
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 3 projects (the test project is NOT added yet)
+    ├── BarberSearch.sln                  ← 5 projects (Web, Domain, Shared, Infrastructure, tests)
     ├── .gitignore                        ← stock dotnet template
+    ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider + entity configurations
+    │   └── Configurations/               ← 14 × IEntityTypeConfiguration<T>, no DbContext yet
     └── src/
         ├── Shared/                       ← Shared.csproj
         │   ├── Error.cs                  ← record Error + enum ErrorType
@@ -384,7 +387,7 @@ Two rules were pushed to the application layer because the aggregate cannot know
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | ❌ absent |
-| Infrastructure (EF Core, DbContext, migrations, DB) | ❌ absent |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired + 14 entity configurations; no `DbContext`, `dotnet ef` tooling or migrations yet |
 | Web (controllers, DI, error mapping, auth) | ❌ template `Program.cs` only |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | ❌ absent |
@@ -537,6 +540,9 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
 5. **Infrastructure:** `BarberSearch.Infrastructure` — EF Core + Npgsql, `ApplicationDbContext`,
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
+   **Partly done:** the project is called `BarberSearch.Infrastructure.Postgresql`; it references
+   `Domain` + `Npgsql.EntityFrameworkCore.PostgreSQL` and carries one configuration per entity
+   (see §8). Still missing: the `DbContext`, `dotnet ef` wiring and the migrations themselves.
 6. **Web:** add `ProjectReference`s to Domain/Application/Infrastructure, controllers in
    `Controllers/`, DI registration, middleware mapping `ErrorType` → HTTP status
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) via `ProblemDetails`,

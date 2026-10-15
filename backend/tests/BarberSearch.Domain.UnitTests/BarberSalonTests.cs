@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;

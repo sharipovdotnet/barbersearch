@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.FavoriteBarbers;
 using CSharpFunctionalExtensions;

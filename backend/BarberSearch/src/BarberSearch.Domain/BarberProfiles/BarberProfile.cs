@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberProfiles.ValueObjects;
 using BarberSearch.Domain.BarberSalons;
@@ -437,10 +440,10 @@ public class BarberProfile : AggregateRoot
 
         if (salon is null)
         {
-            return new Failure([Error.NotFound(
+            return new Failure(Error.NotFound(
                 "barberProfile.findSalon.notFound",
                 "The barber in the specified salon does not work.",
-                salonId)]);
+                salonId));
         }
 
         return salon;

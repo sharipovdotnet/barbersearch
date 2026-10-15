@@ -1,3 +1,4 @@
+using System;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
