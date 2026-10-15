@@ -10,7 +10,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Domain.UnitTes
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Infrastructure.Postgresql", "BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Infrastructure.Postgresql", "src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -65,8 +65,6 @@ backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
     ├── BarberSearch.sln                  ← 5 projects (Web, Domain, Shared, Infrastructure, tests)
     ├── .gitignore                        ← stock dotnet template
-    ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider + entity configurations
-    │   └── Configurations/               ← 14 × IEntityTypeConfiguration<T>, no DbContext yet
     └── src/
         ├── Shared/                       ← Shared.csproj
         │   ├── Error.cs                  ← record Error + enum ErrorType
@@ -97,6 +95,10 @@ backend/                                  ← workspace root
         │   ├── WorkingSchedules/WorkingSchedule.cs               (child of BarberSalon)
         │   ├── BarberServices/BarberService.cs                   (child of BarberProfile)
         │   └── BarberSpecializations/BarberSpecialization.cs     (child of BarberProfile)
+        │
+        ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider + entity configurations
+        │   ├── Configurations/           ← 14 × IEntityTypeConfiguration<T>, no DbContext yet
+        │   └── BarberSearch.Infrastructure.Postgresql.csproj → Domain
         │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj (Microsoft.NET.Sdk.Web)
             ├── Program.cs                ← template minimal host: AddControllers + AddOpenApi
