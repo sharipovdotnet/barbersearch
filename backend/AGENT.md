@@ -42,7 +42,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (three projects + test project) |
+| Target framework | `net10.0` (five projects + test project) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
@@ -63,7 +63,8 @@ the default `src\<project>\obj` and `bin` (see §5.2 for the one shell that cann
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 5 projects (Web, Domain, Shared, Infrastructure, tests)
+    ├── BarberSearch.sln                  ← 7 projects (Web, Domain, Application, Contracts,
+    │                                        Infrastructure.Postgresql, Shared, tests)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -79,8 +80,6 @@ backend/                                  ← workspace root
         │   ├── Users/{User.cs, UserRole.cs}                      (AR)
         │   ├── BarberProfiles/                                   (AR)
         │   │   ├── BarberProfile.cs
-        │   │   ├── BarberProfileCreateData.cs         ← input record for Create()
-        │   │   ├── BarberProfileUpdateData.cs         ← input record for UpdateProfile()
         │   │   ├── Enums/{Grade,Language,PaymentMethod}.cs
         │   │   └── ValueObjects/{DisplayName,YearsOfExperience}.cs
         │   ├── Salons/Salon.cs                                   (AR)
@@ -96,14 +95,34 @@ backend/                                  ← workspace root
         │   ├── BarberServices/BarberService.cs                   (child of BarberProfile)
         │   └── BarberSpecializations/BarberSpecialization.cs     (child of BarberProfile)
         │
-        ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider + entity configurations
-        │   ├── Configurations/           ← 14 × IEntityTypeConfiguration<T>, no DbContext yet
-        │   └── BarberSearch.Infrastructure.Postgresql.csproj → Domain
+        ├── BarberSearch.Contracts/       ← BarberSearch.Contracts.csproj → Domain (ради enum'ов)
+        │   ├── Salons/CreateSalon/CreateSalonRequest.cs
+        │   ├── Bookings/CreateBooking/CreateBookingRequest.cs
+        │   └── BarberProfiles/
+        │       ├── CreateBarberProfile/BarberProfileCreateRequest.cs   ← пришли из домена
+        │       └── UpdateBarberProfile/BarberProfileUpdateRequest.cs   ← (были *Data)
         │
-        └── BarberSearch.Web/             ← BarberSearch.Web.csproj (Microsoft.NET.Sdk.Web)
-            ├── Program.cs                ← template minimal host: AddControllers + AddOpenApi
+        ├── BarberSearch.Application/     ← BarberSearch.Application.csproj → Contracts, Domain, Shared
+        │   ├── Abstractions/             ← ICommand / ICommandHandler<> / IQuery / IQueryHandler<,>
+        │   ├── DependencyInjection.cs    ← AddApplication (Scrutor assembly scan)
+        │   └── {Entity}/                 ← one folder per domain entity (Users/, BarberProfiles/, …)
+        │       ├── I{Entity}Repository.cs  ← repository abstraction of that entity (7 in total;
+        │       │                             Reviews/ also holds ReviewRatingSummary)
+        │       └── {Operation}/          ← XxxCommand.cs + XxxHandler.cs per domain method (68)
+        │
+        ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
+        │   ├── Configurations/           ← 14 × IEntityTypeConfiguration<T>
+        │   ├── Migrations/               ← InitialCreate + ApplicationDbContextModelSnapshot
+        │   ├── Repositories/             ← RepositoryBase<T> + 7 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 14 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
+        │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
+        │
+        └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Application, Infrastructure
+            ├── Program.cs                ← composition root: AddPostgresInfrastructure + AddRepositories
+            ├── DependencyInjection.cs    ← AddPostgresInfrastructure(IConfiguration) / AddRepositories
             ├── Controllers/              ← EMPTY folder (declared in .csproj)
-            ├── appsettings.json          ← Logging + AllowedHosts only
+            ├── appsettings.json          ← ConnectionStrings:Postgres + Logging
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← template leftover (/weatherforecast/)
@@ -111,10 +130,20 @@ backend/                                  ← workspace root
 backend/tests/BarberSearch.Domain.UnitTests/  ← xunit project (in the .sln)
 ```
 
-**Project dependency graph:** `Web` (nothing) · `Domain` → `Shared` · `Shared` → CSharpFunctionalExtensions.
+**Project dependency graph:** `Web` → `Application`, `Infrastructure` · `Infrastructure` → `Application`
+→ `Contracts`, `Domain` → `Shared` · `Contracts` → `Domain` (только ради enum'ов `Language` /
+`PaymentMethod` в контрактах) · `Shared` → CSharpFunctionalExtensions.
 
-> ⚠️ `BarberSearch.Web` does **not** reference `Domain` or `Shared`. Fix this before writing any
-> code in Web.
+> Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
+> (`Users/IUserRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`),
+> implementations in `BarberSearch.Infrastructure.Postgresql` (`Repositories/*Repository.cs`).
+> Infrastructure depends on Application, never the other way round.
+
+> The **composition root** is `BarberSearch.Web/DependencyInjection.cs`: `AddPostgresInfrastructure`
+> reads `ConnectionStrings:Postgres` from configuration (appsettings.json → user secrets →
+> `ConnectionStrings__Postgres`) and hands it to the infrastructure layer; `AddRepositories`
+> registers the seven repositories and `AddApplication` the command/query handlers. `Program.cs`
+> calls the chain, so Web itself never touches `ApplicationDbContext` or any EF type.
 
 ---
 
@@ -132,6 +161,18 @@ dotnet test tests/BarberSearch.Domain.UnitTests
 # run the API (http profile → http://localhost:5243)
 dotnet run --project BarberSearch/src/BarberSearch.Web
 
+# local PostgreSQL (docker compose; the schema itself comes from the migration below)
+docker compose up -d            # start; POSTGRES_PORT=5433 if 5432 is already taken
+docker compose ps               # status and health
+docker compose down             # stop, the named volume keeps the data
+docker compose down -v          # stop and wipe the data
+
+# EF Core migrations (dotnet-ef is installed globally, 10.0.10; the DbContext lives in
+# Infrastructure, the design-time host is Web — the only project referencing the Design package)
+dotnet ef migrations add InitialCreate --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql --startup-project BarberSearch/src/BarberSearch.Web --output-dir Migrations
+dotnet ef migrations script --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql --startup-project BarberSearch/src/BarberSearch.Web
+dotnet ef database update   --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql --startup-project BarberSearch/src/BarberSearch.Web
+
 # restore / clean
 dotnet restore BarberSearch/BarberSearch.sln
 dotnet clean   BarberSearch/BarberSearch.sln
@@ -139,27 +180,47 @@ dotnet clean   BarberSearch/BarberSearch.sln
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all four projects. Verify with:
+`BarberSearch.sln` lists all seven projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
 ```
 
-Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `Shared`,
+Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
+`BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`, `Shared`,
 `..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`.
 
-The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all four entries; switching
+**`BarberSearch.Contracts` добавлен 2026-10-16 вручную** (не через `dotnet sln add` — см.
+предупреждение ниже): `Project(…)` + `EndProject` после записи `BarberSearch.Application`,
+плюс четыре строки `ProjectConfigurationPlatforms` для `Debug|Any CPU` и `Release|Any CPU`,
+GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект **не вложен** ни в одну папку
+решения: `NestedProjects` содержит только тестовый проект, а папки `src` в решении нет —
+вложенность в несуществующую папку и есть та ошибка `MSB5009`, из-за которой `dotnet sln add`
+здесь запрещён. Проверено: `dotnet build BarberSearch.sln` собирает все семь проектов,
+0 ошибок, 0 предупреждений.
+
+The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all seven entries; switching
 them to the SDK-style `{9A19103F-…}` is a separate cleanup (§9.13).
+
+> ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
+> adds `x64`/`x86` solution configurations for every project and nests the new project into the
+> solution folder `{827E0CD3-…}`, which does not exist — MSBuild then fails with
+> `MSB5009: … вложен в {827E0CD3-…}, но этот проект не найден в решении` and the build stops.
+> Add the project by hand instead: two lines (`Project(…)` + `EndProject`) plus four
+> `ProjectConfigurationPlatforms` lines, in the style of the existing entries.
 
 ### 5.2 Environment — what works and what does not
 
-**`dotnet build` and `dotnet restore` work.** The ACL problem described in earlier revisions of
-this file (the DSH `S-1-4-…` grant not being inherited below the workspace root) only applies to
-the **confined** shell. With the session's file policy at `danger-full-access` the whole tree is
-writable and both commands succeed:
+**`dotnet build` and `dotnet restore` work — but a `workspace-write` session is confined, so they
+need approval.** The ACL problem described in earlier revisions of this file (the DSH `S-1-4-…`
+grant not being inherited below the workspace root) only applies to the **confined** shell, and
+`workspace-write` is one: the child `dotnet` process gets *Access to the path … is denied* for
+`BarberSearch.sln` and every `obj\`/`bin\` write, while the harness's own file tools write the same
+tree without trouble. Retry that one command with the `danger-full-access` sandbox permission, or
+run it from a normal developer shell — then both commands succeed:
 
 ```powershell
-dotnet build BarberSearch/BarberSearch.sln     # 4 projects, 0 errors, 0 warnings
+dotnet build BarberSearch/BarberSearch.sln     # 7 projects, 0 errors, 0 warnings
 ```
 
 If the session is ever confined again, the symptom is
@@ -187,33 +248,67 @@ redirected: `$env:npm_config_cache = '<workspace>\.npm-cache'`.
 
 ### 5.3 Running the tests when `dotnet test` is blocked
 
-The test host limitation in §5.2 is bypassed by running xunit **in-process**, using the runner
-utility that `xunit.runner.visualstudio` already copies into the test output. Throwaway code — the
-committed project stays a plain xunit project:
+`dotnet test` **cannot** be used here even with `danger-full-access` (2026-10-16: the same
+`Win32Exception (5)` in `TestHost.DefaultEngineInvoker.SetParentProcessExitCallback`); the
+limitation is the process-handle restriction, not file ACLs. The assembly's own APIs are also a
+dead end: `Xunit.Runners.AssemblyRunner` from `xunit.runner.utility` **2.9** throws
+`InvalidOperationException: Could not find/load any of the following assemblies:
+xunit.execution.dotnet.dll`, although that file **is** in the test bin and next to the runner
+(its `Start(AssemblyRunnerStartOptions)` overload takes `AssemblyRunnerStartOptions.Empty`; the
+session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
+
+What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
+reflection. This is faithful here because the suite is **128 `[Fact]` methods, no `[Theory]`, no
+fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
-# 1. build
+# 1. build the test assembly (needs danger-full-access for obj/bin)
 dotnet build tests/BarberSearch.Domain.UnitTests
 
-# 2. a tiny exe that uses Xunit.Runners.AssemblyRunner
-#    (references the bin folder's xunit.runner.utility.netcoreapp10.dll + xunit.abstractions.dll)
+# 2. a throwaway console project in %TEMP% whose <OutputPath> IS the test bin folder
+#    (AppendTargetFrameworkToOutputPath=false). It references nothing xunit-related:
+#    the test assembly's dependencies are resolved by an AssemblyLoadContext.Default.Resolving
+#    handler that loads <name>.dll from the test bin, because the runner's own deps.json
+#    does not list Domain/Contracts/Shared/xunit.*.
+#    The runner walks public non-abstract classes, takes public parameterless methods carrying
+#    an attribute whose FullName is "Xunit.FactAttribute" (matched by name — no compile-time
+#    xunit reference), honours FactAttribute.Skip, invokes each method on a fresh instance and
+#    treats TargetInvocationException as a failure.
 
-# 3. run it from the test bin folder so the test assembly's dependencies resolve
+# 3. run it from the test bin folder
 cd tests/BarberSearch.Domain.UnitTests/bin/Debug/net10.0
-dotnet exec XunitRunner.dll ./BarberSearch.Domain.UnitTests.dll
+dotnet exec XunitRunner.dll <absolute path to BarberSearch.Domain.UnitTests.dll>
 ```
 
-Result at the time of writing:
+Result on 2026-10-16 (after the `BarberProfile*Request` move, see §10.16):
 
 ```
 Discovered: 128, to run: 128
 Passed: 128, Failed: 0, Skipped: 0
 ```
 
+Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
+files it drops into the test bin.
+
 A previous revision of this file documented an equivalent `csc`-based route (`build.ps1` +
 `TestRunner.cs` + a hand-rolled `[Test]` attribute). That scaffold is **gone**: the tests are real
 xunit `[Fact]`s, `dotnet build` compiles them, and only the runner invocation needs the §5.2
 workaround.
+
+### 5.4 Verifying the EF model and queries without a database
+
+Not every check needs a database, and the model checks below do not: the model is materialized on
+the first `context.Model` access, and a query reaches "open the connection" only *after* it has
+been translated. A throwaway project in the temp folder (assemblies referenced by `<Reference>` to the
+built `bin\Debug\net10.0` DLLs, `Npgsql.EntityFrameworkCore.PostgreSQL` restored from the package
+cache) pointed at a dead connection string (`Port=59999`) calls the repository methods and prints
+the exception chain:
+
+* `NpgsqlException: Failed to connect to …` — the SQL was built, the query translates;
+* `InvalidOperationException: … could not be translated …` — the query is broken.
+
+At the time of writing every repository query reached the connect step: 16 entity types, 14 tables,
+no query has been executed against a real database yet.
 
 ---
 
@@ -223,15 +318,22 @@ Target layering (bold = already exists):
 
 ```
 BarberSearch.Web            → API controllers, DI, ProblemDetails, auth         [skeleton]
-BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, migrations     [NONE]
-BarberSearch.Application    → commands/queries, handlers, DTOs, validators         [NONE]
+BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
+BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
+                              repository abstractions (in the entity folders)      [DONE]
+                              DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
+BarberSearch.Contracts      → record-контракты входных данных операций            [STARTED]
+                              4 из 68 операций: CreateSalon, CreateBooking,
+                              CreateBarberProfile, UpdateBarberProfile
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
 BarberSearch.Domain.UnitTests → domain invariants                                 [DONE]
 ```
 
 Dependency rule: **strictly inward**. Domain knows nothing about EF Core, ASP.NET or JSON.
-Infrastructure must not leak into Domain.
+Infrastructure must not leak into Domain. `Contracts` — исключение из «внутреннего» порядка:
+он ссылается на `Domain` (в контрактах стоят доменные enum'ы), но сам домен на `Contracts`
+не ссылается и входные данные принимает значениями, а не записями-контрактами.
 
 ---
 
@@ -372,12 +474,17 @@ application layer (§8).
 
 ### 7.6 What the domain deliberately does *not* decide
 
-Two rules were pushed to the application layer because the aggregate cannot know them:
+Three rules were pushed to the application layer because the aggregate cannot know them:
 
 1. **"You cannot favourite yourself"** — the domain does not know which `BarberProfile` belongs
    to which `User`.
 2. **"No-show cannot be reported before `Booking.StartAt`"** — a time comparison against "now"
    is an application concern; `MarkNoShow` only enforces `Confirmed → NoShow`.
+3. **"A specialization name is unique"** — uniqueness needs the whole catalog, not one aggregate.
+   The check lives in `CreateSpecializationHandler` / `RenameSpecializationHandler` (domain error
+   `Error.Conflict`), and the case-insensitive unique index `ux_specializations_name` over the
+   `citext` column is the last line of defence. The domain itself still checks only that the name
+   is non-empty. **Decided 2026-10-16**; an inactive entry also holds its name.
 
 ---
 
@@ -388,11 +495,12 @@ Two rules were pushed to the application layer because the aggregate cannot know
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
 | Domain events | ❌ absent |
-| Application (CQRS/handlers/DTOs/validation) | ❌ absent |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired + 14 entity configurations; no `DbContext`, `dotnet ef` tooling or migrations yet |
-| Web (controllers, DI, error mapping, auth) | ❌ template `Program.cs` only |
+| Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
+| Request-контракты (`BarberSearch.Contracts`) | 🟡 проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) пока без контрактов |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root done — `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories and the Application handlers from `ConnectionStrings:Postgres`; no controllers, no `ErrorType`→HTTP mapping, no auth, Swagger UI not wired |
 | Swagger UI | ❌ package present, no config |
-| Docker / CI / README / `.editorconfig` | ❌ absent |
+| Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
 ---
 
@@ -417,7 +525,8 @@ instead of an 11-parameter constructor. A test reflects over `typeof(BarberProfi
 without a constructor call.
 
 ### 9.4 Reworked (was: a barber could set their own `Grade`)
-`Grade` is gone from `BarberProfileUpdateData`. It changes only through
+`Grade` is gone from `BarberProfileUpdateRequest` (в 2026-10-16 это был `BarberProfileUpdateData`
+в домене). It changes only through
 `BarberProfile.ChangeGrade(Grade)`, meant for the administrative scenario; the value is checked
 with `Enum.IsDefined`.
 
@@ -480,8 +589,10 @@ original entity. A test builds a derived type with the same id and asserts equal
 - `Salon.Name` has no length cap (only emptiness is checked); the other string fields are the same.
 - `Review` keeps a denormalized `BarberProfileId` (derived from the booking in `Create`), which
   must stay in sync if a booking's barber could ever change — it cannot today.
-- `BarberProfileUpdateData` / `BarberProfileCreateData` collections are non-nullable but `Create`
-  still tolerates `null` (`?? []`), so a deserializer passing `null` will not fail loudly.
+- `BarberProfileUpdateRequest` / `BarberProfileCreateRequest` (Contracts) declare collections
+  non-nullable, а `BarberProfile.Create` / `UpdateProfile` принимают их как `List<T>?` и
+  подставляют `?? []` — то есть `null` от десериализатора не падает громко, а молча означает
+  «пусто». Оставить так или валидировать коллекции явно — решение не принято.
 - `.sln` uses the legacy project type GUID `{FAE04EC0-...}` instead of the SDK-style `{9A19103F-...}`.
 - `BarberSearch.Web.http` still contains `/weatherforecast/` — `dotnet new` leftover.
 - `Program.cs` calls `UseHttpsRedirection()` while the app is launched with the `http` profile
@@ -523,6 +634,44 @@ original entity. A test builds a derived type with the same id and asserts equal
     In any file that also uses the functional extensions namespace, add
     `using Entity = BarberSearch.Domain.Common.Entity;` (see `BarberSalon.cs`,
     `WorkingSchedule.cs`, `TimeOff.cs`, `BarberService.cs`, `PortfolioPhoto.cs`).
+14. **Constraints EF Core cannot express** — PostgreSQL exclusion constraints — go in as raw
+    `migrationBuilder.Sql(...)` inside the migration, never by hand-editing the model. The entity
+    configuration then carries a comment naming the constraint and its home migration, otherwise
+    the next `migrations add` looks as if the rule had been dropped. Example:
+    `ex_bookings_no_overlap` in `Migrations/*_InitialCreate.cs`, commented in
+    `BookingConfiguration`. Extensions needed by such SQL are declared on the model
+    (`modelBuilder.HasPostgresExtension(...)`), so the migration creates them itself.
+15. **No unused `using` directives.** The tree is IDE0005-clean as of 2026-10-16 (687 → 615 using
+    lines), and the cleanup only ever deletes lines — checked with `git diff --numstat`. The rule
+    is awkward to re-check: `IDE0005` is reported only while XML documentation is generated, and
+    `dotnet format` needs the severity enabled, so it takes two throwaway files at the repo root —
+    `Directory.Build.props` with `<GenerateDocumentationFile>true</GenerateDocumentationFile>`
+    (plus `<NoWarn>$(NoWarn);CS1591</NoWarn>` to keep the run quiet) and `.editorconfig` with
+    `dotnet_diagnostic.IDE0005.severity = warning`:
+    `dotnet format style BarberSearch/BarberSearch.sln --diagnostics IDE0005`. Delete both files
+    afterwards: leaving them on costs 1054 CS1591 warnings on every build. The domain files carry
+    no explicit `using System;`/`System.Collections.Generic`/`System.Linq` anymore — they come
+    from `ImplicitUsings`; `using System.Collections;` in `Failure.cs` is *not* implicit and stays.
+16. **Входные данные операции — `record` в `BarberSearch.Contracts`.** Состав полей любой операции
+    описывается `record`ом `XxxRequest` в проекте `BarberSearch.Contracts` —
+    `{Entity}/{Operation}/{Type}.cs`, namespace = путь от корня проекта (как в `Application`),
+    XML-документация на русском, а команда его только оборачивает:
+    `public record CreateSalonCommand(CreateSalonRequest Request) : ICommand;`.
+    Слой ничего не проверяет: обязательность и формат полей остаются в домене.
+    `Contracts` ссылается на `Domain` (в контрактах стоят доменные enum'ы), **не** на
+    `Application`; обратной ссылки нет и быть не может — цикл. Поэтому **домен входные данные
+    принимает значениями**, а не записью: `BarberProfile.Create(userId, displayName, …)`,
+    `UpdateProfile(displayName, …)`. Читаемость длинного списка держится на **именованных
+    аргументах** у вызывающего: `BarberProfile.Create(userId: request.UserId, …)` — иначе четыре
+    подряд идущих `List<string>` (`certificatesAndTraining`, `achievements`,
+    `communicationFormat`, `goodies`) невозможно различить глазами. В тестах разбор контракта
+    держат в одной приватной функции на файл (`BarberProfileTests.CreateProfile(request)`).
+    В `BarberSearch.sln` проект уже есть, но новый **проект** туда добавляют только вручную
+    (§5.1) — новый `Request`-тип в существующем проекте решения ничего не требует.
+    Образцы: `CreateSalonRequest`, `CreateBookingRequest`, `BarberProfileCreateRequest`,
+    `BarberProfileUpdateRequest` (последние два — бывшие `*Data`, переехали из домена 2026-10-16).
+    Контракт — это **запрос операции**, а не внутренняя структура агрегата: если набор полей
+    нужен только самому агрегату и наружу не выходит, его место в домене.
 
 ---
 
@@ -540,16 +689,45 @@ Suggested order:
 4. **Application:** `BarberSearch.Application` project — commands/queries, handlers, DTOs,
    validators; `IApplicationDbContext` / repository abstractions are declared here. This is
    where review→rating recalculation and the two rules in §7.6 belong.
+   **Partly done:** the project exists (→ `Domain`, `Shared`), declares seven repository
+   abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
+   `Reviews/IReviewRepository.cs` — and carries one handler per public domain method — 68 in
+   total — in per-entity folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without
+   the `Command`/`Handler` suffix, namespace = folder path). The contracts live in
+   `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
+   scan (Scrutor, scoped). The two rules of §7.6 are implemented here:
+   `AddUserFavoriteHandler` (self-favourite) and `MarkBookingNoShowHandler` (no-show too early);
+   `CreateBookingHandler` also implements the idempotency-key repeat described in §15.5.
+   Request-контракты начаты: `BarberSearch.Contracts` (седьмой проект решения, §5.1) держит
+   `CreateSalonRequest`, `CreateBookingRequest`, `BarberProfileCreateRequest` и
+   `BarberProfileUpdateRequest`; команды их оборачивают, а домен принимает значения —
+   правило в §10.16. `BarberProfileCreateData` / `BarberProfileUpdateData` из домена удалены
+   (их место заняли два `*Request`), поэтому `BarberProfile.Create` / `UpdateProfile` вызываются
+   с именованными аргументами.
+   Still missing: request-контракты для остальных операций, validators и review→rating recalculation.
 5. **Infrastructure:** `BarberSearch.Infrastructure` — EF Core + Npgsql, `ApplicationDbContext`,
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
    **Partly done:** the project is called `BarberSearch.Infrastructure.Postgresql`; it references
-   `Domain` + `Npgsql.EntityFrameworkCore.PostgreSQL` and carries one configuration per entity
-   (see §8). Still missing: the `DbContext`, `dotnet ef` wiring and the migrations themselves.
+   `Domain` + `Application` + `Npgsql.EntityFrameworkCore.PostgreSQL`, carries one configuration
+   per entity, the `ApplicationDbContext`, seven repository implementations and the DI
+   registration (see §8). The `dotnet ef` wiring is in place (global tool 10.0.10, design-time
+   host = Web) and the first migration `InitialCreate` is written: 14 tables, every index, the
+   exclusion constraint `ex_bookings_no_overlap` (raw SQL over `btree_gist`) and `citext` for
+   specialization names. Applied on 2026-10-16 to the local PostgreSQL 16.3. Still missing: the
+   application actually exercising queries — no repository query has run inside the app and there
+   are no integration tests.
 6. **Web:** add `ProjectReference`s to Domain/Application/Infrastructure, controllers in
    `Controllers/`, DI registration, middleware mapping `ErrorType` → HTTP status
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) via `ProblemDetails`,
    Swagger UI, JWT auth for `User`.
+   **Partly done:** the `ProjectReference`s and the DI composition root
+   (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place (see §8).
+   Still missing: controllers, the `ErrorType` → HTTP status middleware, Swagger UI wiring and
+   JWT auth.
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
+   **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
+   volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
+   still missing: a Dockerfile for the API, CI, and the `/health/*` endpoints of §15.8.
 
 ---
 
@@ -568,6 +746,12 @@ Suggested order:
    `(barber, salon)` pair, so `WorkingSchedule` hangs off `BarberSalon` (keyed by
    `BarberSalonId`); `Booking` carries a `SalonId`; `WorkingSchedule` enforces one entry per
    `(BarberSalonId, DayOfWeek)`.
+8. **Specialization name uniqueness** — **decided 2026-10-16 and now implemented:** two entries
+   with the same name (ignoring case and surrounding spaces) are forbidden — `citext` column,
+   unique index `ux_specializations_name`, checks in `Create`/`Rename` handlers. An inactive
+   entry also holds its name: otherwise reactivating it would put two identical tags into the
+   catalog and split the client-side filter in two. Verified against a live database on
+   2026-10-16: `стрижка` after `Стрижка` is rejected by the index itself, not only by the handler.
 
 ---
 
@@ -825,8 +1009,13 @@ Also required for the write path:
 1. **Commit the domain rework** — the tests are already in the `.sln`, so `dotnet test`
    `BarberSearch/BarberSearch.sln` is the first thing to run from a normal shell; it has not run
    yet (§9.13).
-2. First migration: schema, indexes, exclusion constraint, `btree_gist`, the `idempotency_key`
-   unique index, the filtered unique index on primary salons.
+2. ~~First migration~~ — **done (2026-10-16):** `Migrations/InitialCreate` carries the schema,
+   every index (including `ux_bookings_user_id_idempotency_key` and the filtered
+   `ux_barber_salons_primary_per_profile`) and the exclusion constraint `ex_bookings_no_overlap`
+   over `btree_gist`, with `citext` for specialization names. It was applied the same day to the
+   locally installed PostgreSQL 16.3, and the two rules were exercised with real INSERTs: an
+   overlapping booking is rejected, a touching one is accepted, and `стрижка` after `Стрижка`
+   violates `ux_specializations_name`.
 3. Booking under contention + idempotency — correctness before speed.
 4. Review → rating recalculation in the application layer (§12.2).
 5. Load test at realistic volume, measure, **then** cache.

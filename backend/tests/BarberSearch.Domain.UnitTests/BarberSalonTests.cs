@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
@@ -13,20 +11,18 @@ public class BarberSalonTests
         bool isPrimary = false,
         Guid? salonId = null)
     {
-        var data = new BarberProfileCreateData(
-            Guid.CreateVersion7(),
-            "Ivan the Barber",
-            5,
-            null,
-            [Language.Ru],
-            null,
-            null,
-            [PaymentMethod.Cash],
-            null,
-            null,
-            null);
-
-        var profile = BarberProfile.Create(data).Value;
+        var profile = BarberProfile.Create(
+            userId: Guid.CreateVersion7(),
+            displayName: "Ivan the Barber",
+            yearsOfExperience: 5,
+            bio: null,
+            languages: [Language.Ru],
+            certificatesAndTraining: null,
+            achievements: null,
+            paymentMethods: [PaymentMethod.Cash],
+            communicationFormat: null,
+            goodies: null,
+            latePolicy: null).Value;
         var id = salonId ?? Guid.CreateVersion7();
 
         profile.AddSalon(id, isPrimary);

@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Web", "src\BarberSearch.Web\BarberSearch.Web.csproj", "{0B95925B-AF3C-4DF2-8901-33C3DB06B8E4}"
 EndProject
@@ -11,6 +11,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Infrastructure.Postgresql", "src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Application", "src\BarberSearch.Application\BarberSearch.Application.csproj", "{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Contracts", "src\BarberSearch.Contracts\BarberSearch.Contracts.csproj", "{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,6 +42,14 @@ Global
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37} = {02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}

@@ -1,4 +1,3 @@
-using System;
 using BarberSearch.Domain.Common;
 
 namespace BarberSearch.Domain.FavoriteBarbers;

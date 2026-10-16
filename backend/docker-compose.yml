@@ -1,0 +1,75 @@
+# PostgreSQL для локальной разработки BarberSearch.
+#
+# Поднимается только база: Dockerfile для API — отдельный шаг (AGENT.md §11.7).
+# Параметры должны совпадать с ConnectionStrings:Postgres из
+# BarberSearch/src/BarberSearch.Web/appsettings.json, иначе приложение не подключится.
+#
+#   docker compose up -d            # поднять базу
+#   docker compose logs -f db       # смотреть лог
+#   docker compose ps               # статус и health
+#   docker compose down             # остановить (данные в томе остаются)
+#   docker compose down -v          # остановить и стереть данные
+#
+# Схему создаёт миграция, а не этот файл (AGENT.md §5):
+#   dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql --startup-project BarberSearch/src/BarberSearch.Web
+
+name: barbersearch
+
+services:
+  db:
+    # Debian-вариант, а не alpine: citext сравнивает строки через lower(), а тот
+    # зависит от LC_CTYPE базы, зафиксированного при её создании (документация
+    # PostgreSQL, F.9 citext → Limitations). В alpine-образе нет полноценных
+    # системных локалей, и «Стрижка»/«стрижка» перестали бы считаться одним
+    # именем, то есть уникальный индекс ux_specializations_name ослаб бы молча.
+    image: postgres:18
+    container_name: barbersearch-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-barbersearch}
+      # UTF-8-локаль glibc: нужна и для корректного lower() (citext), и для
+      # сортировки. Действует только при первой инициализации, то есть на пустом
+      # томе: у уже созданной базы локаль поменять нельзя, только пересоздать.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
+
+    ports:
+      # Порт снаружи можно переопределить: POSTGRES_PORT=5433 docker compose up -d.
+      #
+      # Осторожно: если на 5432 уже отвечает другая СУБД (например, PostgreSQL,
+      # установленный в Windows службой), соединения по localhost уйдут к ней, а не
+      # в контейнер, — при этом docker compose ps покажет публикацию порта, и ничего
+      # не упадёт. Именно так и происходит на этой машине: localhost:5432 обслуживает
+      # PostgreSQL 16.3 из C:\Program Files\PostgreSQL\16. Тогда либо поднимите
+      # контейнер на другом порту (POSTGRES_PORT=5433) и поправьте
+      # ConnectionStrings:Postgres, либо остановите ту службу.
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      # PostgreSQL 18+ держит данные в подкаталоге с номером мажорной версии
+      # (PGDATA=/var/lib/postgresql/18/docker), поэтому монтируется каталог выше.
+      # Привычная точка /var/lib/postgresql/data из образов 17- и более ранних
+      # здесь не годится: entrypoint видит в ней чужие данные и не стартует.
+      - postgres_data:/var/lib/postgresql
+
+    healthcheck:
+      # pg_isready возвращает успех и на временном сервере initdb, поэтому
+      # проверяем конкретную базу под конкретным пользователем.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-barbersearch}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # Расширения citext и btree_gist ставит первая миграция (CREATE EXTENSION
+    # IF NOT EXISTS): инициализирующих SQL-скриптов здесь нет, чтобы схема жила
+    # в одном месте. Оба модуля входят в contrib официального образа и помечены
+    # trusted, поэтому их может создать и владелец базы без прав суперпользователя.
+
+volumes:
+  postgres_data:
+    # Имя задано явно: по умолчанию compose взял бы имя каталога («backend») и
+    # том мог бы столкнуться с другим проектом в папке с таким же именем.
+    name: barbersearch-postgres-data

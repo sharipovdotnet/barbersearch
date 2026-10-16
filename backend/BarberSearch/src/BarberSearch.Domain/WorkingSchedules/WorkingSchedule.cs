@@ -1,4 +1,3 @@
-using System;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;

@@ -19,4 +19,10 @@
       <Folder Include="Controllers\" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\BarberSearch.Domain\BarberSearch.Domain.csproj" />
+        <ProjectReference Include="..\BarberSearch.Application\BarberSearch.Application.csproj" />
+        <ProjectReference Include="..\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj" />
+    </ItemGroup>
+
 </Project>

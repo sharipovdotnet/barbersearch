@@ -1,4 +1,3 @@
-using System;
 using BarberSearch.Domain.Bookings;
 using Shared;
 using Xunit;

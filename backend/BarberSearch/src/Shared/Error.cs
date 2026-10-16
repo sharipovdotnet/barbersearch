@@ -1,5 +1,3 @@
-using System;
-
 namespace Shared;
 
 public record Error

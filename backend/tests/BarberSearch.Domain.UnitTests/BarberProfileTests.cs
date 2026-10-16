@@ -1,15 +1,16 @@
-using System;
-using System.Linq;
-using BarberSearch.Domain;
+using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
+using CSharpFunctionalExtensions;
+using Shared;
 using Xunit;
 
 namespace BarberSearch.Domain.UnitTests;
 
 public class BarberProfileTests
 {
-    private static BarberProfileCreateData CreateData(
+    private static BarberProfileCreateRequest CreateData(
         string displayName = "Ivan the Barber",
         int yearsOfExperience = 5)
         => new(
@@ -25,7 +26,7 @@ public class BarberProfileTests
             ["Coffee"],
             "Wait 10 minutes max");
 
-    private static BarberProfileUpdateData UpdateData(
+    private static BarberProfileUpdateRequest UpdateData(
         string displayName = "Ivan the Barber",
         string? bio = "Bio")
         => new(
@@ -40,8 +41,41 @@ public class BarberProfileTests
             ["Coffee"],
             "Wait 10 minutes max");
 
+    /// <summary>
+    /// Домен принимает значения явными параметрами (на слой Contracts он не ссылается),
+    /// поэтому разбор контракта живёт здесь — одной точкой на весь файл.
+    /// </summary>
+    private static Result<BarberProfile, Failure> CreateProfile(BarberProfileCreateRequest request)
+        => BarberProfile.Create(
+            userId: request.UserId,
+            displayName: request.DisplayName,
+            yearsOfExperience: request.YearsOfExperience,
+            bio: request.Bio,
+            languages: request.Languages,
+            certificatesAndTraining: request.CertificatesAndTraining,
+            achievements: request.Achievements,
+            paymentMethods: request.PaymentMethods,
+            communicationFormat: request.CommunicationFormat,
+            goodies: request.Goodies,
+            latePolicy: request.LatePolicy);
+
+    private static UnitResult<Failure> UpdateProfile(
+        BarberProfile profile,
+        BarberProfileUpdateRequest request)
+        => profile.UpdateProfile(
+            displayName: request.DisplayName,
+            yearsOfExperience: request.YearsOfExperience,
+            bio: request.Bio,
+            languages: request.Languages,
+            certificatesAndTraining: request.CertificatesAndTraining,
+            achievements: request.Achievements,
+            paymentMethods: request.PaymentMethods,
+            communicationFormat: request.CommunicationFormat,
+            goodies: request.Goodies,
+            latePolicy: request.LatePolicy);
+
     private static BarberProfile CreateProfile()
-        => BarberProfile.Create(CreateData()).Value;
+        => CreateProfile(CreateData()).Value;
 
     [Fact]
     public void Create_StartsWithoutRating()
@@ -59,7 +93,7 @@ public class BarberProfileTests
     [Fact]
     public void Create_WithEmptyDisplayName_Fails()
     {
-        var result = BarberProfile.Create(CreateData(displayName: "   "));
+        var result = CreateProfile(CreateData(displayName: "   "));
 
         Assert.True(result.IsFailure);
         Assert.Equal("barberProfile.displayName", result.Error.Errors[0].Code);
@@ -68,7 +102,7 @@ public class BarberProfileTests
     [Fact]
     public void Create_WithYearsOutOfRange_CollectsErrorsFromEveryField()
     {
-        var result = BarberProfile.Create(CreateData(displayName: "", yearsOfExperience: 0));
+        var result = CreateProfile(CreateData(displayName: "", yearsOfExperience: 0));
 
         Assert.True(result.IsFailure);
         Assert.Equal(2, result.Error.Errors.Count);
@@ -79,7 +113,7 @@ public class BarberProfileTests
     {
         var data = CreateData() with { Languages = null! };
 
-        var profile = BarberProfile.Create(data).Value;
+        var profile = CreateProfile(data).Value;
 
         Assert.Single(profile.Languages);
         Assert.Equal(Language.Ru, profile.Languages.First());
@@ -90,8 +124,8 @@ public class BarberProfileTests
     {
         var profile = CreateProfile();
 
-        var first = profile.UpdateProfile(UpdateData());
-        var second = profile.UpdateProfile(UpdateData());
+        var first = UpdateProfile(profile, UpdateData());
+        var second = UpdateProfile(profile, UpdateData());
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);
@@ -108,7 +142,7 @@ public class BarberProfileTests
     {
         var profile = CreateProfile();
 
-        var result = profile.UpdateProfile(UpdateData(bio: null));
+        var result = UpdateProfile(profile, UpdateData(bio: null));
 
         Assert.True(result.IsSuccess);
         Assert.Null(profile.Bio);
@@ -120,7 +154,7 @@ public class BarberProfileTests
         var profile = CreateProfile();
         profile.ChangeGrade(Grade.SeniorBarber);
 
-        profile.UpdateProfile(UpdateData());
+        UpdateProfile(profile, UpdateData());
 
         Assert.Equal(Grade.SeniorBarber, profile.Grade);
     }
