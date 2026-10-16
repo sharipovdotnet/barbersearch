@@ -48,7 +48,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
 | Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, on Web; the provider now lives in Infrastructure) |
 | Npgsql.EntityFrameworkCore.PostgreSQL | `10.0.3` (`BarberSearch.Infrastructure.Postgresql` only) |
-| Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (**referenced, not wired up**) |
+| Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (wired up in `Program.cs`: the UI reads the `AddOpenApi` document) |
 | xunit | `2.9.2` (+ `Microsoft.NET.Test.Sdk` 17.12.0, `xunit.runner.visualstudio` 2.8.2) |
 | IDE | JetBrains Rider (`.idea/` is gitignored) |
 
@@ -118,19 +118,21 @@ backend/                                  ← workspace root
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
         │
-        └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Application, Infrastructure
-            ├── Program.cs                ← composition root: AddPostgresInfrastructure + AddRepositories
-            ├── DependencyInjection.cs    ← AddPostgresInfrastructure(IConfiguration) / AddRepositories
-            ├── Controllers/              ← EMPTY folder (declared in .csproj)
+        └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
+            ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
+            ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
+            ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
+            ├── Controllers/              ← 11 controllers, 68 endpoints — one per Application handler
             ├── appsettings.json          ← ConnectionStrings:Postgres + Logging
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
-            └── BarberSearch.Web.http     ← template leftover (/weatherforecast/)
+            └── BarberSearch.Web.http     ← requests for the main flows
 
 backend/tests/BarberSearch.Domain.UnitTests/  ← xunit project (in the .sln)
 ```
 
-**Project dependency graph:** `Web` → `Application`, `Infrastructure` · `Infrastructure` → `Application`
+**Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
+`Infrastructure` → `Application`
 → `Contracts`, `Domain` → `Shared` · `Contracts` → `Domain` (только ради enum'ов `Language` /
 `PaymentMethod` в контрактах) · `Shared` → CSharpFunctionalExtensions.
 
@@ -227,6 +229,14 @@ If the session is ever confined again, the symptom is
 `Access to the path '…\obj\…' is denied` and the workaround is to compile with `csc` straight
 into a writable folder and pass `-p:BaseIntermediateOutputPath=<writable>\obj\`.
 
+**Running the API from the agent shell needs one extra setting.** The host adds the Windows
+EventLog logging provider on Windows with a `Warning` minimum level, and the confined process
+cannot write the `.NET Runtime` source: the log write throws `Win32Exception (5)`, which surfaces as
+a **500 on the first request** that logs a warning (the usual trigger is
+`HttpsRedirectionMiddleware`: no HTTPS port is configured in the `http` profile). Start the app
+with the provider muted — `$env:Logging__EventLog__LogLevel__Default='None'` — or configure an
+HTTPS port. Running it as a normal developer does not have this problem.
+
 **`dotnet test` builds but its test host dies on start-up in this harness.** The build step
 succeeds; then VSTest's `testhost` throws
 
@@ -317,14 +327,15 @@ no query has been executed against a real database yet.
 Target layering (bold = already exists):
 
 ```
-BarberSearch.Web            → API controllers, DI, ProblemDetails, auth         [skeleton]
+BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE except auth]
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
-BarberSearch.Contracts      → record-контракты входных данных операций            [STARTED]
-                              4 из 68 операций: CreateSalon, CreateBooking,
-                              CreateBarberProfile, UpdateBarberProfile
+BarberSearch.Contracts      → record-контракты входных данных операций            [DONE]
+                              68 из 68 операций: первые 4 (CreateSalon, CreateBooking,
+                              CreateBarberProfile, UpdateBarberProfile) + 25 добавленных
+                              Request-записей + 3 записи ответов (§16)
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
 BarberSearch.Domain.UnitTests → domain invariants                                 [DONE]
@@ -496,9 +507,9 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
-| Request-контракты (`BarberSearch.Contracts`) | 🟡 проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) пока без контрактов |
+| Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
 | Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root done — `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories and the Application handlers from `ConnectionStrings:Postgres`; no controllers, no `ErrorType`→HTTP mapping, no auth, Swagger UI not wired |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; no auth yet (§16) |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
@@ -652,6 +663,12 @@ original entity. A test builds a derived type with the same id and asserts equal
     afterwards: leaving them on costs 1054 CS1591 warnings on every build. The domain files carry
     no explicit `using System;`/`System.Collections.Generic`/`System.Linq` anymore — they come
     from `ImplicitUsings`; `using System.Collections;` in `Failure.cs` is *not* implicit and stays.
+    Re-verified clean on 2026-10-16, after the Web layer was added: the recipe above reports exactly
+    two redundant directives, both `using Microsoft.AspNetCore.Http;` in `Web/Common/` —
+    `Microsoft.AspNetCore.Http` is one of the **Web SDK's implicit usings**, so writing it out is
+    always redundant. The same run also surfaces 10 `CS1573` warnings (missing `<param>` tags in
+    `IBarberProfileRepository`, `IReviewRepository`, `ISalonRepository` and `RepositoryBase`) which
+    no ordinary build shows, because documentation is not generated by default.
 16. **Входные данные операции — `record` в `BarberSearch.Contracts`.** Состав полей любой операции
     описывается `record`ом `XxxRequest` в проекте `BarberSearch.Contracts` —
     `{Entity}/{Operation}/{Type}.cs`, namespace = путь от корня проекта (как в `Application`),
@@ -704,7 +721,8 @@ Suggested order:
    правило в §10.16. `BarberProfileCreateData` / `BarberProfileUpdateData` из домена удалены
    (их место заняли два `*Request`), поэтому `BarberProfile.Create` / `UpdateProfile` вызываются
    с именованными аргументами.
-   Still missing: request-контракты для остальных операций, validators и review→rating recalculation.
+   Still missing: validators и review→rating recalculation. Request-контракты закрыты для всех
+   68 операций — см. §16.
 5. **Infrastructure:** `BarberSearch.Infrastructure` — EF Core + Npgsql, `ApplicationDbContext`,
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
    **Partly done:** the project is called `BarberSearch.Infrastructure.Postgresql`; it references
@@ -720,10 +738,12 @@ Suggested order:
    `Controllers/`, DI registration, middleware mapping `ErrorType` → HTTP status
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) via `ProblemDetails`,
    Swagger UI, JWT auth for `User`.
-   **Partly done:** the `ProjectReference`s and the DI composition root
-   (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place (see §8).
-   Still missing: controllers, the `ErrorType` → HTTP status middleware, Swagger UI wiring and
-   JWT auth.
+   **Done except auth:** the `ProjectReference`s and the DI composition root
+   (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
+   11 controllers with all 68 endpoints, the `ErrorType` → HTTP status mapping
+   (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
+   Swagger UI over the `AddOpenApi` document (see §8 and §16).
+   Still missing: JWT auth for `User`.
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
    **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
@@ -1022,3 +1042,74 @@ Also required for the write path:
 6. Observability last, once there is something worth observing.
 
 Caching before measuring is how a system becomes fast and wrong at the same time.
+
+---
+
+## 16. Web / API layer (added 2026-10-16)
+
+11 controllers, 68 endpoints — one endpoint per Application handler. The route always names the
+aggregate that owns the child entity:
+
+| Controller | Route prefix | Handlers |
+|---|---|---|
+| `UsersController` | `api/users` | 11 |
+| `BarberProfilesController` | `api/barber-profiles` | 21 |
+| `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 4 |
+| `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
+| `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
+| `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
+| `SalonsController` | `api/salons` | 5 |
+| `HairServicesController` | `api/hair-services` | 4 |
+| `SpecializationsController` | `api/specializations` | 4 |
+| `BookingsController` | `api/bookings` | 6 |
+| `ReviewsController` | `api/reviews` | 4 |
+
+Conventions:
+
+- One controller per Application folder, so `Application/BarberSalons` → `BarberSalonsController`.
+- `[ApiController]` plus `ApiController` (`Web/Common/ApiController.cs`) as the base class. Handlers
+  are injected **per action** with `[FromServices]` instead of through the constructor:
+  `BarberProfilesController` would otherwise take 21 dependencies.
+- An action does three things: builds the command/query from the route and a Contracts record, calls
+  the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
+- Identifiers always come from the route, everything else from the body (`XxxRequest`), so the shape
+  of an operation is visible in its signature. A body is used only when the payload is more than a
+  single identifier — that is why only 25 request records were needed for 68 operations.
+- `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
+  validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
+  (falling back to the error code), and every failure carries its codes in the `errorCodes`
+  extension. A mixed failure takes the highest status code (400 < 404 < 409 < 500).
+- Create endpoints answer **201** with `CreatedResourceResponse` and no `Location` header: there are
+  no read operations to point at (see below).
+- The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
+  `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
+  that its XML doc refers to.
+- Enums travel as JSON strings (`JsonStringEnumConverter` in `Program.cs`), so `Grade`, `Language`,
+  `PaymentMethod` and `UserRole` are readable in OpenAPI and in the request bodies.
+- `UseExceptionHandler()` + `AddProblemDetails()` cover what the controllers do not catch.
+
+Deliberately absent:
+
+- **Auth.** Every endpoint is open; `UserRole` and the administrative operations (`ChangeGrade`,
+  `Verify`, rating recalculation) are not protected yet.
+- **Read endpoints.** Only one query handler exists (`FindBarberProfileSalonQuery` →
+  `GET api/barber-profiles/{id}/salons/{salonId}`), so the rest of the API is write-only and not yet
+  usable by a client. That one response is a `BarberSalonResponse` DTO because serializing
+  `BarberSalon` would follow the back-navigation into a cycle.
+- **Pagination, caching, rate limiting, health checks** (§15).
+
+Three issues found while verifying the endpoints against the local database — all three live outside
+the Web layer:
+
+1. **`PUT api/barber-profiles/{id}/salons/{salonId}/primary` answers 409** when another salon of the
+   same profile is already primary. `BarberProfile.SetPrimarySalon` clears the old flag correctly,
+   but EF Core sends the `is_primary = true` UPDATE before the `is_primary = false` one, and the
+   filtered unique index `ux_barber_salons_primary_per_profile` rejects the transient state. Needs a
+   decision: a `DEFERRABLE` constraint in a migration, two `SaveChanges` calls, or explicit
+   ordering. `AddSalon(..., isPrimary: true)` does not hit this (insert/update order differs).
+2. **Photo reordering is duplicated.** `BarberProfile.ReorderPhoto` and `PortfolioPhoto.Reorder` are
+   two handlers for one effect, and both are reachable: `PUT …/photos/{photoId}/sort-order`
+   (aggregate) and `PUT …/photos/{photoId}/order` (child). One of them should go.
+3. **`CreateBooking` accepts a `barberServiceId` that the profile does not offer** — verified by
+   creating a booking with a random service id. The "the barber provides this service" rule is not
+   enforced anywhere yet.

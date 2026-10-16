@@ -1,5 +1,7 @@
 using BarberSearch.Application;
+using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
+using Microsoft.AspNetCore.Identity;
 
 namespace BarberSearch.Web;
 
@@ -10,6 +12,8 @@ namespace BarberSearch.Web;
 /// Класс ничего не создаёт сам — он достаёт строку подключения из конфигурации и передаёт
 /// регистрации в слой <c>BarberSearch.Infrastructure.Postgresql</c>. Program.cs благодаря этому
 /// не знает ни про <c>ApplicationDbContext</c>, ни про конкретные репозитории.
+/// Здесь же регистрируется хешер паролей: хеширование — задача слоя Web
+/// (см. <c>CreateUserCommand.PasswordHash</c>), поэтому зависимость нужна именно ему.
 /// </remarks>
 public static class DependencyInjection
 {
@@ -51,6 +55,9 @@ public static class DependencyInjection
                  'ConnectionStrings__{POSTGRES_CONNECTION_STRING_NAME}'.
                  """);
         }
+
+        // Хешер без состояния и без зависимостей — singleton, как и в ASP.NET Core Identity.
+        services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
         return services.AddPostgresInfrastructure(connectionString)
             .AddRepositories()
