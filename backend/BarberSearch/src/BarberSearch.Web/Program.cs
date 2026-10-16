@@ -1,8 +1,10 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using BarberSearch.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Композиционный корень: PostgreSQL и репозитории подключаются через DependencyInjection слоя Web,
+// строка подключения берётся из конфигурации — ConnectionStrings:Postgres.
+builder.Services.AddProgramDependencies(builder.Configuration);
 
 // Add services to the container.
 

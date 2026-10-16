@@ -1,5 +1,3 @@
-using System;
-
 namespace BarberSearch.Domain.Common;
 
 public class Entity

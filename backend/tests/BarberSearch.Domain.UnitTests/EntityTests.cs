@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-using System.Reflection;
 using BarberSearch.Domain.Common;
 using Shared;
 using Failure = Shared.Failure;

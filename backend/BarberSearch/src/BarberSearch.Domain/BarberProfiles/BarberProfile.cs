@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberProfiles.ValueObjects;
 using BarberSearch.Domain.BarberSalons;
@@ -103,31 +100,44 @@ public class BarberProfile : AggregateRoot
     {
     }
 
-    public static Result<BarberProfile, Failure> Create(BarberProfileCreateData createData)
+    /// <summary>
+    /// Создаёт профиль барбера. Данные приходят значениями, а не записью: запись-контракт
+    /// (<c>BarberProfileCreateRequest</c>) живёт в слое Contracts, на который домен не ссылается.
+    /// </summary>
+    public static Result<BarberProfile, Failure> Create(
+        Guid userId,
+        string displayName,
+        int yearsOfExperience,
+        string? bio,
+        List<Language>? languages,
+        List<string>? certificatesAndTraining,
+        List<string>? achievements,
+        List<PaymentMethod>? paymentMethods,
+        List<string>? communicationFormat,
+        List<string>? goodies,
+        string? latePolicy)
     {
-        ArgumentNullException.ThrowIfNull(createData);
-
-        var inputResult = ValidateInput(createData.DisplayName, createData.YearsOfExperience);
+        var inputResult = ValidateInput(displayName, yearsOfExperience);
         if (inputResult.IsFailure)
         {
             return inputResult.Error;
         }
 
-        var (displayName, yearsOfExperience) = inputResult.Value;
+        var (validDisplayName, validYearsOfExperience) = inputResult.Value;
 
         return new BarberProfile
         {
-            UserId = createData.UserId,
-            DisplayName = displayName,
-            YearsOfExperience = yearsOfExperience,
-            Bio = createData.Bio,
-            _languages = createData.Languages ?? [Language.Ru],
-            _certificatesAndTraining = createData.CertificatesAndTraining ?? [],
-            _achievements = createData.Achievements ?? [],
-            _paymentMethods = createData.PaymentMethods ?? [],
-            _communicationFormat = createData.CommunicationFormat ?? [],
-            _goodies = createData.Goodies ?? [],
-            LatePolicy = createData.LatePolicy ?? string.Empty,
+            UserId = userId,
+            DisplayName = validDisplayName,
+            YearsOfExperience = validYearsOfExperience,
+            Bio = bio,
+            _languages = languages ?? [Language.Ru],
+            _certificatesAndTraining = certificatesAndTraining ?? [],
+            _achievements = achievements ?? [],
+            _paymentMethods = paymentMethods ?? [],
+            _communicationFormat = communicationFormat ?? [],
+            _goodies = goodies ?? [],
+            LatePolicy = latePolicy ?? string.Empty,
             Grade = Grade.None,
             // null = отзывов ещё нет. Ноль в этом поле больше не пишется: это второе
             // представление «нет отзывов» в одном и том же поле.
@@ -142,29 +152,37 @@ public class BarberProfile : AggregateRoot
     /// Обновляет редактируемые барбером поля. Коллекции заменяются целиком, а не дополняются.
     /// Грейд здесь не меняется — см. <see cref="ChangeGrade"/>.
     /// </summary>
-    public UnitResult<Failure> UpdateProfile(BarberProfileUpdateData updateData)
+    public UnitResult<Failure> UpdateProfile(
+        string displayName,
+        int yearsOfExperience,
+        string? bio,
+        List<Language>? languages,
+        List<string>? certificatesAndTraining,
+        List<string>? achievements,
+        List<PaymentMethod>? paymentMethods,
+        List<string>? communicationFormat,
+        List<string>? goodies,
+        string? latePolicy)
     {
-        ArgumentNullException.ThrowIfNull(updateData);
-
-        var inputResult = ValidateInput(updateData.DisplayName, updateData.YearsOfExperience);
+        var inputResult = ValidateInput(displayName, yearsOfExperience);
         if (inputResult.IsFailure)
         {
             return inputResult.Error;
         }
 
-        var (displayName, yearsOfExperience) = inputResult.Value;
+        var (validDisplayName, validYearsOfExperience) = inputResult.Value;
 
-        DisplayName = displayName;
-        YearsOfExperience = yearsOfExperience;
-        Bio = updateData.Bio;
-        LatePolicy = updateData.LatePolicy ?? string.Empty;
+        DisplayName = validDisplayName;
+        YearsOfExperience = validYearsOfExperience;
+        Bio = bio;
+        LatePolicy = latePolicy ?? string.Empty;
 
-        Replace(_languages, updateData.Languages);
-        Replace(_certificatesAndTraining, updateData.CertificatesAndTraining);
-        Replace(_achievements, updateData.Achievements);
-        Replace(_paymentMethods, updateData.PaymentMethods);
-        Replace(_communicationFormat, updateData.CommunicationFormat);
-        Replace(_goodies, updateData.Goodies);
+        Replace(_languages, languages);
+        Replace(_certificatesAndTraining, certificatesAndTraining);
+        Replace(_achievements, achievements);
+        Replace(_paymentMethods, paymentMethods);
+        Replace(_communicationFormat, communicationFormat);
+        Replace(_goodies, goodies);
 
         MarkUpdated();
 

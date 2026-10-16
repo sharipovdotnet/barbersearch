@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
 using Shared;

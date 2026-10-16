@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.WorkingSchedules;

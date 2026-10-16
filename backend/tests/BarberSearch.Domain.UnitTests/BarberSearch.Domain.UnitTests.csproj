@@ -15,6 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Contracts\BarberSearch.Contracts.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Domain\BarberSearch.Domain.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\Shared\Shared.csproj" />
     </ItemGroup>

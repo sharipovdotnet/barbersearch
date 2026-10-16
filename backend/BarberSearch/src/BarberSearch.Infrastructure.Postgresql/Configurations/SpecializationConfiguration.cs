@@ -22,10 +22,16 @@ public class SpecializationConfiguration : IEntityTypeConfiguration<Specializati
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-        builder.Property(x => x.Name).HasColumnName("name").IsRequired();
+        // citext: сравнение без учёта регистра делает сама БД, поэтому обычный уникальный
+        // индекс ниже запрещает и «Стрижка», и «стрижка» (решение владельца, AGENT.md §12).
+        builder.Property(x => x.Name).HasColumnName("name").HasColumnType("citext").IsRequired();
         builder.Property(x => x.Description).HasColumnName("description");
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 
-        // Индексов нет: справочник маленький, а уникальность имени домен не требует.
+        // Имя занимает и неактивная запись: иначе после её активации в справочнике
+        // оказались бы два одинаковых тега, и фильтр клиента разошёлся бы на два.
+        builder.HasIndex(x => x.Name)
+            .HasDatabaseName("ux_specializations_name")
+            .IsUnique();
     }
 }

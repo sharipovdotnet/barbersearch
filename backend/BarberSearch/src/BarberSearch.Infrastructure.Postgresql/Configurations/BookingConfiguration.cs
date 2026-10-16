@@ -60,6 +60,9 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         // Расчёт свободных слотов: range scan по (барбер, день). Отменённые (3), завершённые (4)
         // и неявившиеся (5) слот не занимают, поэтому индекс частичный.
+        // Само пересечение интервалов у одного барбера запрещает exclusion-ограничение
+        // ex_bookings_no_overlap из первой миграции: EF Core такие ограничения не выражает,
+        // поэтому оно живёт только в SQL миграции и здесь не описано.
         builder.HasIndex(x => new { x.BarberProfileId, x.StartAt })
             .HasFilter("status IN (1, 2)")
             .HasDatabaseName("ix_bookings_barber_profile_id_start_at_active");
