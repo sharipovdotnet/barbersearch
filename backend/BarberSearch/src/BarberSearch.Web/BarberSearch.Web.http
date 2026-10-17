@@ -1,6 +1,164 @@
-@BarberSearch.Web_HostAddress = http://localhost:5243
+@host = http://localhost:5243
+@userId = 00000000-0000-0000-0000-000000000000
+@barberProfileId = 00000000-0000-0000-0000-000000000000
+@salonId = 00000000-0000-0000-0000-000000000000
+@hairServiceId = 00000000-0000-0000-0000-000000000000
 
-GET {{BarberSearch.Web_HostAddress}}/weatherforecast/
+# Справочник: специализация. Повтор с другим регистром вернёт 409.
+POST {{host}}/api/specializations
+Content-Type: application/json
+
+{
+  "name": "Fade",
+  "description": "Fades and tapers"
+}
+
+###
+
+# Пользователь. Пароль хешируется слоем Web, роль по умолчанию — Customer.
+POST {{host}}/api/users
+Content-Type: application/json
+
+{
+  "email": "barber@example.com",
+  "password": "Secret123!",
+  "firstName": "Ivan",
+  "lastName": "Petrov"
+}
+
+###
+
+# Каталог услуг: цена и длительность конкретного барбера задаются отдельно.
+POST {{host}}/api/hair-services
+Content-Type: application/json
+
+{
+  "name": "Men's haircut",
+  "category": "Haircut",
+  "defaultDurationMinutes": 30,
+  "description": "Scissors or clipper"
+}
+
+###
+
+POST {{host}}/api/salons
+Content-Type: application/json
+
+{
+  "name": "Smoke Salon",
+  "address": "1 Main St",
+  "city": "Berlin",
+  "country": "DE",
+  "timeZoneId": "Europe/Berlin",
+  "latitude": 52.52,
+  "longitude": 13.405,
+  "postalCode": "10115",
+  "phoneNumber": "+4930123456",
+  "websiteUrl": "https://salon.example"
+}
+
+###
+
+# Профиль барбера: userId берётся из ответа POST /api/users.
+POST {{host}}/api/barber-profiles
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "displayName": "Ivan Petrov",
+  "yearsOfExperience": 5,
+  "bio": "Barber",
+  "languages": ["En", "De"],
+  "certificatesAndTraining": [],
+  "achievements": [],
+  "paymentMethods": ["Cash", "Card"],
+  "communicationFormat": [],
+  "goodies": [],
+  "latePolicy": "Wait 10 minutes"
+}
+
+###
+
+# Салон в профиле и его расписание. Первый салон делаем основным.
+POST {{host}}/api/barber-profiles/{{barberProfileId}}/salons
+Content-Type: application/json
+
+{
+  "salonId": "{{salonId}}",
+  "isPrimary": true
+}
+
+###
+
+POST {{host}}/api/barber-profiles/{{barberProfileId}}/salons/{{salonId}}/working-schedules
+Content-Type: application/json
+
+{
+  "dayOfWeek": "Monday",
+  "startTime": "09:00:00",
+  "endTime": "18:00:00"
+}
+
+###
+
+# Чтение: салон вместе с расписанием пары (барбер, салон).
+GET {{host}}/api/barber-profiles/{{barberProfileId}}/salons/{{salonId}}
 Accept: application/json
+
+###
+
+# Услуга барбера: своя цена и длительность.
+POST {{host}}/api/barber-profiles/{{barberProfileId}}/services
+Content-Type: application/json
+
+{
+  "hairServiceId": "{{hairServiceId}}",
+  "price": 30.0,
+  "durationMinutes": 30
+}
+
+###
+
+# Бронь. Повтор с тем же idempotencyKey вернёт уже созданную бронь, а не вторую.
+POST {{host}}/api/bookings
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "barberProfileId": "{{barberProfileId}}",
+  "barberServiceId": "{{hairServiceId}}",
+  "salonId": "{{salonId}}",
+  "startAt": "2026-12-01T10:00:00+00:00",
+  "endAt": "2026-12-01T10:30:00+00:00",
+  "price": 30.0,
+  "idempotencyKey": "demo-key-1",
+  "customerNote": "First visit"
+}
+
+###
+
+# Жизненный цикл брони.
+POST {{host}}/api/bookings/00000000-0000-0000-0000-000000000000/confirmation
+
+###
+
+POST {{host}}/api/bookings/00000000-0000-0000-0000-000000000000/completion
+
+###
+
+# Отзыв по броне: барбер выводится из брони.
+POST {{host}}/api/reviews
+Content-Type: application/json
+
+{
+  "bookingId": "00000000-0000-0000-0000-000000000000",
+  "userId": "{{userId}}",
+  "rating": 5,
+  "text": "Great cut"
+}
+
+###
+
+POST {{host}}/api/reviews/00000000-0000-0000-0000-000000000000/publication
 
 ###
