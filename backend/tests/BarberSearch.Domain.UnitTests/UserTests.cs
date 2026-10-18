@@ -183,4 +183,27 @@ public class UserTests
         Assert.True(user.MarkEmailAsVerified().IsSuccess);
         Assert.True(user.IsEmailVerified);
     }
+
+    [Fact]
+    public void ChangePasswordHash_WithValidHash_ReplacesIt()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ChangePasswordHash("new-hash");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("new-hash", user.PasswordHash);
+    }
+
+    [Fact]
+    public void ChangePasswordHash_WithEmptyHash_KeepsOldOne()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ChangePasswordHash("   ");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.changePasswordHash", result.Error.Errors[0].Code);
+        Assert.Equal("hash", user.PasswordHash);
+    }
 }

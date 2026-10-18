@@ -232,6 +232,29 @@ public class User : AggregateRoot
         return DomainErrors.Ok();
     }
 
+    /// <summary>
+    /// Заменяет хеш пароля. Открытый пароль в домен не попадает: хеширование — задача слоя Web.
+    /// </summary>
+    /// <remarks>
+    /// Вызывается при смене пароля и при перехешировании, когда <c>IPasswordHasher</c>
+    /// сообщает, что формат хеша устарел.
+    /// </remarks>
+    public UnitResult<Failure> ChangePasswordHash(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            return new Failure(Error.Validation(
+                "user.changePasswordHash",
+                "Password hash cannot be empty.",
+                nameof(passwordHash)));
+        }
+
+        PasswordHash = passwordHash;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
     public UnitResult<Failure> Activate()
     {
         if (IsActive)

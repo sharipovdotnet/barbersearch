@@ -1,11 +1,12 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: the П0–П5 domain rework is **committed** on branch `features/issue-1` (the commit
+> Code state: the П0–П5 domain rework was **committed** on `features/issue-1` (the commit
 > that carries both the domain refactor and the xunit test project; the last *pre-rework* domain
 > commit was `78a9858`, against which §3–§9 were originally verified on 2026-10-12). §9 now lists
 > what the rework closed and what is still open. The whole domain — 16 C# types — plus 2 `Shared`
-> types and 128 xunit tests were reviewed for this revision.
+> types and 128 xunit tests were reviewed for this revision. Current work — the API layer and
+> auth — is on `features/issue-4`.
 
 ---
 
@@ -28,7 +29,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | .NET solution | `BarberSearch\BarberSearch.sln` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-1` (default: `main`) |
+| Working branch | `features/issue-4` (default: `main`) |
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 128 xunit tests) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
@@ -46,6 +47,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
+| Microsoft.AspNetCore.Authentication.JwtBearer | `10.0.11` (+ `Microsoft.IdentityModel.*` 8.19.2, `Microsoft.Bcl.Cryptography` 10.0.2) |
 | Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, on Web; the provider now lives in Infrastructure) |
 | Npgsql.EntityFrameworkCore.PostgreSQL | `10.0.3` (`BarberSearch.Infrastructure.Postgresql` only) |
 | Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (wired up in `Program.cs`: the UI reads the `AddOpenApi` document) |
@@ -121,6 +123,8 @@ backend/                                  ← workspace root
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
+            ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
+            ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             ├── Controllers/              ← 11 controllers, 68 endpoints — one per Application handler
             ├── appsettings.json          ← ConnectionStrings:Postgres + Logging
@@ -327,7 +331,7 @@ no query has been executed against a real database yet.
 Target layering (bold = already exists):
 
 ```
-BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE except auth]
+BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE]
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
@@ -509,7 +513,7 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
 | Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; no auth yet (§16) |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, политики и rate limiting на входе (§17) |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
@@ -743,7 +747,7 @@ Suggested order:
    11 controllers with all 68 endpoints, the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
-   Still missing: JWT auth for `User`.
+   Still missing: refresh-токены и проверка владения ресурсом на остальных контроллерах — §17.
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
    **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
@@ -759,8 +763,9 @@ Suggested order:
 3. **API style:** controllers (the `Controllers/` folder is declared and `AddControllers()` is
    called) — confirm we are not moving to minimal APIs.
 4. **CQRS:** separate read models, or just handlers over a single DbContext?
-5. **Auth:** JWT, roles (`User` / `Barber` / `Admin` — `UserRole` now exists), and who grants
-   `Grade` and `IsVerified`?
+5. **Auth** — **decided 2026-10-19 and implemented (§17):** cookie для браузера + JWT для
+   мобильного/внешнего клиента, роли `UserRole`, политики `AdminOnly` / `BarberOnly` /
+   `VerifiedEmail`; `Grade` и `IsVerified` меняет только администратор.
 6. **Domain events:** introduce an event-collecting `AggregateRoot`, or skip them?
 7. **Multi-salon** — **decided 2026-10-12 and now implemented:** the schedule belongs to the
    `(barber, salon)` pair, so `WorkingSchedule` hangs off `BarberSalon` (keyed by
@@ -1090,13 +1095,12 @@ Conventions:
 
 Deliberately absent:
 
-- **Auth.** Every endpoint is open; `UserRole` and the administrative operations (`ChangeGrade`,
-  `Verify`, rating recalculation) are not protected yet.
+- **Auth** — реализована, см. §17.
 - **Read endpoints.** Only one query handler exists (`FindBarberProfileSalonQuery` →
   `GET api/barber-profiles/{id}/salons/{salonId}`), so the rest of the API is write-only and not yet
   usable by a client. That one response is a `BarberSalonResponse` DTO because serializing
   `BarberSalon` would follow the back-navigation into a cycle.
-- **Pagination, caching, rate limiting, health checks** (§15).
+- **Pagination, caching, health checks** (§15).
 
 Three issues found while verifying the endpoints against the local database — all three live outside
 the Web layer:
@@ -1113,3 +1117,104 @@ the Web layer:
 3. **`CreateBooking` accepts a `barberServiceId` that the profile does not offer** — verified by
    creating a booking with a random service id. The "the barber provides this service" rule is not
    enforced anywhere yet.
+
+---
+
+## 17. Auth: cookie + JWT (added 2026-10-19)
+
+Один хост, две схемы, один набор claims. Браузер получает HttpOnly-cookie, мобильный и внешний
+клиент — access-токен. Схему выбирает `Smart` (`Web/Auth/AuthenticationExtensions.cs`): запрос
+с `Authorization: Bearer …` идёт в JWT, все остальные — в cookie. Благодаря селектору
+`[Authorize]` и политики работают одинаково, без `AuthenticationSchemes` на каждом действии.
+
+### 17.1 Что где лежит
+
+| Слой | Файлы |
+|---|---|
+| `Shared` | `ErrorType.UNAUTHORIZED` / `FORBIDDEN`, фабрики `Error.Unauthorized/Forbidden` |
+| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование |
+| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*` |
+| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
+| `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
+
+### 17.2 Эндпоинты
+
+| Метод | Маршрут | Доступ | Что делает |
+|---|---|---|---|
+| POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается |
+| POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) |
+| POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly-cookie (8 часов) |
+| POST | `api/auth/logout` | аноним, antiforgery | гасит cookie; bearer-клиент просто забывает токен |
+| GET | `api/auth/me` | аутентификация | claims текущего пользователя |
+| GET | `api/auth/csrf` | аноним | antiforgery-токен в теле + cookie |
+
+### 17.3 Claims
+
+`sub`, `email`, `role`, `email_verified`, `barber_profile_id` (если есть), `jti`.
+`MapInboundClaims = false`, `NameClaimType = "sub"`, `RoleClaimType = "role"` — имена короткие
+и одинаковые для cookie и JWT.
+
+### 17.4 Конфигурация
+
+```json
+"Auth": {
+  "Issuer": "BarberSearch",
+  "Audience": "BarberSearch.Api",
+  "AccessTokenMinutes": 15,
+  "CookieHours": 8,
+  "CookieSameSite": "Lax"
+}
+```
+
+`Auth:SigningKey` в `appsettings.json` **не хранится**. В Development ключ генерируется при старте
+(токены живут до перезапуска), в остальных окружениях обязателен `Auth__SigningKey` длиной
+не менее 32 символов. `CookieSameSite=None` (SPA на другом сайте) принудительно включает `Secure`.
+
+### 17.5 Защита
+
+- `FallbackPolicy` требует аутентификации для всего, что не помечено `[AllowAnonymous]`.
+- Политики: `AdminOnly`, `BarberOnly`, `VerifiedEmail`.
+- `AdminOnly` — на `POST api/users`, `ChangeRole`, `LinkBarberProfile`, активацию/деактивацию,
+  подтверждение email/телефона и `RecordLogin`. Публичная регистрация вынесена в
+  `api/auth/register` и всегда создаёт `Customer`.
+- Владение ресурсом в `UsersController` проверяется через `IsCurrentUser(userId)` / `IsAdmin()`.
+- Пароль — `PasswordHasher<User>` (IdentityV3, PBKDF2-SHA256). Неверный пароль и неизвестный email
+  дают одинаковый 401 `auth.login.invalidCredentials`; для неизвестного email выполняется проверка
+  по фиктивному хешу, чтобы наличие аккаунта не выдавалось временем ответа.
+- `SuccessRehashNeeded` перезаписывает хеш при входе.
+- Login/register: 10 попыток в минуту на IP (`AddRateLimiter`, политика `auth`).
+- Antiforgery — только cookie-ветка. Используется свой
+  `ValidateAntiforgeryHeaderAttribute` (через `IAntiforgery`), а не `[ValidateAntiForgeryToken]`:
+  штатный фильтр живёт в MVC ViewFeatures и требует `AddControllersWithViews()`.
+- 401/403 от middleware приходят как `ProblemDetails` (`AuthProblemDetails`), а не пустым телом
+  и не 302 на страницу входа.
+- Antiforgery-токен привязан к identity: после входа его нужно получить заново
+  (`GET api/auth/csrf`), иначе первый же `logout` получит 400 `auth.csrf.invalid`.
+
+### 17.6 Проверено вручную (2026-10-19, локальная PostgreSQL)
+
+`register` 201 → `login` 200 (JWT) → `me` с Bearer 200 (правильные claims) → админский
+`POST api/users` под Customer 403 → битый JWT 401 → `login/cookie` с antiforgery 204 →
+`me` с cookie 200 → `logout` 204 → `me` 401 → `login/cookie` без токена 400 `auth.csrf.invalid`.
+OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток входа в минуту приходит 429.
+Сборка: 7 проектов, 0 ошибок, 0 предупреждений.
+
+### 17.7 Открыто
+
+1. **Refresh-токены.** Access живёт 15 минут; мобильному клиенту нужен refresh с ротацией
+   и отзывом (новая таблица + миграция). Сейчас после истечения — повторный вход.
+2. **Владение ресурсом на остальных контроллерах.** `IsCurrentUser` закрывает только
+   `UsersController`; `BarberProfiles`, `Bookings`, `Reviews` пока проверяют лишь факт входа.
+   Для них нужен `IAuthorizationHandler` с ресурсом.
+3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
+   в контейнере без персистентного тома все сессии умрут после рестарта.
+4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
+   `CookieSameSite=None`, `Secure` и `AllowCredentials`.
+5. **Rate limiting за прокси.** Ключ — `RemoteIpAddress`; без `UseForwardedHeaders` все клиенты
+   за балансировщиком делят один лимит.
+6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
+7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
+   `LoginUserHandler`.
+8. **Следующая сессия** — план перехода к авторизации по владению, матрица доступа и три
+   открытых решения вынесены в `HANDOFF.md` (рядом с этим файлом).
