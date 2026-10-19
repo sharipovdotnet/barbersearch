@@ -4,6 +4,7 @@ using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Shared;
 
 namespace BarberSearch.Infrastructure.Postgresql.Repositories;
@@ -201,26 +202,83 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
     {
         ArgumentNullException.ThrowIfNull(booking);
 
-        await Context.Bookings.AddAsync(booking, cancellationToken);
+        // 50 concurrent inserts on one slot make PostgreSQL's GiST exclusion check
+        // deadlock (40P01) before either transaction can commit, and under load all
+        // contenders can lose, so no 201 is produced at all. Serialising inserts for
+        // one barber with a transaction-scoped advisory lock makes the exclusion
+        // constraint the only decider: first insert wins, the rest get 23P01 -> 409.
+        // Booking create is low-volume (§15.1), so per-barber serialisation is cheap.
+        await using var transaction = await Context.Database.BeginTransactionAsync(cancellationToken);
 
-        // Повтор ключа идемпотентности ловит уникальный индекс
-        // ux_bookings_user_id_idempotency_key, пересечение интервалов — exclusion-ограничение
-        // ex_bookings_no_overlap. Оба случая маппятся в Error.Conflict.
-        var result = await SaveChangesAsync("booking.add", cancellationToken);
-
-        if (result.IsFailure && Context.Entry(booking).State != EntityState.Detached)
+        try
         {
-            // Неудачная вставка не должна остаться в change tracker: обработчик затем
-            // перечитывает бронь по ключу, а случайный повторный SaveChanges в том же
-            // запросе снова наткнулся бы на то же ограничение.
-            Context.Entry(booking).State = EntityState.Detached;
-        }
+            await Context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 SELECT pg_advisory_xact_lock(
+                     hashtextextended({booking.BarberProfileId.ToString()}, 0))
+                 """,
+                cancellationToken);
 
-        return result;
+            await Context.Bookings.AddAsync(booking, cancellationToken);
+
+            // Повтор ключа идемпотентности ловит уникальный индекс
+            // ux_bookings_user_id_idempotency_key, пересечение интервалов — exclusion-ограничение
+            // ex_bookings_no_overlap. Оба случая маппятся в Error.Conflict.
+            UnitResult<Failure> result;
+
+            try
+            {
+                result = await SaveChangesAsync("booking.add", cancellationToken);
+            }
+            catch (InvalidOperationException exception) when (IsDeadlock(exception))
+            {
+                // Kept as a defensive path: if a future lock-key change reintroduces
+                // a deadlock, the request must still be a 409, not a 500.
+                await transaction.RollbackAsync(CancellationToken.None);
+                Context.Entry(booking).State = EntityState.Detached;
+
+                return new Failure(Error.Conflict(
+                    "booking.add.deadlock",
+                    "The booking insert deadlocked with a concurrent insert; the slot was taken."));
+            }
+
+            if (result.IsFailure)
+            {
+                // Неудачная вставка не должна остаться в change tracker: обработчик затем
+                // перечитывает бронь по ключу, а случайный повторный SaveChanges в том же
+                // запросе снова наткнулся бы на то же ограничение.
+                await transaction.RollbackAsync(cancellationToken);
+                Context.Entry(booking).State = EntityState.Detached;
+
+                return result;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(
         Booking booking,
         CancellationToken cancellationToken = default)
         => await SaveGraphAsync(booking, "booking.update", cancellationToken);
+
+    private static bool IsDeadlock(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
