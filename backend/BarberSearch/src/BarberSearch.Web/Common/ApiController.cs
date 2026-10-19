@@ -1,6 +1,4 @@
 using BarberSearch.Contracts.Common;
-using BarberSearch.Domain.Users;
-using BarberSearch.Web.Auth;
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Mvc;
 using Shared;
@@ -43,21 +41,4 @@ public abstract class ApiController : ControllerBase
         => result.IsSuccess
             ? StatusCode(StatusCodes.Status201Created, new CreatedResourceResponse(result.Value))
             : FailureProblemDetails.CreateResult(result.Error);
-
-    /// <summary>
-    /// Совпадает ли пользователь из маршрута с тем, кто пришёл в запросе.
-    /// </summary>
-    /// <remarks>
-    /// Проверка владения ресурсом пока живёт в контроллере: она нужна там, где маршрут несёт
-    /// <c>{userId}</c>. Когда таких действий станет много, её место — обработчик требования
-    /// <c>IAuthorizationHandler</c> с ресурсом, а не копия в каждом action.
-    /// </remarks>
-    protected bool IsCurrentUser(Guid userId)
-        => User.FindFirst(ClaimsPrincipalFactory.SubClaim)?.Value == userId.ToString();
-
-    /// <summary>
-    /// Пришёл ли запрос от администратора.
-    /// </summary>
-    protected bool IsAdmin()
-        => User.IsInRole(nameof(UserRole.Admin));
 }

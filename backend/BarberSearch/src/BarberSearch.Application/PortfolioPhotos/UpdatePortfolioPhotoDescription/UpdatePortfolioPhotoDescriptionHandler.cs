@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -15,14 +16,17 @@ namespace BarberSearch.Application.PortfolioPhotos.UpdatePortfolioPhotoDescripti
 public class UpdatePortfolioPhotoDescriptionHandler : ICommandHandler<UpdatePortfolioPhotoDescriptionCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<UpdatePortfolioPhotoDescriptionHandler> _logger;
 
     public UpdatePortfolioPhotoDescriptionHandler(
         IBarberProfileRepository repository,
-        ILogger<UpdatePortfolioPhotoDescriptionHandler> logger)
+        ILogger<UpdatePortfolioPhotoDescriptionHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -39,6 +43,12 @@ public class UpdatePortfolioPhotoDescriptionHandler : ICommandHandler<UpdatePort
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var photo = profile.PortfolioPhotos.FirstOrDefault(p => p.Id == command.PhotoId);
         if (photo is null)

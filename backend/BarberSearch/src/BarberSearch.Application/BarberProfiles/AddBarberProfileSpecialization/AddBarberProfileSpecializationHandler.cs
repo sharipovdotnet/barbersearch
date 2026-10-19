@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -12,14 +13,17 @@ public class AddBarberProfileSpecializationHandler
     : ICommandHandler<AddBarberProfileSpecializationCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddBarberProfileSpecializationHandler> _logger;
 
     public AddBarberProfileSpecializationHandler(
         IBarberProfileRepository repository,
-        ILogger<AddBarberProfileSpecializationHandler> logger)
+        ILogger<AddBarberProfileSpecializationHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -36,6 +40,12 @@ public class AddBarberProfileSpecializationHandler
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var added = profile.AddSpecialization(command.SpecializationId);
         if (added.IsFailure)

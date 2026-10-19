@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,14 +12,17 @@ namespace BarberSearch.Application.BarberProfiles.RemoveBarberProfilePhoto;
 public class RemoveBarberProfilePhotoHandler : ICommandHandler<RemoveBarberProfilePhotoCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<RemoveBarberProfilePhotoHandler> _logger;
 
     public RemoveBarberProfilePhotoHandler(
         IBarberProfileRepository repository,
-        ILogger<RemoveBarberProfilePhotoHandler> logger)
+        ILogger<RemoveBarberProfilePhotoHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -35,6 +39,12 @@ public class RemoveBarberProfilePhotoHandler : ICommandHandler<RemoveBarberProfi
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var removed = profile.RemovePhoto(command.PhotoId);
         if (removed.IsFailure)

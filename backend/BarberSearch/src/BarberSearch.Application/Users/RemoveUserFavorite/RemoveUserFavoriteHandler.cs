@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -14,11 +15,16 @@ namespace BarberSearch.Application.Users.RemoveUserFavorite;
 public class RemoveUserFavoriteHandler : ICommandHandler<RemoveUserFavoriteCommand>
 {
     private readonly IUserRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<RemoveUserFavoriteHandler> _logger;
 
-    public RemoveUserFavoriteHandler(IUserRepository repository, ILogger<RemoveUserFavoriteHandler> logger)
+    public RemoveUserFavoriteHandler(
+        IUserRepository repository,
+        ICurrentUser currentUser,
+        ILogger<RemoveUserFavoriteHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -36,6 +42,12 @@ public class RemoveUserFavoriteHandler : ICommandHandler<RemoveUserFavoriteComma
         }
 
         var user = userResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(user.Id);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var removed = user.RemoveFavorite(command.BarberProfileId);
         if (removed.IsFailure)

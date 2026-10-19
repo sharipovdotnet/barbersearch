@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using BarberSearch.Domain.BarberSalons;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -17,14 +18,17 @@ public class FindBarberProfileSalonHandler
     : IQueryHandler<BarberSalon, FindBarberProfileSalonQuery>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<FindBarberProfileSalonHandler> _logger;
 
     public FindBarberProfileSalonHandler(
         IBarberProfileRepository repository,
-        ILogger<FindBarberProfileSalonHandler> logger)
+        ILogger<FindBarberProfileSalonHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -40,7 +44,15 @@ public class FindBarberProfileSalonHandler
             return profileResult.Error;
         }
 
-        var salonResult = profileResult.Value.FindSalon(query.SalonId);
+        var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
+
+        var salonResult = profile.FindSalon(query.SalonId);
         if (salonResult.IsFailure)
         {
             return salonResult.Error;

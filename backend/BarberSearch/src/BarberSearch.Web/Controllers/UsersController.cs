@@ -60,7 +60,7 @@ public class UsersController : ApiController
     }
 
     /// <summary>
-    /// Обновляет профиль пользователя.
+    /// Обновляет профиль пользователя. Свой — сам пользователь, чужой — только администратор.
     /// </summary>
     [HttpPut("{userId:guid}/profile")]
     public async Task<ActionResult> UpdateProfile(
@@ -69,11 +69,6 @@ public class UsersController : ApiController
         [FromServices] ICommandHandler<UpdateUserProfileCommand> handler,
         CancellationToken cancellationToken)
     {
-        if (!IsCurrentUser(userId) && !IsAdmin())
-        {
-            return Forbid();
-        }
-
         return ToActionResult(await handler.Handle(
             new UpdateUserProfileCommand(
                 userId,
@@ -178,7 +173,7 @@ public class UsersController : ApiController
         => ToActionResult(await handler.Handle(new RecordUserLoginCommand(userId), cancellationToken));
 
     /// <summary>
-    /// Добавляет барбера в избранное. Повторное добавление — 409.
+    /// Добавляет барбера в избранное. Своё избранное — сам пользователь, чужое — только администратор. Повторное добавление — 409.
     /// </summary>
     [HttpPost("{userId:guid}/favorites/{barberProfileId:guid}")]
     public async Task<ActionResult> AddFavorite(
@@ -187,18 +182,13 @@ public class UsersController : ApiController
         [FromServices] ICommandHandler<AddUserFavoriteCommand> handler,
         CancellationToken cancellationToken)
     {
-        if (!IsCurrentUser(userId) && !IsAdmin())
-        {
-            return Forbid();
-        }
-
         return ToActionResult(await handler.Handle(
             new AddUserFavoriteCommand(userId, barberProfileId),
             cancellationToken));
     }
 
     /// <summary>
-    /// Убирает барбера из избранного. Если барбера там не было — 404.
+    /// Убирает барбера из избранного. Своё избранное — сам пользователь, чужое — только администратор. Если барбера там не было — 404.
     /// </summary>
     [HttpDelete("{userId:guid}/favorites/{barberProfileId:guid}")]
     public async Task<ActionResult> RemoveFavorite(
@@ -207,11 +197,6 @@ public class UsersController : ApiController
         [FromServices] ICommandHandler<RemoveUserFavoriteCommand> handler,
         CancellationToken cancellationToken)
     {
-        if (!IsCurrentUser(userId) && !IsAdmin())
-        {
-            return Forbid();
-        }
-
         return ToActionResult(await handler.Handle(
             new RemoveUserFavoriteCommand(userId, barberProfileId),
             cancellationToken));

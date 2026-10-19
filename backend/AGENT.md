@@ -186,7 +186,7 @@ dotnet clean   BarberSearch/BarberSearch.sln
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all seven projects. Verify with:
+`BarberSearch.sln` lists all eight projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
@@ -194,7 +194,8 @@ dotnet sln BarberSearch/BarberSearch.sln list
 
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
 `BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`, `Shared`,
-`..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`.
+`..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
+`..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`.
 
 **`BarberSearch.Contracts` добавлен 2026-10-16 вручную** (не через `dotnet sln add` — см.
 предупреждение ниже): `Project(…)` + `EndProject` после записи `BarberSearch.Application`,
@@ -205,7 +206,13 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 здесь запрещён. Проверено: `dotnet build BarberSearch.sln` собирает все семь проектов,
 0 ошибок, 0 предупреждений.
 
-The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all seven entries; switching
+**`BarberSearch.Application.UnitTests` добавлен 2026-10-19 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Contracts`, четыре строки
+`ProjectConfigurationPlatforms` для `Debug|Any CPU` и `Release|Any CPU`, GUID проекта —
+`{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}`; проект вложен в существующую папку `tests`
+(`NestedProjects`). Сборка всех восьми проектов — 0 ошибок, 0 предупреждений.
+
+The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all eight entries; switching
 them to the SDK-style `{9A19103F-…}` is a separate cleanup (§9.13).
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
@@ -272,8 +279,8 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **128 `[Fact]` methods, no `[Theory]`, no
-fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
+reflection. This is faithful here because the suite is **Domain — 130, Application — 28 `[Fact]`
+methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
 # 1. build the test assembly (needs danger-full-access for obj/bin)
@@ -294,11 +301,11 @@ cd tests/BarberSearch.Domain.UnitTests/bin/Debug/net10.0
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Domain.UnitTests.dll>
 ```
 
-Result on 2026-10-16 (after the `BarberProfile*Request` move, see §10.16):
+Result on 2026-10-19 (domain suite unchanged since the `BarberProfile*Request` move, see §10.16):
 
 ```
-Discovered: 128, to run: 128
-Passed: 128, Failed: 0, Skipped: 0
+BarberSearch.Domain.UnitTests:      Discovered: 130, passed: 130, failed: 0, skipped: 0
+BarberSearch.Application.UnitTests: Discovered: 28,  passed: 28,  failed: 0, skipped: 0
 ```
 
 Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
@@ -508,12 +515,13 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 | Layer | Status |
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
-| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
+| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 130 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
+| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 28 xunit `[Fact]`s на владение: `403` чужому, `404` отсутствующему, обход admin, авторство из токена, отзыв только по завершённой брони; фейковые репозитории + `ICurrentUser` (§17.8) |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
 | Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, политики и rate limiting на входе (§17) |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, политики и rate limiting на входе (§17); проверки владения ресурсом — в обработчиках Application (§17.8) |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
@@ -1092,6 +1100,12 @@ Conventions:
 - Enums travel as JSON strings (`JsonStringEnumConverter` in `Program.cs`), so `Grade`, `Language`,
   `PaymentMethod` and `UserRole` are readable in OpenAPI and in the request bodies.
 - `UseExceptionHandler()` + `AddProblemDetails()` cover what the controllers do not catch.
+- **Ownership is checked in Application handlers, not in controllers** (§17.8): the handler has
+  already loaded the aggregate, so the check costs no second query, and a foreign resource returns
+  `403 auth.forbidden` through the same `FailureProblemDetails` mapping. The four admin-only profile
+  actions (`Verify`, `Unverify`, `ChangeGrade`, `UpdateRating`) and review `Publish`/`Hide` are closed
+  by `[Authorize(Policy = AdminOnly)]` on the action instead — the decision depends on the role, not
+  on the loaded resource.
 
 Deliberately absent:
 
@@ -1204,11 +1218,11 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 
 1. **Refresh-токены.** Access живёт 15 минут; мобильному клиенту нужен refresh с ротацией
    и отзывом (новая таблица + миграция). Сейчас после истечения — повторный вход.
-2. **Владение ресурсом.** В работе: `ICurrentUser` + `EnsureCanManage` в Application, проверки
-   в обработчиках, после загрузки агрегата (не `IAuthorizationHandler` — обработчик уже
-   загрузил агрегат, второй запрос не нужен). Шаги 1–3 готовы, но не закоммичены: фундамент,
-   создание брони/отзыва/профиля, каталог только для admin. Осталось: профиль барбера и его
-   дети, брони, отзывы, пользователи — детали и матрица в `HANDOFF.md`.
+2. **Владение ресурсом.** ✅ Реализовано 2026-10-19: `ICurrentUser` + `EnsureCanManage` /
+   `EnsureIsBarberOfAsync` в Application, проверки в обработчиках после загрузки агрегата
+   (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
+   Матрица, охват и тесты — §17.8. Из этой темы открыты только security stamp (п. 8)
+   и непроверяемый `barberServiceId` (§16, issue 3).
 3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
    в контейнере без персистентного тома все сессии умрут после рестарта.
 4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
@@ -1218,5 +1232,34 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
 7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
    `LoginUserHandler`.
-8. **Следующая сессия** — план перехода к авторизации по владению, матрица доступа и три
-   открытых решения вынесены в `HANDOFF.md` (рядом с этим файлом).
+8. **Следующая сессия** — refresh-токены; план и порядок работ вынесены в `HANDOFF.md`
+   (рядом с этим файлом).
+
+### 17.8 Авторизация по владению (added 2026-10-19)
+
+Проверка живёт в обработчике, а не в `IAuthorizationHandler`: агрегат уже загружен, поэтому
+владение стоит одного сравнения (для броней — одного `EXISTS`-запроса `IsOwnedByAsync`),
+а `Error.Forbidden` маппится в `403` через `FailureProblemDetails`. Аноним отсекается раньше —
+fallback-политикой (`401`).
+
+| Ресурс | Создание | Изменение | Только admin |
+|---|---|---|---|
+| `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
+| `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
+| Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
+| `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент или барбер | — (admin обходит) |
+| `Review` | клиент по своей завершённой брони | автор | `Publish`/`Hide` |
+| `User` | `register` публично / admin | сам | роль, активация, верификация |
+
+Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой. `admin` обходит проверку через
+`ICurrentUser.IsAdmin` (claim роли, поэтому после смены роли старый токен живёт до истечения —
+п. 8). Исключение — создание отзыва: admin его не обходит, иначе появились бы фиктивные отзывы.
+`Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
+проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
+
+Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
+3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
+Тесты: `tests/BarberSearch.Application.UnitTests` — 28 `[Fact]` на фейковых репозиториях и
+`ICurrentUser` (свой `204`, чужой `403`, отсутствующий `404`, admin, авторство из токена);
+смоук на локальной PostgreSQL двумя пользователями (2026-10-19): свой профиль `204`, чужой
+`403`, своё избранное `204`, чужое `403`, admin-действие под Customer `403`.

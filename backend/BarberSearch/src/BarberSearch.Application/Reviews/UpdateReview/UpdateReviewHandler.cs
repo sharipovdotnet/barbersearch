@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,11 +12,16 @@ namespace BarberSearch.Application.Reviews.UpdateReview;
 public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
 {
     private readonly IReviewRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<UpdateReviewHandler> _logger;
 
-    public UpdateReviewHandler(IReviewRepository repository, ILogger<UpdateReviewHandler> logger)
+    public UpdateReviewHandler(
+        IReviewRepository repository,
+        ICurrentUser currentUser,
+        ILogger<UpdateReviewHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -33,6 +39,12 @@ public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
         }
 
         var review = reviewResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(review.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var updated = review.Update(command.Rating, command.Text);
         if (updated.IsFailure)

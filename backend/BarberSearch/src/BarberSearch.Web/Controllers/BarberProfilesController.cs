@@ -79,8 +79,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Меняет грейд барбера.
+    /// Меняет грейд барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{barberProfileId:guid}/grade")]
     public async Task<ActionResult> ChangeGrade(
         Guid barberProfileId,
@@ -92,8 +93,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Пересчитывает рейтинг барбера по отзывам.
+    /// Пересчитывает рейтинг барбера по отзывам. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{barberProfileId:guid}/rating")]
     public async Task<ActionResult> UpdateRating(
         Guid barberProfileId,
@@ -129,8 +131,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Подтверждает профиль барбера.
+    /// Подтверждает профиль барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{barberProfileId:guid}/verification")]
     public async Task<ActionResult> Verify(
         Guid barberProfileId,
@@ -141,8 +144,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Снимает подтверждение профиля барбера.
+    /// Снимает подтверждение профиля барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpDelete("{barberProfileId:guid}/verification")]
     public async Task<ActionResult> Unverify(
         Guid barberProfileId,

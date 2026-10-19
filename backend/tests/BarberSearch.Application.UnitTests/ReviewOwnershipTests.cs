@@ -1,0 +1,202 @@
+using BarberSearch.Application.Reviews.CreateReview;
+using BarberSearch.Application.Reviews.UpdateReview;
+using BarberSearch.Application.UnitTests.Fakes;
+using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Reviews;
+using Microsoft.Extensions.Logging.Abstractions;
+using Shared;
+using Xunit;
+
+namespace BarberSearch.Application.UnitTests;
+
+public class ReviewOwnershipTests
+{
+    private static Booking CreateBooking(Guid clientId, Guid barberProfileId, bool completed)
+    {
+        var startAt = DateTimeOffset.UtcNow.AddHours(-2);
+        var booking = Booking.Create(
+            clientId,
+            barberProfileId,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            startAt,
+            startAt.AddMinutes(45),
+            1500m,
+            $"key-{Guid.NewGuid()}").Value;
+
+        if (completed)
+        {
+            booking.Confirm();
+            booking.Complete();
+        }
+
+        return booking;
+    }
+
+    [Fact]
+    public async Task Create_ByClientOfCompletedBooking_TakesAuthorFromToken()
+    {
+        var clientId = Guid.CreateVersion7();
+        var booking = CreateBooking(clientId, Guid.CreateVersion7(), completed: true);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var reviews = new FakeReviewRepository();
+        var handler = new CreateReviewHandler(
+            bookings,
+            reviews,
+            new FakeCurrentUser(clientId),
+            NullLogger<CreateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Great haircut"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var review = Assert.Single(reviews.Reviews);
+        Assert.Equal(clientId, review.UserId);
+        Assert.Equal(booking.BarberProfileId, review.BarberProfileId);
+        Assert.Equal(result.Value, review.Id);
+    }
+
+    [Fact]
+    public async Task Create_ByStranger_ReturnsForbidden()
+    {
+        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var reviews = new FakeReviewRepository();
+        var handler = new CreateReviewHandler(
+            bookings,
+            reviews,
+            new FakeCurrentUser(Guid.CreateVersion7()),
+            NullLogger<CreateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Fake review"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Empty(reviews.Reviews);
+    }
+
+    [Fact]
+    public async Task Create_WhenBookingNotCompleted_ReturnsConflict()
+    {
+        var clientId = Guid.CreateVersion7();
+        var booking = CreateBooking(clientId, Guid.CreateVersion7(), completed: false);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var handler = new CreateReviewHandler(
+            bookings,
+            new FakeReviewRepository(),
+            new FakeCurrentUser(clientId),
+            NullLogger<CreateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Too early"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("review.create.bookingNotCompleted", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public async Task Create_ByAdmin_ReturnsForbidden()
+    {
+        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var handler = new CreateReviewHandler(
+            bookings,
+            new FakeReviewRepository(),
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
+            NullLogger<CreateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Admin review"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+    }
+
+    [Fact]
+    public async Task Update_ByAuthor_Succeeds()
+    {
+        var authorId = Guid.CreateVersion7();
+        var booking = CreateBooking(authorId, Guid.CreateVersion7(), completed: true);
+        var review = Review.Create(booking, authorId, 5, "Old text").Value;
+        var reviews = new FakeReviewRepository();
+        reviews.Add(review);
+        var handler = new UpdateReviewHandler(
+            reviews,
+            new FakeCurrentUser(authorId),
+            NullLogger<UpdateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new UpdateReviewCommand(review.Id, 3, "New text"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, review.Rating);
+        Assert.Equal("New text", review.Text);
+    }
+
+    [Fact]
+    public async Task Update_ByStranger_ReturnsForbidden()
+    {
+        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
+        var reviews = new FakeReviewRepository();
+        reviews.Add(review);
+        var handler = new UpdateReviewHandler(
+            reviews,
+            new FakeCurrentUser(Guid.CreateVersion7()),
+            NullLogger<UpdateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new UpdateReviewCommand(review.Id, 1, "Vandalized"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Equal(5, review.Rating);
+    }
+
+    [Fact]
+    public async Task Update_ByAdmin_Succeeds()
+    {
+        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
+        var reviews = new FakeReviewRepository();
+        reviews.Add(review);
+        var handler = new UpdateReviewHandler(
+            reviews,
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
+            NullLogger<UpdateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new UpdateReviewCommand(review.Id, 4, "Moderated"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task Update_WhenReviewMissing_ReturnsNotFound()
+    {
+        var handler = new UpdateReviewHandler(
+            new FakeReviewRepository(),
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
+            NullLogger<UpdateReviewHandler>.Instance);
+
+        var result = await handler.Handle(
+            new UpdateReviewCommand(Guid.CreateVersion7(), 4, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.NOT_FOUND, result.Error.Errors[0].Type);
+    }
+}

@@ -6,7 +6,9 @@ using BarberSearch.Application.Reviews.UpdateReview;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.CreateReview;
 using BarberSearch.Contracts.Reviews.UpdateReview;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -48,8 +50,9 @@ public class ReviewsController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Публикует отзыв: он начинает участвовать в рейтинге барбера.
+    /// Публикует отзыв: он начинает участвовать в рейтинге барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{reviewId:guid}/publication")]
     public async Task<ActionResult> Publish(
         Guid reviewId,
@@ -58,8 +61,9 @@ public class ReviewsController : ApiController
         => ToActionResult(await handler.Handle(new PublishReviewCommand(reviewId), cancellationToken));
 
     /// <summary>
-    /// Скрывает отзыв: он перестаёт участвовать в рейтинге барбера.
+    /// Скрывает отзыв: он перестаёт участвовать в рейтинге барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpDelete("{reviewId:guid}/publication")]
     public async Task<ActionResult> Hide(
         Guid reviewId,
