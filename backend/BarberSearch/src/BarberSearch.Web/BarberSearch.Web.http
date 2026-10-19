@@ -1,8 +1,10 @@
 @host = http://localhost:5243
-@userId = 00000000-0000-0000-0000-000000000000
 @barberProfileId = 00000000-0000-0000-0000-000000000000
 @salonId = 00000000-0000-0000-0000-000000000000
 @hairServiceId = 00000000-0000-0000-0000-000000000000
+
+# Все запросы ниже требуют Bearer-токен: FallbackPolicy закрывает всё, кроме api/auth/*.
+# Каталог (specializations, hair-services, salons) и POST api/users — только admin.
 
 # Справочник: специализация. Повтор с другим регистром вернёт 409.
 POST {{host}}/api/specializations
@@ -15,7 +17,7 @@ Content-Type: application/json
 
 ###
 
-# Пользователь. Пароль хешируется слоем Web, роль по умолчанию — Customer.
+# Пользователь (только admin). Пароль хешируется слоем Web, роль по умолчанию — Customer.
 POST {{host}}/api/users
 Content-Type: application/json
 
@@ -59,12 +61,11 @@ Content-Type: application/json
 
 ###
 
-# Профиль барбера: userId берётся из ответа POST /api/users.
+# Профиль барбера: создаётся для текущего пользователя, нужен токен роли Barber.
 POST {{host}}/api/barber-profiles
 Content-Type: application/json
 
 {
-  "userId": "{{userId}}",
   "displayName": "Ivan Petrov",
   "yearsOfExperience": 5,
   "bio": "Barber",
@@ -119,12 +120,12 @@ Content-Type: application/json
 
 ###
 
-# Бронь. Повтор с тем же idempotencyKey вернёт уже созданную бронь, а не вторую.
+# Бронь. Клиент берётся из токена. Повтор с тем же idempotencyKey вернёт уже созданную
+# бронь, а не вторую.
 POST {{host}}/api/bookings
 Content-Type: application/json
 
 {
-  "userId": "{{userId}}",
   "barberProfileId": "{{barberProfileId}}",
   "barberServiceId": "{{hairServiceId}}",
   "salonId": "{{salonId}}",
@@ -146,13 +147,12 @@ POST {{host}}/api/bookings/00000000-0000-0000-0000-000000000000/completion
 
 ###
 
-# Отзыв по броне: барбер выводится из брони.
+# Отзыв по завершённой броне: автор — текущий пользователь, барбер выводится из брони.
 POST {{host}}/api/reviews
 Content-Type: application/json
 
 {
   "bookingId": "00000000-0000-0000-0000-000000000000",
-  "userId": "{{userId}}",
   "rating": 5,
   "text": "Great cut"
 }

@@ -4,147 +4,132 @@
 > Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
 > (workspace — `backend/`, репозиторий на уровень выше).
 
-## 0. Состояние рабочего дерева
+## 0. Где мы сейчас
 
-Аутентификация реализована, проверена и закоммичена в `features/issue-4` (верхушка ветки,
-`git log -1`). Ниже — состав этого коммита.
+Аутентификация закоммичена (`9c6c75f feat(auth): add cookie and JWT authentication`).
+Поверх неё идёт **авторизация по владению** — шаги 1–3 из плана сделаны, но **не закоммичены**;
+рабочее дерево содержит их целиком. Сборка: 7 проектов, 0 ошибок, 0 предупреждений.
 
-Изменённые файлы:
+Сделано в этой сессии:
 
-```
-backend/AGENT.md
-BarberSearch/src/Shared/Error.cs
-BarberSearch/src/BarberSearch.Domain/Users/User.cs
-BarberSearch/src/BarberSearch.Web/BarberSearch.Web.csproj
-BarberSearch/src/BarberSearch.Web/Common/ApiController.cs
-BarberSearch/src/BarberSearch.Web/Common/FailureProblemDetails.cs
-BarberSearch/src/BarberSearch.Web/Controllers/UsersController.cs
-BarberSearch/src/BarberSearch.Web/Program.cs
-BarberSearch/src/BarberSearch.Web/appsettings.json
-backend/tests/BarberSearch.Domain.UnitTests/UserTests.cs
-```
+1. **Фундамент.** `ICurrentUser` (`UserId`, `IsAdmin`) в Application; `HttpContextCurrentUser`
+   в Web; `EnsureCanManage(ownerId)` → `403 auth.forbidden`; `IsOwnedByAsync` в
+   `IBarberProfileRepository` (один `EXISTS`-запрос, без загрузки агрегата); DI-регистрация.
+2. **Создание.** `UserId` убран из `CreateBookingRequest`, `CreateReviewRequest`,
+   `BarberProfileCreateRequest`. Обработчики берут автора из `ICurrentUser`. Отзыв можно
+   оставить только по **своей завершённой** брони (`403` чужому, `409` если не `Completed`).
+   `POST api/barber-profiles` закрыт политикой `BarberOnly`.
+3. **Каталог.** `Salons`, `HairServices`, `Specializations` — классовый
+   `[Authorize(Policy = AdminOnly)]`, все 13 действий, включая создание.
+
+### 0.1 Что изменено в рабочем дереве
 
 Новые файлы:
 
 ```
-BarberSearch/src/BarberSearch.Application/Users/IPasswordService.cs
-BarberSearch/src/BarberSearch.Application/Users/PasswordVerification.cs
-BarberSearch/src/BarberSearch.Application/Users/LoginUser/{LoginUserCommand,LoginUserHandler,AuthenticatedUser}.cs
-BarberSearch/src/BarberSearch.Contracts/Auth/{Login,Register,Me,Csrf}/*.cs
-BarberSearch/src/BarberSearch.Web/Auth/*.cs
-BarberSearch/src/BarberSearch.Web/OpenApi/BearerSecuritySchemeTransformer.cs
-BarberSearch/src/BarberSearch.Web/Controllers/AuthController.cs
+BarberSearch/src/BarberSearch.Application/Abstractions/ICurrentUser.cs
+BarberSearch/src/BarberSearch.Application/Common/CurrentUserExtensions.cs
+BarberSearch/src/BarberSearch.Web/Auth/HttpContextCurrentUser.cs
 ```
 
-Внешние изменения, которые не видны в git:
+Изменены: `IBarberProfileRepository.cs`, `BarberProfileRepository.cs`,
+`CreateBookingHandler.cs`, `CreateReviewHandler.cs`, `CreateReviewCommand.cs`,
+`CreateBarberProfileHandler.cs`, три Request-контракта, `BarberProfilesController.cs`,
+`ReviewsController.cs`, `SalonsController.cs`, `HairServicesController.cs`,
+`SpecializationsController.cs`, `DependencyInjection.cs`, `BarberSearch.Web.http`,
+`BarberProfileTests.cs`.
 
-- В `BarberSearch.Web.csproj` добавлен `Microsoft.AspNetCore.Authentication.JwtBearer 10.0.11`
-  (тянет `Microsoft.IdentityModel.* 8.19.2` и `Microsoft.Bcl.Cryptography 10.0.2`).
-- В машинном `%APPDATA%\NuGet\NuGet.Config` в `packageSourceMapping` добавлена строка
-  `Microsoft.Bcl.Cryptography`. Без неё restore падает с `NU1100`. Это настройка машины,
-  не репозитория.
+## 1. Решения по доступу (зафиксированы 2026-10-19)
 
-## 1. Что уже работает
+| Вопрос | Решение |
+|---|---|
+| `Publish`/`Hide` отзыва | только admin |
+| `Cancel` брони | клиент и барбер (admin обходит) |
+| Каталог `Salons`/`HairServices`/`Specializations` | только admin, включая создание |
+| Создание профиля барбера | только роль `Barber` |
 
-- Две схемы: cookie для браузера, JWT для мобильного/внешнего клиента; селектор `Smart`
-  по заголовку `Authorization: Bearer …`.
-- Эндпоинты: `POST api/auth/register|login|login/cookie|logout`, `GET api/auth/me|csrf`.
-- Claims: `sub`, `email`, `role`, `email_verified`, `barber_profile_id`, `jti`;
-  `MapInboundClaims = false`, `RoleClaimType = "role"`.
-- Политики: `AdminOnly`, `BarberOnly`, `VerifiedEmail`; `FallbackPolicy` требует входа для всего,
-  кроме `[AllowAnonymous]`.
-- Пароль: `PasswordHasher<User>` (IdentityV3), rehash при `SuccessRehashNeeded`, одинаковая
-  ошибка 401 на неизвестный email и неверный пароль, dummy-verify для выравнивания времени.
-- Antiforgery только на cookie-ветке (`ValidateAntiforgeryHeaderAttribute`), rate limiting
-  10/мин на IP для register/login.
-- 401/403 middleware отдаются как `ProblemDetails`; в Swagger есть кнопка Authorize.
-- Закрыты дыры: `POST api/users` и `ChangeRole` — только admin; публичная регистрация создаёт
-  `Customer`; владение проверяется в `UsersController` (`IsCurrentUser`/`IsAdmin`).
+Отдельно: создание отзыва **не** обходит проверку для admin — иначе появились бы фиктивные
+отзывы. Автор отзыва всегда клиент брони.
 
-Подробности — `AGENT.md` §17.
-
-## 2. Что проверено
-
-Сборка: 7 проектов, 0 ошибок, 0 предупреждений. Смоук на живой PostgreSQL:
-
-```
-me анонимно 401 · register 201 · login 200 · me Bearer 200 · POST api/users под Customer 403
-битый JWT 401 · login/cookie 204 · me cookie 200 · logout 204 → me 401
-login/cookie без CSRF 400 auth.csrf.invalid · OpenAPI securitySchemes=Bearer
-12 попыток входа: 401 × 6, затем 429
-```
-
-`dotnet test` в этом харнессе по-прежнему падает на `testhost` (`Win32Exception 5`,
-AGENT.md §5.2). Два новых теста на `ChangePasswordHash` добавлены и компилируются, но не
-прогонялись — прогнать в обычном shell.
-
-## 3. Следующая задача: авторизация по владению
-
-Причина: fallback-политика проверяет только факт входа. Любой вошедший пользователь может
-менять чужие ресурсы. Примеры:
-
-- `POST api/bookings` принимает `UserId` в теле — бронь от чужого имени;
-- `POST api/reviews` принимает `UserId` — отзыв от чужого имени;
-- 21 действие `api/barber-profiles/{id}` — чужие фото, услуги, салоны, график, отпуска,
-  `Verify`, `ChangeGrade`;
-- `BookingsController` — подтверждение/завершение/отмена чужой брони;
-- каталог `Salons`/`HairServices`/`Specializations` — создаёт и выключает кто угодно.
-
-### 3.1 Матрица (defaults, если не поправят)
+## 2. Матрица доступа
 
 | Ресурс | Создание | Изменение | Только admin |
 |---|---|---|---|
-| `Salons`, `HairServices`, `Specializations` | admin | admin | activate/deactivate |
-| `BarberProfile` | сам барбер (`UserId = sub`) | владелец профиля | `Verify/Unverify`, `ChangeGrade`, `UpdateRating` |
-| Дети профиля: фото, услуги, салоны, график, отпуска | владелец профиля | владелец профиля | — |
-| `Booking` | клиент, `UserId = sub` | подтверждение/завершение/no-show — барбер; отмена — обе стороны | — |
-| `Review` | клиент по своему завершённому booking | автор | `Publish/Hide` — admin (default) |
-| `User` | register (публично) / admin | сам; роль — admin | активация, верификация |
+| `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
+| `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
+| Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
+| `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент или барбер | — (admin обходит) |
+| `Review` | клиент по своей завершённой брони | автор | `Publish`/`Hide` |
+| `User` | `register` публично / admin | сам; роль — admin | роль, активация, верификация |
 
-### 3.2 Реализация
+Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой; аноним получает `401` на политике.
+Проверка владения идёт **в обработчике, после загрузки агрегата**, а не в
+`IAuthorizationHandler`: обработчик уже загрузил агрегат, и проверка не стоит второго запроса.
+`admin` обходит проверку через `ICurrentUser.IsAdmin` (claim роли, поэтому после смены роли
+старый токен живёт до истечения — известный долг §17.7 п.8).
 
-1. `ICurrentUser` в `BarberSearch.Application` (`Id`, `Role`, `IsAdmin`), реализация в Web
-   читает `HttpContext.User`. Проверки — в handler'ах, которые уже загружают агрегат;
-   `IsCurrentUser` из `ApiController` после этого убрать.
-2. Каталог — `[Authorize(Policy = AuthorizationPolicies.AdminOnly)]` на трёх контроллерах.
-3. `UserId` убрать из `CreateBookingRequest`/`CreateBookingCommand`, `CreateReviewRequest`/
-   `CreateReviewCommand` и `CreateBarberProfile*`: идентификатор берётся из `ICurrentUser`,
-   а не из тела. Это ломает контракты и тесты — сделать осознанно.
-4. Проверки владения: `profile.UserId == current.User.Id`, `booking.UserId == sub` (клиент)
-   либо `profile.UserId == sub` (барбер), `review.UserId == sub`; admin обходит.
-5. Тесты: чужие идентификаторы → 403 (не 404, если ресурс существует), admin-обход,
-   аноним → 401.
+## 3. Следующая задача: шаг 4 — профиль барбера и его дети
 
-### 3.3 Критерии готовности
+Всё, что осталось в этом шаге, — 30 обработчиков. После `GetByIdAsync` добавить:
 
-- Ни один handler, меняющий ресурс, не принимает `UserId` из тела.
+```csharp
+var profile = profileResult.Value;
+
+var allowed = _currentUser.EnsureCanManage(profile.UserId);
+if (allowed.IsFailure)
+{
+    return allowed.Error;
+}
+```
+
+и инжектировать `ICurrentUser` в конструктор. Обработчики уже грузят агрегат — кроме
+`CreateBarberProfileHandler` и `CreateBookingHandler`, которые закрыты в шаге 2.
+
+- **Только admin (атрибут на действии, обработчик не трогаем):**
+  `PUT {id}/grade`, `PUT {id}/rating`, `POST {id}/verification`, `DELETE {id}/verification`.
+- **Владелец или admin (17 действий `BarberProfilesController`):** `Update`, `Activate`,
+  `Deactivate`, `AddPhoto`, `RemovePhoto`, `ReorderPhoto`, `AddSalon`, `RemoveSalon`,
+  `SetPrimarySalon`, `FindSalon` (чтение), `AddService`, `RemoveService`,
+  `AddSpecialization`, `RemoveSpecialization`, `AddTimeOff`, `RemoveTimeOff`.
+- **Дети:** `PortfolioPhotosController` — 4, `BarberServicesController` — 4,
+  `BarberSalonsController` — 3, `WorkingSchedulesController` — 2. Везде тот же паттерн.
+
+Замечания:
+
+- `FindSalon` — чтение; пока закрываем владельцем/admin, публичная карточка появится позже.
+- `Activate`/`Deactivate` по матрице — владелец; если решим, что деактивация только admin,
+  это одно слово в матрице и один атрибут.
+- `UpdateRating` — вычисляемое значение, публичный эндпоинт вообще лишний; пока оставляем
+  admin, кандидат на удаление.
+
+## 4. Оставшиеся шаги
+
+5. **Брони (6 обработчиков).** `Confirm`, `Complete`, `MarkNoShow`, `AddBarberNote` — барбер
+   профиля из брони (`booking.BarberProfileId` + `IBarberProfileRepository.IsOwnedByAsync`);
+   `Cancel` — клиент (`booking.UserId`) или барбер; admin обходит.
+6. **Отзывы (4).** `Update` — автор или admin; `Publish`/`Hide` — `[Authorize(Policy = AdminOnly)]`.
+   `Create` уже закрыт в шаге 2.
+7. **Пользователи (3) и чистка.** `UpdateProfile`, `AddFavorite`, `RemoveFavorite` — проверка
+   внутри обработчика; убрать `IsCurrentUser`/`IsAdmin` из `ApiController.cs` и вызовы из
+   `UsersController`.
+8. **Тесты.** Новый `tests/BarberSearch.Application.UnitTests` (в `.sln` добавлять вручную,
+   `AGENT.md` §5.1): фейковые репозитории + `ICurrentUser`; 15–20 тестов на `403`/`404`/admin/
+   владельца, авторство из токена, отзыв только по завершённой брони. Плюс смоук на живой
+   PostgreSQL двумя пользователями и, опционально, reflection-тест на `AdminOnly` у каталога.
+9. **Документация и коммит.** Закрыть §17.7 п.2, добавить §17.8 с матрицей, обновить §8/§16;
+   коммит в стиле `feat(auth): enforce resource ownership`.
+
+## 5. Критерии готовности всей задачи
+
+- Ни один обработчик, меняющий ресурс, не читает `UserId` из тела.
 - Каталог пишется только admin.
-- Чужой `barberProfileId`/`bookingId`/`reviewId` даёт 403 для аутентифицированного
-  не-владельца и 401 для анонима.
-- Сборка 0/0, смоук на два пользователя (владелец/чужой) зелёный.
-- `AGENT.md` §17.7 обновлён, пункт про владение закрыт.
-
-## 4. Решения, которые нужны до кода
-
-1. `Publish`/`Hide` отзыва — admin (default) или автор?
-2. `Cancel` брони — обе стороны (default) или только клиент?
-3. Каталог `Salons`/`HairServices`/`Specializations` — только admin (default), включая создание?
-
-## 5. После этого
-
-1. **Refresh-токены** (0,5–1 день): таблица `refresh_tokens` (`id`, `user_id`, `token_hash`,
-   `expires_at`, `revoked_at`, `replaced_by`), ротация при каждом refresh, детект повторного
-   использования (отзыв всей цепочки), отзыв при logout/смене пароля/роли/деактивации.
-   Access — 15 минут, refresh — 7–30 дней, в БД только SHA-256.
-2. **Read-эндпоинты** — API сейчас write-only; нужны поиск, карточка барбера, слоты.
-3. **Деплой**: персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
-   `UseForwardedHeaders` для rate limiting за прокси, `Cors:AllowedOrigins` + `SameSite=None`
-   для cross-site SPA.
+- Чужой `barberProfileId`/`bookingId`/`reviewId` → `403`, несуществующий → `404`, аноним → `401`.
+- Сборка 0/0, тесты в обычном shell зелёные, смоук на двух пользователях зелёный.
 
 ## 6. Как запускать и проверять
 
 ```powershell
-# сборка (нужен danger-full-access: sandbox не даёт писать obj/bin)
+# сборка (в workspace-write падает без диагностики — нужен danger-full-access, AGENT.md §5.2)
 dotnet build BarberSearch/BarberSearch.sln
 
 # запуск: content root = каталог проекта, EventLog приглушён
@@ -155,17 +140,40 @@ $env:ASPNETCORE_URLS='http://127.0.0.1:5243'
 dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 ```
 
-Приложению нужен доступ на запись в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`, иначе
-cookie-вход падает с `UnauthorizedAccessException` (в обычном shell доступа достаточно).
+`dotnet test` в этом харнессе падает на `testhost` (`Win32Exception 5`, AGENT.md §5.2) —
+прогонять в обычном shell. Приложению нужен доступ на запись в
+`%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`, иначе cookie-вход падает.
 
-## 7. Технический долг auth (AGENT.md §17.7)
+## 7. После ownership
+
+1. **Refresh-токены** (0,5–1 день): таблица `refresh_tokens` (`id`, `user_id`, `token_hash`,
+   `expires_at`, `revoked_at`, `replaced_by`), ротация при каждом refresh, детект повторного
+   использования, отзыв при logout/смене пароля/роли/деактивации. Access — 15 минут,
+   refresh — 7–30 дней, в БД только SHA-256.
+2. **Read-эндпоинты** — API пока write-only.
+3. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
+   `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
+
+## 8. Технический долг auth (AGENT.md §17.7)
 
 1. Refresh-токены отсутствуют.
-2. Владение проверено только в `UsersController`.
+2. Владение: шаги 1–3 готовы, шаг 4 (профиль и дети) — следующий.
 3. Ключи Data Protection не персистентны.
 4. CORS для cross-site SPA не настроен (`Cors:AllowedOrigins` пуст).
 5. Rate limiting за прокси без `UseForwardedHeaders` делит лимит на всех.
 6. Подтверждение email/телефона административное.
-7. `POST api/users/{id}/logins` оставлен только для admin (обычный вход пишет `LoginUserHandler`).
-8. `GET api/auth/me` строит ответ из claims: после смены роли старый токен отдаёт старую роль
-   до истечения срока.
+7. `POST api/users/{id}/logins` оставлен только для admin.
+8. `GET api/auth/me` и `IsAdmin` читают claims: после смены роли старый токен отдаёт старую
+   роль до истечения (15 минут JWT / 8 часов cookie). Лечится security stamp'ом позже.
+9. `CreateBookingRequest.Price` приходит от клиента — цену надо брать из услуги барбера
+   (отдельная задача, не владение).
+10. `barberServiceId` не проверяется на принадлежность профилю (AGENT.md §16.3).
+
+## 9. Промпт для новой сессии
+
+```text
+Прочитай backend/HANDOFF.md и AGENT.md §17. Продолжаем авторизацию по владению с шага 4:
+проверки владельца профиля барбера и его дочерних сущностей (30 обработчиков), четыре
+admin-only действия (Verify/Unverify/ChangeGrade/UpdateRating). Изменения шагов 1–3 лежат
+в рабочем дереве, не закоммичены. Сборка — через danger-full-access.
+```

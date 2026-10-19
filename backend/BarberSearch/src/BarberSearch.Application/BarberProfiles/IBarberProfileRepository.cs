@@ -53,6 +53,15 @@ public interface IBarberProfileRepository
     Task<Result<bool, Failure>> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Принадлежит ли профиль пользователю. Проверка существования, без загрузки агрегата
+    /// и его коллекций: используется при проверке прав барбера на бронь.
+    /// </summary>
+    Task<Result<bool, Failure>> IsOwnedByAsync(
+        Guid barberProfileId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавляет новый профиль вместе с дочерними коллекциями.
     /// </summary>
     Task<UnitResult<Failure>> AddAsync(BarberProfile barberProfile, CancellationToken cancellationToken = default);

@@ -1,6 +1,8 @@
 using BarberSearch.Application;
+using BarberSearch.Application.Abstractions;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
+using BarberSearch.Web.Auth;
 using Microsoft.AspNetCore.Identity;
 
 namespace BarberSearch.Web;
@@ -58,6 +60,11 @@ public static class DependencyInjection
 
         // Хешер без состояния и без зависимостей — singleton, как и в ASP.NET Core Identity.
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
+        // Текущий пользователь запроса: Application видит только абстракцию, а HttpContext
+        // читается здесь, в Web, — слой Application не знает про ASP.NET Core.
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
         return services.AddPostgresInfrastructure(connectionString)
             .AddRepositories()

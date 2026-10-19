@@ -114,6 +114,18 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return exists;
     }
 
+    public async Task<Result<bool, Failure>> IsOwnedByAsync(
+        Guid barberProfileId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var isOwned = await Context.BarberProfiles
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == barberProfileId && x.UserId == userId, cancellationToken);
+
+        return isOwned;
+    }
+
     public async Task<UnitResult<Failure>> AddAsync(
         BarberProfile barberProfile,
         CancellationToken cancellationToken = default)

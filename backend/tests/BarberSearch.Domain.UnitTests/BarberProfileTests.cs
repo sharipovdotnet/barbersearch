@@ -14,7 +14,6 @@ public class BarberProfileTests
         string displayName = "Ivan the Barber",
         int yearsOfExperience = 5)
         => new(
-            Guid.CreateVersion7(),
             displayName,
             yearsOfExperience,
             "Bio",
@@ -47,7 +46,7 @@ public class BarberProfileTests
     /// </summary>
     private static Result<BarberProfile, Failure> CreateProfile(BarberProfileCreateRequest request)
         => BarberProfile.Create(
-            userId: request.UserId,
+            userId: Guid.CreateVersion7(),
             displayName: request.DisplayName,
             yearsOfExperience: request.YearsOfExperience,
             bio: request.Bio,

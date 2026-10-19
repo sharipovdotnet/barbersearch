@@ -31,7 +31,7 @@ public class ReviewsController : ApiController
         [FromServices] ICommandHandler<Guid, CreateReviewCommand> handler,
         CancellationToken cancellationToken)
         => ToCreatedResult(await handler.Handle(
-            new CreateReviewCommand(request.BookingId, request.UserId, request.Rating, request.Text),
+            new CreateReviewCommand(request.BookingId, request.Rating, request.Text),
             cancellationToken));
 
     /// <summary>

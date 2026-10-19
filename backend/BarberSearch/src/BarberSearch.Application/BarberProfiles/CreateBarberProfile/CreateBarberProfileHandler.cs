@@ -12,17 +12,22 @@ namespace BarberSearch.Application.BarberProfiles.CreateBarberProfile;
 /// <remarks>
 /// Вся проверка данных — доменная: агрегат создаётся фабрикой
 /// <see cref="BarberProfile.Create"/>, поэтому дополнительных правил здесь нет.
+/// Профиль всегда создаётся для текущего пользователя: идентификатор берётся из токена,
+/// а роль <c>Barber</c> проверяет политика <c>BarberOnly</c> на эндпоинте.
 /// </remarks>
 public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProfileCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<CreateBarberProfileHandler> _logger;
 
     public CreateBarberProfileHandler(
         IBarberProfileRepository repository,
+        ICurrentUser currentUser,
         ILogger<CreateBarberProfileHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -36,7 +41,7 @@ public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProf
         var request = command.Request;
 
         var entity = BarberProfile.Create(
-            userId: request.UserId,
+            userId: _currentUser.UserId,
             displayName: request.DisplayName,
             yearsOfExperience: request.YearsOfExperience,
             bio: request.Bio,

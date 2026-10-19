@@ -10,19 +10,26 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// Обработчик команды <see cref="CreateBookingCommand"/>.
 /// </summary>
 /// <remarks>
-/// Первым шагом проверяется ключ идемпотентности: если бронь с таким ключом у пользователя
-/// уже есть, возвращается её идентификатор, и вторая бронь не создаётся. Отсутствие записи
-/// по ключу (<see cref="ErrorType.NOT_FOUND"/>) — не ошибка сценария, а признак того, что
-/// создание нужно продолжить.
+/// Клиент брони берётся из токена (<see cref="ICurrentUser"/>), а не из тела запроса, поэтому
+/// создать бронь от чужого имени нельзя; в рамках этого же пользователя ищется и ключ
+/// идемпотентности. Первым шагом проверяется ключ: если бронь с таким ключом уже есть,
+/// возвращается её идентификатор, и вторая бронь не создаётся. Отсутствие записи по ключу
+/// (<see cref="ErrorType.NOT_FOUND"/>) — не ошибка сценария, а признак того, что создание
+/// нужно продолжить.
 /// </remarks>
 public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
 {
     private readonly IBookingRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<CreateBookingHandler> _logger;
 
-    public CreateBookingHandler(IBookingRepository repository, ILogger<CreateBookingHandler> logger)
+    public CreateBookingHandler(
+        IBookingRepository repository,
+        ICurrentUser currentUser,
+        ILogger<CreateBookingHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -35,9 +42,10 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         CancellationToken cancellationToken)
     {
         var request = command.Request;
+        var userId = _currentUser.UserId;
 
         var existing = await _repository.GetByIdempotencyKeyAsync(
-            request.UserId,
+            userId,
             request.IdempotencyKey,
             cancellationToken);
         if (existing.IsSuccess)
@@ -56,7 +64,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         }
 
         var booking = Booking.Create(
-            request.UserId,
+            userId,
             request.BarberProfileId,
             request.BarberServiceId,
             request.SalonId,

@@ -32,7 +32,9 @@ using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberSalons;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -50,8 +52,10 @@ namespace BarberSearch.Web.Controllers;
 public class BarberProfilesController : ApiController
 {
     /// <summary>
-    /// Создаёт профиль барбера.
+    /// Создаёт профиль барбера для текущего пользователя. Доступно только роли <c>Barber</c>:
+    /// администратор выдаёт её через <c>PUT api/users/{userId}/role</c>.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.BarberOnly)]
     [HttpPost]
     public async Task<ActionResult<CreatedResourceResponse>> Create(
         [FromBody] BarberProfileCreateRequest request,
