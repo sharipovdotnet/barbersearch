@@ -1,4 +1,8 @@
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -112,6 +116,278 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .AnyAsync(x => x.Id == id, cancellationToken);
 
         return exists;
+    }
+
+    public async Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
+        BarberSearchFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        if (filter.Limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                "barberSearch.search.limit",
+                "Search limit must be positive.",
+                nameof(filter.Limit)));
+        }
+
+        // Только публичная выдача: активный и подтверждённый профиль.
+        var query = Context.BarberProfiles
+            .AsNoTracking()
+            .Where(x => x.IsActive && x.IsVerified);
+
+        if (!string.IsNullOrWhiteSpace(filter.City))
+        {
+            var city = filter.City.Trim();
+
+            // Город — свойство салона, а не профиля. EXISTS по связи (барбер, салон)
+            // не размножает строки профиля, в отличие от JOIN.
+            query = query.Where(profile => Context.BarberSalons.Any(link =>
+                link.BarberProfileId == profile.Id
+                && Context.Salons.Any(salon =>
+                    salon.Id == link.SalonId
+                    && salon.IsActive
+                    && salon.City == city)));
+        }
+
+        if (filter.SpecializationId is { } specializationId)
+        {
+            query = query.Where(profile => Context.BarberSpecializations.Any(link =>
+                link.BarberProfileId == profile.Id
+                && link.SpecializationId == specializationId));
+        }
+
+        if (filter.ServiceId is { } serviceId)
+        {
+            query = query.Where(profile => Context.BarberServices.Any(service =>
+                service.BarberProfileId == profile.Id
+                && service.HairServiceId == serviceId
+                && service.IsActive));
+        }
+
+        if (filter.Date is { } date)
+        {
+            var dayOfWeek = date.DayOfWeek;
+
+            // Дата — это «есть рабочий день в этот день недели хотя бы в одном активном салоне».
+            // Конкретные свободные интервалы с учётом таймзоны и отпусков считает /slots.
+            query = query.Where(profile => Context.BarberSalons.Any(link =>
+                link.BarberProfileId == profile.Id
+                && Context.Salons.Any(salon => salon.Id == link.SalonId && salon.IsActive)
+                && Context.WorkingSchedules.Any(schedule =>
+                    schedule.BarberSalonId == link.Id
+                    && schedule.DayOfWeek == dayOfWeek
+                    && !schedule.IsDayOff)));
+        }
+
+        if (filter.Cursor is { } cursor)
+        {
+            if (cursor.Rating is null)
+            {
+                // null-рейтинг — последняя группа: продолжаем внутри неё по возрастанию id.
+                query = query.Where(profile =>
+                    profile.Rating == null
+                    && profile.Id.CompareTo(cursor.Id) > 0);
+            }
+            else
+            {
+                var rating = cursor.Rating.Value;
+
+                // Барберы с рейтингом: строго меньший рейтинг, либо тот же рейтинг
+                // и больший id. null-рейтинг идёт после всех ненулевых.
+                query = query.Where(profile =>
+                    profile.Rating == null
+                    || profile.Rating < rating
+                    || (profile.Rating == rating && profile.Id.CompareTo(cursor.Id) > 0));
+            }
+        }
+
+        var rows = await query
+            // PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок
+            // задан тремя ключами: сначала «есть ли рейтинг», затем рейтинг, затем id.
+            .OrderBy(profile => profile.Rating == null)
+            .ThenByDescending(profile => profile.Rating)
+            .ThenBy(profile => profile.Id)
+            .Take(filter.Limit)
+            .Select(profile => new BarberSearchItemResponse(
+                profile.Id,
+                profile.DisplayName.Value,
+                profile.Grade,
+                profile.YearsOfExperience.Value,
+                profile.Rating,
+                profile.ReviewsCount,
+                profile.IsVerified,
+                null,
+                null,
+                null))
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            return rows;
+        }
+
+        var profileIds = rows.Select(row => row.Id).ToArray();
+
+        // Название и город основного салона — второй запрос на уже урезанный набор id.
+        // Так основной запрос остаётся простым EXISTS-запросом без JOIN коллекций.
+        var salons = await (
+            from link in Context.BarberSalons.AsNoTracking()
+            join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
+            where profileIds.Contains(link.BarberProfileId) && salon.IsActive
+            orderby link.IsPrimary descending, link.Id
+            select new
+            {
+                link.BarberProfileId,
+                link.SalonId,
+                salon.Name,
+                salon.City
+            }).ToListAsync(cancellationToken);
+
+        var primarySalons = salons
+            .GroupBy(salon => salon.BarberProfileId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return rows
+            .Select(row => primarySalons.TryGetValue(row.Id, out var salon)
+                ? row with
+                {
+                    PrimarySalonId = salon.SalonId,
+                    PrimarySalonName = salon.Name,
+                    City = salon.City
+                }
+                : row)
+            .ToList();
+    }
+
+    public async Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = await Context.BarberProfiles
+            .AsNoTracking()
+            .Include(x => x.Salons)
+                .ThenInclude(salon => salon.WorkingSchedules)
+            .Include(x => x.Services)
+            .Include(x => x.BarberSpecializations)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(
+                x => x.Id == id && x.IsActive && x.IsVerified,
+                cancellationToken);
+
+        if (profile is null)
+        {
+            return NotFound("barberProfile.getCardById.notFound", nameof(BarberProfile), id);
+        }
+
+        var salonIds = profile.Salons.Select(salon => salon.SalonId).Distinct().ToArray();
+        var salonsById = await Context.Salons
+            .AsNoTracking()
+            .Where(salon => salonIds.Contains(salon.Id) && salon.IsActive)
+            .ToDictionaryAsync(salon => salon.Id, cancellationToken);
+
+        var hairServiceIds = profile.Services
+            .Select(service => service.HairServiceId)
+            .Distinct()
+            .ToArray();
+        var hairServicesById = await Context.HairServices
+            .AsNoTracking()
+            .Where(service => hairServiceIds.Contains(service.Id))
+            .ToDictionaryAsync(service => service.Id, cancellationToken);
+
+        var specializationIds = profile.BarberSpecializations
+            .Select(link => link.SpecializationId)
+            .Distinct()
+            .ToArray();
+        var specializationsById = await Context.Specializations
+            .AsNoTracking()
+            .Where(specialization => specializationIds.Contains(specialization.Id))
+            .ToDictionaryAsync(specialization => specialization.Id, cancellationToken);
+
+        var services = profile.Services
+            .Where(service => service.IsActive && hairServicesById.ContainsKey(service.HairServiceId))
+            .OrderBy(service => hairServicesById[service.HairServiceId].Name)
+            .Select(service =>
+            {
+                var hairService = hairServicesById[service.HairServiceId];
+
+                return new BarberProfileServiceResponse(
+                    service.Id,
+                    service.HairServiceId,
+                    hairService.Name,
+                    hairService.Category,
+                    hairService.DefaultDurationMinutes,
+                    service.Price,
+                    service.DurationMinutes,
+                    service.IsActive);
+            })
+            .ToList();
+
+        var salons = profile.Salons
+            .Where(link => salonsById.ContainsKey(link.SalonId))
+            .OrderByDescending(link => link.IsPrimary)
+            .ThenBy(link => salonsById[link.SalonId].Name)
+            .Select(link =>
+            {
+                var salon = salonsById[link.SalonId];
+
+                return new BarberProfileSalonResponse(
+                    link.Id,
+                    link.SalonId,
+                    salon.Name,
+                    salon.Address,
+                    salon.City,
+                    salon.Country,
+                    salon.TimeZoneId,
+                    link.IsPrimary,
+                    [.. link.WorkingSchedules
+                        .OrderBy(schedule => schedule.DayOfWeek)
+                        .Select(schedule => new WorkingScheduleResponse(
+                            schedule.Id,
+                            schedule.DayOfWeek,
+                            schedule.StartTime,
+                            schedule.EndTime,
+                            schedule.IsDayOff))]);
+            })
+            .ToList();
+
+        var specializations = profile.BarberSpecializations
+            .Where(link => specializationsById.ContainsKey(link.SpecializationId))
+            .OrderBy(link => specializationsById[link.SpecializationId].Name)
+            .Select(link =>
+            {
+                var specialization = specializationsById[link.SpecializationId];
+
+                return new BarberProfileSpecializationResponse(
+                    link.Id,
+                    link.SpecializationId,
+                    specialization.Name,
+                    specialization.Description);
+            })
+            .ToList();
+
+        return new BarberProfileResponse(
+            profile.Id,
+            profile.UserId,
+            profile.DisplayName.Value,
+            profile.Grade,
+            profile.Bio,
+            profile.YearsOfExperience.Value,
+            [.. profile.Languages],
+            [.. profile.CertificatesAndTraining],
+            profile.Rating,
+            profile.ReviewsCount,
+            [.. profile.Achievements],
+            [.. profile.PaymentMethods],
+            [.. profile.CommunicationFormat],
+            [.. profile.Goodies],
+            profile.LatePolicy,
+            profile.IsActive,
+            profile.IsVerified,
+            services,
+            salons,
+            specializations);
     }
 
     public async Task<Result<bool, Failure>> IsOwnedByAsync(

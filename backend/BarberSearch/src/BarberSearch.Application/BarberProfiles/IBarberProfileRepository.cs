@@ -1,3 +1,6 @@
+using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -45,6 +48,34 @@ public interface IBarberProfileRepository
         int page,
         int pageSize,
         bool onlyActive = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница поиска активных и подтверждённых барберов.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания и без Include коллекций: фильтры выражаются через EXISTS,
+    /// а результат сразу проецируется в <see cref="BarberSearchItemResponse"/>.
+    /// Порядок — <c>rating DESC NULLS LAST, id</c>; keyset-условие берётся из
+    /// <see cref="BarberSearchFilter.Cursor"/>.
+    /// </remarks>
+    /// <param name="filter">Фильтры, позиция курсора и лимит строк.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
+        BarberSearchFilter filter,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Карточка активного и подтверждённого барбера: профиль, услуги, салоны и специализации.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания. Если профиля нет, он неактивен или не подтверждён —
+    /// <c>Error.NotFound</c>; доменный граф наружу не отдаётся.
+    /// </remarks>
+    /// <param name="id">Идентификатор профиля барбера.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>
