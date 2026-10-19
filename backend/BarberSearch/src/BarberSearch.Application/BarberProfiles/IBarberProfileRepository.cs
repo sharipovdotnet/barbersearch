@@ -3,6 +3,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -98,6 +99,23 @@ public interface IBarberProfileRepository
         Guid? salonId,
         Guid? serviceId,
         DateOnly date,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Услуга, предложенная конкретным профилем барбера.
+    /// </summary>
+    /// <remarks>
+    /// Узкое чтение для пути создания брони: достаточно строки <c>barber_services</c>, а не
+    /// всего агрегата с пятью коллекциями. Неактивная услуга возвращается как есть — решение
+    /// «можно ли по ней бронировать» принимает Application. Если услуга не принадлежит
+    /// профилю, возвращается <c>Error.NotFound</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="barberServiceId">Идентификатор услуги барбера (<c>BarberService.Id</c>).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberService, Failure>> GetServiceAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

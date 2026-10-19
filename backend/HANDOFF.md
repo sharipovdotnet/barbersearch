@@ -1,17 +1,17 @@
 # HANDOFF — следующая сессия
 
-> Прочитай `AGENT.md` §15, §16 и §17.10 перед изменениями.
+> Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
 > Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
-> (workspace — `backend/`). HEAD этой сессии — `feat(api): add slots, bookings and reviews read
-> endpoints`; перед ним `9b3c6ba feat(api): add barber search and profile read endpoints`.
+> (workspace — `backend/`). HEAD этой сессии —
+> `fix(bookings): make booking creation contention-safe and idempotent`.
 > `origin/features/issue-4` запушен.
 
 ## 0. Где мы сейчас
 
-Аутентификация, авторизация по владению, refresh-токены, security stamp и **read-эндпоинты**
-готовы. Сборка: **8 проектов, 0 ошибок, 0 предупреждений**.
-Тесты: **139 domain + 83 application**, все зелёные через reflection-раннер (`AGENT.md` §5.3).
-API: **13 контроллеров, 81 endpoint (73 доменных + 8 auth)**.
+Аутентификация, авторизация по владению, refresh-токены, security stamp, read-эндпоинты и
+**booking under contention + idempotency** готовы. Сборка: **8 проектов, 0 ошибок,
+0 предупреждений**. Тесты: **139 domain + 92 application**, все зелёные через
+reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 81 endpoint (73 доменных + 8 auth)**.
 
 Что сделано:
 
@@ -27,47 +27,57 @@ API: **13 контроллеров, 81 endpoint (73 доменных + 8 auth)**
 4. **Security stamp** — `User.SecurityStamp`, `RotateSecurityStamp()` в `ChangePasswordHash` /
    `ChangeRole` / `Deactivate`; claim `security_stamp` в JWT и cookie; scoped
    `SecurityStampValidator`; миграция `AddSecurityStamp` (§17.10).
-5. **Read-эндпоинты (этап 2)** — пять вертикальных срезов, Contracts → Application →
-   Infrastructure → Controller → тесты → смоук:
-   - `GET api/barbers` — фильтры `city`, `specializationId`, `serviceId`, `date`; keyset по
-     `rating DESC NULLS LAST, id`; opaque base64url-курсор; `PagedResponse<BarberSearchItemResponse>`;
-     только активные и подтверждённые барберы, только активные салоны.
-   - `GET api/barbers/{id}` — карточка: профиль, активные услуги, активные салоны с расписанием,
-     специализации, рейтинг; `404` для отсутствующего/неактивного/неподтверждённого профиля.
-   - `GET api/barbers/{id}/slots?date=&serviceId=&salonId=` — слоты из `WorkingSchedule` минус
-     `TimeOff` и активные брони; границы дня в `Salon.TimeZoneId`, в ответе `timeZoneId`,
-     `dayStart`/`dayEnd` в UTC; без `salonId` — основной активный салон; без `serviceId` — шаг
-     30 минут, иначе длительность услуги.
-   - `GET api/bookings` — свои брони; admin видит все и может фильтровать по `userId`; чужой
-     `userId` для не-admin — `403`, неизвестный клиент для admin — `404`; keyset по
-     `start_at DESC, id`.
-   - `GET api/reviews?barberProfileId=` — только опубликованные; keyset по `created_at DESC, id`;
-     ответ без навигаций в циклический граф.
-6. **Индексы** — миграция `AddReadIndexes` (2026-10-19): `ix_barber_profiles_search` (partial,
-   `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at`,
-   `ix_bookings_start_at_id`. Применена к локальной PostgreSQL 16.3.
-7. **Тесты** — `Application.UnitTests`: +43 (курсоры/пагинация, поиск, карточка, слоты, брони,
-   отзывы), всего 83; `Domain.UnitTests` — 139 без изменений.
-8. **Смоук read-эндпоинтов** на локальной PostgreSQL: поиск с каждым фильтром и второй страницей
-   по `nextCursor`, битый курсор `400`; карточка и `404`; слоты с `TimeOff`, активной и
-   отменённой бронью, выходным днём и явными границами дня; свои/чужие брони, admin и `userId`,
-   `404`/`403`; только опубликованные отзывы, пагинация.
+5. **Read-эндпоинты (этап 2)** — `GET api/barbers`, `GET api/barbers/{id}`,
+   `GET api/barbers/{id}/slots`, `GET api/bookings`, `GET api/reviews`: keyset-пагинация,
+   response-DTO, `AsNoTracking`, проекции без Include коллекций; индексы `AddReadIndexes` (§16).
+6. **Booking under contention + idempotency (этап 3, 2026-10-19):**
+   - `POST api/bookings` при пересечении активных броней ловит SQLSTATE `23P01` из
+     `ex_bookings_no_overlap` и отвечает `409 booking.add.overlap`, а не `500`. Предварительная
+     `HasActiveOverlapAsync` в create не используется — источник истины БД.
+   - Unique-индекс `ux_bookings_user_id_idempotency_key` защищает пару
+     `(user_id, idempotency_key)`. Обработчик сначала читает бронь по ключу; при `23505`/`23P01`
+     на вставке перечитывает её и возвращает id победителя; если перечитать не удалось —
+     `409 booking.create.idempotencyKeyConflict`. `BookingRepository.AddAsync` снимает неудачную
+     вставку с change tracker, чтобы повторное чтение работало на чистом состоянии.
+   - Цена берётся из `BarberService.Price`; `CreateBookingRequest.Price` оставлен для
+     совместимости и игнорируется.
+   - `barberServiceId` проверяется узким чтением `IBarberProfileRepository.GetServiceAsync`:
+     услуга должна принадлежать `barberProfileId` и быть активной, иначе `404`
+     (`barberProfile.getService.notFound` / `booking.create.serviceInactive`).
+   - `EndAt` по-прежнему приходит от клиента; расчёт от `DurationMinutes` в этом срезе
+     сознательно не менялся.
+7. **Тесты** — `Application.UnitTests`: +9 на создание брони (повтор ключа, перечитывание после
+   unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги,
+   чужая/неактивная услуга, overlap, отменённая бронь не блокирует), всего 92;
+   `Domain.UnitTests` — 139 без изменений.
+8. **Смоук на локальной PostgreSQL 16.3** (2026-10-19): 50 параллельных POST на один слот с
+   разными ключами → ровно `1 × 201` и `49 × 409`, в БД одна активная бронь; 10 параллельных
+   дублей с одним ключом → `10 × 201`, один id, одна строка; последовательный повтор → тот же
+   id; отменённая бронь слот не занимает; `GET api/barbers/{id}/slots` не показывает занятые
+   слоты; `price = 1` в запросе дал строку с `price = 30.00`; чужая услуга → `404`.
+9. **Документация** — `AGENT.md` §8, §15.5, §15.9, §16, §17.7–§17.8; этот файл.
 
-## 1. Следующая задача — booking under contention и рейтинг
+## 1. Следующая задача — рейтинг, затем кэш и деплой
 
-Read-эндпоинты закрыты; дальше по §15.9:
-
-1. **Booking under contention + idempotency** — exclusion constraint `ex_bookings_no_overlap`
-   уже есть, осталось поймать SQLSTATE `23P01` и вернуть `409`; `IdempotencyKey` уже на
-   сущности и в индексе. Проверить 50 одновременных запросов на один слот: ровно один `201`,
-   остальные `409`.
-2. **Review → rating recalculation** в Application (§12.2): пересчитывать
+1. **Review → rating recalculation** в Application (`AGENT.md` §12.2): пересчитывать
    `BarberProfile.Rating` / `ReviewsCount` при публикации/скрытии/удалении отзыва.
-3. **Кэш** слотов/поиска/карточки — только после load test (§15.4); сейчас кэша нет.
-4. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
+2. **Кэш** слотов/поиска/карточки — только после load test (`AGENT.md` §15.4); сейчас кэша нет.
+3. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
    `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
 
-## 2. Технический долг auth (`AGENT.md` §17.7)
+## 2. Открытые дефекты и техдолг
+
+### 2.1 Вне Web-слоя (найдено на read-этапе, не исправлено)
+
+1. **`PUT api/barber-profiles/{id}/salons/{salonId}/primary` отвечает 409**, если другой салон
+   профиля уже основной: EF Core отправляет `is_primary = true` раньше `false`, и filtered unique
+   индекс `ux_barber_salons_primary_per_profile` отклоняет промежуточное состояние. Нужно
+   `DEFERRABLE`-ограничение миграцией, два `SaveChanges` или явный порядок.
+2. **Переупорядочивание фото дублировано:** `BarberProfile.ReorderPhoto` и
+   `PortfolioPhoto.Reorder` — два обработчика одного эффекта, оба доступны по API. Один нужно
+   убрать.
+
+### 2.2 Auth (`AGENT.md` §17.7)
 
 1. Фоновой уборки истёкших refresh-токенов нет (таблица растёт).
 2. Две одновременные ротации одного refresh-токена не сериализованы на уровне БД
@@ -80,8 +90,12 @@ Read-эндпоинты закрыты; дальше по §15.9:
 8. `logout` stamp не ротирует, поэтому предъявленный access-токен доживает до 15 минут;
    перехеширование пароля при входе ротирует stamp и завершает другие сессии; валидатор тянет
    `favorite_barbers` через `GetByIdAsync`.
-9. `CreateBookingRequest.Price` приходит от клиента — цену надо брать из услуги барбера.
-10. `barberServiceId` не проверяется на принадлежность профилю (`AGENT.md` §16, issue 3).
+
+### 2.3 Booking create — осознанно вне среза
+
+- `EndAt` не выводится из `BarberService.DurationMinutes`: клиент по-прежнему присылает конец
+  интервала. Если это меняется, нужен отдельный законченный срез с тестами и документацией;
+  цена и принадлежность услуги уже серверные.
 
 ## 3. Как запускать и проверять
 
@@ -93,7 +107,7 @@ dotnet build BarberSearch/BarberSearch.sln
 #   собрать тестовый проект, затем reflection-раннер из %TEMP%;
 #   после прогона удалить раннер и временные скрипты
 
-# миграции (AddSecurityStamp и AddReadIndexes уже применены к локальной базе)
+# миграции (InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes применены)
 $env:ASPNETCORE_ENVIRONMENT='Development'
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
@@ -110,7 +124,7 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 `appsettings.json`. Приложению нужен доступ на запись в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`,
 иначе cookie-вход падает. Логин/регистрация/refresh/change-password ограничены 10 попытками в
 минуту на IP: смоук с несколькими пользователями легко ловит `429` — выдержи паузу между
-прогонами или разбей сценарий на окна.
+прогонами или разбей сценарий на окна. На `POST api/bookings` лимита нет.
 
 `git add`/`git commit` тоже требуют `danger-full-access`: в workspace-write падает на
 `.git/index.lock` (`Permission denied`).
@@ -118,14 +132,14 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 ## 4. Промпт для новой сессии
 
 ```text
-Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17.10. Ветка features/issue-4, HEAD —
-feat(api): add slots, bookings and reviews read endpoints, рабочее дерево чистое, origin запушен.
-Read-эндпоинты готовы; этап 2 закрыт, его не трогай, если не меняешь контракт осознанно.
+Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17. Ветка features/issue-4, HEAD —
+fix(bookings): make booking creation contention-safe and idempotent, рабочее дерево чистое,
+origin запушен. Booking under contention + idempotency закрыты; read-эндпоинты и auth не трогай,
+если не меняешь контракт осознанно.
 
-Следующая задача: booking under contention + idempotency (поймать 23P01 и вернуть 409,
-проверить 50 одновременных запросов на один слот), затем review → rating recalculation в
-Application. После load test — кэш слотов/поиска/карточки; в конце — деплой (Data Protection,
-Auth__SigningKey, UseForwardedHeaders, CORS + SameSite=None).
+Следующая задача: review → rating recalculation в Application (§12.2), затем load test и только
+после него кэш слотов/поиска/карточки (§15.4), затем деплой (Data Protection, Auth__SigningKey,
+UseForwardedHeaders, CORS + SameSite=None). Открытые дефекты — §2.1 этого файла.
 
 Сборка/тесты/git — через danger-full-access; тесты — reflection-раннер §5.3, после прогона
 удалить раннер и временные скрипты; сборка 8 проектов, 0 ошибок, 0 предупреждений; все тесты

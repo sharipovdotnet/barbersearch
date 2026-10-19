@@ -48,7 +48,10 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
 
         var key = idempotencyKey.Trim();
 
+        // Обработчику нужен только идентификатор существующей брони, поэтому чтение
+        // идёт без отслеживания (AGENT.md §15.6).
         var booking = await Context.Bookings
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 x => x.UserId == userId && x.IdempotencyKey == key,
                 cancellationToken);
@@ -200,10 +203,20 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
 
         await Context.Bookings.AddAsync(booking, cancellationToken);
 
-        // Повтор ключа идемпотентности поймает уникальный индекс
+        // Повтор ключа идемпотентности ловит уникальный индекс
         // ux_bookings_user_id_idempotency_key, пересечение интервалов — exclusion-ограничение
-        // (когда оно появится в миграции). Оба случая вернут Error.Conflict.
-        return await SaveChangesAsync("booking.add", cancellationToken);
+        // ex_bookings_no_overlap. Оба случая маппятся в Error.Conflict.
+        var result = await SaveChangesAsync("booking.add", cancellationToken);
+
+        if (result.IsFailure && Context.Entry(booking).State != EntityState.Detached)
+        {
+            // Неудачная вставка не должна остаться в change tracker: обработчик затем
+            // перечитывает бронь по ключу, а случайный повторный SaveChanges в том же
+            // запросе снова наткнулся бы на то же ограничение.
+            Context.Entry(booking).State = EntityState.Detached;
+        }
+
+        return result;
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(

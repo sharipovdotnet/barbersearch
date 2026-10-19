@@ -5,6 +5,7 @@ using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -106,6 +107,33 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .ToListAsync(cancellationToken);
 
         return profiles;
+    }
+
+    public async Task<Result<BarberService, Failure>> GetServiceAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        CancellationToken cancellationToken = default)
+    {
+        // Узкое чтение строки barber_services: весь агрегат с пятью коллекциями
+        // для проверки цены и активности не нужен (AGENT.md §15.6).
+        var service = await Context.BarberServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                x => x.Id == barberServiceId && x.BarberProfileId == barberProfileId,
+                cancellationToken);
+
+        if (service is null)
+        {
+            return new Failure(Error.NotFound(
+                "barberProfile.getService.notFound",
+                $"""
+                 Barber profile '{barberProfileId}' does not provide service
+                 '{barberServiceId}'.
+                 """,
+                barberServiceId));
+        }
+
+        return service;
     }
 
     public async Task<Result<bool, Failure>> ExistsAsync(

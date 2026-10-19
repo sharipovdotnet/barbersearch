@@ -20,6 +20,13 @@ public sealed class FakeBookingRepository : IBookingRepository
 
     public IReadOnlyCollection<Booking> Bookings => _bookings.Values;
 
+    /// <summary>
+    /// Подмена поведения вставки — для проверки гонки, которую в памяти не воспроизвести.
+    /// </summary>
+    public Func<Booking, UnitResult<Failure>>? OnAdd { get; set; }
+
+    public int AddCalls { get; private set; }
+
     public void Add(Booking booking) => _bookings[booking.Id] = booking;
 
     public Task<Result<Booking, Failure>> GetByIdAsync(
@@ -37,7 +44,28 @@ public sealed class FakeBookingRepository : IBookingRepository
         Guid userId,
         string idempotencyKey,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.Validation(
+                "booking.getIdempotencyKey.idempotencyKey",
+                "Idempotency key cannot be empty.",
+                nameof(idempotencyKey))));
+        }
+
+        var key = idempotencyKey.Trim();
+        var booking = _bookings.Values.FirstOrDefault(
+            x => x.UserId == userId && x.IdempotencyKey == key);
+
+        if (booking is null)
+        {
+            return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.NotFound(
+                "booking.getIdempotencyKey.notFound",
+                $"Booking with idempotency key '{key}' was not found for user '{userId}'.")));
+        }
+
+        return Task.FromResult<Result<Booking, Failure>>(booking);
+    }
 
     public Task<Result<IReadOnlyList<Booking>, Failure>> GetByUserAsync(
         Guid userId,
@@ -113,6 +141,34 @@ public sealed class FakeBookingRepository : IBookingRepository
         Booking booking,
         CancellationToken cancellationToken = default)
     {
+        AddCalls++;
+
+        if (OnAdd is not null)
+        {
+            return Task.FromResult(OnAdd(booking));
+        }
+
+        // Повторяем правила БД, чтобы тесты видели те же коды, что и на PostgreSQL.
+        if (_bookings.Values.Any(x =>
+                x.UserId == booking.UserId
+                && x.IdempotencyKey == booking.IdempotencyKey))
+        {
+            return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
+                "booking.add.uniqueViolation",
+                "A record with the same unique values already exists."))));
+        }
+
+        if (_bookings.Values.Any(x =>
+                x.BarberProfileId == booking.BarberProfileId
+                && x.Status is BookingStatus.Pending or BookingStatus.Confirmed
+                && x.StartAt < booking.EndAt
+                && booking.StartAt < x.EndAt))
+        {
+            return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
+                "booking.add.overlap",
+                "The period overlaps with an existing record."))));
+        }
+
         _bookings[booking.Id] = booking;
 
         return Task.FromResult(UnitResult.Success<Failure>());

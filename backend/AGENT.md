@@ -279,7 +279,7 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **Domain — 139, Application — 83 `[Fact]`
+reflection. This is faithful here because the suite is **Domain — 139, Application — 92 `[Fact]`
 methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -305,7 +305,7 @@ Result on 2026-10-19 (после security stamp, §17.10):
 
 ```
 BarberSearch.Domain.UnitTests:      Discovered: 139, passed: 139, failed: 0, skipped: 0
-BarberSearch.Application.UnitTests: Discovered: 83,  passed: 83,  failed: 0, skipped: 0
+BarberSearch.Application.UnitTests: Discovered: 92,  passed: 92,  failed: 0, skipped: 0
 ```
 
 Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
@@ -517,11 +517,11 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 139 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
-| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 83 xunit `[Fact]`s: 40 прежних (28 на владение + 12 на refresh-токены) + 43 на read-эндпоинты (8 курсоров/пагинации, 9 поиска, 3 карточки, 9 слотов, 8 броней, 6 отзывов); фейковые репозитории + `ICurrentUser` + `TimeProvider` (§17.8–§17.9) |
+| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 92 xunit `[Fact]`s: 40 прежних (28 на владение + 12 на refresh-токены) + 43 на read-эндпоинты (8 курсоров/пагинации, 9 поиска, 3 карточки, 9 слотов, 8 броней, 6 отзывов) + 9 на создание брони (повтор ключа, перечитывание после unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги, чужая/неактивная услуга, overlap, отменённая бронь); фейковые репозитории + `ICurrentUser` + `TimeProvider` (§17.8–§17.9) |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 8 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `RefreshTokens/IRefreshTokenRepository.cs`, …); **78 handlers (72 command + 6 query)**: 68 доменных операций (включая `FindBarberProfileSalon`), 4 refresh-операции и 5 новых read-запросов, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, `RefreshTokens/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request/response-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: 29 request-записей покрывают все write-операции (первыми были `CreateSalonRequest`, `CreateBookingRequest`, `BarberProfileCreateRequest`, `BarberProfileUpdateRequest`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене. Read-эндпоинты добавили response-DTO: `Common/PagedResponse<T>` и папки `SearchBarbers/`, `GetBarberProfile/`, `GetBarberSlots/`, `Bookings/GetBookings/`, `Reviews/GetReviews/`; доменные сущности наружу не сериализуются — см. §16 |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `AddRefreshTokens` + `AddSecurityStamp` + `AddReadIndexes` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`. `AddReadIndexes` (2026-10-19) добавляет `ix_barber_profiles_search` (partial, `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at` и `ix_bookings_start_at_id`; read-методы `SearchAsync` / `GetCardByIdAsync` / `GetSlotContextAsync` / `GetPageAsync` / `GetPublishedPageAsync` живут в репозиториях и проецируют сразу в Contracts. `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), `AddReadIndexes` applied the same day; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `AddRefreshTokens` + `AddSecurityStamp` + `AddReadIndexes` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`. `AddReadIndexes` (2026-10-19) добавляет `ix_barber_profiles_search` (partial, `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at` и `ix_bookings_start_at_id`; read-методы `SearchAsync` / `GetCardByIdAsync` / `GetSlotContextAsync` / `GetPageAsync` / `GetPublishedPageAsync` живут в репозиториях и проецируют сразу в Contracts. `GetServiceAsync` — узкое чтение `barber_services` для создания брони (без загрузки агрегата), `BookingRepository.AddAsync` снимает неудачную вставку с change tracker и маппит `23505`/`23P01` в `Conflict`. `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), `AddReadIndexes` applied the same day; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
 | Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; **13 controllers in `Controllers/` expose 81 endpoints: 73 доменных + 8 auth** (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, security stamp на каждом запросе, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8). Read-эндпоинты: `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots`, `GET api/bookings`, `GET api/reviews` — keyset-пагинация, response-DTO, `AsNoTracking`, проекции без Include коллекций (§16) |
 | Swagger UI | ✅ wired in `Program.cs` (`AddOpenApi` + `UseSwaggerUI`), Bearer security scheme in `Web/OpenApi` |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
@@ -938,7 +938,7 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 |---|---|---|
 | `bookings` | `(barber_profile_id, start_at) WHERE status IN (1,2)` — partial | The slot query is a range scan `start_at >= day AND start_at < day+1`. Cancelled(3)/Completed(4)/NoShow(5) never block a slot, so excluding them keeps the index small and hot |
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
-| `bookings` | `UNIQUE (idempotency_key)` per user (or global) | Mobile clients retry; a retry must not create a second booking. `IdempotencyKey` now exists on the entity |
+| `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global |
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
 | `bookings` | `(start_at DESC, id)` | Administrator's all-bookings list; user list is covered by `(user_id, start_at)` |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
@@ -999,20 +999,49 @@ Cache read paths only. Never cache the booking write.
 ### 15.5 Booking under contention — the correctness core
 
 Two users, one slot, simultaneous POST. With no mechanism, both read "free" and both insert.
+The mechanism is settled: **the exclusion constraint**, not an application pre-check.
 
-Choose one, and know why:
+- `ex_bookings_no_overlap` (`InitialCreate`, raw SQL over `btree_gist`) rejects an overlapping
+  `tstzrange(start_at, end_at)` for the same `barber_profile_id` **only for statuses 1/2**
+  (`Pending`/`Confirmed`). Cancelled (3), completed (4) and no-show (5) rows do not hold a slot.
+- `RepositoryBase.MapDatabaseError` turns `23P01` into `Error.Conflict("booking.add.overlap")`
+  and `23505` into `Error.Conflict("booking.add.uniqueViolation")`; both become `409`, never `500`.
+- `HasActiveOverlapAsync` stays advisory only. `CreateBookingHandler` does **not** call it:
+  a pre-check would still race, and the database is the source of truth. Isolation is the default
+  EF Core `ReadCommitted` with the implicit per-`SaveChanges` transaction — sufficient for the
+  constraint to serialise the two inserts.
 
-1. **Exclusion constraint** (preferred) — the database rejects the overlap; catch SQLSTATE `23P01`
-   and map it to `Error.Conflict` with a domain code following §10.7.
-2. `SELECT ... FOR UPDATE` over the barber's bookings in the target range, inside a transaction.
-3. Optimistic concurrency — map `xmin` via `UseXminAsConcurrencyToken()`. Note `Booking` currently
-   has **no** concurrency token at all.
+**Idempotency.** The unique index `ux_bookings_user_id_idempotency_key` (also from
+`InitialCreate`) makes the key scoped to `(user_id, idempotency_key)`, not global.
 
-Also required for the write path:
+1. `CreateBookingHandler` trims the key once and first reads the existing booking by
+   `(current user, key)`; a hit returns its id without touching the service or inserting.
+2. A miss proceeds to insert. If the insert loses a race, the same handler re-reads by key:
+   `23505` and `23P01` both enter this branch, so a duplicate-key loser gets the winner's id
+   (idempotent `201`) instead of an error.
+3. If the re-read still does not find the row, a unique violation becomes
+   `409 booking.create.idempotencyKeyConflict`; an overlap stays `409 booking.add.overlap`.
+4. `BookingRepository.AddAsync` detaches the failed entity from the change tracker, so the
+   re-read happens against clean state and a later `SaveChanges` cannot retry the same insert.
 
-- **Idempotency key** on booking create — the column exists on `Booking` now; add the unique index
-  and the "return the existing booking" handler.
-- Set the isolation level deliberately (`ReadCommitted` is enough with option 1), not accidentally.
+**Price and service.** `BarberService.Price` is the source of truth; `CreateBookingRequest.Price`
+remains in the contract for compatibility but is ignored. Before creating the booking the handler
+reads the service through `IBarberProfileRepository.GetServiceAsync` (narrow `barber_services`
+query, no aggregate load), requires `BarberService.BarberProfileId == request.BarberProfileId`
+and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
+`booking.create.serviceInactive`). `EndAt` is still taken from the request; duration-derived
+`EndAt` was deliberately **not** introduced in this slice.
+
+**Verified 2026-10-19, local PostgreSQL 16.3:**
+
+- 50 parallel `POST api/bookings` on one slot with 50 different keys — exactly `1 × 201` and
+  `49 × 409`; both `23P01` and `23505` appeared in the server log; one active row in `bookings`.
+- 10 parallel duplicates with the **same** key — `10 × 201`, one distinct id, one row; losers
+  logged "returned after a conflicting insert".
+- A sequential repeat with the same key returned the same id; a cancelled booking on the slot did
+  not block the next insert; `GET api/barbers/{id}/slots` no longer listed either occupied slot.
+- A request with `price = 1` produced a row with `price = 30.00` (the barber service price);
+  a service id belonging to another barber returned `404`.
 
 ### 15.6 EF Core query hygiene
 
@@ -1059,7 +1088,9 @@ Also required for the write path:
    locally installed PostgreSQL 16.3, and the two rules were exercised with real INSERTs: an
    overlapping booking is rejected, a touching one is accepted, and `стрижка` after `Стрижка`
    violates `ux_specializations_name`.
-3. Booking under contention + idempotency — correctness before speed.
+3. ~~Booking under contention + idempotency~~ — **done (2026-10-19):** exclusion constraint
+   caught as `409`, idempotent repeat/re-read by key, server-side price and service ownership;
+   see §15.5. Correctness before speed.
 4. Review → rating recalculation in the application layer (§12.2).
 5. Load test at realistic volume, measure, **then** cache.
 6. Observability last, once there is something worth observing.
@@ -1106,6 +1137,15 @@ Conventions:
   extension. A mixed failure takes the highest status code (400 < 404 < 409 < 500).
 - Create endpoints answer **201** with `CreatedResourceResponse` and no `Location` header yet: the
   read endpoints exist, but creating a resource still does not link to its card.
+- **`POST api/bookings` (2026-10-19).** The client comes from `sub`; `Price` in the request is
+  ignored and `Booking.Price` is copied from the barber service. The service must belong to
+  `barberProfileId` and be active (`404` otherwise) — read through the narrow
+  `GetServiceAsync`, not the full profile aggregate. `IdempotencyKey` is trimmed and scoped to the
+  current user: an existing row returns its id, a losing concurrent insert is re-read by key and
+  also returns the winner's id, and only an unrecoverable race is `409`
+  (`booking.create.idempotencyKeyConflict`). An overlapping active booking is `409
+  booking.add.overlap` from the exclusion constraint; cancelled/completed/no-show rows do not
+  block. `EndAt` still comes from the request in this slice.
 - The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
@@ -1166,7 +1206,7 @@ Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`speciali
 page, foreign `403`, admin all and admin `userId` filter, unknown user `404`; published reviews only,
 two pages, hidden review absent, broken cursor `400`.
 
-Three issues found while verifying the endpoints against the local database — all three live outside
+Two issues found while verifying the endpoints against the local database — both live outside
 the Web layer:
 
 1. **`PUT api/barber-profiles/{id}/salons/{salonId}/primary` answers 409** when another salon of the
@@ -1178,9 +1218,10 @@ the Web layer:
 2. **Photo reordering is duplicated.** `BarberProfile.ReorderPhoto` and `PortfolioPhoto.Reorder` are
    two handlers for one effect, and both are reachable: `PUT …/photos/{photoId}/sort-order`
    (aggregate) and `PUT …/photos/{photoId}/order` (child). One of them should go.
-3. **`CreateBooking` accepts a `barberServiceId` that the profile does not offer** — verified by
-   creating a booking with a random service id. The "the barber provides this service" rule is not
-   enforced anywhere yet.
+
+The third issue from the read-endpoint review — `CreateBooking` accepting a `barberServiceId` that
+the profile does not offer — is closed: §15.5 / `POST api/bookings` now validates ownership and
+activity of the barber service and takes the price from it.
 
 ---
 
@@ -1297,7 +1338,7 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 деактивация `204` и stamp не меняет. В БД у всех 11 прежних пользователей stamp непустой
 и уникальный (backfill `gen_random_uuid()::text`).
 
-Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 83 application, все
+Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 92 application, все
 зелёные через reflection-раннер (§5.3).
 
 ### 17.7 Открыто
@@ -1309,8 +1350,8 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 2. **Владение ресурсом.** ✅ Реализовано 2026-10-19: `ICurrentUser` + `EnsureCanManage` /
    `EnsureIsBarberOfAsync` в Application, проверки в обработчиках после загрузки агрегата
    (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
-   Матрица, охват и тесты — §17.8. Из этой темы открыт только непроверяемый `barberServiceId`
-   (§16, issue 3).
+   Матрица, охват и тесты — §17.8. `CreateBooking` дополнительно проверяет принадлежность
+   и активность `barberServiceId` (§15.5, §16); открытых пунктов по этой теме нет.
 3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
    в контейнере без персистентного тома все сессии умрут после рестарта.
 4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
@@ -1324,7 +1365,8 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
    в `ChangePasswordHash` / `ChangeRole` / `Deactivate`, claim `security_stamp` в JWT и cookie,
    scoped `SecurityStampValidator` в `OnTokenValidated` / `OnValidatePrincipal`, миграция
    `AddSecurityStamp`. Механика и ограничения — §17.10. Read-эндпоинты реализованы 2026-10-19
-   (см. §16); следующая сессия — booking under contention и пересчёт рейтинга (`HANDOFF.md`).
+   (см. §16), booking under contention + идемпотентность — 2026-10-19 (см. §15.5); следующая
+   сессия — пересчёт рейтинга из отзывов (`HANDOFF.md`).
 
 ### 17.8 Авторизация по владению (added 2026-10-19)
 
@@ -1350,9 +1392,9 @@ fallback-политикой (`401`).
 
 Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
 3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
-Тесты: `tests/BarberSearch.Application.UnitTests` — 83 `[Fact]`: 40 прежних (28 на владение на фейковых
-репозиториях и `ICurrentUser` + 12 на refresh-токены) и 43 на read-эндпоинты (курсоры/пагинация,
-поиск, карточка, слоты, брони, отзывы); смоук на локальной PostgreSQL двумя пользователями
+Тесты: `tests/BarberSearch.Application.UnitTests` — 92 `[Fact]`: 40 прежних (28 на владение на фейковых
+репозиториях и `ICurrentUser` + 12 на refresh-токены), 43 на read-эндпоинты (курсоры/пагинация,
+поиск, карточка, слоты, брони, отзывы) и 9 на создание брони (§15.5); смоук на локальной PostgreSQL двумя пользователями
 (2026-10-19): свой профиль `204`, чужой `403`, своё избранное `204`, чужое `403`, admin-действие
 под Customer `403`.
 

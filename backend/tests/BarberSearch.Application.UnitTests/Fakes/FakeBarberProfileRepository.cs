@@ -4,6 +4,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -78,6 +79,27 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
         Guid id,
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_profiles.ContainsKey(id));
+
+    public Task<Result<BarberService, Failure>> GetServiceAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        CancellationToken cancellationToken = default)
+    {
+        var service = _profiles.TryGetValue(barberProfileId, out var profile)
+            ? profile.Services.FirstOrDefault(
+                x => x.Id == barberServiceId && x.BarberProfileId == barberProfileId)
+            : null;
+
+        if (service is null)
+        {
+            return Task.FromResult<Result<BarberService, Failure>>(new Failure(Error.NotFound(
+                "barberProfile.getService.notFound",
+                $"Barber profile '{barberProfileId}' does not provide service '{barberServiceId}'.",
+                barberServiceId)));
+        }
+
+        return Task.FromResult<Result<BarberService, Failure>>(service);
+    }
 
     public Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
         BarberSearchFilter filter,
