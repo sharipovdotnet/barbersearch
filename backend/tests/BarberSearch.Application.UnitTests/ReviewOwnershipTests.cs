@@ -1,6 +1,8 @@
+using BarberSearch.Application.Reviews;
 using BarberSearch.Application.Reviews.CreateReview;
 using BarberSearch.Application.Reviews.UpdateReview;
 using BarberSearch.Application.UnitTests.Fakes;
+using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Reviews;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,14 +13,19 @@ namespace BarberSearch.Application.UnitTests;
 
 public class ReviewOwnershipTests
 {
-    private static Booking CreateBooking(Guid clientId, Guid barberProfileId, bool completed)
+    private static readonly Guid SalonId = Guid.CreateVersion7();
+
+    private static Booking CreateBooking(
+        Guid clientId,
+        Guid barberProfileId,
+        bool completed)
     {
         var startAt = DateTimeOffset.UtcNow.AddHours(-2);
         var booking = Booking.Create(
             clientId,
             barberProfileId,
             Guid.CreateVersion7(),
-            Guid.CreateVersion7(),
+            SalonId,
             startAt,
             startAt.AddMinutes(45),
             1500m,
@@ -33,19 +40,60 @@ public class ReviewOwnershipTests
         return booking;
     }
 
+    private static BarberProfile CreateProfile()
+        => BarberProfile.Create(
+            Guid.CreateVersion7(),
+            "Test Barber",
+            5,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null).Value;
+
+    private static CreateReviewHandler CreateCreateHandler(
+        FakeBookingRepository bookings,
+        FakeReviewRepository reviews,
+        FakeBarberProfileRepository profiles,
+        FakeCurrentUser currentUser)
+        => new(
+            bookings,
+            reviews,
+            new FakeUnitOfWork(reviews, profiles),
+            new ReviewRatingRecalculator(profiles, reviews),
+            currentUser,
+            NullLogger<CreateReviewHandler>.Instance);
+
+    private static UpdateReviewHandler CreateUpdateHandler(
+        FakeReviewRepository reviews,
+        FakeBarberProfileRepository profiles,
+        FakeCurrentUser currentUser)
+        => new(
+            reviews,
+            new FakeUnitOfWork(reviews, profiles),
+            new ReviewRatingRecalculator(profiles, reviews),
+            currentUser,
+            NullLogger<UpdateReviewHandler>.Instance);
+
     [Fact]
     public async Task Create_ByClientOfCompletedBooking_TakesAuthorFromToken()
     {
         var clientId = Guid.CreateVersion7();
-        var booking = CreateBooking(clientId, Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(clientId, profile.Id, completed: true);
         var bookings = new FakeBookingRepository();
         bookings.Add(booking);
         var reviews = new FakeReviewRepository();
-        var handler = new CreateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateCreateHandler(
             bookings,
             reviews,
-            new FakeCurrentUser(clientId),
-            NullLogger<CreateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(clientId));
 
         var result = await handler.Handle(
             new CreateReviewCommand(booking.Id, 5, "Great haircut"),
@@ -61,15 +109,18 @@ public class ReviewOwnershipTests
     [Fact]
     public async Task Create_ByStranger_ReturnsForbidden()
     {
-        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
         var bookings = new FakeBookingRepository();
         bookings.Add(booking);
         var reviews = new FakeReviewRepository();
-        var handler = new CreateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateCreateHandler(
             bookings,
             reviews,
-            new FakeCurrentUser(Guid.CreateVersion7()),
-            NullLogger<CreateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7()));
 
         var result = await handler.Handle(
             new CreateReviewCommand(booking.Id, 5, "Fake review"),
@@ -84,14 +135,17 @@ public class ReviewOwnershipTests
     public async Task Create_WhenBookingNotCompleted_ReturnsConflict()
     {
         var clientId = Guid.CreateVersion7();
-        var booking = CreateBooking(clientId, Guid.CreateVersion7(), completed: false);
+        var profile = CreateProfile();
+        var booking = CreateBooking(clientId, profile.Id, completed: false);
         var bookings = new FakeBookingRepository();
         bookings.Add(booking);
-        var handler = new CreateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateCreateHandler(
             bookings,
             new FakeReviewRepository(),
-            new FakeCurrentUser(clientId),
-            NullLogger<CreateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(clientId));
 
         var result = await handler.Handle(
             new CreateReviewCommand(booking.Id, 5, "Too early"),
@@ -105,14 +159,17 @@ public class ReviewOwnershipTests
     [Fact]
     public async Task Create_ByAdmin_ReturnsForbidden()
     {
-        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
         var bookings = new FakeBookingRepository();
         bookings.Add(booking);
-        var handler = new CreateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateCreateHandler(
             bookings,
             new FakeReviewRepository(),
-            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
-            NullLogger<CreateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true));
 
         var result = await handler.Handle(
             new CreateReviewCommand(booking.Id, 5, "Admin review"),
@@ -126,14 +183,17 @@ public class ReviewOwnershipTests
     public async Task Update_ByAuthor_Succeeds()
     {
         var authorId = Guid.CreateVersion7();
-        var booking = CreateBooking(authorId, Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(authorId, profile.Id, completed: true);
         var review = Review.Create(booking, authorId, 5, "Old text").Value;
         var reviews = new FakeReviewRepository();
         reviews.Add(review);
-        var handler = new UpdateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateUpdateHandler(
             reviews,
-            new FakeCurrentUser(authorId),
-            NullLogger<UpdateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(authorId));
 
         var result = await handler.Handle(
             new UpdateReviewCommand(review.Id, 3, "New text"),
@@ -147,14 +207,17 @@ public class ReviewOwnershipTests
     [Fact]
     public async Task Update_ByStranger_ReturnsForbidden()
     {
-        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
         var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
         var reviews = new FakeReviewRepository();
         reviews.Add(review);
-        var handler = new UpdateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateUpdateHandler(
             reviews,
-            new FakeCurrentUser(Guid.CreateVersion7()),
-            NullLogger<UpdateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7()));
 
         var result = await handler.Handle(
             new UpdateReviewCommand(review.Id, 1, "Vandalized"),
@@ -168,14 +231,17 @@ public class ReviewOwnershipTests
     [Fact]
     public async Task Update_ByAdmin_Succeeds()
     {
-        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7(), completed: true);
+        var profile = CreateProfile();
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
         var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
         var reviews = new FakeReviewRepository();
         reviews.Add(review);
-        var handler = new UpdateReviewHandler(
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateUpdateHandler(
             reviews,
-            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
-            NullLogger<UpdateReviewHandler>.Instance);
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true));
 
         var result = await handler.Handle(
             new UpdateReviewCommand(review.Id, 4, "Moderated"),
@@ -187,10 +253,12 @@ public class ReviewOwnershipTests
     [Fact]
     public async Task Update_WhenReviewMissing_ReturnsNotFound()
     {
-        var handler = new UpdateReviewHandler(
-            new FakeReviewRepository(),
-            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
-            NullLogger<UpdateReviewHandler>.Instance);
+        var reviews = new FakeReviewRepository();
+        var profiles = new FakeBarberProfileRepository();
+        var handler = CreateUpdateHandler(
+            reviews,
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true));
 
         var result = await handler.Handle(
             new UpdateReviewCommand(Guid.CreateVersion7(), 4, null),

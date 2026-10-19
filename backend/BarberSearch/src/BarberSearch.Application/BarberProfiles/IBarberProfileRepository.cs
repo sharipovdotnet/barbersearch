@@ -32,6 +32,19 @@ public interface IBarberProfileRepository
     Task<Result<BarberProfile, Failure>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Корень профиля, заблокированный для пересчёта рейтинга (<c>SELECT … FOR UPDATE</c>).
+    /// </summary>
+    /// <remarks>
+    /// Дочерние коллекции не загружаются: для <c>UpdateRating</c> нужен только корень.
+    /// Блокировка снимается при завершении транзакции, поэтому метод обязан вызываться
+    /// внутри <c>IUnitOfWork</c>. Он сериализует конкурентные пересчёты одного профиля:
+    /// второй писатель ждёт коммита первого и читает сводку уже с его изменениями.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Корни профилей по списку идентификаторов, без дочерних коллекций.
     /// Порядок результата не гарантирован. Пустой список — пустой результат, а не ошибка.
     /// </summary>

@@ -3,15 +3,16 @@
 > Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
 > Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
 > (workspace — `backend/`). HEAD этой сессии —
-> `fix(bookings): make booking creation contention-safe and idempotent`.
+> `feat(reviews): recalculate barber rating on review changes`.
 > `origin/features/issue-4` запушен.
 
 ## 0. Где мы сейчас
 
-Аутентификация, авторизация по владению, refresh-токены, security stamp, read-эндпоинты и
-**booking under contention + idempotency** готовы. Сборка: **8 проектов, 0 ошибок,
-0 предупреждений**. Тесты: **139 domain + 92 application**, все зелёные через
-reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 81 endpoint (73 доменных + 8 auth)**.
+Аутентификация, авторизация по владению, refresh-токены, security stamp, read-эндпоинты,
+**booking under contention + idempotency** и **review → rating recalculation** готовы. Сборка:
+**8 проектов, 0 ошибок, 0 предупреждений**. Тесты: **139 domain + 100 application**, все
+зелёные через reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 81 endpoint
+(73 доменных + 8 auth)**; новых эндпоинтов и изменений контрактов в этом срезе нет.
 
 Что сделано:
 
@@ -30,7 +31,7 @@ reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 
 5. **Read-эндпоинты (этап 2)** — `GET api/barbers`, `GET api/barbers/{id}`,
    `GET api/barbers/{id}/slots`, `GET api/bookings`, `GET api/reviews`: keyset-пагинация,
    response-DTO, `AsNoTracking`, проекции без Include коллекций; индексы `AddReadIndexes` (§16).
-6. **Booking under contention + idempotency (этап 3, 2026-10-19):**
+6. **Booking under contention + idempotency (этап 3):**
    - `POST api/bookings` при пересечении активных броней ловит SQLSTATE `23P01` из
      `ex_bookings_no_overlap` и отвечает `409 booking.add.overlap`, а не `500`. Предварительная
      `HasActiveOverlapAsync` в create не используется — источник истины БД.
@@ -42,26 +43,46 @@ reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 
    - Цена берётся из `BarberService.Price`; `CreateBookingRequest.Price` оставлен для
      совместимости и игнорируется.
    - `barberServiceId` проверяется узким чтением `IBarberProfileRepository.GetServiceAsync`:
-     услуга должна принадлежать `barberProfileId` и быть активной, иначе `404`
-     (`barberProfile.getService.notFound` / `booking.create.serviceInactive`).
+     услуга должна принадлежать `barberProfileId` и быть активной, иначе `404`.
    - `EndAt` по-прежнему приходит от клиента; расчёт от `DurationMinutes` в этом срезе
      сознательно не менялся.
-7. **Тесты** — `Application.UnitTests`: +9 на создание брони (повтор ключа, перечитывание после
-   unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги,
-   чужая/неактивная услуга, overlap, отменённая бронь не блокирует), всего 92;
-   `Domain.UnitTests` — 139 без изменений.
-8. **Смоук на локальной PostgreSQL 16.3** (2026-10-19): 50 параллельных POST на один слот с
-   разными ключами → ровно `1 × 201` и `49 × 409`, в БД одна активная бронь; 10 параллельных
-   дублей с одним ключом → `10 × 201`, один id, одна строка; последовательный повтор → тот же
-   id; отменённая бронь слот не занимает; `GET api/barbers/{id}/slots` не показывает занятые
-   слоты; `price = 1` в запросе дал строку с `price = 30.00`; чужая услуга → `404`.
-9. **Документация** — `AGENT.md` §8, §15.5, §15.9, §16, §17.7–§17.8; этот файл.
+7. **Review → rating recalculation (этап 4, 2026-10-19):**
+   - `ReviewRatingRecalculator` (Application) пересчитывает `BarberProfile.Rating` /
+     `ReviewsCount` по сводке `IReviewRepository.GetRatingSummaryAsync`: только
+     `IsPublished = true`, скрытые не входят ни в count, ни в average. Среднее округляет домен
+     (`BarberProfile.UpdateRating`), SQL и Application правило не дублируют.
+   - Триггеры: `CreateReview` (отзыв сразу опубликован), `UpdateReview` (опубликованного;
+     правка скрытого сводку не меняет), `PublishReview`, `HideReview`. `DeleteReview`-эндпоинта
+     нет, контракт не расширяли.
+   - Атомарность: `IUnitOfWork` (Application) + `UnitOfWork` над `ApplicationDbContext`
+     (Infrastructure) — изменение отзыва и сохранение профиля в одной транзакции; `Failure`
+     и исключение откатывают обе записи.
+   - Защита от lost update: `IBarberProfileRepository.GetForRatingUpdateAsync` читает только
+     корень профиля через `SELECT … FOR UPDATE` (без пяти коллекций) до чтения сводки. Два
+     параллельных `Publish`/`Hide` сериализуются, второй читает уже закоммиченное состояние.
+   - Read-пути по-прежнему `AsNoTracking`; запись профиля идёт с отслеживанием.
+8. **Тесты** — `Application.UnitTests`: +8 на пересчёт рейтинга (создание, правка
+   опубликованного, публикация скрытого, скрытие опубликованного, правка скрытого, скрытие
+   последнего, округление `4.666… → 4.67`, откат транзакции при ошибке сохранения профиля),
+   всего **100**. `GetRatingSummaryAsync` в `FakeReviewRepository` считает по `_reviews`;
+   `FakeUnitOfWork` восстанавливает снимки фейковых репозиториев при откате.
+   `Domain.UnitTests` — **139** без изменений.
+9. **Смоук на локальной PostgreSQL 16.3** (2026-10-19): профиль `Ivan Berlin` с двумя
+   опубликованными отзывами (`4.50 / 2`):
+   - создание отзыва `3` → `4.00 / 3` в карточке и поиске;
+   - скрытие → `4.50 / 2`; публикация обратно → `4.00 / 3`;
+   - правка опубликованного на `1` → `3.33 / 3` (округление);
+   - скрытие всех → `rating = null`, `reviewsCount = 0` в карточке и поиске;
+   - 3 параллельных `Publish` → `3.33 / 3`, затем 3 параллельных `Hide` → `null / 0`;
+     в БД `0` опубликованных. Lost update не воспроизвёлся.
+10. **Документация** — `AGENT.md` §5.3, §8, §12.2, §15.9, §16, §17.8; этот файл.
 
-## 1. Следующая задача — рейтинг, затем кэш и деплой
+## 1. Следующая задача — load test, затем кэш и деплой
 
-1. **Review → rating recalculation** в Application (`AGENT.md` §12.2): пересчитывать
-   `BarberProfile.Rating` / `ReviewsCount` при публикации/скрытии/удалении отзыва.
-2. **Кэш** слотов/поиска/карточки — только после load test (`AGENT.md` §15.4); сейчас кэша нет.
+1. **Load test** на реалистичном объёме данных и с бюджетом из `AGENT.md` §15.7 (сейчас кэша нет).
+2. **Кэш** слотов/поиска/карточки — только после load test (`AGENT.md` §15.4); инвалидация
+   рейтинга при этом станет отдельной задачей, потому что карточка и поиск читают сохранённое
+   поле.
 3. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
    `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
 
@@ -97,6 +118,16 @@ reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 
   интервала. Если это меняется, нужен отдельный законченный срез с тестами и документацией;
   цена и принадлежность услуги уже серверные.
 
+### 2.4 Rating recalculation — сознательные ограничения
+
+- Пересчёт синхронный и в транзакции с изменением отзыва. Это правильно для консистентности,
+  но добавляет `SELECT … FOR UPDATE` + count/avg + UPDATE в write-путь отзыва; на load test
+  смотреть, не становится ли публикация узким местом.
+- Ручной `PUT api/barber-profiles/{id}/rating` (`UpdateBarberProfileRating`) остаётся override:
+  следующее изменение отзыва перезапишет его фактической сводкой.
+- Кэш карточки/поиска ещё не появился, поэтому инвалидация не нужна; при введении кэша
+  изменение рейтинга должно её учитывать.
+
 ## 3. Как запускать и проверять
 
 ```powershell
@@ -107,7 +138,8 @@ dotnet build BarberSearch/BarberSearch.sln
 #   собрать тестовый проект, затем reflection-раннер из %TEMP%;
 #   после прогона удалить раннер и временные скрипты
 
-# миграции (InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes применены)
+# миграции (InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes применены;
+# в этом срезе новых миграций нет)
 $env:ASPNETCORE_ENVIRONMENT='Development'
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
@@ -124,7 +156,7 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 `appsettings.json`. Приложению нужен доступ на запись в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`,
 иначе cookie-вход падает. Логин/регистрация/refresh/change-password ограничены 10 попытками в
 минуту на IP: смоук с несколькими пользователями легко ловит `429` — выдержи паузу между
-прогонами или разбей сценарий на окна. На `POST api/bookings` лимита нет.
+прогонами или разбей сценарий на окна. На `POST api/bookings` и review-эндпоинтах лимита нет.
 
 `git add`/`git commit` тоже требуют `danger-full-access`: в workspace-write падает на
 `.git/index.lock` (`Permission denied`).
@@ -133,12 +165,12 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 
 ```text
 Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17. Ветка features/issue-4, HEAD —
-fix(bookings): make booking creation contention-safe and idempotent, рабочее дерево чистое,
-origin запушен. Booking under contention + idempotency закрыты; read-эндпоинты и auth не трогай,
-если не меняешь контракт осознанно.
+feat(reviews): recalculate barber rating on review changes, рабочее дерево чистое,
+origin запушен. Auth, ownership, read-эндпоинты, booking under contention и rating
+recalculation закрыты; не трогай их без необходимости.
 
-Следующая задача: review → rating recalculation в Application (§12.2), затем load test и только
-после него кэш слотов/поиска/карточки (§15.4), затем деплой (Data Protection, Auth__SigningKey,
+Следующая задача: load test на реалистичном объёме с бюджетом §15.7; только после него —
+кэш слотов/поиска/карточки (§15.4), затем деплой (Data Protection, Auth__SigningKey,
 UseForwardedHeaders, CORS + SameSite=None). Открытые дефекты — §2.1 этого файла.
 
 Сборка/тесты/git — через danger-full-access; тесты — reflection-раннер §5.3, после прогона

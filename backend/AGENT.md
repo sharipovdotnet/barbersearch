@@ -305,7 +305,7 @@ Result on 2026-10-19 (после security stamp, §17.10):
 
 ```
 BarberSearch.Domain.UnitTests:      Discovered: 139, passed: 139, failed: 0, skipped: 0
-BarberSearch.Application.UnitTests: Discovered: 92,  passed: 92,  failed: 0, skipped: 0
+BarberSearch.Application.UnitTests: Discovered: 100, passed: 100, failed: 0, skipped: 0
 ```
 
 Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
@@ -517,11 +517,11 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 139 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
-| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 92 xunit `[Fact]`s: 40 прежних (28 на владение + 12 на refresh-токены) + 43 на read-эндпоинты (8 курсоров/пагинации, 9 поиска, 3 карточки, 9 слотов, 8 броней, 6 отзывов) + 9 на создание брони (повтор ключа, перечитывание после unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги, чужая/неактивная услуга, overlap, отменённая бронь); фейковые репозитории + `ICurrentUser` + `TimeProvider` (§17.8–§17.9) |
+| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — **100** xunit `[Fact]`s: 40 прежних (28 на владение + 12 на refresh-токены) + 43 на read-эндпоинты (8 курсоров/пагинации, 9 поиска, 3 карточки, 9 слотов, 8 броней, 6 отзывов) + 9 на создание брони (повтор ключа, перечитывание после unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги, чужая/неактивная услуга, overlap, отменённая бронь) + 8 на пересчёт рейтинга (создание, правка опубликованного, публикация скрытого, скрытие опубликованного, правка скрытого, скрытие последнего, округление, откат при ошибке сохранения профиля); фейковые репозитории + `ICurrentUser` + `TimeProvider` + транзакционный `FakeUnitOfWork` (§12.2, §17.8–§17.9) |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 8 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `RefreshTokens/IRefreshTokenRepository.cs`, …); **78 handlers (72 command + 6 query)**: 68 доменных операций (включая `FindBarberProfileSalon`), 4 refresh-операции и 5 новых read-запросов, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, `RefreshTokens/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request/response-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: 29 request-записей покрывают все write-операции (первыми были `CreateSalonRequest`, `CreateBookingRequest`, `BarberProfileCreateRequest`, `BarberProfileUpdateRequest`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене. Read-эндпоинты добавили response-DTO: `Common/PagedResponse<T>` и папки `SearchBarbers/`, `GetBarberProfile/`, `GetBarberSlots/`, `Bookings/GetBookings/`, `Reviews/GetReviews/`; доменные сущности наружу не сериализуются — см. §16 |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `AddRefreshTokens` + `AddSecurityStamp` + `AddReadIndexes` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`. `AddReadIndexes` (2026-10-19) добавляет `ix_barber_profiles_search` (partial, `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at` и `ix_bookings_start_at_id`; read-методы `SearchAsync` / `GetCardByIdAsync` / `GetSlotContextAsync` / `GetPageAsync` / `GetPublishedPageAsync` живут в репозиториях и проецируют сразу в Contracts. `GetServiceAsync` — узкое чтение `barber_services` для создания брони (без загрузки агрегата), `BookingRepository.AddAsync` снимает неудачную вставку с change tracker и маппит `23505`/`23P01` в `Conflict`. `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), `AddReadIndexes` applied the same day; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `AddRefreshTokens` + `AddSecurityStamp` + `AddReadIndexes` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`. `AddReadIndexes` (2026-10-19) добавляет `ix_barber_profiles_search` (partial, `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at` и `ix_bookings_start_at_id`; read-методы `SearchAsync` / `GetCardByIdAsync` / `GetSlotContextAsync` / `GetPageAsync` / `GetPublishedPageAsync` живут в репозиториях и проецируют сразу в Contracts. `GetServiceAsync` — узкое чтение `barber_services` для создания брони (без загрузки агрегата), `BookingRepository.AddAsync` снимает неудачную вставку с change tracker и маппит `23505`/`23P01` в `Conflict`. `UnitOfWork` реализует `IUnitOfWork` над `ApplicationDbContext` (commit только при успехе, `Failure`/исключение — rollback), `BarberProfileRepository.GetForRatingUpdateAsync` читает корень профиля через `SELECT … FOR UPDATE` без коллекций. `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), `AddReadIndexes` applied the same day; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
 | Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; **13 controllers in `Controllers/` expose 81 endpoints: 73 доменных + 8 auth** (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, security stamp на каждом запросе, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8). Read-эндпоинты: `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots`, `GET api/bookings`, `GET api/reviews` — keyset-пагинация, response-DTO, `AsNoTracking`, проекции без Include коллекций (§16) |
 | Swagger UI | ✅ wired in `Program.cs` (`AddOpenApi` + `UseSwaggerUI`), Bearer security scheme in `Web/OpenApi` |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
@@ -769,8 +769,14 @@ Suggested order:
 ## 12. Open questions (need an owner decision)
 
 1. **Database:** PostgreSQL (Npgsql) is the assumption; confirm. Is geo search (PostGIS) needed?
-2. **Rating aggregation:** when is `BarberProfile.Rating`/`ReviewsCount` recalculated — on review
-   publish, on hide, or on a schedule? (The scale itself is settled: 1.00..5.00.)
+2. **Rating aggregation** — **decided 2026-10-19 and implemented:** `BarberProfile.Rating` /
+   `ReviewsCount` пересчитываются синхронно при создании отзыва, правке опубликованного отзыва,
+   публикации и скрытии. Считаются только `Review.IsPublished = true`; скрытые не входят ни в
+   count, ни в average. Пересчёт идёт в одной транзакции с изменением отзыва (`IUnitOfWork`),
+   перед чтением сводки берётся row lock на `barber_profiles` (`SELECT … FOR UPDATE`), поэтому
+   два параллельных `Publish`/`Hide` не теряют обновление. Округление и правило «`null` при нуле
+   отзывов» остаются в `BarberProfile.UpdateRating`; SQL и Application их не дублируют.
+   Административный `PUT api/barber-profiles/{id}/rating` остаётся ручным override.
 3. **API style:** controllers (the `Controllers/` folder is declared and `AddControllers()` is
    called) — confirm we are not moving to minimal APIs.
 4. **CQRS:** separate read models, or just handlers over a single DbContext?
@@ -1091,7 +1097,9 @@ and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
 3. ~~Booking under contention + idempotency~~ — **done (2026-10-19):** exclusion constraint
    caught as `409`, idempotent repeat/re-read by key, server-side price and service ownership;
    see §15.5. Correctness before speed.
-4. Review → rating recalculation in the application layer (§12.2).
+4. ~~Review → rating recalculation~~ — **done (2026-10-19):** synchronous recalculation in the
+   application layer, transaction + `SELECT … FOR UPDATE` (§12.2); verified on local PostgreSQL
+   including concurrent publish/hide. No cache and no schema change.
 5. Load test at realistic volume, measure, **then** cache.
 6. Observability last, once there is something worth observing.
 
@@ -1187,6 +1195,12 @@ Read endpoints (added 2026-10-19):
 - **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.
+- **Review writes recalculate the rating (2026-10-19).** `POST api/reviews`, `PUT
+  api/reviews/{id}`, `POST …/{id}/publication` and `DELETE …/{id}/publication` save the review and
+  update `barber_profiles.rating` / `reviews_count` in one transaction (`IUnitOfWork`). The profile
+  root is locked with `SELECT … FOR UPDATE` before the published-only summary is read, so parallel
+  publish/hide cannot lose an update. The response contract and the endpoint set did not change;
+  `Rating` is still read from the stored column in the card and search.
 - **Query hygiene.** All read paths are `AsNoTracking`; search and list endpoints project directly
   into Contracts response records, and search uses EXISTS instead of `Include` of five collections.
   Keyset cursors are encoded/decoded in Application (`BarberSearchCursor`, `BookingCursor`,
@@ -1392,9 +1406,10 @@ fallback-политикой (`401`).
 
 Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
 3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
-Тесты: `tests/BarberSearch.Application.UnitTests` — 92 `[Fact]`: 40 прежних (28 на владение на фейковых
+Тесты: `tests/BarberSearch.Application.UnitTests` — 100 `[Fact]`: 40 прежних (28 на владение на фейковых
 репозиториях и `ICurrentUser` + 12 на refresh-токены), 43 на read-эндпоинты (курсоры/пагинация,
-поиск, карточка, слоты, брони, отзывы) и 9 на создание брони (§15.5); смоук на локальной PostgreSQL двумя пользователями
+поиск, карточка, слоты, брони, отзывы), 9 на создание брони (§15.5) и 8 на пересчёт рейтинга
+(§12.2, включая откат транзакции); смоук на локальной PostgreSQL двумя пользователями
 (2026-10-19): свой профиль `204`, чужой `403`, своё избранное `204`, чужое `403`, admin-действие
 под Customer `403`.
 

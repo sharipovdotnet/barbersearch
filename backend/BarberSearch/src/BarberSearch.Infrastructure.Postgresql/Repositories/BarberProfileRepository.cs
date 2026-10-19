@@ -55,6 +55,28 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return profile;
     }
 
+    public async Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        // Узкое чтение корня: пять коллекций для UpdateRating не нужны, а row lock
+        // сериализует конкурентные пересчёты одного профиля (AGENT.md §12.2).
+        // Сырой SQL намеренно не композируется с LINQ: FOR UPDATE должен остаться
+        // в том же запросе, что и чтение строки.
+        var profiles = await Context.BarberProfiles
+            .FromSqlInterpolated($"SELECT * FROM barber_profiles WHERE id = {id} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+
+        var profile = profiles.SingleOrDefault();
+
+        if (profile is null)
+        {
+            return NotFound("barberProfile.getById.notFound", nameof(BarberProfile), id);
+        }
+
+        return profile;
+    }
+
     public async Task<Result<IReadOnlyList<BarberProfile>, Failure>> GetByIdsAsync(
         IEnumerable<Guid> ids,
         CancellationToken cancellationToken = default)

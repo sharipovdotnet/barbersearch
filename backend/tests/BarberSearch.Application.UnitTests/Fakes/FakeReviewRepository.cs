@@ -4,6 +4,7 @@ using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
 using Shared;
+using System.Reflection;
 
 namespace BarberSearch.Application.UnitTests.Fakes;
 
@@ -11,13 +12,38 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// In-memory <see cref="IReviewRepository"/> для тестов обработчиков. Повторный отзыв
 /// на ту же бронь отклоняется так же, как это делает уникальный индекс в БД.
 /// </summary>
-public sealed class FakeReviewRepository : IReviewRepository
+public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionParticipant
 {
     private readonly Dictionary<Guid, Review> _reviews = [];
+    private Dictionary<Guid, Review>? _snapshot;
 
     public IReadOnlyCollection<Review> Reviews => _reviews.Values;
 
     public void Add(Review review) => _reviews[review.Id] = review;
+
+    public void BeginTransaction()
+        => _snapshot = _reviews.ToDictionary(
+            entry => entry.Key,
+            entry => Clone(entry.Value));
+
+    public void CommitTransaction() => _snapshot = null;
+
+    public void RollbackTransaction()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        _reviews.Clear();
+
+        foreach (var entry in _snapshot)
+        {
+            _reviews[entry.Key] = entry.Value;
+        }
+
+        _snapshot = null;
+    }
 
     public Task<Result<Review, Failure>> GetByIdAsync(
         Guid id,
@@ -86,7 +112,23 @@ public sealed class FakeReviewRepository : IReviewRepository
     public Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        var published = _reviews.Values
+            .Where(review => review.BarberProfileId == barberProfileId && review.IsPublished)
+            .ToList();
+
+        if (published.Count == 0)
+        {
+            return Task.FromResult(
+                Result.Success<ReviewRatingSummary, Failure>(new ReviewRatingSummary(null, 0)));
+        }
+
+        var average = published.Average(review => (decimal)review.Rating);
+
+        return Task.FromResult(
+            Result.Success<ReviewRatingSummary, Failure>(
+                new ReviewRatingSummary(average, published.Count)));
+    }
 
     public Task<UnitResult<Failure>> AddAsync(
         Review review,
@@ -113,6 +155,15 @@ public sealed class FakeReviewRepository : IReviewRepository
         Review review,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    private static Review Clone(Review review)
+    {
+        var memberwiseClone = typeof(object).GetMethod(
+            "MemberwiseClone",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        return (Review)memberwiseClone.Invoke(review, null)!;
+    }
 
     private static ReviewResponse ToResponse(Review review)
         => new(

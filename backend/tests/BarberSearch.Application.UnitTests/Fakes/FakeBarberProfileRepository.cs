@@ -7,6 +7,7 @@ using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Shared;
+using System.Reflection;
 
 namespace BarberSearch.Application.UnitTests.Fakes;
 
@@ -20,11 +21,12 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// Фильтры по городу, специализации, услуге и дате фейк не применяет: тесты проверяют,
 /// что обработчик передал их в репозиторий без искажений.
 /// </remarks>
-public sealed class FakeBarberProfileRepository : IBarberProfileRepository
+public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFakeTransactionParticipant
 {
     private readonly Dictionary<Guid, BarberProfile> _profiles = [];
     private readonly List<BarberSearchItemResponse> _searchItems = [];
     private readonly Dictionary<Guid, BarberProfileResponse> _cards = [];
+    private Dictionary<Guid, BarberProfile>? _snapshot;
 
     public IReadOnlyCollection<BarberProfile> Profiles => _profiles.Values;
 
@@ -34,7 +36,36 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
 
     public BarberSlotContext? SlotContext { get; set; }
 
+    /// <summary>
+    /// Подмена сохранения профиля: тест проверяет откат транзакции при ошибке записи.
+    /// </summary>
+    public Func<BarberProfile, UnitResult<Failure>>? UpdateBehavior { get; set; }
+
     public void Add(BarberProfile profile) => _profiles[profile.Id] = profile;
+
+    public void BeginTransaction()
+        => _snapshot = _profiles.ToDictionary(
+            entry => entry.Key,
+            entry => Clone(entry.Value));
+
+    public void CommitTransaction() => _snapshot = null;
+
+    public void RollbackTransaction()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        _profiles.Clear();
+
+        foreach (var entry in _snapshot)
+        {
+            _profiles[entry.Key] = entry.Value;
+        }
+
+        _snapshot = null;
+    }
 
     public void AddSearchItem(BarberSearchItemResponse item) => _searchItems.Add(item);
 
@@ -67,6 +98,17 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
 
         return Task.FromResult<Result<BarberProfile, Failure>>(profile);
     }
+
+    public Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<BarberProfile, Failure>>(
+            _profiles.TryGetValue(id, out var profile)
+                ? profile
+                : new Failure(Error.NotFound(
+                    "barberProfile.getById.notFound",
+                    $"Barber profile '{id}' was not found.",
+                    id)));
 
     public Task<Result<bool, Failure>> IsOwnedByAsync(
         Guid barberProfileId,
@@ -178,7 +220,12 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
     public Task<UnitResult<Failure>> UpdateAsync(
         BarberProfile barberProfile,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(UnitResult.Success<Failure>());
+    {
+        var result = UpdateBehavior?.Invoke(barberProfile)
+            ?? UnitResult.Success<Failure>();
+
+        return Task.FromResult(result);
+    }
 
     public Task<UnitResult<Failure>> DeleteAsync(
         BarberProfile barberProfile,
@@ -196,4 +243,13 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
         bool onlyActive = true,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    private static BarberProfile Clone(BarberProfile profile)
+    {
+        var memberwiseClone = typeof(object).GetMethod(
+            "MemberwiseClone",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        return (BarberProfile)memberwiseClone.Invoke(profile, null)!;
+    }
 }
