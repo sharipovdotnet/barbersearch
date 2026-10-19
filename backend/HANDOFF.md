@@ -3,16 +3,18 @@
 > Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
 > Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
 > (workspace — `backend/`). HEAD этой сессии —
-> `feat(reviews): recalculate barber rating on review changes`.
+> `test(load): add load-test harness and baseline results`; перед ним отдельный
+> `fix(bookings): serialize contended inserts to avoid GiST deadlock`.
 > `origin/features/issue-4` запушен.
 
 ## 0. Где мы сейчас
 
 Аутентификация, авторизация по владению, refresh-токены, security stamp, read-эндпоинты,
-**booking under contention + idempotency** и **review → rating recalculation** готовы. Сборка:
-**8 проектов, 0 ошибок, 0 предупреждений**. Тесты: **139 domain + 100 application**, все
-зелёные через reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 81 endpoint
-(73 доменных + 8 auth)**; новых эндпоинтов и изменений контрактов в этом срезе нет.
+**booking under contention + idempotency**, **review → rating recalculation** и **load test**
+готовы. Сборка: **8 проектов, 0 ошибок, 0 предупреждений**. Тесты: **139 domain + 100
+application**, все зелёные через reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров,
+81 endpoint (73 доменных + 8 auth)**; новых эндпоинтов и изменений контрактов в этом срезе нет.
+Baseline и узкие места — `LOADTEST.md`.
 
 Что сделано:
 
@@ -76,13 +78,26 @@
    - 3 параллельных `Publish` → `3.33 / 3`, затем 3 параллельных `Hide` → `null / 0`;
      в БД `0` опубликованных. Lost update не воспроизвёлся.
 10. **Документация** — `AGENT.md` §5.3, §8, §12.2, §15.9, §16, §17.8; этот файл.
+11. **Load test (2026-10-19):** отдельная БД `barbersearch_load` (12 000 барберов, 1.2M броней,
+    80k отзывов), harness `load/`, отчёт `LOADTEST.md`. Baseline: search p95 180.5–202.4 ms
+    (худший прогон на 2.4 ms выше бюджета 200), p99 < 270 ms; slots p95 13.0–13.6 ms; contended
+    booking p95 250.9–298.4 ms при бюджете 300, ровно `1 × 201 / 49 × 409`, одна активная строка
+    в БД; review publish/hide p95 85.5–92.0 ms, create p95 220.3–265.6 ms. Error rate 0.
+    Lost update рейтинга не воспроизведён (SQL-сверка совпала).
+12. **Исправлен дефект contended booking:** 50 параллельных INSERT на один слот могли дать
+    `40P01` (deadlock внутри GiST exclusion check) и 500, а под нагрузкой — ни одного `201`.
+    `BookingRepository.AddAsync` сериализует вставки одного барбера advisory lock-ом; `40P01`
+    дополнительно маппится в `409 booking.add.deadlock`. Подробности — `LOADTEST.md` §6.
 
-## 1. Следующая задача — load test, затем кэш и деплой
+## 1. Следующая задача — точечная оптимизация search, затем кэш и деплой
 
-1. **Load test** на реалистичном объёме данных и с бюджетом из `AGENT.md` §15.7 (сейчас кэша нет).
-2. **Кэш** слотов/поиска/карточки — только после load test (`AGENT.md` §15.4); инвалидация
-   рейтинга при этом станет отдельной задачей, потому что карточка и поиск читают сохранённое
-   поле.
+1. **Search plan.** Измерения показали: `ORDER BY (rating IS NULL), rating DESC, id` не
+   использует `ix_barber_profiles_search`; date-only запрос — Parallel Seq Scan + Sort 10 000
+   строк (78.6 ms). Сделать ORDER BY совместимым с частичным индексом (или эквивалентный
+   индекс/переписать date-фильтр), перемерить `load/run.ps1`. Это не кэш.
+2. **Кэш** — только если после этого search всё ещё упирается в p95 200 ms. Слоты и review-write
+   уже имеют запас; кэшировать их незачем. Инвалидация рейтинга при кэше карточки/поиска станет
+   отдельной задачей, потому что они читают сохранённое поле.
 3. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
    `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
 
@@ -127,6 +142,25 @@
   следующее изменение отзыва перезапишет его фактической сводкой.
 - Кэш карточки/поиска ещё не появился, поэтому инвалидация не нужна; при введении кэша
   изменение рейтинга должно её учитывать.
+- Load test подтвердил: publish/hide p95 85.5–92.0 ms, create p95 220.3–265.6 ms при бюджетах
+  500/1000 ms; `SELECT … FOR UPDATE` сериализует конкурентов, lost update не воспроизведён
+  (независимая SQL-сверка совпала). Пересчёт не является узким местом на этом объёме.
+
+### 2.5 Load test — что осталось за кадром
+
+1. **Search**: худший прогон p95 202.4 ms при бюджете 200 (медиана 181.5). Узкое место — план:
+   `ORDER BY (rating IS NULL), rating DESC, id` не использует `ix_barber_profiles_search`,
+   date-only запрос делает Parallel Seq Scan + Sort 10 000 строк (78.6 ms). Это следующий срез,
+   не кэш.
+2. **Booking**: p95 250.9–298.4 ms при бюджете 300 — почти весь запас съеден advisory lock-ом,
+   который сериализует вставки одного барбера. Если нужен запас, следующий шаг — slot-claim
+   (уникальная строка/индекс) или fast-path, а не кэш.
+3. **Инструменты**: `pg_stat_statements` не включён (`shared_preload_libraries` пуст),
+   `dotnet-counters` не установился (SSL/package source mapping), CPU PostgreSQL не читается
+   через `Get-Process` (access denied). Поэтому GC/thread-pool и DB CPU не измерены; в отчёте это
+   отмечено явно. Npgsql pool: максимум 51 backend-соединение при пуле 100, исчерпания не было.
+4. **Стенд**: API, PostgreSQL и load generator на одной машине (24 logical CPU, 16 GB);
+   `synchronous_commit=on`. Абсолютные цифры не переносятся на прод без поправки.
 
 ## 3. Как запускать и проверять
 
@@ -158,6 +192,25 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 минуту на IP: смоук с несколькими пользователями легко ловит `429` — выдержи паузу между
 прогонами или разбей сценарий на окна. На `POST api/bookings` и review-эндпоинтах лимита нет.
 
+Load test (отдельная база, API сам поднимается и останавливается):
+
+```powershell
+# 1) один раз: barbersearch_load + существующие миграции + seed (load/README.md)
+# 2) полный прогон
+dotnet build load/harness/LoadHarness.csproj -c Release
+powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
+  -Repeat 3 -ReadSeconds 15
+
+# повторно в течение 15 минут, не тратя auth rate limit
+powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
+  -Repeat 3 -ReadSeconds 15 -SkipAuth
+```
+
+`run.ps1` сам сбрасывает сценарные строки (`load/seed/reset-scenarios.sql`), генерирует
+манифест и проверяет SQL-ом, что на contended-слоте ровно одна активная бронь. Результаты —
+`load/generated/results.json`, `metrics.csv`, `booking-verification.txt` (каталог не коммитится).
+Полные команды и ограничения — `load/README.md`, отчёт — `LOADTEST.md`.
+
 `git add`/`git commit` тоже требуют `danger-full-access`: в workspace-write падает на
 `.git/index.lock` (`Permission denied`).
 
@@ -165,13 +218,16 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 
 ```text
 Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17. Ветка features/issue-4, HEAD —
-feat(reviews): recalculate barber rating on review changes, рабочее дерево чистое,
-origin запушен. Auth, ownership, read-эндпоинты, booking under contention и rating
-recalculation закрыты; не трогай их без необходимости.
+test(load): add load-test harness and baseline results; перед ним отдельный
+fix(bookings) про deadlock contended insert. Рабочее дерево чистое, origin запушен.
+Auth, ownership, read-эндпоинты, booking under contention (включая advisory lock),
+rating recalculation и load test закрыты; не трогай их без необходимости.
 
-Следующая задача: load test на реалистичном объёме с бюджетом §15.7; только после него —
-кэш слотов/поиска/карточки (§15.4), затем деплой (Data Protection, Auth__SigningKey,
-UseForwardedHeaders, CORS + SameSite=None). Открытые дефекты — §2.1 этого файла.
+Следующая задача: точечная оптимизация search-плана (ORDER BY против
+ix_barber_profiles_search, date-only запрос), затем повторный load test и только потом
+кэш, если измерения всё ещё этого требуют; затем деплой (Data Protection, Auth__SigningKey,
+UseForwardedHeaders, CORS + SameSite=None). Baseline и узкие места — LOADTEST.md.
+Открытые дефекты — §2.1 этого файла.
 
 Сборка/тесты/git — через danger-full-access; тесты — reflection-раннер §5.3, после прогона
 удалить раннер и временные скрипты; сборка 8 проектов, 0 ошибок, 0 предупреждений; все тесты

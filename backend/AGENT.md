@@ -1014,8 +1014,10 @@ The mechanism is settled: **the exclusion constraint**, not an application pre-c
   and `23505` into `Error.Conflict("booking.add.uniqueViolation")`; both become `409`, never `500`.
 - `HasActiveOverlapAsync` stays advisory only. `CreateBookingHandler` does **not** call it:
   a pre-check would still race, and the database is the source of truth. Isolation is the default
-  EF Core `ReadCommitted` with the implicit per-`SaveChanges` transaction — sufficient for the
-  constraint to serialise the two inserts.
+  EF Core `ReadCommitted`; `BookingRepository.AddAsync` opens an explicit transaction and takes a
+  transaction-scoped advisory lock keyed by `barber_profile_id` before the insert. The lock does not
+  decide the winner — `ex_bookings_no_overlap` still does — it keeps 50 concurrent GiST checks from
+  deadlocking (see the load-test correction below).
 
 **Idempotency.** The unique index `ux_bookings_user_id_idempotency_key` (also from
 `InitialCreate`) makes the key scoped to `(user_id, idempotency_key)`, not global.
@@ -1037,6 +1039,15 @@ query, no aggregate load), requires `BarberService.BarberProfileId == request.Ba
 and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
 `booking.create.serviceInactive`). `EndAt` is still taken from the request; duration-derived
 `EndAt` was deliberately **not** introduced in this slice.
+
+**Load-test correction (2026-10-19).** Fifty concurrent inserts on one slot can deadlock inside
+the GiST exclusion check (`40P01`) before either transaction commits; under load all contenders can
+lose, so the batch produces **no `201` at all** and some requests become `500`. This is not pool
+exhaustion and not a timeout at the client. `BookingRepository.AddAsync` now wraps the insert in an
+explicit transaction and takes `pg_advisory_xact_lock(hashtextextended(barber_profile_id, 0))`
+before it, serialising inserts per barber: the first commits, the rest hit `23P01` → `409`. `40P01`
+is also mapped to `409 booking.add.deadlock` as a defensive path. Cost: per-barber serialisation;
+at 50 contenders the measured p95 was 250.9–298.4 ms (budget 300 ms), see `LOADTEST.md`.
 
 **Verified 2026-10-19, local PostgreSQL 16.3:**
 
@@ -1072,6 +1083,16 @@ and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
   Without a budget you cannot distinguish fast from lucky.
 - Schedule it in CI. A benchmark run once is a benchmark you will never trust again.
 
+**Baseline 2026-10-19 (`barbersearch_load`).** 12 000 barbers (10 000 visible), 1.2M bookings,
+80k reviews, 16 parallel readers, 3 × 15 s per read scenario. Search p95 180.5–202.4 ms (median
+181.5; worst run misses the 200 ms budget by 2.4 ms), p99 232.6–269.4 ms; slots p95 13.0–13.6 ms;
+contended booking p95 250.9–298.4 ms with exactly `1 × 201 / 49 × 409` and one row in the DB per
+slot; review publish/hide p95 85.5–92.0 ms; review create p95 220.3–265.6 ms. Error rate 0.
+Search bottleneck: `ORDER BY (rating IS NULL), rating DESC, id` does not use
+`ix_barber_profiles_search`; the date-only query is a Parallel Seq Scan + Sort of 10 000 rows
+(78.6 ms execution). No cache was added: slots/reviews have ample headroom, search needs the plan
+fixed first. Details and query plan: `LOADTEST.md`.
+
 ### 15.8 Observability
 
 - OpenTelemetry .NET with ASP.NET Core and Npgsql instrumentation — traces, metrics, logs.
@@ -1100,7 +1121,12 @@ and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
 4. ~~Review → rating recalculation~~ — **done (2026-10-19):** synchronous recalculation in the
    application layer, transaction + `SELECT … FOR UPDATE` (§12.2); verified on local PostgreSQL
    including concurrent publish/hide. No cache and no schema change.
-5. Load test at realistic volume, measure, **then** cache.
+5. ~~Load test at realistic volume~~ — **done (2026-10-19):** `barbersearch_load`, harness
+   `load/`, baseline `LOADTEST.md`. Slots/reviews have headroom; search worst p95 202.4 ms
+   (budget 200) because `ORDER BY (rating IS NULL), rating DESC` does not use
+   `ix_barber_profiles_search`; contended booking was fixed with a per-barber advisory lock and
+   now gives exactly `1 × 201 / 49 × 409`. Measure, **then** cache: the next step is the search
+   plan, not a cache.
 6. Observability last, once there is something worth observing.
 
 Caching before measuring is how a system becomes fast and wrong at the same time.
@@ -1153,7 +1179,9 @@ Conventions:
   also returns the winner's id, and only an unrecoverable race is `409`
   (`booking.create.idempotencyKeyConflict`). An overlapping active booking is `409
   booking.add.overlap` from the exclusion constraint; cancelled/completed/no-show rows do not
-  block. `EndAt` still comes from the request in this slice.
+  block. Inserts are serialised per barber by a transaction-scoped advisory lock so the GiST check
+  cannot deadlock under 50-way contention; a defensive `40P01` path returns
+  `409 booking.add.deadlock`. `EndAt` still comes from the request in this slice.
 - The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
