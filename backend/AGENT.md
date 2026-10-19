@@ -17,7 +17,7 @@ Domain: barbers (profiles, specializations, portfolio, schedule, pricing), salon
 services, reviews, bookings, favorites, users.
 
 Approach: **DDD with a rich domain model**. The domain is written and is the main asset of
-the repo; application layer, infrastructure and API are not started yet (see §8).
+the repo; Application, Infrastructure and Web exist — current state in §8.
 
 ---
 
@@ -30,7 +30,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-4` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 130 xunit tests) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 139 xunit tests) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -279,7 +279,7 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **Domain — 130, Application — 40 `[Fact]`
+reflection. This is faithful here because the suite is **Domain — 139, Application — 40 `[Fact]`
 methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -301,11 +301,11 @@ cd tests/BarberSearch.Domain.UnitTests/bin/Debug/net10.0
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Domain.UnitTests.dll>
 ```
 
-Result on 2026-10-19 (domain suite unchanged since the `BarberProfile*Request` move, see §10.16):
+Result on 2026-10-19 (после security stamp, §17.10):
 
 ```
-BarberSearch.Domain.UnitTests:      Discovered: 130, passed: 130, failed: 0, skipped: 0
-BarberSearch.Application.UnitTests: Discovered: 28,  passed: 28,  failed: 0, skipped: 0
+BarberSearch.Domain.UnitTests:      Discovered: 139, passed: 139, failed: 0, skipped: 0
+BarberSearch.Application.UnitTests: Discovered: 40,  passed: 40,  failed: 0, skipped: 0
 ```
 
 Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
@@ -515,13 +515,13 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 | Layer | Status |
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
-| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 130 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
+| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 139 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
 | Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 40 xunit `[Fact]`s: 28 на владение (`403` чужому, `404` отсутствующему, обход admin, авторство из токена, отзыв только по завершённой брони) + 12 на refresh-токены (ротация, reuse-detection с отзывом цепочки, истечение, отзыв при logout/смене пароля/роли/деактивации); фейковые репозитории + `ICurrentUser` + `TimeProvider` (§17.8–§17.9) |
 | Domain events | ❌ absent |
 | Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 8 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `RefreshTokens/IRefreshTokenRepository.cs`, …); 72 command/query handlers, one per public method of every domain entity plus refresh-token operations, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, `RefreshTokens/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `Migrations/AddRefreshTokens` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddRefreshTokens` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`); on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 12 controllers in `Controllers/` expose **all 68 domain Application handlers** plus 8 auth actions (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8) |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `Migrations/AddRefreshTokens` + `Migrations/AddSecurityStamp` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`; `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), existing rows backfilled with `gen_random_uuid()::text`; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 12 controllers in `Controllers/` expose **all 68 domain Application handlers** plus 8 auth actions (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, security stamp на каждом запросе, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8) |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
@@ -1152,7 +1152,7 @@ the Web layer:
 | `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`; `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
 | `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword` |
 | `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens` |
-| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
 
 ### 17.2 Эндпоинты
@@ -1170,9 +1170,9 @@ the Web layer:
 
 ### 17.3 Claims
 
-`sub`, `email`, `role`, `email_verified`, `barber_profile_id` (если есть), `jti`.
+`sub`, `email`, `role`, `email_verified`, `security_stamp`, `barber_profile_id` (если есть), `jti`.
 `MapInboundClaims = false`, `NameClaimType = "sub"`, `RoleClaimType = "role"` — имена короткие
-и одинаковые для cookie и JWT.
+и одинаковые для cookie и JWT. `security_stamp` — см. §17.10.
 
 ### 17.4 Конфигурация
 
@@ -1220,8 +1220,9 @@ the Web layer:
   по `replaced_by` (`auth.refresh.reused`). Cookie — HttpOnly, `Path=/`, `Secure` вне Development,
   `SameSite` из `Auth:CookieSameSite`; в Production имя `__Host-barbersearch.refresh`.
 - Refresh-токены отзываются при `logout` (один токен), смене пароля, смене роли и деактивации
-  пользователя (все живые токены). Access-токен и cookie при этом доживают свой срок: JWT
-  не отзывается до истечения (security stamp — §17.7 п. 8).
+  пользователя (все живые токены). Смена пароля, смены роли и деактивация вдобавок меняют
+  `security_stamp`, поэтому уже выданный access-токен и cookie отклоняются на следующем же
+  запросе, не дожидаясь истечения (§17.10).
 
 ### 17.6 Проверено вручную (2026-10-19, локальная PostgreSQL)
 
@@ -1239,7 +1240,16 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 `auth.refresh.reused`. В БД 8 строк: все `token_hash` по 64 hex, открытых токенов нет;
 7 revoked, 3 replaced_by.
 
-Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 130 domain + 40 application, все
+Смоук security stamp (2026-10-19, локальная PostgreSQL, три пользователя и admin через SQL):
+`login` → `change-password` → старый Bearer `401` ProblemDetails, старая cookie `401`
+ProblemDetails (без 302), старый refresh `401`, `login` с новым паролем `200`; `GET api/auth/csrf`
+со старым Bearer — `200` (`[AllowAnonymous]` не тронут). Смена роли: admin `PUT users/{id}/role`
+→ старые Bearer и cookie `401`, refresh `401`, новый `login` `200` с ролью `Barber`. Деактивация:
+старые Bearer и cookie `401`, refresh `401`, вход `401 auth.login.inactive`; повторная
+деактивация `204` и stamp не меняет. В БД у всех 11 прежних пользователей stamp непустой
+и уникальный (backfill `gen_random_uuid()::text`).
+
+Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 40 application, все
 зелёные через reflection-раннер (§5.3).
 
 ### 17.7 Открыто
@@ -1251,8 +1261,8 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 2. **Владение ресурсом.** ✅ Реализовано 2026-10-19: `ICurrentUser` + `EnsureCanManage` /
    `EnsureIsBarberOfAsync` в Application, проверки в обработчиках после загрузки агрегата
    (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
-   Матрица, охват и тесты — §17.8. Из этой темы открыты только security stamp (п. 8)
-   и непроверяемый `barberServiceId` (§16, issue 3).
+   Матрица, охват и тесты — §17.8. Из этой темы открыт только непроверяемый `barberServiceId`
+   (§16, issue 3).
 3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
    в контейнере без персистентного тома все сессии умрут после рестарта.
 4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
@@ -1262,8 +1272,11 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
 7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
    `LoginUserHandler`.
-8. **Следующая сессия** — read-эндпоинты и security stamp; план и порядок работ вынесены
-   в `HANDOFF.md` (рядом с этим файлом).
+8. **Security stamp.** ✅ Реализовано 2026-10-19: `User.SecurityStamp` + `RotateSecurityStamp()`
+   в `ChangePasswordHash` / `ChangeRole` / `Deactivate`, claim `security_stamp` в JWT и cookie,
+   scoped `SecurityStampValidator` в `OnTokenValidated` / `OnValidatePrincipal`, миграция
+   `AddSecurityStamp`. Механика и ограничения — §17.10. Следующая сессия — read-эндпоинты,
+   план в `HANDOFF.md`.
 
 ### 17.8 Авторизация по владению (added 2026-10-19)
 
@@ -1282,8 +1295,8 @@ fallback-политикой (`401`).
 | `User` | `register` публично / admin | сам | роль, активация, верификация |
 
 Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой. `admin` обходит проверку через
-`ICurrentUser.IsAdmin` (claim роли, поэтому после смены роли старый токен живёт до истечения —
-п. 8). Исключение — создание отзыва: admin его не обходит, иначе появились бы фиктивные отзывы.
+`ICurrentUser.IsAdmin` (claim роли; после смены роли старый токен отзывается security stamp'ом —
+§17.10). Исключение — создание отзыва: admin его не обходит, иначе появились бы фиктивные отзывы.
 `Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
 проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
 
@@ -1322,9 +1335,9 @@ fallback-политикой (`401`).
 с новым access и refresh; antiforgery не нужен, потому что ambient-учётных данных нет.
 
 **Отзыв.** `logout` — один предъявленный токен; смена пароля (`POST api/auth/change-password`),
-смена роли и деактивация пользователя — все живые токены (`RevokeAllForUserAsync`).
-Уже выданный access-токен / cookie при этом доживает свой срок: JWT не отзывается до истечения
-(security stamp — §17.7 п. 8).
+смена роли и деактивация пользователя — все живые токены (`RevokeAllForUserAsync`). Те же три
+события меняют `security_stamp` (§17.10), поэтому выданные access-токен и cookie тоже
+отклоняются — на следующем запросе, а не через 15 минут / 8 часов.
 
 **Тесты.** 12 `[Fact]` в `tests/BarberSearch.Application.UnitTests/RefreshTokenTests.cs`:
 ротация и `replaced_by`, reuse-detection с отзывом цепочки, истечение, неизвестный и отозванный
@@ -1334,3 +1347,56 @@ fallback-политикой (`401`).
 **Осталось.** Фоновой уборки истёкших строк нет. Две одновременные ротации одного токена не
 сериализованы на уровне БД (окно между `SELECT` и `UPDATE`), поэтому теоретически возможны две
 ветки; при необходимости закрывается `xmin`/conditional `UPDATE ... WHERE revoked_at IS NULL`.
+
+### 17.10 Security stamp (added 2026-10-19)
+
+**Зачем.** Refresh-токен отзывается сразу, но JWT отозвать нельзя, а cookie живёт до 8 часов.
+Без отпечатка смена пароля/роли и деактивация оставляли бы старый access-токен валидным, а
+`IsAdmin` и `GET api/auth/me` читают claims, а не базу.
+
+**Домен.** `User.SecurityStamp` — непустая строка: новые пользователи получают
+`Guid.NewGuid().ToString("N")`, `Create` задаёт её сразу. `RotateSecurityStamp()` меняет значение
+и вызывает `MarkUpdated()`; его вызывают `ChangePasswordHash`, `ChangeRole` и `Deactivate`.
+`Deactivate` идемпотентен — повторный вызов на уже неактивном пользователе выходит до ротации.
+
+**Схема.** Миграция `AddSecurityStamp`: `users.security_stamp` (`text`, `NOT NULL`), CHECK
+`ck_users_security_stamp` (`char_length(security_stamp) > 0`). Существующим строкам значение
+выдал backfill `gen_random_uuid()::text`; `DEFAULT ''`, нужный только на время backfill, снят —
+новые строки получают stamp из домена.
+
+**Claims.** `ClaimsPrincipalFactory.CreateClaims` добавляет `security_stamp`; набор claims один
+для JWT и cookie, поэтому отпечаток есть в обеих схемах.
+
+**Проверка.** Scoped `SecurityStampValidator` (`Web/Auth`) по claim `sub` читает пользователя
+через `IUserRepository.GetByIdAsync`, сравнивает claim с `User.SecurityStamp` (ordinal) и требует
+`IsActive`. Подключён в `JwtBearerEvents.OnTokenValidated` и
+`CookieAuthenticationEvents.OnValidatePrincipal`. Несовпадение, отсутствие claim/пользователя
+или деактивация:
+
+- **JWT** — `context.Fail(...)`; `401` ProblemDetails отдаёт уже настроенный `OnChallenge`.
+  `[AllowAnonymous]`-эндпоинт при этом продолжает выполняться: тело в событии не пишется.
+- **cookie** — `RejectPrincipal()` + `SignOutAsync` (cookie удаляется), `401` ProblemDetails
+  формирует `OnRedirectToLogin`; 302 на страницу входа нет.
+
+Проверка — один индексный SELECT на каждый аутентифицированный запрос, без кэша: отзыв должен
+применяться немедленно. Анонимные эндпоинты (`login`, `refresh`, `register`, `csrf`) устаревший
+Bearer не ломает.
+
+**Ограничения.**
+- Токены и cookie, выданные до этой миграции, не содержат claim `security_stamp` и после деплоя
+  отклоняются — пользователи один раз перелогинятся. Это ожидаемая цена отзыва старых сессий.
+- Валидатор использует `IUserRepository.GetByIdAsync`, который тянет `favorite_barbers`
+  (`Include`) и отслеживает сущность. Для одного PK-запроса это допустимо; если auth-путь станет
+  горячим — лёгкая проекция без Include и `AsNoTracking`.
+- Перехеширование пароля при входе (`LoginUserHandler` → `ChangePasswordHash`) тоже ротирует
+  stamp: остальные сессии пользователя завершаются. Событие редкое и безопасное, но его нужно
+  помнить.
+- `logout` stamp не ротирует: предъявленный access-токен доживает до истечения (15 минут),
+  cookie удаляется. Чтобы погасить все access-токены, нужен явный `RotateSecurityStamp()`
+  (не реализовано).
+- Кэша нет — ни локального, ни распределённого: отзыв должен применяться на первом же запросе
+  в любом инстансе. При масштабировании это осознанный выбор в пользу корректности (§15.4).
+
+**Тесты.** `tests/BarberSearch.Domain.UnitTests/UserTests.cs` — 9 новых `[Fact]` (stamp непустой
+и уникален, ротация, смена пароля/роли/деактивации, отсутствие ротации при ошибке и повторной
+деактивации); всего 139. Смоук на локальной PostgreSQL — §17.6.

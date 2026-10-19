@@ -29,6 +29,12 @@ public class User : AggregateRoot
 
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// Отпечаток состояния учётных данных. Попадает в claims access-токена и cookie,
+    /// поэтому смена пароля, роли или деактивация делают уже выданные токены недействительными.
+    /// </summary>
+    public string SecurityStamp { get; private set; } = null!;
+
     public DateTimeOffset? LastLoginAt { get; private set; }
 
     /// <summary>
@@ -67,7 +73,8 @@ public class User : AggregateRoot
             FirstName = firstName,
             LastName = lastName,
             Role = role,
-            IsActive = true
+            IsActive = true,
+            SecurityStamp = NewSecurityStamp()
         };
     }
 
@@ -160,7 +167,7 @@ public class User : AggregateRoot
         }
 
         Role = role;
-        MarkUpdated();
+        RotateSecurityStamp();
 
         return DomainErrors.Ok();
     }
@@ -250,7 +257,7 @@ public class User : AggregateRoot
         }
 
         PasswordHash = passwordHash;
-        MarkUpdated();
+        RotateSecurityStamp();
 
         return DomainErrors.Ok();
     }
@@ -276,10 +283,26 @@ public class User : AggregateRoot
         }
 
         IsActive = false;
-        MarkUpdated();
+        RotateSecurityStamp();
 
         return DomainErrors.Ok();
     }
+
+    /// <summary>
+    /// Меняет отпечаток учётных данных. Уже выданные access-токен и cookie перестают проходить
+    /// проверку: claim <c>security_stamp</c> в них больше не совпадает с сохранённым значением.
+    /// </summary>
+    /// <remarks>
+    /// Метод не может провалиться и не возвращает результат: новое значение всегда непустое,
+    /// а проверка токена живёт в слое Web.
+    /// </remarks>
+    public void RotateSecurityStamp()
+    {
+        SecurityStamp = NewSecurityStamp();
+        MarkUpdated();
+    }
+
+    private static string NewSecurityStamp() => Guid.NewGuid().ToString("N");
 
     private static void Validate(
         string? email,

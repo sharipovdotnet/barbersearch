@@ -41,6 +41,12 @@ public static class ClaimsPrincipalFactory
     public const string BarberProfileIdClaim = "barber_profile_id";
 
     /// <summary>
+    /// Отпечаток состояния учётных данных. Сверяется с <c>User.SecurityStamp</c> на каждом
+    /// запросе, поэтому смена пароля, роли или деактивация отзывают выданные токены.
+    /// </summary>
+    public const string SecurityStampClaim = "security_stamp";
+
+    /// <summary>
     /// Уникальный идентификатор токена.
     /// </summary>
     public const string JtiClaim = JwtRegisteredClaimNames.Jti;
@@ -56,6 +62,7 @@ public static class ClaimsPrincipalFactory
             new(EmailClaim, user.Email),
             new(RoleClaim, user.Role.ToString()),
             new(EmailVerifiedClaim, user.IsEmailVerified ? "true" : "false"),
+            new(SecurityStampClaim, user.SecurityStamp),
             new(JtiClaim, Guid.NewGuid().ToString())
         };
 

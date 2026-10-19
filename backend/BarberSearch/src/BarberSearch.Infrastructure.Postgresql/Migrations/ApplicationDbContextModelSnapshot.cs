@@ -834,6 +834,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("role");
 
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("security_stamp");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -853,6 +858,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                             t.HasCheckConstraint("ck_users_email", "position('@' in email) > 1");
 
                             t.HasCheckConstraint("ck_users_role", "role IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_users_security_stamp", "char_length(security_stamp) > 0");
                         });
                 });
 

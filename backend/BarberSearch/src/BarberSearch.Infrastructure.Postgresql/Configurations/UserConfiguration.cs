@@ -19,6 +19,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             table.HasCheckConstraint(
                 "ck_users_role",
                 "role IN (1, 2, 3)");
+            table.HasCheckConstraint(
+                "ck_users_security_stamp",
+                "char_length(security_stamp) > 0");
         });
 
         builder.HasKey(x => x.Id).HasName("pk_users");
@@ -39,6 +42,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.Role).HasColumnName("role").HasConversion<int>();
         builder.Property(x => x.IsActive).HasColumnName("is_active");
         builder.Property(x => x.LastLoginAt).HasColumnName("last_login_at");
+
+        // Отпечаток учётных данных: сверяется с claim'ом security_stamp на каждом запросе.
+        builder.Property(x => x.SecurityStamp).HasColumnName("security_stamp").IsRequired();
 
         // Это граница другого агрегата: навигации на BarberProfile нет, только идентификатор.
         builder.Property(x => x.BarberProfileId).HasColumnName("barber_profile_id");

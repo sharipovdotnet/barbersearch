@@ -1,45 +1,84 @@
 # HANDOFF — следующая сессия
 
-> Прочитай `AGENT.md` §17 (auth, владение и refresh-токены) перед изменениями.
+> Прочитай `AGENT.md` §15, §16 и §17.10 перед изменениями.
 > Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
-> (workspace — `backend/`).
+> (workspace — `backend/`). HEAD этой сессии — `feat(auth): add security stamp`;
+> перед ним `c7bd27f feat(auth): add refresh tokens`, `origin/features/issue-4` запушен.
 
 ## 0. Где мы сейчас
 
-Аутентификация, **авторизация по владению** и **refresh-токены** готовы.
+Аутентификация, **авторизация по владению**, **refresh-токены** и **security stamp** готовы.
 Сборка: **8 проектов, 0 ошибок, 0 предупреждений**.
-Тесты: **130 domain + 40 application**, все зелёные через reflection-раннер (`AGENT.md` §5.3).
-Последние коммиты: `7f7f9ce feat(auth): enforce resource ownership`,
-`feat(auth): add refresh tokens` (эта сессия), `docs: prepare refresh-tokens handoff`.
+Тесты: **139 domain + 40 application**, все зелёные через reflection-раннер (`AGENT.md` §5.3).
 
 Что сделано:
 
 1. **Аутентификация** — cookie + JWT, политики `AdminOnly`/`BarberOnly`/`VerifiedEmail`,
    antiforgery, rate limiting (§17).
-2. **Владение** — проверки в обработчиках после загрузки агрегата:
-   29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
-   3 обработчика пользователей; admin обходит проверку. Матрица — `AGENT.md` §17.8.
+2. **Владение** — проверки в обработчиках после загрузки агрегата: 29 обработчиков профиля
+   барбера и его детей, 5 обработчиков броней, `UpdateReview`, 3 обработчика пользователей;
+   admin обходит проверку. Матрица — `AGENT.md` §17.8.
 3. **Refresh-токены** — таблица `refresh_tokens` (миграция `AddRefreshTokens`), в БД только
    SHA-256, ротация с `revoked_at` + `replaced_by`, reuse-detection с отзывом всей цепочки,
    HttpOnly-cookie для браузера и тело для внешнего клиента, отзыв при logout / смене пароля /
-   смене роли / деактивации. `POST api/auth/refresh`, `POST api/auth/change-password`.
-   Детали — `AGENT.md` §17.9.
-4. **Тесты** — `tests/BarberSearch.Application.UnitTests`: 28 на владение + 12 на refresh
-   (ротация, reuse-detection, истечение, отзыв, границы срока, хранение только хеша).
-   Смоук на локальной PostgreSQL двумя пользователями: ротация, reuse с отзывом цепочки,
-   независимость второго пользователя, смена пароля, logout, cookie-ветка и повтор старой
-   cookie — всё пройдено; в БД 8 строк, все `token_hash` по 64 hex.
+   смене роли / деактивации (§17.9).
+4. **Security stamp (эта сессия)** — `User.SecurityStamp`, `RotateSecurityStamp()` в
+   `ChangePasswordHash` / `ChangeRole` / `Deactivate`; claim `security_stamp` в JWT и cookie;
+   scoped `SecurityStampValidator` в `OnTokenValidated` / `OnValidatePrincipal`; миграция
+   `AddSecurityStamp` (backfill `gen_random_uuid()::text`, CHECK на непустоту, DEFAULT снят).
+   Смена пароля/роли и деактивация теперь отзывают уже выданный access-токен и cookie, а не
+   только refresh. Механика и ограничения — `AGENT.md` §17.10.
+5. **Тесты** — `tests/BarberSearch.Domain.UnitTests`: +9 на stamp (всего 139);
+   `tests/BarberSearch.Application.UnitTests`: 40 без изменений.
+6. **Смоук security stamp** на локальной PostgreSQL (2026-10-19, три пользователя, admin через
+   SQL): login → change-password → старые Bearer/cookie/refresh `401`, новый login `200`;
+   смена роли и деактивация — то же; `[AllowAnonymous]` со старым Bearer отвечает `200`;
+   повторная деактивация stamp не меняет. Подробности — `AGENT.md` §17.6.
 
-## 1. Следующая задача — read-эндпоинты (1–2 дня)
+## 1. Следующая задача — read-эндпоинты (этап 2)
 
-API пока почти write-only: один query-обработчик (`FindBarberProfileSalonQuery`). Клиенту нужны
-`GET api/barbers` (поиск), `GET api/barbers/{id}` (карточка), `GET api/barbers/{id}/slots`,
-`GET api/bookings`, `GET api/reviews`. Это следующий крупный срез; при проектировании — §15.1–§15.6
-(индексы, `AsNoTracking`, проекция в DTO, keyset-пагинация).
+API пока почти write-only: один query-обработчик (`FindBarberProfileSalonQuery`). Каждый пункт —
+рабочий вертикальный срез: **Contracts → Application → Infrastructure → Controller → тесты →
+смоук**.
 
-Параллельно — **security stamp**: после смены роли/деактивации старый access-токен живёт
-15 минут, cookie — 8 часов. Refresh-токены уже отзываются, но access остаётся валидным до
-истечения (`AGENT.md` §17.7 п. 8).
+1. **`GET api/barbers`** — фильтры `city`, `specializationId`, `serviceId`, `date`;
+   keyset-пагинация (не `OFFSET`), курсор opaque (base64), стабильный порядок
+   `rating DESC NULLS LAST, id`; ответ `PagedResponse<BarberSearchItemResponse>` с `items`
+   и `nextCursor`.
+2. **`GET api/barbers/{id}`** — карточка: профиль, услуги, салоны, специализации, рейтинг;
+   `404`, если профиля нет.
+3. **`GET api/barbers/{id}/slots?date=&serviceId=&salonId=`** — свободные слоты из
+   `WorkingSchedule` и `TimeOff` минус активные `Booking`; границы дня и таймзона — явно,
+   без неявного UTC-сдвига.
+4. **`GET api/bookings`** — только свои брони; admin видит все; пагинация; `404`/`403` по
+   правилам §17.8.
+5. **`GET api/reviews?barberProfileId=`** — только опубликованные; пагинация; без навигации
+   в циклические графы.
+
+Правила реализации:
+
+- никаких `Include` коллекций в поиске — проекция сразу в DTO через `Select`;
+- `AsNoTracking()` на всех read-путях;
+- доменные сущности наружу не сериализуются — только response-DTO в `Contracts`;
+- проверить индексы §15.2, недостающие добавить миграцией;
+- **не использовать `dotnet sln add`** (§5.1);
+- если семантика не задана (например, показывать ли неподтверждённых барберов или как сортировать
+  null-рейтинг) — задать **один короткий вопрос**, не выдумывать.
+
+Тесты и проверка:
+
+- `Application.UnitTests`: query-обработчики на фейковых репозиториях (пустой результат,
+  фильтры, границы пагинации, `404`);
+- смоук на локальной PostgreSQL на заполненных данных: поиск с фильтрами, карточка, слоты,
+  свои/чужие брони, отзывы;
+- сборка 8 проектов, 0 ошибок, 0 предупреждений.
+
+Документация: `AGENT.md` §8, §16 и этот файл.
+
+Коммиты:
+
+- `feat(api): add barber search and profile read endpoints`
+- `feat(api): add slots, bookings and reviews read endpoints`
 
 ## 2. Технический долг auth (`AGENT.md` §17.7)
 
@@ -53,8 +92,10 @@ API пока почти write-only: один query-обработчик (`FindBa
 7. Rate limiting за прокси без `UseForwardedHeaders` делит лимит на всех.
 8. Подтверждение email/телефона административное.
 9. `POST api/users/{id}/logins` оставлен только для admin.
-10. `IsAdmin` и `GET api/auth/me` читают claims: после смены роли старый токен отдаёт старую
-    роль до истечения (15 минут JWT / 8 часов cookie). Лечится security stamp'ом.
+10. ~~`IsAdmin` и `GET api/auth/me` читают claims после смены роли~~ — закрыто security stamp
+    (§17.10). Осталось: `logout` stamp не ротирует, поэтому предъявленный access-токен доживает
+    до 15 минут; перехеширование пароля при входе ротирует stamp и завершает другие сессии;
+    валидатор тянет `favorite_barbers` через `GetByIdAsync`.
 11. `CreateBookingRequest.Price` приходит от клиента — цену надо брать из услуги барбера.
 12. `barberServiceId` не проверяется на принадлежность профилю (`AGENT.md` §16, issue 3).
 
@@ -65,9 +106,10 @@ API пока почти write-only: один query-обработчик (`FindBa
 dotnet build BarberSearch/BarberSearch.sln
 
 # тесты: dotnet test в харнессе блокирован (testhost), порядок обхода — AGENT.md §5.3
-#   собрать тестовый проект, затем reflection-раннер из %TEMP% либо обычный developer shell
+#   собрать тестовый проект, затем reflection-раннер из %TEMP%;
+#   после прогона удалить раннер и временные скрипты
 
-# миграция refresh-токенов (уже применена к локальной базе)
+# миграции (AddSecurityStamp уже применена к локальной базе)
 $env:ASPNETCORE_ENVIRONMENT='Development'
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
@@ -84,24 +126,43 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 `appsettings.json`. Приложению нужен доступ на запись в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`,
 иначе cookie-вход падает. Логин/регистрация/refresh/change-password ограничены 10 попытками в
 минуту на IP: смоук с несколькими пользователями легко ловит `429` — выдержи паузу между
-прогонами или разбей сценарий на окна.
+прогонами (в смоуке stamp между волнами было 65 с) или разбей сценарий на окна.
 
 `git add`/`git commit` тоже требуют `danger-full-access`: в workspace-write падает на
 `.git/index.lock` (`Permission denied`).
 
-## 4. После refresh
+## 4. После read-эндпоинтов
 
-1. **Read-эндпоинты** — API пока write-only.
-2. **Security stamp** — отзыв access-токенов при смене роли/пароля/деактивации.
-3. **Уборка refresh_tokens** — фоновая задача или `DELETE ... WHERE expires_at < now()`.
+1. **Booking under contention + idempotency** — exclusion constraint уже есть, осталось
+   поймать `23P01` и вернуть `409`; `IdempotencyKey` уже на сущности (§15.5).
+2. **Review → rating recalculation** в Application (§12.2).
+3. **Кэш** слотов/поиска/карточки — только после load test (§15.4).
 4. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
    `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
 
 ## 5. Промпт для новой сессии
 
 ```text
-Прочитай backend/HANDOFF.md и AGENT.md §17. Refresh-токены и ownership уже закоммичены,
-рабочее дерево чистое. Начинаем read-эндпоинты: поиск барберов, карточка, слоты, брони,
-отзывы. Плюс security stamp, чтобы смена роли/пароля/деактивации отзывала и access-токены.
-Сборка и git — через danger-full-access; тесты — reflection-раннер, AGENT.md §5.3.
+Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17.10. Ветка features/issue-4, HEAD —
+feat(auth): add security stamp, рабочее дерево чистое, origin запушен. Security stamp готов,
+начинаем только этап 2 — read-эндпоинты.
+
+Порядок: GET api/barbers (фильтры city/specializationId/serviceId/date, keyset-пагинация,
+rating DESC NULLS LAST, id, opaque base64-курсор, PagedResponse<BarberSearchItemResponse>);
+GET api/barbers/{id} (карточка, 404); GET api/barbers/{id}/slots?date=&serviceId=&salonId=
+(WorkingSchedule + TimeOff минус активные Booking, границы дня и таймзона явно);
+GET api/bookings (свои, admin — все, пагинация, 404/403 по §17.8);
+GET api/reviews?barberProfileId= (только опубликованные, пагинация, без циклических графов).
+
+Правила: Contracts → Application → Infrastructure → Controller → тесты → смоук; без Include
+коллекций в поиске (проекция в DTO), AsNoTracking на read-путях, только response-DTO наружу,
+проверить индексы §15.2 и добавить миграцией, не использовать dotnet sln add. Если семантика
+не задана (неподтверждённые барберы, сортировка null-рейтинга) — один короткий вопрос.
+
+Коммиты: feat(api): add barber search and profile read endpoints;
+feat(api): add slots, bookings and reviews read endpoints.
+
+Сборка/тесты/git — через danger-full-access; тесты — reflection-раннер §5.3, после прогона
+удалить раннер и временные скрипты; сборка 8 проектов, 0 ошибок, 0 предупреждений; в конце
+зелёные тесты, смоук на локальной PostgreSQL, чистое дерево и пуш ветки.
 ```

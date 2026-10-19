@@ -206,4 +206,107 @@ public class UserTests
         Assert.Equal("user.changePasswordHash", result.Error.Errors[0].Code);
         Assert.Equal("hash", user.PasswordHash);
     }
+
+    [Fact]
+    public void Create_InitializesNonEmptySecurityStamp()
+    {
+        var user = CreateValidUser();
+
+        Assert.False(string.IsNullOrWhiteSpace(user.SecurityStamp));
+    }
+
+    [Fact]
+    public void Create_GivesEveryUserItsOwnSecurityStamp()
+    {
+        var first = CreateValidUser("first@example.com");
+        var second = CreateValidUser("second@example.com");
+
+        Assert.NotEqual(first.SecurityStamp, second.SecurityStamp);
+    }
+
+    [Fact]
+    public void RotateSecurityStamp_ReplacesTheValue()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        user.RotateSecurityStamp();
+
+        Assert.NotEqual(before, user.SecurityStamp);
+        Assert.False(string.IsNullOrWhiteSpace(user.SecurityStamp));
+    }
+
+    [Fact]
+    public void ChangePasswordHash_RotatesSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.ChangePasswordHash("new-hash");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual(before, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void ChangePasswordHash_WithEmptyHash_KeepsSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.ChangePasswordHash("   ");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(before, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void ChangeRole_RotatesSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.ChangeRole(UserRole.Barber);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual(before, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void ChangeRole_WithUnknownValue_KeepsSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.ChangeRole((UserRole)99);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(before, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void Deactivate_RotatesSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.Deactivate();
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual(before, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void Deactivate_WhenAlreadyInactive_KeepsSecurityStamp()
+    {
+        var user = CreateValidUser();
+
+        user.Deactivate();
+        var afterFirst = user.SecurityStamp;
+
+        var repeated = user.Deactivate();
+
+        Assert.True(repeated.IsSuccess);
+        Assert.Equal(afterFirst, user.SecurityStamp);
+    }
 }

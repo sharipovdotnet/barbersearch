@@ -87,6 +87,9 @@ public static class AuthenticationExtensions
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<IPasswordService, PasswordService>();
 
+        // Scoped: проверка отпечатка читает пользователя через scoped DbContext.
+        services.AddScoped<SecurityStampValidator>();
+
         services.AddAntiforgery(antiforgery =>
         {
             antiforgery.HeaderName = "X-CSRF-TOKEN";
@@ -131,6 +134,26 @@ public static class AuthenticationExtensions
                         context.HttpContext,
                         StatusCodes.Status403Forbidden,
                         "The authenticated user is not allowed to access this resource.");
+
+                cookie.Events.OnValidatePrincipal = async context =>
+                {
+                    var validator = context.HttpContext.RequestServices
+                        .GetRequiredService<SecurityStampValidator>();
+
+                    if (await validator.ValidateAsync(
+                            context.Principal,
+                            context.HttpContext.RequestAborted))
+                    {
+                        return;
+                    }
+
+                    // Principal отклоняется, cookie удаляется. Ответ 401 сформирует
+                    // OnRedirectToLogin при challenge, поэтому здесь нет ни 302, ни второго тела.
+                    context.RejectPrincipal();
+
+                    await context.HttpContext.SignOutAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme);
+                };
             })
             .AddJwtBearer(bearer =>
             {
@@ -154,6 +177,22 @@ public static class AuthenticationExtensions
 
                 bearer.Events = new JwtBearerEvents
                 {
+                    OnTokenValidated = async context =>
+                    {
+                        var validator = context.HttpContext.RequestServices
+                            .GetRequiredService<SecurityStampValidator>();
+
+                        if (await validator.ValidateAsync(
+                                context.Principal,
+                                context.HttpContext.RequestAborted))
+                        {
+                            return;
+                        }
+
+                        // Fail, а не запись тела: на защищённом эндпоинте OnChallenge ниже
+                        // отдаст 401 ProblemDetails, а [AllowAnonymous] запрос не сломается.
+                        context.Fail("The security stamp is invalid.");
+                    },
                     OnChallenge = async context =>
                     {
                         context.HandleResponse();

@@ -13,11 +13,18 @@ public sealed record AuthenticatedUser(
     string Email,
     UserRole Role,
     Guid? BarberProfileId,
-    bool IsEmailVerified)
+    bool IsEmailVerified,
+    string SecurityStamp)
 {
     /// <summary>
     /// Снимок агрегата <see cref="User"/> для выдачи учётных данных.
     /// </summary>
     public static AuthenticatedUser From(User user)
-        => new(user.Id, user.Email, user.Role, user.BarberProfileId, user.IsEmailVerified);
+        => new(
+            user.Id,
+            user.Email,
+            user.Role,
+            user.BarberProfileId,
+            user.IsEmailVerified,
+            user.SecurityStamp);
 }
