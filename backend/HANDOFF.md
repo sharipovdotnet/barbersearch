@@ -7,7 +7,8 @@
 ## 0. Где мы сейчас
 
 Аутентификация и **авторизация по владению** готовы и закоммичены
-(`feat(auth): enforce resource ownership`). Сборка: **8 проектов, 0 ошибок, 0 предупреждений**.
+(`7f7f9ce feat(auth): enforce resource ownership`). Сборка: **8 проектов, 0 ошибок,
+0 предупреждений**.
 Тесты: **130 domain + 28 application**, все зелёные.
 
 Что сделано:
@@ -86,6 +87,9 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 иначе cookie-вход падает. Логин/регистрация ограничены 10 попытками в минуту на IP: смоук-скрипт
 с несколькими пользователями легко ловит `429` — выдержи паузу между прогонами.
 
+`git add`/`git commit` тоже требуют `danger-full-access`: в workspace-write падает на
+`.git/index.lock` (`Permission denied`).
+
 ## 4. После refresh
 
 1. **Read-эндпоинты** — API пока write-only.
@@ -95,8 +99,22 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 ## 5. Промпт для новой сессии
 
 ```text
-Прочитай backend/HANDOFF.md и AGENT.md §17. Начинаем refresh-токены: таблица refresh_tokens
-(id, user_id, token_hash, expires_at, revoked_at, replaced_by), ротация при каждом refresh,
-детект повторного использования, отзыв при logout/смене пароля/роли/деактивации; access — 15 минут,
-refresh — 7–30 дней, в БД только SHA-256. Сборка — через danger-full-access.
+Прочитай backend/HANDOFF.md и AGENT.md §17 (особенно §17.7–§17.8). Ownership уже закоммичен
+(7f7f9ce), рабочее дерево чистое. Начинаем refresh-токены.
+
+1. Сущность + таблица refresh_tokens (id, user_id, token_hash, expires_at, revoked_at,
+   replaced_by), EF-конфигурация и миграция; в БД только SHA-256, срок 7–30 дней
+   (Auth:RefreshTokenDays), access остаётся 15 минут.
+2. IRefreshTokenRepository в Application, реализация в Infrastructure, DI.
+3. POST api/auth/refresh: ротация при каждом refresh (старый — revoked_at + replaced_by),
+   повторное использование заменённого токена отзывает всю цепочку; refresh для браузера —
+   в HttpOnly-cookie, для внешнего клиента — в теле ответа.
+4. Отзыв при logout, смене пароля, смене роли и деактивации пользователя.
+5. Тесты в tests/BarberSearch.Application.UnitTests: ротация, reuse-detection, истечение,
+   отзыв; плюс смоук на локальной PostgreSQL двумя пользователями.
+6. Документация (§17) и коммит feat(auth): add refresh tokens.
+
+Сборка, тесты и git (add/commit) — через danger-full-access: workspace-write блокирует
+obj/bin и .git/index.lock. dotnet test в харнессе падает на testhost — прогон через
+reflection-раннер, AGENT.md §5.3.
 ```
