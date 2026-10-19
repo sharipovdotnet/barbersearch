@@ -1,8 +1,6 @@
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Shared;
 
 namespace BarberSearch.Web.Auth;
 
@@ -30,15 +28,10 @@ public sealed class ValidateAntiforgeryHeaderAttribute : Attribute, IAsyncAuthor
 
         var antiforgery = context.HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
 
-        try
+        var failure = await AntiforgeryValidation.ValidateAsync(context.HttpContext, antiforgery);
+        if (failure is not null)
         {
-            await antiforgery.ValidateRequestAsync(context.HttpContext);
-        }
-        catch (AntiforgeryValidationException)
-        {
-            context.Result = FailureProblemDetails.CreateResult(new Failure(Error.Validation(
-                ErrorCode,
-                "The antiforgery token is missing or invalid. Request GET api/auth/csrf first.")));
+            context.Result = FailureProblemDetails.CreateResult(failure);
         }
     }
 }

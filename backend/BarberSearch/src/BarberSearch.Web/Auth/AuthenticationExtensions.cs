@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using BarberSearch.Application.Users;
+using BarberSearch.Domain.RefreshTokens;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -67,15 +68,22 @@ public static class AuthenticationExtensions
             throw new InvalidOperationException("Auth:SigningKey must be at least 32 characters long.");
         }
 
-        var sameSite = Enum.Parse<SameSiteMode>(options.CookieSameSite, ignoreCase: true);
+        if (options.RefreshTokenDays is < RefreshToken.MIN_LIFETIME_DAYS
+            or > RefreshToken.MAX_LIFETIME_DAYS)
+        {
+            throw new InvalidOperationException(
+                $"Auth:RefreshTokenDays must be between {RefreshToken.MIN_LIFETIME_DAYS} " +
+                $"and {RefreshToken.MAX_LIFETIME_DAYS} days.");
+        }
 
-        // Вне Development cookie всегда Secure: префикс __Host- без Secure браузер отвергнет,
-        // а за прокси с TLS-терминацией SameAsRequest увидел бы http и не поставил флаг.
-        var securePolicy = !environment.IsDevelopment() || sameSite == SameSiteMode.None
-            ? CookieSecurePolicy.Always
-            : CookieSecurePolicy.SameAsRequest;
+        var sameSite = AuthCookiePolicy.GetSameSite(options);
+        var securePolicy = AuthCookiePolicy.GetSecurePolicy(options, environment);
 
         services.AddSingleton(options);
+
+        // Часы приложения: обработчики refresh-токенов и смены пароля не читают DateTimeOffset.UtcNow
+        // напрямую, поэтому срок жизни проверяется в тестах без ожидания.
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<IPasswordService, PasswordService>();
 

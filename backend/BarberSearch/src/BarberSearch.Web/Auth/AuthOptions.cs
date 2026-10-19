@@ -36,6 +36,12 @@ public sealed record AuthOptions
     public int AccessTokenMinutes { get; init; } = 15;
 
     /// <summary>
+    /// Срок жизни refresh-токена в днях. Допустимо 7–30: короткий срок заставляет клиента
+    /// часто обновляться, длинный — растягивает окно украденного токена.
+    /// </summary>
+    public int RefreshTokenDays { get; init; } = 14;
+
+    /// <summary>
     /// Срок жизни постоянной cookie в часах.
     /// </summary>
     public int CookieHours { get; init; } = 8;

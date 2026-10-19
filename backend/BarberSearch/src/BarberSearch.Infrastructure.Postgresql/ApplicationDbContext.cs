@@ -6,6 +6,7 @@ using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.PortfolioPhotos;
+using BarberSearch.Domain.RefreshTokens;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Specializations;
@@ -41,6 +42,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Specialization> Specializations => Set<Specialization>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Review> Reviews => Set<Review>();
+
+    // Аутентификация
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     // Дочерние сущности агрегатов
     public DbSet<PortfolioPhoto> PortfolioPhotos => Set<PortfolioPhoto>();

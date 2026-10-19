@@ -5,7 +5,7 @@
 > that carries both the domain refactor and the xunit test project; the last *pre-rework* domain
 > commit was `78a9858`, against which §3–§9 were originally verified on 2026-10-12). §9 now lists
 > what the rework closed and what is still open. The whole domain — 16 C# types — plus 2 `Shared`
-> types and 128 xunit tests were reviewed for this revision. Current work — the API layer and
+> types and 130 xunit tests were reviewed for this revision. Current work — the API layer and
 > auth — is on `features/issue-4`.
 
 ---
@@ -30,7 +30,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-4` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 128 xunit tests) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 130 xunit tests) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -115,8 +115,8 @@ backend/                                  ← workspace root
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 14 × IEntityTypeConfiguration<T>
         │   ├── Migrations/               ← InitialCreate + ApplicationDbContextModelSnapshot
-        │   ├── Repositories/             ← RepositoryBase<T> + 7 repository implementations
-        │   ├── ApplicationDbContext.cs   ← 14 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── Repositories/             ← RepositoryBase<T> + 8 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 15 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
         │
@@ -126,7 +126,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 11 controllers, 68 endpoints — one per Application handler
+            ├── Controllers/              ← 12 controllers: 11 доменных (68 endpoints) + AuthController (8 actions)
             ├── appsettings.json          ← ConnectionStrings:Postgres + Logging
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
@@ -279,7 +279,7 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **Domain — 130, Application — 28 `[Fact]`
+reflection. This is faithful here because the suite is **Domain — 130, Application — 40 `[Fact]`
 methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -516,12 +516,12 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
 | Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 130 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
-| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 28 xunit `[Fact]`s на владение: `403` чужому, `404` отсутствующему, обход admin, авторство из токена, отзыв только по завершённой брони; фейковые репозитории + `ICurrentUser` (§17.8) |
+| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — 40 xunit `[Fact]`s: 28 на владение (`403` чужому, `404` отсутствующему, обход admin, авторство из токена, отзыв только по завершённой брони) + 12 на refresh-токены (ротация, reuse-detection с отзывом цепочки, истечение, отзыв при logout/смене пароля/роли/деактивации); фейковые репозитории + `ICurrentUser` + `TimeProvider` (§17.8–§17.9) |
 | Domain events | ❌ absent |
-| Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
+| Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 8 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `RefreshTokens/IRefreshTokenRepository.cs`, …); 72 command/query handlers, one per public method of every domain entity plus refresh-token operations, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, `RefreshTokens/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
 | Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, политики и rate limiting на входе (§17); проверки владения ресурсом — в обработчиках Application (§17.8) |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `Migrations/AddRefreshTokens` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddRefreshTokens` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`); on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 12 controllers in `Controllers/` expose **all 68 domain Application handlers** plus 8 auth actions (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8) |
 | Swagger UI | ❌ package present, no config |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
@@ -755,7 +755,9 @@ Suggested order:
    11 controllers with all 68 endpoints, the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
-   Still missing: refresh-токены и проверка владения ресурсом на остальных контроллерах — §17.
+   Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
+   с ротацией и `POST api/auth/change-password`; проверка владения ресурсом — в обработчиках
+   Application.
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
    **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
@@ -1060,7 +1062,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-11 controllers, 68 endpoints — one endpoint per Application handler. The route always names the
+11 controllers, 68 endpoints — one endpoint per Application handler, plus `AuthController` (§17). The route always names the
 aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1146,10 +1148,11 @@ the Web layer:
 | Слой | Файлы |
 |---|---|
 | `Shared` | `ErrorType.UNAUTHORIZED` / `FORBIDDEN`, фабрики `Error.Unauthorized/Forbidden` |
-| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование |
-| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*` |
-| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf` |
-| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
+| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by` |
+| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`; `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
+| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword` |
+| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
 
 ### 17.2 Эндпоинты
@@ -1157,9 +1160,11 @@ the Web layer:
 | Метод | Маршрут | Доступ | Что делает |
 |---|---|---|---|
 | POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается |
-| POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) |
-| POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly-cookie (8 часов) |
-| POST | `api/auth/logout` | аноним, antiforgery | гасит cookie; bearer-клиент просто забывает токен |
+| POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
+| POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly access-cookie (8 часов) + HttpOnly refresh-cookie |
+| POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie, тело — 200 + новые access/refresh |
+| POST | `api/auth/logout` | аноним; antiforgery только для cookie | отзывает refresh и гасит cookie; внешний клиент передаёт refresh в теле |
+| POST | `api/auth/change-password` | аутентификация; antiforgery только для cookie | меняет пароль и отзывает все refresh-токены |
 | GET | `api/auth/me` | аутентификация | claims текущего пользователя |
 | GET | `api/auth/csrf` | аноним | antiforgery-токен в теле + cookie |
 
@@ -1176,6 +1181,7 @@ the Web layer:
   "Issuer": "BarberSearch",
   "Audience": "BarberSearch.Api",
   "AccessTokenMinutes": 15,
+  "RefreshTokenDays": 14,
   "CookieHours": 8,
   "CookieSameSite": "Lax"
 }
@@ -1184,6 +1190,8 @@ the Web layer:
 `Auth:SigningKey` в `appsettings.json` **не хранится**. В Development ключ генерируется при старте
 (токены живут до перезапуска), в остальных окружениях обязателен `Auth__SigningKey` длиной
 не менее 32 символов. `CookieSameSite=None` (SPA на другом сайте) принудительно включает `Secure`.
+`Auth:RefreshTokenDays` допустим только в диапазоне 7–30; выход за него роняет приложение при
+старте. Access остаётся 15 минут.
 
 ### 17.5 Защита
 
@@ -1197,14 +1205,23 @@ the Web layer:
   дают одинаковый 401 `auth.login.invalidCredentials`; для неизвестного email выполняется проверка
   по фиктивному хешу, чтобы наличие аккаунта не выдавалось временем ответа.
 - `SuccessRehashNeeded` перезаписывает хеш при входе.
-- Login/register: 10 попыток в минуту на IP (`AddRateLimiter`, политика `auth`).
+- Login/register/refresh/change-password: 10 попыток в минуту на IP (`AddRateLimiter`, политика `auth`).
 - Antiforgery — только cookie-ветка. Используется свой
   `ValidateAntiforgeryHeaderAttribute` (через `IAntiforgery`), а не `[ValidateAntiForgeryToken]`:
   штатный фильтр живёт в MVC ViewFeatures и требует `AddControllersWithViews()`.
+  `refresh`, `logout` и `change-password` проверяют токен вручную и только когда запрос опирается
+  на cookie; запрос с refresh-токеном в теле или Bearer-заголовком не CSRF-уязвим.
 - 401/403 от middleware приходят как `ProblemDetails` (`AuthProblemDetails`), а не пустым телом
   и не 302 на страницу входа.
 - Antiforgery-токен привязан к identity: после входа его нужно получить заново
   (`GET api/auth/csrf`), иначе первый же `logout` получит 400 `auth.csrf.invalid`.
+- Refresh-токен — 64 случайных байта в base64url; в `refresh_tokens` лежит только SHA-256.
+  Каждый `refresh` ротирует пару, повторное предъявление заменённого токена отзывает всю цепочку
+  по `replaced_by` (`auth.refresh.reused`). Cookie — HttpOnly, `Path=/`, `Secure` вне Development,
+  `SameSite` из `Auth:CookieSameSite`; в Production имя `__Host-barbersearch.refresh`.
+- Refresh-токены отзываются при `logout` (один токен), смене пароля, смене роли и деактивации
+  пользователя (все живые токены). Access-токен и cookie при этом доживают свой срок: JWT
+  не отзывается до истечения (security stamp — §17.7 п. 8).
 
 ### 17.6 Проверено вручную (2026-10-19, локальная PostgreSQL)
 
@@ -1212,12 +1229,25 @@ the Web layer:
 `POST api/users` под Customer 403 → битый JWT 401 → `login/cookie` с antiforgery 204 →
 `me` с cookie 200 → `logout` 204 → `me` 401 → `login/cookie` без токена 400 `auth.csrf.invalid`.
 OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток входа в минуту приходит 429.
-Сборка: 7 проектов, 0 ошибок, 0 предупреждений.
+
+Смоук refresh-токенов (2026-10-19, два пользователя): `login` A/B 200 + refresh в теле →
+`refresh` A 200 (новый access и другой refresh) → повтор старого A 401 `auth.refresh.reused` →
+потомок после reuse 401 `auth.refresh.revoked` (цепочка погашена) → `refresh` B 200 (чужая
+цепочка не затронута) → `change-password` A 204 → `refresh` A 401 `auth.refresh.revoked` →
+`logout` с телом 204 → `refresh` 401 `auth.refresh.revoked` → `login/cookie` 204 → `refresh`
+с HttpOnly-cookie и antiforgery 204 (новая cookie) → `me` 200 → повтор старой cookie 401
+`auth.refresh.reused`. В БД 8 строк: все `token_hash` по 64 hex, открытых токенов нет;
+7 revoked, 3 replaced_by.
+
+Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 130 domain + 40 application, все
+зелёные через reflection-раннер (§5.3).
 
 ### 17.7 Открыто
 
-1. **Refresh-токены.** Access живёт 15 минут; мобильному клиенту нужен refresh с ротацией
-   и отзывом (новая таблица + миграция). Сейчас после истечения — повторный вход.
+1. **Refresh-токены.** ✅ Реализовано 2026-10-19: таблица + миграция, ротация, reuse-detection
+   с отзывом цепочки, HttpOnly-cookie для браузера, отзыв при logout/смене пароля/роли/
+   деактивации, `Auth:RefreshTokenDays`. Детали — §17.9. Из темы открыты: фоновая уборка
+   истёкших строк и сериализация двух одновременных ротаций одного токена.
 2. **Владение ресурсом.** ✅ Реализовано 2026-10-19: `ICurrentUser` + `EnsureCanManage` /
    `EnsureIsBarberOfAsync` в Application, проверки в обработчиках после загрузки агрегата
    (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
@@ -1232,8 +1262,8 @@ OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток вх
 6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
 7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
    `LoginUserHandler`.
-8. **Следующая сессия** — refresh-токены; план и порядок работ вынесены в `HANDOFF.md`
-   (рядом с этим файлом).
+8. **Следующая сессия** — read-эндпоинты и security stamp; план и порядок работ вынесены
+   в `HANDOFF.md` (рядом с этим файлом).
 
 ### 17.8 Авторизация по владению (added 2026-10-19)
 
@@ -1259,7 +1289,48 @@ fallback-политикой (`401`).
 
 Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
 3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
-Тесты: `tests/BarberSearch.Application.UnitTests` — 28 `[Fact]` на фейковых репозиториях и
+Тесты: `tests/BarberSearch.Application.UnitTests` — 40 `[Fact]`: 28 на владение на фейковых репозиториях и
 `ICurrentUser` (свой `204`, чужой `403`, отсутствующий `404`, admin, авторство из токена);
 смоук на локальной PostgreSQL двумя пользователями (2026-10-19): свой профиль `204`, чужой
 `403`, своё избранное `204`, чужое `403`, admin-действие под Customer `403`.
+
+### 17.9 Refresh-токены (added 2026-10-19)
+
+**Схема.** Таблица `refresh_tokens`: `id` UUIDv7 PK, `user_id` FK → `users` с
+`ON DELETE CASCADE`, `token_hash` (64 hex, `UNIQUE`), `expires_at`, `revoked_at`
+(`NULL`, пока токен жив), `replaced_by` (self-FK → `refresh_tokens.id`,
+`ON DELETE SET NULL`), `created_at` / `updated_at`. CHECK `char_length(token_hash) = 64`;
+индексы `ux_refresh_tokens_token_hash`, `ix_refresh_tokens_user_id`,
+`ix_refresh_tokens_replaced_by`. В БД **только SHA-256**: открытый токен — 64 случайных байта
+в base64url (86 символов) — возвращается клиенту один раз и в таблицу не попадает.
+
+**Ротация.** `POST api/auth/refresh` всегда меняет пару: старый получает `revoked_at` +
+`replaced_by`, новый вставляется тем же `SaveChanges` (`RefreshTokenRepository.RotateAsync`).
+Повторное предъявление заменённого токена (`replaced_by != null`) — reuse-detection:
+рекурсивный CTE по `replaced_by` отзывает всю цепочку, ответ `401 auth.refresh.reused`.
+Истёкший токен — `401 auth.refresh.expired`, отозванный без замены — `401 auth.refresh.revoked`,
+неизвестный — `401 auth.refresh.invalid`. Пользователь перечитывается на каждом refresh:
+деактивированный получает `401 auth.refresh.inactive`, все его токены отзываются, а claims
+нового access-токена отражают актуальную роль и `BarberProfileId`.
+
+**Ветки.** Браузер: refresh в HttpOnly-cookie `barbersearch.refresh` (Development) /
+`__Host-barbersearch.refresh` (Production), `Path=/`, `Secure` вне Development, `SameSite` из
+`Auth:CookieSameSite`; cookie-ветка требует antiforgery и отвечает `204` с новыми access-cookie
+и refresh-cookie. Refresh-cookie ставится с абсолютным сроком `RefreshTokenDays` независимо от
+`RememberMe`: флаг по-прежнему управляет только access-cookie (8 часов против сессионной).
+Внешний клиент: refresh в теле `RefreshTokenRequest`, ответ `200 TokenResponse`
+с новым access и refresh; antiforgery не нужен, потому что ambient-учётных данных нет.
+
+**Отзыв.** `logout` — один предъявленный токен; смена пароля (`POST api/auth/change-password`),
+смена роли и деактивация пользователя — все живые токены (`RevokeAllForUserAsync`).
+Уже выданный access-токен / cookie при этом доживает свой срок: JWT не отзывается до истечения
+(security stamp — §17.7 п. 8).
+
+**Тесты.** 12 `[Fact]` в `tests/BarberSearch.Application.UnitTests/RefreshTokenTests.cs`:
+ротация и `replaced_by`, reuse-detection с отзывом цепочки, истечение, неизвестный и отозванный
+токен, деактивированный пользователь, смена пароля/роли/деактивации, хранение только хеша,
+границы `Auth:RefreshTokenDays`. Смоук двумя пользователями на локальной PostgreSQL — §17.6.
+
+**Осталось.** Фоновой уборки истёкших строк нет. Две одновременные ротации одного токена не
+сериализованы на уровне БД (окно между `SELECT` и `UPDATE`), поэтому теоретически возможны две
+ветки; при необходимости закрывается `xmin`/conditional `UPDATE ... WHERE revoked_at IS NULL`.

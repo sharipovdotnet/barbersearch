@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.RefreshTokens;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -15,11 +16,19 @@ namespace BarberSearch.Application.Users.ChangeUserRole;
 public class ChangeUserRoleHandler : ICommandHandler<ChangeUserRoleCommand>
 {
     private readonly IUserRepository _repository;
+    private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ChangeUserRoleHandler> _logger;
 
-    public ChangeUserRoleHandler(IUserRepository repository, ILogger<ChangeUserRoleHandler> logger)
+    public ChangeUserRoleHandler(
+        IUserRepository repository,
+        IRefreshTokenRepository refreshTokens,
+        TimeProvider timeProvider,
+        ILogger<ChangeUserRoleHandler> logger)
     {
         _repository = repository;
+        _refreshTokens = refreshTokens;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -48,6 +57,18 @@ public class ChangeUserRoleHandler : ICommandHandler<ChangeUserRoleCommand>
         if (saved.IsFailure)
         {
             return saved.Error;
+        }
+
+        // Старые refresh-токены несут прежнюю роль в claims следующего access-токена,
+        // поэтому после смены роли все сессии пользователя должны перелогиниться.
+        var revoked = await _refreshTokens.RevokeAllForUserAsync(
+            user.Id,
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
+
+        if (revoked.IsFailure)
+        {
+            return revoked.Error;
         }
 
         _logger.LogInformation("User {UserId} role has been changed to {Role}.", user.Id, user.Role);
