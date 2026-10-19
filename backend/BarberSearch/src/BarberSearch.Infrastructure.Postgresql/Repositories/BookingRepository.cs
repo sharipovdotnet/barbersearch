@@ -1,4 +1,6 @@
 using BarberSearch.Application.Bookings;
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +84,58 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             .ToListAsync(cancellationToken);
 
         return bookings;
+    }
+
+    public async Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
+        Guid? userId,
+        BookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                "booking.getPage.limit",
+                "Page limit must be positive.",
+                nameof(limit)));
+        }
+
+        var query = Context.Bookings.AsNoTracking();
+
+        if (userId is { } filterUserId)
+        {
+            query = query.Where(booking => booking.UserId == filterUserId);
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(booking =>
+                booking.StartAt < position.StartAt
+                || (booking.StartAt == position.StartAt
+                    && booking.Id.CompareTo(position.Id) > 0));
+        }
+
+        var rows = await query
+            .OrderByDescending(booking => booking.StartAt)
+            .ThenBy(booking => booking.Id)
+            .Take(limit)
+            .Select(booking => new BookingResponse(
+                booking.Id,
+                booking.UserId,
+                booking.BarberProfileId,
+                booking.BarberServiceId,
+                booking.SalonId,
+                booking.StartAt,
+                booking.EndAt,
+                booking.Price,
+                booking.Status,
+                booking.IdempotencyKey,
+                booking.CustomerNote,
+                booking.BarberNote,
+                booking.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        return rows;
     }
 
     public async Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(

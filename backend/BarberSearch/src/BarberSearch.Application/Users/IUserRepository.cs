@@ -43,6 +43,14 @@ public interface IUserRepository
     Task<Result<bool, Failure>> EmailExistsAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Существует ли пользователь с таким идентификатором. Лёгкая проверка без загрузки
+    /// агрегата: нужна администратору при фильтрации чужого списка броней.
+    /// </summary>
+    /// <param name="id">Идентификатор пользователя.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<bool, Failure>> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавляет нового пользователя. Нарушение уникальности адреса — <c>Error.Conflict</c>.
     /// </summary>
     Task<UnitResult<Failure>> AddAsync(User user, CancellationToken cancellationToken = default);

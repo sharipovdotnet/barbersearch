@@ -4,9 +4,11 @@ using BarberSearch.Application.Bookings.CancelBooking;
 using BarberSearch.Application.Bookings.CompleteBooking;
 using BarberSearch.Application.Bookings.ConfirmBooking;
 using BarberSearch.Application.Bookings.CreateBooking;
+using BarberSearch.Application.Bookings.GetBookings;
 using BarberSearch.Application.Bookings.MarkBookingNoShow;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
 using BarberSearch.Contracts.Bookings.CreateBooking;
+using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +26,30 @@ namespace BarberSearch.Web.Controllers;
 [Route("api/bookings")]
 public class BookingsController : ApiController
 {
+    /// <summary>
+    /// Возвращает брони: свои для клиента, все для администратора.
+    /// </summary>
+    /// <remarks>
+    /// Обычный пользователь не может запросить чужой список — это 403. Администратор
+    /// может сузить выдачу параметром <paramref name="userId"/>; несуществующий клиент
+    /// даёт 404. Порядок — свежие сверху, пагинация курсорная.
+    /// </remarks>
+    /// <param name="userId">Клиент для администратора; остальным доступен только свой id.</param>
+    /// <param name="cursor">Непрозрачный курсор следующей страницы.</param>
+    /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet]
+    public async Task<ActionResult<PagedResponse<BookingResponse>>> Get(
+        [FromQuery] Guid? userId,
+        [FromQuery] string? cursor,
+        [FromQuery] int? pageSize,
+        [FromServices] IQueryHandler<PagedResponse<BookingResponse>, GetBookingsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetBookingsQuery(userId, cursor, pageSize),
+            cancellationToken));
+
     /// <summary>
     /// Создаёт бронь. Повтор с тем же ключом идемпотентности новой брони не создаёт.
     /// </summary>

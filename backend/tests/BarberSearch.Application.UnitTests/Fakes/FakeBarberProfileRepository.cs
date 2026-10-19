@@ -1,4 +1,5 @@
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -29,6 +30,8 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
     public IReadOnlyCollection<BarberSearchItemResponse> SearchItems => _searchItems;
 
     public BarberSearchFilter? LastSearchFilter { get; private set; }
+
+    public BarberSlotContext? SlotContext { get; set; }
 
     public void Add(BarberProfile profile) => _profiles[profile.Id] = profile;
 
@@ -121,6 +124,24 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository
             "barberProfile.getCardById.notFound",
             $"Barber profile '{id}' was not found.",
             id)));
+    }
+
+    public Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? serviceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        if (SlotContext is not null && SlotContext.BarberProfileId == barberProfileId)
+        {
+            return Task.FromResult<Result<BarberSlotContext, Failure>>(SlotContext);
+        }
+
+        return Task.FromResult<Result<BarberSlotContext, Failure>>(new Failure(Error.NotFound(
+            "barberSlots.salon.notFound",
+            $"Slot context for barber profile '{barberProfileId}' was not found.",
+            barberProfileId)));
     }
 
     public Task<UnitResult<Failure>> AddAsync(

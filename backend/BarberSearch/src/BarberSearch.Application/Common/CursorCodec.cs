@@ -100,6 +100,23 @@ internal static class CursorCodec
             CultureInfo.InvariantCulture,
             out result);
 
+    /// <summary>
+    /// Форматирует момент времени для курсора в UTC и invariant culture.
+    /// </summary>
+    public static string Format(DateTimeOffset value)
+        => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Разбирает момент времени из курсора в invariant culture.
+    /// </summary>
+    public static bool TryParseTimestamp(string value, out DateTimeOffset result)
+        => DateTimeOffset.TryParseExact(
+            value,
+            "O",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out result);
+
     private static Failure Invalid(string errorCode)
         => new(Error.Validation(
             errorCode,

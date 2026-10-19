@@ -1,3 +1,4 @@
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -76,6 +77,27 @@ public interface IBarberProfileRepository
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
         Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Данные для расчёта слотов: выбранный активный салон, его таймзона, расписание,
+    /// длительность услуги и отпуска.
+    /// </summary>
+    /// <remarks>
+    /// Профиль должен быть активным и подтверждённым. Если <paramref name="salonId"/>
+    /// не задан, выбирается основной активный салон; если услуга не задана — длительность
+    /// 30 минут. Отсутствие профиля, салона или услуги — <c>Error.NotFound</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="salonId">Салон или <c>null</c> для основного.</param>
+    /// <param name="serviceId">Услуга каталога или <c>null</c> для шага 30 минут.</param>
+    /// <param name="date">Локальная дата салона.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? serviceId,
+        DateOnly date,
         CancellationToken cancellationToken = default);
 
     /// <summary>

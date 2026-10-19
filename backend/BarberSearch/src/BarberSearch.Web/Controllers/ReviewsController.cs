@@ -1,10 +1,12 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Reviews.CreateReview;
+using BarberSearch.Application.Reviews.GetReviews;
 using BarberSearch.Application.Reviews.HideReview;
 using BarberSearch.Application.Reviews.PublishReview;
 using BarberSearch.Application.Reviews.UpdateReview;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.CreateReview;
+using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Contracts.Reviews.UpdateReview;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
@@ -24,6 +26,29 @@ namespace BarberSearch.Web.Controllers;
 [Route("api/reviews")]
 public class ReviewsController : ApiController
 {
+    /// <summary>
+    /// Возвращает опубликованные отзывы барбера.
+    /// </summary>
+    /// <remarks>
+    /// Скрытые отзывы не попадают в выдачу даже администратору: для модерации есть
+    /// отдельные действия публикации и скрытия. Порядок — свежие сверху, пагинация курсорная.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="cursor">Непрозрачный курсор следующей страницы.</param>
+    /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet]
+    public async Task<ActionResult<PagedResponse<ReviewResponse>>> Get(
+        [FromQuery] Guid barberProfileId,
+        [FromQuery] string? cursor,
+        [FromQuery] int? pageSize,
+        [FromServices] IQueryHandler<PagedResponse<ReviewResponse>, GetReviewsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetReviewsQuery(barberProfileId, cursor, pageSize),
+            cancellationToken));
+
     /// <summary>
     /// Создаёт отзыв по завершённой брони. Повторный отзыв на ту же бронь — 409.
     /// </summary>

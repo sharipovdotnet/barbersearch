@@ -1,3 +1,5 @@
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -37,6 +39,25 @@ public interface IBookingRepository
         Guid userId,
         int page,
         int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница броней в порядке <c>start_at DESC, id</c>.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="userId"/> = <c>null</c> — все брони (сценарий администратора).
+    /// Keyset-условие берётся из <paramref name="cursor"/>; <paramref name="limit"/> —
+    /// это pageSize + 1, чтобы обработчик отличил последнюю страницу от неполной.
+    /// Читается без отслеживания и проецируется сразу в <see cref="BookingResponse"/>.
+    /// </remarks>
+    /// <param name="userId">Клиент или <c>null</c> для всех броней.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
+        Guid? userId,
+        BookingCursor? cursor,
+        int limit,
         CancellationToken cancellationToken = default);
 
     /// <summary>

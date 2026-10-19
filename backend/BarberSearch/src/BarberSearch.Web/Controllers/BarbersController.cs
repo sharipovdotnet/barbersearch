@@ -1,7 +1,9 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles.GetBarberProfile;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Common;
@@ -65,5 +67,31 @@ public class BarbersController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new GetBarberProfileQuery(barberProfileId),
+            cancellationToken));
+
+    /// <summary>
+    /// Возвращает свободные слоты барбера на дату.
+    /// </summary>
+    /// <remarks>
+    /// День считается в часовом поясе салона: в ответе есть <c>timeZoneId</c> и границы дня
+    /// в UTC. Без <paramref name="salonId"/> берётся основной активный салон; без
+    /// <paramref name="serviceId"/> шаг сетки — 30 минут, иначе длительность услуги.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="date">Локальная дата салона.</param>
+    /// <param name="serviceId">Идентификатор услуги каталога.</param>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet("{barberProfileId:guid}/slots")]
+    public async Task<ActionResult<BarberSlotsResponse>> GetSlots(
+        Guid barberProfileId,
+        [FromQuery] DateOnly? date,
+        [FromQuery] Guid? serviceId,
+        [FromQuery] Guid? salonId,
+        [FromServices] IQueryHandler<BarberSlotsResponse, GetBarberSlotsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetBarberSlotsQuery(barberProfileId, date, serviceId, salonId),
             cancellationToken));
 }

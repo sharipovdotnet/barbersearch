@@ -1,4 +1,5 @@
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
@@ -259,6 +260,127 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 }
                 : row)
             .ToList();
+    }
+
+    public async Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? serviceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        var isVisible = await Context.BarberProfiles
+            .AsNoTracking()
+            .AnyAsync(
+                profile => profile.Id == barberProfileId
+                           && profile.IsActive
+                           && profile.IsVerified,
+                cancellationToken);
+
+        if (!isVisible)
+        {
+            return NotFound(
+                "barberProfile.getSlots.notFound",
+                nameof(BarberProfile),
+                barberProfileId);
+        }
+
+        // Салон выбирается среди активных: неактивный салон не должен давать слоты.
+        var salonLinks = await (
+            from link in Context.BarberSalons.AsNoTracking()
+            join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
+            where link.BarberProfileId == barberProfileId && salon.IsActive
+            select new
+            {
+                link.Id,
+                link.SalonId,
+                link.IsPrimary,
+                salon.TimeZoneId
+            }).ToListAsync(cancellationToken);
+
+        if (salonLinks.Count == 0)
+        {
+            return new Failure(Error.NotFound(
+                "barberSlots.salon.notFound",
+                $"The barber profile '{barberProfileId}' has no active salon.",
+                barberProfileId));
+        }
+
+        var salonLink = salonId is { } requestedSalonId
+            ? salonLinks.FirstOrDefault(link => link.SalonId == requestedSalonId)
+            : salonLinks
+                .OrderByDescending(link => link.IsPrimary)
+                .ThenBy(link => link.SalonId)
+                .FirstOrDefault();
+
+        if (salonLink is null)
+        {
+            return new Failure(Error.NotFound(
+                "barberSlots.salon.notFound",
+                $"The barber profile '{barberProfileId}' does not work in salon '{salonId}'.",
+                salonId ?? barberProfileId));
+        }
+
+        var schedule = await Context.WorkingSchedules
+            .AsNoTracking()
+            .Where(entry => entry.BarberSalonId == salonLink.Id
+                            && entry.DayOfWeek == date.DayOfWeek
+                            && !entry.IsDayOff)
+            .Select(entry => new
+            {
+                entry.StartTime,
+                entry.EndTime
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var durationMinutes = 30;
+
+        if (serviceId is { } requestedServiceId)
+        {
+            var serviceDuration = await Context.BarberServices
+                .AsNoTracking()
+                .Where(service => service.BarberProfileId == barberProfileId
+                                  && service.HairServiceId == requestedServiceId
+                                  && service.IsActive)
+                .Select(service => (int?)service.DurationMinutes)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (serviceDuration is null)
+            {
+                return new Failure(Error.NotFound(
+                    "barberSlots.service.notFound",
+                    $"The barber profile '{barberProfileId}' does not provide hair service '{requestedServiceId}'.",
+                    requestedServiceId));
+            }
+
+            durationMinutes = serviceDuration.Value;
+        }
+
+        // Окно шире любых реальных смещений UTC (−12..+14): обработчик затем отсекает
+        // отпуска по точным границам локального дня.
+        var dateStartUtc = new DateTimeOffset(
+            date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var windowStart = dateStartUtc.AddDays(-1);
+        var windowEnd = dateStartUtc.AddDays(2);
+
+        var timeOffs = await Context.TimeOffs
+            .AsNoTracking()
+            .Where(timeOff => timeOff.BarberProfileId == barberProfileId
+                              && timeOff.StartAt < windowEnd
+                              && timeOff.EndAt > windowStart)
+            .Select(timeOff => new TimeOffInterval(timeOff.StartAt, timeOff.EndAt))
+            .ToListAsync(cancellationToken);
+
+        return new BarberSlotContext(
+            barberProfileId,
+            salonLink.SalonId,
+            salonLink.TimeZoneId,
+            date,
+            schedule is not null,
+            schedule?.StartTime ?? default,
+            schedule?.EndTime ?? default,
+            durationMinutes,
+            timeOffs);
     }
 
     public async Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(

@@ -11,10 +11,17 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 public sealed class FakeUserRepository : IUserRepository
 {
     private readonly Dictionary<Guid, User> _users = [];
+    private readonly HashSet<Guid> _existingIds = [];
 
     public IReadOnlyCollection<User> Users => _users.Values;
 
     public void Add(User user) => _users[user.Id] = user;
+
+    /// <summary>
+    /// Помечает идентификатор существующим без построения агрегата — для проверок,
+    /// которым нужен только ответ <c>ExistsAsync</c>.
+    /// </summary>
+    public void AddExisting(Guid id) => _existingIds.Add(id);
 
     public Task<Result<User, Failure>> GetByIdAsync(
         Guid id,
@@ -53,6 +60,12 @@ public sealed class FakeUserRepository : IUserRepository
         string email,
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_users.Values.Any(x => x.Email == email));
+
+    public Task<Result<bool, Failure>> ExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<bool, Failure>>(
+            _existingIds.Contains(id) || _users.ContainsKey(id));
 
     public Task<UnitResult<Failure>> AddAsync(
         User user,
