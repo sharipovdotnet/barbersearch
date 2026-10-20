@@ -5,8 +5,8 @@
 > that carries both the domain refactor and the xunit test project; the last *pre-rework* domain
 > commit was `78a9858`, against which §3–§9 were originally verified on 2026-10-12). §9 now lists
 > what the rework closed and what is still open. The whole domain — 16 C# types — plus 2 `Shared`
-> types and 130 xunit tests were reviewed for this revision. Current work — the API layer, auth and
-> the read endpoints — is on `features/issue-4`.
+> types and 130 xunit tests were reviewed for this revision. Current work — the deploy slice on
+> `features/issue-5` — builds on the API/auth/read/load work from `features/issue-4`.
 
 ---
 
@@ -29,7 +29,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | .NET solution | `BarberSearch\BarberSearch.sln` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-4` (default: `main`) |
+| Working branch | `features/issue-5` (default: `main`) |
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 139 xunit tests) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
@@ -43,7 +43,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (five projects + test project) |
+| Target framework | `net10.0` (six src projects + two test projects) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
@@ -65,8 +65,8 @@ the default `src\<project>\obj` and `bin` (see §5.2 for the one shell that cann
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 7 projects (Web, Domain, Application, Contracts,
-    │                                        Infrastructure.Postgresql, Shared, tests)
+    ├── BarberSearch.sln                  ← 8 projects (Web, Domain, Application, Contracts,
+    │                                        Infrastructure.Postgresql, Shared, two test projects)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -233,7 +233,7 @@ tree without trouble. Retry that one command with the `danger-full-access` sandb
 run it from a normal developer shell — then both commands succeed:
 
 ```powershell
-dotnet build BarberSearch/BarberSearch.sln     # 7 projects, 0 errors, 0 warnings
+dotnet build BarberSearch/BarberSearch.sln     # 8 projects, 0 errors, 0 warnings
 ```
 
 If the session is ever confined again, the symptom is
@@ -279,7 +279,7 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **Domain — 139, Application — 92 `[Fact]`
+reflection. This is faithful here because the suite is **Domain — 139, Application — 100 `[Fact]`
 methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -762,7 +762,8 @@ Suggested order:
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
    **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
-   still missing: a Dockerfile for the API, CI, and the `/health/*` endpoints of §15.8.
+   `/health/live` and `/health/ready` are implemented (2026-10-21, §15.8, `DEPLOY.md`);
+   still missing: a Dockerfile for the API, CI, and observability.
 
 ---
 
@@ -915,7 +916,8 @@ Verified absent from skills.sh for .NET; each must be written and reviewed as pr
 - **.NET profiling** — `dotnet-counters`, `dotnet-trace`, BenchmarkDotNet.
 - **Load testing** — NBomber / k6.
 - **C# concurrency** — `Channel<T>`, `ArrayPool<T>`, `ValueTask`, thread-pool starvation.
-- **OpenTelemetry .NET**, health checks, graceful shutdown, structured logging.
+- **OpenTelemetry .NET** (not wired yet); health checks and graceful shutdown are implemented
+  (2026-10-21, §15.8), structured logging is the default host logging.
 
 The `aspnet-core` skill touches some of these, but only at the level of "prefer the built-in
 feature" — it does not replace measuring.
@@ -1120,12 +1122,17 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 ### 15.8 Observability
 
 - OpenTelemetry .NET with ASP.NET Core and Npgsql instrumentation — traces, metrics, logs.
+  Not wired yet; this is the next observability slice.
 - Run `dotnet-counters monitor` during load: GC gen2, thread-pool queue length, Npgsql pool
   counters. Most ".NET is slow under load" is thread-pool starvation or GC, not the database.
-- Health checks split into `/health/live` (process alive) and `/health/ready` (DB reachable), the
-  second one wired to the orchestrator.
-- Structured logging from day one. `appsettings.json` currently carries only the default
-  `Logging` section.
+- **Health checks implemented 2026-10-21:** `/health/live` (process alive, no DB) and
+  `/health/ready` (PostgreSQL via `CanConnectAsync`, `503` when unreachable), both anonymous.
+  Readiness timeout — `HealthChecks:DatabaseTimeoutSeconds`; probe commands and orchestrator
+  wiring — `DEPLOY.md`.
+- Graceful shutdown: Kestrel drains in-flight requests up to
+  `Deployment:ShutdownTimeoutSeconds`; the orchestrator's termination grace period must be larger.
+- Structured logging from day one. `appsettings.json` carries only the default `Logging` section;
+  startup validation messages name variables/paths but never secret values.
 
 ### 15.9 Order of operations
 
@@ -1155,10 +1162,13 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
    over 8 × 20 s runs. Same-key booking idempotency is covered by `load/harness` and by a
    minimal CI check without the 1.2M seed. Repeat=5 rerun: search PASS, same-key/contended
    correctness PASS, booking p95 257.5–304.0 ms (one run +4 ms over budget). **No cache.**
-7. Next: deploy (persistent Data Protection keys, `Auth__SigningKey`, `UseForwardedHeaders`,
-   CORS + `SameSite=None`). Booking headroom, if needed, is a separate slot-claim/fast-path
-   slice — not cache.
-8. Observability last, once there is something worth observing.
+7. ~~Deploy~~ — **done (2026-10-21):** persistent Data Protection keys on a volume,
+   `Auth__SigningKey` from a secret store with previous-key rotation, `UseForwardedHeaders`
+   with explicit trusted proxies, explicit CORS + `SameSite=None` for cross-site SPA,
+   health checks, startup validation and graceful shutdown. Runbook — `DEPLOY.md`; smoke —
+   `deploy/smoke.ps1` (102 checks). Actual production rollout is still a separate step.
+8. Next: observability, once there is something worth observing. Booking headroom, if needed,
+   is a separate slot-claim/fast-path slice — not cache.
 
 Caching before measuring is how a system becomes fast and wrong at the same time.
 
@@ -1271,11 +1281,15 @@ Read endpoints (added 2026-10-19):
 Deliberately absent:
 
 - **Auth** — реализована, см. §17.
-- **Caching and health checks** (§15) — not implemented. The 2026-10-20 load test showed no
-  budget need: search passes with the expression index, slots/reviews have ample headroom, and
-  booking is limited by the advisory lock (correctness), not by a cacheable read. Pagination is
-  implemented as keyset for the read endpoints; the older offset methods remain for other callers.
+- **Caching** (§15) — not implemented. The 2026-10-20 load test showed no budget need:
+  search passes with the expression index, slots/reviews have ample headroom, and booking is
+  limited by the advisory lock (correctness), not by a cacheable read. Pagination is implemented
+  as keyset for the read endpoints; the older offset methods remain for other callers.
 - **`Location` on create** — see above; not added in this stage.
+
+Health checks are **not** controllers: `/health/live` and `/health/ready` are mapped in
+`Program.cs` via `MapHealthChecks` / `Deployment/HealthCheckExtensions` (see §15.8 and
+`DEPLOY.md`). They do not change the 81-endpoint controller surface.
 
 Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
 `serviceId`/`date`, two pages through `nextCursor`, broken cursor `400`; card `200` with 2 services,
@@ -1351,14 +1365,52 @@ activity of the barber service and takes the price from it.
   "RefreshTokenDays": 14,
   "CookieHours": 8,
   "CookieSameSite": "Lax"
+},
+"DataProtection": {
+  "KeysPath": "<persistent volume; required>"
+},
+"Cors": {
+  "AllowedOrigins": []
+},
+"ForwardedHeaders": {
+  "Enabled": false,
+  "ForwardLimit": 1,
+  "KnownProxies": [],
+  "KnownNetworks": []
+},
+"HealthChecks": {
+  "DatabaseTimeoutSeconds": 5
+},
+"Deployment": {
+  "ShutdownTimeoutSeconds": 30
 }
 ```
 
-`Auth:SigningKey` в `appsettings.json` **не хранится**. В Development ключ генерируется при старте
-(токены живут до перезапуска), в остальных окружениях обязателен `Auth__SigningKey` длиной
-не менее 32 символов. `CookieSameSite=None` (SPA на другом сайте) принудительно включает `Secure`.
+`Auth:SigningKey` в `appsettings.json` **не хранится** и приложением не генерируется:
+ключ обязателен во всех окружениях, приходит из секрет-стора/`Auth__SigningKey` и должен быть
+не короче 32 символов. Отсутствие, пустое или короткое значение — падение на старте.
+`Auth:PreviousSigningKeys` (массив) принимается при проверке токенов на время ротации;
+новые токены подписываются только текущим ключом. `kid` выводится из ключа, поэтому старые и
+новые токены различимы. Процедура ротации — `DEPLOY.md` §6.
+
+`DataProtection:KeysPath` обязателен: каталог key ring на постоянном томе, общий для всех
+инстансов; `SetApplicationName("BarberSearch")` фиксирован. В Development относительный путь
+задан в `appsettings.Development.json` (`backend/.data-protection-keys`, git-ignored).
+Опционально ключи шифруются PKCS#12-сертификатом (`DataProtection:CertificatePath` /
+`CertificatePassword` из секрет-стора). Валидация пути и прав — на старте.
+
+`Cors:AllowedOrigins` — явный список origins; `*` запрещён, потому что политика включает
+`AllowCredentials`. `Auth:CookieSameSite=None` (cross-site SPA) требует непустой CORS и
+принудительно включает `Secure`; для same-site остаётся `Lax`/`Strict`. Подробная матрица —
+`DEPLOY.md` §4.
+
+`ForwardedHeaders` по умолчанию выключен. При включении обязателен хотя бы один
+`KnownProxies`/`KnownNetworks`: заголовкам от произвольного клиента приложение не доверяет.
+Обрабатываются только `X-Forwarded-For` и `X-Forwarded-Proto`, `X-Forwarded-Host` — нет.
+
 `Auth:RefreshTokenDays` допустим только в диапазоне 7–30; выход за него роняет приложение при
-старте. Access остаётся 15 минут.
+старте. `Auth:AccessTokenMinutes` — 1–1440, `Auth:CookieHours` — 1–168. Access остаётся
+15 минут. Полный список переменных, томов и команд — `DEPLOY.md` §1–§5.
 
 ### 17.5 Защита
 
@@ -1373,19 +1425,29 @@ activity of the barber service and takes the price from it.
   по фиктивному хешу, чтобы наличие аккаунта не выдавалось временем ответа.
 - `SuccessRehashNeeded` перезаписывает хеш при входе.
 - Login/register/refresh/change-password: 10 попыток в минуту на IP (`AddRateLimiter`, политика `auth`).
+  IP берётся из `Connection.RemoteIpAddress` уже после `UseForwardedHeaders`; за
+  балансировщиком это реальный клиент, а не адрес прокси. Прокси должен быть в
+  `ForwardedHeaders:KnownProxies`/`KnownNetworks`, иначе заголовки игнорируются и лимит
+  остаётся общим на всех (см. §17.4, `DEPLOY.md` §3).
 - Antiforgery — только cookie-ветка. Используется свой
   `ValidateAntiforgeryHeaderAttribute` (через `IAntiforgery`), а не `[ValidateAntiForgeryToken]`:
   штатный фильтр живёт в MVC ViewFeatures и требует `AddControllersWithViews()`.
   `refresh`, `logout` и `change-password` проверяют токен вручную и только когда запрос опирается
   на cookie; запрос с refresh-токеном в теле или Bearer-заголовком не CSRF-уязвим.
+  Antiforgery-cookie — `HttpOnly`, `Path=/`, следует `Auth:CookieSameSite`/`Secure`.
+- CORS — только явные origins из `Cors:AllowedOrigins` и только с `AllowCredentials`;
+  wildcard отклоняется на старте. Для cross-site SPA нужны `Auth:CookieSameSite=None`
+  (тогда cookie `Secure`) и тот же origin в CORS; для same-site — `Lax`.
 - 401/403 от middleware приходят как `ProblemDetails` (`AuthProblemDetails`), а не пустым телом
   и не 302 на страницу входа.
 - Antiforgery-токен привязан к identity: после входа его нужно получить заново
   (`GET api/auth/csrf`), иначе первый же `logout` получит 400 `auth.csrf.invalid`.
-- Refresh-токен — 64 случайных байта в base64url; в `refresh_tokens` лежит только SHA-256.
-  Каждый `refresh` ротирует пару, повторное предъявление заменённого токена отзывает всю цепочку
-  по `replaced_by` (`auth.refresh.reused`). Cookie — HttpOnly, `Path=/`, `Secure` вне Development,
-  `SameSite` из `Auth:CookieSameSite`; в Production имя `__Host-barbersearch.refresh`.
+- Access- и refresh-cookie — `HttpOnly`, `Path=/`; вне Development `Secure` включён всегда,
+  в Production имена с префиксом `__Host-`: `__Host-barbersearch` и
+  `__Host-barbersearch-refresh`. Refresh-токен — 64 случайных байта в base64url; в
+  `refresh_tokens` лежит только SHA-256. Каждый `refresh` ротирует пару, повторное
+  предъявление заменённого токена отзывает всю цепочку по `replaced_by`
+  (`auth.refresh.reused`).
 - Refresh-токены отзываются при `logout` (один токен), смене пароля, смене роли и деактивации
   пользователя (все живые токены). Смена пароля, смены роли и деактивация вдобавок меняют
   `security_stamp`, поэтому уже выданный access-токен и cookie отклоняются на следующем же
@@ -1416,7 +1478,7 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 деактивация `204` и stamp не меняет. В БД у всех 11 прежних пользователей stamp непустой
 и уникальный (backfill `gen_random_uuid()::text`).
 
-Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 92 application, все
+Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 100 application, все
 зелёные через reflection-раннер (§5.3).
 
 ### 17.7 Открыто
@@ -1430,21 +1492,26 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
    (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
    Матрица, охват и тесты — §17.8. `CreateBooking` дополнительно проверяет принадлежность
    и активность `barberServiceId` (§15.5, §16); открытых пунктов по этой теме нет.
-3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
-   в контейнере без персистентного тома все сессии умрут после рестарта.
-4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
-   `CookieSameSite=None`, `Secure` и `AllowCredentials`.
-5. **Rate limiting за прокси.** Ключ — `RemoteIpAddress`; без `UseForwardedHeaders` все клиенты
-   за балансировщиком делят один лимит.
+3. **Data Protection.** ✅ Реализовано 2026-10-21: `PersistKeysToFileSystem` на
+   `DataProtection:KeysPath` (постоянный том), `SetApplicationName("BarberSearch")`,
+   fail-fast при отсутствии/недоступности каталога. Опционально ключи шифруются
+   PKCS#12-сертификатом из секрет-стора. Смоук проверил переживание рестарта и общий
+   key ring двух инстансов. Детали — `DEPLOY.md` §2.
+4. **CORS для cross-site SPA.** ✅ Реализовано 2026-10-21: явные `Cors:AllowedOrigins`,
+   `AllowCredentials`, `SameSite=None` + `Secure` + `HttpOnly` + `Path=/`; wildcard и
+   `SameSite=None` без CORS отклоняются на старте. Детали — `DEPLOY.md` §4.
+5. **Rate limiting за прокси.** ✅ Реализовано 2026-10-21: `UseForwardedHeaders` только от
+   `KnownProxies`/`KnownNetworks`, middleware до rate limiter/auth; лимит считается по
+   реальному IP клиента, заголовки от произвольного клиента игнорируются. Детали —
+   `DEPLOY.md` §3.
 6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
 7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
    `LoginUserHandler`.
 8. **Security stamp.** ✅ Реализовано 2026-10-19: `User.SecurityStamp` + `RotateSecurityStamp()`
    в `ChangePasswordHash` / `ChangeRole` / `Deactivate`, claim `security_stamp` в JWT и cookie,
    scoped `SecurityStampValidator` в `OnTokenValidated` / `OnValidatePrincipal`, миграция
-   `AddSecurityStamp`. Механика и ограничения — §17.10. Read-эндпоинты реализованы 2026-10-19
-   (см. §16), booking under contention + идемпотентность — 2026-10-19 (см. §15.5); следующая
-   сессия — пересчёт рейтинга из отзывов (`HANDOFF.md`).
+   `AddSecurityStamp`. Механика и ограничения — §17.10. Деплой-срез закрыт 2026-10-21
+   (`DEPLOY.md`); следующая сессия — фактический выкат и observability.
 
 ### 17.8 Авторизация по владению (added 2026-10-19)
 
