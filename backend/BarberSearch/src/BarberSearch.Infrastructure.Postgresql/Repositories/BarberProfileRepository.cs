@@ -257,6 +257,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var rows = await query
             // PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок
             // задан тремя ключами: сначала «есть ли рейтинг», затем рейтинг, затем id.
+            // Этот порядок терм в терм совпадает с выражением индекса
+            // ix_barber_profiles_search_keyset (((rating IS NULL)), rating DESC, id)
+            // WHERE is_active AND is_verified, поэтому планировщик идёт по индексу и
+            // останавливается после Limit, не сортируя все видимые профили.
             .OrderBy(profile => profile.Rating == null)
             .ThenByDescending(profile => profile.Rating)
             .ThenBy(profile => profile.Id)
