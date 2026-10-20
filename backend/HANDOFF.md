@@ -2,8 +2,8 @@
 
 > Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
 > Дата: 2026-10-21. Ветка: `features/issue-5`. Git root: `D:\Projects\barbersearch`
-> (workspace — `backend/`). HEAD этого среза — `docs(deploy): add deployment runbook`;
-> перед ним `test(deploy): add deployment smoke` и
+> (workspace — `backend/`). HEAD этого среза — `test(deploy): cover antiforgery restart`;
+> перед ним `docs(deploy): add deployment runbook`, `test(deploy): add deployment smoke` и
 > `feat(deploy): harden startup for containers and proxies`.
 > `origin/features/issue-5` запушен.
 
@@ -90,7 +90,7 @@ Runbook деплоя — `DEPLOY.md`.
       через `HostOptions.ShutdownTimeout` (`Deployment:ShutdownTimeoutSeconds`).
     - **Design-time factory** — `dotnet ef` больше не запускает `Program.cs`; читает
       `ConnectionStrings__Postgres`, поэтому миграции не требуют signing key и DP path.
-    - **Смоук** — `deploy/smoke.ps1`: 102 проверки, все зелёные; доказательства —
+    - **Смоук** — `deploy/smoke.ps1`: 103 проверки, все зелёные; доказательства —
       `deploy/generated/smoke.txt` (git-ignored). Проверены cookie-вход, переживание рестарта,
       общий key ring двух инстансов, ротация/повтор refresh, logout, смена пароля, бронь,
       rate limit по XFF, игнорирование XFF недоверенного прокси, HTTPS-redirect, HSTS,
@@ -255,13 +255,13 @@ idempotency-слоте — одна строка на ключ и одна ак�
 
 ```text
 Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17 (особенно §17.7, §17.9, §17.10)
-и backend/DEPLOY.md. Ветка features/issue-5, HEAD — docs(deploy): add deployment runbook;
-перед ним test(deploy): add deployment smoke и feat(deploy): harden startup for containers
-and proxies. Рабочее дерево чистое, origin запушен.
+и backend/DEPLOY.md. Ветка features/issue-5, HEAD — test(deploy): cover antiforgery restart;
+перед ним docs(deploy): add deployment runbook, test(deploy): add deployment smoke и
+feat(deploy): harden startup for containers and proxies. Рабочее дерево чистое, origin запушен.
 
 Деплой-срез закрыт: Data Protection на постоянном томе, Auth__SigningKey обязателен и
 ротируется, forwarded headers только от своих прокси, явный CORS + SameSite=None для
-cross-site SPA, health checks, startup validation и graceful shutdown. Смоук 102 проверки
+cross-site SPA, health checks, startup validation и graceful shutdown. Смоук 103 проверки
 зелёный, сборка 8/0/0, тесты 139/100. Фактический выкат в прод не выполнялся.
 
 Не трогай search, booking correctness, rating recalculation и read-эндпоинты без

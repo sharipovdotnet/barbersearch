@@ -1166,7 +1166,7 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
    `Auth__SigningKey` from a secret store with previous-key rotation, `UseForwardedHeaders`
    with explicit trusted proxies, explicit CORS + `SameSite=None` for cross-site SPA,
    health checks, startup validation and graceful shutdown. Runbook — `DEPLOY.md`; smoke —
-   `deploy/smoke.ps1` (102 checks). Actual production rollout is still a separate step.
+   `deploy/smoke.ps1` (103 checks). Actual production rollout is still a separate step.
 8. Next: observability, once there is something worth observing. Booking headroom, if needed,
    is a separate slot-claim/fast-path slice — not cache.
 

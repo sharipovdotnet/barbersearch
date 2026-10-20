@@ -501,12 +501,16 @@ try {
     Assert-Contains $refreshSetCookie.ToLowerInvariant() 'httponly' 'refresh cookie is HttpOnly'
     Assert-Contains $refreshSetCookie.ToLowerInvariant() 'path=/' 'refresh cookie path is /'
 
-    $oldRefresh = Get-CookieValue -Handler $cookieHandler -Port $DevPort -Name 'barbersearch.refresh'
-    Assert-True (-not [string]::IsNullOrWhiteSpace($oldRefresh)) 'refresh cookie has a value'
-
     $me = Send-Request -Client $cookieClient -Method 'GET' -Path '/api/auth/me' -Port $DevPort
     Assert-Status $me 200 'me with cookie'
     Assert-Contains $me.Body $email 'me returns the logged-in user'
+
+    $csrfBeforeRestart = Send-Request -Client $cookieClient -Method 'GET' -Path '/api/auth/csrf' -Port $DevPort
+    Assert-Status $csrfBeforeRestart 200 'authenticated csrf before restart'
+    $csrfTokenBeforeRestart = ($csrfBeforeRestart.Body | ConvertFrom-Json).token
+
+    $oldRefresh = Get-CookieValue -Handler $cookieHandler -Port $DevPort -Name 'barbersearch.refresh'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($oldRefresh)) 'refresh cookie has a value'
 
     Stop-Api $dev
     $dev = Start-Api -Name 'dev-restarted' -Port $DevPort -Environment $baseEnvironment
@@ -515,13 +519,10 @@ try {
     $meAfterRestart = Send-Request -Client $cookieClient -Method 'GET' -Path '/api/auth/me' -Port $DevPort
     Assert-Status $meAfterRestart 200 'cookie survives API restart'
 
-    $csrfAfterRestart = Send-Request -Client $cookieClient -Method 'GET' -Path '/api/auth/csrf' -Port $DevPort
-    Assert-Status $csrfAfterRestart 200 'csrf after restart'
-    $csrfTokenAfterRestart = ($csrfAfterRestart.Body | ConvertFrom-Json).token
-
     $refresh = Send-Request -Client $cookieClient -Method 'POST' -Path '/api/auth/refresh' `
-        -Port $DevPort -Headers @{ 'X-CSRF-TOKEN' = $csrfTokenAfterRestart }
-    Assert-Status $refresh 204 'refresh via cookie'
+        -Port $DevPort -Headers @{ 'X-CSRF-TOKEN' = $csrfTokenBeforeRestart }
+    Assert-Status $refresh 204 'antiforgery token from before restart is accepted'
+    Record 'antiforgery token survives API restart'
 
     $newRefresh = Get-CookieValue -Handler $cookieHandler -Port $DevPort -Name 'barbersearch.refresh'
     Assert-True ($newRefresh -ne $oldRefresh) 'refresh token rotates'
@@ -530,7 +531,7 @@ try {
     Assert-Status $meAfterRefresh 200 'session still valid after refresh'
 
     $logout = Send-Request -Client $cookieClient -Method 'POST' -Path '/api/auth/logout' `
-        -Port $DevPort -Headers @{ 'X-CSRF-TOKEN' = $csrfTokenAfterRestart }
+        -Port $DevPort -Headers @{ 'X-CSRF-TOKEN' = $csrfTokenBeforeRestart }
     Assert-Status $logout 204 'logout'
 
     $meAfterLogout = Send-Request -Client $cookieClient -Method 'GET' -Path '/api/auth/me' -Port $DevPort
