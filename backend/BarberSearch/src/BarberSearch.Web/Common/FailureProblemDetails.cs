@@ -7,8 +7,9 @@ namespace BarberSearch.Web.Common;
 /// Превращает доменный <see cref="Failure"/> в <see cref="ProblemDetails"/> с кодом состояния HTTP.
 /// </summary>
 /// <remarks>
-/// Соответствие зафиксировано в AGENT.md §11: <c>VALIDATION</c> → 400, <c>NOT_FOUND</c> → 404,
-/// <c>CONFLICT</c> → 409, <c>FAILURE</c> → 500. Маппинг живёт в контроллерах, а не в middleware:
+/// Соответствие зафиксировано в AGENT.md §11: <c>VALIDATION</c> → 400, <c>UNAUTHORIZED</c> → 401,
+/// <c>FORBIDDEN</c> → 403, <c>NOT_FOUND</c> → 404, <c>CONFLICT</c> → 409, <c>FAILURE</c> → 500.
+/// Маппинг живёт в контроллерах, а не в middleware:
 /// обработчики Application возвращают <c>Result</c>, поэтому объект <see cref="Failure"/> до
 /// middleware не доходит, и middleware увидел бы только исключения.
 /// </remarks>
@@ -27,6 +28,8 @@ public static class FailureProblemDetails
     public static int ToStatusCode(ErrorType type) => type switch
     {
         ErrorType.VALIDATION => StatusCodes.Status400BadRequest,
+        ErrorType.UNAUTHORIZED => StatusCodes.Status401Unauthorized,
+        ErrorType.FORBIDDEN => StatusCodes.Status403Forbidden,
         ErrorType.NOT_FOUND => StatusCodes.Status404NotFound,
         ErrorType.CONFLICT => StatusCodes.Status409Conflict,
         _ => StatusCodes.Status500InternalServerError
@@ -92,6 +95,8 @@ public static class FailureProblemDetails
     private static string TitleFor(int statusCode) => statusCode switch
     {
         StatusCodes.Status400BadRequest => "One or more validation errors occurred.",
+        StatusCodes.Status401Unauthorized => "Authentication is required or the credentials are invalid.",
+        StatusCodes.Status403Forbidden => "The authenticated user is not allowed to perform this operation.",
         StatusCodes.Status404NotFound => "The requested resource was not found.",
         StatusCodes.Status409Conflict => "The request conflicts with the current state of the resource.",
         _ => "An unexpected error occurred while processing the request."

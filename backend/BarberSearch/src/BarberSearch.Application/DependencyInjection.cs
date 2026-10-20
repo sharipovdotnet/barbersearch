@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Reviews;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BarberSearch.Application;
@@ -22,6 +23,10 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         var assembly = typeof(DependencyInjection).Assembly;
+
+        // Пересчёт рейтинга — application-сервис, а не обработчик: его вызывают четыре
+        // команды отзыва, и каждая делает это внутри своей транзакции.
+        services.AddScoped<ReviewRatingRecalculator>();
 
         services.Scan(scan => scan.FromAssemblies([assembly])
             .AddClasses(classes => classes

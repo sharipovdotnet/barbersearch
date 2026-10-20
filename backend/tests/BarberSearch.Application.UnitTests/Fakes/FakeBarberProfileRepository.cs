@@ -1,0 +1,255 @@
+using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
+using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
+using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberServices;
+using CSharpFunctionalExtensions;
+using Shared;
+using System.Reflection;
+
+namespace BarberSearch.Application.UnitTests.Fakes;
+
+/// <summary>
+/// In-memory <see cref="IBarberProfileRepository"/> для тестов обработчиков: реализованы
+/// только те члены, которые вызывают проверяемые сценарии.
+/// </summary>
+/// <remarks>
+/// Поиск в фейке повторяет keyset-порядок настоящего репозитория
+/// (<c>rating DESC NULLS LAST, id</c>), поэтому на нём можно проверять стык страниц.
+/// Фильтры по городу, специализации, услуге и дате фейк не применяет: тесты проверяют,
+/// что обработчик передал их в репозиторий без искажений.
+/// </remarks>
+public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFakeTransactionParticipant
+{
+    private readonly Dictionary<Guid, BarberProfile> _profiles = [];
+    private readonly List<BarberSearchItemResponse> _searchItems = [];
+    private readonly Dictionary<Guid, BarberProfileResponse> _cards = [];
+    private Dictionary<Guid, BarberProfile>? _snapshot;
+
+    public IReadOnlyCollection<BarberProfile> Profiles => _profiles.Values;
+
+    public IReadOnlyCollection<BarberSearchItemResponse> SearchItems => _searchItems;
+
+    public BarberSearchFilter? LastSearchFilter { get; private set; }
+
+    public BarberSlotContext? SlotContext { get; set; }
+
+    /// <summary>
+    /// Подмена сохранения профиля: тест проверяет откат транзакции при ошибке записи.
+    /// </summary>
+    public Func<BarberProfile, UnitResult<Failure>>? UpdateBehavior { get; set; }
+
+    public void Add(BarberProfile profile) => _profiles[profile.Id] = profile;
+
+    public void BeginTransaction()
+        => _snapshot = _profiles.ToDictionary(
+            entry => entry.Key,
+            entry => Clone(entry.Value));
+
+    public void CommitTransaction() => _snapshot = null;
+
+    public void RollbackTransaction()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        _profiles.Clear();
+
+        foreach (var entry in _snapshot)
+        {
+            _profiles[entry.Key] = entry.Value;
+        }
+
+        _snapshot = null;
+    }
+
+    public void AddSearchItem(BarberSearchItemResponse item) => _searchItems.Add(item);
+
+    public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
+
+    public Task<Result<BarberProfile, Failure>> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<BarberProfile, Failure>>(
+            _profiles.TryGetValue(id, out var profile)
+                ? profile
+                : new Failure(Error.NotFound(
+                    "barberProfile.getById.notFound",
+                    $"Barber profile '{id}' was not found.",
+                    id)));
+
+    public Task<Result<BarberProfile, Failure>> GetByUserIdAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = _profiles.Values.FirstOrDefault(x => x.UserId == userId);
+
+        if (profile is null)
+        {
+            return Task.FromResult<Result<BarberProfile, Failure>>(new Failure(Error.NotFound(
+                "barberProfile.getByUserId.notFound",
+                $"Barber profile of user '{userId}' was not found.",
+                userId)));
+        }
+
+        return Task.FromResult<Result<BarberProfile, Failure>>(profile);
+    }
+
+    public Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<BarberProfile, Failure>>(
+            _profiles.TryGetValue(id, out var profile)
+                ? profile
+                : new Failure(Error.NotFound(
+                    "barberProfile.getById.notFound",
+                    $"Barber profile '{id}' was not found.",
+                    id)));
+
+    public Task<Result<bool, Failure>> IsOwnedByAsync(
+        Guid barberProfileId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<bool, Failure>>(
+            _profiles.TryGetValue(barberProfileId, out var profile) && profile.UserId == userId);
+
+    public Task<Result<bool, Failure>> ExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<bool, Failure>>(_profiles.ContainsKey(id));
+
+    public Task<Result<BarberService, Failure>> GetServiceAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        CancellationToken cancellationToken = default)
+    {
+        var service = _profiles.TryGetValue(barberProfileId, out var profile)
+            ? profile.Services.FirstOrDefault(
+                x => x.Id == barberServiceId && x.BarberProfileId == barberProfileId)
+            : null;
+
+        if (service is null)
+        {
+            return Task.FromResult<Result<BarberService, Failure>>(new Failure(Error.NotFound(
+                "barberProfile.getService.notFound",
+                $"Barber profile '{barberProfileId}' does not provide service '{barberServiceId}'.",
+                barberServiceId)));
+        }
+
+        return Task.FromResult<Result<BarberService, Failure>>(service);
+    }
+
+    public Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
+        BarberSearchFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        LastSearchFilter = filter;
+
+        var ordered = _searchItems
+            .OrderBy(item => item.Rating == null)
+            .ThenByDescending(item => item.Rating)
+            .ThenBy(item => item.Id)
+            .AsEnumerable();
+
+        if (filter.Cursor is { } cursor)
+        {
+            ordered = cursor.Rating is null
+                ? ordered.Where(item =>
+                    item.Rating == null
+                    && item.Id.CompareTo(cursor.Id) > 0)
+                : ordered.Where(item =>
+                    item.Rating == null
+                    || item.Rating < cursor.Rating
+                    || (item.Rating == cursor.Rating && item.Id.CompareTo(cursor.Id) > 0));
+        }
+
+        IReadOnlyList<BarberSearchItemResponse> result = ordered
+            .Take(filter.Limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<BarberSearchItemResponse>, Failure>(result));
+    }
+
+    public Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (_cards.TryGetValue(id, out var card))
+        {
+            return Task.FromResult<Result<BarberProfileResponse, Failure>>(card);
+        }
+
+        return Task.FromResult<Result<BarberProfileResponse, Failure>>(new Failure(Error.NotFound(
+            "barberProfile.getCardById.notFound",
+            $"Barber profile '{id}' was not found.",
+            id)));
+    }
+
+    public Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? serviceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        if (SlotContext is not null && SlotContext.BarberProfileId == barberProfileId)
+        {
+            return Task.FromResult<Result<BarberSlotContext, Failure>>(SlotContext);
+        }
+
+        return Task.FromResult<Result<BarberSlotContext, Failure>>(new Failure(Error.NotFound(
+            "barberSlots.salon.notFound",
+            $"Slot context for barber profile '{barberProfileId}' was not found.",
+            barberProfileId)));
+    }
+
+    public Task<UnitResult<Failure>> AddAsync(
+        BarberProfile barberProfile,
+        CancellationToken cancellationToken = default)
+    {
+        _profiles[barberProfile.Id] = barberProfile;
+
+        return Task.FromResult(UnitResult.Success<Failure>());
+    }
+
+    public Task<UnitResult<Failure>> UpdateAsync(
+        BarberProfile barberProfile,
+        CancellationToken cancellationToken = default)
+    {
+        var result = UpdateBehavior?.Invoke(barberProfile)
+            ?? UnitResult.Success<Failure>();
+
+        return Task.FromResult(result);
+    }
+
+    public Task<UnitResult<Failure>> DeleteAsync(
+        BarberProfile barberProfile,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<Result<IReadOnlyList<BarberProfile>, Failure>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<Result<IReadOnlyList<BarberProfile>, Failure>> GetPagedAsync(
+        int page,
+        int pageSize,
+        bool onlyActive = true,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    private static BarberProfile Clone(BarberProfile profile)
+    {
+        var memberwiseClone = typeof(object).GetMethod(
+            "MemberwiseClone",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        return (BarberProfile)memberwiseClone.Invoke(profile, null)!;
+    }
+}

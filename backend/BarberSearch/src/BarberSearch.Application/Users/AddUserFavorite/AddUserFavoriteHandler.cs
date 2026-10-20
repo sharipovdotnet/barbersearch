@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -16,11 +17,16 @@ namespace BarberSearch.Application.Users.AddUserFavorite;
 public class AddUserFavoriteHandler : ICommandHandler<AddUserFavoriteCommand>
 {
     private readonly IUserRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddUserFavoriteHandler> _logger;
 
-    public AddUserFavoriteHandler(IUserRepository repository, ILogger<AddUserFavoriteHandler> logger)
+    public AddUserFavoriteHandler(
+        IUserRepository repository,
+        ICurrentUser currentUser,
+        ILogger<AddUserFavoriteHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -38,6 +44,12 @@ public class AddUserFavoriteHandler : ICommandHandler<AddUserFavoriteCommand>
         }
 
         var user = userResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(user.Id);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         // Правило уровня Application: свой профиль барбера в избранное добавить нельзя,
         // поэтому доменный метод в этом случае не вызывается вовсе.

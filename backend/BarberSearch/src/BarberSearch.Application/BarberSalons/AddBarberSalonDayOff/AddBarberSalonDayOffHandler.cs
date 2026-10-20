@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -15,14 +16,17 @@ namespace BarberSearch.Application.BarberSalons.AddBarberSalonDayOff;
 public class AddBarberSalonDayOffHandler : ICommandHandler<AddBarberSalonDayOffCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddBarberSalonDayOffHandler> _logger;
 
     public AddBarberSalonDayOffHandler(
         IBarberProfileRepository repository,
-        ILogger<AddBarberSalonDayOffHandler> logger)
+        ILogger<AddBarberSalonDayOffHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -39,6 +43,12 @@ public class AddBarberSalonDayOffHandler : ICommandHandler<AddBarberSalonDayOffC
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var salonResult = profile.FindSalon(command.SalonId);
         if (salonResult.IsFailure)

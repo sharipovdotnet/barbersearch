@@ -6,7 +6,9 @@ using BarberSearch.Application.HairServices.UpdateHairService;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.HairServices.CreateHairService;
 using BarberSearch.Contracts.HairServices.UpdateHairService;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -16,9 +18,11 @@ namespace BarberSearch.Web.Controllers;
 /// </summary>
 /// <remarks>
 /// Цена и длительность конкретного барбера живут в профиле барбера, а не здесь:
-/// каталог хранит только длительность по умолчанию.
+/// каталог хранит только длительность по умолчанию. Каталог — админский справочник:
+/// создание, правка и активация доступны только администратору.
 /// </remarks>
 [ApiController]
+[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
 [Route("api/hair-services")]
 public class HairServicesController : ApiController
 {

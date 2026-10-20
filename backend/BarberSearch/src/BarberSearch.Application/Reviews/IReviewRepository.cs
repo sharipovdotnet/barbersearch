@@ -1,3 +1,5 @@
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -31,6 +33,25 @@ public interface IReviewRepository
         int page,
         int pageSize,
         bool onlyPublished = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница опубликованных отзывов барбера в порядке <c>created_at DESC, id</c>.
+    /// </summary>
+    /// <remarks>
+    /// Скрытые отзывы в выдачу не попадают. Keyset-условие берётся из
+    /// <paramref name="cursor"/>; <paramref name="limit"/> — это pageSize + 1.
+    /// Читается без отслеживания и проецируется сразу в <see cref="ReviewResponse"/>,
+    /// без навигаций на бронь и пользователя.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetPublishedPageAsync(
+        Guid barberProfileId,
+        ReviewCursor? cursor,
+        int limit,
         CancellationToken cancellationToken = default);
 
     /// <summary>

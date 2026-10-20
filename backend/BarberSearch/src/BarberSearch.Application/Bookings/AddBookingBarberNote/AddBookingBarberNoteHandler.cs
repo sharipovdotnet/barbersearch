@@ -1,4 +1,6 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,11 +13,19 @@ namespace BarberSearch.Application.Bookings.AddBookingBarberNote;
 public class AddBookingBarberNoteHandler : ICommandHandler<AddBookingBarberNoteCommand>
 {
     private readonly IBookingRepository _repository;
+    private readonly IBarberProfileRepository _barberProfiles;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddBookingBarberNoteHandler> _logger;
 
-    public AddBookingBarberNoteHandler(IBookingRepository repository, ILogger<AddBookingBarberNoteHandler> logger)
+    public AddBookingBarberNoteHandler(
+        IBookingRepository repository,
+        IBarberProfileRepository barberProfiles,
+        ICurrentUser currentUser,
+        ILogger<AddBookingBarberNoteHandler> logger)
     {
         _repository = repository;
+        _barberProfiles = barberProfiles;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -33,6 +43,15 @@ public class AddBookingBarberNoteHandler : ICommandHandler<AddBookingBarberNoteC
         }
 
         var booking = bookingResult.Value;
+
+        var allowed = await _currentUser.EnsureIsBarberOfAsync(
+            _barberProfiles,
+            booking.BarberProfileId,
+            cancellationToken);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var noted = booking.AddBarberNote(command.Note);
         if (noted.IsFailure)

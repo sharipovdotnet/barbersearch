@@ -492,6 +492,60 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.RefreshTokens.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid?>("ReplacedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replaced_by");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("ReplacedBy")
+                        .HasDatabaseName("ix_refresh_tokens_replaced_by");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_refresh_tokens_token_hash");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
+
+                    b.ToTable("refresh_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_refresh_tokens_token_hash", "char_length(token_hash) = 64");
+                        });
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.Reviews.Review", b =>
                 {
                     b.Property<Guid>("Id")
@@ -780,6 +834,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("role");
 
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("security_stamp");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -799,6 +858,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                             t.HasCheckConstraint("ck_users_email", "position('@' in email) > 1");
 
                             t.HasCheckConstraint("ck_users_role", "role IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_users_security_stamp", "char_length(security_stamp) > 0");
                         });
                 });
 
@@ -953,6 +1014,22 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_portfolio_photos_barber_profiles_barber_profile_id");
 
                     b.Navigation("BarberProfile");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.RefreshTokens.RefreshToken", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.RefreshTokens.RefreshToken", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_refresh_tokens_refresh_tokens_replaced_by");
+
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_users_user_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.TimeOffs.TimeOff", b =>

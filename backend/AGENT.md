@@ -1,11 +1,12 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: the П0–П5 domain rework is **committed** on branch `features/issue-1` (the commit
+> Code state: the П0–П5 domain rework was **committed** on `features/issue-1` (the commit
 > that carries both the domain refactor and the xunit test project; the last *pre-rework* domain
 > commit was `78a9858`, against which §3–§9 were originally verified on 2026-10-12). §9 now lists
 > what the rework closed and what is still open. The whole domain — 16 C# types — plus 2 `Shared`
-> types and 128 xunit tests were reviewed for this revision.
+> types and 130 xunit tests were reviewed for this revision. Current work — the API layer, auth and
+> the read endpoints — is on `features/issue-4`.
 
 ---
 
@@ -16,7 +17,7 @@ Domain: barbers (profiles, specializations, portfolio, schedule, pricing), salon
 services, reviews, bookings, favorites, users.
 
 Approach: **DDD with a rich domain model**. The domain is written and is the main asset of
-the repo; application layer, infrastructure and API are not started yet (see §8).
+the repo; Application, Infrastructure and Web exist — current state in §8.
 
 ---
 
@@ -28,8 +29,8 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | .NET solution | `BarberSearch\BarberSearch.sln` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-1` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 128 xunit tests) |
+| Working branch | `features/issue-4` (default: `main`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 139 xunit tests) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -46,6 +47,7 @@ the repo; application layer, infrastructure and API are not started yet (see §8
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
+| Microsoft.AspNetCore.Authentication.JwtBearer | `10.0.11` (+ `Microsoft.IdentityModel.*` 8.19.2, `Microsoft.Bcl.Cryptography` 10.0.2) |
 | Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, on Web; the provider now lives in Infrastructure) |
 | Npgsql.EntityFrameworkCore.PostgreSQL | `10.0.3` (`BarberSearch.Infrastructure.Postgresql` only) |
 | Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (wired up in `Program.cs`: the UI reads the `AddOpenApi` document) |
@@ -108,21 +110,23 @@ backend/                                  ← workspace root
         │   └── {Entity}/                 ← one folder per domain entity (Users/, BarberProfiles/, …)
         │       ├── I{Entity}Repository.cs  ← repository abstraction of that entity (7 in total;
         │       │                             Reviews/ also holds ReviewRatingSummary)
-        │       └── {Operation}/          ← XxxCommand.cs + XxxHandler.cs per domain method (68)
+        │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (78)
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 14 × IEntityTypeConfiguration<T>
         │   ├── Migrations/               ← InitialCreate + ApplicationDbContextModelSnapshot
-        │   ├── Repositories/             ← RepositoryBase<T> + 7 repository implementations
-        │   ├── ApplicationDbContext.cs   ← 14 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── Repositories/             ← RepositoryBase<T> + 8 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 15 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
         │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
+            ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
+            ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 11 controllers, 68 endpoints — one per Application handler
+            ├── Controllers/              ← 13 controllers: 12 доменных (73 endpoints) + AuthController (8 actions)
             ├── appsettings.json          ← ConnectionStrings:Postgres + Logging
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
@@ -182,7 +186,7 @@ dotnet clean   BarberSearch/BarberSearch.sln
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all seven projects. Verify with:
+`BarberSearch.sln` lists all eight projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
@@ -190,7 +194,8 @@ dotnet sln BarberSearch/BarberSearch.sln list
 
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
 `BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`, `Shared`,
-`..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`.
+`..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
+`..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`.
 
 **`BarberSearch.Contracts` добавлен 2026-10-16 вручную** (не через `dotnet sln add` — см.
 предупреждение ниже): `Project(…)` + `EndProject` после записи `BarberSearch.Application`,
@@ -201,7 +206,13 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 здесь запрещён. Проверено: `dotnet build BarberSearch.sln` собирает все семь проектов,
 0 ошибок, 0 предупреждений.
 
-The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all seven entries; switching
+**`BarberSearch.Application.UnitTests` добавлен 2026-10-19 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Contracts`, четыре строки
+`ProjectConfigurationPlatforms` для `Debug|Any CPU` и `Release|Any CPU`, GUID проекта —
+`{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}`; проект вложен в существующую папку `tests`
+(`NestedProjects`). Сборка всех восьми проектов — 0 ошибок, 0 предупреждений.
+
+The `.sln` still uses the legacy project type GUID `{FAE04EC0-…}` for all eight entries; switching
 them to the SDK-style `{9A19103F-…}` is a separate cleanup (§9.13).
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
@@ -268,8 +279,8 @@ xunit.execution.dotnet.dll`, although that file **is** in the test bin and next 
 session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not compile at all).
 
 What works is a throwaway runner that loads the test assembly and invokes every `[Fact]` by
-reflection. This is faithful here because the suite is **128 `[Fact]` methods, no `[Theory]`, no
-fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
+reflection. This is faithful here because the suite is **Domain — 139, Application — 92 `[Fact]`
+methods, no `[Theory]`, no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
 # 1. build the test assembly (needs danger-full-access for obj/bin)
@@ -290,11 +301,11 @@ cd tests/BarberSearch.Domain.UnitTests/bin/Debug/net10.0
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Domain.UnitTests.dll>
 ```
 
-Result on 2026-10-16 (after the `BarberProfile*Request` move, see §10.16):
+Result on 2026-10-19 (после security stamp, §17.10):
 
 ```
-Discovered: 128, to run: 128
-Passed: 128, Failed: 0, Skipped: 0
+BarberSearch.Domain.UnitTests:      Discovered: 139, passed: 139, failed: 0, skipped: 0
+BarberSearch.Application.UnitTests: Discovered: 100, passed: 100, failed: 0, skipped: 0
 ```
 
 Delete the runner afterwards — both the throwaway project in `%TEMP%` and the `XunitRunner.*`
@@ -317,8 +328,10 @@ the exception chain:
 * `NpgsqlException: Failed to connect to …` — the SQL was built, the query translates;
 * `InvalidOperationException: … could not be translated …` — the query is broken.
 
-At the time of writing every repository query reached the connect step: 16 entity types, 14 tables,
-no query has been executed against a real database yet.
+At the time of writing every repository query reached the connect step: 16 entity types, 15 tables,
+and the read queries added in stage 2 have additionally been exercised against the local PostgreSQL
+by the smoke tests. The dead-connection check remains the quick way to tell a translation failure
+(`InvalidOperationException: … could not be translated …`) from a connection failure.
 
 ---
 
@@ -327,15 +340,14 @@ no query has been executed against a real database yet.
 Target layering (bold = already exists):
 
 ```
-BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE except auth]
+BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE]
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
-BarberSearch.Contracts      → record-контракты входных данных операций            [DONE]
-                              68 из 68 операций: первые 4 (CreateSalon, CreateBooking,
-                              CreateBarberProfile, UpdateBarberProfile) + 25 добавленных
-                              Request-записей + 3 записи ответов (§16)
+BarberSearch.Contracts      → record-контракты входных данных и ответов операций      [DONE]
+                              29 request-записей покрывают write-операции; для пяти
+                              read-эндпоинтов — response-DTO + PagedResponse<T> (§16)
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
 BarberSearch.Domain.UnitTests → domain invariants                                 [DONE]
@@ -504,13 +516,14 @@ Three rules were pushed to the application layer because the aggregate cannot kn
 | Layer | Status |
 |---|---|
 | Domain (entities, VOs, invariants, errors) | ✅ reworked — §9 lists what is closed and what remains |
-| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 128 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
+| Domain tests | ✅ `tests/BarberSearch.Domain.UnitTests` — 139 xunit `[Fact]`s, in the `.sln`, all green via §5.3 |
+| Application tests | ✅ `tests/BarberSearch.Application.UnitTests` — **100** xunit `[Fact]`s: 40 прежних (28 на владение + 12 на refresh-токены) + 43 на read-эндпоинты (8 курсоров/пагинации, 9 поиска, 3 карточки, 9 слотов, 8 броней, 6 отзывов) + 9 на создание брони (повтор ключа, перечитывание после unique violation, 409 без победителя, ключ в рамках пользователя, цена из услуги, чужая/неактивная услуга, overlap, отменённая бронь) + 8 на пересчёт рейтинга (создание, правка опубликованного, публикация скрытого, скрытие опубликованного, правка скрытого, скрытие последнего, округление, откат при ошибке сохранения профиля); фейковые репозитории + `ICurrentUser` + `TimeProvider` + транзакционный `FakeUnitOfWork` (§12.2, §17.8–§17.9) |
 | Domain events | ❌ absent |
-| Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 7 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`, …); 68 command/query handlers, one per public method of every domain entity, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
-| Request-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: первыми были 4 из 68 операций — `CreateSalonRequest` (10 полей), `CreateBookingRequest` (9), `BarberProfileCreateRequest` (11) и `BarberProfileUpdateRequest` (10, перенесены из домена 2026-10-16, бывшие `*Data`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене; остальные «толстые» команды (`CreateUser`, `UpdateUserProfile`, `UpdateSalonLocation`, `CreateHairService`, `AddBarberProfile*`) получили контракты в этой ревизии, когда понадобились контроллеры — см. §16 |
-| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 14 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 7 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` — 14 tables, every index (incl. `ux_users_email`, `ux_barber_profiles_user_id`, `ux_reviews_booking_id`, `ux_bookings_user_id_idempotency_key`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`) plus the exclusion constraint `ex_bookings_no_overlap` as raw SQL; `dotnet ef` works (global tool 10.0.10, design-time host = Web); the migration **was applied on 2026-10-16** to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), and both the exclusion constraint and the `citext` uniqueness were exercised with real INSERTs; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
-| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the seven repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; 11 controllers in `Controllers/` expose **all 68** Application handlers (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; no auth yet (§16) |
-| Swagger UI | ❌ package present, no config |
+| Application (CQRS/handlers/DTOs/validation) | 🟡 `BarberSearch.Application` — project + 8 repository abstractions, each colocated with its entity (`Users/IUserRepository.cs`, `BarberProfiles/IBarberProfileRepository.cs`, `RefreshTokens/IRefreshTokenRepository.cs`, …); **78 handlers (72 command + 6 query)**: 68 доменных операций (включая `FindBarberProfileSalon`), 4 refresh-операции и 5 новых read-запросов, in per-entity folders (`Users/`, `BarberProfiles/`, `BarberSalons/`, `RefreshTokens/`, …), contracts in `Abstractions/` (`ICommand`, `ICommandHandler<>`, `ICommandHandler<,>`, `IQuery<>`, `IQueryHandler<,>`) and `AddApplication()` (Scrutor assembly scan, scoped); validators still absent, a Request-контракт вынесен в отдельный слой (строка ниже) |
+| Request/response-контракты (`BarberSearch.Contracts`) | ✅ проект в `src/`, **в `.sln` добавлен вручную** (§5.1), ссылается на `Domain` ради enum'ов: 29 request-записей покрывают все write-операции (первыми были `CreateSalonRequest`, `CreateBookingRequest`, `BarberProfileCreateRequest`, `BarberProfileUpdateRequest`); команда их только оборачивает (`CreateBarberProfileCommand(BarberProfileCreateRequest Request)`), валидация осталась в домене. Read-эндпоинты добавили response-DTO: `Common/PagedResponse<T>` и папки `SearchBarbers/`, `GetBarberProfile/`, `GetBarberSlots/`, `Bookings/GetBookings/`, `Reviews/GetReviews/`; доменные сущности наружу не сериализуются — см. §16 |
+| Infrastructure (EF Core, DbContext, migrations, DB) | 🟡 `BarberSearch.Infrastructure.Postgresql` — provider wired, 15 entity configurations, `ApplicationDbContext` (declares the `citext` and `btree_gist` extensions), `RepositoryBase<T>` + 8 repository implementations in `Repositories/`, DI registration, and `Migrations/InitialCreate` + `AddRefreshTokens` + `AddSecurityStamp` + `AddReadIndexes` — 15 tables, every index (incl. `ux_users_email`, `ux_refresh_tokens_token_hash`, filtered `ux_barber_salons_primary_per_profile`, `ux_specializations_name`), the exclusion constraint `ex_bookings_no_overlap` as raw SQL and `users.security_stamp` with `ck_users_security_stamp`. `AddReadIndexes` (2026-10-19) добавляет `ix_barber_profiles_search` (partial, `rating DESC NULLS LAST, id`), `ix_reviews_barber_profile_id_published_created_at` и `ix_bookings_start_at_id`; read-методы `SearchAsync` / `GetCardByIdAsync` / `GetSlotContextAsync` / `GetPageAsync` / `GetPublishedPageAsync` живут в репозиториях и проецируют сразу в Contracts. `GetServiceAsync` — узкое чтение `barber_services` для создания брони (без загрузки агрегата), `BookingRepository.AddAsync` снимает неудачную вставку с change tracker и маппит `23505`/`23P01` в `Conflict`. `UnitOfWork` реализует `IUnitOfWork` над `ApplicationDbContext` (commit только при успехе, `Failure`/исключение — rollback), `BarberProfileRepository.GetForRatingUpdateAsync` читает корень профиля через `SELECT … FOR UPDATE` без коллекций. `dotnet ef` works (global tool 10.0.10, design-time host = Web); `AddSecurityStamp` applied on 2026-10-19 to the locally installed PostgreSQL 16.3 (`C:\Program Files\PostgreSQL\16`, database `barbersearch`), `AddReadIndexes` applied the same day; on this machine the native service holds port 5432, so the compose container (PG 18.6, healthy) stays empty |
+| Web (controllers, DI, error mapping, auth) | 🟡 composition root + API: `DependencyInjection.cs` + `Program.cs` wire PostgreSQL, the eight repositories, the Application handlers and `IPasswordHasher<User>` from `ConnectionStrings:Postgres`; **13 controllers in `Controllers/` expose 81 endpoints: 73 доменных + 8 auth** (`Web/Common/ApiController.cs` turns `Result` into 200/201/204, `Web/Common/FailureProblemDetails.cs` maps `ErrorType` → 400/401/403/404/409/500 over ProblemDetails), Swagger UI reads the `AddOpenApi` document, enums travel as JSON strings; cookie + JWT auth, refresh-токены в HttpOnly-cookie, security stamp на каждом запросе, политики и rate limiting (§17); проверки владения ресурсом — в обработчиках Application (§17.8). Read-эндпоинты: `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots`, `GET api/bookings`, `GET api/reviews` — keyset-пагинация, response-DTO, `AsNoTracking`, проекции без Include коллекций (§16) |
+| Swagger UI | ✅ wired in `Program.cs` (`AddOpenApi` + `UseSwaggerUI`), Bearer security scheme in `Web/OpenApi` |
 | Docker / CI / README / `.editorconfig` | 🟡 `docker-compose.yml` in the repo root (PostgreSQL 18 with a named volume, `pg_isready` healthcheck, explicit UTF-8 locale, `POSTGRES_PORT` override); no Dockerfile for the API, no CI, no README, no `.editorconfig` |
 
 ---
@@ -708,9 +721,9 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
    **Partly done:** the project exists (→ `Domain`, `Shared`), declares seven repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries one handler per public domain method — 68 in
-   total — in per-entity folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without
-   the `Command`/`Handler` suffix, namespace = folder path). The contracts live in
+   `Reviews/IReviewRepository.cs` — and carries **78 handlers (72 command + 6 query)** in per-entity
+   folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
+   `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
    scan (Scrutor, scoped). The two rules of §7.6 are implemented here:
    `AddUserFavoriteHandler` (self-favourite) and `MarkBookingNoShowHandler` (no-show too early);
@@ -722,28 +735,30 @@ Suggested order:
    (их место заняли два `*Request`), поэтому `BarberProfile.Create` / `UpdateProfile` вызываются
    с именованными аргументами.
    Still missing: validators и review→rating recalculation. Request-контракты закрыты для всех
-   68 операций — см. §16.
+   write-операций, response-DTO — для пяти read-эндпоинтов (см. §16).
 5. **Infrastructure:** `BarberSearch.Infrastructure` — EF Core + Npgsql, `ApplicationDbContext`,
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
    **Partly done:** the project is called `BarberSearch.Infrastructure.Postgresql`; it references
    `Domain` + `Application` + `Npgsql.EntityFrameworkCore.PostgreSQL`, carries one configuration
-   per entity, the `ApplicationDbContext`, seven repository implementations and the DI
+   per entity, the `ApplicationDbContext`, eight repository implementations and the DI
    registration (see §8). The `dotnet ef` wiring is in place (global tool 10.0.10, design-time
-   host = Web) and the first migration `InitialCreate` is written: 14 tables, every index, the
-   exclusion constraint `ex_bookings_no_overlap` (raw SQL over `btree_gist`) and `citext` for
-   specialization names. Applied on 2026-10-16 to the local PostgreSQL 16.3. Still missing: the
-   application actually exercising queries — no repository query has run inside the app and there
-   are no integration tests.
+   host = Web); migrations `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp` and
+   `AddReadIndexes` produce 15 tables, every index, the exclusion constraint
+   `ex_bookings_no_overlap` (raw SQL over `btree_gist`) and `citext` for specialization names.
+   Applied to the local PostgreSQL 16.3 (2026-10-16 and 2026-10-19). Read queries have been
+   exercised against it by the stage-2 smoke; integration tests are still missing.
 6. **Web:** add `ProjectReference`s to Domain/Application/Infrastructure, controllers in
    `Controllers/`, DI registration, middleware mapping `ErrorType` → HTTP status
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) via `ProblemDetails`,
    Swagger UI, JWT auth for `User`.
-   **Done except auth:** the `ProjectReference`s and the DI composition root
+   **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   11 controllers with all 68 endpoints, the `ErrorType` → HTTP status mapping
+   13 controllers with 81 endpoints (73 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
-   Still missing: JWT auth for `User`.
+   Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
+   с ротацией и `POST api/auth/change-password`; проверка владения ресурсом — в обработчиках
+   Application.
 7. **Operations:** Dockerfile, docker-compose (Postgres), health checks, CI.
    **Partly done:** `docker-compose.yml` in the repo root brings up PostgreSQL 18 with a named
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
@@ -754,13 +769,20 @@ Suggested order:
 ## 12. Open questions (need an owner decision)
 
 1. **Database:** PostgreSQL (Npgsql) is the assumption; confirm. Is geo search (PostGIS) needed?
-2. **Rating aggregation:** when is `BarberProfile.Rating`/`ReviewsCount` recalculated — on review
-   publish, on hide, or on a schedule? (The scale itself is settled: 1.00..5.00.)
+2. **Rating aggregation** — **decided 2026-10-19 and implemented:** `BarberProfile.Rating` /
+   `ReviewsCount` пересчитываются синхронно при создании отзыва, правке опубликованного отзыва,
+   публикации и скрытии. Считаются только `Review.IsPublished = true`; скрытые не входят ни в
+   count, ни в average. Пересчёт идёт в одной транзакции с изменением отзыва (`IUnitOfWork`),
+   перед чтением сводки берётся row lock на `barber_profiles` (`SELECT … FOR UPDATE`), поэтому
+   два параллельных `Publish`/`Hide` не теряют обновление. Округление и правило «`null` при нуле
+   отзывов» остаются в `BarberProfile.UpdateRating`; SQL и Application их не дублируют.
+   Административный `PUT api/barber-profiles/{id}/rating` остаётся ручным override.
 3. **API style:** controllers (the `Controllers/` folder is declared and `AddControllers()` is
    called) — confirm we are not moving to minimal APIs.
 4. **CQRS:** separate read models, or just handlers over a single DbContext?
-5. **Auth:** JWT, roles (`User` / `Barber` / `Admin` — `UserRole` now exists), and who grants
-   `Grade` and `IsVerified`?
+5. **Auth** — **decided 2026-10-19 and implemented (§17):** cookie для браузера + JWT для
+   мобильного/внешнего клиента, роли `UserRole`, политики `AdminOnly` / `BarberOnly` /
+   `VerifiedEmail`; `Grade` и `IsVerified` меняет только администратор.
 6. **Domain events:** introduce an event-collecting `AggregateRoot`, or skip them?
 7. **Multi-salon** — **decided 2026-10-12 and now implemented:** the schedule belongs to the
    `(barber, salon)` pair, so `WorkingSchedule` hangs off `BarberSalon` (keyed by
@@ -922,17 +944,24 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 |---|---|---|
 | `bookings` | `(barber_profile_id, start_at) WHERE status IN (1,2)` — partial | The slot query is a range scan `start_at >= day AND start_at < day+1`. Cancelled(3)/Completed(4)/NoShow(5) never block a slot, so excluding them keeps the index small and hot |
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
-| `bookings` | `UNIQUE (idempotency_key)` per user (or global) | Mobile clients retry; a retry must not create a second booking. `IdempotencyKey` now exists on the entity |
+| `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global |
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
+| `bookings` | `(start_at DESC, id)` | Administrator's all-bookings list; user list is covered by `(user_id, start_at)` |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
 | `time_offs` | `(barber_profile_id, start_at)` | Vacation lookup during slot computation |
 | `barber_salons` | `UNIQUE (barber_profile_id) WHERE is_primary` | Enforces the "one primary salon" invariant at the DB level too |
 | `barber_specializations` | `(specialization_id, barber_profile_id)` | Filter column first: search starts from the filter, not the barber |
 | `barber_services` | `(hair_service_id, barber_profile_id)` and `(barber_profile_id)` | The same join traversed in both directions |
 | `reviews` | `UNIQUE (booking_id)` | One review per booking (nothing in the domain prevents a second one today) |
+| `reviews` | `(barber_profile_id, created_at DESC, id) WHERE is_published` — partial | Published reviews of one barber, keyset order; hidden reviews never enter the public list |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
-| `barber_profiles` | `(is_active, is_verified, rating DESC)` | Default listing order. `rating` is nullable now — decide where "no reviews" sorts |
+| `barber_profiles` | `(rating DESC NULLS LAST, id) WHERE is_active AND is_verified` — partial | Search order `rating DESC NULLS LAST, id`; the partial predicate matches the visibility filter |
+
+`AddReadIndexes` (2026-10-19) creates the last three indexes with raw SQL: EF Core's `HasIndex`
+cannot express `NULLS LAST`, and the partial predicates keep the indexes small. The old
+`(is_active, is_verified, rating DESC)` index remains for other consumers; the search query uses
+`ix_barber_profiles_search`.
 
 **Primary keys:** `Entity.Id` is `Guid.CreateVersion7()` (`Entity.cs`) — time-ordered, so inserts
 append to the btree instead of splitting pages.
@@ -976,20 +1005,67 @@ Cache read paths only. Never cache the booking write.
 ### 15.5 Booking under contention — the correctness core
 
 Two users, one slot, simultaneous POST. With no mechanism, both read "free" and both insert.
+The mechanism is settled: **the exclusion constraint**, not an application pre-check.
 
-Choose one, and know why:
+- `ex_bookings_no_overlap` (`InitialCreate`, raw SQL over `btree_gist`) rejects an overlapping
+  `tstzrange(start_at, end_at)` for the same `barber_profile_id` **only for statuses 1/2**
+  (`Pending`/`Confirmed`). Cancelled (3), completed (4) and no-show (5) rows do not hold a slot.
+- `RepositoryBase.MapDatabaseError` turns `23P01` into `Error.Conflict("booking.add.overlap")`
+  and `23505` into `Error.Conflict("booking.add.uniqueViolation")`; both become `409`, never `500`.
+- `HasActiveOverlapAsync` stays advisory only. `CreateBookingHandler` does **not** call it:
+  a pre-check would still race, and the database is the source of truth. Isolation is the default
+  EF Core `ReadCommitted`; `BookingRepository.AddAsync` opens an explicit transaction and takes a
+  transaction-scoped advisory lock keyed by `barber_profile_id` before the insert. The lock does not
+  decide the winner — `ex_bookings_no_overlap` still does — it keeps 50 concurrent GiST checks from
+  deadlocking (see the load-test correction below).
 
-1. **Exclusion constraint** (preferred) — the database rejects the overlap; catch SQLSTATE `23P01`
-   and map it to `Error.Conflict` with a domain code following §10.7.
-2. `SELECT ... FOR UPDATE` over the barber's bookings in the target range, inside a transaction.
-3. Optimistic concurrency — map `xmin` via `UseXminAsConcurrencyToken()`. Note `Booking` currently
-   has **no** concurrency token at all.
+**Idempotency.** The unique index `ux_bookings_user_id_idempotency_key` (also from
+`InitialCreate`) makes the key scoped to `(user_id, idempotency_key)`, not global.
 
-Also required for the write path:
+1. `CreateBookingHandler` trims the key once and first reads the existing booking by
+   `(current user, key)`; a hit returns its id without touching the service or inserting.
+2. A miss proceeds to insert. If the insert loses a race, the same handler re-reads by key:
+   `23505` and `23P01` both enter this branch, so a duplicate-key loser gets the winner's id
+   (idempotent `201`) instead of an error.
+3. If the re-read still does not find the row, a unique violation becomes
+   `409 booking.create.idempotencyKeyConflict`; an overlap stays `409 booking.add.overlap`.
+4. `BookingRepository.AddAsync` detaches the failed entity from the change tracker, so the
+   re-read happens against clean state and a later `SaveChanges` cannot retry the same insert.
 
-- **Idempotency key** on booking create — the column exists on `Booking` now; add the unique index
-  and the "return the existing booking" handler.
-- Set the isolation level deliberately (`ReadCommitted` is enough with option 1), not accidentally.
+**Price and service.** `BarberService.Price` is the source of truth; `CreateBookingRequest.Price`
+remains in the contract for compatibility but is ignored. Before creating the booking the handler
+reads the service through `IBarberProfileRepository.GetServiceAsync` (narrow `barber_services`
+query, no aggregate load), requires `BarberService.BarberProfileId == request.BarberProfileId`
+and `IsActive`; otherwise `404` (`barberProfile.getService.notFound` /
+`booking.create.serviceInactive`). `EndAt` is still taken from the request; duration-derived
+`EndAt` was deliberately **not** introduced in this slice.
+
+**Load-test correction (2026-10-19).** Fifty concurrent inserts on one slot can deadlock inside
+the GiST exclusion check (`40P01`) before either transaction commits; under load all contenders can
+lose, so the batch produces **no `201` at all** and some requests become `500`. This is not pool
+exhaustion and not a timeout at the client. `BookingRepository.AddAsync` now wraps the insert in an
+explicit transaction and takes `pg_advisory_xact_lock(hashtextextended(barber_profile_id, 0))`
+before it, serialising inserts per barber: the first commits, the rest hit `23P01` → `409`. `40P01`
+is also mapped to `409 booking.add.deadlock` as a defensive path. Cost: per-barber serialisation;
+at 50 contenders the measured p95 was 250.9–298.4 ms (budget 300 ms), see `LOADTEST.md`.
+
+**Verified 2026-10-19, re-verified 2026-10-20, local PostgreSQL 16.3:**
+
+- 50 parallel `POST api/bookings` on one slot with 50 different keys — exactly `1 × 201` and
+  `49 × 409`; both `23P01` and `23505` appeared in the server log; one active row in `bookings`.
+  Re-run 2026-10-20: five measured batches plus warm-up, each `1 × 201 / 49 × 409`, no `500`,
+  exactly one active row on every contended slot.
+- 10 parallel duplicates with the **same** key — `10 × 201`, one distinct id, one row; losers
+  logged "returned after a conflicting insert". This is now a permanent harness scenario
+  (`booking-idempotency`) and a separate minimal CI check
+  (`load/ci/booking-idempotency.ps1`, one barber/service/salon/slot, no 1.2M seed).
+- A sequential repeat with the same key returned the same id; a cancelled booking on the slot did
+  not block the next insert; `GET api/barbers/{id}/slots` no longer listed either occupied slot.
+- The follow-up SQL check after the five-repeat run confirmed one row per same key, all five
+  measured winners cancelled, five fresh active rows on the same slots, and no warm-up row
+  holding a slot.
+- A request with `price = 1` produced a row with `price = 30.00` (the barber service price);
+  a service id belonging to another barber returned `404`.
 
 ### 15.6 EF Core query hygiene
 
@@ -999,6 +1075,10 @@ Also required for the write path:
 - `AsSplitQuery()` where collection includes are genuinely unavoidable.
 - **Keyset pagination** (cursor over `(rating, id)`), never `OFFSET` — deep pages degrade linearly
   and the search UI invites them. `rating` is nullable, so decide the null ordering explicitly.
+  The ORDER BY must match an index expression term for term; otherwise the planner sorts all rows
+  before applying the limit. Search uses `ix_barber_profiles_search_keyset`
+  (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified`) and was verified with
+  `EXPLAIN` at 10 000 visible profiles (`LOADTEST.md` §7.1).
 - `EF.CompileAsyncQuery` for search and slot queries; they run thousands of times a minute.
 - Count queries in development and fail loudly past a threshold. N+1 in this model is invisible
   until production traffic.
@@ -1013,6 +1093,29 @@ Also required for the write path:
 - Set the budget **before** optimizing: search p95 < 200 ms and p99 < 500 ms; booking p95 < 300 ms.
   Without a budget you cannot distinguish fast from lucky.
 - Schedule it in CI. A benchmark run once is a benchmark you will never trust again.
+
+**Baseline 2026-10-19 (`barbersearch_load`).** 12 000 barbers (10 000 visible), 1.2M bookings,
+80k reviews, 16 parallel readers, 3 × 15 s per read scenario. Search p95 180.5–202.4 ms (median
+181.5; worst run misses the 200 ms budget by 2.4 ms), p99 232.6–269.4 ms; slots p95 13.0–13.6 ms;
+contended booking p95 250.9–298.4 ms with exactly `1 × 201 / 49 × 409` and one row in the DB per
+slot; review publish/hide p95 85.5–92.0 ms; review create p95 220.3–265.6 ms. Error rate 0.
+Search bottleneck: `ORDER BY (rating IS NULL), rating DESC, id` does not use
+`ix_barber_profiles_search`; the date-only query is a Parallel Seq Scan + Sort of 10 000 rows
+(78.6 ms execution).
+
+**Follow-up 2026-10-20 (`Repeat=5`).** Search is fixed by the additive expression index
+`ix_barber_profiles_search_keyset` on `(((rating IS NULL)), rating DESC, id) WHERE is_active AND
+is_verified` (migration `AddSearchKeysetIndex`). `EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)`:
+date-only changed from Seq Scan + Sort 75.6–87.3 ms to Index Scan 3.6–13.8 ms; no-filter from
+8.2–9.5 ms to 0.05–0.13 ms. Search load: 8 runs of 20 s, p95 29.8–40.6 ms (median 32.1),
+p99 34.4–50.6 ms, RPS median 1 020.9; full five-repeat run p95 28.5–31.5, p99 32.3–36.3, 0
+errors. Slots p95 10.2–11.6 ms; same-key booking idempotency p95 51.2–52.2 ms with
+`10 × 201` / one id / one row, sequential repeat same id, and a fresh `201` after cancellation;
+review publish/hide p95 82.4–98.3 ms; review create p95 189.3–269.8 ms. Contended booking p95
+257.5–304.0 ms — one run 4 ms over the 300 ms budget; correctness is unchanged
+(`1 × 201 / 49 × 409` and one active row per slot). No cache was added: search now passes with a
+≈5× p95 margin, slots/reviews have ample headroom, and booking is limited by the advisory lock,
+not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 
 ### 15.8 Observability
 
@@ -1036,10 +1139,26 @@ Also required for the write path:
    locally installed PostgreSQL 16.3, and the two rules were exercised with real INSERTs: an
    overlapping booking is rejected, a touching one is accepted, and `стрижка` after `Стрижка`
    violates `ux_specializations_name`.
-3. Booking under contention + idempotency — correctness before speed.
-4. Review → rating recalculation in the application layer (§12.2).
-5. Load test at realistic volume, measure, **then** cache.
-6. Observability last, once there is something worth observing.
+3. ~~Booking under contention + idempotency~~ — **done (2026-10-19):** exclusion constraint
+   caught as `409`, idempotent repeat/re-read by key, server-side price and service ownership;
+   see §15.5. Correctness before speed.
+4. ~~Review → rating recalculation~~ — **done (2026-10-19):** synchronous recalculation in the
+   application layer, transaction + `SELECT … FOR UPDATE` (§12.2); verified on local PostgreSQL
+   including concurrent publish/hide. No cache and no schema change.
+5. ~~Load test at realistic volume~~ — **done (2026-10-19):** `barbersearch_load`, harness
+   `load/`, baseline `LOADTEST.md`. Slots/reviews have headroom; contended booking was fixed with
+   a per-barber advisory lock and gives exactly `1 × 201 / 49 × 409`. Search worst p95 202.4 ms
+   (budget 200) was a query-plan miss, not volume.
+6. ~~Search plan fix + same-key regression~~ — **done (2026-10-20):** additive migration
+   `AddSearchKeysetIndex` adds `ix_barber_profiles_search_keyset`; date-only search drops from
+   75.6–87.3 ms to 3.6–13.8 ms in EXPLAIN and search p95 from 170.6–202.8 ms to 29.8–40.6 ms
+   over 8 × 20 s runs. Same-key booking idempotency is covered by `load/harness` and by a
+   minimal CI check without the 1.2M seed. Repeat=5 rerun: search PASS, same-key/contended
+   correctness PASS, booking p95 257.5–304.0 ms (one run +4 ms over budget). **No cache.**
+7. Next: deploy (persistent Data Protection keys, `Auth__SigningKey`, `UseForwardedHeaders`,
+   CORS + `SameSite=None`). Booking headroom, if needed, is a separate slot-claim/fast-path
+   slice — not cache.
+8. Observability last, once there is something worth observing.
 
 Caching before measuring is how a system becomes fast and wrong at the same time.
 
@@ -1047,8 +1166,8 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-11 controllers, 68 endpoints — one endpoint per Application handler. The route always names the
-aggregate that owns the child entity:
+**13 controllers, 81 endpoints: 73 domain + 8 auth** — one endpoint per Application handler, plus
+`AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
@@ -1061,8 +1180,9 @@ aggregate that owns the child entity:
 | `SalonsController` | `api/salons` | 5 |
 | `HairServicesController` | `api/hair-services` | 4 |
 | `SpecializationsController` | `api/specializations` | 4 |
-| `BookingsController` | `api/bookings` | 6 |
-| `ReviewsController` | `api/reviews` | 4 |
+| `BarbersController` | `api/barbers` | 3 (search, card, slots) |
+| `BookingsController` | `api/bookings` | 7 (6 write + list) |
+| `ReviewsController` | `api/reviews` | 5 (4 write + list) |
 
 Conventions:
 
@@ -1072,33 +1192,99 @@ Conventions:
   `BarberProfilesController` would otherwise take 21 dependencies.
 - An action does three things: builds the command/query from the route and a Contracts record, calls
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
-- Identifiers always come from the route, everything else from the body (`XxxRequest`), so the shape
-  of an operation is visible in its signature. A body is used only when the payload is more than a
-  single identifier — that is why only 25 request records were needed for 68 operations.
+- Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
+  string (read endpoints), so the shape of an operation is visible in its signature. A body is used
+  only when the payload is more than a single identifier — 29 request records cover all write
+  operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
   (falling back to the error code), and every failure carries its codes in the `errorCodes`
   extension. A mixed failure takes the highest status code (400 < 404 < 409 < 500).
-- Create endpoints answer **201** with `CreatedResourceResponse` and no `Location` header: there are
-  no read operations to point at (see below).
+- Create endpoints answer **201** with `CreatedResourceResponse` and no `Location` header yet: the
+  read endpoints exist, but creating a resource still does not link to its card.
+- **`POST api/bookings` (2026-10-19).** The client comes from `sub`; `Price` in the request is
+  ignored and `Booking.Price` is copied from the barber service. The service must belong to
+  `barberProfileId` and be active (`404` otherwise) — read through the narrow
+  `GetServiceAsync`, not the full profile aggregate. `IdempotencyKey` is trimmed and scoped to the
+  current user: an existing row returns its id, a losing concurrent insert is re-read by key and
+  also returns the winner's id, and only an unrecoverable race is `409`
+  (`booking.create.idempotencyKeyConflict`). An overlapping active booking is `409
+  booking.add.overlap` from the exclusion constraint; cancelled/completed/no-show rows do not
+  block. Inserts are serialised per barber by a transaction-scoped advisory lock so the GiST check
+  cannot deadlock under 50-way contention; a defensive `40P01` path returns
+  `409 booking.add.deadlock`. `EndAt` still comes from the request in this slice.
 - The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
 - Enums travel as JSON strings (`JsonStringEnumConverter` in `Program.cs`), so `Grade`, `Language`,
   `PaymentMethod` and `UserRole` are readable in OpenAPI and in the request bodies.
 - `UseExceptionHandler()` + `AddProblemDetails()` cover what the controllers do not catch.
+- **Ownership is checked in Application handlers, not in controllers** (§17.8): the handler has
+  already loaded the aggregate, so the check costs no second query, and a foreign resource returns
+  `403 auth.forbidden` through the same `FailureProblemDetails` mapping. The four admin-only profile
+  actions (`Verify`, `Unverify`, `ChangeGrade`, `UpdateRating`) and review `Publish`/`Hide` are closed
+  by `[Authorize(Policy = AdminOnly)]` on the action instead — the decision depends on the role, not
+  on the loaded resource.
+
+Read endpoints (added 2026-10-19):
+
+- **Visibility.** Search, card and slots return only `IsActive && IsVerified` barber profiles and
+  only `IsActive` salons; an invisible profile/salon is `404`. Card returns only active barber
+  services. Reviews return only `IsPublished` rows. Access is still **authenticated**: the fallback
+  policy requires a user, and no read endpoint carries `[AllowAnonymous]`.
+- **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `serviceId` (EXISTS
+  over the link tables, so a profile row is never duplicated), `date` (the barber has a non-day-off
+  schedule for that weekday in at least one active salon; exact free time is `/slots`). Order is
+  `rating DESC NULLS LAST, id`, served by the expression index
+  `ix_barber_profiles_search_keyset` (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND
+  is_verified`, migration `AddSearchKeysetIndex`). The response is
+  `PagedResponse<BarberSearchItemResponse>` with
+  `items` and an opaque base64url `nextCursor`; `pageSize` defaults to 20 and is capped at 100.
+  A broken cursor or an out-of-range page size is `400`, not `500`.
+- **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
+  rating; `404` for a missing/inactive/unverified profile. Response is `BarberProfileResponse` and
+  nested records; no domain entity is serialized.
+- **`GET api/barbers/{id}/slots?date=&serviceId=&salonId=`** — `date` is required. Without
+  `salonId` the primary active salon is used; without `serviceId` the grid step is 30 minutes,
+  otherwise the barber service duration. The day is computed in `Salon.TimeZoneId`; the response
+  carries `timeZoneId`, `dayStart`/`dayEnd` in UTC, `durationMinutes`, `isWorkingDay` and UTC slots.
+  `TimeOff` intervals and active (`Pending`/`Confirmed`) bookings are subtracted; cancelled,
+  completed and no-show bookings do not block; slots in the past are omitted. Unknown
+  profile/salon/service is `404`, missing date is `400`.
+- **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`.
+  A non-admin asking for another user's `userId` gets `403`; an admin filtering by a non-existent
+  user gets `404`. Order is `start_at DESC, id`, keyset cursor, `PagedResponse<BookingResponse>`.
+- **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
+  returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
+  contains ids and text only — no navigation into the booking/user/barber cycle.
+- **Review writes recalculate the rating (2026-10-19).** `POST api/reviews`, `PUT
+  api/reviews/{id}`, `POST …/{id}/publication` and `DELETE …/{id}/publication` save the review and
+  update `barber_profiles.rating` / `reviews_count` in one transaction (`IUnitOfWork`). The profile
+  root is locked with `SELECT … FOR UPDATE` before the published-only summary is read, so parallel
+  publish/hide cannot lose an update. The response contract and the endpoint set did not change;
+  `Rating` is still read from the stored column in the card and search.
+- **Query hygiene.** All read paths are `AsNoTracking`; search and list endpoints project directly
+  into Contracts response records, and search uses EXISTS instead of `Include` of five collections.
+  Keyset cursors are encoded/decoded in Application (`BarberSearchCursor`, `BookingCursor`,
+  `ReviewCursor`, `CursorCodec`) with invariant culture; the opaque string is the contract.
 
 Deliberately absent:
 
-- **Auth.** Every endpoint is open; `UserRole` and the administrative operations (`ChangeGrade`,
-  `Verify`, rating recalculation) are not protected yet.
-- **Read endpoints.** Only one query handler exists (`FindBarberProfileSalonQuery` →
-  `GET api/barber-profiles/{id}/salons/{salonId}`), so the rest of the API is write-only and not yet
-  usable by a client. That one response is a `BarberSalonResponse` DTO because serializing
-  `BarberSalon` would follow the back-navigation into a cycle.
-- **Pagination, caching, rate limiting, health checks** (§15).
+- **Auth** — реализована, см. §17.
+- **Caching and health checks** (§15) — not implemented. The 2026-10-20 load test showed no
+  budget need: search passes with the expression index, slots/reviews have ample headroom, and
+  booking is limited by the advisory lock (correctness), not by a cacheable read. Pagination is
+  implemented as keyset for the read endpoints; the older offset methods remain for other callers.
+- **`Location` on create** — see above; not added in this stage.
 
-Three issues found while verifying the endpoints against the local database — all three live outside
+Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
+`serviceId`/`date`, two pages through `nextCursor`, broken cursor `400`; card `200` with 2 services,
+2 salons and 1 specialization, random id `404`; slots for `Europe/Berlin` with explicit
+`dayStart`/`dayEnd`, a `TimeOff`, an active booking, a cancelled booking and a day off; own bookings
+page, foreign `403`, admin all and admin `userId` filter, unknown user `404`; published reviews only,
+two pages, hidden review absent, broken cursor `400`.
+
+Two issues found while verifying the endpoints against the local database — both live outside
 the Web layer:
 
 1. **`PUT api/barber-profiles/{id}/salons/{salonId}/primary` answers 409** when another salon of the
@@ -1110,6 +1296,277 @@ the Web layer:
 2. **Photo reordering is duplicated.** `BarberProfile.ReorderPhoto` and `PortfolioPhoto.Reorder` are
    two handlers for one effect, and both are reachable: `PUT …/photos/{photoId}/sort-order`
    (aggregate) and `PUT …/photos/{photoId}/order` (child). One of them should go.
-3. **`CreateBooking` accepts a `barberServiceId` that the profile does not offer** — verified by
-   creating a booking with a random service id. The "the barber provides this service" rule is not
-   enforced anywhere yet.
+
+The third issue from the read-endpoint review — `CreateBooking` accepting a `barberServiceId` that
+the profile does not offer — is closed: §15.5 / `POST api/bookings` now validates ownership and
+activity of the barber service and takes the price from it.
+
+---
+
+## 17. Auth: cookie + JWT (added 2026-10-19)
+
+Один хост, две схемы, один набор claims. Браузер получает HttpOnly-cookie, мобильный и внешний
+клиент — access-токен. Схему выбирает `Smart` (`Web/Auth/AuthenticationExtensions.cs`): запрос
+с `Authorization: Bearer …` идёт в JWT, все остальные — в cookie. Благодаря селектору
+`[Authorize]` и политики работают одинаково, без `AuthenticationSchemes` на каждом действии.
+
+### 17.1 Что где лежит
+
+| Слой | Файлы |
+|---|---|
+| `Shared` | `ErrorType.UNAUTHORIZED` / `FORBIDDEN`, фабрики `Error.Unauthorized/Forbidden` |
+| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by` |
+| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`; `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
+| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword` |
+| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
+| `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
+
+### 17.2 Эндпоинты
+
+| Метод | Маршрут | Доступ | Что делает |
+|---|---|---|---|
+| POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается |
+| POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
+| POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly access-cookie (8 часов) + HttpOnly refresh-cookie |
+| POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie, тело — 200 + новые access/refresh |
+| POST | `api/auth/logout` | аноним; antiforgery только для cookie | отзывает refresh и гасит cookie; внешний клиент передаёт refresh в теле |
+| POST | `api/auth/change-password` | аутентификация; antiforgery только для cookie | меняет пароль и отзывает все refresh-токены |
+| GET | `api/auth/me` | аутентификация | claims текущего пользователя |
+| GET | `api/auth/csrf` | аноним | antiforgery-токен в теле + cookie |
+
+### 17.3 Claims
+
+`sub`, `email`, `role`, `email_verified`, `security_stamp`, `barber_profile_id` (если есть), `jti`.
+`MapInboundClaims = false`, `NameClaimType = "sub"`, `RoleClaimType = "role"` — имена короткие
+и одинаковые для cookie и JWT. `security_stamp` — см. §17.10.
+
+### 17.4 Конфигурация
+
+```json
+"Auth": {
+  "Issuer": "BarberSearch",
+  "Audience": "BarberSearch.Api",
+  "AccessTokenMinutes": 15,
+  "RefreshTokenDays": 14,
+  "CookieHours": 8,
+  "CookieSameSite": "Lax"
+}
+```
+
+`Auth:SigningKey` в `appsettings.json` **не хранится**. В Development ключ генерируется при старте
+(токены живут до перезапуска), в остальных окружениях обязателен `Auth__SigningKey` длиной
+не менее 32 символов. `CookieSameSite=None` (SPA на другом сайте) принудительно включает `Secure`.
+`Auth:RefreshTokenDays` допустим только в диапазоне 7–30; выход за него роняет приложение при
+старте. Access остаётся 15 минут.
+
+### 17.5 Защита
+
+- `FallbackPolicy` требует аутентификации для всего, что не помечено `[AllowAnonymous]`.
+- Политики: `AdminOnly`, `BarberOnly`, `VerifiedEmail`.
+- `AdminOnly` — на `POST api/users`, `ChangeRole`, `LinkBarberProfile`, активацию/деактивацию,
+  подтверждение email/телефона и `RecordLogin`. Публичная регистрация вынесена в
+  `api/auth/register` и всегда создаёт `Customer`.
+- Владение ресурсом в `UsersController` проверяется через `IsCurrentUser(userId)` / `IsAdmin()`.
+- Пароль — `PasswordHasher<User>` (IdentityV3, PBKDF2-SHA256). Неверный пароль и неизвестный email
+  дают одинаковый 401 `auth.login.invalidCredentials`; для неизвестного email выполняется проверка
+  по фиктивному хешу, чтобы наличие аккаунта не выдавалось временем ответа.
+- `SuccessRehashNeeded` перезаписывает хеш при входе.
+- Login/register/refresh/change-password: 10 попыток в минуту на IP (`AddRateLimiter`, политика `auth`).
+- Antiforgery — только cookie-ветка. Используется свой
+  `ValidateAntiforgeryHeaderAttribute` (через `IAntiforgery`), а не `[ValidateAntiForgeryToken]`:
+  штатный фильтр живёт в MVC ViewFeatures и требует `AddControllersWithViews()`.
+  `refresh`, `logout` и `change-password` проверяют токен вручную и только когда запрос опирается
+  на cookie; запрос с refresh-токеном в теле или Bearer-заголовком не CSRF-уязвим.
+- 401/403 от middleware приходят как `ProblemDetails` (`AuthProblemDetails`), а не пустым телом
+  и не 302 на страницу входа.
+- Antiforgery-токен привязан к identity: после входа его нужно получить заново
+  (`GET api/auth/csrf`), иначе первый же `logout` получит 400 `auth.csrf.invalid`.
+- Refresh-токен — 64 случайных байта в base64url; в `refresh_tokens` лежит только SHA-256.
+  Каждый `refresh` ротирует пару, повторное предъявление заменённого токена отзывает всю цепочку
+  по `replaced_by` (`auth.refresh.reused`). Cookie — HttpOnly, `Path=/`, `Secure` вне Development,
+  `SameSite` из `Auth:CookieSameSite`; в Production имя `__Host-barbersearch.refresh`.
+- Refresh-токены отзываются при `logout` (один токен), смене пароля, смене роли и деактивации
+  пользователя (все живые токены). Смена пароля, смены роли и деактивация вдобавок меняют
+  `security_stamp`, поэтому уже выданный access-токен и cookie отклоняются на следующем же
+  запросе, не дожидаясь истечения (§17.10).
+
+### 17.6 Проверено вручную (2026-10-19, локальная PostgreSQL)
+
+`register` 201 → `login` 200 (JWT) → `me` с Bearer 200 (правильные claims) → админский
+`POST api/users` под Customer 403 → битый JWT 401 → `login/cookie` с antiforgery 204 →
+`me` с cookie 200 → `logout` 204 → `me` 401 → `login/cookie` без токена 400 `auth.csrf.invalid`.
+OpenAPI отдаёт `securitySchemes.Bearer`; после 10 попыток входа в минуту приходит 429.
+
+Смоук refresh-токенов (2026-10-19, два пользователя): `login` A/B 200 + refresh в теле →
+`refresh` A 200 (новый access и другой refresh) → повтор старого A 401 `auth.refresh.reused` →
+потомок после reuse 401 `auth.refresh.revoked` (цепочка погашена) → `refresh` B 200 (чужая
+цепочка не затронута) → `change-password` A 204 → `refresh` A 401 `auth.refresh.revoked` →
+`logout` с телом 204 → `refresh` 401 `auth.refresh.revoked` → `login/cookie` 204 → `refresh`
+с HttpOnly-cookie и antiforgery 204 (новая cookie) → `me` 200 → повтор старой cookie 401
+`auth.refresh.reused`. В БД 8 строк: все `token_hash` по 64 hex, открытых токенов нет;
+7 revoked, 3 replaced_by.
+
+Смоук security stamp (2026-10-19, локальная PostgreSQL, три пользователя и admin через SQL):
+`login` → `change-password` → старый Bearer `401` ProblemDetails, старая cookie `401`
+ProblemDetails (без 302), старый refresh `401`, `login` с новым паролем `200`; `GET api/auth/csrf`
+со старым Bearer — `200` (`[AllowAnonymous]` не тронут). Смена роли: admin `PUT users/{id}/role`
+→ старые Bearer и cookie `401`, refresh `401`, новый `login` `200` с ролью `Barber`. Деактивация:
+старые Bearer и cookie `401`, refresh `401`, вход `401 auth.login.inactive`; повторная
+деактивация `204` и stamp не меняет. В БД у всех 11 прежних пользователей stamp непустой
+и уникальный (backfill `gen_random_uuid()::text`).
+
+Сборка: 8 проектов, 0 ошибок, 0 предупреждений. Тесты: 139 domain + 92 application, все
+зелёные через reflection-раннер (§5.3).
+
+### 17.7 Открыто
+
+1. **Refresh-токены.** ✅ Реализовано 2026-10-19: таблица + миграция, ротация, reuse-detection
+   с отзывом цепочки, HttpOnly-cookie для браузера, отзыв при logout/смене пароля/роли/
+   деактивации, `Auth:RefreshTokenDays`. Детали — §17.9. Из темы открыты: фоновая уборка
+   истёкших строк и сериализация двух одновременных ротаций одного токена.
+2. **Владение ресурсом.** ✅ Реализовано 2026-10-19: `ICurrentUser` + `EnsureCanManage` /
+   `EnsureIsBarberOfAsync` в Application, проверки в обработчиках после загрузки агрегата
+   (не `IAuthorizationHandler` — обработчик уже загрузил агрегат, второй запрос не нужен).
+   Матрица, охват и тесты — §17.8. `CreateBooking` дополнительно проверяет принадлежность
+   и активность `barberServiceId` (§15.5, §16); открытых пунктов по этой теме нет.
+3. **Data Protection.** Ключи cookie лежат в `%LOCALAPPDATA%\ASP.NET\DataProtection-Keys`;
+   в контейнере без персистентного тома все сессии умрут после рестарта.
+4. **CORS для cross-site SPA.** `Cors:AllowedOrigins` пуст; при заполнении нужны
+   `CookieSameSite=None`, `Secure` и `AllowCredentials`.
+5. **Rate limiting за прокси.** Ключ — `RemoteIpAddress`; без `UseForwardedHeaders` все клиенты
+   за балансировщиком делят один лимит.
+6. **Подтверждение email/телефона** пока административное; самостоятельное — через письмо-ссылку.
+7. **`POST api/users/{id}/logins`** оставлен только для администратора: обычный вход фиксирует
+   `LoginUserHandler`.
+8. **Security stamp.** ✅ Реализовано 2026-10-19: `User.SecurityStamp` + `RotateSecurityStamp()`
+   в `ChangePasswordHash` / `ChangeRole` / `Deactivate`, claim `security_stamp` в JWT и cookie,
+   scoped `SecurityStampValidator` в `OnTokenValidated` / `OnValidatePrincipal`, миграция
+   `AddSecurityStamp`. Механика и ограничения — §17.10. Read-эндпоинты реализованы 2026-10-19
+   (см. §16), booking under contention + идемпотентность — 2026-10-19 (см. §15.5); следующая
+   сессия — пересчёт рейтинга из отзывов (`HANDOFF.md`).
+
+### 17.8 Авторизация по владению (added 2026-10-19)
+
+Проверка живёт в обработчике, а не в `IAuthorizationHandler`: агрегат уже загружен, поэтому
+владение стоит одного сравнения (для броней — одного `EXISTS`-запроса `IsOwnedByAsync`),
+а `Error.Forbidden` маппится в `403` через `FailureProblemDetails`. Аноним отсекается раньше —
+fallback-политикой (`401`).
+
+| Ресурс | Создание | Изменение | Только admin |
+|---|---|---|---|
+| `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
+| `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
+| Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
+| `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент или барбер | — (admin обходит) |
+| `Review` | клиент по своей завершённой брони | автор | `Publish`/`Hide` |
+| `User` | `register` публично / admin | сам | роль, активация, верификация |
+
+Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой. `admin` обходит проверку через
+`ICurrentUser.IsAdmin` (claim роли; после смены роли старый токен отзывается security stamp'ом —
+§17.10). Исключение — создание отзыва: admin его не обходит, иначе появились бы фиктивные отзывы.
+`Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
+проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
+
+Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
+3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
+Тесты: `tests/BarberSearch.Application.UnitTests` — 100 `[Fact]`: 40 прежних (28 на владение на фейковых
+репозиториях и `ICurrentUser` + 12 на refresh-токены), 43 на read-эндпоинты (курсоры/пагинация,
+поиск, карточка, слоты, брони, отзывы), 9 на создание брони (§15.5) и 8 на пересчёт рейтинга
+(§12.2, включая откат транзакции); смоук на локальной PostgreSQL двумя пользователями
+(2026-10-19): свой профиль `204`, чужой `403`, своё избранное `204`, чужое `403`, admin-действие
+под Customer `403`.
+
+### 17.9 Refresh-токены (added 2026-10-19)
+
+**Схема.** Таблица `refresh_tokens`: `id` UUIDv7 PK, `user_id` FK → `users` с
+`ON DELETE CASCADE`, `token_hash` (64 hex, `UNIQUE`), `expires_at`, `revoked_at`
+(`NULL`, пока токен жив), `replaced_by` (self-FK → `refresh_tokens.id`,
+`ON DELETE SET NULL`), `created_at` / `updated_at`. CHECK `char_length(token_hash) = 64`;
+индексы `ux_refresh_tokens_token_hash`, `ix_refresh_tokens_user_id`,
+`ix_refresh_tokens_replaced_by`. В БД **только SHA-256**: открытый токен — 64 случайных байта
+в base64url (86 символов) — возвращается клиенту один раз и в таблицу не попадает.
+
+**Ротация.** `POST api/auth/refresh` всегда меняет пару: старый получает `revoked_at` +
+`replaced_by`, новый вставляется тем же `SaveChanges` (`RefreshTokenRepository.RotateAsync`).
+Повторное предъявление заменённого токена (`replaced_by != null`) — reuse-detection:
+рекурсивный CTE по `replaced_by` отзывает всю цепочку, ответ `401 auth.refresh.reused`.
+Истёкший токен — `401 auth.refresh.expired`, отозванный без замены — `401 auth.refresh.revoked`,
+неизвестный — `401 auth.refresh.invalid`. Пользователь перечитывается на каждом refresh:
+деактивированный получает `401 auth.refresh.inactive`, все его токены отзываются, а claims
+нового access-токена отражают актуальную роль и `BarberProfileId`.
+
+**Ветки.** Браузер: refresh в HttpOnly-cookie `barbersearch.refresh` (Development) /
+`__Host-barbersearch.refresh` (Production), `Path=/`, `Secure` вне Development, `SameSite` из
+`Auth:CookieSameSite`; cookie-ветка требует antiforgery и отвечает `204` с новыми access-cookie
+и refresh-cookie. Refresh-cookie ставится с абсолютным сроком `RefreshTokenDays` независимо от
+`RememberMe`: флаг по-прежнему управляет только access-cookie (8 часов против сессионной).
+Внешний клиент: refresh в теле `RefreshTokenRequest`, ответ `200 TokenResponse`
+с новым access и refresh; antiforgery не нужен, потому что ambient-учётных данных нет.
+
+**Отзыв.** `logout` — один предъявленный токен; смена пароля (`POST api/auth/change-password`),
+смена роли и деактивация пользователя — все живые токены (`RevokeAllForUserAsync`). Те же три
+события меняют `security_stamp` (§17.10), поэтому выданные access-токен и cookie тоже
+отклоняются — на следующем запросе, а не через 15 минут / 8 часов.
+
+**Тесты.** 12 `[Fact]` в `tests/BarberSearch.Application.UnitTests/RefreshTokenTests.cs`:
+ротация и `replaced_by`, reuse-detection с отзывом цепочки, истечение, неизвестный и отозванный
+токен, деактивированный пользователь, смена пароля/роли/деактивации, хранение только хеша,
+границы `Auth:RefreshTokenDays`. Смоук двумя пользователями на локальной PostgreSQL — §17.6.
+
+**Осталось.** Фоновой уборки истёкших строк нет. Две одновременные ротации одного токена не
+сериализованы на уровне БД (окно между `SELECT` и `UPDATE`), поэтому теоретически возможны две
+ветки; при необходимости закрывается `xmin`/conditional `UPDATE ... WHERE revoked_at IS NULL`.
+
+### 17.10 Security stamp (added 2026-10-19)
+
+**Зачем.** Refresh-токен отзывается сразу, но JWT отозвать нельзя, а cookie живёт до 8 часов.
+Без отпечатка смена пароля/роли и деактивация оставляли бы старый access-токен валидным, а
+`IsAdmin` и `GET api/auth/me` читают claims, а не базу.
+
+**Домен.** `User.SecurityStamp` — непустая строка: новые пользователи получают
+`Guid.NewGuid().ToString("N")`, `Create` задаёт её сразу. `RotateSecurityStamp()` меняет значение
+и вызывает `MarkUpdated()`; его вызывают `ChangePasswordHash`, `ChangeRole` и `Deactivate`.
+`Deactivate` идемпотентен — повторный вызов на уже неактивном пользователе выходит до ротации.
+
+**Схема.** Миграция `AddSecurityStamp`: `users.security_stamp` (`text`, `NOT NULL`), CHECK
+`ck_users_security_stamp` (`char_length(security_stamp) > 0`). Существующим строкам значение
+выдал backfill `gen_random_uuid()::text`; `DEFAULT ''`, нужный только на время backfill, снят —
+новые строки получают stamp из домена.
+
+**Claims.** `ClaimsPrincipalFactory.CreateClaims` добавляет `security_stamp`; набор claims один
+для JWT и cookie, поэтому отпечаток есть в обеих схемах.
+
+**Проверка.** Scoped `SecurityStampValidator` (`Web/Auth`) по claim `sub` читает пользователя
+через `IUserRepository.GetByIdAsync`, сравнивает claim с `User.SecurityStamp` (ordinal) и требует
+`IsActive`. Подключён в `JwtBearerEvents.OnTokenValidated` и
+`CookieAuthenticationEvents.OnValidatePrincipal`. Несовпадение, отсутствие claim/пользователя
+или деактивация:
+
+- **JWT** — `context.Fail(...)`; `401` ProblemDetails отдаёт уже настроенный `OnChallenge`.
+  `[AllowAnonymous]`-эндпоинт при этом продолжает выполняться: тело в событии не пишется.
+- **cookie** — `RejectPrincipal()` + `SignOutAsync` (cookie удаляется), `401` ProblemDetails
+  формирует `OnRedirectToLogin`; 302 на страницу входа нет.
+
+Проверка — один индексный SELECT на каждый аутентифицированный запрос, без кэша: отзыв должен
+применяться немедленно. Анонимные эндпоинты (`login`, `refresh`, `register`, `csrf`) устаревший
+Bearer не ломает.
+
+**Ограничения.**
+- Токены и cookie, выданные до этой миграции, не содержат claim `security_stamp` и после деплоя
+  отклоняются — пользователи один раз перелогинятся. Это ожидаемая цена отзыва старых сессий.
+- Валидатор использует `IUserRepository.GetByIdAsync`, который тянет `favorite_barbers`
+  (`Include`) и отслеживает сущность. Для одного PK-запроса это допустимо; если auth-путь станет
+  горячим — лёгкая проекция без Include и `AsNoTracking`.
+- Перехеширование пароля при входе (`LoginUserHandler` → `ChangePasswordHash`) тоже ротирует
+  stamp: остальные сессии пользователя завершаются. Событие редкое и безопасное, но его нужно
+  помнить.
+- `logout` stamp не ротирует: предъявленный access-токен доживает до истечения (15 минут),
+  cookie удаляется. Чтобы погасить все access-токены, нужен явный `RotateSecurityStamp()`
+  (не реализовано).
+- Кэша нет — ни локального, ни распределённого: отзыв должен применяться на первом же запросе
+  в любом инстансе. При масштабировании это осознанный выбор в пользу корректности (§15.4).
+
+**Тесты.** `tests/BarberSearch.Domain.UnitTests/UserTests.cs` — 9 новых `[Fact]` (stamp непустой
+и уникален, ротация, смена пароля/роли/деактивации, отсутствие ротации при ошибке и повторной
+деактивации); всего 139. Смоук на локальной PostgreSQL — §17.6.

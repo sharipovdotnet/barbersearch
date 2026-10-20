@@ -4,11 +4,11 @@ namespace BarberSearch.Contracts.Reviews.CreateReview;
 /// Данные запроса на создание отзыва.
 /// </summary>
 /// <remarks>
-/// Барбер в запросе не передаётся: он выводится из брони <see cref="BookingId"/>,
-/// поэтому привязать отзыв не к тому барберу невозможно.
+/// Ни барбер, ни автор в запросе не передаются: барбер выводится из брони
+/// <see cref="BookingId"/>, а автор — из токена. Поэтому привязать отзыв не к тому барберу
+/// или оставить его от чужого имени невозможно.
 /// </remarks>
 public record CreateReviewRequest(
     Guid BookingId,
-    Guid UserId,
     int Rating,
     string? Text);

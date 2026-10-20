@@ -1,4 +1,6 @@
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
+using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +81,51 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
             .ToListAsync(cancellationToken);
 
         return reviews;
+    }
+
+    public async Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetPublishedPageAsync(
+        Guid barberProfileId,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                "review.getPublishedPage.limit",
+                "Page limit must be positive.",
+                nameof(limit)));
+        }
+
+        var query = Context.Reviews
+            .AsNoTracking()
+            .Where(review => review.BarberProfileId == barberProfileId && review.IsPublished);
+
+        if (cursor is { } position)
+        {
+            query = query.Where(review =>
+                review.CreatedAt < position.CreatedAt
+                || (review.CreatedAt == position.CreatedAt
+                    && review.Id.CompareTo(position.Id) > 0));
+        }
+
+        var rows = await query
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenBy(review => review.Id)
+            .Take(limit)
+            .Select(review => new ReviewResponse(
+                review.Id,
+                review.BarberProfileId,
+                review.UserId,
+                review.BookingId,
+                review.Rating,
+                review.Text,
+                review.IsPublished,
+                review.CreatedAt,
+                review.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
+        return rows;
     }
 
     public async Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(

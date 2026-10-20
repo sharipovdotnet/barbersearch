@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,14 +12,17 @@ namespace BarberSearch.Application.BarberProfiles.ReorderBarberProfilePhoto;
 public class ReorderBarberProfilePhotoHandler : ICommandHandler<ReorderBarberProfilePhotoCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<ReorderBarberProfilePhotoHandler> _logger;
 
     public ReorderBarberProfilePhotoHandler(
         IBarberProfileRepository repository,
-        ILogger<ReorderBarberProfilePhotoHandler> logger)
+        ILogger<ReorderBarberProfilePhotoHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -35,6 +39,12 @@ public class ReorderBarberProfilePhotoHandler : ICommandHandler<ReorderBarberPro
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var reordered = profile.ReorderPhoto(command.PhotoId, command.SortOrder);
         if (reordered.IsFailure)

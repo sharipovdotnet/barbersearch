@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,14 +12,17 @@ namespace BarberSearch.Application.BarberProfiles.RemoveBarberProfileService;
 public class RemoveBarberProfileServiceHandler : ICommandHandler<RemoveBarberProfileServiceCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<RemoveBarberProfileServiceHandler> _logger;
 
     public RemoveBarberProfileServiceHandler(
         IBarberProfileRepository repository,
-        ILogger<RemoveBarberProfileServiceHandler> logger)
+        ILogger<RemoveBarberProfileServiceHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -35,6 +39,12 @@ public class RemoveBarberProfileServiceHandler : ICommandHandler<RemoveBarberPro
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var removed = profile.RemoveService(command.HairServiceId);
         if (removed.IsFailure)

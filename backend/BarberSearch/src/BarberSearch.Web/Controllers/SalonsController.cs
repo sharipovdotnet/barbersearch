@@ -8,7 +8,9 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Salons.CreateSalon;
 using BarberSearch.Contracts.Salons.UpdateSalonContactInfo;
 using BarberSearch.Contracts.Salons.UpdateSalonLocation;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -18,9 +20,11 @@ namespace BarberSearch.Web.Controllers;
 /// </summary>
 /// <remarks>
 /// Расписание и услуги салона здесь не живут: слоты считаются по паре (барбер, салон),
-/// поэтому расписание адресуется через профиль барбера.
+/// поэтому расписание адресуется через профиль барбера. Каталог — админский справочник:
+/// создание, правка и активация доступны только администратору.
 /// </remarks>
 [ApiController]
+[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
 [Route("api/salons")]
 public class SalonsController : ApiController
 {

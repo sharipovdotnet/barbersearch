@@ -1,4 +1,6 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -15,11 +17,19 @@ namespace BarberSearch.Application.Bookings.MarkBookingNoShow;
 public class MarkBookingNoShowHandler : ICommandHandler<MarkBookingNoShowCommand>
 {
     private readonly IBookingRepository _repository;
+    private readonly IBarberProfileRepository _barberProfiles;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<MarkBookingNoShowHandler> _logger;
 
-    public MarkBookingNoShowHandler(IBookingRepository repository, ILogger<MarkBookingNoShowHandler> logger)
+    public MarkBookingNoShowHandler(
+        IBookingRepository repository,
+        IBarberProfileRepository barberProfiles,
+        ICurrentUser currentUser,
+        ILogger<MarkBookingNoShowHandler> logger)
     {
         _repository = repository;
+        _barberProfiles = barberProfiles;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -37,6 +47,15 @@ public class MarkBookingNoShowHandler : ICommandHandler<MarkBookingNoShowCommand
         }
 
         var booking = bookingResult.Value;
+
+        var allowed = await _currentUser.EnsureIsBarberOfAsync(
+            _barberProfiles,
+            booking.BarberProfileId,
+            cancellationToken);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         // Правило уровня Application: раньше начала брони неявку отметить нельзя,
         // поэтому доменный метод в этом случае не вызывается вовсе.

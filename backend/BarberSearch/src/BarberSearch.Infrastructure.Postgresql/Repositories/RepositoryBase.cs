@@ -140,6 +140,13 @@ public abstract class RepositoryBase<TEntity>
                 $"{errorCode}.overlap",
                 $"The period overlaps with an existing record ({postgres.ConstraintName}).")),
 
+            // Fifty concurrent inserts on one slot can deadlock inside the GiST
+            // exclusion-constraint check even though the constraint is doing its job.
+            // It is a lost contention, not a server failure: 409, never 500.
+            PostgresErrorCodes.DeadlockDetected => new Failure(Error.Conflict(
+                $"{errorCode}.deadlock",
+                $"The operation deadlocked with a concurrent transaction ({postgres.ConstraintName}).")),
+
             PostgresErrorCodes.ForeignKeyViolation => new Failure(Error.Conflict(
                 $"{errorCode}.foreignKeyViolation",
                 $"A referenced record does not exist ({postgres.ConstraintName}).")),

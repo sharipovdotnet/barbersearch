@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,11 +12,16 @@ namespace BarberSearch.Application.Users.UpdateUserProfile;
 public class UpdateUserProfileHandler : ICommandHandler<UpdateUserProfileCommand>
 {
     private readonly IUserRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<UpdateUserProfileHandler> _logger;
 
-    public UpdateUserProfileHandler(IUserRepository repository, ILogger<UpdateUserProfileHandler> logger)
+    public UpdateUserProfileHandler(
+        IUserRepository repository,
+        ICurrentUser currentUser,
+        ILogger<UpdateUserProfileHandler> logger)
     {
         _repository = repository;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -33,6 +39,12 @@ public class UpdateUserProfileHandler : ICommandHandler<UpdateUserProfileCommand
         }
 
         var user = userResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(user.Id);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var updated = user.UpdateProfile(
             command.FirstName,

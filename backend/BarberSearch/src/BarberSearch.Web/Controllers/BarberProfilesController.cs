@@ -32,7 +32,9 @@ using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberSalons;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -50,8 +52,10 @@ namespace BarberSearch.Web.Controllers;
 public class BarberProfilesController : ApiController
 {
     /// <summary>
-    /// Создаёт профиль барбера.
+    /// Создаёт профиль барбера для текущего пользователя. Доступно только роли <c>Barber</c>:
+    /// администратор выдаёт её через <c>PUT api/users/{userId}/role</c>.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.BarberOnly)]
     [HttpPost]
     public async Task<ActionResult<CreatedResourceResponse>> Create(
         [FromBody] BarberProfileCreateRequest request,
@@ -75,8 +79,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Меняет грейд барбера.
+    /// Меняет грейд барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{barberProfileId:guid}/grade")]
     public async Task<ActionResult> ChangeGrade(
         Guid barberProfileId,
@@ -88,8 +93,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Пересчитывает рейтинг барбера по отзывам.
+    /// Пересчитывает рейтинг барбера по отзывам. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{barberProfileId:guid}/rating")]
     public async Task<ActionResult> UpdateRating(
         Guid barberProfileId,
@@ -125,8 +131,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Подтверждает профиль барбера.
+    /// Подтверждает профиль барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{barberProfileId:guid}/verification")]
     public async Task<ActionResult> Verify(
         Guid barberProfileId,
@@ -137,8 +144,9 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Снимает подтверждение профиля барбера.
+    /// Снимает подтверждение профиля барбера. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpDelete("{barberProfileId:guid}/verification")]
     public async Task<ActionResult> Unverify(
         Guid barberProfileId,

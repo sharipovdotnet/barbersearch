@@ -8,12 +8,12 @@ namespace BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 /// <remarks>
 /// Контракт слоя Application: команда <c>CreateBarberProfileCommand</c> несёт его целиком,
 /// а домен получает значения — <c>BarberProfile.Create</c> принимает их явными параметрами,
-/// потому что на слой Contracts он не ссылается. Enum'ы (<see cref="Language"/>,
-/// <see cref="PaymentMethod"/>) приходят из домена: это словарь предметной области,
-/// а не деталь транспорта.
+/// потому что на слой Contracts он не ссылается. Владелец профиля в запросе не передаётся:
+/// это текущий пользователь из токена, поэтому завести профиль на чужой идентификатор нельзя.
+/// Enum'ы (<see cref="Language"/>, <see cref="PaymentMethod"/>) приходят из домена: это словарь
+/// предметной области, а не деталь транспорта.
 /// </remarks>
 public record BarberProfileCreateRequest(
-    Guid UserId,
     string DisplayName,
     int YearsOfExperience,
     string? Bio,

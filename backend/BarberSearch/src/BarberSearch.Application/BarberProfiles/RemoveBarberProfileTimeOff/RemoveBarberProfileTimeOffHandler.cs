@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,14 +12,17 @@ namespace BarberSearch.Application.BarberProfiles.RemoveBarberProfileTimeOff;
 public class RemoveBarberProfileTimeOffHandler : ICommandHandler<RemoveBarberProfileTimeOffCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<RemoveBarberProfileTimeOffHandler> _logger;
 
     public RemoveBarberProfileTimeOffHandler(
         IBarberProfileRepository repository,
-        ILogger<RemoveBarberProfileTimeOffHandler> logger)
+        ILogger<RemoveBarberProfileTimeOffHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -35,6 +39,12 @@ public class RemoveBarberProfileTimeOffHandler : ICommandHandler<RemoveBarberPro
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var removed = profile.RemoveTimeOff(command.TimeOffId);
         if (removed.IsFailure)

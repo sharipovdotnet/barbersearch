@@ -102,6 +102,17 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         return exists;
     }
 
+    public async Task<Result<bool, Failure>> ExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await Context.Users
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        return exists;
+    }
+
     public async Task<UnitResult<Failure>> AddAsync(
         User user,
         CancellationToken cancellationToken = default)

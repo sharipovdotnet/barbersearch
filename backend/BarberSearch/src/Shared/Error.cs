@@ -30,6 +30,18 @@ public record Error
     public static Error Failure(string? code, string message)
         => new(code ?? "failure", message, ErrorType.FAILURE);
 
+    /// <summary>
+    /// Ошибка аутентификации: пользователь не представился или учётные данные неверны.
+    /// </summary>
+    public static Error Unauthorized(string? code, string message)
+        => new(code ?? "unauthorized", message, ErrorType.UNAUTHORIZED);
+
+    /// <summary>
+    /// Ошибка авторизации: пользователь известен, но прав на операцию нет.
+    /// </summary>
+    public static Error Forbidden(string? code, string message)
+        => new(code ?? "forbidden", message, ErrorType.FORBIDDEN);
+
     public Failure ToFailure() => this;
 }
 
@@ -59,4 +71,14 @@ public enum ErrorType
     /// Ошибка конфликт.
     /// </summary>
     CONFLICT,
+
+    /// <summary>
+    /// Ошибка аутентификации.
+    /// </summary>
+    UNAUTHORIZED,
+
+    /// <summary>
+    /// Ошибка авторизации.
+    /// </summary>
+    FORBIDDEN,
 }

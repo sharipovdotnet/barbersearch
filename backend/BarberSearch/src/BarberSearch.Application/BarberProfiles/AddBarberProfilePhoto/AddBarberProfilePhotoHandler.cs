@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -15,14 +16,17 @@ namespace BarberSearch.Application.BarberProfiles.AddBarberProfilePhoto;
 public class AddBarberProfilePhotoHandler : ICommandHandler<AddBarberProfilePhotoCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddBarberProfilePhotoHandler> _logger;
 
     public AddBarberProfilePhotoHandler(
         IBarberProfileRepository repository,
-        ILogger<AddBarberProfilePhotoHandler> logger)
+        ILogger<AddBarberProfilePhotoHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -39,6 +43,12 @@ public class AddBarberProfilePhotoHandler : ICommandHandler<AddBarberProfilePhot
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var added = profile.AddPhoto(command.Url, command.ThumbnailUrl, command.Description);
         if (added.IsFailure)

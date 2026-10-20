@@ -15,7 +15,9 @@ using BarberSearch.Contracts.Users.ChangeUserRole;
 using BarberSearch.Contracts.Users.CreateUser;
 using BarberSearch.Contracts.Users.UpdateUserProfile;
 using BarberSearch.Domain.Users;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,8 +36,10 @@ namespace BarberSearch.Web.Controllers;
 public class UsersController : ApiController
 {
     /// <summary>
-    /// Создаёт пользователя. Роль по умолчанию — <c>Customer</c>.
+    /// Создаёт пользователя. Доступно только администратору: самостоятельная регистрация
+    /// живёт в <c>POST api/auth/register</c> и всегда создаёт <c>Customer</c>.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost]
     public async Task<ActionResult<CreatedResourceResponse>> Create(
         [FromBody] CreateUserRequest request,
@@ -56,7 +60,7 @@ public class UsersController : ApiController
     }
 
     /// <summary>
-    /// Обновляет профиль пользователя.
+    /// Обновляет профиль пользователя. Свой — сам пользователь, чужой — только администратор.
     /// </summary>
     [HttpPut("{userId:guid}/profile")]
     public async Task<ActionResult> UpdateProfile(
@@ -64,7 +68,8 @@ public class UsersController : ApiController
         [FromBody] UpdateUserProfileRequest request,
         [FromServices] ICommandHandler<UpdateUserProfileCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        return ToActionResult(await handler.Handle(
             new UpdateUserProfileCommand(
                 userId,
                 request.FirstName,
@@ -72,10 +77,12 @@ public class UsersController : ApiController
                 request.PhoneNumber,
                 request.AvatarUrl),
             cancellationToken));
+    }
 
     /// <summary>
-    /// Меняет роль пользователя.
+    /// Меняет роль пользователя. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{userId:guid}/role")]
     public async Task<ActionResult> ChangeRole(
         Guid userId,
@@ -87,8 +94,9 @@ public class UsersController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Привязывает профиль барбера к пользователю.
+    /// Привязывает профиль барбера к пользователю. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPut("{userId:guid}/barber-profile/{barberProfileId:guid}")]
     public async Task<ActionResult> LinkBarberProfile(
         Guid userId,
@@ -100,8 +108,9 @@ public class UsersController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Активирует пользователя.
+    /// Активирует пользователя. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{userId:guid}/activation")]
     public async Task<ActionResult> Activate(
         Guid userId,
@@ -110,8 +119,9 @@ public class UsersController : ApiController
         => ToActionResult(await handler.Handle(new ActivateUserCommand(userId), cancellationToken));
 
     /// <summary>
-    /// Деактивирует пользователя.
+    /// Деактивирует пользователя. Только администратор.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpDelete("{userId:guid}/activation")]
     public async Task<ActionResult> Deactivate(
         Guid userId,
@@ -120,8 +130,10 @@ public class UsersController : ApiController
         => ToActionResult(await handler.Handle(new DeactivateUserCommand(userId), cancellationToken));
 
     /// <summary>
-    /// Помечает email подтверждённым.
+    /// Помечает email подтверждённым. Пока только администратор: самостоятельное подтверждение
+    /// появится вместе с письмом-ссылкой.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{userId:guid}/email-verification")]
     public async Task<ActionResult> MarkEmailAsVerified(
         Guid userId,
@@ -133,7 +145,9 @@ public class UsersController : ApiController
 
     /// <summary>
     /// Помечает телефон подтверждённым. Без сохранённого номера сценарий вернёт 400.
+    /// Пока только администратор — как и подтверждение email.
     /// </summary>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{userId:guid}/phone-verification")]
     public async Task<ActionResult> MarkPhoneAsVerified(
         Guid userId,
@@ -146,6 +160,11 @@ public class UsersController : ApiController
     /// <summary>
     /// Отмечает вход пользователя: в профиле обновляется время последнего входа.
     /// </summary>
+    /// <remarks>
+    /// Оставлено только для администратора: обычный вход фиксируется самим логином,
+    /// а анонимный вызов позволял бы подделать аудит входа.
+    /// </remarks>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{userId:guid}/logins")]
     public async Task<ActionResult> RecordLogin(
         Guid userId,
@@ -154,7 +173,7 @@ public class UsersController : ApiController
         => ToActionResult(await handler.Handle(new RecordUserLoginCommand(userId), cancellationToken));
 
     /// <summary>
-    /// Добавляет барбера в избранное. Повторное добавление — 409.
+    /// Добавляет барбера в избранное. Своё избранное — сам пользователь, чужое — только администратор. Повторное добавление — 409.
     /// </summary>
     [HttpPost("{userId:guid}/favorites/{barberProfileId:guid}")]
     public async Task<ActionResult> AddFavorite(
@@ -162,12 +181,14 @@ public class UsersController : ApiController
         Guid barberProfileId,
         [FromServices] ICommandHandler<AddUserFavoriteCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        return ToActionResult(await handler.Handle(
             new AddUserFavoriteCommand(userId, barberProfileId),
             cancellationToken));
+    }
 
     /// <summary>
-    /// Убирает барбера из избранного. Если барбера там не было — 404.
+    /// Убирает барбера из избранного. Своё избранное — сам пользователь, чужое — только администратор. Если барбера там не было — 404.
     /// </summary>
     [HttpDelete("{userId:guid}/favorites/{barberProfileId:guid}")]
     public async Task<ActionResult> RemoveFavorite(
@@ -175,7 +196,9 @@ public class UsersController : ApiController
         Guid barberProfileId,
         [FromServices] ICommandHandler<RemoveUserFavoriteCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        return ToActionResult(await handler.Handle(
             new RemoveUserFavoriteCommand(userId, barberProfileId),
             cancellationToken));
+    }
 }

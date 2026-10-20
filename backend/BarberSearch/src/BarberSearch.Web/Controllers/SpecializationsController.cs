@@ -6,7 +6,9 @@ using BarberSearch.Application.Specializations.RenameSpecialization;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Specializations.CreateSpecialization;
 using BarberSearch.Contracts.Specializations.RenameSpecialization;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -16,9 +18,11 @@ namespace BarberSearch.Web.Controllers;
 /// </summary>
 /// <remarks>
 /// Имя уникально без учёта регистра: повтор возвращает 409 (проверка в обработчике
-/// плюс уникальный индекс <c>ux_specializations_name</c>).
+/// плюс уникальный индекс <c>ux_specializations_name</c>). Каталог — админский справочник:
+/// создание, переименование и активация доступны только администратору.
 /// </remarks>
 [ApiController]
+[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
 [Route("api/specializations")]
 public class SpecializationsController : ApiController
 {

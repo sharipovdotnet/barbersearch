@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -15,14 +16,17 @@ namespace BarberSearch.Application.BarberServices.ActivateBarberService;
 public class ActivateBarberServiceHandler : ICommandHandler<ActivateBarberServiceCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<ActivateBarberServiceHandler> _logger;
 
     public ActivateBarberServiceHandler(
         IBarberProfileRepository repository,
-        ILogger<ActivateBarberServiceHandler> logger)
+        ILogger<ActivateBarberServiceHandler> logger,
+        ICurrentUser currentUser)
     {
         _repository = repository;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -39,6 +43,12 @@ public class ActivateBarberServiceHandler : ICommandHandler<ActivateBarberServic
         }
 
         var profile = profileResult.Value;
+
+        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        if (allowed.IsFailure)
+        {
+            return allowed.Error;
+        }
 
         var service = profile.Services.FirstOrDefault(s => s.Id == command.BarberServiceId);
         if (service is null)
