@@ -175,18 +175,6 @@ try {
         } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $generated 'auth.json')
 
         Write-Host "authenticated admin=$($adminMe.id) customer=$($customerMe.id)"
-
-        Invoke-Sql @"
-UPDATE bookings
-SET user_id = '$($customerMe.id)'::uuid,
-    updated_at = now()
-WHERE id IN (
-    SELECT md5('booking:' || b || ':' || n)::uuid
-    FROM generate_series(2, 9) AS b
-    CROSS JOIN generate_series(8, 57) AS n
-    WHERE b IN (2, 6, 7, 9)
-);
-"@ | Out-Null
     }
     elseif (-not (Test-Path (Join-Path $generated 'auth.json'))) {
         throw "auth.json is missing; run without -SkipAuth."
@@ -203,6 +191,21 @@ WHERE id IN (
 
     $auth = Get-Content (Join-Path $generated 'auth.json') -Raw | ConvertFrom-Json
     $manifest = Get-Content (Join-Path $generated 'manifest.json') -Raw | ConvertFrom-Json
+
+    # The create-review scenario posts against these bookings, and the handler checks
+    # ownership. This is data setup, not authentication: it must also run with
+    # -SkipAuth, which reuses customerId from auth.json.
+    Invoke-Sql @"
+UPDATE bookings
+SET user_id = '$($auth.customerId)'::uuid,
+    updated_at = now()
+WHERE id IN (
+    SELECT md5('booking:' || b || ':' || n)::uuid
+    FROM generate_series(2, 13) AS b
+    CROSS JOIN generate_series(8, 57) AS n
+    WHERE b IN (2, 6, 7, 9, 12, 13)
+);
+"@ | Out-Null
 
     [ordered]@{
         baseUrl = $auth.baseUrl

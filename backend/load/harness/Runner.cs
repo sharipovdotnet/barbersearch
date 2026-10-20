@@ -697,10 +697,11 @@ internal sealed class Runner
     {
         var barbers = _context.Manifest.ContentionReviewBarbers;
 
-        if (barbers.Count < 4)
+        if (barbers.Count < _options.Repeat + 1)
         {
             throw new InvalidOperationException(
-                "The manifest needs four contention-review barbers (3 measured + 1 warm-up).");
+                $"The manifest needs {_options.Repeat + 1} contention-review barbers " +
+                $"({_options.Repeat} measured + 1 warm-up); it has {barbers.Count}.");
         }
 
         var scenario = new ScenarioResult
@@ -713,12 +714,15 @@ internal sealed class Runner
 
         Console.WriteLine("review-publish-hide: warm-up batch...");
 
-        var warmup = await RunReviewBatchAsync(barbers[3], "warmup");
+        // The last barber is the warm-up one, so the measured runs use the first
+        // Repeat entries and never collide with it.
+        var warmupBarber = barbers[^1];
+        var warmup = await RunReviewBatchAsync(warmupBarber, "warmup");
         var warmupVerification = await VerifyReviewStateAsync(
-            barbers[3].BarberId,
-            barbers[3].ExpectedCount,
-            barbers[3].ExpectedRatingSum,
-            barbers[3].ExpectedReviewIds);
+            warmupBarber.BarberId,
+            warmupBarber.ExpectedCount,
+            warmupBarber.ExpectedRatingSum,
+            warmupBarber.ExpectedReviewIds);
 
         if (!warmup.Passed || !warmupVerification.Passed)
         {
@@ -793,10 +797,11 @@ internal sealed class Runner
     {
         var barbers = _context.Manifest.CreateReviewBarbers;
 
-        if (barbers.Count < 4)
+        if (barbers.Count < _options.Repeat + 1)
         {
             throw new InvalidOperationException(
-                "The manifest needs four create-review barbers (3 measured + 1 warm-up).");
+                $"The manifest needs {_options.Repeat + 1} create-review barbers " +
+                $"({_options.Repeat} measured + 1 warm-up); it has {barbers.Count}.");
         }
 
         var scenario = new ScenarioResult
@@ -809,14 +814,17 @@ internal sealed class Runner
 
         Console.WriteLine("review-create: warm-up batch...");
 
+        // Same split as publish/hide: last barber is warm-up, measured runs use the
+        // first Repeat entries.
+        var warmupBarber = barbers[^1];
         var warmup = await RunCreateReviewBatchAsync(
-            barbers[3],
+            warmupBarber,
             "warmup",
             CreateReviewWarmupCount);
         var warmupVerification = await VerifyReviewStateAsync(
-            barbers[3].BarberId,
-            barbers[3].BasePublishedCount + CreateReviewWarmupCount,
-            barbers[3].BaseRatingSum + CreateReviewWarmupCount * barbers[3].NewRating);
+            warmupBarber.BarberId,
+            warmupBarber.BasePublishedCount + CreateReviewWarmupCount,
+            warmupBarber.BaseRatingSum + warmupBarber.NewRating * CreateReviewWarmupCount);
 
         if (!warmup.Passed || !warmupVerification.Passed)
         {

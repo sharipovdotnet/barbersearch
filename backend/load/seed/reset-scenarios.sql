@@ -9,25 +9,26 @@ SET TIME ZONE 'UTC';
 
 BEGIN;
 
--- 1. Publish/hide scenario: barbers 1, 4, 5 (measured) and 8 (warm-up).
+-- 1. Publish/hide scenario: barbers 1, 4, 5, 8, 10, 11 (the last one is the
+--    warm-up barber, so five measured repeats stay distinct).
 --    Initial state: reviews n=0..5 published, n=6..19 hidden.
 UPDATE reviews AS r
 SET is_published = (x.n < 6),
     updated_at = now()
 FROM (
     SELECT b, n, md5('review:' || b || ':' || n)::uuid AS review_id
-    FROM generate_series(1, 8) AS b
+    FROM generate_series(1, 11) AS b
     CROSS JOIN generate_series(0, 19) AS n
-    WHERE b IN (1, 4, 5, 8)
+    WHERE b IN (1, 4, 5, 8, 10, 11)
 ) AS x
 WHERE r.id = x.review_id;
 
 DELETE FROM reviews
 WHERE booking_id IN (
     SELECT md5('booking:' || b || ':' || n)::uuid
-    FROM generate_series(2, 9) AS b
+    FROM generate_series(2, 13) AS b
     CROSS JOIN generate_series(8, 57) AS n
-    WHERE b IN (2, 6, 7, 9)
+    WHERE b IN (2, 6, 7, 9, 12, 13)
 );
 
 -- 2. Contended booking: remove the active rows created by the harness. The
@@ -50,8 +51,8 @@ SET rating = NULL,
     updated_at = now()
 WHERE id IN (
     SELECT md5('barber:' || b)::uuid
-    FROM generate_series(1, 9) AS b
-    WHERE b IN (1, 2, 4, 5, 6, 7, 8, 9)
+    FROM generate_series(1, 13) AS b
+    WHERE b IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 );
 
 UPDATE barber_profiles AS p
@@ -66,8 +67,8 @@ FROM (
     WHERE is_published
       AND barber_profile_id IN (
           SELECT md5('barber:' || b)::uuid
-          FROM generate_series(1, 9) AS b
-          WHERE b IN (1, 2, 4, 5, 6, 7, 8, 9)
+          FROM generate_series(1, 13) AS b
+          WHERE b IN (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
       )
     GROUP BY barber_profile_id
 ) AS s

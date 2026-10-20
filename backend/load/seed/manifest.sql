@@ -72,7 +72,7 @@ SELECT jsonb_build_object(
                              AND NOT r.is_published
                        ))
                    ORDER BY b)
-        FROM (VALUES (1), (4), (5), (8)) AS v(b)
+        FROM (VALUES (1), (4), (5), (8), (10), (11)) AS v(b)
     ),
     'createReviewBarbers', (
         SELECT jsonb_agg(
@@ -94,7 +94,7 @@ SELECT jsonb_build_object(
                        ),
                        'newRating', 5)
                    ORDER BY b)
-        FROM (VALUES (2), (6), (7), (9)) AS v(b)
+        FROM (VALUES (2), (6), (7), (9), (12), (13)) AS v(b)
     ),
     'contendedBooking', jsonb_build_object(
         'barberId', md5('barber:3')::uuid,

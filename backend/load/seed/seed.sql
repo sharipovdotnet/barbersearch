@@ -500,8 +500,46 @@ WHERE b IN (1, 4, 5, 8)
   AND NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reviews-contention')
 ON CONFLICT DO NOTHING;
 
+-- Two more contention barbers (10 and 11) make five measured repeats possible
+-- with a distinct warm-up barber. This is a separate marker so an already
+-- seeded barbersearch_load can be upgraded by re-running seed.sql.
+INSERT INTO reviews
+    (id, barber_profile_id, user_id, booking_id, rating, text,
+     is_published, created_at, updated_at)
+SELECT md5('review:' || b || ':' || n)::uuid,
+       md5('barber:' || b)::uuid,
+       md5('load-customer:' || (1 + ((b * 100 + n) % 2000)))::uuid,
+       md5('booking:' || b || ':' || n)::uuid,
+       CASE ((b * 13 + n * 7) % 10)
+           WHEN 0 THEN 1
+           WHEN 1 THEN 2
+           WHEN 2 THEN 3
+           WHEN 3 THEN 4
+           WHEN 4 THEN 5
+           WHEN 5 THEN 5
+           WHEN 6 THEN 4
+           WHEN 7 THEN 4
+           WHEN 8 THEN 3
+           ELSE 5
+       END,
+       'Load-test contention review ' || b || '-' || n,
+       false,
+       date_trunc('day', now())
+           - ((n + 1) * interval '1 day')
+           + ((9 + (n % 8)) * interval '1 hour')
+           + interval '1 day',
+       date_trunc('day', now())
+           - ((n + 1) * interval '1 day')
+           + ((9 + (n % 8)) * interval '1 hour')
+           + interval '1 day'
+FROM generate_series(10, 11) AS b
+CROSS JOIN generate_series(8, 19) AS n
+WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reviews-contention-extra')
+ON CONFLICT DO NOTHING;
+
 INSERT INTO load_seed_state (key) VALUES ('reviews') ON CONFLICT DO NOTHING;
 INSERT INTO load_seed_state (key) VALUES ('reviews-contention') ON CONFLICT DO NOTHING;
+INSERT INTO load_seed_state (key) VALUES ('reviews-contention-extra') ON CONFLICT DO NOTHING;
 
 UPDATE barber_profiles AS p
 SET rating = s.avg_rating,
