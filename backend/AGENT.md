@@ -1049,14 +1049,21 @@ before it, serialising inserts per barber: the first commits, the rest hit `23P0
 is also mapped to `409 booking.add.deadlock` as a defensive path. Cost: per-barber serialisation;
 at 50 contenders the measured p95 was 250.9–298.4 ms (budget 300 ms), see `LOADTEST.md`.
 
-**Verified 2026-10-19, local PostgreSQL 16.3:**
+**Verified 2026-10-19, re-verified 2026-10-20, local PostgreSQL 16.3:**
 
 - 50 parallel `POST api/bookings` on one slot with 50 different keys — exactly `1 × 201` and
   `49 × 409`; both `23P01` and `23505` appeared in the server log; one active row in `bookings`.
+  Re-run 2026-10-20: five measured batches plus warm-up, each `1 × 201 / 49 × 409`, no `500`,
+  exactly one active row on every contended slot.
 - 10 parallel duplicates with the **same** key — `10 × 201`, one distinct id, one row; losers
-  logged "returned after a conflicting insert".
+  logged "returned after a conflicting insert". This is now a permanent harness scenario
+  (`booking-idempotency`) and a separate minimal CI check
+  (`load/ci/booking-idempotency.ps1`, one barber/service/salon/slot, no 1.2M seed).
 - A sequential repeat with the same key returned the same id; a cancelled booking on the slot did
   not block the next insert; `GET api/barbers/{id}/slots` no longer listed either occupied slot.
+- The follow-up SQL check after the five-repeat run confirmed one row per same key, all five
+  measured winners cancelled, five fresh active rows on the same slots, and no warm-up row
+  holding a slot.
 - A request with `price = 1` produced a row with `price = 30.00` (the barber service price);
   a service id belonging to another barber returned `404`.
 
@@ -1068,6 +1075,10 @@ at 50 contenders the measured p95 was 250.9–298.4 ms (budget 300 ms), see `LOA
 - `AsSplitQuery()` where collection includes are genuinely unavoidable.
 - **Keyset pagination** (cursor over `(rating, id)`), never `OFFSET` — deep pages degrade linearly
   and the search UI invites them. `rating` is nullable, so decide the null ordering explicitly.
+  The ORDER BY must match an index expression term for term; otherwise the planner sorts all rows
+  before applying the limit. Search uses `ix_barber_profiles_search_keyset`
+  (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified`) and was verified with
+  `EXPLAIN` at 10 000 visible profiles (`LOADTEST.md` §7.1).
 - `EF.CompileAsyncQuery` for search and slot queries; they run thousands of times a minute.
 - Count queries in development and fail loudly past a threshold. N+1 in this model is invisible
   until production traffic.
@@ -1090,8 +1101,21 @@ contended booking p95 250.9–298.4 ms with exactly `1 × 201 / 49 × 409` and o
 slot; review publish/hide p95 85.5–92.0 ms; review create p95 220.3–265.6 ms. Error rate 0.
 Search bottleneck: `ORDER BY (rating IS NULL), rating DESC, id` does not use
 `ix_barber_profiles_search`; the date-only query is a Parallel Seq Scan + Sort of 10 000 rows
-(78.6 ms execution). No cache was added: slots/reviews have ample headroom, search needs the plan
-fixed first. Details and query plan: `LOADTEST.md`.
+(78.6 ms execution).
+
+**Follow-up 2026-10-20 (`Repeat=5`).** Search is fixed by the additive expression index
+`ix_barber_profiles_search_keyset` on `(((rating IS NULL)), rating DESC, id) WHERE is_active AND
+is_verified` (migration `AddSearchKeysetIndex`). `EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)`:
+date-only changed from Seq Scan + Sort 75.6–87.3 ms to Index Scan 3.6–13.8 ms; no-filter from
+8.2–9.5 ms to 0.05–0.13 ms. Search load: 8 runs of 20 s, p95 29.8–40.6 ms (median 32.1),
+p99 34.4–50.6 ms, RPS median 1 020.9; full five-repeat run p95 28.5–31.5, p99 32.3–36.3, 0
+errors. Slots p95 10.2–11.6 ms; same-key booking idempotency p95 51.2–52.2 ms with
+`10 × 201` / one id / one row, sequential repeat same id, and a fresh `201` after cancellation;
+review publish/hide p95 82.4–98.3 ms; review create p95 189.3–269.8 ms. Contended booking p95
+257.5–304.0 ms — one run 4 ms over the 300 ms budget; correctness is unchanged
+(`1 × 201 / 49 × 409` and one active row per slot). No cache was added: search now passes with a
+≈5× p95 margin, slots/reviews have ample headroom, and booking is limited by the advisory lock,
+not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 
 ### 15.8 Observability
 
@@ -1122,12 +1146,19 @@ fixed first. Details and query plan: `LOADTEST.md`.
    application layer, transaction + `SELECT … FOR UPDATE` (§12.2); verified on local PostgreSQL
    including concurrent publish/hide. No cache and no schema change.
 5. ~~Load test at realistic volume~~ — **done (2026-10-19):** `barbersearch_load`, harness
-   `load/`, baseline `LOADTEST.md`. Slots/reviews have headroom; search worst p95 202.4 ms
-   (budget 200) because `ORDER BY (rating IS NULL), rating DESC` does not use
-   `ix_barber_profiles_search`; contended booking was fixed with a per-barber advisory lock and
-   now gives exactly `1 × 201 / 49 × 409`. Measure, **then** cache: the next step is the search
-   plan, not a cache.
-6. Observability last, once there is something worth observing.
+   `load/`, baseline `LOADTEST.md`. Slots/reviews have headroom; contended booking was fixed with
+   a per-barber advisory lock and gives exactly `1 × 201 / 49 × 409`. Search worst p95 202.4 ms
+   (budget 200) was a query-plan miss, not volume.
+6. ~~Search plan fix + same-key regression~~ — **done (2026-10-20):** additive migration
+   `AddSearchKeysetIndex` adds `ix_barber_profiles_search_keyset`; date-only search drops from
+   75.6–87.3 ms to 3.6–13.8 ms in EXPLAIN and search p95 from 170.6–202.8 ms to 29.8–40.6 ms
+   over 8 × 20 s runs. Same-key booking idempotency is covered by `load/harness` and by a
+   minimal CI check without the 1.2M seed. Repeat=5 rerun: search PASS, same-key/contended
+   correctness PASS, booking p95 257.5–304.0 ms (one run +4 ms over budget). **No cache.**
+7. Next: deploy (persistent Data Protection keys, `Auth__SigningKey`, `UseForwardedHeaders`,
+   CORS + `SameSite=None`). Booking headroom, if needed, is a separate slot-claim/fast-path
+   slice — not cache.
+8. Observability last, once there is something worth observing.
 
 Caching before measuring is how a system becomes fast and wrong at the same time.
 
@@ -1204,7 +1235,10 @@ Read endpoints (added 2026-10-19):
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `serviceId` (EXISTS
   over the link tables, so a profile row is never duplicated), `date` (the barber has a non-day-off
   schedule for that weekday in at least one active salon; exact free time is `/slots`). Order is
-  `rating DESC NULLS LAST, id`. The response is `PagedResponse<BarberSearchItemResponse>` with
+  `rating DESC NULLS LAST, id`, served by the expression index
+  `ix_barber_profiles_search_keyset` (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND
+  is_verified`, migration `AddSearchKeysetIndex`). The response is
+  `PagedResponse<BarberSearchItemResponse>` with
   `items` and an opaque base64url `nextCursor`; `pageSize` defaults to 20 and is capped at 100.
   A broken cursor or an out-of-range page size is `400`, not `500`.
 - **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
@@ -1237,7 +1271,9 @@ Read endpoints (added 2026-10-19):
 Deliberately absent:
 
 - **Auth** — реализована, см. §17.
-- **Caching and health checks** (§15) — not implemented; they wait for a load test. Pagination is
+- **Caching and health checks** (§15) — not implemented. The 2026-10-20 load test showed no
+  budget need: search passes with the expression index, slots/reviews have ample headroom, and
+  booking is limited by the advisory lock (correctness), not by a cacheable read. Pagination is
   implemented as keyset for the read endpoints; the older offset methods remain for other callers.
 - **`Location` on create** — see above; not added in this stage.
 

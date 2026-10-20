@@ -1,20 +1,23 @@
 # HANDOFF — следующая сессия
 
 > Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
-> Дата: 2026-10-19. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
-> (workspace — `backend/`). HEAD этой сессии —
-> `test(load): add load-test harness and baseline results`; перед ним отдельный
-> `fix(bookings): serialize contended inserts to avoid GiST deadlock`.
+> Дата: 2026-10-20. Ветка: `features/issue-4`. Git root: `D:\Projects\barbersearch`
+> (workspace — `backend/`). HEAD этой сессии — `docs(load): refresh baseline after search fix`;
+> перед ним `test(load): support five repeats for review scenarios`,
+> `perf(search): make keyset order use the search index` и
+> `test(load): cover same-key booking idempotency`.
 > `origin/features/issue-4` запушен.
 
 ## 0. Где мы сейчас
 
 Аутентификация, авторизация по владению, refresh-токены, security stamp, read-эндпоинты,
-**booking under contention + idempotency**, **review → rating recalculation** и **load test**
-готовы. Сборка: **8 проектов, 0 ошибок, 0 предупреждений**. Тесты: **139 domain + 100
-application**, все зелёные через reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров,
-81 endpoint (73 доменных + 8 auth)**; новых эндпоинтов и изменений контрактов в этом срезе нет.
-Baseline и узкие места — `LOADTEST.md`.
+**booking under contention + idempotency**, **review → rating recalculation**, **search-план** и
+**load test** готовы. Same-key регрессия закрыта harness-сценарием и минимальным CI-прогоном;
+search переведён на expression-индекс и перемерен 8 прогонами и полным `Repeat=5`. Сборка:
+**8 проектов, 0 ошибок, 0 предупреждений**. Тесты: **139 domain + 100 application**, все
+зелёные через reflection-раннер (`AGENT.md` §5.3). API: **13 контроллеров, 81 endpoint
+(73 доменных + 8 auth)**; новых эндпоинтов и изменений контрактов в этом срезе нет.
+Baseline и узкие места — `LOADTEST.md`; кэш не добавлялся.
 
 Что сделано:
 
@@ -88,22 +91,43 @@ Baseline и узкие места — `LOADTEST.md`.
     `40P01` (deadlock внутри GiST exclusion check) и 500, а под нагрузкой — ни одного `201`.
     `BookingRepository.AddAsync` сериализует вставки одного барбера advisory lock-ом; `40P01`
     дополнительно маппится в `409 booking.add.deadlock`. Подробности — `LOADTEST.md` §6.
+13. **Same-key booking regression (2026-10-20):** в `load/harness` добавлен сценарий
+    `booking-idempotency`: warm-up, 10 параллельных POST с одним ключом → `10 × 201`, один id,
+    одна строка; последовательный повтор → тот же id; отмена → `204`; новая бронь на тот же слот
+    с другим ключом → `201`. `run.ps1` проверяет SQL-ом одну строку на ключ, отмену победителя и
+    одну активную бронь на каждом слоте. Добавлен минимальный CI-прогон
+    `load/ci/booking-idempotency.ps1` + `load/seed/minimal.sql` (1 барбер, 1 услуга, 1 салон,
+    1 слот, отдельная `*_ci` БД, без 1.2M seed). Unit-тесты не менялись.
+14. **Search plan (2026-10-20):** additive-миграция `AddSearchKeysetIndex` создаёт
+    `ix_barber_profiles_search_keyset` на `(((rating IS NULL)), rating DESC, id) WHERE is_active
+    AND is_verified`. LINQ, cursor-предикат и порядок null-рейтингов не менялись; старый
+    `ix_barber_profiles_search` оставлен. `EXPLAIN`: date-only Seq Scan + Sort 75.6–87.3 ms →
+    Index Scan 3.6–13.8 ms; без фильтров 8.2–9.5 → 0.05–0.13 ms. Search p95 29.8–40.6 ms на
+    8 × 20 s (было 170.6–202.8 ms, худший прогон FAIL).
+15. **Follow-up load test (2026-10-20, `Repeat=5`):** search p95 28.5–31.5 ms, p99 32.3–36.3,
+    ошибок 0; slots p95 10.2–11.6; booking-idempotency p95 51.2–52.2; review publish/hide p95
+    82.4–98.3; review create p95 189.3–269.8. Contended booking p95 257.5–304.0 ms — один прогон
+    на 4 ms выше бюджета 300, корректность прежняя (`1 × 201 / 49 × 409`, одна активная строка
+    на слот). SQL-сверка рейтингов по 12 профилям — 0 расхождений. Кэш не добавлялся.
 
-## 1. Следующая задача — точечная оптимизация search, затем кэш и деплой
+## 1. Следующая задача — деплой; кэш измерениями не оправдан
 
-1. **Search plan.** Измерения показали: `ORDER BY (rating IS NULL), rating DESC, id` не
-   использует `ix_barber_profiles_search`; date-only запрос — Parallel Seq Scan + Sort 10 000
-   строк (78.6 ms). Сделать ORDER BY совместимым с частичным индексом (или эквивалентный
-   индекс/переписать date-фильтр), перемерить `load/run.ps1`. Это не кэш.
-2. **Кэш** — только если после этого search всё ещё упирается в p95 200 ms. Слоты и review-write
-   уже имеют запас; кэшировать их незачем. Инвалидация рейтинга при кэше карточки/поиска станет
-   отдельной задачей, потому что они читают сохранённое поле.
-3. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
-   `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`.
+1. **Деплой:** персистентные ключи Data Protection, `Auth__SigningKey` в секрет-сторе,
+   `UseForwardedHeaders`, `Cors:AllowedOrigins` + `SameSite=None`. Это следующий срез.
+2. **Booking headroom (опционально, отдельно):** contended p95 257.5–304.0 ms при бюджете 300;
+   один прогон вышел на 4 ms. Причина — advisory lock, а не план. Если нужен запас, следующий
+   шаг — slot-claim (уникальная строка/индекс) или fast-path, а не кэш. Поведение текущего
+   correctness-fix не переделывать без отдельного среза и регрессии.
+3. **Кэш** — не начинать: измерения 2026-10-20 не дают основания. Search проходит с запасом
+   ≈5×, слоты и review-write имеют запас, booking ограничен корректностью. Если будущие
+   измерения всё же потребуют кэша, это отдельный срез с инвалидацией рейтинга.
 
 ## 2. Открытые дефекты и техдолг
 
 ### 2.1 Вне Web-слоя (найдено на read-этапе, не исправлено)
+
+Новых дефектов в срезе 2026-10-20 не найдено: search-план и same-key пробел закрыты,
+SQL-сверка броней и рейтингов сошлась. Открытые пункты ниже остаются с read-этапа.
 
 1. **`PUT api/barber-profiles/{id}/salons/{salonId}/primary` отвечает 409**, если другой салон
    профиля уже основной: EF Core отправляет `is_primary = true` раньше `false`, и filtered unique
@@ -142,23 +166,24 @@ Baseline и узкие места — `LOADTEST.md`.
   следующее изменение отзыва перезапишет его фактической сводкой.
 - Кэш карточки/поиска ещё не появился, поэтому инвалидация не нужна; при введении кэша
   изменение рейтинга должно её учитывать.
-- Load test подтвердил: publish/hide p95 85.5–92.0 ms, create p95 220.3–265.6 ms при бюджетах
+- Load test подтвердил: publish/hide p95 82.4–98.3 ms, create p95 189.3–269.8 ms при бюджетах
   500/1000 ms; `SELECT … FOR UPDATE` сериализует конкурентов, lost update не воспроизведён
-  (независимая SQL-сверка совпала). Пересчёт не является узким местом на этом объёме.
+  (независимая SQL-сверка по 12 профилям совпала). Пересчёт не является узким местом на этом
+  объёме.
 
 ### 2.5 Load test — что осталось за кадром
 
-1. **Search**: худший прогон p95 202.4 ms при бюджете 200 (медиана 181.5). Узкое место — план:
-   `ORDER BY (rating IS NULL), rating DESC, id` не использует `ix_barber_profiles_search`,
-   date-only запрос делает Parallel Seq Scan + Sort 10 000 строк (78.6 ms). Это следующий срез,
-   не кэш.
-2. **Booking**: p95 250.9–298.4 ms при бюджете 300 — почти весь запас съеден advisory lock-ом,
-   который сериализует вставки одного барбера. Если нужен запас, следующий шаг — slot-claim
-   (уникальная строка/индекс) или fast-path, а не кэш.
-3. **Инструменты**: `pg_stat_statements` не включён (`shared_preload_libraries` пуст),
-   `dotnet-counters` не установился (SSL/package source mapping), CPU PostgreSQL не читается
-   через `Get-Process` (access denied). Поэтому GC/thread-pool и DB CPU не измерены; в отчёте это
-   отмечено явно. Npgsql pool: максимум 51 backend-соединение при пуле 100, исчерпания не было.
+1. **Search — закрыт 2026-10-20.** Expression-индекс `ix_barber_profiles_search_keyset` даёт
+   Index Scan вместо Seq Scan + Sort: date-only 75.6–87.3 → 3.6–13.8 ms, search p95 29.8–40.6 ms
+   на 8 × 20 s и 28.5–31.5 ms в `Repeat=5`. Кэш не нужен.
+2. **Booking**: p95 257.5–304.0 ms при бюджете 300 — один прогон вышел на 4 ms. Почти весь запас
+   съеден advisory lock-ом, который сериализует вставки одного барбера. Если нужен запас,
+   следующий шаг — slot-claim (уникальная строка/индекс) или fast-path, а не кэш.
+3. **Инструменты**: `pg_stat_statements` не включён (`shared_preload_libraries` пуст; включение
+   требует рестарта общего локального инстанса, поэтому не делалось), `dotnet-counters` не
+   установился (SSL/package source mapping), CPU PostgreSQL не читается через `Get-Process`
+   (access denied). Поэтому GC/thread-pool и DB CPU не измерены; в отчёте это отмечено явно.
+   Npgsql pool: максимум 51 backend-соединение при пуле 100, исчерпания не было.
 4. **Стенд**: API, PostgreSQL и load generator на одной машине (24 logical CPU, 16 GB);
    `synchronous_commit=on`. Абсолютные цифры не переносятся на прод без поправки.
 
@@ -172,8 +197,8 @@ dotnet build BarberSearch/BarberSearch.sln
 #   собрать тестовый проект, затем reflection-раннер из %TEMP%;
 #   после прогона удалить раннер и временные скрипты
 
-# миграции (InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes применены;
-# в этом срезе новых миграций нет)
+# миграции (InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes /
+# AddSearchKeysetIndex применены; новых миграций в следующем срезе нет)
 $env:ASPNETCORE_ENVIRONMENT='Development'
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
@@ -195,19 +220,28 @@ dotnet bin/Debug/net10.0/BarberSearch.Web.dll
 Load test (отдельная база, API сам поднимается и останавливается):
 
 ```powershell
-# 1) один раз: barbersearch_load + существующие миграции + seed (load/README.md)
+# 1) один раз: barbersearch_load + все миграции + seed (load/README.md)
 # 2) полный прогон
 dotnet build load/harness/LoadHarness.csproj -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
-  -Repeat 3 -ReadSeconds 15
+  -Repeat 5 -ReadSeconds 15
 
-# повторно в течение 15 минут, не тратя auth rate limit
+# повторно, пока токены живы (15 минут), не тратя auth rate limit
 powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
-  -Repeat 3 -ReadSeconds 15 -SkipAuth
+  -Repeat 5 -ReadSeconds 15 -SkipAuth
+
+# только search, 8 окон по 20 с
+powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
+  -Scenario search -Repeat 8 -ReadSeconds 20
+
+# same-key без 1.2M seed, отдельная *_ci БД
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File load/ci/booking-idempotency.ps1
 ```
 
 `run.ps1` сам сбрасывает сценарные строки (`load/seed/reset-scenarios.sql`), генерирует
-манифест и проверяет SQL-ом, что на contended-слоте ровно одна активная бронь. Результаты —
+манифест и проверяет SQL-ом, что на contended-слоте ровно одна активная бронь, а на
+idempotency-слоте — одна строка на ключ и одна активная бронь после отмены. Результаты —
 `load/generated/results.json`, `metrics.csv`, `booking-verification.txt` (каталог не коммитится).
 Полные команды и ограничения — `load/README.md`, отчёт — `LOADTEST.md`.
 
@@ -218,18 +252,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
 
 ```text
 Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17. Ветка features/issue-4, HEAD —
-test(load): add load-test harness and baseline results; перед ним отдельный
-fix(bookings) про deadlock contended insert. Рабочее дерево чистое, origin запушен.
-Auth, ownership, read-эндпоинты, booking under contention (включая advisory lock),
-rating recalculation и load test закрыты; не трогай их без необходимости.
+docs(load): refresh baseline after search fix; перед ним test(load): support five repeats
+for review scenarios, perf(search): make keyset order use the search index и
+test(load): cover same-key booking idempotency. Рабочее дерево чистое, origin запушен.
+Auth, ownership, read-эндпоинты, booking under contention (advisory lock + same-key),
+rating recalculation, search-план и load test закрыты; кэш измерениями не оправдан.
+Не трогай их без необходимости.
 
-Следующая задача: точечная оптимизация search-плана (ORDER BY против
-ix_barber_profiles_search, date-only запрос), затем повторный load test и только потом
-кэш, если измерения всё ещё этого требуют; затем деплой (Data Protection, Auth__SigningKey,
-UseForwardedHeaders, CORS + SameSite=None). Baseline и узкие места — LOADTEST.md.
-Открытые дефекты — §2.1 этого файла.
+Следующая задача: деплой — персистентные ключи Data Protection, Auth__SigningKey в
+секрет-сторе, UseForwardedHeaders, Cors:AllowedOrigins + SameSite=None. Кэш/Redis/output
+caching не начинать. Booking headroom (p95 257.5–304.0 при бюджете 300) — отдельный
+срез slot-claim/fast-path, только если понадобится; текущий correctness-fix не
+переделывать. Baseline и планы — LOADTEST.md; открытые дефекты — §2.1 этого файла.
 
 Сборка/тесты/git — через danger-full-access; тесты — reflection-раннер §5.3, после прогона
 удалить раннер и временные скрипты; сборка 8 проектов, 0 ошибок, 0 предупреждений; все тесты
-зелёные.
+зелёные (139 domain + 100 application).
 ```

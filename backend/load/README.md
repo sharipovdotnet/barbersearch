@@ -36,7 +36,8 @@ $env:PGPASSWORD = 'postgres'
 & $psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c `
   'CREATE DATABASE barbersearch_load;'
 
-# существующие миграции: InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes
+# миграции: InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes /
+#            AddSearchKeysetIndex
 dotnet ef database update `
   --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web `
@@ -76,14 +77,21 @@ dotnet build load/harness/LoadHarness.csproj -c Release
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
-  -Repeat 3 -ReadSeconds 15
+  -Repeat 5 -ReadSeconds 15
 ```
 
-Повторный запуск в течение 15 минут (токены ещё живы, лимит auth не тратится):
+Повторный запуск, пока токены живы (15 минут; лимит auth не тратится):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
-  -Repeat 3 -ReadSeconds 15 -SkipAuth
+  -Repeat 5 -ReadSeconds 15 -SkipAuth
+```
+
+Только search, 8 окон по 20 с:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
+  -Scenario search -Repeat 8 -ReadSeconds 20
 ```
 
 Результаты: `load/generated/results.json`, `manifest.json`, `metrics.csv`,
@@ -111,10 +119,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
   `run.ps1` проверяет SQL-ом одну строку на ключ, её отмену и ровно одну
   активную бронь на слоте.
 - **review-publish-hide**: 20 одновременных `Publish`/`Hide` отзывов одного
-  барбера; проверяется, что публичный список, `rating` и `reviewsCount` совпадают
-  с ожидаемым набором (14 ранее скрытых отзывов), id совпадают.
+  барбера, 5 разных барберов; проверяется, что публичный список, `rating` и
+  `reviewsCount` совпадают с ожидаемым набором (14 ранее скрытых отзывов), id
+  совпадают. Последний барбер в манифесте — warm-up.
 - **review-create**: 50 одновременных `POST api/reviews` по завершённым броням
-  одного барбера; проверяется `rating = round(sum/count, 2)` и `reviewsCount`.
+  одного барбера, 5 разных барберов; проверяется `rating = round(sum/count, 2)`
+  и `reviewsCount`. Последний барбер — warm-up.
 
 Бюджеты зафиксированы до прогона: search p95 200 / p99 500 мс (§15.7), booking
 p95 300 мс (§15.7), slots p95 300 / p99 800 мс, review publish/create p95 500 /
