@@ -9,9 +9,11 @@
 | Путь | Назначение |
 |---|---|
 | `seed/seed.sql` | set-based генератор данных; идемпотентный, с `load_seed_state` |
+| `seed/minimal.sql` | минимальный набор для CI: 1 салон, 1 услуга, 1 барбер, 1 слот |
 | `seed/reset-scenarios.sql` | откатывает только строки, которые меняют сценарии |
 | `seed/manifest.sql` | печатает JSON-манифест: id городов, услуги, барберы, слоты |
-| `harness/` | консольный .NET 10 harness (search / slots / booking / review) |
+| `harness/` | консольный .NET 10 harness (search / slots / booking / booking-idempotency / review) |
+| `ci/booking-idempotency.ps1` | изолированный CI-прогон same-key идемпотентности без 1.2M seed |
 | `collect-metrics.ps1` | сэмплирует CPU/RAM приложения и `pg_stat_activity`/`pg_locks` |
 | `run.ps1` | поднимает API, логинится, сбрасывает сценарии, гоняет harness, собирает метрики |
 
@@ -102,6 +104,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
   разными `idempotencyKey`; ожидается ровно `1 × 201` и `49 × 409`, без 500.
   После прогона `run.ps1` проверяет SQL-ом, что на каждом слоте ровно одна
   активная бронь.
+- **booking-idempotency**: warm-up бронь + отмена, затем 10 одновременных
+  `POST api/bookings` с **одним** `idempotencyKey` — ожидается `10 × 201` и один
+  id; повторный последовательный запрос с тем же ключом даёт тот же id; после
+  отмены победителя новая бронь с другим ключом на тот же слот получает `201`.
+  `run.ps1` проверяет SQL-ом одну строку на ключ, её отмену и ровно одну
+  активную бронь на слоте.
 - **review-publish-hide**: 20 одновременных `Publish`/`Hide` отзывов одного
   барбера; проверяется, что публичный список, `rating` и `reviewsCount` совпадают
   с ожидаемым набором (14 ранее скрытых отзывов), id совпадают.
@@ -112,7 +120,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
 p95 300 мс (§15.7), slots p95 300 / p99 800 мс, review publish/create p95 500 /
 p99 1000 мс.
 
-## 6. Ограничения стенда
+## 6. Минимальный CI-прогон same-key booking
+
+Полный load test требует 1.2M броней, но same-key регрессия проверяется на
+пустой БД. Скрипт создаёт отдельную `barbersearch_load_ci`, применяет миграции,
+поднимает API на `127.0.0.1:5244`, регистрирует одного клиента, заливает
+`seed/minimal.sql` (1 барбер, 1 услуга, 1 салон, 1 рабочий слот) и гоняет
+`--scenario booking-idempotency --repeat 1`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File load/ci/booking-idempotency.ps1
+```
+
+По умолчанию БД удаляется после прогона; `-KeepDatabase` оставляет её для
+разбора, `-SkipBuild` пропускает сборку решения и harness. Код возврата:
+`0` — успех, `2` — не сошлась correctness harness, `3` — не сошлась SQL-проверка.
+Имя БД обязано заканчиваться на `_ci`, чтобы скрипт не мог удалить
+`barbersearch` или `barbersearch_load`.
+
+## 7. Ограничения стенда
 
 - k6 не установлен; NBomber нет в NuGet-кэше, а restore с `nuget.org` в этой
   среде падает на SSL/package source mapping. Поэтому harness — свой .NET-клиент

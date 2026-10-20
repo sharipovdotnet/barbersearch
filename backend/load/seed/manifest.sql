@@ -110,7 +110,7 @@ SELECT jsonb_build_object(
                                             + interval '10 hours 30 minutes') AT TIME ZONE 'UTC',
                                             'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
                        ORDER BY n)
-            FROM generate_series(1, 4) AS n
+            FROM generate_series(1, 20) AS n
         )
     )
 )

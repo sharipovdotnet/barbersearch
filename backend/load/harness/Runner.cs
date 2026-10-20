@@ -10,6 +10,7 @@ namespace LoadHarness;
 internal sealed class Runner
 {
     private const int BookingContenders = 50;
+    private const int SameKeyContenders = 10;
     private const int CreateReviewCount = 50;
     private const int CreateReviewWarmupCount = 10;
     private const int WarmupSeconds = 5;
@@ -73,6 +74,11 @@ internal sealed class Runner
             if (Includes("booking"))
             {
                 results.Scenarios.Add(await RunBookingAsync());
+            }
+
+            if (Includes("booking-idempotency"))
+            {
+                results.Scenarios.Add(await RunBookingIdempotencyAsync());
             }
 
             if (Includes("review"))
@@ -438,6 +444,148 @@ internal sealed class Runner
         return scenario;
     }
 
+    /// <summary>
+    /// Same-key idempotency under contention, plus the two cases that the contended
+    /// (different-key) batch cannot prove: a sequential repeat returns the same id,
+    /// and a cancelled booking stops holding the slot.
+    /// </summary>
+    /// <remarks>
+    /// Ten parallel POSTs share one idempotency key. Exactly one row may be inserted;
+    /// the other nine must return the winner's id with <c>201</c>, never <c>409</c> or
+    /// <c>500</c>. The SQL side (one row per key, one active row on the slot) is checked
+    /// by <c>run.ps1</c>, which owns database access.
+    /// </remarks>
+    private async Task<ScenarioResult> RunBookingIdempotencyAsync()
+    {
+        var contended = _context.Manifest.ContendedBooking;
+
+        // When the contended scenario also runs, it uses the first Repeat + 1 slots
+        // (warm-up + measured). The idempotency runs must not collide with them.
+        var firstSlot = Includes("booking") ? _options.Repeat + 1 : 0;
+        var requiredSlots = firstSlot + _options.Repeat;
+
+        if (contended.Slots.Count < requiredSlots)
+        {
+            throw new InvalidOperationException(
+                $"The manifest has {contended.Slots.Count} booking slots; " +
+                $"the idempotency scenario needs {requiredSlots} " +
+                $"({firstSlot} reserved for booking-contended + {_options.Repeat} measured).");
+        }
+
+        var scenario = new ScenarioResult
+        {
+            Name = "booking-idempotency",
+            Concurrency = SameKeyContenders,
+            WarmupSeconds = 0,
+            MeasureSeconds = 0
+        };
+
+        Console.WriteLine($"booking-idempotency: {SameKeyContenders} parallel same-key requests per run...");
+
+        for (var run = 1; run <= _options.Repeat; run++)
+        {
+            var slot = contended.Slots[firstSlot + run - 1];
+            var sameKey = $"load-idem-same-r{run}";
+            var afterCancelKey = $"load-idem-after-cancel-r{run}";
+
+            // Warm up the whole write path (EF model, JWT, service read, advisory lock,
+            // insert, cancel) on the same slot. The row is cancelled, so the exclusion
+            // constraint does not hold the slot for the measured batch.
+            var warmupKey = $"load-idem-warmup-r{run}";
+            var warmupBooking = await SendBookingAsync(slot, warmupKey);
+            var warmupId = warmupBooking.Status == 201
+                ? ParseCreatedId(warmupBooking.Body)
+                : null;
+            BatchItem? warmupCancellation = warmupId is null
+                ? null
+                : await SendAsync(BuildCancellationRequest(warmupId));
+
+            var factories = Enumerable
+                .Range(0, SameKeyContenders)
+                .Select(_ => (Func<HttpRequestMessage>)(() => BuildBookingRequest(slot, sameKey)))
+                .ToArray();
+
+            var stopwatch = Stopwatch.StartNew();
+            var batch = await RunBatchAsync(factories);
+            stopwatch.Stop();
+
+            var created = batch.Count(item => item.Status == 201);
+            var other = batch.Count(item => item.Status != 201);
+            var createdIds = batch
+                .Where(item => item.Status == 201)
+                .Select(item => ParseCreatedId(item.Body))
+                .Where(id => id is not null)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var winnerId = createdIds.Length == 1 ? createdIds[0] : null;
+
+            BatchItem? sequential = null;
+            BatchItem? cancellation = null;
+            BatchItem? afterCancel = null;
+            var sequentialSameId = false;
+            var afterCancelNewId = false;
+
+            if (winnerId is not null)
+            {
+                // A repeat after the race has settled must hit the same row.
+                sequential = await SendBookingAsync(slot, sameKey);
+                sequentialSameId = sequential.Status == 201
+                                   && string.Equals(
+                                       ParseCreatedId(sequential.Body),
+                                       winnerId,
+                                       StringComparison.Ordinal);
+
+                cancellation = await SendAsync(BuildCancellationRequest(winnerId));
+
+                // A cancelled row (status 3) is outside the exclusion constraint, so the
+                // same slot must accept a fresh booking with a different key.
+                afterCancel = await SendBookingAsync(slot, afterCancelKey);
+                var afterCancelId = afterCancel.Status == 201
+                    ? ParseCreatedId(afterCancel.Body)
+                    : null;
+                afterCancelNewId = afterCancelId is not null
+                                   && !string.Equals(afterCancelId, winnerId, StringComparison.Ordinal);
+            }
+
+            var passed = warmupBooking.Status == 201
+                         && warmupCancellation is { Status: 204 }
+                         && created == SameKeyContenders
+                         && other == 0
+                         && winnerId is not null
+                         && sequential is { Status: 201 }
+                         && sequentialSameId
+                         && cancellation is { Status: 204 }
+                         && afterCancel is { Status: 201 }
+                         && afterCancelNewId;
+
+            var detail =
+                $"r{run}: warmup={warmupBooking.Status}/{StatusOf(warmupCancellation)}; " +
+                $"batch statuses={FormatCounts(batch)}; distinctIds={createdIds.Length}; " +
+                $"sequential={StatusOf(sequential)} sameId={sequentialSameId}; " +
+                $"cancel={StatusOf(cancellation)}; " +
+                $"afterCancel={StatusOf(afterCancel)} newId={afterCancelNewId}";
+
+            var stats = StatsFrom(batch);
+            scenario.Runs.Add(StatsMath.BuildRunResult(
+                run,
+                stats.Latencies(),
+                stats.Statuses,
+                stopwatch.Elapsed.TotalSeconds,
+                status => status == 201,
+                passed,
+                detail));
+
+            Console.WriteLine(
+                $"  booking-idempotency run {run}: {detail}; " +
+                $"p95={scenario.Runs[^1].P95Ms:F1} ms");
+        }
+
+        scenario.Aggregate = StatsMath.Aggregate(scenario.Runs);
+        StatsMath.ApplyBudget(scenario, p95BudgetMs: null, p99BudgetMs: null);
+
+        return scenario;
+    }
+
     private async Task<BatchOutcome> RunBookingBatchAsync(BookingSlot slot, string tag)
     {
         var factories = Enumerable
@@ -502,6 +650,48 @@ internal sealed class Runner
 
         return request;
     }
+
+    private HttpRequestMessage BuildCancellationRequest(string bookingId)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/bookings/{bookingId}/cancellation");
+        request.Headers.Authorization = Bearer(_context.CustomerToken);
+
+        return request;
+    }
+
+    private Task<BatchItem> SendBookingAsync(BookingSlot slot, string idempotencyKey)
+        => SendAsync(BuildBookingRequest(slot, idempotencyKey));
+
+    private async Task<BatchItem> SendAsync(HttpRequestMessage request)
+    {
+        using (request)
+        {
+            var started = Stopwatch.GetTimestamp();
+
+            try
+            {
+                using var response = await _client.SendAsync(request).ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                return new BatchItem(
+                    (int)response.StatusCode,
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    body);
+            }
+            catch (Exception exception)
+            {
+                return new BatchItem(
+                    0,
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    exception.Message);
+            }
+        }
+    }
+
+    private static string StatusOf(BatchItem? item)
+        => item is null ? "not-run" : item.Status.ToString(CultureInfo.InvariantCulture);
 
     private async Task<ScenarioResult> RunReviewPublicationAsync()
     {

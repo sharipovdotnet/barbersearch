@@ -302,6 +302,67 @@ WHERE idempotency_key LIKE 'load-contended-%';
         }
     }
 
+    if ($Scenario -eq 'all' -or $Scenario -eq 'booking-idempotency') {
+        $manifest = Get-Content (Join-Path $generated 'manifest.json') -Raw | ConvertFrom-Json
+        $contended = $manifest.contendedBooking
+        $firstSlot = if ($Scenario -eq 'booking-idempotency') { 0 } else { $Repeat + 1 }
+        $lines = @()
+        $idemOk = $true
+
+        for ($run = 1; $run -le $Repeat; $run++) {
+            $slot = $contended.slots[$firstSlot + $run - 1]
+            $start = [DateTimeOffset]::Parse($slot.startAt).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $sameKey = "load-idem-same-r$run"
+            $afterKey = "load-idem-after-cancel-r$run"
+
+            $sameRows = Invoke-Sql @"
+SELECT count(*)
+FROM bookings
+WHERE idempotency_key = '$sameKey';
+"@
+            $sameRows = [int]($sameRows | Select-Object -First 1)
+
+            $activeRows = Invoke-Sql @"
+SELECT count(*)
+FROM bookings
+WHERE barber_profile_id = '$($contended.barberId)'::uuid
+  AND start_at = '$start'::timestamptz
+  AND status IN (1, 2);
+"@
+            $activeRows = [int]($activeRows | Select-Object -First 1)
+
+            $sameCancelledRows = Invoke-Sql @"
+SELECT count(*)
+FROM bookings
+WHERE idempotency_key = '$sameKey'
+  AND status = 3;
+"@
+            $sameCancelledRows = [int]($sameCancelledRows | Select-Object -First 1)
+
+            $afterRows = Invoke-Sql @"
+SELECT count(*)
+FROM bookings
+WHERE idempotency_key = '$afterKey'
+  AND status IN (1, 2);
+"@
+            $afterRows = [int]($afterRows | Select-Object -First 1)
+
+            $runOk = $sameRows -eq 1 -and $sameCancelledRows -eq 1 -and $activeRows -eq 1 -and $afterRows -eq 1
+            $idemOk = $idemOk -and $runOk
+            $lines += "idem run $run slot $start same_key_rows=$sameRows same_key_cancelled=$sameCancelledRows active_rows=$activeRows after_cancel_active_rows=$afterRows"
+        }
+
+        $lines | Add-Content -Encoding utf8 (Join-Path $generated 'booking-verification.txt')
+
+        if (-not $idemOk) {
+            Write-Host 'booking idempotency database verification FAILED'
+            $exitCode = 3
+        }
+        else {
+            Write-Host 'booking idempotency database verification passed: one row per key, one active row after cancellation'
+        }
+    }
+
     Write-Host ''
     Write-Host "results:   $(Join-Path $generated 'results.json')"
     Write-Host "manifest:  $(Join-Path $generated 'manifest.json')"

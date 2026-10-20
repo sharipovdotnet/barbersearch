@@ -35,6 +35,12 @@ WHERE booking_id IN (
 DELETE FROM bookings
 WHERE idempotency_key LIKE 'load-contended-%';
 
+-- Same-key idempotency scenario: one winner row plus the post-cancellation row per
+-- repeat. The cancelled winner is also removed, so reset itself does not leave a
+-- cancelled row holding the slot.
+DELETE FROM bookings
+WHERE idempotency_key LIKE 'load-idem-%';
+
 -- 3. Recompute the denormalized rating for every touched profile from the
 --    current published reviews. Two statements keep the check constraint
 --    (rating IS NULL) = (reviews_count = 0) valid at every step.
