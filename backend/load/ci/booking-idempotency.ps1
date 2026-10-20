@@ -145,6 +145,7 @@ try {
     }
 
     Write-Host 'applying migrations...'
+    $env:ConnectionStrings__Postgres = $connection
     & dotnet ef database update `
         --project (Join-Path $root 'BarberSearch/src/BarberSearch.Infrastructure.Postgresql') `
         --startup-project $webProject `
@@ -160,6 +161,7 @@ try {
     $env:ASPNETCORE_URLS = $baseUrl
     $env:ConnectionStrings__Postgres = "$connection;Maximum Pool Size=20;Timeout=15;Command Timeout=60"
     $env:Auth__SigningKey = 'barbersearch-ci-booking-idempotency-signing-key-0123456789'
+    $env:DataProtection__KeysPath = Join-Path $generated 'data-protection-keys'
 
     $app = Start-Process -FilePath 'dotnet' `
         -ArgumentList 'bin/Debug/net10.0/BarberSearch.Web.dll' `

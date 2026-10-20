@@ -1,7 +1,4 @@
-using System.Security.Cryptography;
-using System.Text;
 using BarberSearch.Application.Users;
-using BarberSearch.Domain.RefreshTokens;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -28,58 +25,23 @@ public static class AuthenticationExtensions
     /// Регистрирует аутентификацию, antiforgery и сервисы выдачи учётных данных.
     /// </summary>
     /// <param name="services">Коллекция сервисов приложения.</param>
-    /// <param name="configuration">Конфигурация: секция <c>Auth</c>.</param>
-    /// <param name="environment">Окружение: в Development допускается ключ, сгенерированный при старте.</param>
+    /// <param name="options">Уже проверенные настройки секции <c>Auth</c>.</param>
+    /// <param name="environment">Окружение: имена cookie и политика <c>Secure</c>.</param>
     public static IServiceCollection AddAppAuthentication(
         this IServiceCollection services,
-        IConfiguration configuration,
+        AuthOptions options,
         IWebHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(environment);
-
-        var options = configuration
-            .GetSection(AuthOptions.SectionName)
-            .Get<AuthOptions>() ?? new AuthOptions();
-
-        if (string.IsNullOrWhiteSpace(options.SigningKey))
-        {
-            if (!environment.IsDevelopment())
-            {
-                throw new InvalidOperationException(
-                    $"""
-                     Auth:SigningKey is not configured.
-                     Set it with user secrets or the environment variable Auth__SigningKey.
-                     The key must be at least 32 characters long.
-                     """);
-            }
-
-            // Ключ на время жизни процесса: после перезапуска выданные токены станут невалидны.
-            // Для разработки этого достаточно, а секрет не попадает в репозиторий.
-            options = options with
-            {
-                SigningKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            };
-        }
-
-        if (options.SigningKey.Length < 32)
-        {
-            throw new InvalidOperationException("Auth:SigningKey must be at least 32 characters long.");
-        }
-
-        if (options.RefreshTokenDays is < RefreshToken.MIN_LIFETIME_DAYS
-            or > RefreshToken.MAX_LIFETIME_DAYS)
-        {
-            throw new InvalidOperationException(
-                $"Auth:RefreshTokenDays must be between {RefreshToken.MIN_LIFETIME_DAYS} " +
-                $"and {RefreshToken.MAX_LIFETIME_DAYS} days.");
-        }
 
         var sameSite = AuthCookiePolicy.GetSameSite(options);
         var securePolicy = AuthCookiePolicy.GetSecurePolicy(options, environment);
+        var signingKeys = new JwtSigningKeys(options);
 
         services.AddSingleton(options);
+        services.AddSingleton(signingKeys);
 
         // Часы приложения: обработчики refresh-токенов и смены пароля не читают DateTimeOffset.UtcNow
         // напрямую, поэтому срок жизни проверяется в тестах без ожидания.
@@ -93,6 +55,7 @@ public static class AuthenticationExtensions
         services.AddAntiforgery(antiforgery =>
         {
             antiforgery.HeaderName = "X-CSRF-TOKEN";
+            antiforgery.Cookie.Path = "/";
             antiforgery.Cookie.SameSite = sameSite;
             antiforgery.Cookie.SecurePolicy = securePolicy;
         });
@@ -118,6 +81,7 @@ public static class AuthenticationExtensions
                     : "__Host-barbersearch";
 
                 cookie.Cookie.HttpOnly = true;
+                cookie.Cookie.Path = "/";
                 cookie.Cookie.SecurePolicy = securePolicy;
                 cookie.Cookie.SameSite = sameSite;
                 cookie.ExpireTimeSpan = TimeSpan.FromHours(options.CookieHours);
@@ -164,12 +128,12 @@ public static class AuthenticationExtensions
                 {
                     ValidIssuer = options.Issuer,
                     ValidAudience = options.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(options.SigningKey)),
+                    IssuerSigningKeys = signingKeys.ValidationKeys,
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
+                    TryAllIssuerSigningKeys = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = ClaimsPrincipalFactory.SubClaim,
                     RoleClaimType = ClaimsPrincipalFactory.RoleClaim

@@ -13,8 +13,7 @@ namespace BarberSearch.Web.Auth;
 /// </remarks>
 internal static class AuthCookiePolicy
 {
-    public static SameSiteMode GetSameSite(AuthOptions options)
-        => Enum.Parse<SameSiteMode>(options.CookieSameSite, ignoreCase: true);
+    public static SameSiteMode GetSameSite(AuthOptions options) => options.GetSameSiteMode();
 
     public static CookieSecurePolicy GetSecurePolicy(
         AuthOptions options,
