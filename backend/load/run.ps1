@@ -136,6 +136,7 @@ try {
         $env:ASPNETCORE_URLS = $baseUrl
         $env:ConnectionStrings__Postgres = 'Host=127.0.0.1;Port=5432;Database=barbersearch_load;Username=postgres;Password=postgres;Maximum Pool Size=100;Timeout=15;Command Timeout=60'
         $env:Auth__SigningKey = 'barbersearch-load-test-signing-key-0123456789abcdef'
+        $env:DataProtection__KeysPath = Join-Path $generated 'data-protection-keys'
 
         $webProject = Join-Path $root 'BarberSearch/src/BarberSearch.Web'
         $startedApp = Start-Process -FilePath 'dotnet' `

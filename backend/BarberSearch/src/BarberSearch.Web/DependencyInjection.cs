@@ -11,7 +11,7 @@ namespace BarberSearch.Web;
 /// Композиционный корень приложения: единственное место, где слои связываются между собой.
 /// </summary>
 /// <remarks>
-/// Класс ничего не создаёт сам — он достаёт строку подключения из конфигурации и передаёт
+/// Класс ничего не создаёт сам — он получает уже проверенную строку подключения и передаёт
 /// регистрации в слой <c>BarberSearch.Infrastructure.Postgresql</c>. Program.cs благодаря этому
 /// не знает ни про <c>ApplicationDbContext</c>, ни про конкретные репозитории.
 /// Здесь же регистрируется хешер паролей: хеширование — задача слоя Web
@@ -25,38 +25,20 @@ public static class DependencyInjection
     public const string POSTGRES_CONNECTION_STRING_NAME = "Postgres";
 
     /// <summary>
-    /// Подключает PostgreSQL: читает строку подключения из конфигурации и передаёт её
-    /// в <c>AddPostgresInfrastructure</c> инфраструктурного слоя, а также добавляет репозитории.
+    /// Подключает PostgreSQL и регистрирует репозитории.
     /// </summary>
     /// <param name="services">Коллекция сервисов приложения.</param>
-    /// <param name="configuration">
-    /// Конфигурация приложения. Ожидается ключ <c>ConnectionStrings:Postgres</c>; в Development
-    /// его можно переопределить через user secrets, в проде — через переменную окружения
-    /// <c>ConnectionStrings__Postgres</c>.
+    /// <param name="connectionString">
+    /// Проверенная строка подключения. Читается в <c>StartupSettings</c> из
+    /// <c>ConnectionStrings:Postgres</c> или <c>ConnectionStrings__Postgres</c>.
     /// </param>
     /// <returns>Та же коллекция сервисов — для цепочки вызовов.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Строка подключения не задана ни в одном источнике конфигурации.
-    /// </exception>
     public static IServiceCollection AddProgramDependencies(
         this IServiceCollection services,
-        IConfiguration configuration)
+        string connectionString)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        var connectionString = configuration.GetConnectionString(POSTGRES_CONNECTION_STRING_NAME);
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException(
-                $"""
-                 Connection string '{POSTGRES_CONNECTION_STRING_NAME}' is not configured.
-                 Set 'ConnectionStrings:{POSTGRES_CONNECTION_STRING_NAME}' in appsettings.json,
-                 user secrets, or the environment variable
-                 'ConnectionStrings__{POSTGRES_CONNECTION_STRING_NAME}'.
-                 """);
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         // Хешер без состояния и без зависимостей — singleton, как и в ASP.NET Core Identity.
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();

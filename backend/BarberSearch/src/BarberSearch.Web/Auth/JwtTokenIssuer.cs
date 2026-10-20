@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text;
 using BarberSearch.Application.Users.LoginUser;
 using BarberSearch.Contracts.Auth.Login;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -14,18 +13,23 @@ namespace BarberSearch.Web.Auth;
 /// Подпись — HMAC-SHA256: этот же API и проверяет свои токены, поэтому асимметричный ключ
 /// не нужен. Срок жизни короткий (по умолчанию 15 минут), потому что отозвать JWT до истечения
 /// нельзя; за это время успевает примениться смена роли или деактивация.
+/// <para>
+/// Текущий ключ подписи задаётся в <see cref="JwtSigningKeys"/>; предыдущие ключи там же
+/// используются только для проверки, поэтому ротация не инвалидирует уже выданные токены.
+/// </para>
 /// </remarks>
 public sealed class JwtTokenIssuer
 {
     private readonly AuthOptions _options;
-    private readonly SigningCredentials _credentials;
+    private readonly JwtSigningKeys _signingKeys;
 
-    public JwtTokenIssuer(AuthOptions options)
+    public JwtTokenIssuer(AuthOptions options, JwtSigningKeys signingKeys)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(signingKeys);
+
         _options = options;
-        _credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.SigningKey)),
-            SecurityAlgorithms.HmacSha256);
+        _signingKeys = signingKeys;
     }
 
     /// <summary>
@@ -39,7 +43,7 @@ public sealed class JwtTokenIssuer
             Issuer = _options.Issuer,
             Audience = _options.Audience,
             Expires = DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes),
-            SigningCredentials = _credentials
+            SigningCredentials = _signingKeys.Credentials
         };
 
         var token = new JsonWebTokenHandler().CreateToken(descriptor);

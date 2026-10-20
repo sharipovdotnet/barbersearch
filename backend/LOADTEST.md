@@ -405,9 +405,9 @@ GC gen2 / thread-pool queue length (`dotnet-counters` не установлен)
 
 Итог: **кэш измерениями не оправдан ни для одного сценария**. Search закрыт
 индексом, слоты и отзывы имеют запас, booking ограничен корректностью advisory
-lock, а не планом. Следующий срез — deploy (Data Protection, `Auth__SigningKey`,
-`UseForwardedHeaders`, CORS + `SameSite=None`), а booking headroom — отдельно,
-если понадобится.
+lock, а не планом. Деплой-срез выполнен 2026-10-21 (`DEPLOY.md`: Data Protection,
+`Auth__SigningKey` + ротация, `UseForwardedHeaders`, CORS + `SameSite=None`, health
+checks); booking headroom — отдельно, если понадобится.
 
 ## 9. Как повторить
 

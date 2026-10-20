@@ -1,0 +1,2 @@
+# Local Data Protection key ring (Development default; never commit keys).
+.data-protection-keys/

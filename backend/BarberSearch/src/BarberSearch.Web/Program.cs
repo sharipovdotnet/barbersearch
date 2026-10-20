@@ -2,18 +2,34 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
+using BarberSearch.Web.Deployment;
 using BarberSearch.Web.OpenApi;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Композиционный корень: PostgreSQL и репозитории подключаются через DependencyInjection слоя Web,
-// строка подключения берётся из конфигурации — ConnectionStrings:Postgres.
-builder.Services.AddProgramDependencies(builder.Configuration);
+// Конфигурация читается и проверяется один раз, до регистрации сервисов: отсутствие ключа
+// подписи, пути key ring или доверенного прокси должно ронять старт, а не первый запрос.
+var startup = StartupSettings.Load(builder.Configuration, builder.Environment);
+
+// Композиционный корень: PostgreSQL и репозитории подключаются через DependencyInjection слоя Web.
+builder.Services.AddProgramDependencies(startup.PostgresConnectionString);
+
+// Ключи Data Protection лежат на постоянном томе и общие для всех инстансов.
+builder.Services.AddPersistentDataProtection(startup.DataProtection);
 
 // Аутентификация: cookie для браузера и bearer для остальных клиентов, плюс политики авторизации.
 builder.Services
-    .AddAppAuthentication(builder.Configuration, builder.Environment)
+    .AddAppAuthentication(startup.Auth, builder.Environment)
     .AddAppAuthorization();
+
+// При остановке хоста Kestrel перестаёт принимать новые соединения и ждёт in-flight запросы
+// не дольше этого таймаута. Оркестратор должен давать pod'у не меньше времени.
+builder.Services.Configure<HostOptions>(options =>
+    options.ShutdownTimeout = TimeSpan.FromSeconds(startup.ShutdownTimeoutSeconds));
+
+// /health/live не трогает БД, /health/ready проверяет PostgreSQL.
+builder.Services.AddAppHealthChecks(startup.HealthDatabaseTimeoutSeconds);
 
 // Перечисления в JSON — строками: Grade, Language, PaymentMethod и UserRole читаются из тела
 // по имени, а не по числу, и так же попадают в схему OpenAPI.
@@ -26,6 +42,7 @@ builder.Services.AddControllers()
 builder.Services.AddProblemDetails();
 
 // Перебор паролей не должен быть бесплатным: 10 попыток в минуту на адрес.
+// Адрес берётся из Connection.RemoteIpAddress уже после UseForwardedHeaders.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -41,14 +58,12 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// CORS нужен только если браузерный клиент живёт на другом origin. Пустой список источников
-// означает, что политика не регистрируется вовсе.
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-
-if (allowedOrigins.Length > 0)
+// CORS нужен только если браузерный клиент живёт на другом источнике. Список проверен
+// StartupSettings: wildcard запрещён, потому что политика разрешает credentials.
+if (startup.Cors.Enabled)
 {
-    builder.Services.AddCors(options => options.AddPolicy("spa", policy => policy
-        .WithOrigins(allowedOrigins)
+    builder.Services.AddCors(options => options.AddPolicy(CorsSettings.PolicyName, policy => policy
+        .WithOrigins(startup.Cors.AllowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()));
@@ -60,8 +75,21 @@ builder.Services.AddOpenApi(options =>
 
 var app = builder.Build();
 
+// Forwarded headers — первыми: от них зависят scheme, RemoteIpAddress и HTTPS-redirect.
+// Middleware не регистрируется, если прокси не настроен, поэтому заголовки от произвольного
+// клиента не принимаются.
+if (startup.ForwardedHeaders.Enabled)
+{
+    app.UseForwardedHeaders(startup.ForwardedHeaders.ToOptions());
+}
+
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -73,17 +101,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "BarberSearch API v1"));
 }
 
-if (allowedOrigins.Length > 0)
-{
-    app.UseCors("spa");
-}
-
 app.UseHttpsRedirection();
+
+if (startup.Cors.Enabled)
+{
+    app.UseCors(CorsSettings.PolicyName);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+app.MapAppHealthChecks();
 
 app.Run();
