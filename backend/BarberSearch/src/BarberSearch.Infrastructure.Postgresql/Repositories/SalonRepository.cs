@@ -1,5 +1,7 @@
 using BarberSearch.Application.Salons;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -11,8 +13,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 {
-    public SalonRepository(ApplicationDbContext context)
-        : base(context)
+    public SalonRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+        : base(context, auditTrail)
     {
     }
 
@@ -25,7 +27,7 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         if (salon is null)
         {
-            return NotFound("salon.getById.notFound", nameof(Salon), id);
+            return NotFound(ApiErrorCodes.Salon.NotFound, nameof(Salon), id);
         }
 
         return salon;
@@ -41,12 +43,16 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         if (string.IsNullOrWhiteSpace(city))
         {
             return new Failure(Error.Validation(
-                "salon.getByCity.city",
+                ApiErrorCodes.Salon.CityInvalid,
                 "City cannot be empty.",
                 nameof(city)));
         }
 
-        if (ValidatePaging(page, pageSize, "salon.getByCity") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.Salon.PagingPageInvalid,
+                ApiErrorCodes.Salon.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
         }
@@ -76,7 +82,11 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         bool onlyActive = true,
         CancellationToken cancellationToken = default)
     {
-        if (ValidatePaging(page, pageSize, "salon.getPaged") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.Salon.PagingPageInvalid,
+                ApiErrorCodes.Salon.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
         }
@@ -118,13 +128,13 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         await Context.Salons.AddAsync(salon, cancellationToken);
 
-        return await SaveChangesAsync("salon.add", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.Salon.AddPrefix, cancellationToken);
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(
         Salon salon,
         CancellationToken cancellationToken = default)
-        => await SaveGraphAsync(salon, "salon.update", cancellationToken);
+        => await SaveGraphAsync(salon, ApiErrorCodes.Salon.UpdatePrefix, cancellationToken);
 
     public async Task<UnitResult<Failure>> DeleteAsync(
         Salon salon,
@@ -134,6 +144,6 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         Context.Salons.Remove(salon);
 
-        return await SaveChangesAsync("salon.delete", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.Salon.DeletePrefix, cancellationToken);
     }
 }

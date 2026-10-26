@@ -102,6 +102,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_barber_profiles");
 
@@ -113,10 +119,6 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasIndex("UserId")
                         .IsUnique()
                         .HasDatabaseName("ux_barber_profiles_user_id");
-
-                    b.HasIndex("IsActive", "IsVerified", "Rating")
-                        .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_barber_profiles_is_active_is_verified_rating");
 
                     b.ToTable("barber_profiles", null, t =>
                         {
@@ -158,13 +160,14 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_barber_salons");
-
-                    b.HasIndex("BarberProfileId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_barber_salons_primary_per_profile")
-                        .HasFilter("is_primary");
 
                     b.HasIndex("SalonId")
                         .HasDatabaseName("ix_barber_salons_salon_id");
@@ -211,6 +214,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_barber_services");
 
@@ -250,6 +259,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_barber_specializations");
@@ -324,6 +339,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_bookings");
 
@@ -375,6 +396,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_favorite_barbers");
 
@@ -423,6 +450,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_hair_services");
 
@@ -454,7 +487,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
                         .HasColumnName("description");
 
                     b.Property<bool>("IsPublished")
@@ -466,7 +500,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnName("sort_order");
 
                     b.Property<string>("ThumbnailUrl")
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("thumbnail_url");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
@@ -475,8 +510,15 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("url");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_portfolio_photos");
@@ -529,6 +571,9 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_refresh_tokens_expires_at");
 
                     b.HasIndex("ReplacedBy")
                         .HasDatabaseName("ix_refresh_tokens_replaced_by");
@@ -584,6 +629,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_reviews");
 
@@ -594,6 +645,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasIndex("BarberProfileId", "CreatedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_reviews_barber_profile_id_created_at");
+
+                    b.HasIndex("CreatedAt", "Id")
+                        .HasDatabaseName("ix_reviews_moderation_created_at_id")
+                        .HasFilter("is_published = false");
 
                     b.ToTable("reviews", null, t =>
                         {
@@ -663,8 +718,15 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<string>("WebsiteUrl")
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("website_url");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_salons");
@@ -717,6 +779,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_specializations");
 
@@ -760,6 +828,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_time_offs");
 
@@ -779,7 +853,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("AvatarUrl")
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("avatar_url");
 
                     b.Property<Guid?>("BarberProfileId")
@@ -792,8 +867,13 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(254)
+                        .HasColumnType("citext")
                         .HasColumnName("email");
+
+                    b.Property<int>("FailedLoginAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_login_attempts");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
@@ -812,6 +892,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_phone_verified");
 
+                    b.Property<DateTimeOffset?>("LastFailedLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_failed_login_at");
+
                     b.Property<DateTimeOffset?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
@@ -820,6 +904,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("last_name");
+
+                    b.Property<DateTimeOffset?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_end");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -843,6 +931,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_users");
 
@@ -855,7 +949,9 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.ToTable("users", null, t =>
                         {
-                            t.HasCheckConstraint("ck_users_email", "position('@' in email) > 1");
+                            t.HasCheckConstraint("ck_users_email", "char_length(email) BETWEEN 3 AND 254");
+
+                            t.HasCheckConstraint("ck_users_failed_login_attempts", "failed_login_attempts >= 0");
 
                             t.HasCheckConstraint("ck_users_role", "role IN (1, 2, 3)");
 
@@ -897,6 +993,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_working_schedules");
 
@@ -910,6 +1012,57 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_working_schedules_time_range", "is_day_off OR end_time > start_time");
                         });
+                });
+
+            modelBuilder.Entity("BarberSearch.Infrastructure.Postgresql.Audit.AuditLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_log");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("ix_audit_log_actor_user_id");
+
+                    b.HasIndex("OccurredAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_audit_log_occurred_at");
+
+                    b.HasIndex("EntityType", "EntityId")
+                        .HasDatabaseName("ix_audit_log_entity_type_entity_id");
+
+                    b.ToTable("audit_log", (string)null);
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.BarberProfiles.BarberProfile", b =>
@@ -965,6 +1118,13 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_barber_salons_barber_profiles_barber_profile_id");
 
+                    b.HasOne("BarberSearch.Domain.Salons.Salon", null)
+                        .WithMany()
+                        .HasForeignKey("SalonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_barber_salons_salons_salon_id");
+
                     b.Navigation("BarberProfile");
                 });
 
@@ -976,6 +1136,13 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_barber_services_barber_profiles_barber_profile_id");
+
+                    b.HasOne("BarberSearch.Domain.HairServices.HairService", null)
+                        .WithMany()
+                        .HasForeignKey("HairServiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_barber_services_hair_services_hair_service_id");
 
                     b.Navigation("BarberProfile");
                 });
@@ -989,11 +1156,25 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_barber_specializations_barber_profiles_barber_profile_id");
 
+                    b.HasOne("BarberSearch.Domain.Specializations.Specialization", null)
+                        .WithMany()
+                        .HasForeignKey("SpecializationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_barber_specializations_specializations_specialization_id");
+
                     b.Navigation("BarberProfile");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.FavoriteBarbers.FavoriteBarber", b =>
                 {
+                    b.HasOne("BarberSearch.Domain.BarberProfiles.BarberProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BarberProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_favorite_barbers_barber_profiles_barber_profile_id");
+
                     b.HasOne("BarberSearch.Domain.Users.User", "User")
                         .WithMany("FavoriteBarbers")
                         .HasForeignKey("UserId")
@@ -1042,6 +1223,15 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_time_offs_barber_profiles_barber_profile_id");
 
                     b.Navigation("BarberProfile");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.Users.User", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.BarberProfiles.BarberProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BarberProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_users_barber_profiles_barber_profile_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.WorkingSchedule", b =>

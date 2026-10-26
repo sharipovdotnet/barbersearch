@@ -1,5 +1,6 @@
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberServices;
+using BarberSearch.Domain.HairServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -26,6 +27,9 @@ public class BarberServiceConfiguration : IEntityTypeConfiguration<BarberService
 
         builder.HasKey(x => x.Id).HasName("pk_barber_services");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -34,6 +38,14 @@ public class BarberServiceConfiguration : IEntityTypeConfiguration<BarberService
 
         // Это граница другого агрегата: навигации на HairService нет, только идентификатор.
         builder.Property(x => x.HairServiceId).HasColumnName("hair_service_id");
+
+        // FK без навигации: новая строка barber_services не может ссылаться на
+        // несуществующую услугу справочника. Справочник деактивируется, а не удаляется.
+        builder.HasOne<HairService>()
+            .WithMany()
+            .HasForeignKey(x => x.HairServiceId)
+            .HasConstraintName("fk_barber_services_hair_services_hair_service_id")
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.Price).HasColumnName("price").HasPrecision(10, 2);
         builder.Property(x => x.DurationMinutes).HasColumnName("duration_minutes");

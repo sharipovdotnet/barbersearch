@@ -1,3 +1,4 @@
+using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.FavoriteBarbers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -16,6 +17,9 @@ public class FavoriteBarberConfiguration : IEntityTypeConfiguration<FavoriteBarb
 
         builder.HasKey(x => x.Id).HasName("pk_favorite_barbers");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -30,6 +34,14 @@ public class FavoriteBarberConfiguration : IEntityTypeConfiguration<FavoriteBarb
             .HasForeignKey(x => x.UserId)
             .HasConstraintName("fk_favorite_barbers_users_user_id")
             .OnDelete(DeleteBehavior.Cascade);
+
+        // FK без навигации: избранное не может указывать на несуществующий профиль.
+        // Профиль удаляется только вместе с пользователем, поэтому Restrict безопасен.
+        builder.HasOne<BarberProfile>()
+            .WithMany()
+            .HasForeignKey(x => x.BarberProfileId)
+            .HasConstraintName("fk_favorite_barbers_barber_profiles_barber_profile_id")
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Повторное добавление в избранное запрещено и в домене.
         builder.HasIndex(x => new { x.UserId, x.BarberProfileId })

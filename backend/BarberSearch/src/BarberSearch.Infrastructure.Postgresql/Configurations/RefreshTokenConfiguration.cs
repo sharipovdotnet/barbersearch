@@ -62,5 +62,9 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
 
         builder.HasIndex(x => x.ReplacedBy)
             .HasDatabaseName("ix_refresh_tokens_replaced_by");
+
+        // Диапазонный предикат фоновой уборки (R-50): DELETE … WHERE expires_at < cutoff.
+        builder.HasIndex(x => x.ExpiresAt)
+            .HasDatabaseName("ix_refresh_tokens_expires_at");
     }
 }

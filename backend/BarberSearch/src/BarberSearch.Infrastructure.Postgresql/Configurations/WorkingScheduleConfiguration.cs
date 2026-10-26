@@ -26,6 +26,9 @@ public class WorkingScheduleConfiguration : IEntityTypeConfiguration<WorkingSche
 
         builder.HasKey(x => x.Id).HasName("pk_working_schedules");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

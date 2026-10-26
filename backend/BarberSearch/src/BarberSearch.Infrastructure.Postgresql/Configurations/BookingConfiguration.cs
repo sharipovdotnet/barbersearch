@@ -35,6 +35,10 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.HasKey(x => x.Id).HasName("pk_bookings");
 
+        // Оптимистическая блокировка: Cancel/Complete по устаревшему снимку не перезапишет
+        // уже выполненный переход (R-05). Ошибка маппится в 409 booking.update.concurrencyConflict.
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

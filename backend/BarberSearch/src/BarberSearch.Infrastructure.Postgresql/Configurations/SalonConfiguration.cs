@@ -41,6 +41,9 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
 
         builder.HasKey(x => x.Id).HasName("pk_salons");
 
+        // Оптимистическая блокировка: конкурентный UPDATE не перезаписывает чужую правку (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -51,13 +54,16 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
         builder.Property(x => x.PostalCode).HasColumnName("postal_code");
         builder.Property(x => x.Country).HasColumnName("country").IsRequired();
 
-        // Идентификатор часового пояса IANA, например Europe/Moscow.
+        // Идентификатор часового пояса IANA, например Europe/Moscow. Разрешимость
+        // проверяет домен при записи (Salon.Create / UpdateLocation, R-01).
         builder.Property(x => x.TimeZoneId).HasColumnName("time_zone_id").IsRequired();
 
         builder.Property(x => x.Latitude).HasColumnName("latitude");
         builder.Property(x => x.Longitude).HasColumnName("longitude");
         builder.Property(x => x.PhoneNumber).HasColumnName("phone_number");
-        builder.Property(x => x.WebsiteUrl).HasColumnName("website_url");
+        builder.Property(x => x.WebsiteUrl)
+            .HasColumnName("website_url")
+            .HasMaxLength(Constants.MAX_URL_LENGTH);
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 
         builder.HasIndex(x => new { x.City, x.IsActive })

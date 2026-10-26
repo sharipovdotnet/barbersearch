@@ -1,4 +1,5 @@
 using BarberSearch.Domain.BarberSpecializations;
+using BarberSearch.Domain.Specializations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -17,6 +18,9 @@ public class BarberSpecializationConfiguration
 
         builder.HasKey(x => x.Id).HasName("pk_barber_specializations");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -25,6 +29,14 @@ public class BarberSpecializationConfiguration
 
         // Это граница другого агрегата: навигации на Specialization нет, только идентификатор.
         builder.Property(x => x.SpecializationId).HasColumnName("specialization_id");
+
+        // FK без навигации: новая строка barber_specializations не может ссылаться на
+        // несуществующую специализацию. Справочник деактивируется, а не удаляется.
+        builder.HasOne<Specialization>()
+            .WithMany()
+            .HasForeignKey(x => x.SpecializationId)
+            .HasConstraintName("fk_barber_specializations_specializations_specialization_id")
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.BarberProfile)
             .WithMany(profile => profile.BarberSpecializations)
