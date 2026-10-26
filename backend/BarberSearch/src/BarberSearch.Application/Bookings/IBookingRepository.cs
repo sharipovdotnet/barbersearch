@@ -81,8 +81,37 @@ public interface IBookingRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Берёт транзакционную advisory-блокировку на барбера, сериализуя создание его броней.
+    /// </summary>
+    /// <remarks>
+    /// Блокировка живёт до конца транзакции, поэтому вызывать метод можно только внутри
+    /// <c>IUnitOfWork.ExecuteAsync</c>: вне транзакции PostgreSQL снимет её сразу после
+    /// выполнения запроса. Транзакцию метод не открывает — её границей владеет вызывающий
+    /// сценарий. Блокировка не решает, кто получит слот (это делает exclusion-ограничение
+    /// <c>ex_bookings_no_overlap</c>), а не даёт параллельным GiST-проверкам уйти в deadlock.
+    /// <para>
+    /// Ожидание ограничено <c>lock_timeout</c> (2 секунды, задаётся через <c>SET LOCAL</c>
+    /// в той же транзакции). Если блокировку взять не удалось, метод возвращает
+    /// <c>Error.Conflict</c> с кодом <c>booking.add.lockTimeout</c> (409): это осознанно
+    /// ограниченное ожидание, а не сбой сервера, поэтому клиенту достаточно повторить запрос.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Барбер, чьи брони сериализуются.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Успех после взятия блокировки; <c>Failure</c> — истёк <c>lock_timeout</c>.</returns>
+    Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавляет бронь. Повтор ключа идемпотентности — <c>Error.Conflict</c>.
     /// </summary>
+    /// <remarks>
+    /// Метод только добавляет сущность и сохраняет её: транзакцию не открывает, потому что
+    /// её границей владеет <c>IUnitOfWork</c> (R-15). Неудачная вставка снимается
+    /// с change tracker, чтобы повторный <c>SaveChanges</c> в том же scope не пытался
+    /// записать её снова.
+    /// </remarks>
     Task<UnitResult<Failure>> AddAsync(Booking booking, CancellationToken cancellationToken = default);
 
     /// <summary>

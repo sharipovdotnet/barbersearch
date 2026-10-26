@@ -31,19 +31,6 @@ public class CreateUserHandler : ICommandHandler<Guid, CreateUserCommand>
         CreateUserCommand command,
         CancellationToken cancellationToken)
     {
-        var emailExists = await _repository.EmailExistsAsync(command.Email, cancellationToken);
-        if (emailExists.IsFailure)
-        {
-            return emailExists.Error;
-        }
-
-        if (emailExists.Value)
-        {
-            return new Failure(Error.Conflict(
-                "user.create.emailTaken",
-                $"Email '{command.Email}' is already registered."));
-        }
-
         var user = User.Create(
             command.Email,
             command.PasswordHash,
@@ -53,6 +40,21 @@ public class CreateUserHandler : ICommandHandler<Guid, CreateUserCommand>
         if (user.IsFailure)
         {
             return user.Error;
+        }
+
+        // Проверка занятости идёт по каноническому адресу из агрегата: User.Create уже
+        // срезал пробелы и привёл регистр, поэтому проверка и вставка видят одно значение.
+        var emailExists = await _repository.EmailExistsAsync(user.Value.Email, cancellationToken);
+        if (emailExists.IsFailure)
+        {
+            return emailExists.Error;
+        }
+
+        if (emailExists.Value)
+        {
+            return new Failure(Error.Conflict(
+                "user.create.emailTaken",
+                $"Email '{user.Value.Email}' is already registered."));
         }
 
         var added = await _repository.AddAsync(user.Value, cancellationToken);

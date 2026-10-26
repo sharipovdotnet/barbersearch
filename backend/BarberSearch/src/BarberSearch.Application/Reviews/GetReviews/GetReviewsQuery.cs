@@ -9,7 +9,10 @@ namespace BarberSearch.Application.Reviews.GetReviews;
 /// </summary>
 /// <remarks>
 /// <paramref name="BarberProfileId"/> обязателен: без него выдача всех отзывов
-/// не имеет смысла для карточки. Скрытые отзывы в ответ не попадают.
+/// не имеет смысла для карточки. Отсутствие параметра в HTTP-запросе отсекает model binding
+/// контроллера; явный пустой GUID (<see cref="Guid.Empty"/>) отклоняет обработчик доменным
+/// кодом <c>review.getReviews.barberProfileId</c> (defense-in-depth). Скрытые отзывы
+/// в ответ не попадают.
 /// </remarks>
 /// <param name="BarberProfileId">Идентификатор профиля барбера.</param>
 /// <param name="Cursor">Курсор следующей страницы.</param>

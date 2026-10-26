@@ -7,7 +7,9 @@ using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.ChangePassword;
 using BarberSearch.Application.Users.ChangeUserRole;
 using BarberSearch.Application.Users.DeactivateUser;
+using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Domain.Users;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 using Xunit;
@@ -88,6 +90,43 @@ public class RefreshTokenTests
         Assert.Equal("auth.refresh.reused", reuse.Error.Errors[0].Code);
         Assert.True(context.Tokens.FindByRawToken(second)!.IsRevoked);
         Assert.True(context.Tokens.FindByRawToken(third)!.IsRevoked);
+    }
+
+    [Fact]
+    public async Task Refresh_TwoConcurrentRequestsWithSameToken_ExactlyOneSucceeds()
+    {
+        var context = new Context();
+        var issued = await context.IssueAsync();
+
+        // Оба запроса читают токен до первого UPDATE: ровно то окно, в котором до R-07
+        // появлялись две живые цепочки.
+        context.Tokens.ReadRendezvous = 2;
+
+        var results = await Task.WhenAll(
+            context.Refresher.Handle(
+                new RefreshSessionCommand(issued.Token, LifetimeDays),
+                CancellationToken.None),
+            context.Refresher.Handle(
+                new RefreshSessionCommand(issued.Token, LifetimeDays),
+                CancellationToken.None));
+
+        var winner = Assert.Single(results, result => result.IsSuccess);
+        var loser = Assert.Single(results, result => result.IsFailure);
+
+        Assert.Equal(ErrorType.UNAUTHORIZED, loser.Error.Errors[0].Type);
+        Assert.Equal("auth.refresh.reused", loser.Error.Errors[0].Code);
+
+        var rotated = context.Tokens.FindByRawToken(issued.Token)!;
+        var replacement = context.Tokens.FindByRawToken(winner.Value.RefreshToken);
+
+        Assert.True(rotated.IsRevoked);
+        Assert.NotNull(replacement);
+        Assert.Equal(replacement!.Id, rotated.ReplacedBy);
+
+        // Проигравший не вставил вторую замену и не погасил цепочку победителя:
+        // в таблице ровно две строки, живая — только выданная победителю.
+        Assert.Equal(2, context.Tokens.Tokens.Count);
+        Assert.True(replacement.IsActive(context.Clock.UtcNow));
     }
 
     [Fact]
@@ -210,6 +249,31 @@ public class RefreshTokenTests
     }
 
     [Fact]
+    public async Task ChangePassword_WithWeakNewPassword_DoesNotHashOrRevokeTokens()
+    {
+        var context = new Context();
+        var issued = await context.IssueAsync();
+        var hashBefore = context.User.PasswordHash;
+        var stampBefore = context.User.SecurityStamp;
+
+        var result = await context.PasswordChanger.Handle(
+            new ChangePasswordCommand(context.User.Id, "password", "password"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("auth.password.common", result.Error.Errors[0].Code);
+        Assert.Equal("newPassword", result.Error.Errors[0].InvalidField);
+
+        // Политика сработала до загрузки пользователя, сверки текущего пароля и PBKDF2.
+        Assert.Equal(0, context.Passwords.HashCallCount);
+        Assert.Equal(0, context.Passwords.VerifyCallCount);
+        Assert.Equal(hashBefore, context.User.PasswordHash);
+        Assert.Equal(stampBefore, context.User.SecurityStamp);
+        Assert.False(context.Tokens.FindByRawToken(issued.Token)!.IsRevoked);
+    }
+
+    [Fact]
     public async Task ChangePassword_WithWrongCurrentPassword_DoesNotRevokeTokens()
     {
         var context = new Context();
@@ -222,6 +286,96 @@ public class RefreshTokenTests
         Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
         Assert.False(context.Tokens.FindByRawToken(issued.Token)!.IsRevoked);
+    }
+
+    [Fact]
+    public async Task ChangePassword_WhenTokenRevocationFails_RollsBackPasswordChange()
+    {
+        var context = new Context();
+        await context.IssueAsync();
+        var stampBefore = context.User.SecurityStamp;
+        context.Tokens.RevokeAllBehavior = (_, _) => UnitResult.Failure<Failure>(new Failure(
+            Error.Failure("refreshToken.revokeAll.database", "Simulated revocation failure.")));
+
+        var result = await context.PasswordChanger.Handle(
+            new ChangePasswordCommand(context.User.Id, "password", "new-password"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+
+        var stored = (await context.Users.GetByIdAsync(context.User.Id)).Value;
+
+        Assert.Equal(
+            PasswordVerification.Success,
+            context.Passwords.Verify(stored.PasswordHash, "password"));
+        Assert.Equal(stampBefore, stored.SecurityStamp);
+        Assert.All(context.Tokens.Tokens, token => Assert.False(token.IsRevoked));
+    }
+
+    [Fact]
+    public async Task ChangePassword_WhenTokenRevocationThrows_RollsBackPasswordChange()
+    {
+        var context = new Context();
+        await context.IssueAsync();
+        var stampBefore = context.User.SecurityStamp;
+        context.Tokens.RevokeAllBehavior = (_, _) =>
+            throw new TimeoutException("Simulated revocation timeout.");
+
+        await Assert.ThrowsAsync<TimeoutException>(() => context.PasswordChanger.Handle(
+            new ChangePasswordCommand(context.User.Id, "password", "new-password"),
+            CancellationToken.None));
+
+        var stored = (await context.Users.GetByIdAsync(context.User.Id)).Value;
+
+        Assert.Equal(
+            PasswordVerification.Success,
+            context.Passwords.Verify(stored.PasswordHash, "password"));
+        Assert.Equal(stampBefore, stored.SecurityStamp);
+        Assert.All(context.Tokens.Tokens, token => Assert.False(token.IsRevoked));
+    }
+
+    [Fact]
+    public async Task ChangeRole_WhenTokenRevocationFails_RollsBackRoleChange()
+    {
+        var context = new Context();
+        await context.IssueAsync();
+        var stampBefore = context.User.SecurityStamp;
+        context.Tokens.RevokeAllBehavior = (_, _) => UnitResult.Failure<Failure>(new Failure(
+            Error.Failure("refreshToken.revokeAll.database", "Simulated revocation failure.")));
+
+        var result = await context.RoleChanger.Handle(
+            new ChangeUserRoleCommand(context.User.Id, UserRole.Admin),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+
+        var stored = (await context.Users.GetByIdAsync(context.User.Id)).Value;
+
+        Assert.Equal(UserRole.Customer, stored.Role);
+        Assert.Equal(stampBefore, stored.SecurityStamp);
+        Assert.All(context.Tokens.Tokens, token => Assert.False(token.IsRevoked));
+    }
+
+    [Fact]
+    public async Task Deactivate_WhenTokenRevocationFails_RollsBackDeactivation()
+    {
+        var context = new Context();
+        await context.IssueAsync();
+        var stampBefore = context.User.SecurityStamp;
+        context.Tokens.RevokeAllBehavior = (_, _) => UnitResult.Failure<Failure>(new Failure(
+            Error.Failure("refreshToken.revokeAll.database", "Simulated revocation failure.")));
+
+        var result = await context.Deactivator.Handle(
+            new DeactivateUserCommand(context.User.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+
+        var stored = (await context.Users.GetByIdAsync(context.User.Id)).Value;
+
+        Assert.True(stored.IsActive);
+        Assert.Equal(stampBefore, stored.SecurityStamp);
+        Assert.All(context.Tokens.Tokens, token => Assert.False(token.IsRevoked));
     }
 
     private sealed class Context
@@ -246,6 +400,8 @@ public class RefreshTokenTests
 
         public FakePasswordService Passwords { get; } = new();
 
+        public PasswordPolicy Policy { get; } = new();
+
         public User User { get; }
 
         public IssueRefreshTokenHandler Issuer => new(
@@ -267,19 +423,23 @@ public class RefreshTokenTests
         public ChangeUserRoleHandler RoleChanger => new(
             Users,
             Tokens,
+            new FakeUnitOfWork(Users, Tokens),
             Clock,
             NullLogger<ChangeUserRoleHandler>.Instance);
 
         public DeactivateUserHandler Deactivator => new(
             Users,
             Tokens,
+            new FakeUnitOfWork(Users, Tokens),
             Clock,
             NullLogger<DeactivateUserHandler>.Instance);
 
         public ChangePasswordHandler PasswordChanger => new(
             Users,
             Passwords,
+            Policy,
             Tokens,
+            new FakeUnitOfWork(Users, Tokens),
             Clock,
             NullLogger<ChangePasswordHandler>.Instance);
 

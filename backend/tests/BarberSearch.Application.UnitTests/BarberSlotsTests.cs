@@ -1,6 +1,7 @@
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Domain.Bookings;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 using Xunit;
 
@@ -30,6 +31,8 @@ public class BarberSlotsTests
         Assert.Equal(new DateTimeOffset(2026, 11, 30, 23, 0, 0, TimeSpan.Zero), result.Value.DayStart);
         Assert.Equal(new DateTimeOffset(2026, 12, 1, 23, 0, 0, TimeSpan.Zero), result.Value.DayEnd);
         Assert.Equal(18, result.Value.Slots.Count);
+        Assert.Null(result.Value.BarberServiceId);
+        Assert.Null(result.Value.HairServiceId);
         Assert.Equal(
             new DateTimeOffset(2026, 12, 1, 8, 0, 0, TimeSpan.Zero),
             result.Value.Slots[0].StartAt);
@@ -136,6 +139,27 @@ public class BarberSlotsTests
     }
 
     [Fact]
+    public async Task Slots_WithHairService_ReturnThePairUsedForDuration()
+    {
+        var barberServiceId = Guid.CreateVersion7();
+        var hairServiceId = Guid.CreateVersion7();
+        var handler = CreateHandler(CreateContext(
+            durationMinutes: 45,
+            barberServiceId: barberServiceId,
+            hairServiceId: hairServiceId));
+
+        var result = await handler.Handle(
+            new GetBarberSlotsQuery(BarberProfileId, Date, hairServiceId, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(barberServiceId, result.Value.BarberServiceId);
+        Assert.Equal(hairServiceId, result.Value.HairServiceId);
+        Assert.Equal(45, result.Value.DurationMinutes);
+        Assert.Equal(12, result.Value.Slots.Count);
+    }
+
+    [Fact]
     public async Task Slots_InThePast_AreNotOffered()
     {
         var handler = CreateHandler(
@@ -171,7 +195,8 @@ public class BarberSlotsTests
         var handler = new GetBarberSlotsHandler(
             new FakeBarberProfileRepository(),
             new FakeBookingRepository(),
-            new FakeTimeProvider(Now));
+            new FakeTimeProvider(Now),
+            NullLogger<GetBarberSlotsHandler>.Instance);
 
         var result = await handler.Handle(
             new GetBarberSlotsQuery(BarberProfileId, Date, null, null),
@@ -182,7 +207,7 @@ public class BarberSlotsTests
     }
 
     [Fact]
-    public async Task Slots_WithUnresolvableTimeZone_ReturnsFailure()
+    public async Task Slots_WithUnresolvableTimeZone_ReturnsConflictNotServerError()
     {
         var handler = CreateHandler(CreateContext(timeZoneId: "Not/AZone"));
 
@@ -191,7 +216,22 @@ public class BarberSlotsTests
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ErrorType.FAILURE, result.Error.Errors[0].Type);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("barberSlots.timeZone.unknown", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public async Task Slots_WithoutTimeZone_ReturnsDistinctConflict()
+    {
+        var handler = CreateHandler(CreateContext(timeZoneId: " "));
+
+        var result = await handler.Handle(
+            new GetBarberSlotsQuery(BarberProfileId, Date, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("barberSlots.timeZone.missing", result.Error.Errors[0].Code);
     }
 
     private static GetBarberSlotsHandler CreateHandler(
@@ -201,13 +241,16 @@ public class BarberSlotsTests
         => new(
             new FakeBarberProfileRepository { SlotContext = context },
             bookings ?? new FakeBookingRepository(),
-            new FakeTimeProvider(now ?? Now));
+            new FakeTimeProvider(now ?? Now),
+            NullLogger<GetBarberSlotsHandler>.Instance);
 
     private static BarberSlotContext CreateContext(
         int durationMinutes = 30,
         bool isWorkingDay = true,
         IReadOnlyList<TimeOffInterval>? timeOffs = null,
-        string timeZoneId = "Europe/Berlin")
+        string timeZoneId = "Europe/Berlin",
+        Guid? barberServiceId = null,
+        Guid? hairServiceId = null)
         => new(
             BarberProfileId,
             SalonId,
@@ -217,6 +260,8 @@ public class BarberSlotsTests
             new TimeOnly(9, 0),
             new TimeOnly(18, 0),
             durationMinutes,
+            barberServiceId,
+            hairServiceId,
             timeOffs ?? []);
 
     private static Booking CreateBooking(DateTimeOffset startAt)

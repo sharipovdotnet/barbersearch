@@ -26,13 +26,13 @@ public class DeactivateBarberProfileHandler : ICommandHandler<DeactivateBarberPr
     }
 
     /// <summary>
-    /// Загружает профиль барбера, деактивирует его и сохраняет агрегат.
+    /// Загружает корень профиля, деактивирует его и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         DeactivateBarberProfileCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetRootByIdAsync(command.BarberProfileId, cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

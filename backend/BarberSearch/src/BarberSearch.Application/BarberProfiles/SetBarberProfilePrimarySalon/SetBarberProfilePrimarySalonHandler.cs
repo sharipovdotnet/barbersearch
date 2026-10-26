@@ -27,13 +27,15 @@ public class SetBarberProfilePrimarySalonHandler
     }
 
     /// <summary>
-    /// Загружает профиль барбера, назначает основной салон и сохраняет агрегат.
+    /// Загружает профиль с салонами, назначает основной салон и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         SetBarberProfilePrimarySalonCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithSalonsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

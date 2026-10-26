@@ -3,7 +3,9 @@ using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -34,12 +36,25 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     public BarberSearchFilter? LastSearchFilter { get; private set; }
 
+    /// <summary>
+    /// Какие узкие чтения профиля вызвал обработчик: <c>root</c>, <c>salons</c>,
+    /// <c>salons+schedules</c>, <c>services</c>, <c>photos</c>, <c>specializations</c>,
+    /// <c>timeOffs</c>, <c>owner</c>, <c>salon</c>. Тесты R-12 проверяют, что обработчик
+    /// не грузит лишние коллекции.
+    /// </summary>
+    public List<string> LoadCalls { get; } = [];
+
     public BarberSlotContext? SlotContext { get; set; }
 
     /// <summary>
     /// Подмена сохранения профиля: тест проверяет откат транзакции при ошибке записи.
     /// </summary>
     public Func<BarberProfile, UnitResult<Failure>>? UpdateBehavior { get; set; }
+
+    /// <summary>
+    /// Подмена вставки профиля: тест проверяет маппинг гонки unique violation (R-28).
+    /// </summary>
+    public Func<BarberProfile, UnitResult<Failure>>? AddBehavior { get; set; }
 
     public void Add(BarberProfile profile) => _profiles[profile.Id] = profile;
 
@@ -71,32 +86,96 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
 
-    public Task<Result<BarberProfile, Failure>> GetByIdAsync(
+    /// <summary>
+    /// Профиль из памяти — для проверок состояния после выполнения обработчика.
+    /// В интерфейс репозитория не входит: обработчики обязаны пользоваться узкими чтениями.
+    /// </summary>
+    public BarberProfile? Find(Guid id)
+        => _profiles.GetValueOrDefault(id);
+
+    public Task<Result<BarberProfile, Failure>> GetRootByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<Result<BarberProfile, Failure>>(
+        => LoadProfile("root", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSalonsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("salons", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSalonsAndSchedulesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("salons+schedules", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithServicesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("services", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithPhotosAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("photos", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSpecializationsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("specializations", id);
+
+    public Task<Result<BarberProfile, Failure>> GetWithTimeOffsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("timeOffs", id);
+
+    public Task<Result<Guid, Failure>> GetOwnerIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        LoadCalls.Add("owner");
+
+        return Task.FromResult<Result<Guid, Failure>>(
+            _profiles.TryGetValue(id, out var profile)
+                ? profile.UserId
+                : new Failure(Error.NotFound(
+                    ApiErrorCodes.BarberProfile.NotFound,
+                    $"Barber profile '{id}' was not found.",
+                    id)));
+    }
+
+    public Task<Result<BarberSalon, Failure>> GetSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+    {
+        LoadCalls.Add("salon");
+
+        var salon = _profiles.TryGetValue(barberProfileId, out var profile)
+            ? profile.Salons.FirstOrDefault(link => link.SalonId == salonId)
+            : null;
+
+        if (salon is null)
+        {
+            return Task.FromResult<Result<BarberSalon, Failure>>(new Failure(Error.NotFound(
+                ApiErrorCodes.BarberProfile.FindSalonNotFound,
+                "The barber in the specified salon does not work.",
+                salonId)));
+        }
+
+        return Task.FromResult<Result<BarberSalon, Failure>>(salon);
+    }
+
+    private Task<Result<BarberProfile, Failure>> LoadProfile(string kind, Guid id)
+    {
+        LoadCalls.Add(kind);
+
+        return Task.FromResult<Result<BarberProfile, Failure>>(
             _profiles.TryGetValue(id, out var profile)
                 ? profile
                 : new Failure(Error.NotFound(
-                    "barberProfile.getById.notFound",
+                    ApiErrorCodes.BarberProfile.NotFound,
                     $"Barber profile '{id}' was not found.",
                     id)));
-
-    public Task<Result<BarberProfile, Failure>> GetByUserIdAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
-    {
-        var profile = _profiles.Values.FirstOrDefault(x => x.UserId == userId);
-
-        if (profile is null)
-        {
-            return Task.FromResult<Result<BarberProfile, Failure>>(new Failure(Error.NotFound(
-                "barberProfile.getByUserId.notFound",
-                $"Barber profile of user '{userId}' was not found.",
-                userId)));
-        }
-
-        return Task.FromResult<Result<BarberProfile, Failure>>(profile);
     }
 
     public Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
@@ -106,7 +185,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             _profiles.TryGetValue(id, out var profile)
                 ? profile
                 : new Failure(Error.NotFound(
-                    "barberProfile.getById.notFound",
+                    ApiErrorCodes.BarberProfile.NotFound,
                     $"Barber profile '{id}' was not found.",
                     id)));
 
@@ -122,6 +201,14 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_profiles.ContainsKey(id));
 
+    public Task<Result<bool, Failure>> HasSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<bool, Failure>>(
+            _profiles.TryGetValue(barberProfileId, out var profile)
+            && profile.Salons.Any(link => link.SalonId == salonId));
+
     public Task<Result<BarberService, Failure>> GetServiceAsync(
         Guid barberProfileId,
         Guid barberServiceId,
@@ -135,7 +222,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         if (service is null)
         {
             return Task.FromResult<Result<BarberService, Failure>>(new Failure(Error.NotFound(
-                "barberProfile.getService.notFound",
+                ApiErrorCodes.BarberProfile.ServiceNotFound,
                 $"Barber profile '{barberProfileId}' does not provide service '{barberServiceId}'.",
                 barberServiceId)));
         }
@@ -185,7 +272,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         }
 
         return Task.FromResult<Result<BarberProfileResponse, Failure>>(new Failure(Error.NotFound(
-            "barberProfile.getCardById.notFound",
+            ApiErrorCodes.BarberProfile.NotFound,
             $"Barber profile '{id}' was not found.",
             id)));
     }
@@ -193,7 +280,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
-        Guid? serviceId,
+        Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default)
     {
@@ -203,7 +290,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         }
 
         return Task.FromResult<Result<BarberSlotContext, Failure>>(new Failure(Error.NotFound(
-            "barberSlots.salon.notFound",
+            ApiErrorCodes.Common.BarberSlotsSalonNotFound,
             $"Slot context for barber profile '{barberProfileId}' was not found.",
             barberProfileId)));
     }
@@ -212,9 +299,14 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         BarberProfile barberProfile,
         CancellationToken cancellationToken = default)
     {
-        _profiles[barberProfile.Id] = barberProfile;
+        var result = AddBehavior?.Invoke(barberProfile) ?? UnitResult.Success<Failure>();
 
-        return Task.FromResult(UnitResult.Success<Failure>());
+        if (result.IsSuccess)
+        {
+            _profiles[barberProfile.Id] = barberProfile;
+        }
+
+        return Task.FromResult(result);
     }
 
     public Task<UnitResult<Failure>> UpdateAsync(

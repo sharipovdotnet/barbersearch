@@ -30,13 +30,15 @@ public class AddBarberProfilePhotoHandler : ICommandHandler<AddBarberProfilePhot
     }
 
     /// <summary>
-    /// Загружает профиль барбера, добавляет фотографию и сохраняет агрегат.
+    /// Загружает профиль с портфолио, добавляет фотографию и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         AddBarberProfilePhotoCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithPhotosAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

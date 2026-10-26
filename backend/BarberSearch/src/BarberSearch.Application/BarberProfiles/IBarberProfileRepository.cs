@@ -3,6 +3,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -15,21 +16,111 @@ namespace BarberSearch.Application.BarberProfiles;
 /// <remarks>
 /// Профиль барбера — самый крупный агрегат: у него пять дочерних коллекций
 /// (салоны с расписанием, услуги, специализации, портфолио, отпуска).
-/// Методы <c>GetByIdAsync</c> / <c>GetByUserIdAsync</c> грузят агрегат целиком (split-запрос),
-/// а <c>GetByIdsAsync</c> и <c>GetPagedAsync</c> — только корни: их используют списки и поиск,
-/// где коллекции не нужны (см. AGENT.md §15.6).
+/// Write-пути не грузят граф целиком: <c>GetRootByIdAsync</c> читает только корень,
+/// а методы <c>GetWith…Async</c> — корень и ровно ту коллекцию, которую меняет операция.
+/// Полный граф с пятью <c>Include</c> не нужен ни одному обработчику (см. AGENT.md §15.6).
+/// <c>GetByIdsAsync</c> и <c>GetPagedAsync</c> тоже читают только корни: их используют
+/// списки и поиск, где коллекции не нужны.
 /// </remarks>
 public interface IBarberProfileRepository
 {
     /// <summary>
-    /// Профиль со всеми дочерними коллекциями. Сущность отслеживается контекстом.
+    /// Корень профиля без дочерних коллекций. Сущность отслеживается контекстом.
     /// </summary>
-    Task<Result<BarberProfile, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// Для операций, которые меняют только поля корня (активация, верификация, грейд,
+    /// редактирование профиля): коллекции им не нужны, а их загрузка — лишние SQL-запросы.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetRootByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Профиль барбера, принадлежащий пользователю, со всеми дочерними коллекциями.
+    /// Корень профиля вместе с салонами, без расписания. Сущность отслеживается контекстом.
     /// </summary>
-    Task<Result<BarberProfile, Failure>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// Для добавления, удаления и назначения основного салона: домен проверяет уникальность
+    /// <c>SalonId</c> и единственность <c>IsPrimary</c> по коллекции салонов.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithSalonsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Корень профиля с салонами и их расписанием. Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Для операций над рабочими днями: инварианты расписания (уникальный день недели,
+    /// границы времени) проверяет <c>BarberSalon</c>, поэтому нужны и салоны, и их расписание.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithSalonsAndSchedulesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Корень профиля вместе с услугами. Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Проверка дубликата <c>HairServiceId</c> и изменение одной услуги остаются в домене,
+    /// но остальные четыре коллекции не загружаются.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithServicesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Корень профиля вместе с портфолио. Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Лимит фотографий и операции над одной фотографией проверяет агрегат; остальные
+    /// коллекции для этого не нужны.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithPhotosAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Корень профиля вместе со специализациями. Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Дубликат <c>SpecializationId</c> проверяет агрегат по этой коллекции.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithSpecializationsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Корень профиля вместе с отпусками. Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Пересечение периодов — инвариант агрегата, поэтому для <c>AddTimeOff</c> нужны
+    /// существующие отпуска; услуги, салоны и портфолио не загружаются.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithTimeOffsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Идентификатор владельца профиля, без загрузки агрегата. Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Узкая проверка владения для запросов, которым сам профиль не нужен.
+    /// </remarks>
+    Task<Result<Guid, Failure>> GetOwnerIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Салон барбера вместе с расписанием пары (барбер, салон). Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Узкое чтение для <c>FindBarberProfileSalon</c>: остальные салоны и четыре другие
+    /// коллекции профиля этому запросу не нужны.
+    /// </remarks>
+    Task<Result<BarberSalon, Failure>> GetSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Корень профиля, заблокированный для пересчёта рейтинга (<c>SELECT … FOR UPDATE</c>).
@@ -56,6 +147,12 @@ public interface IBarberProfileRepository
     /// Страница профилей для выдачи: сначала с рейтингом, затем «без отзывов»,
     /// внутри группы — по убыванию рейтинга. Читается без отслеживания.
     /// </summary>
+    /// <remarks>
+    /// Глубина offset-выдачи ограничена: <c>page * pageSize</c> не может превышать 10 000,
+    /// иначе <c>400</c> с кодом <c>barberProfile.paging.depth</c>. Проверка глубины выполняется
+    /// после проверки параметров, поэтому при недопустимых <c>page</c>/<c>pageSize</c> клиент
+    /// получает прежние <c>barberProfile.paging.page</c> / <c>barberProfile.paging.pageSize</c>.
+    /// </remarks>
     /// <param name="page">Номер страницы, начиная с 1.</param>
     /// <param name="pageSize">Размер страницы, не больше 200.</param>
     /// <param name="onlyActive">Только активные профили (для публичной выдачи — <c>true</c>).</param>
@@ -71,6 +168,8 @@ public interface IBarberProfileRepository
     /// <remarks>
     /// Читается без отслеживания и без Include коллекций: фильтры выражаются через EXISTS,
     /// а результат сразу проецируется в <see cref="BarberSearchItemResponse"/>.
+    /// <see cref="BarberSearchFilter.HairServiceId"/> — услуга справочника
+    /// (<c>hair_services.id</c>), не строка «услуга барбера» (R-20).
     /// Порядок — <c>rating DESC NULLS LAST, id</c>; keyset-условие берётся из
     /// <see cref="BarberSearchFilter.Cursor"/>.
     /// </remarks>
@@ -99,18 +198,25 @@ public interface IBarberProfileRepository
     /// </summary>
     /// <remarks>
     /// Профиль должен быть активным и подтверждённым. Если <paramref name="salonId"/>
-    /// не задан, выбирается основной активный салон; если услуга не задана — длительность
-    /// 30 минут. Отсутствие профиля, салона или услуги — <c>Error.NotFound</c>.
+    /// не задан, выбирается основной активный салон; если услуга не задана — шаг
+    /// <c>Constants.DEFAULT_SLOT_DURATION_MINUTES</c> (30 минут). Отсутствие профиля, салона
+    /// или услуги — <c>Error.NotFound</c>.
+    /// <paramref name="hairServiceId"/> — услуга справочника (<c>hair_services.id</c>),
+    /// а не строка «услуга барбера»: длительность и <c>BarberServiceId</c> читаются
+    /// из одной строки <c>barber_services</c> этой услуги (R-20).
     /// </remarks>
     /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
     /// <param name="salonId">Салон или <c>null</c> для основного.</param>
-    /// <param name="serviceId">Услуга каталога или <c>null</c> для шага 30 минут.</param>
+    /// <param name="hairServiceId">
+    /// Услуга справочника или <c>null</c> для шага <c>Constants.DEFAULT_SLOT_DURATION_MINUTES</c>
+    /// (30 минут).
+    /// </param>
     /// <param name="date">Локальная дата салона.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
-        Guid? serviceId,
+        Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default);
 
@@ -143,6 +249,19 @@ public interface IBarberProfileRepository
     Task<Result<bool, Failure>> IsOwnedByAsync(
         Guid barberProfileId,
         Guid userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Работает ли барбер в указанном салоне. Узкий <c>EXISTS</c> по <c>barber_salons</c>:
+    /// проверка нужна при создании брони, чтобы <c>bookings.salon_id</c> указывал на салон,
+    /// в котором барбер действительно работает.
+    /// </summary>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<bool, Failure>> HasSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

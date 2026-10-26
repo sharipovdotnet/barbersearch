@@ -16,14 +16,14 @@ namespace BarberSearch.Application.UnitTests;
 
 /// <summary>
 /// Пересчёт <see cref="BarberProfile.Rating"/> / <see cref="BarberProfile.ReviewsCount"/>
-/// при создании, правке, публикации и скрытии отзыва (AGENT.md §12.2).
+/// при создании (пре-модерация, R-35), правке, публикации и скрытии отзыва (AGENT.md §12.2).
 /// </summary>
 public class ReviewRatingTests
 {
     private static readonly Guid SalonId = Guid.CreateVersion7();
 
     [Fact]
-    public async Task Create_PublishedReview_UpdatesRatingAndCount()
+    public async Task Create_PendingReview_DoesNotChangeRating()
     {
         var clientId = Guid.CreateVersion7();
         var profile = CreateProfile();
@@ -41,6 +41,42 @@ public class ReviewRatingTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+
+        // R-35: создание оставляет отзыв на модерации — публичная сводка не меняется.
+        var created = Assert.Single(reviews.Reviews);
+        Assert.False(created.IsPublished);
+        Assert.Null(profile.Rating);
+        Assert.Equal(0, profile.ReviewsCount);
+    }
+
+    [Fact]
+    public async Task Publish_CreatedReview_UpdatesRatingAndCount()
+    {
+        var clientId = Guid.CreateVersion7();
+        var profile = CreateProfile();
+        var booking = CreateBooking(clientId, profile.Id, completed: true);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var reviews = new FakeReviewRepository();
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+
+        var createHandler = CreateCreateHandler(bookings, reviews, profiles, clientId);
+        var created = await createHandler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Great haircut"),
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        Assert.Null(profile.Rating);
+
+        var stored = (await reviews.GetByIdAsync(created.Value)).Value;
+        var publishHandler = CreatePublishHandler(reviews, profiles);
+        var published = await publishHandler.Handle(
+            new PublishReviewCommand(stored.Id),
+            CancellationToken.None);
+
+        Assert.True(published.IsSuccess);
+        Assert.True(stored.IsPublished);
         Assert.Equal(5.00m, profile.Rating);
         Assert.Equal(1, profile.ReviewsCount);
     }
@@ -178,6 +214,46 @@ public class ReviewRatingTests
     }
 
     [Fact]
+    public async Task Recalculate_NoPublishedReviews_ClearsRatingAndCount()
+    {
+        var profile = CreateProfile();
+        profile.UpdateRating(4.50m, 2);
+        var reviews = new FakeReviewRepository();
+        reviews.Add(CreateReview(
+            CreateBooking(Guid.CreateVersion7(), profile.Id),
+            5,
+            published: false));
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+
+        var result = await new ReviewRatingRecalculator(profiles, reviews)
+            .RecalculateAsync(profile.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(profile.Rating);
+        Assert.Equal(0, profile.ReviewsCount);
+    }
+
+    [Fact]
+    public async Task Recalculate_PublishedReviews_ReturnsAverageAndCount()
+    {
+        var profile = CreateProfile();
+        var reviews = new FakeReviewRepository();
+        reviews.Add(CreateReview(CreateBooking(Guid.CreateVersion7(), profile.Id), 5));
+        reviews.Add(CreateReview(CreateBooking(Guid.CreateVersion7(), profile.Id), 5));
+        reviews.Add(CreateReview(CreateBooking(Guid.CreateVersion7(), profile.Id), 4));
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+
+        var result = await new ReviewRatingRecalculator(profiles, reviews)
+            .RecalculateAsync(profile.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(4.67m, profile.Rating);
+        Assert.Equal(3, profile.ReviewsCount);
+    }
+
+    [Fact]
     public async Task Publish_ThirdReview_RoundsAverageToTwoDecimals()
     {
         var profile = CreateProfile();
@@ -230,7 +306,7 @@ public class ReviewRatingTests
         Assert.True(result.IsFailure);
 
         var storedReview = (await reviews.GetByIdAsync(review.Id)).Value;
-        var storedProfile = (await profiles.GetByIdAsync(profile.Id)).Value;
+        var storedProfile = profiles.Find(profile.Id)!;
 
         Assert.Equal(5, storedReview.Rating);
         Assert.Equal("Original", storedReview.Text);
@@ -247,7 +323,6 @@ public class ReviewRatingTests
             bookings,
             reviews,
             new FakeUnitOfWork(reviews, profiles),
-            new ReviewRatingRecalculator(profiles, reviews),
             new FakeCurrentUser(clientId),
             NullLogger<CreateReviewHandler>.Instance);
 
@@ -327,9 +402,10 @@ public class ReviewRatingTests
     {
         var review = Review.Create(booking, booking.UserId, rating, text).Value;
 
-        if (!published)
+        // R-35: Create оставляет отзыв скрытым; опубликованные для тестов включаем явно.
+        if (published)
         {
-            review.Hide();
+            review.Publish();
         }
 
         return review;

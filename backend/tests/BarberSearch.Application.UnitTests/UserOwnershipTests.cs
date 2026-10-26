@@ -2,6 +2,7 @@ using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Application.Users.AddUserFavorite;
 using BarberSearch.Application.Users.RemoveUserFavorite;
 using BarberSearch.Application.Users.UpdateUserProfile;
+using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Users;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
@@ -17,6 +18,20 @@ public class UserOwnershipTests
             "hash",
             "First",
             "Last").Value;
+
+    private static BarberProfile CreateProfile()
+        => BarberProfile.Create(
+            Guid.CreateVersion7(),
+            "Master Barber",
+            5,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null).Value;
 
     [Fact]
     public async Task UpdateProfile_BySelf_Succeeds()
@@ -82,19 +97,46 @@ public class UserOwnershipTests
         var user = CreateUser();
         var repository = new FakeUserRepository();
         repository.Add(user);
-        var barberProfileId = Guid.CreateVersion7();
+        var profile = CreateProfile();
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
         var handler = new AddUserFavoriteHandler(
             repository,
+            profiles,
+            new FakeUnitOfWork(),
             new FakeCurrentUser(user.Id),
             NullLogger<AddUserFavoriteHandler>.Instance);
 
         var result = await handler.Handle(
-            new AddUserFavoriteCommand(user.Id, barberProfileId),
+            new AddUserFavoriteCommand(user.Id, profile.Id),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var favorite = Assert.Single(user.FavoriteBarbers);
-        Assert.Equal(barberProfileId, favorite.BarberProfileId);
+        Assert.Equal(profile.Id, favorite.BarberProfileId);
+    }
+
+    [Fact]
+    public async Task AddFavorite_UnknownBarberProfile_ReturnsNotFound()
+    {
+        var user = CreateUser();
+        var repository = new FakeUserRepository();
+        repository.Add(user);
+        var handler = new AddUserFavoriteHandler(
+            repository,
+            new FakeBarberProfileRepository(),
+            new FakeUnitOfWork(),
+            new FakeCurrentUser(user.Id),
+            NullLogger<AddUserFavoriteHandler>.Instance);
+
+        var result = await handler.Handle(
+            new AddUserFavoriteCommand(user.Id, Guid.CreateVersion7()),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.NOT_FOUND, result.Error.Errors[0].Type);
+        Assert.Equal("user.addFavorite.barberProfileNotFound", result.Error.Errors[0].Code);
+        Assert.Empty(user.FavoriteBarbers);
     }
 
     [Fact]
@@ -105,6 +147,8 @@ public class UserOwnershipTests
         repository.Add(user);
         var handler = new AddUserFavoriteHandler(
             repository,
+            new FakeBarberProfileRepository(),
+            new FakeUnitOfWork(),
             new FakeCurrentUser(Guid.CreateVersion7()),
             NullLogger<AddUserFavoriteHandler>.Instance);
 

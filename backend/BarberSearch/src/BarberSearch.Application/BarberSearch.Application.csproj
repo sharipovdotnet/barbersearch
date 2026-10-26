@@ -17,4 +17,13 @@
         <ProjectReference Include="..\Shared\Shared.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Словарь частых паролей для IPasswordPolicy. LogicalName фиксирован: имя ресурса
+             не должно зависеть от пути и настроек сборки. Источник: SecLists
+             Passwords/Common-Credentials/10k-most-common.txt (MIT). -->
+        <EmbeddedResource Include="Users\Passwords\10k-most-common.txt">
+            <LogicalName>BarberSearch.Application.Users.Passwords.10k-most-common.txt</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
 </Project>

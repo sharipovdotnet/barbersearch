@@ -11,22 +11,29 @@ namespace BarberSearch.Application.Users.DeactivateUser;
 /// </summary>
 /// <remarks>
 /// Повторная деактивация идемпотентна: доменный метод возвращает успех, ничего не меняя.
+/// <para>
+/// Деактивация и отзыв всех refresh-токенов пишутся в одной транзакции (R-08): иначе неудачный
+/// отзыв оставил бы активную учётную запись деактивированной, но с продлеваемой сессией.
+/// </para>
 /// </remarks>
 public class DeactivateUserHandler : ICommandHandler<DeactivateUserCommand>
 {
     private readonly IUserRepository _repository;
     private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DeactivateUserHandler> _logger;
 
     public DeactivateUserHandler(
         IUserRepository repository,
         IRefreshTokenRepository refreshTokens,
+        IUnitOfWork unitOfWork,
         TimeProvider timeProvider,
         ILogger<DeactivateUserHandler> logger)
     {
         _repository = repository;
         _refreshTokens = refreshTokens;
+        _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -46,31 +53,41 @@ public class DeactivateUserHandler : ICommandHandler<DeactivateUserCommand>
 
         var user = userResult.Value;
 
-        var deactivated = user.Deactivate();
-        if (deactivated.IsFailure)
+        // Флаг активности и отзыв сессий — одна транзакция: деактивированный пользователь
+        // не должен остаться с живым refresh-токеном.
+        var result = await _unitOfWork.ExecuteAsync(async token =>
         {
-            return deactivated.Error;
+            var deactivated = user.Deactivate();
+            if (deactivated.IsFailure)
+            {
+                return deactivated.Error;
+            }
+
+            var saved = await _repository.UpdateAsync(user, token);
+            if (saved.IsFailure)
+            {
+                return saved.Error;
+            }
+
+            // Деактивированный пользователь не должен продлевать сессию живым refresh-токеном.
+            var revoked = await _refreshTokens.RevokeAllForUserAsync(
+                user.Id,
+                _timeProvider.GetUtcNow(),
+                token);
+
+            if (revoked.IsFailure)
+            {
+                return revoked.Error;
+            }
+
+            return UnitResult.Success<Failure>();
+        }, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            _logger.LogInformation("User {UserId} has been deactivated.", user.Id);
         }
 
-        var saved = await _repository.UpdateAsync(user, cancellationToken);
-        if (saved.IsFailure)
-        {
-            return saved.Error;
-        }
-
-        // Деактивированный пользователь не должен продлевать сессию живым refresh-токеном.
-        var revoked = await _refreshTokens.RevokeAllForUserAsync(
-            user.Id,
-            _timeProvider.GetUtcNow(),
-            cancellationToken);
-
-        if (revoked.IsFailure)
-        {
-            return revoked.Error;
-        }
-
-        _logger.LogInformation("User {UserId} has been deactivated.", user.Id);
-
-        return UnitResult.Success<Failure>();
+        return result;
     }
 }

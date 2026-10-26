@@ -24,6 +24,21 @@ public interface IUserRepository
     Task<Result<User, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Узкая проекция учётных данных: активность и <c>SecurityStamp</c>, без агрегата и избранного.
+    /// </summary>
+    /// <remarks>
+    /// Используется проверкой security stamp на каждом аутентифицированном запросе (R-11):
+    /// SQL — <c>SELECT is_active, security_stamp … WHERE id = …</c> без <c>Include</c> и
+    /// без отслеживания. Отсутствие записи — <c>Error.NotFound</c> с кодом
+    /// <c>user.securityStamp.notFound</c>.
+    /// </remarks>
+    /// <param name="id">Идентификатор пользователя.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<UserSecurityStamp, Failure>> GetSecurityStampAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Пользователь по адресу электронной почты (вход в систему).
     /// </summary>
     Task<Result<User, Failure>> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
@@ -31,6 +46,12 @@ public interface IUserRepository
     /// <summary>
     /// Страница пользователей, свежие сверху. Читается без отслеживания.
     /// </summary>
+    /// <remarks>
+    /// Глубина offset-выдачи ограничена: <c>page * pageSize</c> не может превышать 10 000,
+    /// иначе <c>400</c> с кодом <c>user.paging.depth</c>. Проверка глубины выполняется после
+    /// проверки параметров, поэтому при недопустимых <c>page</c>/<c>pageSize</c> клиент получает
+    /// прежние <c>user.paging.page</c> / <c>user.paging.pageSize</c>.
+    /// </remarks>
     Task<Result<IReadOnlyList<User>, Failure>> GetPagedAsync(
         int page,
         int pageSize,

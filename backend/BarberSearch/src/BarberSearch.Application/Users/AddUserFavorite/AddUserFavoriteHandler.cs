@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -17,15 +18,21 @@ namespace BarberSearch.Application.Users.AddUserFavorite;
 public class AddUserFavoriteHandler : ICommandHandler<AddUserFavoriteCommand>
 {
     private readonly IUserRepository _repository;
+    private readonly IBarberProfileRepository _profiles;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddUserFavoriteHandler> _logger;
 
     public AddUserFavoriteHandler(
         IUserRepository repository,
+        IBarberProfileRepository profiles,
+        IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         ILogger<AddUserFavoriteHandler> logger)
     {
         _repository = repository;
+        _profiles = profiles;
+        _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _logger = logger;
     }
@@ -60,16 +67,36 @@ public class AddUserFavoriteHandler : ICommandHandler<AddUserFavoriteCommand>
                 "A user cannot add their own barber profile to favorites."));
         }
 
-        var added = user.AddFavorite(command.BarberProfileId);
-        if (added.IsFailure)
+        // Ссылка на профиль барбера проверяется до вставки, в той же транзакции:
+        // внешний ключ fk_favorite_barbers_barber_profiles_barber_profile_id не даст
+        // сохранить избранное на несуществующий профиль (R-02).
+        var result = await _unitOfWork.ExecuteAsync(async ct =>
         {
-            return added.Error;
-        }
+            var profileExists = await _profiles.ExistsAsync(command.BarberProfileId, ct);
+            if (profileExists.IsFailure)
+            {
+                return profileExists.Error;
+            }
 
-        var saved = await _repository.UpdateAsync(user, cancellationToken);
-        if (saved.IsFailure)
+            if (!profileExists.Value)
+            {
+                return new Failure(Error.NotFound(
+                    "user.addFavorite.barberProfileNotFound",
+                    $"Barber profile '{command.BarberProfileId}' was not found.",
+                    command.BarberProfileId));
+            }
+
+            var added = user.AddFavorite(command.BarberProfileId);
+            if (added.IsFailure)
+            {
+                return added.Error;
+            }
+
+            return await _repository.UpdateAsync(user, ct);
+        }, cancellationToken);
+        if (result.IsFailure)
         {
-            return saved.Error;
+            return result;
         }
 
         _logger.LogInformation(

@@ -1,6 +1,7 @@
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Bookings.GetBookings;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -25,9 +26,46 @@ public sealed class FakeBookingRepository : IBookingRepository
     /// </summary>
     public Func<Booking, UnitResult<Failure>>? OnAdd { get; set; }
 
+    /// <summary>
+    /// Подмена поведения сохранения — для проверки проигранной оптимистической блокировки
+    /// (<c>booking.update.concurrencyConflict</c>), которую создаёт реальный <c>xmin</c>.
+    /// </summary>
+    public Func<Booking, UnitResult<Failure>>? OnUpdate { get; set; }
+
+    /// <summary>
+    /// Подмена поведения взятия advisory-блокировки — для проверки истёкшего
+    /// <c>lock_timeout</c> (<c>booking.add.lockTimeout</c>, R-18).
+    /// </summary>
+    public Func<Guid, UnitResult<Failure>>? OnAcquireLock { get; set; }
+
     public int AddCalls { get; private set; }
 
+    public int LockCalls { get; private set; }
+
+    public Guid? LockedBarberProfileId { get; private set; }
+
+    /// <summary>
+    /// Порядок вызовов репозитория: тест проверяет, что блокировка берётся до вставки (R-15).
+    /// </summary>
+    public List<string> Operations { get; } = [];
+
+    public int UpdateCalls { get; private set; }
+
+    public int GetByIdempotencyKeyCalls { get; private set; }
+
     public void Add(Booking booking) => _bookings[booking.Id] = booking;
+
+    public Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        LockCalls++;
+        LockedBarberProfileId = barberProfileId;
+        Operations.Add("lock");
+
+        return Task.FromResult(
+            OnAcquireLock?.Invoke(barberProfileId) ?? UnitResult.Success<Failure>());
+    }
 
     public Task<Result<Booking, Failure>> GetByIdAsync(
         Guid id,
@@ -36,7 +74,7 @@ public sealed class FakeBookingRepository : IBookingRepository
             _bookings.TryGetValue(id, out var booking)
                 ? booking
                 : new Failure(Error.NotFound(
-                    "booking.getById.notFound",
+                    ApiErrorCodes.Booking.NotFound,
                     $"Booking '{id}' was not found.",
                     id)));
 
@@ -45,10 +83,12 @@ public sealed class FakeBookingRepository : IBookingRepository
         string idempotencyKey,
         CancellationToken cancellationToken = default)
     {
+        GetByIdempotencyKeyCalls++;
+
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.Validation(
-                "booking.getIdempotencyKey.idempotencyKey",
+                ApiErrorCodes.Booking.IdempotencyKeyInvalid,
                 "Idempotency key cannot be empty.",
                 nameof(idempotencyKey))));
         }
@@ -60,7 +100,7 @@ public sealed class FakeBookingRepository : IBookingRepository
         if (booking is null)
         {
             return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.NotFound(
-                "booking.getIdempotencyKey.notFound",
+                ApiErrorCodes.Booking.IdempotencyKeyNotFound,
                 $"Booking with idempotency key '{key}' was not found for user '{userId}'.")));
         }
 
@@ -142,6 +182,7 @@ public sealed class FakeBookingRepository : IBookingRepository
         CancellationToken cancellationToken = default)
     {
         AddCalls++;
+        Operations.Add("add");
 
         if (OnAdd is not null)
         {
@@ -154,7 +195,7 @@ public sealed class FakeBookingRepository : IBookingRepository
                 && x.IdempotencyKey == booking.IdempotencyKey))
         {
             return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
-                "booking.add.uniqueViolation",
+                ApiErrorCodes.Booking.AddUniqueViolation,
                 "A record with the same unique values already exists."))));
         }
 
@@ -165,7 +206,7 @@ public sealed class FakeBookingRepository : IBookingRepository
                 && booking.StartAt < x.EndAt))
         {
             return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
-                "booking.add.overlap",
+                ApiErrorCodes.Booking.AddOverlap,
                 "The period overlaps with an existing record."))));
         }
 
@@ -177,7 +218,11 @@ public sealed class FakeBookingRepository : IBookingRepository
     public Task<UnitResult<Failure>> UpdateAsync(
         Booking booking,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(UnitResult.Success<Failure>());
+    {
+        UpdateCalls++;
+
+        return Task.FromResult(OnUpdate?.Invoke(booking) ?? UnitResult.Success<Failure>());
+    }
 
     private static BookingResponse ToResponse(Booking booking)
         => new(

@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.RefreshTokens;
+using BarberSearch.Application.Users.Passwords;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -13,25 +14,41 @@ namespace BarberSearch.Application.Users.ChangePassword;
 /// Отзыв всех токенов, а не только текущего: если пароль сменили из-за подозрения на кражу,
 /// остальные устройства не должны пережить смену. Access-токен доживает свои 15 минут —
 /// это зафиксированное ограничение JWT (AGENT.md §17.7).
+/// <para>
+/// Новый хеш и отзыв токенов пишутся в одной транзакции: если отзыв не удался, пароль
+/// остаётся прежним. Иначе смена пароля «из-за кражи» оставила бы живые refresh-токены (R-08).
+/// </para>
+/// <para>
+/// Новый пароль проверяется <see cref="IPasswordPolicy"/> до хеширования. Обязательность,
+/// длина и словарь проверяются до загрузки пользователя; совпадение с email/именем — после,
+/// потому что эти данные хранятся в профиле. Текущий пароль политикой не проверяется:
+/// к существующим паролям применяется только сверка хеша.
+/// </para>
 /// </remarks>
 public class ChangePasswordHandler : ICommandHandler<ChangePasswordCommand>
 {
     private readonly IUserRepository _users;
     private readonly IPasswordService _passwords;
+    private readonly IPasswordPolicy _passwordPolicy;
     private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ChangePasswordHandler> _logger;
 
     public ChangePasswordHandler(
         IUserRepository users,
         IPasswordService passwords,
+        IPasswordPolicy passwordPolicy,
         IRefreshTokenRepository refreshTokens,
+        IUnitOfWork unitOfWork,
         TimeProvider timeProvider,
         ILogger<ChangePasswordHandler> logger)
     {
         _users = users;
         _passwords = passwords;
+        _passwordPolicy = passwordPolicy;
         _refreshTokens = refreshTokens;
+        _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -43,12 +60,12 @@ public class ChangePasswordHandler : ICommandHandler<ChangePasswordCommand>
         ChangePasswordCommand command,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(command.NewPassword))
+        // Дешёвая часть политики (обязательность, длина, словарь) — до запроса к БД
+        // и до PBKDF2: невалидный ввод не должен доходить ни до того, ни до другого.
+        var composition = _passwordPolicy.Validate(command.NewPassword, "newPassword");
+        if (composition is not null)
         {
-            return new Failure(Error.Validation(
-                "auth.changePassword.newPassword",
-                "The new password cannot be empty.",
-                nameof(command.NewPassword)));
+            return composition;
         }
 
         var userResult = await _users.GetByIdAsync(command.UserId, cancellationToken);
@@ -58,6 +75,19 @@ public class ChangePasswordHandler : ICommandHandler<ChangePasswordCommand>
         }
 
         var user = userResult.Value;
+
+        // Совпадение с email/именем проверяется после загрузки профиля: этих данных нет
+        // в команде. Хеширование всё ещё впереди.
+        var personalData = _passwordPolicy.Validate(
+            command.NewPassword,
+            user.Email,
+            user.FirstName,
+            user.LastName,
+            "newPassword");
+        if (personalData is not null)
+        {
+            return personalData;
+        }
 
         if (_passwords.Verify(user.PasswordHash, command.CurrentPassword) == PasswordVerification.Failed)
         {
@@ -71,32 +101,46 @@ public class ChangePasswordHandler : ICommandHandler<ChangePasswordCommand>
                 nameof(command.CurrentPassword)));
         }
 
-        var changed = user.ChangePasswordHash(_passwords.Hash(command.NewPassword));
-        if (changed.IsFailure)
+        // PBKDF2 считается до открытия транзакции: хеширование не должно держать соединение.
+        var newPasswordHash = _passwords.Hash(command.NewPassword);
+
+        // Доменное изменение и обе записи — в одной транзакции: частичного результата
+        // «пароль сменён, токены живы» быть не должно. Любой Failure или исключение
+        // откатывает и хеш, и отзыв.
+        var result = await _unitOfWork.ExecuteAsync(async token =>
         {
-            return changed.Error;
+            var changed = user.ChangePasswordHash(newPasswordHash);
+            if (changed.IsFailure)
+            {
+                return changed.Error;
+            }
+
+            var saved = await _users.UpdateAsync(user, token);
+            if (saved.IsFailure)
+            {
+                return saved.Error;
+            }
+
+            var revoked = await _refreshTokens.RevokeAllForUserAsync(
+                user.Id,
+                _timeProvider.GetUtcNow(),
+                token);
+
+            if (revoked.IsFailure)
+            {
+                return revoked.Error;
+            }
+
+            return UnitResult.Success<Failure>();
+        }, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            _logger.LogInformation(
+                "User {UserId} changed the password; all refresh tokens have been revoked.",
+                user.Id);
         }
 
-        var saved = await _users.UpdateAsync(user, cancellationToken);
-        if (saved.IsFailure)
-        {
-            return saved.Error;
-        }
-
-        var revoked = await _refreshTokens.RevokeAllForUserAsync(
-            user.Id,
-            _timeProvider.GetUtcNow(),
-            cancellationToken);
-
-        if (revoked.IsFailure)
-        {
-            return revoked.Error;
-        }
-
-        _logger.LogInformation(
-            "User {UserId} changed the password; all refresh tokens have been revoked.",
-            user.Id);
-
-        return UnitResult.Success<Failure>();
+        return result;
     }
 }

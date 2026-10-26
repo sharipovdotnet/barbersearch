@@ -144,6 +144,22 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
         var rotated = await _refreshTokens.RotateAsync(current, replacement, cancellationToken);
         if (rotated.IsFailure)
         {
+            if (IsAlreadyRotated(rotated.Error))
+            {
+                // Между SELECT и условным UPDATE параллельный запрос успел отозвать этот же
+                // токен: строка уже не NULL по revoked_at, замена не сохранена. В базе одна
+                // живая цепочка — цепочка победителя. Цепочку здесь не гасим: иначе два
+                // легитимных одновременных refresh разлогинили бы клиента. Если проигравший
+                // предъявит токен ещё раз, сработает обычная reuse-detection.
+                _logger.LogWarning(
+                    "Refresh for user {UserId} lost a concurrent rotation; the winning request keeps the session.",
+                    user.Id);
+
+                return Unauthorized(
+                    "auth.refresh.reused",
+                    "The refresh token has already been used by a concurrent request.");
+            }
+
             return rotated.Error;
         }
 
@@ -160,4 +176,14 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
 
     private static Failure Unauthorized(string code, string message)
         => new(Error.Unauthorized(code, message));
+
+    /// <summary>
+    /// Ротацию проиграла другая параллельная ротация того же токена
+    /// (<see cref="IRefreshTokenRepository.AlreadyRotatedErrorCode"/>), а не сбой записи.
+    /// </summary>
+    private static bool IsAlreadyRotated(Failure failure)
+        => failure.Errors.Any(error => string.Equals(
+            error.Code,
+            IRefreshTokenRepository.AlreadyRotatedErrorCode,
+            StringComparison.Ordinal));
 }

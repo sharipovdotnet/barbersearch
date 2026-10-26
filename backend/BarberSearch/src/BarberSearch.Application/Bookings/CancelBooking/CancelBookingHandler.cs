@@ -36,6 +36,14 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         CancelBookingCommand command,
         CancellationToken cancellationToken)
     {
+        var userIdResult = _currentUser.RequireUserId();
+        if (userIdResult.IsFailure)
+        {
+            return userIdResult.Error;
+        }
+
+        var currentUserId = userIdResult.Value;
+
         var bookingResult = await _repository.GetByIdAsync(command.BookingId, cancellationToken);
         if (bookingResult.IsFailure)
         {
@@ -44,7 +52,7 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
 
         var booking = bookingResult.Value;
 
-        if (booking.UserId != _currentUser.UserId)
+        if (booking.UserId != currentUserId)
         {
             var allowed = await _currentUser.EnsureIsBarberOfAsync(
                 _barberProfiles,
