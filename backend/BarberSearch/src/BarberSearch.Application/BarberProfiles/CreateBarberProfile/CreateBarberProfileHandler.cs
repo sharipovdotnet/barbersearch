@@ -28,6 +28,12 @@ namespace BarberSearch.Application.BarberProfiles.CreateBarberProfile;
 /// </remarks>
 public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProfileCommand>
 {
+    /// <summary>
+    /// Текст ошибки «у текущего пользователя уже есть профиль барбера».
+    /// </summary>
+    private const string ALREADY_EXISTS_MESSAGE =
+        "The current user already has a barber profile.";
+
     private readonly IBarberProfileRepository _repository;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
@@ -105,7 +111,7 @@ public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProf
             {
                 return new Failure(Error.Conflict(
                     ApiErrorCodes.BarberProfile.CreateAlreadyExists,
-                    "The current user already has a barber profile."));
+                    ALREADY_EXISTS_MESSAGE));
             }
 
             var added = await _repository.AddAsync(profile, token);
@@ -119,7 +125,7 @@ public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProf
                 {
                     return new Failure(Error.Conflict(
                         ApiErrorCodes.BarberProfile.CreateAlreadyExists,
-                        "The current user already has a barber profile."));
+                        ALREADY_EXISTS_MESSAGE));
                 }
 
                 return added.Error;

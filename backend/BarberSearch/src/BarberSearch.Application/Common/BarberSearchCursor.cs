@@ -17,13 +17,18 @@ namespace BarberSearch.Application.Common;
 public sealed record BarberSearchCursor(decimal? Rating, Guid Id)
 {
     /// <summary>
+    /// Публичный код ошибки «курсор поиска барберов не разбирается».
+    /// </summary>
+    private const string INVALID_CURSOR_CODE = "barberSearch.cursor.invalid";
+
+    /// <summary>
     /// Кодирует курсор в непрозрачную строку.
     /// </summary>
     public string Encode()
         => CursorCodec.Encode(
-            "1",
+            CursorCodec.VERSION,
             Rating is null ? string.Empty : CursorCodec.Format(Rating.Value),
-            Id.ToString("D"));
+            Id.ToString(CursorCodec.GUID_FORMAT));
 
     /// <summary>
     /// Декодирует курсор. Битый или подделанный курсор — <c>Error.Validation</c> (400).
@@ -31,7 +36,10 @@ public sealed record BarberSearchCursor(decimal? Rating, Guid Id)
     /// <param name="cursor">Строка курсора из query string.</param>
     public static Result<BarberSearchCursor, Failure> Decode(string cursor)
     {
-        var partsResult = CursorCodec.Decode(cursor, 3, "barberSearch.cursor.invalid");
+        var partsResult = CursorCodec.Decode(
+            cursor,
+            CursorCodec.PART_COUNT,
+            INVALID_CURSOR_CODE);
         if (partsResult.IsFailure)
         {
             return partsResult.Error;
@@ -39,7 +47,7 @@ public sealed record BarberSearchCursor(decimal? Rating, Guid Id)
 
         var parts = partsResult.Value;
 
-        if (parts[0] != "1")
+        if (parts[0] != CursorCodec.VERSION)
         {
             return Invalid();
         }
@@ -58,7 +66,7 @@ public sealed record BarberSearchCursor(decimal? Rating, Guid Id)
             rating = parsedRating;
         }
 
-        if (!Guid.TryParseExact(parts[2], "D", out var id) || id == Guid.Empty)
+        if (!Guid.TryParseExact(parts[2], CursorCodec.GUID_FORMAT, out var id) || id == Guid.Empty)
         {
             return Invalid();
         }
@@ -68,7 +76,7 @@ public sealed record BarberSearchCursor(decimal? Rating, Guid Id)
 
     private static Failure Invalid()
         => new(Error.Validation(
-            "barberSearch.cursor.invalid",
-            "The pagination cursor is invalid.",
+            INVALID_CURSOR_CODE,
+            Messages.CURSOR_INVALID,
             "cursor"));
 }

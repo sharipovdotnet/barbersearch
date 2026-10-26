@@ -54,8 +54,8 @@ public static class AuthenticationExtensions
 
         services.AddAntiforgery(antiforgery =>
         {
-            antiforgery.HeaderName = "X-CSRF-TOKEN";
-            antiforgery.Cookie.Path = "/";
+            antiforgery.HeaderName = AuthConstants.CSRF_HEADER_NAME;
+            antiforgery.Cookie.Path = AuthConstants.COOKIE_PATH;
             antiforgery.Cookie.SameSite = sameSite;
             antiforgery.Cookie.SecurePolicy = securePolicy;
         });
@@ -66,22 +66,22 @@ public static class AuthenticationExtensions
                 authentication.DefaultScheme = SmartScheme;
                 authentication.DefaultChallengeScheme = SmartScheme;
             })
-            .AddPolicyScheme(SmartScheme, "Bearer or Cookie", policy =>
+            .AddPolicyScheme(SmartScheme, AuthConstants.SMART_SCHEME_DISPLAY_NAME, policy =>
             {
                 policy.ForwardDefaultSelector = context =>
                     context.Request.Headers.Authorization.ToString()
-                        .StartsWith("Bearer ", StringComparison.Ordinal)
+                        .StartsWith(AuthConstants.BEARER_PREFIX, StringComparison.Ordinal)
                         ? JwtBearerDefaults.AuthenticationScheme
                         : CookieAuthenticationDefaults.AuthenticationScheme;
             })
             .AddCookie(cookie =>
             {
                 cookie.Cookie.Name = environment.IsDevelopment()
-                    ? "barbersearch.auth"
-                    : "__Host-barbersearch";
+                    ? AuthConstants.DEVELOPMENT_SESSION_COOKIE
+                    : AuthConstants.PRODUCTION_SESSION_COOKIE;
 
                 cookie.Cookie.HttpOnly = true;
-                cookie.Cookie.Path = "/";
+                cookie.Cookie.Path = AuthConstants.COOKIE_PATH;
                 cookie.Cookie.SecurePolicy = securePolicy;
                 cookie.Cookie.SameSite = sameSite;
                 cookie.ExpireTimeSpan = TimeSpan.FromHours(options.CookieHours);
@@ -91,13 +91,13 @@ public static class AuthenticationExtensions
                     => AuthProblemDetails.WriteAsync(
                         context.HttpContext,
                         StatusCodes.Status401Unauthorized,
-                        "Authentication is required to access this resource.");
+                        AuthConstants.AUTH_REQUIRED_DETAIL);
 
                 cookie.Events.OnRedirectToAccessDenied = context
                     => AuthProblemDetails.WriteAsync(
                         context.HttpContext,
                         StatusCodes.Status403Forbidden,
-                        "The authenticated user is not allowed to access this resource.");
+                        AuthConstants.ACCESS_DENIED_DETAIL);
 
                 cookie.Events.OnValidatePrincipal = async context =>
                 {
@@ -134,7 +134,7 @@ public static class AuthenticationExtensions
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     TryAllIssuerSigningKeys = true,
-                    ClockSkew = TimeSpan.FromSeconds(30),
+                    ClockSkew = TimeSpan.FromSeconds(options.ClockSkewSeconds),
                     NameClaimType = ClaimsPrincipalFactory.SUB_CLAIM,
                     RoleClaimType = ClaimsPrincipalFactory.ROLE_CLAIM
                 };
@@ -155,24 +155,25 @@ public static class AuthenticationExtensions
 
                         // Fail, а не запись тела: на защищённом эндпоинте OnChallenge ниже
                         // отдаст 401 ProblemDetails, а [AllowAnonymous] запрос не сломается.
-                        context.Fail("The security stamp is invalid.");
+                        context.Fail(AuthConstants.INVALID_SECURITY_STAMP_MESSAGE);
                     },
                     OnChallenge = async context =>
                     {
                         context.HandleResponse();
 
-                        context.Response.Headers["WWW-Authenticate"] = "Bearer";
+                        context.Response.Headers[AuthConstants.WWW_AUTHENTICATE_HEADER] =
+                            AuthConstants.BEARER_SCHEME;
 
                         await AuthProblemDetails.WriteAsync(
                             context.HttpContext,
                             StatusCodes.Status401Unauthorized,
-                            "A valid access token is required to access this resource.");
+                            AuthConstants.INVALID_TOKEN_DETAIL);
                     },
                     OnForbidden = context
                         => AuthProblemDetails.WriteAsync(
                             context.HttpContext,
                             StatusCodes.Status403Forbidden,
-                            "The authenticated user is not allowed to access this resource.")
+                            AuthConstants.ACCESS_DENIED_DETAIL)
                 };
             });
 

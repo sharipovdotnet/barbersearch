@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
+using BarberSearch.Application.RefreshTokens;
 using BarberSearch.Application.RefreshTokens.IssueRefreshToken;
 using BarberSearch.Application.RefreshTokens.RefreshSession;
 using BarberSearch.Application.RefreshTokens.RevokeRefreshToken;
@@ -18,6 +20,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using BarberSearch.Web.Deployment;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -44,13 +47,11 @@ namespace BarberSearch.Web.Controllers;
 [Route("api/auth")]
 public class AuthController : ApiController
 {
-    private const string BearerPrefix = "Bearer ";
-
     /// <summary>
     /// Самостоятельная регистрация. Роль всегда <c>Customer</c>.
     /// </summary>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("register")]
     public async Task<ActionResult<CreatedResourceResponse>> Register(
         [FromBody] RegisterRequest request,
@@ -86,7 +87,7 @@ public class AuthController : ApiController
     /// Вход для мобильного или внешнего клиента: возвращает access-токен и refresh-токен в теле.
     /// </summary>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("login")]
     public async Task<ActionResult<TokenResponse>> Login(
         [FromBody] LoginRequest request,
@@ -127,7 +128,7 @@ public class AuthController : ApiController
     /// залогинивают в аккаунт атакующего.
     /// </remarks>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [ValidateAntiforgeryHeader]
     [HttpPost("login/cookie")]
     public async Task<ActionResult> LoginWithCookie(
@@ -192,7 +193,7 @@ public class AuthController : ApiController
     /// Cookie-ветка требует antiforgery: запрос опирается на cookie, а не на заголовок.
     /// </remarks>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("refresh")]
     public async Task<ActionResult> Refresh(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request,
@@ -213,8 +214,8 @@ public class AuthController : ApiController
         if (string.IsNullOrWhiteSpace(rawToken))
         {
             return FailureProblemDetails.CreateResult(new Failure(Error.Unauthorized(
-                "auth.refresh.missing",
-                "A refresh token is required.")));
+                RefreshTokenErrorCodes.MISSING,
+                Messages.REFRESH_TOKEN_REQUIRED)));
         }
 
         if (!fromBody)
@@ -285,7 +286,7 @@ public class AuthController : ApiController
     /// logout ограничен политикой <c>auth</c>: 10 запросов в минуту на адрес клиента.
     /// </remarks>
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("logout")]
     public async Task<ActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request,
@@ -333,7 +334,7 @@ public class AuthController : ApiController
     /// требует antiforgery, Bearer-ветка — нет: у неё нет ambient-учётных данных.
     /// </remarks>
     [Authorize]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("change-password")]
     public async Task<ActionResult> ChangePassword(
         [FromBody] ChangePasswordRequest request,
@@ -436,7 +437,7 @@ public class AuthController : ApiController
     private bool IsBearerRequest()
         => Request.Headers.Authorization
             .ToString()
-            .StartsWith(BearerPrefix, StringComparison.Ordinal);
+            .StartsWith(AuthConstants.BEARER_PREFIX, StringComparison.Ordinal);
 
     private async Task<ActionResult?> ValidateAntiforgeryAsync(IAntiforgery antiforgery)
     {

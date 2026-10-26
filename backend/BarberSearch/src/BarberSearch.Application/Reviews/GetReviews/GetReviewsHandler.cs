@@ -2,6 +2,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -47,7 +48,7 @@ public sealed class GetReviewsHandler
         {
             return new Failure(Error.Validation(
                 "review.getReviews.barberProfileId",
-                "Barber profile identifier cannot be empty.",
+                DomainMessages.BARBER_PROFILE_ID_REQUIRED,
                 nameof(query.BarberProfileId)));
         }
 

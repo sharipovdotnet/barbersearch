@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.LoginUser;
 using BarberSearch.Domain.RefreshTokens;
@@ -19,6 +20,11 @@ namespace BarberSearch.Application.RefreshTokens.RefreshSession;
 /// </remarks>
 public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, RefreshSessionCommand>
 {
+    /// <summary>
+    /// Текст ошибки «refresh-токен неизвестен или не принадлежит активному пользователю».
+    /// </summary>
+    private const string INVALID_TOKEN_MESSAGE = "The refresh token is invalid.";
+
     private readonly IRefreshTokenRepository _refreshTokens;
     private readonly IUserRepository _users;
     private readonly TimeProvider _timeProvider;
@@ -45,7 +51,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
     {
         if (string.IsNullOrWhiteSpace(command.RefreshToken))
         {
-            return Unauthorized("auth.refresh.missing", "A refresh token is required.");
+            return Unauthorized(RefreshTokenErrorCodes.MISSING, Messages.REFRESH_TOKEN_REQUIRED);
         }
 
         if (RefreshTokenLifetime.Validate(command.LifetimeDays) is { } lifetimeError)
@@ -61,7 +67,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
         {
             _logger.LogInformation("Refresh attempt with an unknown token.");
 
-            return Unauthorized("auth.refresh.invalid", "The refresh token is invalid.");
+            return Unauthorized(RefreshTokenErrorCodes.INVALID, INVALID_TOKEN_MESSAGE);
         }
 
         var current = tokenResult.Value;
@@ -84,7 +90,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
                 current.UserId);
 
             return Unauthorized(
-                "auth.refresh.reused",
+                RefreshTokenErrorCodes.REUSED,
                 "The refresh token has already been used. The session has been revoked.");
         }
 
@@ -101,7 +107,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
         var userResult = await _users.GetByIdAsync(current.UserId, cancellationToken);
         if (userResult.IsFailure)
         {
-            return Unauthorized("auth.refresh.invalid", "The refresh token is invalid.");
+            return Unauthorized(RefreshTokenErrorCodes.INVALID, INVALID_TOKEN_MESSAGE);
         }
 
         var user = userResult.Value;
@@ -117,7 +123,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
                     string.Join(", ", revoked.Error.Errors.Select(error => error.Code)));
             }
 
-            return Unauthorized("auth.refresh.inactive", "The account is deactivated.");
+            return Unauthorized("auth.refresh.inactive", Messages.ACCOUNT_DEACTIVATED);
         }
 
         var rawToken = RefreshTokenGenerator.CreateToken();
@@ -156,7 +162,7 @@ public class RefreshSessionHandler : ICommandHandler<RefreshSessionResult, Refre
                     user.Id);
 
                 return Unauthorized(
-                    "auth.refresh.reused",
+                    RefreshTokenErrorCodes.REUSED,
                     "The refresh token has already been used by a concurrent request.");
             }
 

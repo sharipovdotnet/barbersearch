@@ -5,8 +5,7 @@
 -- Run this read-only check before validating the constraints (and daily until the
 -- legacy rows are cleaned):
 --
---   & 'C:\Program Files\PostgreSQL\16\bin\psql.exe' `
---       -h 127.0.0.1 -p 5432 -U postgres -d barbersearch `
+--   psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch `
 --       -f deploy/find-dangling-references.sql
 --
 -- A non-zero dangling_count means the referenced aggregate was deleted while the

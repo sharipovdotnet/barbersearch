@@ -164,7 +164,7 @@ public sealed class RefreshTokenCleanupService : BackgroundService
             if (deleted > 0)
             {
                 _logger.LogInformation(
-                    "Deleted {Count} expired refresh tokens (R-50).",
+                    "Deleted {Count} expired refresh tokens.",
                     deleted);
             }
         }
@@ -174,13 +174,13 @@ public sealed class RefreshTokenCleanupService : BackgroundService
             // а уборка повторится на следующем тике.
             _logger.LogWarning(
                 exception,
-                "Refresh token cleanup failed; the next run will retry (R-50).");
+                "Refresh token cleanup failed; the next run will retry.");
         }
         catch (TimeoutException exception)
         {
             _logger.LogWarning(
                 exception,
-                "Refresh token cleanup timed out; the next run will retry (R-50).");
+                "Refresh token cleanup timed out; the next run will retry.");
         }
     }
 }

@@ -1,5 +1,6 @@
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberProfiles.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -31,14 +32,16 @@ public class BarberProfileConfiguration : IEntityTypeConfiguration<BarberProfile
                     $"years_of_experience BETWEEN {Constants.MIN_YEARS_OF_EXPERIENCE} AND {Constants.MAX_YEARS_OF_EXPERIENCE}"));
             table.HasCheckConstraint(
                 "ck_barber_profiles_grade",
-                "grade BETWEEN 0 AND 10");
+                CheckConstraintSql.EnumRange<Grade>("grade"));
 
             // null-рейтинг и нулевой счётчик отзывов — одно и то же состояние («отзывов нет»),
             // поэтому они меняются только вместе.
             table.HasCheckConstraint(
                 "ck_barber_profiles_rating",
                 "(rating IS NULL) = (reviews_count = 0) " +
-                "AND (rating IS NULL OR rating BETWEEN 1.00 AND 5.00)");
+                "AND (rating IS NULL OR " +
+                CheckConstraintSql.DecimalRange("rating", Constants.MIN_RATING, Constants.MAX_RATING) +
+                ")");
             table.HasCheckConstraint(
                 "ck_barber_profiles_reviews_count",
                 "reviews_count >= 0");
@@ -56,7 +59,8 @@ public class BarberProfileConfiguration : IEntityTypeConfiguration<BarberProfile
         builder.Property(x => x.UserId).HasColumnName("user_id");
         builder.Property(x => x.Grade).HasColumnName("grade").HasConversion<int>();
         builder.Property(x => x.Bio).HasColumnName("bio");
-        builder.Property(x => x.Rating).HasColumnName("rating").HasPrecision(3, 2);
+        builder.Property(x => x.Rating).HasColumnName("rating")
+            .HasPrecision(ColumnPrecision.RATING_PRECISION, ColumnPrecision.RATING_SCALE);
         builder.Property(x => x.ReviewsCount).HasColumnName("reviews_count");
         builder.Property(x => x.LatePolicy).HasColumnName("late_policy").IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active");

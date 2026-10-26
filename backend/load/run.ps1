@@ -1,4 +1,11 @@
 param(
+    [string]$DbHost = '127.0.0.1',
+    [int]$DbPort = 5432,
+    [string]$DbUser = 'postgres',
+    [string]$Database = 'barbersearch_load',
+    [string]$DbPassword = $env:BARBERSEARCH_DB_PASSWORD,
+    [string]$UserPassword = $env:BARBERSEARCH_TEST_USER_PASSWORD,
+    [string]$Psql = 'psql',
     [int]$Repeat = 3,
     [string]$Scenario = 'all',
     [int]$SearchConcurrency = 16,
@@ -12,22 +19,63 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    $DbPassword = $env:PGPASSWORD
+}
+
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    throw 'The database password is required: pass -DbPassword or set BARBERSEARCH_DB_PASSWORD (PGPASSWORD is also accepted).'
+}
+
+if ([string]::IsNullOrWhiteSpace($UserPassword)) {
+    throw 'The test user password is required: pass -UserPassword or set BARBERSEARCH_TEST_USER_PASSWORD.'
+}
+
 $root = Split-Path $PSScriptRoot -Parent
 $generated = Join-Path $PSScriptRoot 'generated'
 $harnessDll = Join-Path $PSScriptRoot 'harness/bin/Release/net10.0/LoadHarness.dll'
-$psql = 'C:\Program Files\PostgreSQL\16\bin\psql.exe'
 $baseUrl = 'http://127.0.0.1:5243'
 $adminEmail = 'load-admin@barbersearch.test'
 $customerEmail = 'load-customer@barbersearch.test'
-$password = 'LoadTest!Passw0rd'
 
 New-Item -ItemType Directory -Force -Path $generated | Out-Null
-$env:PGPASSWORD = 'postgres'
+$env:PGPASSWORD = $DbPassword
+
+function New-PostgresConnectionString {
+    param(
+        [string]$DatabaseName = $Database,
+        [int]$Port = $DbPort,
+        [int]$MaximumPoolSize = 0,
+        [int]$TimeoutSeconds = 0,
+        [int]$CommandTimeoutSeconds = 0
+    )
+
+    $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+    $builder['Host'] = $DbHost
+    $builder['Port'] = $Port
+    $builder['Database'] = $DatabaseName
+    $builder['Username'] = $DbUser
+    $builder['Password'] = $DbPassword
+
+    if ($MaximumPoolSize -gt 0) {
+        $builder['Maximum Pool Size'] = $MaximumPoolSize
+    }
+
+    if ($TimeoutSeconds -gt 0) {
+        $builder['Timeout'] = $TimeoutSeconds
+    }
+
+    if ($CommandTimeoutSeconds -gt 0) {
+        $builder['Command Timeout'] = $CommandTimeoutSeconds
+    }
+
+    return $builder.ConnectionString
+}
 
 function Invoke-Sql {
     param([string]$Sql)
 
-    & $psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load `
+    & $Psql -h $DbHost -p $DbPort -U $DbUser -d $Database `
         -q -tA -v ON_ERROR_STOP=1 -c $Sql
 }
 
@@ -70,7 +118,7 @@ function Ensure-User {
 
     $body = @{
         email = $Email
-        password = $password
+        password = $UserPassword
         firstName = $FirstName
         lastName = $LastName
     } | ConvertTo-Json
@@ -96,7 +144,7 @@ function Ensure-User {
 function Login-User {
     param([string]$Email)
 
-    $body = @{ email = $Email; password = $password } | ConvertTo-Json
+    $body = @{ email = $Email; password = $UserPassword } | ConvertTo-Json
 
     try {
         return Invoke-RestMethod -Method Post -Uri "$baseUrl/api/auth/login" `
@@ -128,14 +176,35 @@ try {
     }
 
     if ($AppPid -le 0) {
-        Write-Host "starting $baseUrl against barbersearch_load..."
+        Write-Host "starting $baseUrl against $Database..."
 
         $env:ASPNETCORE_ENVIRONMENT = 'Development'
         $env:Logging__EventLog__LogLevel__Default = 'None'
         ${env:Logging__LogLevel__Microsoft.EntityFrameworkCore} = 'Warning'
         $env:ASPNETCORE_URLS = $baseUrl
-        $env:ConnectionStrings__Postgres = 'Host=127.0.0.1;Port=5432;Database=barbersearch_load;Username=postgres;Password=postgres;Maximum Pool Size=100;Timeout=15;Command Timeout=60'
-        $env:Auth__SigningKey = 'barbersearch-load-test-signing-key-0123456789abcdef'
+        $env:ConnectionStrings__Postgres = New-PostgresConnectionString `
+            -MaximumPoolSize 100 -TimeoutSeconds 15 -CommandTimeoutSeconds 60
+
+        # The key survives API restarts so -SkipAuth can reuse auth.json tokens;
+        # the file lives in the git-ignored generated/ directory.
+        $signingKeyPath = Join-Path $generated 'signing-key.txt'
+        $signingKey = if (Test-Path $signingKeyPath) {
+            (Get-Content $signingKeyPath -Raw).Trim()
+        }
+        else {
+            ''
+        }
+
+        if ([string]::IsNullOrWhiteSpace($signingKey)) {
+            $signingKey = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
+            Set-Content -Path $signingKeyPath -Value $signingKey -Encoding ascii -NoNewline
+        }
+
+        if ($signingKey.Length -lt 32) {
+            throw "The load signing key in '$signingKeyPath' must be at least 32 characters long."
+        }
+
+        $env:Auth__SigningKey = $signingKey
         $env:DataProtection__KeysPath = Join-Path $generated 'data-protection-keys'
 
         $webProject = Join-Path $root 'BarberSearch/src/BarberSearch.Web'
@@ -182,11 +251,11 @@ try {
     }
 
     if (-not $SkipReset) {
-        & $psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load `
+        & $Psql -h $DbHost -p $DbPort -U $DbUser -d $Database `
             -q -v ON_ERROR_STOP=1 -f (Join-Path $PSScriptRoot 'seed/reset-scenarios.sql')
     }
 
-    & $psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load `
+    & $Psql -h $DbHost -p $DbPort -U $DbUser -d $Database `
         -q -tA -f (Join-Path $PSScriptRoot 'seed/manifest.sql') |
         Set-Content -Encoding utf8 (Join-Path $generated 'manifest.json')
 
@@ -228,6 +297,11 @@ WHERE id IN (
             '-File', (Join-Path $PSScriptRoot 'collect-metrics.ps1'),
             '-AppPid', $AppPid,
             '-OutFile', (Join-Path $generated 'metrics.csv'),
+            '-Psql', "`"$Psql`"",
+            '-DbHost', $DbHost,
+            '-DbPort', $DbPort.ToString(),
+            '-DbUser', $DbUser,
+            '-Database', $Database,
             '-DurationSeconds', '900',
             '-StopFile', $metricsStopFile
         )

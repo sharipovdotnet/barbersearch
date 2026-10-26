@@ -16,7 +16,7 @@ public class WorkingScheduleConfiguration : IEntityTypeConfiguration<WorkingSche
         {
             table.HasCheckConstraint(
                 "ck_working_schedules_day_of_week",
-                "day_of_week BETWEEN 0 AND 6");
+                CheckConstraintSql.EnumRange<DayOfWeek>("day_of_week"));
 
             // В нерабочий день время не задаётся, в рабочий — конец позже начала.
             table.HasCheckConstraint(

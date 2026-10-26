@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -57,7 +58,7 @@ public class PublishPortfolioPhotoHandler : ICommandHandler<PublishPortfolioPhot
         {
             return new Failure(Error.NotFound(
                 "portfolioPhoto.publish.notFound",
-                "The specified photo was not found in this artist's portfolio.",
+                DomainMessages.PHOTO_NOT_FOUND,
                 command.PhotoId));
         }
 

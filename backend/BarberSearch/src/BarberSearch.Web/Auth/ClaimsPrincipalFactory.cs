@@ -61,7 +61,7 @@ public static class ClaimsPrincipalFactory
             new(SUB_CLAIM, user.Id.ToString()),
             new(EMAIL_CLAIM, user.Email),
             new(ROLE_CLAIM, user.Role.ToString()),
-            new(EMAIL_VERIFIED_CLAIM, user.IsEmailVerified ? "true" : "false"),
+            new(EMAIL_VERIFIED_CLAIM, user.IsEmailVerified ? ClaimValues.TRUE : ClaimValues.FALSE),
             new(SECURITY_STAMP_CLAIM, user.SecurityStamp),
             new(JTI_CLAIM, Guid.NewGuid().ToString())
         };

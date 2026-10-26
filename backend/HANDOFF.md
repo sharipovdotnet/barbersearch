@@ -882,12 +882,13 @@ dotnet test tests/<Project> --nologo --verbosity quiet "-p:BaseOutputPath=$out\"
 #   reflection-раннер §5.3 — только fallback, если это перестанет работать
 
 # миграции: design-time factory читает ConnectionStrings__Postgres
-$env:ConnectionStrings__Postgres = 'Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=postgres'
+$env:POSTGRES_PASSWORD = '<локальный пароль PostgreSQL>'
+$env:ConnectionStrings__Postgres = "Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD"
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
 
 # R-02: старые висячие ссылки (FK добавлены как NOT VALID); после очистки — VALIDATE CONSTRAINT
-& 'C:\Program Files\PostgreSQL\16\bin\psql.exe' -h 127.0.0.1 -p 5432 -U postgres `
+psql -h 127.0.0.1 -p 5432 -U postgres `
   -d barbersearch -f deploy/find-dangling-references.sql
 
 # запуск: content root = каталог проекта, EventLog приглушён
@@ -896,8 +897,8 @@ $env:ASPNETCORE_ENVIRONMENT='Development'
 $env:Logging__EventLog__LogLevel__Default='None'
 $env:ASPNETCORE_URLS='http://127.0.0.1:5243'
 # один раз: строка подключения в user secrets (DEPLOY.md §1.1) либо env ниже
-# dotnet user-secrets set "ConnectionStrings:Postgres" "Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=postgres"
-$env:ConnectionStrings__Postgres='Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=postgres'
+# dotnet user-secrets set "ConnectionStrings:Postgres" "Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD"
+$env:ConnectionStrings__Postgres="Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD"
 $env:Auth__SigningKey='<local key, >= 32 chars, never commit>'
 # DataProtection:KeysPath в Development уже задан в appsettings.Development.json
 dotnet bin/Debug/net10.0/BarberSearch.Web.dll

@@ -1,2 +1,5 @@
 # Local Data Protection key ring (Development default; never commit keys).
 .data-protection-keys/
+
+# Local docker compose environment (contains POSTGRES_PASSWORD; never commit it).
+.env

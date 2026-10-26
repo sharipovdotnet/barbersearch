@@ -17,6 +17,16 @@ namespace BarberSearch.Domain.Reviews;
 public class Review : AggregateRoot
 {
     /// <summary>
+    /// Текст ошибки «отзыв длиннее <see cref="Constants.MAX_TEXT_LENGTH"/>».
+    /// </summary>
+    /// <remarks>
+    /// <c>static readonly</c>, а не <c>const</c>: интерполяция с целочисленной константой
+    /// не является константным выражением, поэтому значение вычисляется один раз при старте.
+    /// </remarks>
+    private static readonly string TEXT_TOO_LONG =
+        $"Review text cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.";
+
+    /// <summary>
     /// Барбер, которому оставлен отзыв. Денормализовано из брони — нужно для поиска,
     /// но задать значение снаружи нельзя.
     /// </summary>
@@ -68,7 +78,7 @@ public class Review : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "review.text.tooLong",
-                $"Review text cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                TEXT_TOO_LONG,
                 nameof(text)));
         }
 
@@ -100,7 +110,7 @@ public class Review : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "review.update.text.tooLong",
-                $"Review text cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                TEXT_TOO_LONG,
                 nameof(text)));
         }
 

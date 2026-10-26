@@ -27,7 +27,7 @@ public class Specialization : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "specialization.name",
-                "Specialization name cannot be empty.",
+                DomainMessages.SPECIALIZATION_NAME_REQUIRED,
                 nameof(name)));
         }
 
@@ -48,7 +48,7 @@ public class Specialization : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "specialization.rename.name",
-                "Specialization name cannot be empty.",
+                DomainMessages.SPECIALIZATION_NAME_REQUIRED,
                 nameof(name)));
         }
 

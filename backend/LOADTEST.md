@@ -422,9 +422,14 @@ checks); booking headroom — отдельно, если понадобится.
 Полные команды — `load/README.md`. Кратко:
 
 ```powershell
+# пароли — только из окружения (в репозитории их нет)
+$env:BARBERSEARCH_DB_PASSWORD = '<пароль локальной PostgreSQL>'
+$env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ символов>'
+$env:PGPASSWORD = $env:BARBERSEARCH_DB_PASSWORD
+
 # 1. отдельная БД + существующие миграции (см. README)
 # 2. данные
-& 'C:\Program Files\PostgreSQL\16\bin\psql.exe' -h 127.0.0.1 -p 5432 `
+psql -h 127.0.0.1 -p 5432 `
   -U postgres -d barbersearch_load -v ON_ERROR_STOP=1 -f load/seed/seed.sql
 
 # 3. harness

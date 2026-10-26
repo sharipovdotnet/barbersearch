@@ -5,6 +5,12 @@
 # (load/seed/minimal.sql), and runs the harness scenario `booking-idempotency`.
 # No 1.2M-row seed and no dependency on barbersearch or barbersearch_load.
 #
+# No password is stored here: set BARBERSEARCH_DB_PASSWORD (or PGPASSWORD) for the
+# database and BARBERSEARCH_TEST_USER_PASSWORD (12+ characters) for the test customer.
+# psql is taken from PATH; override with -Psql.
+#
+#   $env:BARBERSEARCH_DB_PASSWORD = '<local database password>'
+#   $env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ characters>'
 #   powershell -NoProfile -ExecutionPolicy Bypass `
 #     -File load/ci/booking-idempotency.ps1
 #
@@ -12,6 +18,12 @@
 
 param(
     [string]$Database = 'barbersearch_load_ci',
+    [string]$DbHost = '127.0.0.1',
+    [int]$DbPort = 5432,
+    [string]$DbUser = 'postgres',
+    [string]$DbPassword = $env:BARBERSEARCH_DB_PASSWORD,
+    [string]$UserPassword = $env:BARBERSEARCH_TEST_USER_PASSWORD,
+    [string]$Psql = 'psql',
     [int]$Port = 5244,
     [switch]$SkipBuild,
     [switch]$KeepDatabase
@@ -24,21 +36,63 @@ if ($Database -notmatch '_ci$') {
     throw "Refusing to recreate '$Database': the name must end with '_ci'."
 }
 
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    $DbPassword = $env:PGPASSWORD
+}
+
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    throw 'The database password is required: pass -DbPassword or set BARBERSEARCH_DB_PASSWORD (PGPASSWORD is also accepted).'
+}
+
+if ([string]::IsNullOrWhiteSpace($UserPassword)) {
+    throw 'The test user password is required: pass -UserPassword or set BARBERSEARCH_TEST_USER_PASSWORD.'
+}
+
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $generated = Join-Path $root 'load/generated/ci'
 $harnessDll = Join-Path $root 'load/harness/bin/Release/net10.0/LoadHarness.dll'
 $webProject = Join-Path $root 'BarberSearch/src/BarberSearch.Web'
-$psql = 'C:\Program Files\PostgreSQL\16\bin\psql.exe'
-$psqlArgs = @('-h', '127.0.0.1', '-p', '5432', '-U', 'postgres')
+$psqlArgs = @('-h', $DbHost, '-p', $DbPort, '-U', $DbUser)
 $baseUrl = "http://127.0.0.1:$Port"
 $email = 'ci-customer@barbersearch.test'
-$password = 'LoadTest!Passw0rd'
 $barberId = '44444444-4444-4444-4444-444444444444'
 $barberServiceId = '77777777-7777-7777-7777-777777777777'
 $salonId = '11111111-1111-1111-1111-111111111111'
 
 New-Item -ItemType Directory -Force -Path $generated | Out-Null
-$env:PGPASSWORD = 'postgres'
+$env:PGPASSWORD = $DbPassword
+
+function New-PostgresConnectionString {
+    param(
+        [string]$DatabaseName = $Database,
+        [int]$MaximumPoolSize = 0,
+        [int]$TimeoutSeconds = 0,
+        [int]$CommandTimeoutSeconds = 0
+    )
+
+    $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+    $builder['Host'] = $DbHost
+    $builder['Port'] = $DbPort
+    $builder['Database'] = $DatabaseName
+    $builder['Username'] = $DbUser
+    $builder['Password'] = $DbPassword
+
+    if ($MaximumPoolSize -gt 0) {
+        $builder['Maximum Pool Size'] = $MaximumPoolSize
+    }
+
+    if ($TimeoutSeconds -gt 0) {
+        $builder['Timeout'] = $TimeoutSeconds
+    }
+
+    if ($CommandTimeoutSeconds -gt 0) {
+        $builder['Command Timeout'] = $CommandTimeoutSeconds
+    }
+
+    return $builder.ConnectionString
+}
+
+$connection = New-PostgresConnectionString
 
 function Invoke-Sql {
     param(
@@ -46,7 +100,7 @@ function Invoke-Sql {
         [string]$Db = $Database
     )
 
-    & $psql @psqlArgs -d $Db -q -tA -v ON_ERROR_STOP=1 -c $Sql
+    & $Psql @psqlArgs -d $Db -q -tA -v ON_ERROR_STOP=1 -c $Sql
 }
 
 function Wait-Api {
@@ -74,7 +128,7 @@ function Wait-Api {
 function Ensure-Customer {
     $body = @{
         email = $email
-        password = $password
+        password = $UserPassword
         firstName = 'CI'
         lastName = 'Customer'
     } | ConvertTo-Json
@@ -98,7 +152,7 @@ function Ensure-Customer {
 }
 
 function Login-Customer {
-    $body = @{ email = $email; password = $password } | ConvertTo-Json
+    $body = @{ email = $email; password = $UserPassword } | ConvertTo-Json
 
     try {
         return Invoke-RestMethod -Method Post -Uri "$baseUrl/api/auth/login" `
@@ -117,13 +171,12 @@ function Login-Customer {
 
 $app = $null
 $exitCode = 0
-$connection = "Host=127.0.0.1;Port=5432;Database=$Database;Username=postgres;Password=postgres"
 
 try {
     Write-Host "recreating isolated CI database $Database..."
-    & $psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
+    & $Psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
         -c "DROP DATABASE IF EXISTS $Database WITH (FORCE);"
-    & $psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
+    & $Psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
         -c "CREATE DATABASE $Database;"
 
     if (-not $SkipBuild) {
@@ -159,8 +212,9 @@ try {
     $env:Logging__EventLog__LogLevel__Default = 'None'
     ${env:Logging__LogLevel__Microsoft.EntityFrameworkCore} = 'Warning'
     $env:ASPNETCORE_URLS = $baseUrl
-    $env:ConnectionStrings__Postgres = "$connection;Maximum Pool Size=20;Timeout=15;Command Timeout=60"
-    $env:Auth__SigningKey = 'barbersearch-ci-booking-idempotency-signing-key-0123456789'
+    $env:ConnectionStrings__Postgres = New-PostgresConnectionString `
+        -MaximumPoolSize 20 -TimeoutSeconds 15 -CommandTimeoutSeconds 60
+    $env:Auth__SigningKey = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
     $env:DataProtection__KeysPath = Join-Path $generated 'data-protection-keys'
 
     $app = Start-Process -FilePath 'dotnet' `
@@ -177,7 +231,7 @@ try {
     $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" `
         -Headers @{ Authorization = "Bearer $($customer.accessToken)" }
 
-    & $psql @psqlArgs -d $Database -q -v ON_ERROR_STOP=1 `
+    & $Psql @psqlArgs -d $Database -q -v ON_ERROR_STOP=1 `
         -f (Join-Path $root 'load/seed/minimal.sql')
 
     # The slot is far enough in the future to stay outside any local-day logic;
@@ -282,7 +336,7 @@ finally {
     }
 
     if (-not $KeepDatabase) {
-        & $psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
+        & $Psql @psqlArgs -d postgres -q -v ON_ERROR_STOP=1 `
             -c "DROP DATABASE IF EXISTS $Database WITH (FORCE);" | Out-Null
     }
 }

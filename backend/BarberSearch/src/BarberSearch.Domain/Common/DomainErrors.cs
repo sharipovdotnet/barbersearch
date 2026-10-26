@@ -42,7 +42,7 @@ internal static class DomainErrors
     /// </summary>
     public static Error? NegativePrice(decimal price, string code)
         => price < 0
-            ? Error.Validation(code, "Price cannot be negative.", nameof(price))
+            ? Error.Validation(code, DomainMessages.PRICE_NEGATIVE, nameof(price))
             : null;
 
     /// <summary>

@@ -23,7 +23,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 $"char_length(email) BETWEEN {Constants.MIN_EMAIL_LENGTH} AND {Constants.MAX_EMAIL_LENGTH}");
             table.HasCheckConstraint(
                 "ck_users_role",
-                "role IN (1, 2, 3)");
+                CheckConstraintSql.EnumIn<UserRole>("role"));
             table.HasCheckConstraint(
                 "ck_users_security_stamp",
                 "char_length(security_stamp) > 0");

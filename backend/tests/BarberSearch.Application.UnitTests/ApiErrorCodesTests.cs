@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.BarberProfiles;
 using Xunit;
 
 namespace BarberSearch.Application.UnitTests;
@@ -77,6 +78,16 @@ public class ApiErrorCodesTests
             }
         }
     }
+
+    /// <summary>
+    /// Домен не может ссылаться на Contracts, поэтому совпадение доменной константы
+    /// с публичным реестром закреплено здесь.
+    /// </summary>
+    [Fact]
+    public void FindSalonNotFound_MatchesDomainConstant()
+        => Assert.Equal(
+            ApiErrorCodes.BarberProfile.FindSalonNotFound,
+            BarberProfile.FIND_SALON_NOT_FOUND);
 
     [Fact]
     public void OnlyInternalCode_IsInternalDatabaseError()

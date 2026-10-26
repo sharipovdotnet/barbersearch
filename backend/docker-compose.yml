@@ -1,8 +1,14 @@
 # PostgreSQL для локальной разработки BarberSearch.
 #
 # Поднимается только база: Dockerfile для API — отдельный шаг (AGENT.md §11.7).
-# Параметры должны совпадать с ConnectionStrings:Postgres из
-# BarberSearch/src/BarberSearch.Web/appsettings.json, иначе приложение не подключится.
+# Параметры должны совпадать с ConnectionStrings:Postgres, который приложение
+# получает из user secrets или переменной окружения (в appsettings.json он пуст),
+# иначе приложение не подключится.
+#
+# Пароль обязателен и в файл не попадает: скопируйте .env.example в .env (он
+# в .gitignore) и задайте POSTGRES_PASSWORD, либо передайте переменную окружения:
+#   $env:POSTGRES_PASSWORD = '<локальный пароль>'
+#   docker compose up -d
 #
 #   docker compose up -d            # поднять базу
 #   docker compose logs -f db       # смотреть лог
@@ -28,7 +34,9 @@ services:
 
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # Секрет не имеет дефолта: без POSTGRES_PASSWORD compose падает с понятной
+      # ошибкой, а не поднимает базу с общеизвестным паролем.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-barbersearch}
       # UTF-8-локаль glibc: нужна и для корректного lower() (citext), и для
       # сортировки. Действует только при первой инициализации, то есть на пустом
@@ -41,10 +49,9 @@ services:
       # Осторожно: если на 5432 уже отвечает другая СУБД (например, PostgreSQL,
       # установленный в Windows службой), соединения по localhost уйдут к ней, а не
       # в контейнер, — при этом docker compose ps покажет публикацию порта, и ничего
-      # не упадёт. Именно так и происходит на этой машине: localhost:5432 обслуживает
-      # PostgreSQL 16.3 из C:\Program Files\PostgreSQL\16. Тогда либо поднимите
-      # контейнер на другом порту (POSTGRES_PORT=5433) и поправьте
-      # ConnectionStrings:Postgres, либо остановите ту службу.
+      # не упадёт. Тогда либо поднимите контейнер на другом порту
+      # (POSTGRES_PORT=5433) и поправьте ConnectionStrings:Postgres, либо
+      # остановите ту службу.
       - "${POSTGRES_PORT:-5432}:5432"
 
     volumes:

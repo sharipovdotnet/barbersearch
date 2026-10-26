@@ -47,7 +47,8 @@ public class BarberServiceConfiguration : IEntityTypeConfiguration<BarberService
             .HasConstraintName("fk_barber_services_hair_services_hair_service_id")
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Property(x => x.Price).HasColumnName("price").HasPrecision(10, 2);
+        builder.Property(x => x.Price).HasColumnName("price")
+            .HasPrecision(ColumnPrecision.MONEY_PRECISION, ColumnPrecision.MONEY_SCALE);
         builder.Property(x => x.DurationMinutes).HasColumnName("duration_minutes");
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 

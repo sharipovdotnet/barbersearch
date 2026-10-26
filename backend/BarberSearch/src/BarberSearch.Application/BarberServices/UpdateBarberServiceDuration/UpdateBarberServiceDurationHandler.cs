@@ -57,7 +57,7 @@ public class UpdateBarberServiceDurationHandler : ICommandHandler<UpdateBarberSe
         {
             return new Failure(Error.NotFound(
                 "barberService.updateDuration.notFound",
-                "The specified service was not found in this barber profile.",
+                Messages.SERVICE_NOT_FOUND_IN_PROFILE,
                 command.BarberServiceId));
         }
 

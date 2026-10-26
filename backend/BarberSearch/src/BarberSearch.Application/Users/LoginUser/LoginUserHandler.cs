@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
@@ -120,7 +121,7 @@ public class LoginUserHandler : ICommandHandler<AuthenticatedUser, LoginUserComm
 
             return new Failure(Error.Unauthorized(
                 "auth.login.inactive",
-                "The account is deactivated."));
+                Messages.ACCOUNT_DEACTIVATED));
         }
 
         if (user.IsLockedOut(now))

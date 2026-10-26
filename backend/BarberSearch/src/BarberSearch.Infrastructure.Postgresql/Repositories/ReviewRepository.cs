@@ -115,7 +115,7 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Review.PageLimitInvalid,
-                "Page limit must be positive.",
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
                 nameof(limit)));
         }
 
@@ -169,7 +169,7 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Review.PageLimitInvalid,
-                "Page limit must be positive.",
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
                 nameof(limit)));
         }
 

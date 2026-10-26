@@ -22,12 +22,14 @@ Content-Type: application/json
 ###
 
 # Пользователь (только admin). Пароль хешируется слоем Web, роль по умолчанию — Customer.
+# Пароль в репозитории не хранится: задайте {{password}} в локальном .http-окружении
+# (этот файл в git не попадает) или подставьте значение вручную перед отправкой.
 POST {{host}}/api/users
 Content-Type: application/json
 
 {
   "email": "barber@example.com",
-  "password": "Secret123!",
+  "password": "{{password}}",
   "firstName": "Ivan",
   "lastName": "Petrov"
 }

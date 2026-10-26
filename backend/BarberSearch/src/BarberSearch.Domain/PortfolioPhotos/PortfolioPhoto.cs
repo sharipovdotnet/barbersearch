@@ -62,7 +62,7 @@ public class PortfolioPhoto : Entity
         {
             return new Failure(Error.Validation(
                 "portfolioPhoto.updateDescription.description",
-                $"Photo description cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                DomainMessages.PHOTO_DESCRIPTION_TOO_LONG,
                 nameof(description)));
         }
 

@@ -21,6 +21,7 @@
 | `DataProtection__KeysPath` | да | Каталог key ring на постоянном томе. В образе ключей быть не должно. |
 | `DataProtection__CertificatePath` | нет | PKCS#12-сертификат для шифрования ключей на диске. Пароль — `DataProtection__CertificatePassword` из секрет-стора. |
 | `Auth__CookieSameSite` | да для cross-site SPA | `Lax` (same-site), `Strict` или `None` (cross-site). `None` требует `Cors__AllowedOrigins` и принудительно включает `Secure`. |
+| `Auth__ClockSkewSeconds` | нет | Допуск на расхождение часов при проверке JWT, `0..300` секунд; по умолчанию `30`. |
 | `Cors__AllowedOrigins__0`, `__1`, … | при cross-site SPA | Явные origins, например `https://app.example.com`. `*` запрещён: политика включает credentials. |
 | `ForwardedHeaders__Enabled` | при работе за прокси | `true`, если перед API стоит доверенный прокси/балансировщик. |
 | `ForwardedHeaders__KnownProxies__0`, … | при `Enabled=true` | IP-адреса своих прокси. Без них старт падает. |
@@ -44,8 +45,21 @@
 
 ```powershell
 cd BarberSearch/src/BarberSearch.Web
-dotnet user-secrets set "ConnectionStrings:Postgres" "Host=localhost;Port=5432;Database=barbersearch;Username=postgres;Password=postgres"
+$env:POSTGRES_PASSWORD = '<локальный пароль PostgreSQL>'
+dotnet user-secrets set "ConnectionStrings:Postgres" "Host=localhost;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD"
 dotnet user-secrets set "Auth:SigningKey" "<at least 32 chars>"
+```
+
+`POSTGRES_PASSWORD` здесь — переменная текущей сессии PowerShell, а не файл в репозитории;
+`Password=$env:POSTGRES_PASSWORD` разворачивается при выполнении команды. Тот же пароль
+нужен `docker compose`: скопируйте `.env.example` в `.env` (он в `.gitignore`) и заполните
+`POSTGRES_PASSWORD`, иначе compose откажется стартовать.
+
+```powershell
+# из каталога backend/ (после предыдущего блока — cd ../../..)
+Copy-Item .env.example .env
+# откройте .env и задайте POSTGRES_PASSWORD
+docker compose up -d
 ```
 
 Альтернатива — переменные окружения процесса: `ConnectionStrings__Postgres` и
@@ -161,7 +175,8 @@ Kestrel при остановке перестаёт принимать новы
 ## 6. Ротация ключа подписи
 
 Новые access-токены подписываются только `Auth__SigningKey`. Предыдущие ключи нужны, чтобы
-дожить уже выданные токены (по умолчанию 15 минут + `ClockSkew` 30 секунд).
+дожить уже выданные токены (по умолчанию access-токен живёт 15 минут плюс
+`Auth__ClockSkewSeconds` — 30 секунд).
 
 1. Сгенерируйте новый ключ (≥ 32 символов) в секрет-сторе.
 2. Задеплойте все инстансы с:
@@ -186,13 +201,14 @@ dotnet build BarberSearch/BarberSearch.sln
 # тесты: ожидается 184 domain + 212 application + 71 infrastructure + 10 integration
 
 # миграции: design-time factory читает ConnectionStrings__Postgres
-$env:ConnectionStrings__Postgres = 'Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=postgres'
+# POSTGRES_PASSWORD — локальный пароль из §1.1 (в git не попадает)
+$env:ConnectionStrings__Postgres = "Host=127.0.0.1;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD"
 dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web
 
 # R-02: FK добавлены как NOT VALID. Проверить старые висячие ссылки; после очистки
-# выполнить VALIDATE CONSTRAINT из конца скрипта.
-& 'C:\Program Files\PostgreSQL\16\bin\psql.exe' -h 127.0.0.1 -p 5432 -U postgres `
+# выполнить VALIDATE CONSTRAINT из конца скрипта. psql берётся из PATH.
+psql -h 127.0.0.1 -p 5432 -U postgres `
   -d barbersearch -f deploy/find-dangling-references.sql
 ```
 
@@ -200,8 +216,15 @@ dotnet ef database update --project BarberSearch/src/BarberSearch.Infrastructure
 останавливается скриптом):
 
 ```powershell
+# пароли не хранятся в скрипте: БД — из BARBERSEARCH_DB_PASSWORD (или -DbPassword),
+# тестовый пользователь — из BARBERSEARCH_TEST_USER_PASSWORD (или -UserPassword)
+$env:BARBERSEARCH_DB_PASSWORD = $env:POSTGRES_PASSWORD
+$env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ символов>'
 powershell -NoProfile -ExecutionPolicy Bypass -File deploy/smoke.ps1
 ```
+
+Хост, порт, пользователь и имя БД — параметры `-DbHost`, `-DbPort`, `-DbUser`, `-Database`;
+`psql` ищется в `PATH`, другой путь задаётся через `-Psql`.
 
 Скрипт проверяет cookie-вход, переживание рестарта, ротацию refresh, logout, смену пароля,
 создание брони, rate limit по `X-Forwarded-For`, доверие только своим прокси, HTTPS-redirect,
@@ -240,7 +263,7 @@ docker build -t barbersearch-api:local -f Dockerfile .
 docker run --rm -p 18080:8080 `
   -e Auth__SigningKey='<32+ символов>' `
   -e DataProtection__KeysPath=/tmp/keys `
-  -e ConnectionStrings__Postgres='Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=postgres' `
+  -e ConnectionStrings__Postgres="Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD" `
   barbersearch-api:local
 curl.exe -fsS http://127.0.0.1:18080/health/live
 ```

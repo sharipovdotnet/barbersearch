@@ -39,6 +39,13 @@ public class StartupSettingsTests
                 ["ConnectionStrings:Postgres"] =
                     "Host=127.0.0.1;Port=59999;Database=missing;Username=postgres;Password=postgres;Timeout=1",
                 ["Auth:SigningKey"] = new string('s', AuthOptions.MIN_SIGNING_KEY_LENGTH),
+                ["Auth:Issuer"] = "BarberSearch",
+                ["Auth:Audience"] = "BarberSearch.Api",
+                ["Auth:AccessTokenMinutes"] = "15",
+                ["Auth:RefreshTokenDays"] = "14",
+                ["Auth:CookieHours"] = "8",
+                ["Auth:CookieSameSite"] = "Lax",
+                ["Auth:ClockSkewSeconds"] = "30",
                 ["DataProtection:KeysPath"] = keysPath,
                 ["AllowedHosts"] = "*"
             });

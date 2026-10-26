@@ -9,6 +9,7 @@ using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
+using BarberSearch.Domain.Common;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -117,7 +118,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         {
             return new Failure(Error.NotFound(
                 ApiErrorCodes.BarberProfile.FindSalonNotFound,
-                "The barber in the specified salon does not work.",
+                DomainMessages.BARBER_NOT_IN_SALON,
                 salonId));
         }
 

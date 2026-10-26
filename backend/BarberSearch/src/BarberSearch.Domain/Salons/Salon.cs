@@ -31,6 +31,12 @@ public class Salon : AggregateRoot
 
     public bool IsActive { get; private set; }
 
+    private const string ADDRESS_ERROR_CODE = "salon.address";
+    private const string CITY_ERROR_CODE = "salon.city";
+    private const string COUNTRY_ERROR_CODE = "salon.country";
+    private const string TIME_ZONE_ID_ERROR_CODE = "salon.timeZoneId";
+    private const string WEBSITE_URL_ERROR_CODE = "salon.websiteUrl";
+
     private Salon()
     {
     }
@@ -50,16 +56,16 @@ public class Salon : AggregateRoot
         var errors = DomainErrors.Collect();
 
         ValidateRequired(name, nameof(name), "salon.name", errors);
-        ValidateRequired(address, nameof(address), "salon.address", errors);
-        ValidateRequired(city, nameof(city), "salon.city", errors);
-        ValidateRequired(country, nameof(country), "salon.country", errors);
-        ValidateRequired(timeZoneId, nameof(timeZoneId), "salon.timeZoneId", errors);
+        ValidateRequired(address, nameof(address), ADDRESS_ERROR_CODE, errors);
+        ValidateRequired(city, nameof(city), CITY_ERROR_CODE, errors);
+        ValidateRequired(country, nameof(country), COUNTRY_ERROR_CODE, errors);
+        ValidateRequired(timeZoneId, nameof(timeZoneId), TIME_ZONE_ID_ERROR_CODE, errors);
         var normalizedTimeZoneId = ValidateTimeZone(timeZoneId, errors);
         ValidateCoordinates(latitude, longitude, errors);
 
         var websiteUrlError = UrlValidator.Validate(
             websiteUrl,
-            "salon.websiteUrl",
+            WEBSITE_URL_ERROR_CODE,
             nameof(websiteUrl),
             required: false,
             out var normalizedWebsiteUrl);
@@ -100,10 +106,10 @@ public class Salon : AggregateRoot
     {
         var errors = DomainErrors.Collect();
 
-        ValidateRequired(address, nameof(address), "salon.address", errors);
-        ValidateRequired(city, nameof(city), "salon.city", errors);
-        ValidateRequired(country, nameof(country), "salon.country", errors);
-        ValidateRequired(timeZoneId, nameof(timeZoneId), "salon.timeZoneId", errors);
+        ValidateRequired(address, nameof(address), ADDRESS_ERROR_CODE, errors);
+        ValidateRequired(city, nameof(city), CITY_ERROR_CODE, errors);
+        ValidateRequired(country, nameof(country), COUNTRY_ERROR_CODE, errors);
+        ValidateRequired(timeZoneId, nameof(timeZoneId), TIME_ZONE_ID_ERROR_CODE, errors);
         var normalizedTimeZoneId = ValidateTimeZone(timeZoneId, errors);
         ValidateCoordinates(latitude, longitude, errors);
 
@@ -133,7 +139,7 @@ public class Salon : AggregateRoot
 
         var websiteUrlError = UrlValidator.Validate(
             websiteUrl,
-            "salon.websiteUrl",
+            WEBSITE_URL_ERROR_CODE,
             nameof(websiteUrl),
             required: false,
             out var normalizedWebsiteUrl);

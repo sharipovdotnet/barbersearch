@@ -20,7 +20,8 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         {
             table.HasCheckConstraint(
                 "ck_refresh_tokens_token_hash",
-                "char_length(token_hash) = 64");
+                FormattableString.Invariant(
+                    $"char_length(token_hash) = {RefreshToken.HASH_LENGTH}"));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_refresh_tokens");

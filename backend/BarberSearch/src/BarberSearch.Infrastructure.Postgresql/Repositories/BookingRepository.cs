@@ -3,6 +3,7 @@ using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Common;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -45,7 +46,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Booking.IdempotencyKeyInvalid,
-                "Idempotency key cannot be empty.",
+                DomainMessages.IDEMPOTENCY_KEY_REQUIRED,
                 nameof(idempotencyKey)));
         }
 
@@ -106,7 +107,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Booking.PageLimitInvalid,
-                "Page limit must be positive.",
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
                 nameof(limit)));
         }
 
@@ -186,7 +187,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Booking.OverlapPeriodInvalid,
-                "End time must be after start time.",
+                DomainMessages.END_TIME_NOT_AFTER_START,
                 nameof(endAt)));
         }
 
