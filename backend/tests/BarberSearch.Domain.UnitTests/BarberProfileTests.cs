@@ -1,3 +1,4 @@
+using System.Globalization;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Domain.BarberProfiles;
@@ -116,6 +117,121 @@ public class BarberProfileTests
 
         Assert.Single(profile.Languages);
         Assert.Equal(Language.Ru, profile.Languages.First());
+    }
+
+    [Fact]
+    public void Create_WithUnknownLanguage_Fails()
+    {
+        var result = CreateProfile(CreateData() with { Languages = [(Language)999] });
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal("barberProfile.languages.unknown", error.Code);
+        Assert.Equal("languages", error.InvalidField);
+        Assert.Contains("999", error.Message);
+    }
+
+    [Fact]
+    public void Create_WithUnknownPaymentMethod_Fails()
+    {
+        var result = CreateProfile(CreateData() with { PaymentMethods = [(PaymentMethod)999] });
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal("barberProfile.paymentMethods.unknown", error.Code);
+        Assert.Equal("paymentMethods", error.InvalidField);
+        Assert.Contains("999", error.Message);
+    }
+
+    [Fact]
+    public void Create_WithUnknownLanguageAndBadDisplayName_CollectsBothErrors()
+    {
+        var data = CreateData(displayName: "") with { Languages = [(Language)999] };
+
+        var result = CreateProfile(data);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(2, result.Error.Errors.Count);
+        Assert.Contains(result.Error.Errors, error => error.Code == "barberProfile.displayName");
+        Assert.Contains(result.Error.Errors, error => error.Code == "barberProfile.languages.unknown");
+    }
+
+    [Fact]
+    public void Create_WithValidLanguageAndPaymentMethodCollections_Succeeds()
+    {
+        var result = CreateProfile(CreateData());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal([Language.Ru, Language.En], result.Value.Languages);
+        Assert.Equal([PaymentMethod.Cash], result.Value.PaymentMethods);
+    }
+
+    [Fact]
+    public void Create_WithEmptyLanguageAndPaymentMethodCollections_Succeeds()
+    {
+        var data = CreateData() with { Languages = [], PaymentMethods = [] };
+
+        var result = CreateProfile(data);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Languages);
+        Assert.Empty(result.Value.PaymentMethods);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithUnknownLanguage_FailsAndLeavesAggregateUnchanged()
+    {
+        var profile = CreateProfile();
+
+        var result = UpdateProfile(
+            profile,
+            UpdateData(displayName: "Changed") with { Languages = [(Language)999] });
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal("barberProfile.languages.unknown", error.Code);
+        Assert.Equal("languages", error.InvalidField);
+        Assert.Contains("999", error.Message);
+
+        // Неизвестное значение не попадает в агрегат, а провал не меняет остальные поля:
+        // валидация стоит до первой мутации.
+        Assert.Equal("Ivan the Barber", profile.DisplayName.Value);
+        Assert.Equal([Language.Ru, Language.En], profile.Languages);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithUnknownPaymentMethod_FailsAndLeavesAggregateUnchanged()
+    {
+        var profile = CreateProfile();
+
+        var result = UpdateProfile(
+            profile,
+            UpdateData() with { PaymentMethods = [(PaymentMethod)999] });
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal("barberProfile.paymentMethods.unknown", error.Code);
+        Assert.Equal("paymentMethods", error.InvalidField);
+        Assert.Contains("999", error.Message);
+        Assert.Equal([PaymentMethod.Cash], profile.PaymentMethods);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithEmptyLanguageAndPaymentMethodCollections_ClearsCollections()
+    {
+        var profile = CreateProfile();
+
+        var result = UpdateProfile(
+            profile,
+            UpdateData() with { Languages = [], PaymentMethods = [] });
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(profile.Languages);
+        Assert.Empty(profile.PaymentMethods);
     }
 
     [Fact]
@@ -309,6 +425,180 @@ public class BarberProfileTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("barberProfile.addPhoto.url", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void AddPhoto_AcceptsHttpAndHttpsUrls()
+    {
+        var profile = CreateProfile();
+
+        var https = profile.AddPhoto("https://cdn.example.com/1.jpg");
+        var http = profile.AddPhoto("http://cdn.example.com/2.jpg");
+        var uppercaseScheme = profile.AddPhoto("HTTPS://cdn.example.com/3.jpg");
+
+        Assert.True(https.IsSuccess);
+        Assert.True(http.IsSuccess);
+        Assert.True(uppercaseScheme.IsSuccess);
+        Assert.Equal(3, profile.PortfolioPhotos.Count);
+    }
+
+    [Fact]
+    public void AddPhoto_RejectsNonHttpSchemes()
+    {
+        var profile = CreateProfile();
+
+        foreach (var url in new[]
+                 {
+                     "javascript:alert(1)",
+                     "data:text/html,<script>alert(1)</script>",
+                     "ftp://cdn.example.com/1.jpg"
+                 })
+        {
+            var result = profile.AddPhoto(url);
+
+            Assert.True(result.IsFailure);
+
+            var error = Assert.Single(result.Error.Errors);
+
+            Assert.Equal("barberProfile.addPhoto.url", error.Code);
+            Assert.Equal("url", error.InvalidField);
+        }
+
+        Assert.Empty(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddPhoto_RejectsRelativeUrl()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.AddPhoto("/photos/1.jpg");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberProfile.addPhoto.url", result.Error.Errors[0].Code);
+        Assert.Empty(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddPhoto_RejectsUserInfoInUrl()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.AddPhoto("https://user:pass@cdn.example.com/1.jpg");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberProfile.addPhoto.url", result.Error.Errors[0].Code);
+        Assert.Empty(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddPhoto_AcceptsUrlAtLimitAndRejectsLongerOne()
+    {
+        var profile = CreateProfile();
+        const int prefixLength = 24; // "https://cdn.example.com/"
+        var atLimit = "https://cdn.example.com/" +
+                      new string('a', Constants.MAX_URL_LENGTH - prefixLength);
+
+        var accepted = profile.AddPhoto(atLimit);
+        var rejected = profile.AddPhoto(atLimit + "a");
+
+        Assert.True(accepted.IsSuccess);
+        Assert.True(rejected.IsFailure);
+
+        var error = Assert.Single(rejected.Error.Errors);
+
+        Assert.Equal("barberProfile.addPhoto.url", error.Code);
+        Assert.Contains(
+            Constants.MAX_URL_LENGTH.ToString(CultureInfo.InvariantCulture),
+            error.Message);
+    }
+
+    [Fact]
+    public void AddPhoto_TrimsUrlAndThumbnailAndNormalizesBlankOptionalValues()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.AddPhoto(
+            "  https://cdn.example.com/1.jpg  ",
+            "   ",
+            "Fade");
+
+        Assert.True(result.IsSuccess);
+
+        var photo = profile.PortfolioPhotos.Single();
+
+        Assert.Equal("https://cdn.example.com/1.jpg", photo.Url);
+        Assert.Null(photo.ThumbnailUrl);
+    }
+
+    [Fact]
+    public void AddPhoto_CollectsUrlThumbnailAndDescriptionErrors()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.AddPhoto(
+            " ",
+            "javascript:alert(1)",
+            new string('x', Constants.MAX_TEXT_LENGTH + 1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(3, result.Error.Errors.Count);
+        Assert.Contains(result.Error.Errors, error => error.Code == "barberProfile.addPhoto.url");
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "barberProfile.addPhoto.thumbnailUrl");
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "barberProfile.addPhoto.description");
+        Assert.Empty(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddPhoto_AcceptsDescriptionAtLimitAndRejectsLongerOne()
+    {
+        var profile = CreateProfile();
+
+        var accepted = profile.AddPhoto(
+            "https://cdn.example.com/1.jpg",
+            null,
+            new string('x', Constants.MAX_TEXT_LENGTH));
+        var rejected = profile.AddPhoto(
+            "https://cdn.example.com/2.jpg",
+            null,
+            new string('x', Constants.MAX_TEXT_LENGTH + 1));
+
+        Assert.True(accepted.IsSuccess);
+        Assert.True(rejected.IsFailure);
+
+        var error = Assert.Single(rejected.Error.Errors);
+
+        Assert.Equal("barberProfile.addPhoto.description", error.Code);
+        Assert.Equal("description", error.InvalidField);
+        Assert.Single(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void UpdateDescription_AtLimitSucceedsAndLongerOneKeepsOldValue()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn.example.com/1.jpg", null, "Vintage fade");
+        var photo = profile.PortfolioPhotos.Single();
+
+        var rejected = photo.UpdateDescription(
+            new string('x', Constants.MAX_TEXT_LENGTH + 1));
+
+        Assert.True(rejected.IsFailure);
+
+        var error = Assert.Single(rejected.Error.Errors);
+
+        Assert.Equal("portfolioPhoto.updateDescription.description", error.Code);
+        Assert.Equal("description", error.InvalidField);
+        Assert.Equal("Vintage fade", photo.Description);
+
+        var accepted = photo.UpdateDescription(new string('x', Constants.MAX_TEXT_LENGTH));
+
+        Assert.True(accepted.IsSuccess);
+        Assert.Equal(Constants.MAX_TEXT_LENGTH, photo.Description!.Length);
     }
 
     [Fact]

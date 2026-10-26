@@ -1,3 +1,4 @@
+using BarberSearch.Domain;
 using BarberSearch.Domain.Bookings;
 using Shared;
 using Xunit;
@@ -73,6 +74,33 @@ public class BookingTests
     }
 
     [Fact]
+    public void Create_WithMaximumDuration_Succeeds()
+    {
+        var result = Booking.Create(
+            Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(Constants.MAX_BOOKING_DURATION_MINUTES),
+            1000m,
+            "key-1");
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public void Create_WithDurationLongerThanMaximum_Fails()
+    {
+        var result = Booking.Create(
+            Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(Constants.MAX_BOOKING_DURATION_MINUTES + 1),
+            1000m,
+            "key-1");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.create.period.tooLong", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
     public void Create_WithNegativePrice_Fails()
     {
         var result = Booking.Create(
@@ -81,6 +109,14 @@ public class BookingTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("booking.create.price", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Create_WithPaddedIdempotencyKey_StoresItTrimmed()
+    {
+        var booking = CreateValidBooking("  key-1  ");
+
+        Assert.Equal("key-1", booking.IdempotencyKey);
     }
 
     [Fact]

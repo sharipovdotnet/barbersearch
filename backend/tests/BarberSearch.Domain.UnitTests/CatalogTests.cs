@@ -68,12 +68,150 @@ public class SalonTests
     }
 
     [Fact]
+    public void Create_WithUnknownTimeZone_Fails()
+    {
+        var result = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Mars/Olympus", 55, 37);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("salon.timeZoneId.unknown", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Create_TrimsTimeZoneId()
+    {
+        var result = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", " Europe/Moscow ", 55, 37);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Europe/Moscow", result.Value.TimeZoneId);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidWebsiteUrls()
+    {
+        foreach (var websiteUrl in new[]
+                 {
+                     "javascript:alert(1)",
+                     "data:text/html,<script>alert(1)</script>",
+                     "ftp://barbershop.example.com",
+                     "barbershop.example.com"
+                 })
+        {
+            var result = Salon.Create(
+                "Barbershop",
+                "Tverskaya 1",
+                "Moscow",
+                "RU",
+                "Europe/Moscow",
+                55,
+                37,
+                websiteUrl: websiteUrl);
+
+            Assert.True(result.IsFailure);
+
+            var error = Assert.Single(result.Error.Errors);
+
+            Assert.Equal("salon.websiteUrl", error.Code);
+            Assert.Equal("websiteUrl", error.InvalidField);
+        }
+    }
+
+    [Fact]
+    public void Create_TrimsWebsiteUrl()
+    {
+        var result = Salon.Create(
+            "Barbershop",
+            "Tverskaya 1",
+            "Moscow",
+            "RU",
+            "Europe/Moscow",
+            55,
+            37,
+            websiteUrl: "  https://barbershop.example.com  ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://barbershop.example.com", result.Value.WebsiteUrl);
+    }
+
+    [Fact]
+    public void Create_WithSpacesInsteadOfWebsite_SucceedsWithNull()
+    {
+        var result = Salon.Create(
+            "Barbershop",
+            "Tverskaya 1",
+            "Moscow",
+            "RU",
+            "Europe/Moscow",
+            55,
+            37,
+            websiteUrl: "   ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.WebsiteUrl);
+    }
+
+    [Fact]
+    public void UpdateContactInfo_WithInvalidWebsiteUrl_FailsAndKeepsOldValues()
+    {
+        var salon = Salon.Create(
+            "Barbershop",
+            "Tverskaya 1",
+            "Moscow",
+            "RU",
+            "Europe/Moscow",
+            55,
+            37,
+            phoneNumber: "+79001234567",
+            websiteUrl: "https://barbershop.example.com").Value;
+
+        var result = salon.UpdateContactInfo("+79007654321", "javascript:alert(1)");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("salon.websiteUrl", result.Error.Errors[0].Code);
+        Assert.Equal("+79001234567", salon.PhoneNumber);
+        Assert.Equal("https://barbershop.example.com", salon.WebsiteUrl);
+    }
+
+    [Fact]
+    public void UpdateContactInfo_TrimsWebsiteUrlAndClearsItOnBlank()
+    {
+        var salon = CreateValidSalon();
+
+        var updated = salon.UpdateContactInfo(
+            null,
+            "  https://barbershop.example.com  ");
+
+        Assert.True(updated.IsSuccess);
+        Assert.Equal("https://barbershop.example.com", salon.WebsiteUrl);
+
+        var cleared = salon.UpdateContactInfo(null, "   ");
+
+        Assert.True(cleared.IsSuccess);
+        Assert.Null(salon.WebsiteUrl);
+    }
+
+    [Fact]
     public void Create_CollectsEveryMissingField()
     {
         var result = Salon.Create("", "", "", "", "", 55, 37);
 
         Assert.True(result.IsFailure);
         Assert.Equal(5, result.Error.Errors.Count);
+    }
+
+    [Fact]
+    public void UpdateLocation_WithUnknownTimeZone_FailsAndKeepsOldLocation()
+    {
+        var salon = CreateValidSalon();
+
+        var result = salon.UpdateLocation(
+            "Arbat 5", "Moscow", "RU", "Mars/Olympus", 55.75, 37.59);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("salon.timeZoneId.unknown", result.Error.Errors[0].Code);
+        Assert.Equal("Tverskaya 1", salon.Address);
+        Assert.Equal("Europe/Moscow", salon.TimeZoneId);
     }
 
     [Fact]

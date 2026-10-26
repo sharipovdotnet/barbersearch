@@ -58,6 +58,14 @@ public class PortfolioPhoto : Entity
 
     public UnitResult<Failure> UpdateDescription(string? description)
     {
+        if (description is not null && description.Length > Constants.MAX_TEXT_LENGTH)
+        {
+            return new Failure(Error.Validation(
+                "portfolioPhoto.updateDescription.description",
+                $"Photo description cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                nameof(description)));
+        }
+
         Description = description;
         MarkUpdated();
 
@@ -67,7 +75,13 @@ public class PortfolioPhoto : Entity
     /// <summary>
     /// Меняет порядок вывода фотографии в портфолио.
     /// </summary>
-    public UnitResult<Failure> Reorder(int sortOrder)
+    /// <remarks>
+    /// Публичная точка входа одна — <see cref="BarberProfile.ReorderPhoto"/>, которая проверяет,
+    /// что фотография принадлежит этому профилю, и обновляет корень агрегата. Метод
+    /// <c>internal</c> (R-44): ребёнок не меняется снаружи, и дублирующего маршрута
+    /// <c>…/photos/{photoId}/order</c> больше нет.
+    /// </remarks>
+    internal UnitResult<Failure> Reorder(int sortOrder)
     {
         SortOrder = sortOrder;
         MarkUpdated();

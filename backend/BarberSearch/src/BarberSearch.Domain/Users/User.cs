@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.FavoriteBarbers;
 using CSharpFunctionalExtensions;
@@ -11,6 +12,18 @@ namespace BarberSearch.Domain.Users;
 /// </summary>
 public class User : AggregateRoot
 {
+    /// <summary>
+    /// Предохранитель счётчика неудач: больше этого значения он не растёт, поэтому показатель
+    /// степени в <see cref="LockoutDelay"/> остаётся маленьким и <see cref="int"/> не переполняется.
+    /// </summary>
+    private const int FAILED_LOGIN_ATTEMPTS_CAP = Constants.MAX_FAILED_LOGIN_ATTEMPTS + 10;
+
+    /// <summary>
+    /// Показатель степени, после которого задержка заведомо упирается в
+    /// <see cref="Constants.LOGIN_LOCKOUT_MAX_MINUTES"/>: 2^6 = 64 минуты при базе в 1 минуту.
+    /// </summary>
+    private const int MAX_LOCKOUT_EXPONENT = 6;
+
     private readonly List<FavoriteBarber> _favoriteBarbers = [];
 
     public string Email { get; private set; } = null!;
@@ -38,6 +51,23 @@ public class User : AggregateRoot
     public DateTimeOffset? LastLoginAt { get; private set; }
 
     /// <summary>
+    /// Сколько неудачных попыток входа подряд зафиксировано у аккаунта.
+    /// </summary>
+    public int FailedLoginAttempts { get; private set; }
+
+    /// <summary>
+    /// Момент последней неудачной попытки. По нему решается, начинать счёт заново
+    /// (пауза больше <see cref="Constants.LOGIN_FAILURE_RESET_MINUTES"/> минут) или продолжать.
+    /// </summary>
+    public DateTimeOffset? LastFailedLoginAt { get; private set; }
+
+    /// <summary>
+    /// Конец текущей блокировки входа. <c>null</c> — блокировки нет; прошедшее значение
+    /// блокировкой уже не является (<see cref="IsLockedOut"/>).
+    /// </summary>
+    public DateTimeOffset? LockoutEnd { get; private set; }
+
+    /// <summary>
     /// Идентификатор профиля барбера, если пользователь в роли барбера.
     /// Навигации на <c>BarberProfile</c> нет — это граница другого агрегата.
     /// </summary>
@@ -58,8 +88,9 @@ public class User : AggregateRoot
         UserRole role = UserRole.Customer)
     {
         var errors = DomainErrors.Collect();
+        var normalizedEmail = NormalizeEmail(email);
 
-        Validate(email, passwordHash, firstName, lastName, role, errors);
+        Validate(normalizedEmail, passwordHash, firstName, lastName, role, errors);
 
         if (errors.Count != 0)
         {
@@ -68,7 +99,7 @@ public class User : AggregateRoot
 
         return new User
         {
-            Email = email,
+            Email = normalizedEmail,
             PasswordHash = passwordHash,
             FirstName = firstName,
             LastName = lastName,
@@ -77,6 +108,18 @@ public class User : AggregateRoot
             SecurityStamp = NewSecurityStamp()
         };
     }
+
+    /// <summary>
+    /// Приводит адрес к каноническому виду: срезает пробелы по краям и переводит в нижний регистр.
+    /// </summary>
+    /// <remarks>
+    /// Канонический вид — часть контракта хранения: по нему строится уникальный индекс,
+    /// и в нём адрес сравнивается при входе. Без нормализации <c>User@x</c> и <c>user@x</c>
+    /// становились двумя пользователями, а аккаунт с пробелом по краям нельзя было открыть
+    /// для входа (R-03).
+    /// </remarks>
+    public static string NormalizeEmail(string? email)
+        => email?.Trim().ToLowerInvariant() ?? string.Empty;
 
     public UnitResult<Failure> UpdateProfile(
         string firstName,
@@ -102,6 +145,17 @@ public class User : AggregateRoot
                 nameof(lastName)));
         }
 
+        var avatarUrlError = UrlValidator.Validate(
+            avatarUrl,
+            "user.updateProfile.avatarUrl",
+            nameof(avatarUrl),
+            required: false,
+            out var normalizedAvatarUrl);
+        if (avatarUrlError is not null)
+        {
+            errors.Add(avatarUrlError);
+        }
+
         if (errors.Count != 0)
         {
             return new Failure(errors);
@@ -110,7 +164,7 @@ public class User : AggregateRoot
         FirstName = firstName;
         LastName = lastName;
         PhoneNumber = phoneNumber;
-        AvatarUrl = avatarUrl;
+        AvatarUrl = normalizedAvatarUrl;
 
         MarkUpdated();
 
@@ -231,9 +285,88 @@ public class User : AggregateRoot
         return DomainErrors.Ok();
     }
 
+    /// <summary>
+    /// Отмечает вход пользователя: ставит <see cref="LastLoginAt"/> и обновляет
+    /// <see cref="Entity.UpdatedAt"/>.
+    /// </summary>
+    /// <remarks>
+    /// Время берётся системными часами: это техническая метка аудита, а не бизнес-«сейчас».
+    /// Домен сознательно не знает про <c>TimeProvider</c> (политика R-27, <c>AGENT.md</c> §7.6);
+    /// управляемое время живёт в Application/Web, где принимаются зависящие от времени решения.
+    /// </remarks>
     public UnitResult<Failure> RecordLogin()
     {
         LastLoginAt = DateTimeOffset.UtcNow;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Сообщает, заблокирован ли вход на момент <paramref name="now"/>.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение строгое: в момент <see cref="LockoutEnd"/> блокировка уже закончилась.
+    /// Иначе клиент, дождавшийся конца задержки, получал бы отказ ещё раз.
+    /// </remarks>
+    public bool IsLockedOut(DateTimeOffset now)
+        => LockoutEnd is { } lockoutEnd && lockoutEnd > now;
+
+    /// <summary>
+    /// Регистрирует неудачную попытку входа и, начиная с
+    /// <see cref="Constants.MAX_FAILED_LOGIN_ATTEMPTS"/>-й подряд, блокирует вход.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Метод не может провалиться: это фиксация факта, а не бизнес-проверка. Решение «вход
+    /// заблокирован» принимает вызывающий через <see cref="IsLockedOut"/>.
+    /// </para>
+    /// <para>
+    /// Пауза больше <see cref="Constants.LOGIN_FAILURE_RESET_MINUTES"/> минут после предыдущей
+    /// неудачи начинает счёт заново. Задержка после порога растёт как
+    /// <c>LOGIN_LOCKOUT_BASE_MINUTES * 2^(attempts - MAX_FAILED_LOGIN_ATTEMPTS)</c> и ограничена
+    /// <see cref="Constants.LOGIN_LOCKOUT_MAX_MINUTES"/>; счётчик тоже ограничен сверху, чтобы
+    /// степень двойки не переполнила <see cref="int"/>.
+    /// </para>
+    /// </remarks>
+    public UnitResult<Failure> RegisterFailedLogin(DateTimeOffset now)
+    {
+        if (LastFailedLoginAt is { } lastFailedAt &&
+            now - lastFailedAt > TimeSpan.FromMinutes(Constants.LOGIN_FAILURE_RESET_MINUTES))
+        {
+            FailedLoginAttempts = 0;
+            LockoutEnd = null;
+        }
+
+        FailedLoginAttempts = Math.Min(FailedLoginAttempts + 1, FAILED_LOGIN_ATTEMPTS_CAP);
+        LastFailedLoginAt = now;
+
+        if (FailedLoginAttempts >= Constants.MAX_FAILED_LOGIN_ATTEMPTS)
+        {
+            LockoutEnd = now + LockoutDelay(FailedLoginAttempts);
+        }
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Сбрасывает счётчик неудач и снимает блокировку — вызывается после успешного входа.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен: если сбрасывать нечего, <see cref="Entity.UpdatedAt"/> не меняется.
+    /// </remarks>
+    public UnitResult<Failure> ResetFailedLogin()
+    {
+        if (FailedLoginAttempts == 0 && LastFailedLoginAt is null && LockoutEnd is null)
+        {
+            return DomainErrors.Ok();
+        }
+
+        FailedLoginAttempts = 0;
+        LastFailedLoginAt = null;
+        LockoutEnd = null;
         MarkUpdated();
 
         return DomainErrors.Ok();
@@ -304,19 +437,70 @@ public class User : AggregateRoot
 
     private static string NewSecurityStamp() => Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// Задержка после <paramref name="attempts"/>-й неудачи подряд: 1, 2, 4, … минут,
+    /// но не больше <see cref="Constants.LOGIN_LOCKOUT_MAX_MINUTES"/>.
+    /// </summary>
+    private static TimeSpan LockoutDelay(int attempts)
+    {
+        var exponent = Math.Min(
+            attempts - Constants.MAX_FAILED_LOGIN_ATTEMPTS,
+            MAX_LOCKOUT_EXPONENT);
+
+        var minutes = Math.Min(
+            (long)Constants.LOGIN_LOCKOUT_BASE_MINUTES << exponent,
+            Constants.LOGIN_LOCKOUT_MAX_MINUTES);
+
+        return TimeSpan.FromMinutes(minutes);
+    }
+
+    /// <summary>
+    /// Синтаксическая проверка канонического адреса.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MailAddress.TryCreate(string, out MailAddress)"/> разбирает адрес по RFC,
+    /// а не по регулярному выражению. Сравнение <c>Address</c> с исходной строкой отсекает
+    /// форму с отображаемым именем (<c>Иван &lt;ivan@example.com&gt;</c>), которую он тоже
+    /// принимает. Домен обязан содержать точку: <c>a@b</c> синтаксически допустим для
+    /// <see cref="MailAddress"/>, но не является адресом публичного сервиса.
+    /// </remarks>
+    private static bool IsValidEmail(string email)
+    {
+        if (email.Length is < Constants.MIN_EMAIL_LENGTH or > Constants.MAX_EMAIL_LENGTH)
+        {
+            return false;
+        }
+
+        if (!MailAddress.TryCreate(email, out var parsed) ||
+            !string.Equals(parsed.Address, email, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var at = email.LastIndexOf('@');
+        var dot = email.IndexOf('.', at + 1);
+
+        return at > 0 &&
+               dot > at + 1 &&
+               dot < email.Length - 1 &&
+               !email.Contains("..", StringComparison.Ordinal) &&
+               !email.EndsWith('.');
+    }
+
     private static void Validate(
-        string? email,
+        string email,
         string? passwordHash,
         string? firstName,
         string? lastName,
         UserRole role,
         List<Error> errors)
     {
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        if (!IsValidEmail(email))
         {
             errors.Add(Error.Validation(
                 "user.email",
-                "Email must be a non-empty address.",
+                $"Email must be a valid address between {Constants.MIN_EMAIL_LENGTH} " +
+                $"and {Constants.MAX_EMAIL_LENGTH} characters.",
                 nameof(email)));
         }
 

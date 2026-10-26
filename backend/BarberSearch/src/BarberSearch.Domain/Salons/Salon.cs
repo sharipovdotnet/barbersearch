@@ -54,7 +54,19 @@ public class Salon : AggregateRoot
         ValidateRequired(city, nameof(city), "salon.city", errors);
         ValidateRequired(country, nameof(country), "salon.country", errors);
         ValidateRequired(timeZoneId, nameof(timeZoneId), "salon.timeZoneId", errors);
+        var normalizedTimeZoneId = ValidateTimeZone(timeZoneId, errors);
         ValidateCoordinates(latitude, longitude, errors);
+
+        var websiteUrlError = UrlValidator.Validate(
+            websiteUrl,
+            "salon.websiteUrl",
+            nameof(websiteUrl),
+            required: false,
+            out var normalizedWebsiteUrl);
+        if (websiteUrlError is not null)
+        {
+            errors.Add(websiteUrlError);
+        }
 
         if (errors.Count != 0)
         {
@@ -67,12 +79,12 @@ public class Salon : AggregateRoot
             Address = address,
             City = city,
             Country = country,
-            TimeZoneId = timeZoneId,
+            TimeZoneId = normalizedTimeZoneId!,
             Latitude = latitude,
             Longitude = longitude,
             PostalCode = postalCode,
             PhoneNumber = phoneNumber,
-            WebsiteUrl = websiteUrl,
+            WebsiteUrl = normalizedWebsiteUrl,
             IsActive = true
         };
     }
@@ -92,6 +104,7 @@ public class Salon : AggregateRoot
         ValidateRequired(city, nameof(city), "salon.city", errors);
         ValidateRequired(country, nameof(country), "salon.country", errors);
         ValidateRequired(timeZoneId, nameof(timeZoneId), "salon.timeZoneId", errors);
+        var normalizedTimeZoneId = ValidateTimeZone(timeZoneId, errors);
         ValidateCoordinates(latitude, longitude, errors);
 
         if (errors.Count != 0)
@@ -102,7 +115,7 @@ public class Salon : AggregateRoot
         Address = address;
         City = city;
         Country = country;
-        TimeZoneId = timeZoneId;
+        TimeZoneId = normalizedTimeZoneId!;
         Latitude = latitude;
         Longitude = longitude;
         PostalCode = postalCode;
@@ -116,8 +129,26 @@ public class Salon : AggregateRoot
         string? phoneNumber,
         string? websiteUrl)
     {
+        var errors = DomainErrors.Collect();
+
+        var websiteUrlError = UrlValidator.Validate(
+            websiteUrl,
+            "salon.websiteUrl",
+            nameof(websiteUrl),
+            required: false,
+            out var normalizedWebsiteUrl);
+        if (websiteUrlError is not null)
+        {
+            errors.Add(websiteUrlError);
+        }
+
+        if (errors.Count != 0)
+        {
+            return new Failure(errors);
+        }
+
         PhoneNumber = phoneNumber;
-        WebsiteUrl = websiteUrl;
+        WebsiteUrl = normalizedWebsiteUrl;
 
         MarkUpdated();
 
@@ -160,6 +191,42 @@ public class Salon : AggregateRoot
         {
             errors.Add(Error.Validation(code, "Value cannot be empty.", field));
         }
+    }
+
+    /// <summary>
+    /// Проверяет, что часовой пояс разрешается в системе, и возвращает его нормализованное
+    /// значение: пробелы по краям срезаются, Windows-идентификатор переводится в IANA.
+    /// </summary>
+    /// <remarks>
+    /// Без этой проверки опечатка в админском запросе сохранялась бы в БД и ломала
+    /// расчёт слотов уже на чтении (R-01). <c>null</c> означает, что пояс пуст или
+    /// не разрешается; пустое значение отдельно помечает <see cref="ValidateRequired"/>.
+    /// </remarks>
+    private static string? ValidateTimeZone(string? timeZoneId, List<Error> errors)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return null;
+        }
+
+        var candidate = timeZoneId.Trim();
+
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(candidate, out var ianaId))
+        {
+            candidate = ianaId;
+        }
+
+        if (TimeZoneInfo.TryFindSystemTimeZoneById(candidate, out _))
+        {
+            return candidate;
+        }
+
+        errors.Add(Error.Validation(
+            "salon.timeZoneId.unknown",
+            $"Time zone '{timeZoneId}' cannot be resolved.",
+            nameof(timeZoneId)));
+
+        return null;
     }
 
     private static void ValidateCoordinates(

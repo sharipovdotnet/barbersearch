@@ -40,6 +40,50 @@ public class Booking : AggregateRoot
     {
     }
 
+    /// <summary>
+    /// Приводит ключ идемпотентности к каноническому виду: срезает пробелы по краям.
+    /// </summary>
+    /// <remarks>
+    /// Канонический вид — часть контракта хранения: по нему строится уникальный индекс
+    /// <c>ux_bookings_user_id_idempotency_key</c>, и в нём ключ сравнивается при повторном
+    /// запросе. Обработчик нормализует ключ до чтения из репозитория, а <see cref="Create"/>
+    /// — при создании агрегата, поэтому оба сравнения используют один и тот же вид (R-09).
+    /// </remarks>
+    public static string NormalizeIdempotencyKey(string? idempotencyKey)
+        => idempotencyKey?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// Проверяет ключ идемпотентности; возвращает <c>null</c>, если он корректен.
+    /// </summary>
+    /// <remarks>
+    /// Проверка вынесена из <see cref="Create"/> в отдельный метод, чтобы обработчик мог
+    /// применить её <b>до</b> запроса в репозиторий: иначе пустой ключ отвечал ошибкой
+    /// инфраструктуры, а доменный код <c>booking.create.idempotencyKey</c> был недостижим (R-09).
+    /// </remarks>
+    public static Error? ValidateIdempotencyKey(string idempotencyKey)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Error.Validation(
+                "booking.create.idempotencyKey",
+                "Idempotency key cannot be empty.",
+                nameof(idempotencyKey));
+        }
+
+        if (idempotencyKey.Length > Constants.MAX_IDEMPOTENCY_KEY_LENGTH)
+        {
+            return Error.Validation(
+                "booking.create.idempotencyKey.tooLong",
+                $"""
+                 Idempotency key cannot be longer than
+                 {Constants.MAX_IDEMPOTENCY_KEY_LENGTH} characters.
+                 """,
+                nameof(idempotencyKey));
+        }
+
+        return null;
+    }
+
     public static Result<Booking, Failure> Create(
         Guid userId,
         Guid barberProfileId,
@@ -53,11 +97,20 @@ public class Booking : AggregateRoot
     {
         var errors = DomainErrors.Collect();
 
+        var normalizedIdempotencyKey = NormalizeIdempotencyKey(idempotencyKey);
+
         if (endAt <= startAt)
         {
             errors.Add(Error.Validation(
                 "booking.create.period",
                 "End time must be after start time.",
+                nameof(endAt)));
+        }
+        else if (endAt - startAt > TimeSpan.FromMinutes(Constants.MAX_BOOKING_DURATION_MINUTES))
+        {
+            errors.Add(Error.Validation(
+                "booking.create.period.tooLong",
+                $"Booking duration cannot exceed {Constants.MAX_BOOKING_DURATION_MINUTES} minutes.",
                 nameof(endAt)));
         }
 
@@ -69,22 +122,9 @@ public class Booking : AggregateRoot
                 nameof(price)));
         }
 
-        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        if (ValidateIdempotencyKey(normalizedIdempotencyKey) is { } idempotencyKeyError)
         {
-            errors.Add(Error.Validation(
-                "booking.create.idempotencyKey",
-                "Idempotency key cannot be empty.",
-                nameof(idempotencyKey)));
-        }
-        else if (idempotencyKey.Length > Constants.MAX_IDEMPOTENCY_KEY_LENGTH)
-        {
-            errors.Add(Error.Validation(
-                "booking.create.idempotencyKey.tooLong",
-                $"""
-                 Idempotency key cannot be longer than 
-                 {Constants.MAX_IDEMPOTENCY_KEY_LENGTH} characters.
-                 """,
-                nameof(idempotencyKey)));
+            errors.Add(idempotencyKeyError);
         }
 
         if (errors.Count != 0)
@@ -101,7 +141,7 @@ public class Booking : AggregateRoot
             StartAt = startAt,
             EndAt = endAt,
             Price = price,
-            IdempotencyKey = idempotencyKey,
+            IdempotencyKey = normalizedIdempotencyKey,
             CustomerNote = customerNote,
             Status = BookingStatus.Pending
         };
