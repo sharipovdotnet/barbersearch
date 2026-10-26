@@ -1,0 +1,72 @@
+name: backend-ci
+
+# Сборка и тесты backend. Workflow лежит в корне репозитория (не в backend/),
+# потому что GitHub Actions читает только .github/workflows из корня.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Directory.Build.props включает ContinuousIntegrationBuild при CI=true.
+  CI: true
+
+jobs:
+  build-and-test:
+    name: Build, unit and integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            backend/**/*.csproj
+            backend/global.json
+
+      - name: Restore
+        run: dotnet restore BarberSearch/BarberSearch.sln
+
+      - name: Build (Release)
+        run: dotnet build BarberSearch/BarberSearch.sln -c Release --no-restore --nologo
+
+      # Unit-тесты не требуют БД и Docker.
+      - name: Unit tests — Domain
+        run: >
+          dotnet test tests/BarberSearch.Domain.UnitTests
+          -c Release --no-build --no-restore --nologo --verbosity quiet
+
+      - name: Unit tests — Application
+        run: >
+          dotnet test tests/BarberSearch.Application.UnitTests
+          -c Release --no-build --no-restore --nologo --verbosity quiet
+
+      - name: Unit tests — Infrastructure
+        run: >
+          dotnet test tests/BarberSearch.Infrastructure.UnitTests
+          -c Release --no-build --no-restore --nologo --verbosity quiet
+
+      # Testcontainers поднимает postgres:18 на Docker движке ubuntu-latest;
+      # секреты не нужны. Без Docker сработал бы BARBERSEARCH_TEST_POSTGRES,
+      # но здесь он не задаётся намеренно.
+      - name: Integration tests (Testcontainers)
+        run: >
+          dotnet test tests/BarberSearch.IntegrationTests
+          -c Release --no-build --no-restore --nologo --verbosity quiet

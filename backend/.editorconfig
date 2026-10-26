@@ -1,0 +1,83 @@
+# Единые правила форматирования и анализаторов для всего backend/.
+# root = true — файл является корнем для EditorConfig, выше (в D:\Projects\barbersearch)
+# настройки не ищутся. Действует на BarberSearch/src/*, tests/* и load/harness.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# JSON/YAML/XML-проекты в репозитории свёрстаны двумя пробелами.
+[*.{json,yml,yaml,csproj,props,targets}]
+indent_size = 2
+
+[*.cs]
+# Базовые C#-стили репозитория (AGENT.md §10): файловые namespace, var только там,
+# где тип очевиден, явные модификаторы доступа, System-using'и первыми.
+# Это IDE-правила: в сборке они не проверяются (EnforceCodeStyleInBuild=false),
+# но ими руководствуется dotnet format и редактор.
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+csharp_prefer_braces = true:suggestion
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+dotnet_style_predefined_type_for_locals_parameters_members = true:suggestion
+dotnet_style_predefined_type_for_member_access = true:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:suggestion
+
+# IDE0005 (лишние using) включается явно. Штатная сборка XML-доки не генерирует
+# (Directory.Build.props), поэтому правило проверяется отдельной командой
+# `dotnet format style --diagnostics IDE0005`, а не каждым build.
+dotnet_diagnostic.IDE0005.severity = warning
+
+# --- Явные исключения из recommended-набора анализаторов (R-37) ---
+# Каждое исключение — осознанное решение с причиной; правила не отключаются «пакетно»
+# через AnalysisMode=Default, потому что остальной recommended-набор полезен.
+
+# SCREAMING_SNAKE_CASE — обязательное соглашение для доменных констант (AGENT.md §10.9),
+# а имена xUnit-тестов строятся как Method_Scenario_Expected. Оба случая — не дефект.
+dotnet_diagnostic.CA1707.severity = none
+
+# Перевод всех 190 вызовов ILogger на LoggerMessage-делегаты — отдельный
+# производительный рефакторинг, не входящий в R-37; поведение и контракты не меняются.
+dotnet_diagnostic.CA1848.severity = none
+
+# Оценка аргументов лога (интерполяция/свойства) при выключенном уровне логирования.
+# Аргументы в существующих вызовах дешёвые, а проверки IsEnabled — тот же отдельный
+# рефакторинг логирования, что и CA1848. Пока правило шумит на 156 вызовах.
+dotnet_diagnostic.CA1873.severity = none
+
+# CA1716 (имена, совпадающие с ключевыми словами других языков) в C#-only проекте
+# неприменим: `Shared`, `Error`, namespace `Auth.Me`, параметры `date`/`to` — часть
+# устоявшегося публичного контракта. Переименование `Error`/`Shared` — breaking change,
+# а `to` используется в nameof(...) публичного поля ошибки. Отдельный пункт R-37 не про это.
+dotnet_diagnostic.CA1716.severity = none
+
+# Сгенерированные EF Core миграции: массивы-литералы (CA1861) и new bool[0] (CA1825) —
+# нормальный вид snapshot/миграционного кода, руками его не переписываем.
+[BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1825.severity = none
+
+# EF переводит x.Name.ToLower() в SQL lower(); сравнение идёт на сервере, культура
+# процесса не участвует. Замена на ToLowerInvariant()/StringComparison изменила бы
+# транслируемый SQL, поэтому CA1304/CA1311/CA1862 здесь — ложные срабатывания.
+[BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/SpecializationRepository.cs]
+dotnet_diagnostic.CA1304.severity = none
+dotnet_diagnostic.CA1311.severity = none
+dotnet_diagnostic.CA1862.severity = none
+
+# xUnit collection definition по соглашению называется ...Collection, хотя ICollection
+# не реализует; CA1711 для этого паттерна — ложное срабатывание.
+[tests/BarberSearch.IntegrationTests/IntegrationCollection.cs]
+dotnet_diagnostic.CA1711.severity = none

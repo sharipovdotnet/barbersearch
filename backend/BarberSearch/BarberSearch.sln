@@ -1,22 +1,26 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Web", "src\BarberSearch.Web\BarberSearch.Web.csproj", "{0B95925B-AF3C-4DF2-8901-33C3DB06B8E4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Web", "src\BarberSearch.Web\BarberSearch.Web.csproj", "{0B95925B-AF3C-4DF2-8901-33C3DB06B8E4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Domain", "src\BarberSearch.Domain\BarberSearch.Domain.csproj", "{AE9D8ADA-B053-41C0-A026-3319510D035B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Domain", "src\BarberSearch.Domain\BarberSearch.Domain.csproj", "{AE9D8ADA-B053-41C0-A026-3319510D035B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "src\Shared\Shared.csproj", "{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "src\Shared\Shared.csproj", "{AEF6BE57-0A12-4813-9E8D-E7CAD3201692}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Domain.UnitTests", "..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj", "{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Domain.UnitTests", "..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj", "{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Infrastructure.Postgresql", "src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.Postgresql", "src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Application", "src\BarberSearch.Application\BarberSearch.Application.csproj", "{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Application", "src\BarberSearch.Application\BarberSearch.Application.csproj", "{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Contracts", "src\BarberSearch.Contracts\BarberSearch.Contracts.csproj", "{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Contracts", "src\BarberSearch.Contracts\BarberSearch.Contracts.csproj", "{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarberSearch.Application.UnitTests", "..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj", "{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Application.UnitTests", "..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj", "{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.UnitTests", "..\tests\BarberSearch.Infrastructure.UnitTests\BarberSearch.Infrastructure.UnitTests.csproj", "{A5487549-6B9C-462E-992A-DA0F87B69383}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.IntegrationTests", "..\tests\BarberSearch.IntegrationTests\BarberSearch.IntegrationTests.csproj", "{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,9 +60,19 @@ Global
 		{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5487549-6B9C-462E-992A-DA0F87B69383}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5487549-6B9C-462E-992A-DA0F87B69383}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5487549-6B9C-462E-992A-DA0F87B69383}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5487549-6B9C-462E-992A-DA0F87B69383}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7C1E4A62-9D3B-4F58-8A21-5B6E0C4D9F37} = {02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}
 		{6C2E1B7A-4D9F-4A3E-B8C5-2F1D7E9A0B64} = {02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}
+		{A5487549-6B9C-462E-992A-DA0F87B69383} = {02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}
+		{3F3A1C7E-9B2D-4E55-8C41-77D2A5E9B6C0} = {02148D49-8A4C-4BA2-A4B4-1A1F32A7F919}
 	EndGlobalSection
 EndGlobal

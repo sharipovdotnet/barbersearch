@@ -1,0 +1,19 @@
+# Контекст сборки — backend/. В образ не должны попадать артефакты сборки,
+# тесты, локальные ключи Data Protection и результаты smoke-прогонов.
+
+**/bin/
+**/obj/
+**/TestResults/
+**/.vs/
+**/.idea/
+**/*.user
+**/*.suo
+
+.data-protection-keys/
+acl-recovery/
+deploy/generated/
+
+# Dockerfile и .dockerignore не нужны внутри образа, но их присутствие в контексте
+# безвредно; перечислены явно, чтобы не копировать лишнее при изменении COPY.
+Dockerfile
+.dockerignore
