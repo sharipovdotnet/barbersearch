@@ -6,6 +6,7 @@ using BarberSearch.Application.RefreshTokens.RevokeRefreshToken;
 using BarberSearch.Application.Users.ChangePassword;
 using BarberSearch.Application.Users.CreateUser;
 using BarberSearch.Application.Users.LoginUser;
+using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Contracts.Auth.ChangePassword;
 using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
@@ -55,8 +56,21 @@ public class AuthController : ApiController
         [FromBody] RegisterRequest request,
         [FromServices] ICommandHandler<Guid, CreateUserCommand> handler,
         [FromServices] IPasswordHasher<User> passwordHasher,
+        [FromServices] IPasswordPolicy passwordPolicy,
         CancellationToken cancellationToken)
     {
+        // Политика проверяется до PBKDF2: 128 — потолок, чтобы большой пароль не жёг CPU.
+        var policyFailure = passwordPolicy.Validate(
+            request.Password,
+            request.Email,
+            request.FirstName,
+            request.LastName,
+            "password");
+        if (policyFailure is not null)
+        {
+            return FailureProblemDetails.CreateResult(policyFailure);
+        }
+
         // Роль берётся из кода, а не из тела: иначе первый же клиент зарегистрирует себе Admin.
         var command = new CreateUserCommand(
             request.Email,
@@ -80,6 +94,7 @@ public class AuthController : ApiController
         [FromServices] ICommandHandler<IssuedRefreshToken, IssueRefreshTokenCommand> issueRefreshToken,
         [FromServices] JwtTokenIssuer issuer,
         [FromServices] AuthOptions authOptions,
+        [FromServices] TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var result = await handler.Handle(
@@ -100,7 +115,7 @@ public class AuthController : ApiController
             return FailureProblemDetails.CreateResult(refresh.Error);
         }
 
-        return Ok(CreateTokenResponse(result.Value, refresh.Value, issuer));
+        return Ok(CreateTokenResponse(result.Value, refresh.Value, issuer, timeProvider));
     }
 
     /// <summary>
@@ -121,6 +136,7 @@ public class AuthController : ApiController
         [FromServices] ICommandHandler<IssuedRefreshToken, IssueRefreshTokenCommand> issueRefreshToken,
         [FromServices] AuthOptions authOptions,
         [FromServices] IWebHostEnvironment environment,
+        [FromServices] TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var result = await handler.Handle(
@@ -152,7 +168,7 @@ public class AuthController : ApiController
             {
                 IsPersistent = request.RememberMe,
                 ExpiresUtc = request.RememberMe
-                    ? DateTimeOffset.UtcNow.AddHours(authOptions.CookieHours)
+                    ? timeProvider.GetUtcNow().AddHours(authOptions.CookieHours)
                     : null
             });
 
@@ -185,6 +201,7 @@ public class AuthController : ApiController
         [FromServices] AuthOptions authOptions,
         [FromServices] IWebHostEnvironment environment,
         [FromServices] IAntiforgery antiforgery,
+        [FromServices] TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var fromBody = !string.IsNullOrWhiteSpace(request?.RefreshToken);
@@ -231,7 +248,7 @@ public class AuthController : ApiController
 
         if (fromBody)
         {
-            return Ok(CreateTokenResponse(result.Value.User, issued, issuer));
+            return Ok(CreateTokenResponse(result.Value.User, issued, issuer, timeProvider));
         }
 
         var principal = ClaimsPrincipalFactory.CreatePrincipal(
@@ -244,7 +261,7 @@ public class AuthController : ApiController
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(authOptions.CookieHours)
+                ExpiresUtc = timeProvider.GetUtcNow().AddHours(authOptions.CookieHours)
             });
 
         RefreshTokenCookie.Append(
@@ -261,10 +278,14 @@ public class AuthController : ApiController
     /// Выход: гасит cookie сессии, отзывает предъявленный refresh-токен и удаляет refresh-cookie.
     /// </summary>
     /// <remarks>
-    /// Внешний клиент передаёт refresh-токен в теле или заголовке <c>Authorization: Bearer</c>.
-    /// Cookie-ветка требует antiforgery; logout с телом или Bearer от неё не зависит.
+    /// Logout остаётся анонимным намеренно: он должен работать с истёкшей сессией и с
+    /// refresh-токеном в теле, когда cookie уже нет. Внешний клиент передаёт refresh-токен
+    /// в теле или заголовке <c>Authorization: Bearer</c>. Cookie-ветка требует antiforgery;
+    /// logout с телом или Bearer от неё не зависит. Как и остальные действия контроллера,
+    /// logout ограничен политикой <c>auth</c>: 10 запросов в минуту на адрес клиента.
     /// </remarks>
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("logout")]
     public async Task<ActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request,
@@ -331,7 +352,7 @@ public class AuthController : ApiController
             }
         }
 
-        if (!Guid.TryParse(User.FindFirstValue(ClaimsPrincipalFactory.SubClaim), out var userId))
+        if (!Guid.TryParse(User.FindFirstValue(ClaimsPrincipalFactory.SUB_CLAIM), out var userId))
         {
             return Unauthorized();
         }
@@ -358,25 +379,25 @@ public class AuthController : ApiController
     [HttpGet("me")]
     public ActionResult<MeResponse> Me()
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimsPrincipalFactory.SubClaim), out var id))
+        if (!Guid.TryParse(User.FindFirstValue(ClaimsPrincipalFactory.SUB_CLAIM), out var id))
         {
             return Unauthorized();
         }
 
         var barberProfileId = Guid.TryParse(
-            User.FindFirstValue(ClaimsPrincipalFactory.BarberProfileIdClaim),
+            User.FindFirstValue(ClaimsPrincipalFactory.BARBER_PROFILE_ID_CLAIM),
             out var parsed)
             ? parsed
             : (Guid?)null;
 
         var isEmailVerified = bool.TryParse(
-            User.FindFirstValue(ClaimsPrincipalFactory.EmailVerifiedClaim),
+            User.FindFirstValue(ClaimsPrincipalFactory.EMAIL_VERIFIED_CLAIM),
             out var verified) && verified;
 
         return Ok(new MeResponse(
             id,
-            User.FindFirstValue(ClaimsPrincipalFactory.EmailClaim) ?? string.Empty,
-            User.FindFirstValue(ClaimsPrincipalFactory.RoleClaim) ?? string.Empty,
+            User.FindFirstValue(ClaimsPrincipalFactory.EMAIL_CLAIM) ?? string.Empty,
+            User.FindFirstValue(ClaimsPrincipalFactory.ROLE_CLAIM) ?? string.Empty,
             barberProfileId,
             isEmailVerified));
     }
@@ -397,12 +418,13 @@ public class AuthController : ApiController
     private static TokenResponse CreateTokenResponse(
         AuthenticatedUser user,
         IssuedRefreshToken refresh,
-        JwtTokenIssuer issuer)
+        JwtTokenIssuer issuer,
+        TimeProvider timeProvider)
     {
         var access = issuer.Issue(user);
         var refreshSeconds = (int)Math.Max(
             0,
-            Math.Round((refresh.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds));
+            Math.Round((refresh.ExpiresAt - timeProvider.GetUtcNow()).TotalSeconds));
 
         return access with
         {

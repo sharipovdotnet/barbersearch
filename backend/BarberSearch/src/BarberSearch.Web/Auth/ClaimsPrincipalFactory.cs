@@ -18,38 +18,38 @@ public static class ClaimsPrincipalFactory
     /// <summary>
     /// Идентификатор пользователя.
     /// </summary>
-    public const string SubClaim = JwtRegisteredClaimNames.Sub;
+    public const string SUB_CLAIM = JwtRegisteredClaimNames.Sub;
 
     /// <summary>
     /// Адрес электронной почты.
     /// </summary>
-    public const string EmailClaim = JwtRegisteredClaimNames.Email;
+    public const string EMAIL_CLAIM = JwtRegisteredClaimNames.Email;
 
     /// <summary>
     /// Роль (<c>Customer</c>, <c>Barber</c>, <c>Admin</c>).
     /// </summary>
-    public const string RoleClaim = "role";
+    public const string ROLE_CLAIM = "role";
 
     /// <summary>
     /// Признак подтверждённого адреса электронной почты.
     /// </summary>
-    public const string EmailVerifiedClaim = "email_verified";
+    public const string EMAIL_VERIFIED_CLAIM = "email_verified";
 
     /// <summary>
     /// Идентификатор профиля барбера, если он есть у пользователя.
     /// </summary>
-    public const string BarberProfileIdClaim = "barber_profile_id";
+    public const string BARBER_PROFILE_ID_CLAIM = "barber_profile_id";
 
     /// <summary>
     /// Отпечаток состояния учётных данных. Сверяется с <c>User.SecurityStamp</c> на каждом
     /// запросе, поэтому смена пароля, роли или деактивация отзывают выданные токены.
     /// </summary>
-    public const string SecurityStampClaim = "security_stamp";
+    public const string SECURITY_STAMP_CLAIM = "security_stamp";
 
     /// <summary>
     /// Уникальный идентификатор токена.
     /// </summary>
-    public const string JtiClaim = JwtRegisteredClaimNames.Jti;
+    public const string JTI_CLAIM = JwtRegisteredClaimNames.Jti;
 
     /// <summary>
     /// Собирает claims пользователя.
@@ -58,17 +58,17 @@ public static class ClaimsPrincipalFactory
     {
         var claims = new List<Claim>
         {
-            new(SubClaim, user.Id.ToString()),
-            new(EmailClaim, user.Email),
-            new(RoleClaim, user.Role.ToString()),
-            new(EmailVerifiedClaim, user.IsEmailVerified ? "true" : "false"),
-            new(SecurityStampClaim, user.SecurityStamp),
-            new(JtiClaim, Guid.NewGuid().ToString())
+            new(SUB_CLAIM, user.Id.ToString()),
+            new(EMAIL_CLAIM, user.Email),
+            new(ROLE_CLAIM, user.Role.ToString()),
+            new(EMAIL_VERIFIED_CLAIM, user.IsEmailVerified ? "true" : "false"),
+            new(SECURITY_STAMP_CLAIM, user.SecurityStamp),
+            new(JTI_CLAIM, Guid.NewGuid().ToString())
         };
 
         if (user.BarberProfileId is { } barberProfileId)
         {
-            claims.Add(new Claim(BarberProfileIdClaim, barberProfileId.ToString()));
+            claims.Add(new Claim(BARBER_PROFILE_ID_CLAIM, barberProfileId.ToString()));
         }
 
         return claims;
@@ -82,8 +82,8 @@ public static class ClaimsPrincipalFactory
         var identity = new ClaimsIdentity(
             CreateClaims(user),
             authenticationType,
-            SubClaim,
-            RoleClaim);
+            SUB_CLAIM,
+            ROLE_CLAIM);
 
         return new ClaimsPrincipal(identity);
     }

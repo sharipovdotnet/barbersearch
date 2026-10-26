@@ -7,6 +7,7 @@ using BarberSearch.Application.Users.DeactivateUser;
 using BarberSearch.Application.Users.LinkUserBarberProfile;
 using BarberSearch.Application.Users.MarkUserEmailAsVerified;
 using BarberSearch.Application.Users.MarkUserPhoneAsVerified;
+using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Application.Users.RecordUserLogin;
 using BarberSearch.Application.Users.RemoveUserFavorite;
 using BarberSearch.Application.Users.UpdateUserProfile;
@@ -45,8 +46,21 @@ public class UsersController : ApiController
         [FromBody] CreateUserRequest request,
         [FromServices] ICommandHandler<Guid, CreateUserCommand> handler,
         [FromServices] IPasswordHasher<User> passwordHasher,
+        [FromServices] IPasswordPolicy passwordPolicy,
         CancellationToken cancellationToken)
     {
+        // Политика проверяется до PBKDF2: 128 — потолок, чтобы большой пароль не жёг CPU.
+        var policyFailure = passwordPolicy.Validate(
+            request.Password,
+            request.Email,
+            request.FirstName,
+            request.LastName,
+            "password");
+        if (policyFailure is not null)
+        {
+            return FailureProblemDetails.CreateResult(policyFailure);
+        }
+
         // Хешеру нужен только пароль: в режиме IdentityV3 (по умолчанию) экземпляр
         // пользователя не участвует в вычислении хеша.
         var command = new CreateUserCommand(

@@ -7,7 +7,7 @@ namespace BarberSearch.Web.Common;
 /// Превращает доменный <see cref="Failure"/> в <see cref="ProblemDetails"/> с кодом состояния HTTP.
 /// </summary>
 /// <remarks>
-/// Соответствие зафиксировано в AGENT.md §11: <c>VALIDATION</c> → 400, <c>UNAUTHORIZED</c> → 401,
+/// Соответствие зафиксировано в AGENT.md §7.5: <c>VALIDATION</c> → 400, <c>UNAUTHORIZED</c> → 401,
 /// <c>FORBIDDEN</c> → 403, <c>NOT_FOUND</c> → 404, <c>CONFLICT</c> → 409, <c>FAILURE</c> → 500.
 /// Маппинг живёт в контроллерах, а не в middleware:
 /// обработчики Application возвращают <c>Result</c>, поэтому объект <see cref="Failure"/> до
@@ -23,7 +23,8 @@ public static class FailureProblemDetails
     public const string ERROR_CODES_EXTENSION = "errorCodes";
 
     /// <summary>
-    /// Код состояния HTTP для типа доменной ошибки.
+    /// Код состояния HTTP для типа доменной ошибки. Маппинг явный для каждого значения
+    /// <see cref="ErrorType"/>: новый тип ошибки не должен молча превращаться в 500.
     /// </summary>
     public static int ToStatusCode(ErrorType type) => type switch
     {
@@ -32,6 +33,9 @@ public static class FailureProblemDetails
         ErrorType.FORBIDDEN => StatusCodes.Status403Forbidden,
         ErrorType.NOT_FOUND => StatusCodes.Status404NotFound,
         ErrorType.CONFLICT => StatusCodes.Status409Conflict,
+        ErrorType.FAILURE => StatusCodes.Status500InternalServerError,
+        // Защита от значения вне объявленного перечисления (например, приведённого числа):
+        // контракт не должен падать на неопределённом значении, поэтому отвечаем 500.
         _ => StatusCodes.Status500InternalServerError
     };
 

@@ -1,9 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.PortfolioPhotos.PublishPortfolioPhoto;
-using BarberSearch.Application.PortfolioPhotos.ReorderPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UnpublishPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UpdatePortfolioPhotoDescription;
-using BarberSearch.Contracts.PortfolioPhotos.ReorderPortfolioPhoto;
 using BarberSearch.Contracts.PortfolioPhotos.UpdatePortfolioPhotoDescription;
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -11,12 +9,14 @@ using Microsoft.AspNetCore.Mvc;
 namespace BarberSearch.Web.Controllers;
 
 /// <summary>
-/// Фотография портфолио: публикация, подпись и порядок вывода.
+/// Фотография портфолио: публикация и подпись.
 /// </summary>
 /// <remarks>
 /// Сама фотография — дочерняя сущность агрегата <c>BarberProfile</c>, поэтому адрес идёт
-/// через профиль. Создание и удаление фотографии живут в <see cref="BarberProfilesController"/>
-/// (это методы агрегата), здесь — операции самой фотографии.
+/// через профиль. Создание, удаление и изменение порядка фотографии живут в
+/// <see cref="BarberProfilesController"/> (это методы агрегата), здесь — операции самой
+/// фотографии. Порядок вывода меняется только через агрегат:
+/// <c>PUT api/barber-profiles/{barberProfileId}/photos/{photoId}/sort-order</c> (R-44).
 /// </remarks>
 [ApiController]
 [Route("api/barber-profiles/{barberProfileId:guid}/photos")]
@@ -60,19 +60,5 @@ public class PortfolioPhotosController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UpdatePortfolioPhotoDescriptionCommand(barberProfileId, photoId, request.Description),
-            cancellationToken));
-
-    /// <summary>
-    /// Меняет порядок вывода фотографии (порядок задаёт сама фотография).
-    /// </summary>
-    [HttpPut("{photoId:guid}/order")]
-    public async Task<ActionResult> Reorder(
-        Guid barberProfileId,
-        Guid photoId,
-        [FromBody] ReorderPortfolioPhotoRequest request,
-        [FromServices] ICommandHandler<ReorderPortfolioPhotoCommand> handler,
-        CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
-            new ReorderPortfolioPhotoCommand(barberProfileId, photoId, request.SortOrder),
             cancellationToken));
 }

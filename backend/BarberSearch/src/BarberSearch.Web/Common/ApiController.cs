@@ -34,8 +34,15 @@ public abstract class ApiController : ControllerBase
     /// <see cref="ProblemDetails"/> при провале.
     /// </summary>
     /// <remarks>
-    /// Заголовок <c>Location</c> не выставляется: в API пока нет операций чтения, по которым
-    /// можно было бы дать ссылку на созданный ресурс, а ссылка в никуда хуже её отсутствия.
+    /// Заголовок <c>Location</c> сознательно не выставляется — решение R-42 от 2026-10-25:
+    /// ни у одного из восьми create-эндпоинтов нет self-URI, читаемого сразу после создания.
+    /// <c>GET api/bookings</c> и <c>GET api/reviews</c> — только списки (созданный отзыв к тому же
+    /// скрыт до публикации), у <c>salons</c>, <c>hair-services</c>, <c>specializations</c> и
+    /// <c>users</c> чтения нет, <c>GET api/auth/me</c> — не ресурс по id, а единственный GET по id
+    /// среди них, <c>GET api/barbers/{id}</c>, отдаёт лишь активный и подтверждённый профиль
+    /// (<c>GetCardByIdAsync</c>: <c>IsActive &amp;&amp; IsVerified</c>) и сразу после создания
+    /// отвечает 404. Ссылка в никуда хуже её отсутствия. Пересмотреть, когда у созданного ресурса
+    /// появится GET по id: тогда здесь <c>CreatedAtAction</c> / <c>Created(uri, value)</c>.
     /// </remarks>
     protected ActionResult<CreatedResourceResponse> ToCreatedResult(Result<Guid, Failure> result)
         => result.IsSuccess
