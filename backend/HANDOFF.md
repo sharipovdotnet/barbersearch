@@ -1,12 +1,11 @@
 # HANDOFF — следующая сессия
 
 > Прочитай `AGENT.md` §15, §16 и §17 перед изменениями.
-> Дата: 2026-10-25. Ветка: `features/issue-6`. Git root: `D:\Projects\barbersearch`
-> (workspace — `backend/`). HEAD этого среза — `test(deploy): cover antiforgery restart`;
-> перед ним `docs(deploy): add deployment runbook`, `test(deploy): add deployment smoke` и
-> `feat(deploy): harden startup for containers and proxies`. Срезы R-01–R-54 лежат в рабочем
-> дереве незакоммиченными: 10 проектов, сборка 0/0, тесты 184 + 212 + 71 + 12 зелёные.
-> `origin/features/issue-6` запушен (до R-01–R-40).
+> Дата: 2026-10-26. Ветка: `features/issue-6`. Git root: `D:\Projects\barbersearch`
+> (workspace — `backend/`). Срез R-01–R-54 **закоммичен** девятью коммитами поверх `9736b85`
+> (merge PR #5) и запушен в `origin/features/issue-6`; рабочее дерево чистое. 10 проектов,
+> сборка Debug/Release — 0/0, тесты 184 + 212 + 71 + 12 зелёные в обоих конфигурациях,
+> деплой-смоук — 104 проверки. Перечень коммитов и доказательства — §0.1.
 
 ## 0. Где мы сейчас
 
@@ -161,6 +160,45 @@ API: **13 контроллеров,
     0 вхождений, R-52 добавил пример `GET api/reviews`; `.http` не менялся. `dotnet sln list` —
     10 проектов, Debug/Release 0/0, тесты 184 + 212 + 71 + 12 — зелёные.
     Детали — `CODE-REVIEW.md` R-54.
+
+### 0.1. Состояние git и верификация 2026-10-26
+
+До 2026-10-26 срез R-01–R-54 существовал только в рабочем дереве: reflog `features/issue-6`
+не содержал ни одного коммита, `origin` стоял на merge PR #5. Теперь он зафиксирован
+девятью коммитами (в порядке применения):
+
+| Коммит | Содержимое |
+|---|---|
+| `4663ee6` | `chore(build)`: `Directory.Build.props`, `global.json`, `.editorconfig`, CI, `Dockerfile`, `.dockerignore`, правка `.sln` (R-37, R-54) |
+| `7c7083c` | `refactor(shared,domain)`: `Failure`/`Error`, `UrlValidator`, валидация входа, `Entity : IEquatable` (R-10, R-23, R-24, R-39–R-41) |
+| `576cda3` | `feat(application)`: `ICurrentUser`, ownership, идемпотентность, модерация, политика пароля, `ApiErrorCodes` (R-05…R-35) |
+| `622125a` | `feat(infrastructure)`: 8 миграций, `audit_log`, `xmin`, узкие чтения, `lock_timeout` (R-05, R-11, R-12, R-16, R-19, R-34) |
+| `6c2e7ad` | `feat(web)`: auth/security stamp, rate limits, ProblemDetails, сжатие и таймауты, startup validation, уборка refresh-токенов (R-13, R-14, R-21…R-29, R-32, R-35, R-45…R-50) |
+| `1055420` | `test(integration)`: Testcontainers-набор, 12 сценариев (R-36) |
+| `ece7c58` | `test(deploy,load)`: `smoke.ps1`, `find-dangling-references.sql`, harness (R-47, R-50) |
+| `0024b46` | `docs`: `CODE-REVIEW.md`, `AGENT.md`, этот файл, `DEPLOY.md`, `LOADTEST.md` (R-51, R-52) |
+| `46b63d3` | `fix(load)`: сиды пишут `failed_login_attempts` |
+
+Проверено 2026-10-26 на этом HEAD:
+
+- сборка `BarberSearch.sln` — 10 проектов, **Debug и Release: 0 ошибок / 0 предупреждений**
+  (`CI=true`, то есть с `ContinuousIntegrationBuild`);
+- тесты — **184 domain + 212 application + 71 infrastructure + 12 integration**, все зелёные
+  в Debug и в Release (`-p:BaseOutputPath` в `%TEMP%`, см. §3);
+- `dotnet ef migrations has-pending-model-changes` — «No changes have been made to the model
+  since the last migration»;
+- `deploy/smoke.ps1` — **PASS, 104 проверки**: миграции на чистой БД, cookie/JWT, ротация
+  refresh, rate limit по `XFF`, health checks и семь fail-fast сценариев.
+
+Найдено и исправлено этой верификацией: `load/seed/minimal.sql` и `load/seed/seed.sql` не
+заполняли `failed_login_attempts`, который после `AddUserLockout` (R-21) стал `NOT NULL` без
+default — смоук падал на `FAIL minimal seed failed`. Вывод: полный прогон смоука нужно
+повторять после каждого среза, меняющего схему, — он ловит расхождение сидов со схемой, а
+`dotnet test` этого не видит.
+
+Локальная БД `barbersearch` отстаёт на 8 миграций (применено 7 из 15 на 2026-10-26): перед
+локальным запуском нужен `dotnet ef database update` (§3). Смоук и интеграционные тесты это
+не затрагивает — они работают на своих базах.
 
 ## 1. Следующая задача — фактический выкат
 
@@ -836,7 +874,7 @@ dotnet build BarberSearch/BarberSearch.sln
 #   не используй `-q`: в SDK 10 это MSBuild question mode, а не quiet
 $out = Join-Path $env:TEMP "bs-tests\<Project>"
 dotnet test tests/<Project> --nologo --verbosity quiet "-p:BaseOutputPath=$out\"
-#   ожидается: domain 184 / application 212 / infrastructure 71 / integration 10, все зелёные
+#   ожидается: domain 184 / application 212 / infrastructure 71 / integration 12, все зелёные
 #   интеграционным тестам нужен Docker (Testcontainers, postgres:18) или BARBERSEARCH_TEST_POSTGRES
 #   reflection-раннер §5.3 — только fallback, если это перестанет работать
 
@@ -916,8 +954,9 @@ idempotency-слоте — одна строка на ключ и одна ак�
 
 ```text
 Прочитай backend/HANDOFF.md и AGENT.md §15, §16, §17 (особенно §17.5, §17.7, §17.9,
-§17.10) и backend/DEPLOY.md. Ветка features/issue-6, HEAD — 9736b85 (merge PR #5). В рабочем
-дереве незакоммиченные срезы R-01–R-50 из CODE-REVIEW.md; origin запушен.
+§17.10) и backend/DEPLOY.md. Ветка features/issue-6, HEAD — 46b63d3; срез R-01–R-54
+закоммичен девятью коммитами поверх 9736b85 (merge PR #5) и запушен, рабочее дерево чистое.
+Верификация 2026-10-26 — §0.1: сборка Debug/Release 0/0, тесты 184/212/71/12, смоук 104.
 
 Деплой-срез закрыт: Data Protection на постоянном томе, Auth__SigningKey обязателен и
 ротируется, forwarded headers только от своих прокси, явный CORS + SameSite=None для
@@ -964,9 +1003,9 @@ R-40 — `Error` с `init`/`with`, `ErrorType.NONE` удалён и маппин
 R-49 — `Path=/` refresh-cookie сознательно принят из-за `__Host-` (+`RefreshCookieTests`),
 R-50 — фоновая уборка истёкших refresh-токенов, индекс `ix_refresh_tokens_expires_at` и
 миграция `AddRefreshTokenExpiresAtIndex`.
-Сборка 10/0/0, тесты 184 domain + 212 application + 71 infrastructure + 10 integration;
-смоук после R-47 содержит 104 проверки, но полный прогон на момент R-50 не повторялся —
-после правок R-21…R-50 его нужно перепрогнать. Фактический выкат в прод не выполнялся.
+Сборка 10/0/0 (Debug и Release), тесты 184 domain + 212 application + 71 infrastructure +
+12 integration — зелёные; деплой-смоук перепрогнан 2026-10-26 после R-21…R-54: 104 проверки,
+PASS (найден и исправлен баг сидов, см. §0.1). Фактический выкат в прод не выполнялся.
 
 Не трогай search, booking correctness, rating recalculation и read-эндпоинты без
 необходимости. Кэш/Redis/output caching не начинать. Booking headroom (p95 257.5–304.0
@@ -975,5 +1014,5 @@ R-50 — фоновая уборка истёкших refresh-токенов, и
 Сборка/тесты/git — через danger-full-access; тесты — `dotnet test` с
 `-p:BaseOutputPath` в `%TEMP%` (§5.2), reflection-раннер §5.3 — только fallback; сборка
 10 проектов, 0 ошибок, 0 предупреждений; все тесты
-зелёные (184 domain + 212 application + 71 infrastructure + 10 integration).
+зелёные (184 domain + 212 application + 71 infrastructure + 12 integration).
 ```

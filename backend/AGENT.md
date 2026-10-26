@@ -3,9 +3,11 @@
 > Context file for AI agents and developers. Read this first before any change.
 > Code state: branch `features/issue-6`; **10 projects**. The domain rework was committed on
 > `features/issue-1` (the last *pre-rework* commit was `78a9858`, against which §3–§9 were
-> originally verified on 2026-10-12). The current slice **R-01…R-54** is in the working tree,
-> uncommitted. Tests: **184 domain + 212 application + 71 infrastructure + 12 integration**, all
-> green. §9.13 lists the open minor issues only; the closed history is in `HANDOFF.md` §2.
+> originally verified on 2026-10-12). The slice **R-01…R-54** is committed on `features/issue-6`
+> and pushed to origin (see `HANDOFF.md` §0.1 for the commit list and the 2026-10-26 evidence).
+> Tests: **184 domain + 212 application + 71 infrastructure + 12 integration**, all green in both
+> Debug and Release. §9.13 lists the open minor issues only; the closed history is in
+> `HANDOFF.md` §2.
 
 ---
 
