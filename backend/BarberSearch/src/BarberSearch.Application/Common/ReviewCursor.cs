@@ -17,13 +17,18 @@ namespace BarberSearch.Application.Common;
 public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
 {
     /// <summary>
+    /// Публичный код ошибки «курсор списка отзывов не разбирается».
+    /// </summary>
+    private const string INVALID_CURSOR_CODE = "review.cursor.invalid";
+
+    /// <summary>
     /// Кодирует курсор в непрозрачную строку.
     /// </summary>
     public string Encode()
         => CursorCodec.Encode(
-            "1",
+            CursorCodec.VERSION,
             CursorCodec.Format(CreatedAt),
-            Id.ToString("D"));
+            Id.ToString(CursorCodec.GUID_FORMAT));
 
     /// <summary>
     /// Декодирует курсор. Битый курсор — <c>Error.Validation</c> (400).
@@ -31,7 +36,10 @@ public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
     /// <param name="cursor">Строка курсора из query string.</param>
     public static Result<ReviewCursor, Failure> Decode(string cursor)
     {
-        var partsResult = CursorCodec.Decode(cursor, 3, "review.cursor.invalid");
+        var partsResult = CursorCodec.Decode(
+            cursor,
+            CursorCodec.PART_COUNT,
+            INVALID_CURSOR_CODE);
         if (partsResult.IsFailure)
         {
             return partsResult.Error;
@@ -39,9 +47,9 @@ public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
 
         var parts = partsResult.Value;
 
-        if (parts[0] != "1"
+        if (parts[0] != CursorCodec.VERSION
             || !CursorCodec.TryParseTimestamp(parts[1], out var createdAt)
-            || !Guid.TryParseExact(parts[2], "D", out var id)
+            || !Guid.TryParseExact(parts[2], CursorCodec.GUID_FORMAT, out var id)
             || id == Guid.Empty)
         {
             return Invalid();
@@ -52,7 +60,7 @@ public sealed record ReviewCursor(DateTimeOffset CreatedAt, Guid Id)
 
     private static Failure Invalid()
         => new(Error.Validation(
-            "review.cursor.invalid",
-            "The pagination cursor is invalid.",
+            INVALID_CURSOR_CODE,
+            Messages.CURSOR_INVALID,
             "cursor"));
 }

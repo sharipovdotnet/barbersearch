@@ -115,7 +115,7 @@ public class HairService : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "hairService.category",
-                $"Unknown service category value {(int)category}.",
+                DomainMessages.UnknownServiceCategory(category),
                 nameof(category)));
         }
 

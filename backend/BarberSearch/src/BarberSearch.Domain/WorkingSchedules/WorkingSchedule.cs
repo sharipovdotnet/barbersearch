@@ -68,7 +68,7 @@ public class WorkingSchedule : Entity
         {
             return DomainErrors.Fail(Error.Validation(
                 "workingSchedule.setWorkingHours.timeRange",
-                "Working schedule end time must be after its start time.",
+                DomainMessages.WORKING_SCHEDULE_END_TIME_NOT_AFTER_START,
                 nameof(endTime)));
         }
 

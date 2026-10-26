@@ -198,7 +198,9 @@ dotnet test tests/BarberSearch.IntegrationTests --nologo --verbosity quiet "-p:B
 # run the API (http profile → http://localhost:5243)
 dotnet run --project BarberSearch/src/BarberSearch.Web
 
-# local PostgreSQL (docker compose; the schema itself comes from the migration below)
+# local PostgreSQL (docker compose; the schema itself comes from the migration below).
+# POSTGRES_PASSWORD is required: copy .env.example to .env (git-ignored) and fill it in,
+# or export POSTGRES_PASSWORD in the current shell.
 docker compose up -d            # start; POSTGRES_PORT=5433 if 5432 is already taken
 docker compose ps               # status and health
 docker compose down             # stop, the named volume keeps the data
@@ -237,7 +239,7 @@ docker build -t barbersearch-api:local -f Dockerfile .
 docker run --rm -p 18080:8080 `
   -e Auth__SigningKey='<at least 32 characters>' `
   -e DataProtection__KeysPath=/tmp/keys `
-  -e ConnectionStrings__Postgres='Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=postgres' `
+  -e ConnectionStrings__Postgres="Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD" `
   barbersearch-api:local
 curl.exe -fsS http://127.0.0.1:18080/health/live
 ```
@@ -1701,7 +1703,8 @@ activity of the barber service and takes the price from it.
   "AccessTokenMinutes": 15,
   "RefreshTokenDays": 14,
   "CookieHours": 8,
-  "CookieSameSite": "Lax"
+  "CookieSameSite": "Lax",
+  "ClockSkewSeconds": 30
 },
 "DataProtection": {
   "KeysPath": "<persistent volume; required>"
@@ -1762,9 +1765,10 @@ cookie-scope). В `appsettings.json` только `localhost;127.0.0.1`; на д
 Обрабатываются только `X-Forwarded-For` и `X-Forwarded-Proto`, `X-Forwarded-Host` — нет.
 
 `Auth:RefreshTokenDays` допустим только в диапазоне 7–30; выход за него роняет приложение при
-старте. `Auth:AccessTokenMinutes` — 1–1440, `Auth:CookieHours` — 1–168. Access остаётся
-15 минут. `RefreshTokens:CleanupIntervalMinutes` — 1..1440 (60 по умолчанию): интервал фоновой
-уборки истёкших refresh-токенов (R-50, §17.9); меняет только частоту запуска, не границу
+старте. `Auth:AccessTokenMinutes` — 1–1440, `Auth:CookieHours` — 1–168, `Auth:ClockSkewSeconds` —
+0–300 (30 по умолчанию: настраиваемый допуск на расхождение часов при проверке JWT). Access
+остаётся 15 минут. `RefreshTokens:CleanupIntervalMinutes` — 1..1440 (60 по умолчанию): интервал
+фоновой уборки истёкших refresh-токенов (R-50, §17.9); меняет только частоту запуска, не границу
 удаления. Полный список переменных, томов и команд — `DEPLOY.md` §1–§5.
 
 `JwtTokenIssuer` берёт «сейчас» из singleton'а `TimeProvider` и заполняет из него и `exp`, и

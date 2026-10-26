@@ -1,5 +1,6 @@
 using BarberSearch.Application.Specializations;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Specializations;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -53,7 +54,7 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.Specialization.NameInvalid,
-                "Specialization name cannot be empty.",
+                DomainMessages.SPECIALIZATION_NAME_REQUIRED,
                 nameof(name)));
         }
 

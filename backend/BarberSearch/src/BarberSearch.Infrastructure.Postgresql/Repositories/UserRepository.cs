@@ -13,6 +13,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class UserRepository : RepositoryBase<User>, IUserRepository
 {
+    /// <summary>
+    /// Текст ошибки «email пуст».
+    /// </summary>
+    private const string EMAIL_REQUIRED = "Email cannot be empty.";
+
     public UserRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
         : base(context, auditTrail)
     {
@@ -71,7 +76,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.User.EmailInvalid,
-                "Email cannot be empty.",
+                EMAIL_REQUIRED,
                 nameof(email)));
         }
 
@@ -143,7 +148,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.User.EmailInvalid,
-                "Email cannot be empty.",
+                EMAIL_REQUIRED,
                 nameof(email)));
         }
 

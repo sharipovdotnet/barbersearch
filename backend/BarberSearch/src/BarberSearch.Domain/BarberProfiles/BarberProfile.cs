@@ -32,6 +32,16 @@ public class BarberProfile : AggregateRoot
     private List<string> _achievements = [];
     private List<string> _communicationFormat = [];
 
+    /// <summary>
+    /// Публичный код ошибки <see cref="FindSalon"/>: салона с таким идентификатором нет в профиле.
+    /// </summary>
+    /// <remarks>
+    /// Код продублирован в <c>ApiErrorCodes.BarberProfile.FindSalonNotFound</c>: домен не может
+    /// ссылаться на Contracts, поэтому совпадение значений закреплено тестом
+    /// <c>ApiErrorCodesTests.FindSalonNotFound_MatchesDomainConstant</c>.
+    /// </remarks>
+    public const string FIND_SALON_NOT_FOUND = "barberProfile.findSalon.notFound";
+
     public Guid UserId { get; private set; }
 
     public DisplayName DisplayName { get; private set; } = null!;
@@ -364,7 +374,7 @@ public class BarberProfile : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "barberProfile.addPhoto.description",
-                $"Photo description cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                DomainMessages.PHOTO_DESCRIPTION_TOO_LONG,
                 nameof(description)));
         }
 
@@ -395,7 +405,7 @@ public class BarberProfile : AggregateRoot
             _portfolioPhotos,
             photoId,
             "barberProfile.removePhoto.notFound",
-            "The specified photo was not found in this artist's portfolio.");
+            DomainMessages.PHOTO_NOT_FOUND);
 
     /// <summary>
     /// Меняет порядок фотографии в портфолио.
@@ -408,7 +418,7 @@ public class BarberProfile : AggregateRoot
         {
             return new Failure(Error.NotFound(
                 "barberProfile.reorderPhoto.notFound",
-                "The specified photo was not found in this artist's portfolio.",
+                DomainMessages.PHOTO_NOT_FOUND,
                 photoId));
         }
 
@@ -452,7 +462,7 @@ public class BarberProfile : AggregateRoot
         {
             return new Failure(Error.NotFound(
                 "barberProfile.removeSalon.notFound",
-                "The barber in the specified salon does not work.",
+                DomainMessages.BARBER_NOT_IN_SALON,
                 salonId));
         }
 
@@ -470,7 +480,7 @@ public class BarberProfile : AggregateRoot
         {
             return new Failure(Error.NotFound(
                 "barberProfile.setPrimarySalon.notFound",
-                "The barber in the specified salon does not work.",
+                DomainMessages.BARBER_NOT_IN_SALON,
                 salonId));
         }
 
@@ -501,8 +511,8 @@ public class BarberProfile : AggregateRoot
         if (salon is null)
         {
             return new Failure(Error.NotFound(
-                "barberProfile.findSalon.notFound",
-                "The barber in the specified salon does not work.",
+                FIND_SALON_NOT_FOUND,
+                DomainMessages.BARBER_NOT_IN_SALON,
                 salonId));
         }
 
@@ -523,7 +533,7 @@ public class BarberProfile : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "barberProfile.addService.price",
-                "Price cannot be negative.",
+                DomainMessages.PRICE_NEGATIVE,
                 nameof(price)));
         }
 

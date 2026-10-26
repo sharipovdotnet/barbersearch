@@ -1,3 +1,4 @@
+using BarberSearch.Web.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Shared;
 
@@ -99,8 +100,8 @@ public static class FailureProblemDetails
     private static string TitleFor(int statusCode) => statusCode switch
     {
         StatusCodes.Status400BadRequest => "One or more validation errors occurred.",
-        StatusCodes.Status401Unauthorized => "Authentication is required or the credentials are invalid.",
-        StatusCodes.Status403Forbidden => "The authenticated user is not allowed to perform this operation.",
+        StatusCodes.Status401Unauthorized => AuthConstants.AUTHENTICATION_FAILED_TITLE,
+        StatusCodes.Status403Forbidden => AuthConstants.ACCESS_DENIED_TITLE,
         StatusCodes.Status404NotFound => "The requested resource was not found.",
         StatusCodes.Status409Conflict => "The request conflicts with the current state of the resource.",
         _ => "An unexpected error occurred while processing the request."

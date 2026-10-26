@@ -85,7 +85,7 @@ public static class RefreshTokenCookie
         {
             HttpOnly = true,
             IsEssential = true,
-            Path = "/",
+            Path = AuthConstants.COOKIE_PATH,
             SameSite = AuthCookiePolicy.GetSameSite(options),
             Secure = AuthCookiePolicy.UseSecure(options, environment, context.Request)
         };

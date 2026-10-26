@@ -1,3 +1,4 @@
+using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -207,7 +208,7 @@ public abstract class RepositoryBase<TEntity>
         {
             return new Failure(Error.Validation(
                 pageSizeCode,
-                $"Page size must be between 1 and {MAX_PAGE_SIZE}.",
+                Messages.PageSizeOutOfRange(MAX_PAGE_SIZE),
                 nameof(pageSize)));
         }
 

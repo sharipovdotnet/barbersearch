@@ -81,7 +81,7 @@ public class BarberSalon : Entity
         {
             errors.Add(Error.Validation(
                 "barberSalon.addWorkingSchedule.timeRange",
-                "Working schedule end time must be after its start time.",
+                DomainMessages.WORKING_SCHEDULE_END_TIME_NOT_AFTER_START,
                 nameof(endTime)));
         }
 

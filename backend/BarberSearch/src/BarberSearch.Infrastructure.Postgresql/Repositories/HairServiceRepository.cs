@@ -1,5 +1,6 @@
 using BarberSearch.Application.HairServices;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -54,7 +55,7 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.HairService.CategoryInvalid,
-                $"Unknown service category value {(int)category}.",
+                DomainMessages.UnknownServiceCategory(category),
                 nameof(category)));
         }
 

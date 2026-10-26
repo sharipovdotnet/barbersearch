@@ -27,8 +27,8 @@ public static class AuthProblemDetails
             {
                 Status = statusCode,
                 Title = statusCode == StatusCodes.Status401Unauthorized
-                    ? "Authentication is required or the credentials are invalid."
-                    : "The authenticated user is not allowed to perform this operation.",
+                    ? AuthConstants.AUTHENTICATION_FAILED_TITLE
+                    : AuthConstants.ACCESS_DENIED_TITLE,
                 Detail = detail
             }
         });

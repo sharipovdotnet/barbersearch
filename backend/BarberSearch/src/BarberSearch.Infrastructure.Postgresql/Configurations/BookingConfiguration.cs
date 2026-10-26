@@ -26,7 +26,7 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
                 "price >= 0");
             table.HasCheckConstraint(
                 "ck_bookings_status",
-                "status IN (1, 2, 3, 4, 5)");
+                CheckConstraintSql.EnumIn<BookingStatus>("status"));
             table.HasCheckConstraint(
                 "ck_bookings_idempotency_key",
                 FormattableString.Invariant(
@@ -49,7 +49,8 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(x => x.SalonId).HasColumnName("salon_id");
         builder.Property(x => x.StartAt).HasColumnName("start_at");
         builder.Property(x => x.EndAt).HasColumnName("end_at");
-        builder.Property(x => x.Price).HasColumnName("price").HasPrecision(10, 2);
+        builder.Property(x => x.Price).HasColumnName("price")
+            .HasPrecision(ColumnPrecision.MONEY_PRECISION, ColumnPrecision.MONEY_SCALE);
         builder.Property(x => x.Status).HasColumnName("status").HasConversion<int>();
         builder.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key").IsRequired();
         builder.Property(x => x.CustomerNote).HasColumnName("customer_note");
@@ -68,7 +69,10 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         // ex_bookings_no_overlap из первой миграции: EF Core такие ограничения не выражает,
         // поэтому оно живёт только в SQL миграции и здесь не описано.
         builder.HasIndex(x => new { x.BarberProfileId, x.StartAt })
-            .HasFilter("status IN (1, 2)")
+            .HasFilter(CheckConstraintSql.EnumIn(
+                "status",
+                BookingStatus.Pending,
+                BookingStatus.Confirmed))
             .HasDatabaseName("ix_bookings_barber_profile_id_start_at_active");
 
         // Слоты считаются по паре (барбер, салон), поэтому салон тоже в ключе.

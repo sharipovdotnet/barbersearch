@@ -23,6 +23,12 @@ namespace BarberSearch.Application.Common;
 public static class CurrentUserExtensions
 {
     /// <summary>
+    /// Текст ошибки «операция над ресурсом запрещена».
+    /// </summary>
+    private const string FORBIDDEN_MESSAGE =
+        "You are not allowed to perform this operation on this resource.";
+
+    /// <summary>
     /// Возвращает идентификатор текущего пользователя или <c>401 auth.unauthorized</c>.
     /// </summary>
     /// <param name="currentUser">Текущий пользователь запроса.</param>
@@ -72,7 +78,7 @@ public static class CurrentUserExtensions
 
         return new Failure(Error.Forbidden(
             ApiErrorCodes.Auth.Forbidden,
-            "You are not allowed to perform this operation on this resource."));
+            FORBIDDEN_MESSAGE));
     }
 
     /// <summary>
@@ -127,7 +133,7 @@ public static class CurrentUserExtensions
 
         return new Failure(Error.Forbidden(
             ApiErrorCodes.Auth.Forbidden,
-            "You are not allowed to perform this operation on this resource."));
+            FORBIDDEN_MESSAGE));
     }
 
     private static Error UnauthorizedError() => Error.Unauthorized(

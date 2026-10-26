@@ -70,7 +70,7 @@ public sealed class JwtTokenIssuer
 
         return new TokenResponse(
             token,
-            "Bearer",
+            AuthConstants.BEARER_SCHEME,
             (int)TimeSpan.FromMinutes(_options.AccessTokenMinutes).TotalSeconds);
     }
 }

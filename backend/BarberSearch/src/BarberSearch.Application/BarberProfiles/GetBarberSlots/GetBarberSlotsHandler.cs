@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
+using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -58,7 +59,7 @@ public sealed class GetBarberSlotsHandler
         {
             return new Failure(Error.Validation(
                 "barberSlots.barberProfileId",
-                "Barber profile identifier cannot be empty.",
+                DomainMessages.BARBER_PROFILE_ID_REQUIRED,
                 nameof(query.BarberProfileId)));
         }
 

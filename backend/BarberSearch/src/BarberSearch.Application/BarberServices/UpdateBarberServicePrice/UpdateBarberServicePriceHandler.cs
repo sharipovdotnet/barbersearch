@@ -57,7 +57,7 @@ public class UpdateBarberServicePriceHandler : ICommandHandler<UpdateBarberServi
         {
             return new Failure(Error.NotFound(
                 "barberService.updatePrice.notFound",
-                "The specified service was not found in this barber profile.",
+                Messages.SERVICE_NOT_FOUND_IN_PROFILE,
                 command.BarberServiceId));
         }
 

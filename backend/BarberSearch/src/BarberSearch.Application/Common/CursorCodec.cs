@@ -17,6 +17,32 @@ namespace BarberSearch.Application.Common;
 internal static class CursorCodec
 {
     /// <summary>
+    /// Версия формата курсора. Меняется вместе с составом частей: старый курсор после
+    /// этого отвергается, а не читается неправильно.
+    /// </summary>
+    public const string VERSION = "1";
+
+    /// <summary>
+    /// Число частей полезной нагрузки, общее для всех курсоров: версия, ключ и id.
+    /// </summary>
+    public const int PART_COUNT = 3;
+
+    /// <summary>
+    /// Формат <see cref="Guid"/> в текстовом виде: 32 hex-цифры и четыре дефиса.
+    /// </summary>
+    public const string GUID_FORMAT = "D";
+
+    /// <summary>
+    /// Разделитель частей полезной нагрузки. Внутри частей не встречается.
+    /// </summary>
+    private const char SEPARATOR = '|';
+
+    /// <summary>
+    /// Размер блока base64: до добавления padding длина строки должна быть кратна ему.
+    /// </summary>
+    private const int BASE64_BLOCK = 4;
+
+    /// <summary>
     /// Верхняя граница длины курсора: защита от разбора произвольно большой строки.
     /// </summary>
     private const int MAX_CURSOR_LENGTH = 2048;
@@ -29,7 +55,7 @@ internal static class CursorCodec
     {
         ArgumentNullException.ThrowIfNull(parts);
 
-        var payload = string.Join('|', parts);
+        var payload = string.Join(SEPARATOR, parts);
         var bytes = Encoding.UTF8.GetBytes(payload);
 
         return Convert.ToBase64String(bytes)
@@ -61,14 +87,14 @@ internal static class CursorCodec
                 .Replace('-', '+')
                 .Replace('_', '/');
 
-            var remainder = normalized.Length % 4;
+            var remainder = normalized.Length % BASE64_BLOCK;
             if (remainder != 0)
             {
-                normalized += new string('=', 4 - remainder);
+                normalized += new string('=', BASE64_BLOCK - remainder);
             }
 
             var payload = Encoding.UTF8.GetString(Convert.FromBase64String(normalized));
-            var parts = payload.Split('|');
+            var parts = payload.Split(SEPARATOR);
 
             return parts.Length == expectedParts
                 ? parts
@@ -120,6 +146,6 @@ internal static class CursorCodec
     private static Failure Invalid(string errorCode)
         => new(Error.Validation(
             errorCode,
-            "The pagination cursor is invalid.",
+            Messages.CURSOR_INVALID,
             "cursor"));
 }

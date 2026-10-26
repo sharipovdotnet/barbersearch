@@ -24,6 +24,21 @@ public class User : AggregateRoot
     /// </summary>
     private const int MAX_LOCKOUT_EXPONENT = 6;
 
+    /// <summary>
+    /// Текст ошибки «имя пользователя пусто».
+    /// </summary>
+    private const string FIRST_NAME_REQUIRED = "First name cannot be empty.";
+
+    /// <summary>
+    /// Текст ошибки «фамилия пользователя пуста».
+    /// </summary>
+    private const string LAST_NAME_REQUIRED = "Last name cannot be empty.";
+
+    /// <summary>
+    /// Текст ошибки «хеш пароля пуст».
+    /// </summary>
+    private const string PASSWORD_HASH_REQUIRED = "Password hash cannot be empty.";
+
     private readonly List<FavoriteBarber> _favoriteBarbers = [];
 
     public string Email { get; private set; } = null!;
@@ -133,7 +148,7 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.updateProfile.firstName",
-                "First name cannot be empty.",
+                FIRST_NAME_REQUIRED,
                 nameof(firstName)));
         }
 
@@ -141,7 +156,7 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.updateProfile.lastName",
-                "Last name cannot be empty.",
+                LAST_NAME_REQUIRED,
                 nameof(lastName)));
         }
 
@@ -216,7 +231,7 @@ public class User : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "user.changeRole",
-                $"Unknown user role value {(int)role}.",
+                UnknownRole(role),
                 nameof(role)));
         }
 
@@ -235,7 +250,7 @@ public class User : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "user.linkBarberProfile",
-                "Barber profile identifier cannot be empty.",
+                DomainMessages.BARBER_PROFILE_ID_REQUIRED,
                 nameof(barberProfileId)));
         }
 
@@ -385,7 +400,7 @@ public class User : AggregateRoot
         {
             return new Failure(Error.Validation(
                 "user.changePasswordHash",
-                "Password hash cannot be empty.",
+                PASSWORD_HASH_REQUIRED,
                 nameof(passwordHash)));
         }
 
@@ -508,7 +523,7 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.passwordHash",
-                "Password hash cannot be empty.",
+                PASSWORD_HASH_REQUIRED,
                 nameof(passwordHash)));
         }
 
@@ -516,7 +531,7 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.firstName",
-                "First name cannot be empty.",
+                FIRST_NAME_REQUIRED,
                 nameof(firstName)));
         }
 
@@ -524,7 +539,7 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.lastName",
-                "Last name cannot be empty.",
+                LAST_NAME_REQUIRED,
                 nameof(lastName)));
         }
 
@@ -532,8 +547,15 @@ public class User : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "user.role",
-                $"Unknown user role value {(int)role}.",
+                UnknownRole(role),
                 nameof(role)));
         }
     }
+
+    /// <summary>
+    /// Текст ошибки «значение роли не определено в <see cref="UserRole"/>».
+    /// </summary>
+    /// <param name="role">Некорректная роль.</param>
+    private static string UnknownRole(UserRole role)
+        => $"Unknown user role value {(int)role}.";
 }

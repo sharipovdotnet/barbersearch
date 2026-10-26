@@ -19,7 +19,7 @@ public class HairServiceConfiguration : IEntityTypeConfiguration<HairService>
                 "char_length(btrim(name)) > 0");
             table.HasCheckConstraint(
                 "ck_hair_services_category",
-                "category IN (1, 2, 3, 4, 5, 99)");
+                CheckConstraintSql.EnumIn<ServiceCategory>("category"));
             table.HasCheckConstraint(
                 "ck_hair_services_default_duration_minutes",
                 FormattableString.Invariant(

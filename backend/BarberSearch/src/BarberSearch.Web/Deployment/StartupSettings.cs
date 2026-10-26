@@ -17,6 +17,11 @@ namespace BarberSearch.Web.Deployment;
 /// </remarks>
 public sealed record StartupSettings
 {
+    private const string ALLOWED_HOSTS_KEY = "AllowedHosts";
+    private const string SHUTDOWN_TIMEOUT_SECONDS_KEY = "Deployment:ShutdownTimeoutSeconds";
+    private const string HEALTH_DATABASE_TIMEOUT_SECONDS_KEY = "HealthChecks:DatabaseTimeoutSeconds";
+    private const string REFRESH_TOKEN_CLEANUP_INTERVAL_MINUTES_KEY = "RefreshTokens:CleanupIntervalMinutes";
+
     /// <summary>
     /// Строка подключения PostgreSQL.
     /// </summary>
@@ -118,19 +123,19 @@ public sealed record StartupSettings
             ForwardedHeaders = forwardedHeaders,
             ShutdownTimeoutSeconds = ReadInt(
                 configuration,
-                "Deployment:ShutdownTimeoutSeconds",
+                SHUTDOWN_TIMEOUT_SECONDS_KEY,
                 defaultValue: 30,
                 min: 5,
                 max: 300),
             HealthDatabaseTimeoutSeconds = ReadInt(
                 configuration,
-                "HealthChecks:DatabaseTimeoutSeconds",
+                HEALTH_DATABASE_TIMEOUT_SECONDS_KEY,
                 defaultValue: 5,
                 min: 1,
                 max: 60),
             RefreshTokenCleanupIntervalMinutes = ReadInt(
                 configuration,
-                "RefreshTokens:CleanupIntervalMinutes",
+                REFRESH_TOKEN_CLEANUP_INTERVAL_MINUTES_KEY,
                 defaultValue: 60,
                 min: 1,
                 max: 1440)
@@ -152,7 +157,7 @@ public sealed record StartupSettings
     /// </exception>
     private static void ValidateAllowedHosts(IConfiguration configuration)
     {
-        var hosts = (configuration["AllowedHosts"] ?? string.Empty).Split(
+        var hosts = (configuration[ALLOWED_HOSTS_KEY] ?? string.Empty).Split(
             ';',
             StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 

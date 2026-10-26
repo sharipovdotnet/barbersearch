@@ -11,15 +11,24 @@
 #   * booking creation through the cookie session;
 #   * fail-fast startup for missing/invalid deploy settings.
 #
-# It is a local verification tool, not part of the API. It needs the locally installed
-# PostgreSQL 16, psql.exe and dotnet-ef, like load/run.ps1. Run with danger-full-access:
+# It is a local verification tool, not part of the API. It needs a reachable
+# PostgreSQL, psql in PATH (override with -Psql) and dotnet-ef, like load/run.ps1.
+# No password is stored in the script:
 #
+#   $env:BARBERSEARCH_DB_PASSWORD = '<local database password>'
+#   $env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ characters>'
 #   powershell -NoProfile -ExecutionPolicy Bypass -File deploy/smoke.ps1
 #
 # Evidence is written to deploy/generated/smoke.txt (git-ignored).
 
 param(
     [string]$Database = 'barbersearch_deploy_smoke',
+    [string]$DbHost = '127.0.0.1',
+    [int]$DbPort = 5432,
+    [string]$DbUser = 'postgres',
+    [string]$DbPassword = $env:BARBERSEARCH_DB_PASSWORD,
+    [string]$UserPassword = $env:BARBERSEARCH_TEST_USER_PASSWORD,
+    [string]$Psql = 'psql',
     [int]$DevPort = 5243,
     [int]$SecondPort = 5245,
     [int]$ProdPort = 5244,
@@ -36,21 +45,64 @@ if ($Database -notmatch '_smoke$') {
     throw "Refusing to recreate '$Database': the name must end with '_smoke'."
 }
 
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    $DbPassword = $env:PGPASSWORD
+}
+
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    throw 'The database password is required: pass -DbPassword or set BARBERSEARCH_DB_PASSWORD (PGPASSWORD is also accepted).'
+}
+
+if ([string]::IsNullOrWhiteSpace($UserPassword)) {
+    throw 'The test user password is required: pass -UserPassword or set BARBERSEARCH_TEST_USER_PASSWORD.'
+}
+
 $root = Split-Path $PSScriptRoot -Parent
 $generated = Join-Path $PSScriptRoot 'generated'
 $keysPath = Join-Path $generated 'keys'
 $webProject = Join-Path $root 'BarberSearch/src/BarberSearch.Web'
 $solution = Join-Path $root 'BarberSearch/BarberSearch.sln'
-$psql = 'C:\Program Files\PostgreSQL\16\bin\psql.exe'
-$connection = "Host=127.0.0.1;Port=5432;Database=$Database;Username=postgres;Password=postgres;Timeout=5"
 $webDll = Join-Path $webProject 'bin/Debug/net10.0/BarberSearch.Web.dll'
 $barberId = '44444444-4444-4444-4444-444444444444'
 $barberServiceId = '77777777-7777-7777-7777-777777777777'
 $salonId = '11111111-1111-1111-1111-111111111111'
-$newPassword = 'Smoke!NewPassw0rd'
+$newPassword = "$UserPassword-r2"
 
 New-Item -ItemType Directory -Force -Path $generated | Out-Null
-$env:PGPASSWORD = 'postgres'
+$env:PGPASSWORD = $DbPassword
+
+function New-PostgresConnectionString {
+    param(
+        [string]$DatabaseName = $Database,
+        [int]$Port = $DbPort,
+        [int]$TimeoutSeconds = 0,
+        [int]$MaximumPoolSize = 0,
+        [int]$CommandTimeoutSeconds = 0
+    )
+
+    $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+    $builder['Host'] = $DbHost
+    $builder['Port'] = $Port
+    $builder['Database'] = $DatabaseName
+    $builder['Username'] = $DbUser
+    $builder['Password'] = $DbPassword
+
+    if ($TimeoutSeconds -gt 0) {
+        $builder['Timeout'] = $TimeoutSeconds
+    }
+
+    if ($MaximumPoolSize -gt 0) {
+        $builder['Maximum Pool Size'] = $MaximumPoolSize
+    }
+
+    if ($CommandTimeoutSeconds -gt 0) {
+        $builder['Command Timeout'] = $CommandTimeoutSeconds
+    }
+
+    return $builder.ConnectionString
+}
+
+$connection = New-PostgresConnectionString -TimeoutSeconds 5
 
 $script:evidence = @()
 $script:checks = 0
@@ -419,9 +471,9 @@ try {
 
     if (-not $SkipDatabaseSetup) {
         Write-Host "recreating isolated smoke database $Database..."
-        & $psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -q -v ON_ERROR_STOP=1 `
+        & $Psql -h $DbHost -p $DbPort -U $DbUser -d postgres -q -v ON_ERROR_STOP=1 `
             -c "DROP DATABASE IF EXISTS $Database WITH (FORCE);"
-        & $psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -q -v ON_ERROR_STOP=1 `
+        & $Psql -h $DbHost -p $DbPort -U $DbUser -d postgres -q -v ON_ERROR_STOP=1 `
             -c "CREATE DATABASE $Database;"
 
         $env:ConnectionStrings__Postgres = $connection
@@ -436,7 +488,7 @@ try {
             throw 'dotnet ef database update failed'
         }
 
-        & $psql -h 127.0.0.1 -p 5432 -U postgres -d $Database -q -v ON_ERROR_STOP=1 `
+        & $Psql -h $DbHost -p $DbPort -U $DbUser -d $Database -q -v ON_ERROR_STOP=1 `
             -f (Join-Path $root 'load/seed/minimal.sql') | Out-Host
 
         if ($LASTEXITCODE -ne 0) {
@@ -474,7 +526,7 @@ try {
     $email = "deploy-smoke-$([Guid]::NewGuid().ToString('N').Substring(0, 8))@barbersearch.test"
     $registerBody = @{
         email = $email
-        password = 'Smoke!Passw0rd'
+        password = $UserPassword
         firstName = 'Deploy'
         lastName = 'Smoke'
     } | ConvertTo-Json -Compress
@@ -485,7 +537,7 @@ try {
 
     $loginBody = @{
         email = $email
-        password = 'Smoke!Passw0rd'
+        password = $UserPassword
         rememberMe = $false
     } | ConvertTo-Json -Compress
 
@@ -554,7 +606,7 @@ try {
     $authenticatedToken = ($csrfAuthenticated.Body | ConvertFrom-Json).token
 
     $changePasswordBody = @{
-        currentPassword = 'Smoke!Passw0rd'
+        currentPassword = $UserPassword
         newPassword = $newPassword
     } | ConvertTo-Json -Compress
 
@@ -613,7 +665,7 @@ try {
     $bookingRepeatId = ($bookingRepeat.Body | ConvertFrom-Json).id
     Assert-Equal $bookingRepeatId $bookingId 'same idempotency key returns the same booking'
 
-    $bookingRows = & $psql -h 127.0.0.1 -p 5432 -U postgres -d $Database -q -tA -v ON_ERROR_STOP=1 `
+    $bookingRows = & $Psql -h $DbHost -p $DbPort -U $DbUser -d $Database -q -tA -v ON_ERROR_STOP=1 `
         -c "SELECT count(*) FROM bookings WHERE idempotency_key = '$idempotencyKey';"
     Assert-Equal ([int]($bookingRows | Select-Object -First 1)) 1 'one booking row per idempotency key'
 
@@ -816,7 +868,8 @@ try {
     $healthContext.Client.Dispose()
 
     $deadDbEnvironment = New-BaseEnvironment -EnvironmentName 'Development'
-    $deadDbEnvironment['ConnectionStrings__Postgres'] = 'Host=127.0.0.1;Port=59999;Database=missing;Username=postgres;Password=postgres;Timeout=1'
+    $deadDbEnvironment['ConnectionStrings__Postgres'] = New-PostgresConnectionString `
+        -DatabaseName 'missing' -Port 59999 -TimeoutSeconds 1
 
     $deadDb = Start-Api -Name 'dead-db' -Port $BadDbPort -Environment $deadDbEnvironment
     Wait-Api -Port $BadDbPort

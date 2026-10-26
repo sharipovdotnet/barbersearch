@@ -66,7 +66,7 @@ public class SetWorkingScheduleDayOffHandler : ICommandHandler<SetWorkingSchedul
         {
             return new Failure(Error.NotFound(
                 "workingSchedule.setDayOff.notFound",
-                "The specified working schedule was not found in this barber salon.",
+                Messages.WORKING_SCHEDULE_NOT_FOUND,
                 command.WorkingScheduleId));
         }
 

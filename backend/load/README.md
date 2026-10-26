@@ -17,9 +17,11 @@
 | `collect-metrics.ps1` | сэмплирует CPU/RAM приложения и `pg_stat_activity`/`pg_locks` |
 | `run.ps1` | поднимает API, логинится, сбрасывает сценарии, гоняет harness, собирает метрики |
 
-Требуется: .NET SDK 10, PostgreSQL 16.3 на `127.0.0.1:5432`, `psql` из
-`C:\Program Files\PostgreSQL\16\bin`. Скрипты запускаются из PowerShell 5.1 с
-`-ExecutionPolicy Bypass`.
+Требуется: .NET SDK 10, PostgreSQL 16.3 на `127.0.0.1:5432`, `psql` в `PATH`
+(другой путь задаётся параметром `-Psql`). Скрипты запускаются из PowerShell 5.1 с
+`-ExecutionPolicy Bypass`. Пароли в репозитории не хранятся: база — из
+`BARBERSEARCH_DB_PASSWORD` (или `PGPASSWORD`, или `-DbPassword`), тестовые
+пользователи — из `BARBERSEARCH_TEST_USER_PASSWORD` (или `-UserPassword`).
 
 ## 1. Отдельная база
 
@@ -27,13 +29,13 @@
 `barbersearch_load`.
 
 ```powershell
-$psql = 'C:\Program Files\PostgreSQL\16\bin\psql.exe'
-$env:PGPASSWORD = 'postgres'
+$env:BARBERSEARCH_DB_PASSWORD = '<пароль локальной PostgreSQL>'
+$env:PGPASSWORD = $env:BARBERSEARCH_DB_PASSWORD
 
 # пересоздать пустую load-базу
-& $psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c `
+psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c `
   'DROP DATABASE IF EXISTS barbersearch_load WITH (FORCE);'
-& $psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c `
+psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c `
   'CREATE DATABASE barbersearch_load;'
 
 # миграции: InitialCreate / AddRefreshTokens / AddSecurityStamp / AddReadIndexes /
@@ -41,7 +43,7 @@ $env:PGPASSWORD = 'postgres'
 dotnet ef database update `
   --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql `
   --startup-project BarberSearch/src/BarberSearch.Web `
-  --connection 'Host=127.0.0.1;Port=5432;Database=barbersearch_load;Username=postgres;Password=postgres'
+  --connection "Host=127.0.0.1;Port=5432;Database=barbersearch_load;Username=postgres;Password=$env:BARBERSEARCH_DB_PASSWORD"
 ```
 
 `dotnet ef` и `dotnet build` в confined-сессии требуют `danger-full-access`
@@ -50,7 +52,7 @@ dotnet ef database update `
 ## 2. Данные
 
 ```powershell
-& $psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load `
+psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load `
   -v ON_ERROR_STOP=1 -f load/seed/seed.sql
 ```
 
@@ -76,9 +78,15 @@ dotnet build load/harness/LoadHarness.csproj -c Release
 сбросит сценарные строки, сгенерирует манифест, соберёт метрики и остановит API.
 
 ```powershell
+$env:BARBERSEARCH_DB_PASSWORD = '<пароль локальной PostgreSQL>'
+$env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ символов>'
+
 powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
   -Repeat 5 -ReadSeconds 15
 ```
+
+Параметры подключения — `-DbHost`, `-DbPort`, `-DbUser`, `-Database`, `-Psql`;
+пароли — `-DbPassword` и `-UserPassword` (или переменные окружения выше).
 
 Повторный запуск, пока токены живы (15 минут; лимит auth не тратится):
 
@@ -142,6 +150,8 @@ p99 1000 мс.
 `--scenario booking-idempotency --repeat 1`:
 
 ```powershell
+$env:BARBERSEARCH_DB_PASSWORD = '<пароль локальной PostgreSQL>'
+$env:BARBERSEARCH_TEST_USER_PASSWORD = '<12+ символов>'
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File load/ci/booking-idempotency.ps1
 ```

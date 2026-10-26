@@ -15,6 +15,11 @@ namespace BarberSearch.Web.Auth;
 /// предыдущие продолжают проверяться, пока живут выданные ими access-токены. Пустой список
 /// означает, что ротация не настроена.
 /// </para>
+/// <para>
+/// Остальные значения заданы один раз — в <c>appsettings.json</c>; тип не дублирует их
+/// инициализаторами. Отсутствующее или пустое значение отклоняется в
+/// <see cref="FromConfiguration"/>.
+/// </para>
 /// </remarks>
 public sealed record AuthOptions
 {
@@ -29,14 +34,20 @@ public sealed record AuthOptions
     public const int MIN_SIGNING_KEY_LENGTH = 32;
 
     /// <summary>
-    /// Издатель токена (<c>iss</c>).
+    /// Максимальный допуск расхождения часов при проверке JWT в секундах.
     /// </summary>
-    public string Issuer { get; init; } = "BarberSearch";
+    public const int MAX_CLOCK_SKEW_SECONDS = 300;
 
     /// <summary>
-    /// Получатель токена (<c>aud</c>) — идентификатор этого API.
+    /// Издатель токена (<c>iss</c>). Значение задаётся в <c>appsettings.json</c>.
     /// </summary>
-    public string Audience { get; init; } = "BarberSearch.Api";
+    public string Issuer { get; init; } = null!;
+
+    /// <summary>
+    /// Получатель токена (<c>aud</c>) — идентификатор этого API. Значение задаётся
+    /// в <c>appsettings.json</c>.
+    /// </summary>
+    public string Audience { get; init; } = null!;
 
     /// <summary>
     /// Текущий ключ подписи HMAC-SHA256. Не хранится в репозитории.
@@ -49,44 +60,70 @@ public sealed record AuthOptions
     public string[] PreviousSigningKeys { get; init; } = [];
 
     /// <summary>
-    /// Срок жизни access-токена в минутах.
+    /// Срок жизни access-токена в минутах. Значение задаётся в <c>appsettings.json</c>.
     /// </summary>
-    public int AccessTokenMinutes { get; init; } = 15;
+    public int AccessTokenMinutes { get; init; }
 
     /// <summary>
     /// Срок жизни refresh-токена в днях. Допустимо 7–30: короткий срок заставляет клиента
-    /// часто обновляться, длинный — растягивает окно украденного токена.
+    /// часто обновляться, длинный — растягивает окно украденного токена. Значение задаётся
+    /// в <c>appsettings.json</c>.
     /// </summary>
-    public int RefreshTokenDays { get; init; } = 14;
+    public int RefreshTokenDays { get; init; }
 
     /// <summary>
-    /// Срок жизни постоянной cookie в часах.
+    /// Срок жизни постоянной cookie в часах. Значение задаётся в <c>appsettings.json</c>.
     /// </summary>
-    public int CookieHours { get; init; } = 8;
+    public int CookieHours { get; init; }
 
     /// <summary>
     /// Режим SameSite для cookie аутентификации и antiforgery: <c>Lax</c>, <c>Strict</c> или <c>None</c>.
+    /// Значение задаётся в <c>appsettings.json</c>.
     /// </summary>
     /// <remarks>
     /// <c>None</c> нужен только если SPA живёт на другом сайте; вместе с ним принудительно
     /// включается <c>Secure</c>, иначе браузер cookie не примет.
     /// </remarks>
-    public string CookieSameSite { get; init; } = "Lax";
+    public string CookieSameSite { get; init; } = null!;
+
+    /// <summary>
+    /// Допуск на расхождение часов при проверке JWT в секундах, <c>0..300</c>.
+    /// Значение задаётся в <c>appsettings.json</c>; настраиваемый допуск заменяет прежние
+    /// жёстко заданные 30 секунд.
+    /// </summary>
+    public int ClockSkewSeconds { get; init; }
 
     /// <summary>
     /// Читает секцию и проверяет обязательные значения.
     /// </summary>
     /// <param name="configuration">Конфигурация приложения.</param>
     /// <exception cref="InvalidOperationException">
-    /// Ключ подписи отсутствует, короче 32 символов или список предыдущих ключей некорректен.
+    /// Секция <c>Auth</c> отсутствует, обязательное значение пустое или вне диапазона,
+    /// ключ подписи отсутствует, короче 32 символов, либо список предыдущих ключей некорректен.
     /// </exception>
     public static AuthOptions FromConfiguration(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var options = configuration
-            .GetSection(SectionName)
-            .Get<AuthOptions>() ?? new AuthOptions();
+        var section = configuration.GetSection(SectionName);
+
+        // Значения по умолчанию живут в appsettings.json, а не в этом типе. Если секции нет,
+        // молчаливая подстановка new AuthOptions() вернула бы незаполненные свойства и
+        // замаскировала ошибку конфигурации.
+        if (!section.Exists())
+        {
+            throw new InvalidOperationException(
+                """
+                Auth configuration section is not configured.
+                Add the Auth section to appsettings.json with Issuer, Audience,
+                AccessTokenMinutes, RefreshTokenDays, CookieHours, CookieSameSite and
+                ClockSkewSeconds.
+                Auth:SigningKey must come from a secret store or the environment variable Auth__SigningKey.
+                """);
+        }
+
+        var options = section.Get<AuthOptions>()
+            ?? throw new InvalidOperationException("Auth configuration section could not be read.");
 
         var signingKey = options.SigningKey?.Trim() ?? string.Empty;
 
@@ -129,6 +166,12 @@ public sealed record AuthOptions
         if (options.CookieHours is < 1 or > 168)
         {
             throw new InvalidOperationException("Auth:CookieHours must be between 1 and 168.");
+        }
+
+        if (options.ClockSkewSeconds is < 0 or > MAX_CLOCK_SKEW_SECONDS)
+        {
+            throw new InvalidOperationException(
+                $"Auth:ClockSkewSeconds must be between 0 and {MAX_CLOCK_SKEW_SECONDS} seconds.");
         }
 
         if (!Enum.TryParse<SameSiteMode>(options.CookieSameSite, ignoreCase: true, out _))

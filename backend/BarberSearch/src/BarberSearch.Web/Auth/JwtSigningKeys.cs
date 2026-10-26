@@ -8,7 +8,7 @@ namespace BarberSearch.Web.Auth;
 /// Ключи подписи и проверки JWT: текущий и предыдущие.
 /// </summary>
 /// <remarks>
-/// <c>kid</c> выводится из самого ключа (первые 16 hex SHA-256). Это не раскрывает ключ,
+/// <c>kid</c> выводится из самого ключа (первые <see cref="KEY_ID_LENGTH"/> hex SHA-256). Это не раскрывает ключ,
 /// но позволяет отличить токены, подписанные старым и новым ключом, во время ротации.
 /// <para>
 /// Новые токены подписываются только текущим ключом; проверка принимает текущий и все
@@ -18,6 +18,11 @@ namespace BarberSearch.Web.Auth;
 /// </remarks>
 public sealed class JwtSigningKeys
 {
+    /// <summary>
+    /// Длина <c>kid</c> в hex-символах: первые байты SHA-256 от ключа.
+    /// </summary>
+    private const int KEY_ID_LENGTH = 16;
+
     public JwtSigningKeys(AuthOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -55,5 +60,5 @@ public sealed class JwtSigningKeys
         };
 
     private static string ComputeKeyId(string value)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..16].ToLowerInvariant();
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..KEY_ID_LENGTH].ToLowerInvariant();
 }

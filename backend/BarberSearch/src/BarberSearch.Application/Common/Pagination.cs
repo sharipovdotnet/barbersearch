@@ -30,7 +30,7 @@ public static class Pagination
         => pageSize is < 1 or > MAX_PAGE_SIZE
             ? new Failure(Error.Validation(
                 $"{errorCode}.pageSize",
-                $"Page size must be between 1 and {MAX_PAGE_SIZE}.",
+                Messages.PageSizeOutOfRange(MAX_PAGE_SIZE),
                 "pageSize"))
             : null;
 }

@@ -24,12 +24,14 @@ public class ErrorTests
         var unauthorized = Error.Unauthorized(null, "Authentication required.");
         var forbidden = Error.Forbidden(null, "Access denied.");
 
-        AssertError(notFound, "record.not.found", "Missing.", ErrorType.NOT_FOUND, invalidField: null);
-        AssertError(validation, "validation.error", "Invalid.", ErrorType.VALIDATION, invalidField: null);
-        AssertError(conflict, "value.is.conflict", "Conflict.", ErrorType.CONFLICT, invalidField: null);
-        AssertError(failure, "failure", "Boom.", ErrorType.FAILURE, invalidField: null);
-        AssertError(unauthorized, "unauthorized", "Authentication required.", ErrorType.UNAUTHORIZED, invalidField: null);
-        AssertError(forbidden, "forbidden", "Access denied.", ErrorType.FORBIDDEN, invalidField: null);
+        // Литералы, а не FallbackErrorCodes: тест фиксирует сам проводной формат <c>error.*</c>,
+        // а не только совпадение фабрики с константой.
+        AssertError(notFound, "error.notFound", "Missing.", ErrorType.NOT_FOUND, invalidField: null);
+        AssertError(validation, "error.validation", "Invalid.", ErrorType.VALIDATION, invalidField: null);
+        AssertError(conflict, "error.conflict", "Conflict.", ErrorType.CONFLICT, invalidField: null);
+        AssertError(failure, "error.failure", "Boom.", ErrorType.FAILURE, invalidField: null);
+        AssertError(unauthorized, "error.unauthorized", "Authentication required.", ErrorType.UNAUTHORIZED, invalidField: null);
+        AssertError(forbidden, "error.forbidden", "Access denied.", ErrorType.FORBIDDEN, invalidField: null);
     }
 
     [Fact]

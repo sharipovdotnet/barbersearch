@@ -66,7 +66,7 @@ public class Booking : AggregateRoot
         {
             return Error.Validation(
                 "booking.create.idempotencyKey",
-                "Idempotency key cannot be empty.",
+                DomainMessages.IDEMPOTENCY_KEY_REQUIRED,
                 nameof(idempotencyKey));
         }
 
@@ -103,7 +103,7 @@ public class Booking : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "booking.create.period",
-                "End time must be after start time.",
+                DomainMessages.END_TIME_NOT_AFTER_START,
                 nameof(endAt)));
         }
         else if (endAt - startAt > TimeSpan.FromMinutes(Constants.MAX_BOOKING_DURATION_MINUTES))
@@ -118,7 +118,7 @@ public class Booking : AggregateRoot
         {
             errors.Add(Error.Validation(
                 "booking.create.price",
-                "Price cannot be negative.",
+                DomainMessages.PRICE_NEGATIVE,
                 nameof(price)));
         }
 

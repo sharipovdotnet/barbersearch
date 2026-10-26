@@ -1,11 +1,11 @@
 param(
     [Parameter(Mandatory = $true)][int]$AppPid,
     [Parameter(Mandatory = $true)][string]$OutFile,
-    [string]$Psql = 'C:\Program Files\PostgreSQL\16\bin\psql.exe',
+    [string]$Psql = 'psql',
     [string]$DbHost = '127.0.0.1',
     [int]$DbPort = 5432,
     [string]$DbUser = 'postgres',
-    [string]$DbPassword = 'postgres',
+    [string]$DbPassword = $env:BARBERSEARCH_DB_PASSWORD,
     [string]$Database = 'barbersearch_load',
     [int]$DurationSeconds = 600,
     [int]$IntervalMs = 1000,
@@ -13,6 +13,15 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    $DbPassword = $env:PGPASSWORD
+}
+
+if ([string]::IsNullOrWhiteSpace($DbPassword)) {
+    throw 'The database password is required: pass -DbPassword or set BARBERSEARCH_DB_PASSWORD (PGPASSWORD is also accepted).'
+}
+
 $env:PGPASSWORD = $DbPassword
 $invariant = [System.Globalization.CultureInfo]::InvariantCulture
 
