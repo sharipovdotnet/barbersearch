@@ -2,9 +2,17 @@ name: backend-ci
 
 # Сборка и тесты backend. Workflow лежит в корне репозитория (не в backend/),
 # потому что GitHub Actions читает только .github/workflows из корня.
+# Запускается только при изменениях backend/ — правки frontend его не трогают.
 on:
   push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
   pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
