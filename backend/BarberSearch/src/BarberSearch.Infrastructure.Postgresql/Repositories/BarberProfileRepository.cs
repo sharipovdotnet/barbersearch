@@ -4,8 +4,12 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.Common;
+using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -17,42 +21,107 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBarberProfileRepository
 {
-    public BarberProfileRepository(ApplicationDbContext context)
-        : base(context)
+    public BarberProfileRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+        : base(context, auditTrail)
     {
     }
 
-    public async Task<Result<BarberProfile, Failure>> GetByIdAsync(
+    public Task<Result<BarberProfile, Failure>> GetRootByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(Context.BarberProfiles, id, cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSalonsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles.Include(x => x.Salons),
+            id,
+            cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSalonsAndSchedulesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles
+                .Include(x => x.Salons)
+                    .ThenInclude(salon => salon.WorkingSchedules),
+            id,
+            cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithServicesAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles.Include(x => x.Services),
+            id,
+            cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithPhotosAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles.Include(x => x.PortfolioPhotos),
+            id,
+            cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithSpecializationsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles.Include(x => x.BarberSpecializations),
+            id,
+            cancellationToken);
+
+    public Task<Result<BarberProfile, Failure>> GetWithTimeOffsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles.Include(x => x.TimeOffs),
+            id,
+            cancellationToken);
+
+    public async Task<Result<Guid, Failure>> GetOwnerIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var profile = await FullAggregate()
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var ownerId = await Context.BarberProfiles
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => (Guid?)x.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (profile is null)
+        if (ownerId is null)
         {
-            return NotFound("barberProfile.getById.notFound", nameof(BarberProfile), id);
+            return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
         }
 
-        return profile;
+        return ownerId.Value;
     }
 
-    public async Task<Result<BarberProfile, Failure>> GetByUserIdAsync(
-        Guid userId,
+    public async Task<Result<BarberSalon, Failure>> GetSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
         CancellationToken cancellationToken = default)
     {
-        var profile = await FullAggregate()
-            .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        // Узкое чтение одного салона вместе с расписанием: профиль, его услуги, фото,
+        // специализации и отпуска для FindBarberProfileSalon не нужны.
+        var salon = await Context.BarberSalons
+            .AsNoTracking()
+            .Include(x => x.WorkingSchedules)
+            .FirstOrDefaultAsync(
+                x => x.BarberProfileId == barberProfileId && x.SalonId == salonId,
+                cancellationToken);
 
-        if (profile is null)
+        if (salon is null)
         {
             return new Failure(Error.NotFound(
-                "barberProfile.getByUserId.notFound",
-                $"Barber profile of user '{userId}' was not found.",
-                userId));
+                ApiErrorCodes.BarberProfile.FindSalonNotFound,
+                "The barber in the specified salon does not work.",
+                salonId));
         }
 
-        return profile;
+        return salon;
     }
 
     public async Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(
@@ -63,15 +132,19 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         // сериализует конкурентные пересчёты одного профиля (AGENT.md §12.2).
         // Сырой SQL намеренно не композируется с LINQ: FOR UPDATE должен остаться
         // в том же запросе, что и чтение строки.
+        //
+        // xmin указывается явно: PostgreSQL не включает системные колонки в SELECT *,
+        // а EF Core ждёт xmin в проекции — иначе токен конкурентности (R-05) не
+        // материализуется, и UPDATE уходит с xmin = 0.
         var profiles = await Context.BarberProfiles
-            .FromSqlInterpolated($"SELECT * FROM barber_profiles WHERE id = {id} FOR UPDATE")
+            .FromSqlInterpolated($"SELECT *, xmin FROM barber_profiles WHERE id = {id} FOR UPDATE")
             .ToListAsync(cancellationToken);
 
         var profile = profiles.SingleOrDefault();
 
         if (profile is null)
         {
-            return NotFound("barberProfile.getById.notFound", nameof(BarberProfile), id);
+            return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
         }
 
         return profile;
@@ -100,15 +173,35 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return profiles;
     }
 
+    /// <summary>
+    /// Страница профилей: сначала с рейтингом, затем «без отзывов». Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Глубина offset-выдачи ограничена: <c>page * pageSize</c> не может превышать
+    /// <see cref="MAX_PAGE_OFFSET"/> (10 000), иначе <c>400</c> с кодом
+    /// <c>barberProfile.paging.depth</c> — до обращения к базе.
+    /// </remarks>
     public async Task<Result<IReadOnlyList<BarberProfile>, Failure>> GetPagedAsync(
         int page,
         int pageSize,
         bool onlyActive = true,
         CancellationToken cancellationToken = default)
     {
-        if (ValidatePaging(page, pageSize, "barberProfile.getPaged") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.BarberProfile.PagingPageInvalid,
+                ApiErrorCodes.BarberProfile.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
+        }
+
+        if (ValidatePageOffset(
+                page,
+                pageSize,
+                ApiErrorCodes.BarberProfile.PagingDepthInvalid) is { } depthError)
+        {
+            return depthError;
         }
 
         var query = Context.BarberProfiles.AsNoTracking();
@@ -147,7 +240,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         if (service is null)
         {
             return new Failure(Error.NotFound(
-                "barberProfile.getService.notFound",
+                ApiErrorCodes.BarberProfile.ServiceNotFound,
                 $"""
                  Barber profile '{barberProfileId}' does not provide service
                  '{barberServiceId}'.
@@ -169,6 +262,20 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return exists;
     }
 
+    public async Task<Result<bool, Failure>> HasSalonAsync(
+        Guid barberProfileId,
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+    {
+        var worksAtSalon = await Context.BarberSalons
+            .AsNoTracking()
+            .AnyAsync(
+                link => link.BarberProfileId == barberProfileId && link.SalonId == salonId,
+                cancellationToken);
+
+        return worksAtSalon;
+    }
+
     public async Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
         BarberSearchFilter filter,
         CancellationToken cancellationToken = default)
@@ -178,7 +285,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         if (filter.Limit <= 0)
         {
             return new Failure(Error.Validation(
-                "barberSearch.search.limit",
+                ApiErrorCodes.Common.BarberSearchLimitInvalid,
                 "Search limit must be positive.",
                 nameof(filter.Limit)));
         }
@@ -209,11 +316,11 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 && link.SpecializationId == specializationId));
         }
 
-        if (filter.ServiceId is { } serviceId)
+        if (filter.HairServiceId is { } hairServiceId)
         {
             query = query.Where(profile => Context.BarberServices.Any(service =>
                 service.BarberProfileId == profile.Id
-                && service.HairServiceId == serviceId
+                && service.HairServiceId == hairServiceId
                 && service.IsActive));
         }
 
@@ -319,7 +426,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     public async Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
-        Guid? serviceId,
+        Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default)
     {
@@ -334,7 +441,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         if (!isVisible)
         {
             return NotFound(
-                "barberProfile.getSlots.notFound",
+                ApiErrorCodes.BarberProfile.SlotsNotFound,
                 nameof(BarberProfile),
                 barberProfileId);
         }
@@ -355,7 +462,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         if (salonLinks.Count == 0)
         {
             return new Failure(Error.NotFound(
-                "barberSlots.salon.notFound",
+                ApiErrorCodes.Common.BarberSlotsSalonNotFound,
                 $"The barber profile '{barberProfileId}' has no active salon.",
                 barberProfileId));
         }
@@ -370,7 +477,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         if (salonLink is null)
         {
             return new Failure(Error.NotFound(
-                "barberSlots.salon.notFound",
+                ApiErrorCodes.Common.BarberSlotsSalonNotFound,
                 $"The barber profile '{barberProfileId}' does not work in salon '{salonId}'.",
                 salonId ?? barberProfileId));
         }
@@ -387,27 +494,31 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var durationMinutes = 30;
+        var durationMinutes = Constants.DEFAULT_SLOT_DURATION_MINUTES;
+        Guid? barberServiceId = null;
+        Guid? requestedHairServiceId = null;
 
-        if (serviceId is { } requestedServiceId)
+        if (hairServiceId is { } hairServiceFilter)
         {
-            var serviceDuration = await Context.BarberServices
-                .AsNoTracking()
-                .Where(service => service.BarberProfileId == barberProfileId
-                                  && service.HairServiceId == requestedServiceId
-                                  && service.IsActive)
-                .Select(service => (int?)service.DurationMinutes)
+            // Длительность и идентификатор пары читаются одной строкой: в ответ слотов
+            // уходит именно та barber_services, по которой построена сетка (R-20).
+            var service = await BuildSlotServiceQuery(
+                    Context,
+                    barberProfileId,
+                    hairServiceFilter)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (serviceDuration is null)
+            if (service is null)
             {
                 return new Failure(Error.NotFound(
-                    "barberSlots.service.notFound",
-                    $"The barber profile '{barberProfileId}' does not provide hair service '{requestedServiceId}'.",
-                    requestedServiceId));
+                    ApiErrorCodes.Common.BarberSlotsServiceNotFound,
+                    $"The barber profile '{barberProfileId}' does not provide hair service '{hairServiceFilter}'.",
+                    hairServiceFilter));
             }
 
-            durationMinutes = serviceDuration.Value;
+            durationMinutes = service.DurationMinutes;
+            barberServiceId = service.BarberServiceId;
+            requestedHairServiceId = service.HairServiceId;
         }
 
         // Окно шире любых реальных смещений UTC (−12..+14): обработчик затем отсекает
@@ -434,7 +545,48 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             schedule?.StartTime ?? default,
             schedule?.EndTime ?? default,
             durationMinutes,
+            barberServiceId,
+            requestedHairServiceId,
             timeOffs);
+    }
+
+    /// <summary>
+    /// Строит чтение пары «услуга барбера» по услуге справочника.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>hairServiceId</c> — это <c>hair_services.id</c>, а возвращаемый
+    /// <see cref="BarberSlotServiceLookup.BarberServiceId"/> — <c>barber_services.id</c>,
+    /// которую принимает создание брони. Оба идентификатора и длительность проецируются
+    /// из одной строки, поэтому в ответ слотов уходит та пара, по которой реально
+    /// считалась сетка (R-20).
+    /// </para>
+    /// <para>
+    /// У профиля не больше одной строки на услугу справочника: это гарантирует
+    /// уникальный индекс <c>ux_barber_services_barber_profile_id_hair_service_id</c>.
+    /// Фильтр <c>is_active</c> сохранён: неактивная услуга слотов не даёт.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">Контекст базы данных.</param>
+    /// <param name="barberProfileId">Профиль, чью услугу читаем.</param>
+    /// <param name="hairServiceId">Услуга справочника (<c>hair_services.id</c>).</param>
+    /// <returns>Запрос одной пары либо <c>null</c>, если услуга не найдена.</returns>
+    internal static IQueryable<BarberSlotServiceLookup> BuildSlotServiceQuery(
+        ApplicationDbContext context,
+        Guid barberProfileId,
+        Guid hairServiceId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.BarberServices
+            .AsNoTracking()
+            .Where(service => service.BarberProfileId == barberProfileId
+                              && service.HairServiceId == hairServiceId
+                              && service.IsActive)
+            .Select(service => new BarberSlotServiceLookup(
+                service.Id,
+                service.HairServiceId,
+                service.DurationMinutes));
     }
 
     public async Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
@@ -454,7 +606,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
         if (profile is null)
         {
-            return NotFound("barberProfile.getCardById.notFound", nameof(BarberProfile), id);
+            return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
         }
 
         var salonIds = profile.Salons.Select(salon => salon.SalonId).Distinct().ToArray();
@@ -586,13 +738,16 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
         await Context.BarberProfiles.AddAsync(barberProfile, cancellationToken);
 
-        return await SaveChangesAsync("barberProfile.add", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.BarberProfile.AddPrefix, cancellationToken);
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(
         BarberProfile barberProfile,
         CancellationToken cancellationToken = default)
-        => await SaveGraphAsync(barberProfile, "barberProfile.update", cancellationToken);
+        => await SaveGraphAsync(
+            barberProfile,
+            ApiErrorCodes.BarberProfile.UpdatePrefix,
+            cancellationToken);
 
     public async Task<UnitResult<Failure>> DeleteAsync(
         BarberProfile barberProfile,
@@ -602,23 +757,30 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
         Context.BarberProfiles.Remove(barberProfile);
 
-        return await SaveChangesAsync("barberProfile.delete", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.BarberProfile.DeletePrefix, cancellationToken);
     }
 
     /// <summary>
-    /// Запрос профиля со всеми дочерними коллекциями.
+    /// Читает профиль по подготовленному запросу и переводит отсутствие строки в <c>404</c>.
     /// </summary>
     /// <remarks>
-    /// <c>AsSplitQuery</c> обязателен: пять коллекций в одном JOIN дают декартово произведение
-    /// строк, то есть и лишний трафик, и неверный результат при агрегатах.
+    /// Один <c>Include</c> коллекции не требует <c>AsSplitQuery</c>: EF Core выполняет один
+    /// SELECT с JOIN, а не семь запросов полного агрегата. Отслеживание включено — вызывающие
+    /// меняют профиль и сохраняют его через <c>UpdateAsync</c>, а <c>xmin</c> приходит вместе
+    /// с прочитанной строкой.
     /// </remarks>
-    private IQueryable<BarberProfile> FullAggregate()
-        => Context.BarberProfiles
-            .Include(x => x.Salons)
-                .ThenInclude(salon => salon.WorkingSchedules)
-            .Include(x => x.Services)
-            .Include(x => x.PortfolioPhotos)
-            .Include(x => x.BarberSpecializations)
-            .Include(x => x.TimeOffs)
-            .AsSplitQuery();
+    private static async Task<Result<BarberProfile, Failure>> GetProfileAsync(
+        IQueryable<BarberProfile> query,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var profile = await query.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (profile is null)
+        {
+            return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
+        }
+
+        return profile;
+    }
 }

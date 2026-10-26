@@ -47,6 +47,53 @@ public class UserTests
     }
 
     [Fact]
+    public void Create_TrimsAndLowercasesEmail()
+    {
+        var result = User.Create("  User@Mail.RU  ", "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("user@mail.ru", result.Value.Email);
+    }
+
+    [Fact]
+    public void Create_WithEmailWithoutDomain_ReturnsValidationFailure()
+    {
+        var result = User.Create("a@b", "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.email", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Create_WithMultipleAtSigns_ReturnsValidationFailure()
+    {
+        var result = User.Create("a@b@c", "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.email", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Create_WithDisplayName_ReturnsValidationFailure()
+    {
+        var result = User.Create("Ivan <ivan@example.com>", "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.email", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Create_WithEmailLongerThanLimit_ReturnsValidationFailure()
+    {
+        var email = new string('a', 250) + "@example.com";
+
+        var result = User.Create(email, "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.email", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
     public void UpdateProfile_WithEmptyName_Fails()
     {
         var user = CreateValidUser();
@@ -54,6 +101,52 @@ public class UserTests
         var result = user.UpdateProfile("", "Petrov", null, null);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public void UpdateProfile_RejectsInvalidAvatarUrlAndKeepsOldValue()
+    {
+        var user = CreateValidUser();
+        user.UpdateProfile("Ivan", "Petrov", null, "https://cdn.example.com/avatar.png");
+
+        foreach (var avatarUrl in new[]
+                 {
+                     "javascript:alert(1)",
+                     "avatar.png",
+                     "https://user:pass@cdn.example.com/avatar.png"
+                 })
+        {
+            var result = user.UpdateProfile("Changed", "Petrov", "+79001234567", avatarUrl);
+
+            Assert.True(result.IsFailure);
+
+            var error = Assert.Single(result.Error.Errors);
+
+            Assert.Equal("user.updateProfile.avatarUrl", error.Code);
+            Assert.Equal("avatarUrl", error.InvalidField);
+            Assert.Equal("Ivan", user.FirstName);
+            Assert.Equal("https://cdn.example.com/avatar.png", user.AvatarUrl);
+        }
+    }
+
+    [Fact]
+    public void UpdateProfile_TrimsAvatarUrlAndClearsItOnBlank()
+    {
+        var user = CreateValidUser();
+
+        var updated = user.UpdateProfile(
+            "Ivan",
+            "Petrov",
+            null,
+            "  https://cdn.example.com/avatar.png  ");
+
+        Assert.True(updated.IsSuccess);
+        Assert.Equal("https://cdn.example.com/avatar.png", user.AvatarUrl);
+
+        var cleared = user.UpdateProfile("Ivan", "Petrov", null, "   ");
+
+        Assert.True(cleared.IsSuccess);
+        Assert.Null(user.AvatarUrl);
     }
 
     [Fact]
@@ -308,5 +401,173 @@ public class UserTests
 
         Assert.True(repeated.IsSuccess);
         Assert.Equal(afterFirst, user.SecurityStamp);
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_FourFailures_DoNotLockTheAccount()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            now = now.AddSeconds(10);
+            Assert.True(user.RegisterFailedLogin(now).IsSuccess);
+        }
+
+        Assert.Equal(4, user.FailedLoginAttempts);
+        Assert.Equal(now, user.LastFailedLoginAt);
+        Assert.Null(user.LockoutEnd);
+        Assert.False(user.IsLockedOut(now));
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_FifthFailure_LocksForExactlyOneMinute()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= Constants.MAX_FAILED_LOGIN_ATTEMPTS; attempt++)
+        {
+            now = now.AddSeconds(10);
+            user.RegisterFailedLogin(now);
+        }
+
+        var failedAt = now;
+
+        Assert.Equal(Constants.MAX_FAILED_LOGIN_ATTEMPTS, user.FailedLoginAttempts);
+        Assert.Equal(failedAt.AddMinutes(Constants.LOGIN_LOCKOUT_BASE_MINUTES), user.LockoutEnd);
+        Assert.True(user.IsLockedOut(failedAt));
+        Assert.True(user.IsLockedOut(failedAt.AddMinutes(1).AddMilliseconds(-1)));
+
+        // В момент окончания задержки аккаунт уже не заблокирован, иначе клиент,
+        // дождавшийся конца блокировки, получал бы ещё один отказ.
+        Assert.False(user.IsLockedOut(user.LockoutEnd!.Value));
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_SixthFailureAfterLockoutExpires_LocksForTwoMinutes()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= Constants.MAX_FAILED_LOGIN_ATTEMPTS; attempt++)
+        {
+            now = now.AddSeconds(10);
+            user.RegisterFailedLogin(now);
+        }
+
+        var lockoutEnd = user.LockoutEnd!.Value;
+
+        Assert.False(user.IsLockedOut(lockoutEnd));
+
+        now = lockoutEnd;
+        user.RegisterFailedLogin(now);
+
+        Assert.Equal(Constants.MAX_FAILED_LOGIN_ATTEMPTS + 1, user.FailedLoginAttempts);
+        Assert.Equal(now.AddMinutes(2), user.LockoutEnd);
+        Assert.True(user.IsLockedOut(now));
+        Assert.True(user.IsLockedOut(now.AddSeconds(1)));
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_GrowsBackoffUpToMaximum()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= Constants.MAX_FAILED_LOGIN_ATTEMPTS; attempt++)
+        {
+            now = now.AddSeconds(10);
+            user.RegisterFailedLogin(now);
+        }
+
+        // 6-я неудача — 2 минуты, 7-я — 4, 8-я — 8. Дальше пауза между неудачами
+        // превысила бы окно сброса, поэтому рост до потолка проверяется отдельно.
+        foreach (var expectedMinutes in new[] { 2, 4, 8 })
+        {
+            now = user.LockoutEnd!.Value;
+            user.RegisterFailedLogin(now);
+
+            Assert.Equal(now.AddMinutes(expectedMinutes), user.LockoutEnd);
+        }
+
+        Assert.Equal(Constants.MAX_FAILED_LOGIN_ATTEMPTS + 3, user.FailedLoginAttempts);
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_CapsCounterAndLockoutDelay()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        // Сотня неудач подряд внутри окна сброса: счётчик упирается в предохранитель,
+        // а задержка — в LOGIN_LOCKOUT_MAX_MINUTES, без переполнения int.
+        for (var attempt = 1; attempt <= 100; attempt++)
+        {
+            now = now.AddSeconds(1);
+            user.RegisterFailedLogin(now);
+        }
+
+        Assert.Equal(
+            Constants.MAX_FAILED_LOGIN_ATTEMPTS + 10,
+            user.FailedLoginAttempts);
+        Assert.Equal(
+            now.AddMinutes(Constants.LOGIN_LOCKOUT_MAX_MINUTES),
+            user.LockoutEnd);
+        Assert.True(user.IsLockedOut(now.AddMinutes(59)));
+        Assert.False(user.IsLockedOut(now.AddMinutes(60)));
+    }
+
+    [Fact]
+    public void ResetFailedLogin_ClearsCounterAndLockoutAndIsIdempotent()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= Constants.MAX_FAILED_LOGIN_ATTEMPTS; attempt++)
+        {
+            now = now.AddSeconds(10);
+            user.RegisterFailedLogin(now);
+        }
+
+        Assert.True(user.IsLockedOut(now));
+
+        var reset = user.ResetFailedLogin();
+
+        Assert.True(reset.IsSuccess);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LastFailedLoginAt);
+        Assert.Null(user.LockoutEnd);
+        Assert.False(user.IsLockedOut(now));
+
+        // Повторный сброс идемпотентен: состояние остаётся пустым.
+        Assert.True(user.ResetFailedLogin().IsSuccess);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LockoutEnd);
+    }
+
+    [Fact]
+    public void RegisterFailedLogin_AfterResetWindow_StartsCountingFromScratch()
+    {
+        var user = CreateValidUser();
+        var now = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            now = now.AddSeconds(10);
+            user.RegisterFailedLogin(now);
+        }
+
+        Assert.Equal(4, user.FailedLoginAttempts);
+
+        // Пауза больше окна сброса: прошлые неудачи больше не считаются.
+        var afterPause = now.AddMinutes(Constants.LOGIN_FAILURE_RESET_MINUTES + 1);
+        user.RegisterFailedLogin(afterPause);
+
+        Assert.Equal(1, user.FailedLoginAttempts);
+        Assert.Equal(afterPause, user.LastFailedLoginAt);
+        Assert.Null(user.LockoutEnd);
+        Assert.False(user.IsLockedOut(afterPause));
     }
 }

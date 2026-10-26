@@ -238,7 +238,7 @@ internal sealed class Runner
 
         if (roll < 25)
         {
-            // No filters: the planner uses ix_barber_profiles_search directly.
+            // No filters: the planner uses ix_barber_profiles_search_keyset directly (R-38).
         }
         else if (roll < 45)
         {
@@ -294,7 +294,7 @@ internal sealed class Runner
 
         if (service is not null)
         {
-            query.Add("serviceId=" + service);
+            query.Add("hairServiceId=" + service);
         }
 
         if (date is not null)
@@ -346,7 +346,7 @@ internal sealed class Runner
 
         if (Random.Shared.Next(100) < 50)
         {
-            query.Add("serviceId=" + barber.HairServiceId);
+            query.Add("hairServiceId=" + barber.HairServiceId);
         }
 
         if (Random.Shared.Next(100) < 30)
@@ -637,7 +637,6 @@ internal sealed class Runner
             salonId = _context.Manifest.ContendedBooking.SalonId,
             startAt = slot.StartAt,
             endAt = slot.EndAt,
-            price = 0m,
             idempotencyKey,
             customerNote = (string?)null
         };
@@ -821,15 +820,20 @@ internal sealed class Runner
             warmupBarber,
             "warmup",
             CreateReviewWarmupCount);
+
+        // R-35: creation leaves the review hidden (pre-moderation). The admin publishes the
+        // created rows before the state check; publication latency is not part of the create stats.
+        var warmupPublication = await PublishCreatedReviewsAsync(warmup.CreatedIds, "warmup");
         var warmupVerification = await VerifyReviewStateAsync(
             warmupBarber.BarberId,
             warmupBarber.BasePublishedCount + CreateReviewWarmupCount,
             warmupBarber.BaseRatingSum + warmupBarber.NewRating * CreateReviewWarmupCount);
 
-        if (!warmup.Passed || !warmupVerification.Passed)
+        if (!warmup.Passed || !warmupPublication.Passed || !warmupVerification.Passed)
         {
             throw new InvalidOperationException(
-                $"Create-review warm-up failed: {warmup.Detail} | {warmupVerification.Detail}");
+                $"Create-review warm-up failed: {warmup.Detail} | " +
+                $"{warmupPublication.Detail} | {warmupVerification.Detail}");
         }
 
         scenario.WarmupCount = warmup.Items.Count;
@@ -838,13 +842,14 @@ internal sealed class Runner
         {
             var barber = barbers[run - 1];
             var outcome = await RunCreateReviewBatchAsync(barber, $"r{run}", CreateReviewCount);
+            var publication = await PublishCreatedReviewsAsync(outcome.CreatedIds, $"r{run}");
             var verification = await VerifyReviewStateAsync(
                 barber.BarberId,
                 barber.BasePublishedCount + CreateReviewCount,
                 barber.BaseRatingSum + CreateReviewCount * barber.NewRating);
 
-            var passed = outcome.Passed && verification.Passed;
-            var detail = $"{outcome.Detail} | {verification.Detail}";
+            var passed = outcome.Passed && publication.Passed && verification.Passed;
+            var detail = $"{outcome.Detail} | {publication.Detail} | {verification.Detail}";
             var stats = StatsFrom(outcome.Items);
 
             scenario.Runs.Add(StatsMath.BuildRunResult(
@@ -909,11 +914,60 @@ internal sealed class Runner
             .Where(item => item.Status == 201)
             .Select(item => ParseCreatedId(item.Body))
             .Where(id => id is not null)
-            .Distinct()
-            .Count();
-        var passed = status201 == count && createdIds == count;
+            .Distinct(StringComparer.Ordinal)
+            .Select(id => id!)
+            .ToArray();
+        var passed = status201 == count && createdIds.Length == count;
         var detail =
-            $"{tag}: statuses={FormatCounts(items)}; createdIds={createdIds}";
+            $"{tag}: statuses={FormatCounts(items)}; createdIds={createdIds.Length}";
+
+        return new BatchOutcome(items, passed, detail, stopwatch.Elapsed.TotalSeconds)
+        {
+            CreatedIds = createdIds
+        };
+    }
+
+    /// <summary>
+    /// Publishes the reviews created by the measured create batches, as the admin.
+    /// </summary>
+    /// <remarks>
+    /// Since R-35 a created review is hidden until an administrator publishes it, so the
+    /// create scenario verifies the rating recalculation on this publication step. The
+    /// requests are sent as one batch after the create batch and are deliberately kept out of
+    /// the create latency statistics: the scenario still measures <c>POST api/reviews</c>.
+    /// Any status other than <c>204</c> fails the run.
+    /// </remarks>
+    private async Task<BatchOutcome> PublishCreatedReviewsAsync(
+        IReadOnlyList<string> reviewIds,
+        string tag)
+    {
+        if (reviewIds.Count == 0)
+        {
+            return new BatchOutcome(
+                [],
+                false,
+                $"{tag}: no created reviews to publish",
+                0);
+        }
+
+        var factories = reviewIds
+            .Select(reviewId => (Func<HttpRequestMessage>)(() =>
+            {
+                var request = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"/api/reviews/{reviewId}/publication");
+                request.Headers.Authorization = Bearer(_context.AdminToken);
+
+                return request;
+            }))
+            .ToArray();
+
+        var stopwatch = Stopwatch.StartNew();
+        var items = await RunBatchAsync(factories);
+        stopwatch.Stop();
+
+        var passed = items.All(item => item.Status == 204);
+        var detail = $"{tag}: publication statuses={FormatCounts(items)}";
 
         return new BatchOutcome(items, passed, detail, stopwatch.Elapsed.TotalSeconds);
     }
@@ -1077,7 +1131,7 @@ internal sealed class Runner
         }
     }
 
-    private static IReadOnlyList<string> ParseErrorCodes(string body)
+    private static string[] ParseErrorCodes(string body)
     {
         try
         {

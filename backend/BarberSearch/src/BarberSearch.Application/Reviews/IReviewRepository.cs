@@ -24,6 +24,12 @@ public interface IReviewRepository
     /// <summary>
     /// Страница отзывов барбера, свежие сверху. Читается без отслеживания.
     /// </summary>
+    /// <remarks>
+    /// Глубина offset-выдачи ограничена: <c>page * pageSize</c> не может превышать 10 000,
+    /// иначе <c>400</c> с кодом <c>review.paging.depth</c>. Проверка глубины выполняется после
+    /// проверки параметров, поэтому при недопустимых <c>page</c>/<c>pageSize</c> клиент получает
+    /// прежние <c>review.paging.page</c> / <c>review.paging.pageSize</c>.
+    /// </remarks>
     /// <param name="onlyPublished">
     /// <c>true</c> — только опубликованные (карточка барбера для клиентов),
     /// <c>false</c> — включая скрытые (модерация).
@@ -55,9 +61,37 @@ public interface IReviewRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Очередь модерации — страница скрытых отзывов всех барберов в порядке
+    /// <c>created_at ASC, id</c> (FIFO: старые сверху).
+    /// </summary>
+    /// <remarks>
+    /// В выдачу попадают только <c>is_published = false</c>, независимо от барбера: администратор
+    /// видит всё, что ждёт решения. Порядок обратен карточке барбера, поэтому порядок задаёт
+    /// запрос, а курсор хранит пару <c>(created_at, id)</c> без направления. Keyset-условие
+    /// берётся из <paramref name="cursor"/>; <paramref name="limit"/> — это pageSize + 1.
+    /// <paramref name="limit"/> &lt;= 0 — <c>400</c> с кодом <c>review.page.limit</c>, как у
+    /// <see cref="GetPublishedPageAsync"/>. Читается без отслеживания и проецируется сразу
+    /// в <see cref="ReviewResponse"/>.
+    /// </remarks>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Сводка по опубликованным отзывам барбера — данные для пересчёта
     /// <c>BarberProfile.Rating</c> / <c>ReviewsCount</c> (AGENT.md §12.2).
     /// </summary>
+    /// <remarks>
+    /// Реализация читает количество и среднее одним агрегирующим SQL-запросом
+    /// (R-19): сводка запрашивается под <c>SELECT … FOR UPDATE</c> на профиле,
+    /// поэтому лишний round-trip удлинял бы блокировку. Нет опубликованных отзывов —
+    /// <see cref="ReviewRatingSummary.AverageRating"/> = <c>null</c>,
+    /// <see cref="ReviewRatingSummary.Count"/> = 0.
+    /// </remarks>
     Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default);

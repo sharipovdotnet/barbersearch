@@ -26,13 +26,15 @@ public class RemoveBarberProfileTimeOffHandler : ICommandHandler<RemoveBarberPro
     }
 
     /// <summary>
-    /// Загружает профиль барбера, удаляет нерабочий период и сохраняет агрегат.
+    /// Загружает профиль с отпусками, удаляет нерабочий период и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         RemoveBarberProfileTimeOffCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithTimeOffsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

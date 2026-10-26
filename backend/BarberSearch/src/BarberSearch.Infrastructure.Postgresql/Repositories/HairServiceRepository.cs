@@ -1,5 +1,7 @@
 using BarberSearch.Application.HairServices;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -11,8 +13,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairServiceRepository
 {
-    public HairServiceRepository(ApplicationDbContext context)
-        : base(context)
+    public HairServiceRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+        : base(context, auditTrail)
     {
     }
 
@@ -25,7 +27,7 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
 
         if (hairService is null)
         {
-            return NotFound("hairService.getById.notFound", nameof(HairService), id);
+            return NotFound(ApiErrorCodes.HairService.NotFound, nameof(HairService), id);
         }
 
         return hairService;
@@ -51,7 +53,7 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         if (!Enum.IsDefined(category))
         {
             return new Failure(Error.Validation(
-                "hairService.getByCategory.category",
+                ApiErrorCodes.HairService.CategoryInvalid,
                 $"Unknown service category value {(int)category}.",
                 nameof(category)));
         }
@@ -71,7 +73,11 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         bool onlyActive = true,
         CancellationToken cancellationToken = default)
     {
-        if (ValidatePaging(page, pageSize, "hairService.getPaged") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.HairService.PagingPageInvalid,
+                ApiErrorCodes.HairService.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
         }
@@ -94,6 +100,17 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         return hairServices;
     }
 
+    public async Task<Result<bool, Failure>> ExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await Context.HairServices
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        return exists;
+    }
+
     public async Task<UnitResult<Failure>> AddAsync(
         HairService hairService,
         CancellationToken cancellationToken = default)
@@ -102,13 +119,13 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
 
         await Context.HairServices.AddAsync(hairService, cancellationToken);
 
-        return await SaveChangesAsync("hairService.add", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.HairService.AddPrefix, cancellationToken);
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(
         HairService hairService,
         CancellationToken cancellationToken = default)
-        => await SaveGraphAsync(hairService, "hairService.update", cancellationToken);
+        => await SaveGraphAsync(hairService, ApiErrorCodes.HairService.UpdatePrefix, cancellationToken);
 
     public async Task<UnitResult<Failure>> DeleteAsync(
         HairService hairService,
@@ -118,6 +135,6 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
 
         Context.HairServices.Remove(hairService);
 
-        return await SaveChangesAsync("hairService.delete", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.HairService.DeletePrefix, cancellationToken);
     }
 }

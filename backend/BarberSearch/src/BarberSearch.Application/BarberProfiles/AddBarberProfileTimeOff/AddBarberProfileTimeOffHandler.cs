@@ -26,13 +26,15 @@ public class AddBarberProfileTimeOffHandler : ICommandHandler<AddBarberProfileTi
     }
 
     /// <summary>
-    /// Загружает профиль барбера, добавляет нерабочий период и сохраняет агрегат.
+    /// Загружает профиль с отпусками, добавляет нерабочий период и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         AddBarberProfileTimeOffCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithTimeOffsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

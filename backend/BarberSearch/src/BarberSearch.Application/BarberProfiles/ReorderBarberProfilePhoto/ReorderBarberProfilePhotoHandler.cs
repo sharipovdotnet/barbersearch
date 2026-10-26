@@ -26,13 +26,15 @@ public class ReorderBarberProfilePhotoHandler : ICommandHandler<ReorderBarberPro
     }
 
     /// <summary>
-    /// Загружает профиль барбера, меняет порядок фотографии и сохраняет агрегат.
+    /// Загружает профиль с портфолио, меняет порядок фотографии и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         ReorderBarberProfilePhotoCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithPhotosAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

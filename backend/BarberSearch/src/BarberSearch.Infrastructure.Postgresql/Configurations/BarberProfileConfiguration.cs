@@ -46,6 +46,9 @@ public class BarberProfileConfiguration : IEntityTypeConfiguration<BarberProfile
 
         builder.HasKey(x => x.Id).HasName("pk_barber_profiles");
 
+        // Оптимистическая блокировка: конкурентный UPDATE не перезаписывает чужую правку (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -100,11 +103,12 @@ public class BarberProfileConfiguration : IEntityTypeConfiguration<BarberProfile
             .IsUnique()
             .HasDatabaseName("ux_barber_profiles_user_id");
 
-        // Порядок выдачи по умолчанию. rating nullable: место «профилей без отзывов»
-        // (NULLS LAST/FIRST) должен решать конкретный запрос.
-        builder.HasIndex(x => new { x.IsActive, x.IsVerified, x.Rating })
-            .IsDescending(false, false, true)
-            .HasDatabaseName("ix_barber_profiles_is_active_is_verified_rating");
+        // Индекс порядка выдачи поиска сознательно не объявлен в EF-модели: ORDER BY
+        // (rating IS NULL), rating DESC, id требует expression-индекса, а HasIndex его
+        // не выражает. Единственный поисковый индекс — ix_barber_profiles_search_keyset
+        // (raw SQL в AddSearchKeysetIndex); прежние ix_barber_profiles_search
+        // (rating DESC NULLS LAST, id) и ix_barber_profiles_is_active_is_verified_rating
+        // (is_active, is_verified, rating DESC) удалены как неиспользуемые (R-38).
 
         // Поиск «барберы, говорящие на языке» идёт оператором @> по массиву.
         builder.HasIndex(x => x.Languages)

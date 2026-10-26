@@ -281,6 +281,12 @@ internal sealed record BatchOutcome(
     string Detail,
     double ElapsedSeconds)
 {
+    /// <summary>
+    /// Идентификаторы созданных строк (для review-create): их нужно опубликовать админом,
+    /// прежде чем проверять рейтинг. Значение по умолчанию сохраняет прежние вызовы.
+    /// </summary>
+    public IReadOnlyList<string> CreatedIds { get; init; } = [];
+
     public BatchOutcome With(bool passed, string detail)
         => this with { Passed = passed, Detail = detail };
 }

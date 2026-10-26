@@ -35,6 +35,13 @@ public interface ISpecializationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Существует ли специализация с таким идентификатором. Узкая проверка ссылки:
+    /// используется перед добавлением специализации в профиль барбера, чтобы не записать
+    /// висячую ссылку на несуществующую строку <c>specializations</c>.
+    /// </summary>
+    Task<Result<bool, Failure>> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавляет новую специализацию.
     /// </summary>
     Task<UnitResult<Failure>> AddAsync(Specialization specialization, CancellationToken cancellationToken = default);

@@ -1,7 +1,9 @@
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Bookings.GetBookings;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -14,8 +16,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class BookingRepository : RepositoryBase<Booking>, IBookingRepository
 {
-    public BookingRepository(ApplicationDbContext context)
-        : base(context)
+    public BookingRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+        : base(context, auditTrail)
     {
     }
 
@@ -28,7 +30,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
 
         if (booking is null)
         {
-            return NotFound("booking.getById.notFound", nameof(Booking), id);
+            return NotFound(ApiErrorCodes.Booking.NotFound, nameof(Booking), id);
         }
 
         return booking;
@@ -42,7 +44,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return new Failure(Error.Validation(
-                "booking.getIdempotencyKey.idempotencyKey",
+                ApiErrorCodes.Booking.IdempotencyKeyInvalid,
                 "Idempotency key cannot be empty.",
                 nameof(idempotencyKey)));
         }
@@ -60,7 +62,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         if (booking is null)
         {
             return new Failure(Error.NotFound(
-                "booking.getIdempotencyKey.notFound",
+                ApiErrorCodes.Booking.IdempotencyKeyNotFound,
                 $"Booking with idempotency key '{key}' was not found for user '{userId}'."));
         }
 
@@ -73,7 +75,11 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        if (ValidatePaging(page, pageSize, "booking.getByUser") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.Booking.PagingPageInvalid,
+                ApiErrorCodes.Booking.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
         }
@@ -99,7 +105,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         if (limit <= 0)
         {
             return new Failure(Error.Validation(
-                "booking.getPage.limit",
+                ApiErrorCodes.Booking.PageLimitInvalid,
                 "Page limit must be positive.",
                 nameof(limit)));
         }
@@ -151,7 +157,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         if (to <= from)
         {
             return new Failure(Error.Validation(
-                "booking.getActiveByBarber.period",
+                ApiErrorCodes.Booking.ActivePeriodInvalid,
                 "The end of the period must be after its start.",
                 nameof(to)));
         }
@@ -179,7 +185,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         if (endAt <= startAt)
         {
             return new Failure(Error.Validation(
-                "booking.hasActiveOverlap.period",
+                ApiErrorCodes.Booking.OverlapPeriodInvalid,
                 "End time must be after start time.",
                 nameof(endAt)));
         }
@@ -196,70 +202,83 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return overlaps;
     }
 
-    public async Task<UnitResult<Failure>> AddAsync(
-        Booking booking,
+    public async Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(booking);
-
         // 50 concurrent inserts on one slot make PostgreSQL's GiST exclusion check
         // deadlock (40P01) before either transaction can commit, and under load all
         // contenders can lose, so no 201 is produced at all. Serialising inserts for
         // one barber with a transaction-scoped advisory lock makes the exclusion
         // constraint the only decider: first insert wins, the rest get 23P01 -> 409.
         // Booking create is low-volume (§15.1), so per-barber serialisation is cheap.
-        await using var transaction = await Context.Database.BeginTransactionAsync(cancellationToken);
-
+        //
+        // Lock lives until the end of the caller's transaction, so this method must be
+        // called inside IUnitOfWork.ExecuteAsync. It is deliberately narrow: the
+        // repository neither starts nor commits the transaction (R-15).
+        //
+        // SET LOCAL действует только до конца текущей транзакции и только на это
+        // соединение, поэтому read-запросы без транзакции его не получают. Без
+        // ограничения pg_advisory_xact_lock ждал бы бесконечно: зависшая транзакция
+        // держала бы все новые брони барбера и копила запросы в пуле (R-18).
         try
         {
+            await Context.Database.ExecuteSqlRawAsync(
+                $"SET LOCAL lock_timeout = '{PostgresSettings.LOCK_TIMEOUT}'",
+                cancellationToken);
+
             await Context.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                  SELECT pg_advisory_xact_lock(
-                     hashtextextended({booking.BarberProfileId.ToString()}, 0))
+                     hashtextextended({barberProfileId.ToString()}, 0))
                  """,
                 cancellationToken);
 
+            return UnitResult.Success<Failure>();
+        }
+        catch (PostgresException exception)
+            when (exception.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            // 55P03: блокировку не удалось взять за lock_timeout. Транзакция уже
+            // прервана, её откатит IUnitOfWork; клиенту отдаём 409, а не 500.
+            return UnitResult.Failure(MapPostgresError(exception, ApiErrorCodes.Booking.AddPrefix));
+        }
+    }
+
+    public async Task<UnitResult<Failure>> AddAsync(
+        Booking booking,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(booking);
+
+        try
+        {
             await Context.Bookings.AddAsync(booking, cancellationToken);
 
             // Повтор ключа идемпотентности ловит уникальный индекс
             // ux_bookings_user_id_idempotency_key, пересечение интервалов — exclusion-ограничение
             // ex_bookings_no_overlap. Оба случая маппятся в Error.Conflict.
-            UnitResult<Failure> result;
-
-            try
-            {
-                result = await SaveChangesAsync("booking.add", cancellationToken);
-            }
-            catch (InvalidOperationException exception) when (IsDeadlock(exception))
-            {
-                // Kept as a defensive path: if a future lock-key change reintroduces
-                // a deadlock, the request must still be a 409, not a 500.
-                await transaction.RollbackAsync(CancellationToken.None);
-                Context.Entry(booking).State = EntityState.Detached;
-
-                return new Failure(Error.Conflict(
-                    "booking.add.deadlock",
-                    "The booking insert deadlocked with a concurrent insert; the slot was taken."));
-            }
+            //
+            // Транзакцию репозиторий не открывает: её границей владеет IUnitOfWork,
+            // поэтому вставка не может закоммититься раньше проверок обработчика.
+            var result = await SaveChangesAsync(ApiErrorCodes.Booking.AddPrefix, cancellationToken);
 
             if (result.IsFailure)
             {
                 // Неудачная вставка не должна остаться в change tracker: обработчик затем
                 // перечитывает бронь по ключу, а случайный повторный SaveChanges в том же
                 // запросе снова наткнулся бы на то же ограничение.
-                await transaction.RollbackAsync(cancellationToken);
                 Context.Entry(booking).State = EntityState.Detached;
-
-                return result;
             }
-
-            await transaction.CommitAsync(cancellationToken);
 
             return result;
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            // Исключение уже откатит транзакцию IUnitOfWork; здесь важно только не оставить
+            // бронь в трекере, иначе она может быть записана следующим SaveChanges.
+            Context.Entry(booking).State = EntityState.Detached;
+
             throw;
         }
     }
@@ -267,18 +286,5 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
     public async Task<UnitResult<Failure>> UpdateAsync(
         Booking booking,
         CancellationToken cancellationToken = default)
-        => await SaveGraphAsync(booking, "booking.update", cancellationToken);
-
-    private static bool IsDeadlock(Exception exception)
-    {
-        for (Exception? current = exception; current is not null; current = current.InnerException)
-        {
-            if (current is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected })
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => await SaveGraphAsync(booking, ApiErrorCodes.Booking.UpdatePrefix, cancellationToken);
 }

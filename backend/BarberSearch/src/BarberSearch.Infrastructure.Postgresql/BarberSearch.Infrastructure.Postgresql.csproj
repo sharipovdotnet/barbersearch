@@ -15,4 +15,9 @@
         <ProjectReference Include="..\BarberSearch.Domain\BarberSearch.Domain.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Unit-тесты проверяют трансляцию агрегирующего запроса сводки отзывов (R-19). -->
+        <InternalsVisibleTo Include="BarberSearch.Infrastructure.UnitTests" />
+    </ItemGroup>
+
 </Project>

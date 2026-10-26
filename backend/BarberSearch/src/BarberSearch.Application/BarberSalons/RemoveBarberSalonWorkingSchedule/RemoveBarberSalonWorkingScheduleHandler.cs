@@ -36,7 +36,9 @@ public class RemoveBarberSalonWorkingScheduleHandler : ICommandHandler<RemoveBar
         RemoveBarberSalonWorkingScheduleCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithSalonsAndSchedulesAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

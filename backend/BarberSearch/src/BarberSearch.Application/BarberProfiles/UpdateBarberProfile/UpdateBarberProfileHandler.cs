@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Domain.BarberProfiles;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -26,13 +27,17 @@ public class UpdateBarberProfileHandler : ICommandHandler<UpdateBarberProfileCom
     }
 
     /// <summary>
-    /// Загружает профиль барбера, применяет к нему изменение и сохраняет агрегат.
+    /// Загружает корень профиля, применяет к нему изменение и сохраняет агрегат.
     /// </summary>
+    /// <remarks>
+    /// <see cref="BarberProfile.UpdateProfile"/> меняет только поля корня и его
+    /// primitive-коллекции, поэтому дочерние коллекции не загружаются.
+    /// </remarks>
     public async Task<UnitResult<Failure>> Handle(
         UpdateBarberProfileCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetRootByIdAsync(command.BarberProfileId, cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

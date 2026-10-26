@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Specializations;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -13,27 +14,35 @@ public class AddBarberProfileSpecializationHandler
     : ICommandHandler<AddBarberProfileSpecializationCommand>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly ISpecializationRepository _specializations;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly ILogger<AddBarberProfileSpecializationHandler> _logger;
 
     public AddBarberProfileSpecializationHandler(
         IBarberProfileRepository repository,
+        ISpecializationRepository specializations,
+        IUnitOfWork unitOfWork,
         ILogger<AddBarberProfileSpecializationHandler> logger,
         ICurrentUser currentUser)
     {
         _repository = repository;
+        _specializations = specializations;
+        _unitOfWork = unitOfWork;
         _logger = logger;
         _currentUser = currentUser;
     }
 
     /// <summary>
-    /// Загружает профиль барбера, добавляет специализацию и сохраняет агрегат.
+    /// Загружает профиль со специализациями, добавляет специализацию и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         AddBarberProfileSpecializationCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithSpecializationsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;
@@ -47,16 +56,37 @@ public class AddBarberProfileSpecializationHandler
             return allowed.Error;
         }
 
-        var added = profile.AddSpecialization(command.SpecializationId);
-        if (added.IsFailure)
+        // Ссылка на справочник специализаций проверяется до вставки, в той же транзакции.
+        // Внешний ключ fk_barber_specializations_specializations_specialization_id — последняя линия.
+        var result = await _unitOfWork.ExecuteAsync(async ct =>
         {
-            return added.Error;
-        }
+            var specializationExists = await _specializations.ExistsAsync(
+                command.SpecializationId,
+                ct);
+            if (specializationExists.IsFailure)
+            {
+                return specializationExists.Error;
+            }
 
-        var saved = await _repository.UpdateAsync(profile, cancellationToken);
-        if (saved.IsFailure)
+            if (!specializationExists.Value)
+            {
+                return new Failure(Error.NotFound(
+                    "barberProfile.addSpecialization.specializationNotFound",
+                    $"Specialization '{command.SpecializationId}' was not found.",
+                    command.SpecializationId));
+            }
+
+            var added = profile.AddSpecialization(command.SpecializationId);
+            if (added.IsFailure)
+            {
+                return added.Error;
+            }
+
+            return await _repository.UpdateAsync(profile, ct);
+        }, cancellationToken);
+        if (result.IsFailure)
         {
-            return saved.Error;
+            return result;
         }
 
         _logger.LogInformation(

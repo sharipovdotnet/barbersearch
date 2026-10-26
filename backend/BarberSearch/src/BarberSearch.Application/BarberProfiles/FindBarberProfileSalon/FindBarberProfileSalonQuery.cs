@@ -1,5 +1,5 @@
 using BarberSearch.Application.Abstractions;
-using BarberSearch.Domain.BarberSalons;
+using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 
 namespace BarberSearch.Application.BarberProfiles.FindBarberProfileSalon;
 
@@ -7,9 +7,9 @@ namespace BarberSearch.Application.BarberProfiles.FindBarberProfileSalon;
 /// Запрос поиска салона внутри профиля барбера.
 /// </summary>
 /// <remarks>
-/// Это чтение: обработчик не сохраняет агрегат. Найденный салон — точка входа
-/// для работы с расписанием пары (барбер, салон).
+/// Это чтение: обработчик не сохраняет агрегат. Ответ — <see cref="BarberSalonResponse"/>,
+/// а не доменный <c>BarberSalon</c>: навигация на профиль наружу не выходит.
 /// </remarks>
 public record FindBarberProfileSalonQuery(
     Guid BarberProfileId,
-    Guid SalonId) : IQuery<BarberSalon>;
+    Guid SalonId) : IQuery<BarberSalonResponse>;

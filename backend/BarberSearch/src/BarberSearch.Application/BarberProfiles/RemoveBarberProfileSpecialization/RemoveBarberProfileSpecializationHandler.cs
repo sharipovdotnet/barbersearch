@@ -27,13 +27,15 @@ public class RemoveBarberProfileSpecializationHandler
     }
 
     /// <summary>
-    /// Загружает профиль барбера, удаляет специализацию и сохраняет агрегат.
+    /// Загружает профиль со специализациями, удаляет специализацию и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         RemoveBarberProfileSpecializationCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithSpecializationsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

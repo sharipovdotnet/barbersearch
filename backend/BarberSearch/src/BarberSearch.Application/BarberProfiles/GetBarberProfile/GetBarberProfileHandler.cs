@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -38,7 +39,7 @@ public sealed class GetBarberProfileHandler
         {
             return Task.FromResult<Result<BarberProfileResponse, Failure>>(
                 new Failure(Error.Validation(
-                    "barberProfile.getById.invalidId",
+                    ApiErrorCodes.BarberProfile.InvalidId,
                     "Barber profile identifier cannot be empty.",
                     nameof(query.BarberProfileId))));
         }

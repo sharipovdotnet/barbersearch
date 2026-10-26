@@ -1,5 +1,7 @@
 using BarberSearch.Application.Specializations;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Specializations;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Shared;
@@ -11,8 +13,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class SpecializationRepository : RepositoryBase<Specialization>, ISpecializationRepository
 {
-    public SpecializationRepository(ApplicationDbContext context)
-        : base(context)
+    public SpecializationRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+        : base(context, auditTrail)
     {
     }
 
@@ -25,7 +27,7 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
 
         if (specialization is null)
         {
-            return NotFound("specialization.getById.notFound", nameof(Specialization), id);
+            return NotFound(ApiErrorCodes.Specialization.NotFound, nameof(Specialization), id);
         }
 
         return specialization;
@@ -50,7 +52,7 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         if (string.IsNullOrWhiteSpace(name))
         {
             return new Failure(Error.Validation(
-                "specialization.getByName.name",
+                ApiErrorCodes.Specialization.NameInvalid,
                 "Specialization name cannot be empty.",
                 nameof(name)));
         }
@@ -66,7 +68,7 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         if (specialization is null)
         {
             return new Failure(Error.NotFound(
-                "specialization.getByName.notFound",
+                ApiErrorCodes.Specialization.NotFound,
                 $"Specialization with name '{name.Trim()}' was not found."));
         }
 
@@ -79,7 +81,11 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         bool onlyActive = true,
         CancellationToken cancellationToken = default)
     {
-        if (ValidatePaging(page, pageSize, "specialization.getPaged") is { } pagingError)
+        if (ValidatePaging(
+                page,
+                pageSize,
+                ApiErrorCodes.Specialization.PagingPageInvalid,
+                ApiErrorCodes.Specialization.PagingPageSizeInvalid) is { } pagingError)
         {
             return pagingError;
         }
@@ -101,6 +107,17 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         return specializations;
     }
 
+    public async Task<Result<bool, Failure>> ExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await Context.Specializations
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        return exists;
+    }
+
     public async Task<UnitResult<Failure>> AddAsync(
         Specialization specialization,
         CancellationToken cancellationToken = default)
@@ -109,13 +126,16 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
 
         await Context.Specializations.AddAsync(specialization, cancellationToken);
 
-        return await SaveChangesAsync("specialization.add", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.Specialization.AddPrefix, cancellationToken);
     }
 
     public async Task<UnitResult<Failure>> UpdateAsync(
         Specialization specialization,
         CancellationToken cancellationToken = default)
-        => await SaveGraphAsync(specialization, "specialization.update", cancellationToken);
+        => await SaveGraphAsync(
+            specialization,
+            ApiErrorCodes.Specialization.UpdatePrefix,
+            cancellationToken);
 
     public async Task<UnitResult<Failure>> DeleteAsync(
         Specialization specialization,
@@ -125,6 +145,6 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
 
         Context.Specializations.Remove(specialization);
 
-        return await SaveChangesAsync("specialization.delete", cancellationToken);
+        return await SaveChangesAsync(ApiErrorCodes.Specialization.DeletePrefix, cancellationToken);
     }
 }

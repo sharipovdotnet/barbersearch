@@ -186,6 +186,8 @@ public class BookingOwnershipTests
             bookings,
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7()),
+            // Время не влияет на сценарий: проверка владения стоит до правила «не раньше начала».
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
             NullLogger<MarkBookingNoShowHandler>.Instance);
 
         var result = await handler.Handle(

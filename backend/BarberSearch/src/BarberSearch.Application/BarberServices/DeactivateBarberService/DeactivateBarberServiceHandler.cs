@@ -36,7 +36,9 @@ public class DeactivateBarberServiceHandler : ICommandHandler<DeactivateBarberSe
         DeactivateBarberServiceCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithServicesAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

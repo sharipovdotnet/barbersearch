@@ -33,7 +33,7 @@ public static class AuthorizationExtensions
                 => policy.RequireRole(nameof(UserRole.Barber)));
 
             options.AddPolicy(AuthorizationPolicies.VerifiedEmail, policy
-                => policy.RequireClaim(ClaimsPrincipalFactory.EmailVerifiedClaim, "true"));
+                => policy.RequireClaim(ClaimsPrincipalFactory.EMAIL_VERIFIED_CLAIM, "true"));
         });
 
         return services;

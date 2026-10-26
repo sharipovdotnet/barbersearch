@@ -2,6 +2,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using CSharpFunctionalExtensions;
+using Microsoft.Extensions.Logging;
 using Shared;
 
 namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
@@ -15,6 +16,9 @@ namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
 /// Сетка строится по локальному времени салона, поэтому переход на летнее время
 /// не сдвигает начало рабочего дня. Слот исключается, если пересекается с отпуском
 /// или активной бронью; отменённые и завершённые брони слот не занимают.
+/// Если услуга задана, в ответ попадают <c>barberServiceId</c> и <c>hairServiceId</c>
+/// той пары, по которой посчитана длительность: именно <c>barberServiceId</c> нужен
+/// для создания брони (R-20).
 /// </remarks>
 public sealed class GetBarberSlotsHandler
     : IQueryHandler<BarberSlotsResponse, GetBarberSlotsQuery>
@@ -22,19 +26,23 @@ public sealed class GetBarberSlotsHandler
     private readonly IBarberProfileRepository _profileRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<GetBarberSlotsHandler> _logger;
 
     public GetBarberSlotsHandler(
         IBarberProfileRepository profileRepository,
         IBookingRepository bookingRepository,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<GetBarberSlotsHandler> logger)
     {
         ArgumentNullException.ThrowIfNull(profileRepository);
         ArgumentNullException.ThrowIfNull(bookingRepository);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(logger);
 
         _profileRepository = profileRepository;
         _bookingRepository = bookingRepository;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     /// <summary>
@@ -63,12 +71,12 @@ public sealed class GetBarberSlotsHandler
         }
 
         var salonId = query.SalonId == Guid.Empty ? null : query.SalonId;
-        var serviceId = query.ServiceId == Guid.Empty ? null : query.ServiceId;
+        var hairServiceId = query.HairServiceId == Guid.Empty ? null : query.HairServiceId;
 
         var contextResult = await _profileRepository.GetSlotContextAsync(
             query.BarberProfileId,
             salonId,
-            serviceId,
+            hairServiceId,
             date,
             cancellationToken);
         if (contextResult.IsFailure)
@@ -85,19 +93,33 @@ public sealed class GetBarberSlotsHandler
                 "The slot duration must be positive."));
         }
 
-        TimeZoneInfo timeZone;
+        // Пояс проверяется при записи салона (Salon.Create / UpdateLocation), поэтому сюда
+        // попадает только историческая или повреждённая запись. Это не ошибка клиента,
+        // но и не 500: отвечаем 409, а в лог пишем алерт с идентификаторами, чтобы данные
+        // можно было найти и починить.
+        if (string.IsNullOrWhiteSpace(context.TimeZoneId))
+        {
+            _logger.LogError(
+                "Salon {SalonId} of barber profile {BarberProfileId} has an empty time zone; slots cannot be calculated.",
+                context.SalonId,
+                context.BarberProfileId);
 
-        try
-        {
-            timeZone = TimeZoneInfo.FindSystemTimeZoneById(context.TimeZoneId);
+            return new Failure(Error.Conflict(
+                "barberSlots.timeZone.missing",
+                $"Salon '{context.SalonId}' has no time zone configured."));
         }
-        catch (TimeZoneNotFoundException)
+
+        if (!TryResolveTimeZone(context.TimeZoneId, out var timeZone))
         {
-            return InvalidTimeZone(context.TimeZoneId);
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return InvalidTimeZone(context.TimeZoneId);
+            _logger.LogError(
+                "Salon {SalonId} of barber profile {BarberProfileId} has an unresolvable time zone '{TimeZoneId}'; slots cannot be calculated.",
+                context.SalonId,
+                context.BarberProfileId,
+                context.TimeZoneId);
+
+            return new Failure(Error.Conflict(
+                "barberSlots.timeZone.unknown",
+                $"Salon time zone '{context.TimeZoneId}' cannot be resolved."));
         }
 
         var dayStart = ToUtc(date.ToDateTime(TimeOnly.MinValue), timeZone);
@@ -113,6 +135,8 @@ public sealed class GetBarberSlotsHandler
         var response = new BarberSlotsResponse(
             context.BarberProfileId,
             context.SalonId,
+            context.BarberServiceId,
+            context.HairServiceId,
             date,
             context.TimeZoneId,
             dayStart.Value,
@@ -203,8 +227,29 @@ public sealed class GetBarberSlotsHandler
         return new DateTimeOffset(utc);
     }
 
-    private static Failure InvalidTimeZone(string timeZoneId)
-        => new(Error.Failure(
-            "barberSlots.timeZone.invalid",
-            $"Salon time zone '{timeZoneId}' cannot be resolved."));
+    /// <summary>
+    /// Разрешает часовой пояс салона: сначала как системный идентификатор (IANA на Linux,
+    /// IANA/Windows на Windows), затем — исторический Windows-идентификатор через
+    /// конвертацию в IANA. Неразрешимый пояс возвращает <c>false</c>, а не исключение.
+    /// </summary>
+    private static bool TryResolveTimeZone(string timeZoneId, out TimeZoneInfo timeZone)
+    {
+        var candidate = timeZoneId.Trim();
+
+        if (TimeZoneInfo.TryFindSystemTimeZoneById(candidate, out var found))
+        {
+            timeZone = found!;
+            return true;
+        }
+
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(candidate, out var ianaId)
+            && TimeZoneInfo.TryFindSystemTimeZoneById(ianaId, out found))
+        {
+            timeZone = found!;
+            return true;
+        }
+
+        timeZone = null!;
+        return false;
+    }
 }

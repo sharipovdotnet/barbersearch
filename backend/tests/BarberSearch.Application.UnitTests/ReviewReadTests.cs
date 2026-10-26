@@ -153,9 +153,10 @@ public class ReviewReadTests
             $"key-{Guid.NewGuid()}").Value;
         var review = Review.Create(booking, booking.UserId, 5, text).Value;
 
-        if (!isPublished)
+        // R-35: Create оставляет отзыв скрытым; для публичных чтений публикуем явно.
+        if (isPublished)
         {
-            review.Hide();
+            review.Publish();
         }
 
         return review;

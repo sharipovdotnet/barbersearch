@@ -26,13 +26,15 @@ public class RemoveBarberProfileSalonHandler : ICommandHandler<RemoveBarberProfi
     }
 
     /// <summary>
-    /// Загружает профиль барбера, удаляет салон и сохраняет агрегат.
+    /// Загружает профиль с салонами, удаляет салон и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         RemoveBarberProfileSalonCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithSalonsAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

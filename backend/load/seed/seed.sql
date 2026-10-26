@@ -143,7 +143,7 @@ BEGIN;
 INSERT INTO users
     (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
      is_email_verified, is_phone_verified, role, is_active, last_login_at,
-     barber_profile_id, created_at, updated_at, security_stamp)
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
 SELECT md5('load-customer:' || i)::uuid,
        'customer' || i || '@load.local',
        'LOADTEST-NOT-A-REAL-PASSWORD-HASH',
@@ -152,7 +152,8 @@ SELECT md5('load-customer:' || i)::uuid,
        NULL, NULL, true, false, 1, true, NULL, NULL,
        now() - interval '30 days',
        now() - interval '30 days',
-       md5('customer-stamp:' || i)
+       md5('customer-stamp:' || i),
+       0
 FROM generate_series(1, 2000) AS i
 WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'users-customers')
 ON CONFLICT DO NOTHING;
@@ -162,7 +163,7 @@ INSERT INTO load_seed_state (key) VALUES ('users-customers') ON CONFLICT DO NOTH
 INSERT INTO users
     (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
      is_email_verified, is_phone_verified, role, is_active, last_login_at,
-     barber_profile_id, created_at, updated_at, security_stamp)
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
 SELECT md5('load-barber-user:' || b)::uuid,
        'barber' || b || '@load.local',
        'LOADTEST-NOT-A-REAL-PASSWORD-HASH',
@@ -172,7 +173,8 @@ SELECT md5('load-barber-user:' || b)::uuid,
        md5('barber:' || b)::uuid,
        now() - interval '1 year',
        now() - interval '1 year',
-       md5('barber-stamp:' || b)
+       md5('barber-stamp:' || b),
+       0
 FROM generate_series(1, 12000) AS b
 WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'users-barbers')
 ON CONFLICT DO NOTHING;

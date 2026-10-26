@@ -13,23 +13,28 @@ namespace BarberSearch.Application.Bookings.MarkBookingNoShow;
 /// <remarks>
 /// Правило «неявку нельзя отметить раньше начала брони» проверяется здесь, а не в домене:
 /// сравнение с текущим временем — забота слоя Application (AGENT.md §7.6).
+/// «Сейчас» берётся из <see cref="TimeProvider"/>, чтобы это правило проверялось в тестах
+/// без ожидания и не зависело от системных часов.
 /// </remarks>
 public class MarkBookingNoShowHandler : ICommandHandler<MarkBookingNoShowCommand>
 {
     private readonly IBookingRepository _repository;
     private readonly IBarberProfileRepository _barberProfiles;
     private readonly ICurrentUser _currentUser;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MarkBookingNoShowHandler> _logger;
 
     public MarkBookingNoShowHandler(
         IBookingRepository repository,
         IBarberProfileRepository barberProfiles,
         ICurrentUser currentUser,
+        TimeProvider timeProvider,
         ILogger<MarkBookingNoShowHandler> logger)
     {
         _repository = repository;
         _barberProfiles = barberProfiles;
         _currentUser = currentUser;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -59,7 +64,7 @@ public class MarkBookingNoShowHandler : ICommandHandler<MarkBookingNoShowCommand
 
         // Правило уровня Application: раньше начала брони неявку отметить нельзя,
         // поэтому доменный метод в этом случае не вызывается вовсе.
-        if (DateTimeOffset.UtcNow < booking.StartAt)
+        if (_timeProvider.GetUtcNow() < booking.StartAt)
         {
             return new Failure(Error.Validation(
                 "booking.markNoShow.tooEarly",

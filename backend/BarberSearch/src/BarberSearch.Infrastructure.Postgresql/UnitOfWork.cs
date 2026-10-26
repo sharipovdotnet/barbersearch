@@ -9,10 +9,19 @@ namespace BarberSearch.Infrastructure.Postgresql;
 /// Транзакция над <see cref="ApplicationDbContext"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Один scoped контекст на запрос: все репозитории, вызванные внутри операции, пишут в ту же
 /// транзакцию. Коммит выполняется только при успешном результате; <c>Failure</c> и исключения
 /// приводят к откату. Исключение не превращается в успех и не глотается — оно уходит наверх,
 /// после того как <c>await using</c> откатил транзакцию.
+/// </para>
+/// <para>
+/// После отката change tracker очищается: и при <c>Failure</c>, и при исключении из операции
+/// или коммита. Иначе изменённые сущности остались бы отслеживаемыми, и повторный
+/// <c>SaveChanges</c> в том же scope записал бы откатанные изменения в БД. При успешном коммите
+/// трекер не очищается — обработчики могут рассчитывать на отслеживаемые сущности после
+/// <c>IUnitOfWork.ExecuteAsync</c>.
+/// </para>
 /// </remarks>
 public sealed class UnitOfWork : IUnitOfWork
 {
@@ -50,19 +59,35 @@ public sealed class UnitOfWork : IUnitOfWork
         Func<T, bool> isFailure,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var committed = false;
 
-        var result = await operation(cancellationToken);
-
-        if (isFailure(result))
+        try
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            var result = await operation(cancellationToken);
+
+            if (isFailure(result))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+
+                return result;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            committed = true;
 
             return result;
         }
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return result;
+        finally
+        {
+            if (!committed)
+            {
+                // Failure или исключение: транзакция уже откатана явно либо откатится при
+                // dispose (тогда сюда попадаем после выхода из using). Откатанные изменения
+                // не должны пережить операцию — иначе повторный SaveChanges запишет их в БД.
+                _context.ChangeTracker.Clear();
+            }
+        }
     }
 }

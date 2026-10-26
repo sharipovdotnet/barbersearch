@@ -43,8 +43,8 @@ public static class AuthenticationExtensions
         services.AddSingleton(options);
         services.AddSingleton(signingKeys);
 
-        // Часы приложения: обработчики refresh-токенов и смены пароля не читают DateTimeOffset.UtcNow
-        // напрямую, поэтому срок жизни проверяется в тестах без ожидания.
+        // Часы приложения: обработчики, выдача JWT и cookie не читают DateTimeOffset.UtcNow
+        // напрямую, поэтому сроки и метки токенов проверяются в тестах без ожидания.
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<IPasswordService, PasswordService>();
@@ -135,8 +135,8 @@ public static class AuthenticationExtensions
                     ValidateIssuerSigningKey = true,
                     TryAllIssuerSigningKeys = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
-                    NameClaimType = ClaimsPrincipalFactory.SubClaim,
-                    RoleClaimType = ClaimsPrincipalFactory.RoleClaim
+                    NameClaimType = ClaimsPrincipalFactory.SUB_CLAIM,
+                    RoleClaimType = ClaimsPrincipalFactory.ROLE_CLAIM
                 };
 
                 bearer.Events = new JwtBearerEvents

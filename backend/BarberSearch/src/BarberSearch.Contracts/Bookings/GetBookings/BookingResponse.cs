@@ -12,7 +12,7 @@ namespace BarberSearch.Contracts.Bookings.GetBookings;
 /// <param name="Id">Идентификатор брони.</param>
 /// <param name="UserId">Идентификатор клиента.</param>
 /// <param name="BarberProfileId">Идентификатор профиля барбера.</param>
-/// <param name="BarberServiceId">Идентификатор услуги барбера.</param>
+/// <param name="BarberServiceId">Идентификатор услуги барбера (<c>barber_services.id</c>).</param>
 /// <param name="SalonId">Идентификатор салона.</param>
 /// <param name="StartAt">Начало брони в UTC.</param>
 /// <param name="EndAt">Окончание брони в UTC.</param>

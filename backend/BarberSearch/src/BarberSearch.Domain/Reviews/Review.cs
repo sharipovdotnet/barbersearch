@@ -9,6 +9,11 @@ namespace BarberSearch.Domain.Reviews;
 /// Отзыв — агрегатный корень. Всегда привязан к брони: и барбер, и клиент
 /// выводятся из неё, поэтому привязать отзыв не к тому барберу невозможно.
 /// </summary>
+/// <remarks>
+/// Отзыв создаётся на модерации (<see cref="IsPublished"/> = <c>false</c>) и не участвует
+/// в публичной сводке, пока администратор не вызовет <see cref="Publish"/>. Скрыть
+/// опубликованный отзыв можно через <see cref="Hide"/> (R-35).
+/// </remarks>
 public class Review : AggregateRoot
 {
     /// <summary>
@@ -31,6 +36,15 @@ public class Review : AggregateRoot
     {
     }
 
+    /// <summary>
+    /// Создаёт отзыв на модерации: <see cref="IsPublished"/> = <c>false</c>, поэтому новый
+    /// отзыв не влияет на публичный рейтинг барбера. Публикует его администратор
+    /// (<see cref="Publish"/>).
+    /// </summary>
+    /// <param name="booking">Завершённая бронь, из которой берутся барбер и клиент.</param>
+    /// <param name="userId">Идентификатор автора отзыва.</param>
+    /// <param name="rating">Оценка от 1 до 5.</param>
+    /// <param name="text">Текст отзыва; <c>null</c> — без текста.</param>
     public static Result<Review, Failure> Create(
         Booking booking,
         Guid userId,
@@ -65,7 +79,7 @@ public class Review : AggregateRoot
             UserId = userId,
             Rating = rating,
             Text = text,
-            IsPublished = true
+            IsPublished = false
         };
     }
 

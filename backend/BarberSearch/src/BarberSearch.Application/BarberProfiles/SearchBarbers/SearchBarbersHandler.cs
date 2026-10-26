@@ -60,7 +60,7 @@ public sealed class SearchBarbersHandler
         var filter = new BarberSearchFilter(
             City: string.IsNullOrWhiteSpace(query.City) ? null : query.City.Trim(),
             SpecializationId: query.SpecializationId == Guid.Empty ? null : query.SpecializationId,
-            ServiceId: query.ServiceId == Guid.Empty ? null : query.ServiceId,
+            HairServiceId: query.HairServiceId == Guid.Empty ? null : query.HairServiceId,
             Date: query.Date,
             Cursor: cursor,
             Limit: pageSize + 1);

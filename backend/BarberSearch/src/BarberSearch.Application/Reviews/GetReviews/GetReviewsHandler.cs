@@ -14,6 +14,13 @@ namespace BarberSearch.Application.Reviews.GetReviews;
 /// В выдачу попадают только опубликованные отзывы. Репозиторий проецирует их сразу
 /// в <see cref="ReviewResponse"/> без навигаций, поэтому циклический граф
 /// «отзыв → бронь → барбер → отзывы» наружу не выходит.
+/// <para>
+/// <see cref="GetReviewsQuery.BarberProfileId"/> со значением <see cref="Guid.Empty"/>
+/// отклоняется здесь с кодом <c>review.getReviews.barberProfileId</c>. Это защита в глубину:
+/// отсутствие параметра в HTTP-запросе отсекает model binding контроллера
+/// (<c>[BindRequired]</c>, 400 на поле <c>barberProfileId</c>), а явный пустой GUID
+/// по-прежнему получает доменную validation-ошибку.
+/// </para>
 /// </remarks>
 public sealed class GetReviewsHandler
     : IQueryHandler<PagedResponse<ReviewResponse>, GetReviewsQuery>

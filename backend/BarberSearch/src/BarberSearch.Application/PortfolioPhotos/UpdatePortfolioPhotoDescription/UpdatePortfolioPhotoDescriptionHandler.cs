@@ -36,7 +36,9 @@ public class UpdatePortfolioPhotoDescriptionHandler : ICommandHandler<UpdatePort
         UpdatePortfolioPhotoDescriptionCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithPhotosAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

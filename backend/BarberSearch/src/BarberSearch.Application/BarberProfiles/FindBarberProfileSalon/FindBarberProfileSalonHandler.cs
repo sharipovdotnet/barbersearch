@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Domain.BarberSalons;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,7 @@ namespace BarberSearch.Application.BarberProfiles.FindBarberProfileSalon;
 /// не меняет состояние профиля.
 /// </remarks>
 public class FindBarberProfileSalonHandler
-    : IQueryHandler<BarberSalon, FindBarberProfileSalonQuery>
+    : IQueryHandler<BarberSalonResponse, FindBarberProfileSalonQuery>
 {
     private readonly IBarberProfileRepository _repository;
     private readonly ICurrentUser _currentUser;
@@ -32,27 +33,36 @@ public class FindBarberProfileSalonHandler
     }
 
     /// <summary>
-    /// Загружает профиль барбера и возвращает салон по идентификатору салона.
+    /// Проверяет владельца профиля и возвращает запрошенный салон вместе с расписанием.
     /// </summary>
-    public async Task<Result<BarberSalon, Failure>> Handle(
+    /// <remarks>
+    /// Загружаются только <c>user_id</c> профиля и одна строка <c>barber_salons</c>
+    /// с расписанием: остальные салоны и четыре другие коллекции не нужны.
+    /// Домен в ответе не возвращается: <see cref="BarberSalonResponse"/> собирается здесь,
+    /// поэтому навигация <c>BarberSalon.BarberProfile</c> до Web-слоя не доходит.
+    /// </remarks>
+    public async Task<Result<BarberSalonResponse, Failure>> Handle(
         FindBarberProfileSalonQuery query,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(query.BarberProfileId, cancellationToken);
-        if (profileResult.IsFailure)
+        var ownerResult = await _repository.GetOwnerIdAsync(
+            query.BarberProfileId,
+            cancellationToken);
+        if (ownerResult.IsFailure)
         {
-            return profileResult.Error;
+            return ownerResult.Error;
         }
 
-        var profile = profileResult.Value;
-
-        var allowed = _currentUser.EnsureCanManage(profile.UserId);
+        var allowed = _currentUser.EnsureCanManage(ownerResult.Value);
         if (allowed.IsFailure)
         {
             return allowed.Error;
         }
 
-        var salonResult = profile.FindSalon(query.SalonId);
+        var salonResult = await _repository.GetSalonAsync(
+            query.BarberProfileId,
+            query.SalonId,
+            cancellationToken);
         if (salonResult.IsFailure)
         {
             return salonResult.Error;
@@ -63,6 +73,22 @@ public class FindBarberProfileSalonHandler
             query.SalonId,
             query.BarberProfileId);
 
-        return salonResult.Value;
+        return ToResponse(salonResult.Value);
     }
+
+    /// <summary>
+    /// Перекладывает доменный салон в ответ API: навигация на профиль наружу не выходит.
+    /// </summary>
+    private static BarberSalonResponse ToResponse(BarberSalon salon)
+        => new(
+            salon.Id,
+            salon.BarberProfileId,
+            salon.SalonId,
+            salon.IsPrimary,
+            [.. salon.WorkingSchedules.Select(schedule => new WorkingScheduleResponse(
+                schedule.Id,
+                schedule.DayOfWeek,
+                schedule.StartTime,
+                schedule.EndTime,
+                schedule.IsDayOff))]);
 }

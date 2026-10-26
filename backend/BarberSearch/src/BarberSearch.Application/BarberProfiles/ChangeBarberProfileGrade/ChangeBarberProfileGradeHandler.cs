@@ -22,13 +22,13 @@ public class ChangeBarberProfileGradeHandler : ICommandHandler<ChangeBarberProfi
     }
 
     /// <summary>
-    /// Загружает профиль барбера, меняет грейд и сохраняет агрегат.
+    /// Загружает корень профиля, меняет грейд и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         ChangeBarberProfileGradeCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetRootByIdAsync(command.BarberProfileId, cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

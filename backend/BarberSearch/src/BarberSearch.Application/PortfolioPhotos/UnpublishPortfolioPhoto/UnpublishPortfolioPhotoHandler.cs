@@ -36,7 +36,9 @@ public class UnpublishPortfolioPhotoHandler : ICommandHandler<UnpublishPortfolio
         UnpublishPortfolioPhotoCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetWithPhotosAsync(
+            command.BarberProfileId,
+            cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

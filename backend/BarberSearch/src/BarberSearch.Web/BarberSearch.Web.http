@@ -1,7 +1,11 @@
 @host = http://localhost:5243
 @barberProfileId = 00000000-0000-0000-0000-000000000000
 @salonId = 00000000-0000-0000-0000-000000000000
+# Услуга справочника (hair_services.id): её принимают поиск и слоты.
 @hairServiceId = 00000000-0000-0000-0000-000000000000
+# Строка «услуга барбера» (barber_services.id): её принимает только создание брони.
+# Значение приходит в barberServiceId карточки или ответа слотов.
+@barberServiceId = 00000000-0000-0000-0000-000000000000
 
 # Все запросы ниже требуют Bearer-токен: FallbackPolicy закрывает всё, кроме api/auth/*.
 # Каталог (specializations, hair-services, salons) и POST api/users — только admin.
@@ -120,18 +124,31 @@ Content-Type: application/json
 
 ###
 
+# Поиск: hairServiceId — услуга справочника, не barberServiceId брони (R-20).
+GET {{host}}/api/barbers?city=Berlin&hairServiceId={{hairServiceId}}
+Accept: application/json
+
+###
+
+# Слоты: фильтр по hairServiceId; в ответе пара barberServiceId/hairServiceId,
+# по которой посчитана длительность.
+GET {{host}}/api/barbers/{{barberProfileId}}/slots?date=2026-12-01&hairServiceId={{hairServiceId}}
+Accept: application/json
+
+###
+
 # Бронь. Клиент берётся из токена. Повтор с тем же idempotencyKey вернёт уже созданную
-# бронь, а не вторую.
+# бронь, а не вторую. startAt обязан попадать в окно [сейчас − 5 минут; сейчас + 90 дней],
+# а длительность — не превышать 1440 минут (R-04), поэтому дату ниже правь под текущую.
 POST {{host}}/api/bookings
 Content-Type: application/json
 
 {
   "barberProfileId": "{{barberProfileId}}",
-  "barberServiceId": "{{hairServiceId}}",
+  "barberServiceId": "{{barberServiceId}}",
   "salonId": "{{salonId}}",
   "startAt": "2026-12-01T10:00:00+00:00",
   "endAt": "2026-12-01T10:30:00+00:00",
-  "price": 30.0,
   "idempotencyKey": "demo-key-1",
   "customerNote": "First visit"
 }
@@ -148,6 +165,8 @@ POST {{host}}/api/bookings/00000000-0000-0000-0000-000000000000/completion
 ###
 
 # Отзыв по завершённой броне: автор — текущий пользователь, барбер выводится из брони.
+# С R-35 отзыв создаётся скрытым (пре-модерация) и не меняет рейтинг, пока админ не опубликует
+# его следующей командой.
 POST {{host}}/api/reviews
 Content-Type: application/json
 
@@ -159,6 +178,20 @@ Content-Type: application/json
 
 ###
 
+# Публикация админом: отзыв попадает в публичный список и в рейтинг барбера.
 POST {{host}}/api/reviews/00000000-0000-0000-0000-000000000000/publication
+
+###
+
+# Очередь модерации (только админ): скрытые отзывы всех барберов, старые сверху.
+GET {{host}}/api/reviews/moderation?pageSize=20
+
+###
+
+# Публичный список отзывов барбера. barberProfileId обязателен: без параметра — 400
+# ValidationProblemDetails на поле barberProfileId, а не доменный код (R-52). Пустой GUID
+# по-прежнему получает доменную 400 review.getReviews.barberProfileId (defense-in-depth).
+GET {{host}}/api/reviews?barberProfileId={{barberProfileId}}
+Accept: application/json
 
 ###

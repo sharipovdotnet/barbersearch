@@ -46,6 +46,14 @@ public sealed class GetBookingsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        var userIdResult = _currentUser.RequireUserId();
+        if (userIdResult.IsFailure)
+        {
+            return userIdResult.Error;
+        }
+
+        var currentUserId = userIdResult.Value;
+
         var pageSize = query.PageSize ?? Pagination.DEFAULT_PAGE_SIZE;
 
         if (Pagination.ValidatePageSize(pageSize, "booking.getBookings") is { } pageSizeError)
@@ -56,11 +64,11 @@ public sealed class GetBookingsHandler
         var requestedUserId = query.UserId == Guid.Empty ? null : query.UserId;
 
         if (requestedUserId is { } foreignUserId
-            && foreignUserId != _currentUser.UserId
+            && foreignUserId != currentUserId
             && !_currentUser.IsAdmin)
         {
             return new Failure(Error.Forbidden(
-                "auth.forbidden",
+                ApiErrorCodes.Auth.Forbidden,
                 "Bookings of another user are not available."));
         }
 
@@ -91,7 +99,7 @@ public sealed class GetBookingsHandler
         }
         else
         {
-            filterUserId = _currentUser.UserId;
+            filterUserId = currentUserId;
         }
 
         BookingCursor? cursor = null;

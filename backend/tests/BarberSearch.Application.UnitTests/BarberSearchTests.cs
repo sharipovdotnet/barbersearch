@@ -35,18 +35,18 @@ public class BarberSearchTests
         var repository = new FakeBarberProfileRepository();
         var handler = new SearchBarbersHandler(repository);
         var specializationId = Guid.CreateVersion7();
-        var serviceId = Guid.CreateVersion7();
+        var hairServiceId = Guid.CreateVersion7();
         var date = new DateOnly(2026, 12, 1);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery(" Berlin ", specializationId, serviceId, date, null, 5),
+            new SearchBarbersQuery(" Berlin ", specializationId, hairServiceId, date, null, 5),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(repository.LastSearchFilter);
         Assert.Equal("Berlin", repository.LastSearchFilter!.City);
         Assert.Equal(specializationId, repository.LastSearchFilter.SpecializationId);
-        Assert.Equal(serviceId, repository.LastSearchFilter.ServiceId);
+        Assert.Equal(hairServiceId, repository.LastSearchFilter.HairServiceId);
         Assert.Equal(date, repository.LastSearchFilter.Date);
         Assert.Null(repository.LastSearchFilter.Cursor);
         Assert.Equal(6, repository.LastSearchFilter.Limit);
@@ -66,7 +66,7 @@ public class BarberSearchTests
         Assert.NotNull(repository.LastSearchFilter);
         Assert.Null(repository.LastSearchFilter!.City);
         Assert.Null(repository.LastSearchFilter.SpecializationId);
-        Assert.Null(repository.LastSearchFilter.ServiceId);
+        Assert.Null(repository.LastSearchFilter.HairServiceId);
         Assert.Null(repository.LastSearchFilter.Cursor);
         Assert.Equal(Pagination.DEFAULT_PAGE_SIZE + 1, repository.LastSearchFilter.Limit);
     }

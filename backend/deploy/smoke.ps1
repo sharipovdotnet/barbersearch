@@ -60,6 +60,7 @@ $managedEnvironmentKeys = @(
     'ASPNETCORE_ENVIRONMENT',
     'ASPNETCORE_URLS',
     'ASPNETCORE_HTTPS_PORT',
+    'AllowedHosts',
     'ConnectionStrings__Postgres',
     'Auth__SigningKey',
     'Auth__CookieSameSite',
@@ -326,6 +327,7 @@ function New-BaseEnvironment {
 
     return @{
         'ASPNETCORE_ENVIRONMENT' = $EnvironmentName
+        'AllowedHosts' = 'localhost;127.0.0.1;api.barbersearch.test'
         'ConnectionStrings__Postgres' = $connection
         'Auth__SigningKey' = $script:signingKey
         'DataProtection__KeysPath' = $keysPath
@@ -583,7 +585,9 @@ try {
     Write-Host ''
     Write-Host '3. booking creation'
 
-    $slotStart = [DateTimeOffset]::UtcNow.Date.AddDays(30 + (Get-Random -Minimum 0 -Maximum 300)).AddHours(10)
+    # R-04: StartAt must stay inside now + BOOKING_HORIZON_DAYS (90), so the smoke books
+    # 30..79 days ahead instead of the previous 30..329.
+    $slotStart = [DateTimeOffset]::UtcNow.Date.AddDays(30 + (Get-Random -Minimum 0 -Maximum 50)).AddHours(10)
     $slotEnd = $slotStart.AddMinutes(30)
     $idempotencyKey = "deploy-smoke-$([Guid]::NewGuid().ToString('N'))"
 
@@ -593,7 +597,6 @@ try {
         salonId = $salonId
         startAt = $slotStart.ToString('yyyy-MM-ddTHH:mm:ssZ')
         endAt = $slotEnd.ToString('yyyy-MM-ddTHH:mm:ssZ')
-        price = 0
         idempotencyKey = $idempotencyKey
         customerNote = 'deploy smoke'
     } | ConvertTo-Json -Compress
@@ -870,6 +873,12 @@ try {
     $untrustedWithoutProxy['ASPNETCORE_URLS'] = "http://127.0.0.1:$failPort"
     Assert-StartupFails -Name 'forwarded-headers-without-proxy' -Environment $untrustedWithoutProxy `
         -Expected 'no trusted proxy is configured'
+
+    $wildcardAllowedHosts = New-BaseEnvironment -EnvironmentName 'Production'
+    $wildcardAllowedHosts['AllowedHosts'] = '*'
+    $wildcardAllowedHosts['ASPNETCORE_URLS'] = "http://127.0.0.1:$failPort"
+    Assert-StartupFails -Name 'allowed-hosts-wildcard' -Environment $wildcardAllowedHosts `
+        -Expected "'*' is not allowed"
 
     Record "SMOKE PASSED ($script:checks checks)"
 }

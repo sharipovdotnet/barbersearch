@@ -13,6 +13,7 @@ using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.TimeOffs;
 using BarberSearch.Domain.Users;
 using BarberSearch.Domain.WorkingSchedules;
+using BarberSearch.Infrastructure.Postgresql.Audit;
 using Microsoft.EntityFrameworkCore;
 
 namespace BarberSearch.Infrastructure.Postgresql;
@@ -45,6 +46,9 @@ public class ApplicationDbContext : DbContext
 
     // Аутентификация
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    // Аудит
+    public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
 
     // Дочерние сущности агрегатов
     public DbSet<PortfolioPhoto> PortfolioPhotos => Set<PortfolioPhoto>();

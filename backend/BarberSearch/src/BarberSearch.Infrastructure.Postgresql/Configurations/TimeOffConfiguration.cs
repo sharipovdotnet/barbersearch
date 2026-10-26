@@ -18,6 +18,9 @@ public class TimeOffConfiguration : IEntityTypeConfiguration<TimeOff>
 
         builder.HasKey(x => x.Id).HasName("pk_time_offs");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

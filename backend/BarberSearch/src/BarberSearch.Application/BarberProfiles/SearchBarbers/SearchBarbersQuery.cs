@@ -14,14 +14,17 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// </remarks>
 /// <param name="City">Город салона.</param>
 /// <param name="SpecializationId">Идентификатор специализации.</param>
-/// <param name="ServiceId">Идентификатор услуги каталога.</param>
+/// <param name="HairServiceId">
+/// Идентификатор услуги справочника (<c>hair_services.id</c>), а не строки
+/// «услуга барбера» (R-20).
+/// </param>
 /// <param name="Date">Дата, на которую барбер работает.</param>
 /// <param name="Cursor">Курсор следующей страницы.</param>
 /// <param name="PageSize">Размер страницы; <c>null</c> — значение по умолчанию.</param>
 public record SearchBarbersQuery(
     string? City,
     Guid? SpecializationId,
-    Guid? ServiceId,
+    Guid? HairServiceId,
     DateOnly? Date,
     string? Cursor,
     int? PageSize) : IQuery<PagedResponse<BarberSearchItemResponse>>;

@@ -18,6 +18,9 @@ public class SpecializationConfiguration : IEntityTypeConfiguration<Specializati
 
         builder.HasKey(x => x.Id).HasName("pk_specializations");
 
+        // Оптимистическая блокировка: конкурентный UPDATE не перезаписывает чужую правку (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

@@ -63,7 +63,6 @@ public class ReviewOwnershipTests
             bookings,
             reviews,
             new FakeUnitOfWork(reviews, profiles),
-            new ReviewRatingRecalculator(profiles, reviews),
             currentUser,
             NullLogger<CreateReviewHandler>.Instance);
 

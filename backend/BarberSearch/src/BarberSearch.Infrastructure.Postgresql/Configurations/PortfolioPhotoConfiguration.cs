@@ -1,3 +1,4 @@
+using BarberSearch.Domain;
 using BarberSearch.Domain.PortfolioPhotos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -23,14 +24,27 @@ public class PortfolioPhotoConfiguration : IEntityTypeConfiguration<PortfolioPho
 
         builder.HasKey(x => x.Id).HasName("pk_portfolio_photos");
 
+        // xmin и на дочерней строке: UPDATE ребёнка не трогает корень агрегата (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
         builder.Property(x => x.BarberProfileId).HasColumnName("barber_profile_id");
-        builder.Property(x => x.Url).HasColumnName("url").IsRequired();
-        builder.Property(x => x.ThumbnailUrl).HasColumnName("thumbnail_url");
-        builder.Property(x => x.Description).HasColumnName("description");
+
+        // Длины повторяют доменные пределы (R-24): varchar отсекает строку в мегабайт,
+        // которую иначе можно было бы записать в text в обход API.
+        builder.Property(x => x.Url)
+            .HasColumnName("url")
+            .HasMaxLength(Constants.MAX_URL_LENGTH)
+            .IsRequired();
+        builder.Property(x => x.ThumbnailUrl)
+            .HasColumnName("thumbnail_url")
+            .HasMaxLength(Constants.MAX_URL_LENGTH);
+        builder.Property(x => x.Description)
+            .HasColumnName("description")
+            .HasMaxLength(Constants.MAX_TEXT_LENGTH);
         builder.Property(x => x.SortOrder).HasColumnName("sort_order");
         builder.Property(x => x.IsPublished).HasColumnName("is_published");
 

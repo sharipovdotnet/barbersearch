@@ -1,3 +1,4 @@
+using System.Globalization;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberProfiles.ValueObjects;
 using BarberSearch.Domain.BarberSalons;
@@ -117,7 +118,11 @@ public class BarberProfile : AggregateRoot
         List<string>? goodies,
         string? latePolicy)
     {
-        var inputResult = ValidateInput(displayName, yearsOfExperience);
+        var inputResult = ValidateInput(
+            displayName,
+            yearsOfExperience,
+            languages,
+            paymentMethods);
         if (inputResult.IsFailure)
         {
             return inputResult.Error;
@@ -164,7 +169,11 @@ public class BarberProfile : AggregateRoot
         List<string>? goodies,
         string? latePolicy)
     {
-        var inputResult = ValidateInput(displayName, yearsOfExperience);
+        var inputResult = ValidateInput(
+            displayName,
+            yearsOfExperience,
+            languages,
+            paymentMethods);
         if (inputResult.IsFailure)
         {
             return inputResult.Error;
@@ -327,12 +336,41 @@ public class BarberProfile : AggregateRoot
         string? thumbnailUrl = null,
         string? description = null)
     {
-        if (string.IsNullOrWhiteSpace(url))
+        var errors = DomainErrors.Collect();
+
+        var urlError = UrlValidator.Validate(
+            url,
+            "barberProfile.addPhoto.url",
+            nameof(url),
+            required: true,
+            out var normalizedUrl);
+        if (urlError is not null)
         {
-            return new Failure(Error.Validation(
-                "barberProfile.addPhoto.url",
-                "Photo URL cannot be empty.",
-                nameof(url)));
+            errors.Add(urlError);
+        }
+
+        var thumbnailError = UrlValidator.Validate(
+            thumbnailUrl,
+            "barberProfile.addPhoto.thumbnailUrl",
+            nameof(thumbnailUrl),
+            required: false,
+            out var normalizedThumbnailUrl);
+        if (thumbnailError is not null)
+        {
+            errors.Add(thumbnailError);
+        }
+
+        if (description is not null && description.Length > Constants.MAX_TEXT_LENGTH)
+        {
+            errors.Add(Error.Validation(
+                "barberProfile.addPhoto.description",
+                $"Photo description cannot be longer than {Constants.MAX_TEXT_LENGTH} characters.",
+                nameof(description)));
+        }
+
+        if (errors.Count != 0)
+        {
+            return new Failure(errors);
         }
 
         if (_portfolioPhotos.Count >= Constants.MAX_PHOTOS_COUNT)
@@ -342,7 +380,11 @@ public class BarberProfile : AggregateRoot
                 $"The number of photographs in the portfolio should not exceed {Constants.MAX_PHOTOS_COUNT} pieces."));
         }
 
-        _portfolioPhotos.Add(PortfolioPhoto.Create(Id, url, thumbnailUrl, description));
+        _portfolioPhotos.Add(PortfolioPhoto.Create(
+            Id,
+            normalizedUrl!,
+            normalizedThumbnailUrl,
+            description));
         MarkUpdated();
 
         return DomainErrors.Ok();
@@ -606,7 +648,9 @@ public class BarberProfile : AggregateRoot
 
     private static Result<(DisplayName, YearsOfExperience), Failure> ValidateInput(
         string displayName,
-        int yearsOfExperience)
+        int yearsOfExperience,
+        IEnumerable<Language>? languages,
+        IEnumerable<PaymentMethod>? paymentMethods)
     {
         var errors = DomainErrors.Collect();
 
@@ -622,12 +666,56 @@ public class BarberProfile : AggregateRoot
             errors.Add(yearsOfExperienceResult.Error);
         }
 
+        CollectUnknownEnumErrors(
+            errors,
+            languages,
+            "barberProfile.languages.unknown",
+            "languages",
+            "language");
+        CollectUnknownEnumErrors(
+            errors,
+            paymentMethods,
+            "barberProfile.paymentMethods.unknown",
+            "paymentMethods",
+            "payment method");
+
         if (errors.Count != 0)
         {
             return new Failure(errors);
         }
 
         return (displayNameResult.Value, yearsOfExperienceResult.Value);
+    }
+
+    /// <summary>
+    /// Добавляет ошибку на каждое значение перечисления, которого нет в определении типа.
+    /// <c>null</c>-коллекция допустима: у неё есть собственное значение по умолчанию
+    /// (<see cref="Create"/> подставляет <see cref="Language.Ru"/> для языков и пустой список
+    /// для способов оплаты), а пустая коллекция допустима всегда.
+    /// </summary>
+    private static void CollectUnknownEnumErrors<TEnum>(
+        List<Error> errors,
+        IEnumerable<TEnum>? values,
+        string errorCode,
+        string invalidField,
+        string valueName)
+        where TEnum : struct, Enum
+    {
+        if (values is null)
+        {
+            return;
+        }
+
+        foreach (var value in values)
+        {
+            if (!Enum.IsDefined(value))
+            {
+                errors.Add(Error.Validation(
+                    errorCode,
+                    $"Unknown {valueName} value {Convert.ToInt32(value, CultureInfo.InvariantCulture)}.",
+                    invalidField));
+            }
+        }
     }
 
     /// <summary>

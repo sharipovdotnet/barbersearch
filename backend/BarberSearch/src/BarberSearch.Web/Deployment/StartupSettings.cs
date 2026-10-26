@@ -12,6 +12,8 @@ namespace BarberSearch.Web.Deployment;
 /// Сообщения об ошибках называют переменные окружения и пути, но никогда — значения секретов.
 /// Отдельные проверки (строка подключения, ключ подписи, key ring, CORS, прокси) живут рядом
 /// с соответствующими настройками; этот тип только собирает их в один вызов.
+/// В <c>Production</c> здесь же проверяется <c>AllowedHosts</c>: пустой список и <c>*</c>
+/// запрещены, потому что host filtering должен принимать только явно перечисленные хосты.
 /// </remarks>
 public sealed record StartupSettings
 {
@@ -51,6 +53,16 @@ public sealed record StartupSettings
     public required int HealthDatabaseTimeoutSeconds { get; init; }
 
     /// <summary>
+    /// Интервал фоновой уборки истёкших refresh-токенов в минутах (R-50), <c>1..1440</c>.
+    /// </summary>
+    /// <remarks>
+    /// Уборка удаляет строки, истёкшие более <c>RefreshToken.MAX_LIFETIME_DAYS</c> назад;
+    /// интервал меняет только частоту запуска, но не границу удаления. Частое значение
+    /// уменьшает разовый объём DELETE, редкое — нагрузку на БД.
+    /// </remarks>
+    public required int RefreshTokenCleanupIntervalMinutes { get; init; }
+
+    /// <summary>
     /// Читает и проверяет конфигурацию.
     /// </summary>
     /// <exception cref="InvalidOperationException">Обязательная настройка отсутствует или противоречива.</exception>
@@ -66,9 +78,11 @@ public sealed record StartupSettings
         {
             throw new InvalidOperationException(
                 """
-                Connection string 'Postgres' is not configured.
-                Set ConnectionStrings:Postgres in appsettings.json, user secrets, or the
-                environment variable ConnectionStrings__Postgres.
+                Connection string 'Postgres' is not configured: appsettings.json intentionally
+                leaves it empty, so no working credentials are stored in the repository.
+                For local development, run from the BarberSearch/src/BarberSearch.Web directory:
+                  dotnet user-secrets set "ConnectionStrings:Postgres" "<connection string>"
+                For deployed environments, set the environment variable ConnectionStrings__Postgres.
                 """);
         }
 
@@ -86,6 +100,13 @@ public sealed record StartupSettings
                 Auth:CookieSameSite=None is only valid for a cross-site SPA.
                 Configure Cors:AllowedOrigins with the SPA origin, or use Lax/Strict.
                 """);
+        }
+
+        // Host filtering не должен пропускать произвольный Host в боевом окружении:
+        // wildcard ломает привязку cookie и открывает host-header атаки.
+        if (environment.IsProduction())
+        {
+            ValidateAllowedHosts(configuration);
         }
 
         return new StartupSettings
@@ -106,8 +127,57 @@ public sealed record StartupSettings
                 "HealthChecks:DatabaseTimeoutSeconds",
                 defaultValue: 5,
                 min: 1,
-                max: 60)
+                max: 60),
+            RefreshTokenCleanupIntervalMinutes = ReadInt(
+                configuration,
+                "RefreshTokens:CleanupIntervalMinutes",
+                defaultValue: 60,
+                min: 1,
+                max: 1440)
         };
+    }
+
+    /// <summary>
+    /// Проверяет список разрешённых хостов для боевого окружения.
+    /// </summary>
+    /// <remarks>
+    /// ASP.NET Core host filtering читает <c>AllowedHosts</c> напрямую, поэтому пустое
+    /// значение или <c>*</c> нужно отклонить до запуска хоста. В Development/Testing
+    /// проверка не выполняется: локальный хост и тестовый <c>TestServer</c> остаются
+    /// работоспособными.
+    /// </remarks>
+    /// <param name="configuration">Конфигурация приложения.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Список пуст или содержит wildcard <c>*</c>.
+    /// </exception>
+    private static void ValidateAllowedHosts(IConfiguration configuration)
+    {
+        var hosts = (configuration["AllowedHosts"] ?? string.Empty).Split(
+            ';',
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        if (hosts.Length == 0)
+        {
+            throw new InvalidOperationException(
+                """
+                AllowedHosts is not configured for Production.
+                List the public host names semicolon-separated, without a scheme or path, e.g.
+                  AllowedHosts=api.example.com
+                Host filtering answers 400 to an unknown Host header instead of serving the API.
+                """);
+        }
+
+        if (hosts.Contains("*", StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                """
+                AllowedHosts='*' is not allowed outside local development: a wildcard accepts
+                any Host header and weakens host-header and cookie-scoping protections.
+                List the public host names semicolon-separated, without a scheme or path, e.g.
+                  AllowedHosts=api.example.com
+                Host filtering answers 400 to an unknown Host header instead of serving the API.
+                """);
+        }
     }
 
     private static int ReadInt(

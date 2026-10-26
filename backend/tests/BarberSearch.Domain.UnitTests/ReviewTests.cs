@@ -46,10 +46,15 @@ public class ReviewTests
     }
 
     [Fact]
-    public void Create_StartsPublished()
+    public void Create_StartsPendingModeration()
     {
         var review = Review.Create(CreateBooking(), Guid.CreateVersion7(), 5, null);
 
+        // R-35: пре-модерация — новый отзыв скрыт до решения администратора.
+        Assert.False(review.Value.IsPublished);
+
+        // Публикация после создания включает отзыв в публичную сводку (путь администратора).
+        Assert.True(review.Value.Publish().IsSuccess);
         Assert.True(review.Value.IsPublished);
     }
 

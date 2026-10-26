@@ -1,29 +1,35 @@
 using System.Security.Claims;
-using BarberSearch.Application.Users;
+using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Users.ValidateSecurityStamp;
 
 namespace BarberSearch.Web.Auth;
 
 /// <summary>
-/// Проверяет, что выданные учётные данные ещё действительны: claim <c>security_stamp</c>
-/// в токене совпадает с сохранённым у пользователя, а сам пользователь активен.
+/// Тонкий адаптер проверки учётных данных для cookie и JWT.
 /// </summary>
 /// <remarks>
-/// Сервис scoped, потому что читает пользователя через <see cref="IUserRepository"/> и scoped
-/// <c>DbContext</c>. Смена пароля, роли и деактивация меняют <c>User.SecurityStamp</c>, поэтому
-/// уже выданный access-токен (15 минут) и cookie (до 8 часов) перестают проходить проверку
-/// не дожидаясь истечения срока. Кэша нет намеренно: отзыв должен применяться на следующем же
-/// запросе, а проверка — это один SELECT по первичному ключу.
+/// Парсит claims <c>sub</c> и <c>security_stamp</c> и передаёт решение в Application —
+/// <see cref="ValidateSecurityStampQuery"/>. Сама проверка (активность и совпадение отпечатка)
+/// живёт в обработчике и покрыта юнит-тестами без тестового проекта Web.
+/// <para>
+/// Сервис scoped, потому что обработчик читает пользователя через scoped <c>DbContext</c>.
+/// Смена пароля, роли и деактивация меняют <c>User.SecurityStamp</c>, поэтому уже выданный
+/// access-токен (15 минут) и cookie (до 8 часов) перестают проходить проверку, не дожидаясь
+/// истечения срока. Кэша нет намеренно: отзыв должен применяться на следующем же запросе,
+/// а проверка — один узкий SELECT <c>is_active, security_stamp</c> по первичному ключу,
+/// без <c>Include</c> и без отслеживания (R-11).
+/// </para>
 /// </remarks>
 public sealed class SecurityStampValidator
 {
-    private readonly IUserRepository _users;
+    private readonly IQueryHandler<bool, ValidateSecurityStampQuery> _handler;
     private readonly ILogger<SecurityStampValidator> _logger;
 
     public SecurityStampValidator(
-        IUserRepository users,
+        IQueryHandler<bool, ValidateSecurityStampQuery> handler,
         ILogger<SecurityStampValidator> logger)
     {
-        _users = users;
+        _handler = handler;
         _logger = logger;
     }
 
@@ -37,14 +43,14 @@ public sealed class SecurityStampValidator
         ClaimsPrincipal? principal,
         CancellationToken cancellationToken = default)
     {
-        var sub = principal?.FindFirstValue(ClaimsPrincipalFactory.SubClaim);
+        var sub = principal?.FindFirstValue(ClaimsPrincipalFactory.SUB_CLAIM);
 
         if (!Guid.TryParse(sub, out var userId))
         {
             return false;
         }
 
-        var claimedStamp = principal!.FindFirstValue(ClaimsPrincipalFactory.SecurityStampClaim);
+        var claimedStamp = principal!.FindFirstValue(ClaimsPrincipalFactory.SECURITY_STAMP_CLAIM);
 
         if (string.IsNullOrWhiteSpace(claimedStamp))
         {
@@ -55,37 +61,10 @@ public sealed class SecurityStampValidator
             return false;
         }
 
-        var userResult = await _users.GetByIdAsync(userId, cancellationToken);
+        var result = await _handler.Handle(
+            new ValidateSecurityStampQuery(userId, claimedStamp),
+            cancellationToken);
 
-        if (userResult.IsFailure)
-        {
-            _logger.LogWarning(
-                "Security stamp check failed: user {UserId} was not found.",
-                userId);
-
-            return false;
-        }
-
-        var user = userResult.Value;
-
-        if (!user.IsActive)
-        {
-            _logger.LogWarning(
-                "Security stamp check failed: user {UserId} is deactivated.",
-                userId);
-
-            return false;
-        }
-
-        if (!string.Equals(user.SecurityStamp, claimedStamp, StringComparison.Ordinal))
-        {
-            _logger.LogWarning(
-                "Security stamp check failed: the token of user {UserId} is stale.",
-                userId);
-
-            return false;
-        }
-
-        return true;
+        return result.IsSuccess && result.Value;
     }
 }

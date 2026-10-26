@@ -22,13 +22,13 @@ public class UnverifyBarberProfileHandler : ICommandHandler<UnverifyBarberProfil
     }
 
     /// <summary>
-    /// Загружает профиль барбера, снимает верификацию и сохраняет агрегат.
+    /// Загружает корень профиля, снимает верификацию и сохраняет агрегат.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         UnverifyBarberProfileCommand command,
         CancellationToken cancellationToken)
     {
-        var profileResult = await _repository.GetByIdAsync(command.BarberProfileId, cancellationToken);
+        var profileResult = await _repository.GetRootByIdAsync(command.BarberProfileId, cancellationToken);
         if (profileResult.IsFailure)
         {
             return profileResult.Error;

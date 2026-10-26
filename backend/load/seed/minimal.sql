@@ -37,12 +37,12 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users
     (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
      is_email_verified, is_phone_verified, role, is_active, last_login_at,
-     barber_profile_id, created_at, updated_at, security_stamp)
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
 VALUES
     ('33333333-3333-3333-3333-333333333333',
      'ci-owner@barbersearch.test', 'CI-NOT-A-REAL-PASSWORD-HASH', 'CI', 'Owner',
      NULL, NULL, true, false, 2, true, NULL, NULL, now(), now(),
-     'ci-owner-security-stamp')
+     'ci-owner-security-stamp', 0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO barber_profiles

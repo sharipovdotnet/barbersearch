@@ -31,7 +31,6 @@ using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhoto;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
 using BarberSearch.Contracts.Common;
-using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -246,20 +245,11 @@ public class BarberProfilesController : ApiController
     public async Task<ActionResult<BarberSalonResponse>> FindSalon(
         Guid barberProfileId,
         Guid salonId,
-        [FromServices] IQueryHandler<BarberSalon, FindBarberProfileSalonQuery> handler,
+        [FromServices] IQueryHandler<BarberSalonResponse, FindBarberProfileSalonQuery> handler,
         CancellationToken cancellationToken)
-    {
-        var result = await handler.Handle(
+        => ToActionResult(await handler.Handle(
             new FindBarberProfileSalonQuery(barberProfileId, salonId),
-            cancellationToken);
-
-        if (result.IsFailure)
-        {
-            return FailureProblemDetails.CreateResult(result.Error);
-        }
-
-        return Ok(ToResponse(result.Value));
-    }
+            cancellationToken));
 
     /// <summary>
     /// Добавляет услугу в профиль барбера: цена и длительность задаются для этого барбера.
@@ -346,20 +336,4 @@ public class BarberProfilesController : ApiController
         => ToActionResult(await handler.Handle(
             new RemoveBarberProfileTimeOffCommand(barberProfileId, timeOffId),
             cancellationToken));
-
-    /// <summary>
-    /// Перекладывает доменный салон в ответ API: навигация на профиль наружу не выходит.
-    /// </summary>
-    private static BarberSalonResponse ToResponse(BarberSalon salon)
-        => new(
-            salon.Id,
-            salon.BarberProfileId,
-            salon.SalonId,
-            salon.IsPrimary,
-            [.. salon.WorkingSchedules.Select(schedule => new WorkingScheduleResponse(
-                schedule.Id,
-                schedule.DayOfWeek,
-                schedule.StartTime,
-                schedule.EndTime,
-                schedule.IsDayOff))]);
 }

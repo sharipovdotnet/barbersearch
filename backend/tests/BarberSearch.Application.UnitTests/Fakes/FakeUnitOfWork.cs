@@ -39,6 +39,12 @@ public sealed class FakeUnitOfWork : IUnitOfWork
 
     public int RollbackCount { get; private set; }
 
+    /// <summary>
+    /// Открыта ли фейковая транзакция. Тесты проверяют, что запись выполняется внутри
+    /// <see cref="IUnitOfWork"/>, а не в собственной транзакции репозитория (R-15).
+    /// </summary>
+    public bool IsInTransaction { get; private set; }
+
     public Task<UnitResult<Failure>> ExecuteAsync(
         Func<CancellationToken, Task<UnitResult<Failure>>> operation,
         CancellationToken cancellationToken = default)
@@ -67,6 +73,8 @@ public sealed class FakeUnitOfWork : IUnitOfWork
             participant.BeginTransaction();
         }
 
+        IsInTransaction = true;
+
         try
         {
             var result = await operation(cancellationToken);
@@ -84,6 +92,10 @@ public sealed class FakeUnitOfWork : IUnitOfWork
         {
             Rollback();
             throw;
+        }
+        finally
+        {
+            IsInTransaction = false;
         }
     }
 

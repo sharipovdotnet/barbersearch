@@ -52,6 +52,7 @@ public static class HealthCheckExtensions
                 Predicate = _ => false,
                 ResponseWriter = HealthCheckResponseWriter.WriteAsync
             })
+            .WithRequestTimeout(RequestTimeoutSettings.HealthCheckTimeout)
             .AllowAnonymous();
 
         endpoints
@@ -60,6 +61,7 @@ public static class HealthCheckExtensions
                 Predicate = registration => registration.Tags.Contains(ReadyTag),
                 ResponseWriter = HealthCheckResponseWriter.WriteAsync
             })
+            .WithRequestTimeout(RequestTimeoutSettings.HealthCheckTimeout)
             .AllowAnonymous();
 
         return endpoints;

@@ -37,6 +37,13 @@ public interface IHairServiceRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Существует ли услуга с таким идентификатором. Узкая проверка ссылки:
+    /// используется перед добавлением услуги в профиль барбера, чтобы не записать
+    /// висячую ссылку на несуществующую строку <c>hair_services</c>.
+    /// </summary>
+    Task<Result<bool, Failure>> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавляет новую услугу в справочник.
     /// </summary>
     Task<UnitResult<Failure>> AddAsync(HairService hairService, CancellationToken cancellationToken = default);

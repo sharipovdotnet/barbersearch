@@ -15,7 +15,16 @@ namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
 /// <param name="IsWorkingDay">Есть ли в расписании рабочий день на эту дату.</param>
 /// <param name="StartTime">Начало рабочего дня по локальному времени салона.</param>
 /// <param name="EndTime">Окончание рабочего дня по локальному времени салона.</param>
-/// <param name="DurationMinutes">Длительность слота: услуга либо 30 минут по умолчанию.</param>
+/// <param name="DurationMinutes">
+/// Шаг сетки: <c>BarberService.DurationMinutes</c> выбранной услуги либо
+/// <c>Constants.DEFAULT_SLOT_DURATION_MINUTES</c> (30 минут), когда услуга не задана.
+/// </param>
+/// <param name="BarberServiceId">
+/// Строка <c>barber_services</c>, из которой взята длительность; <c>null</c> — услуга не задана.
+/// </param>
+/// <param name="HairServiceId">
+/// Услуга справочника, по которой фильтровались слоты; <c>null</c> — услуга не задана.
+/// </param>
 /// <param name="TimeOffs">Отпуска барбера, пересекающиеся с окном вокруг даты.</param>
 public sealed record BarberSlotContext(
     Guid BarberProfileId,
@@ -26,4 +35,6 @@ public sealed record BarberSlotContext(
     TimeOnly StartTime,
     TimeOnly EndTime,
     int DurationMinutes,
+    Guid? BarberServiceId,
+    Guid? HairServiceId,
     IReadOnlyList<TimeOffInterval> TimeOffs);

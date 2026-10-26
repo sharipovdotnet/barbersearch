@@ -1,0 +1,59 @@
+<Project>
+
+    <!--
+        Общие настройки сборки для всех проектов под backend/:
+        BarberSearch/src/*, tests/* и load/harness. TargetFramework намеренно НЕ задаётся —
+        он у каждого проекта свой (сейчас везде net10.0, но это дело проекта).
+        Файл лежит в backend/, а не в BarberSearch/: иначе тесты и load/harness
+        (они лежат рядом, а не внутри BarberSearch/) остались бы без настроек.
+    -->
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>14.0</LangVersion>
+
+        <!-- Воспроизводимая сборка: одинаковый вход → одинаковый бинарник. -->
+        <Deterministic>true</Deterministic>
+
+        <!--
+            Портативные PDB — переносимый формат по умолчанию; DebugType=embedded
+            раздувал бы сборки, full — не нужен без Windows-only отладчика.
+        -->
+        <DebugType>portable</DebugType>
+
+        <!--
+            XML-документация не генерируется: иначе каждый публичный тип без <summary>
+            даёт CS1591 (≈1054 предупреждения на текущем дереве, AGENT.md §10.15).
+            XML-доки в коде остаются, но проверяются отдельно (dotnet format), а не сборкой.
+        -->
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+        <!--
+            Анализаторы Roslyn включены для всех проектов, включая тесты и load/harness:
+            это и есть смысл R-37. Уровень latest-recommended + Recommended — рекомендованный
+            набор правил; шумные/спорные правила заглушены точечно в .editorconfig
+            с обоснованием, а не отключением анализаторов целиком.
+        -->
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <AnalysisMode>Recommended</AnalysisMode>
+
+        <!--
+            Стилевые IDE-правила (IDE0005 и т.п.) в сборке не проверяются: они шумят
+            на существующем дереве и не являются дефектами. В .editorconfig для них
+            выставлены явные severity, а проверка стиля — отдельная команда dotnet format.
+        -->
+        <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+        <!-- Любое предупреждение компилятора/анализатора — ошибка сборки. -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+        <!--
+            CI-сборка: детерминированные пути и запрет на неявные зависимости.
+            Включается только когда окружение само сообщает, что это CI (GitHub Actions
+            выставляет CI=true); локальная сборка остаётся неизменной.
+        -->
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+</Project>

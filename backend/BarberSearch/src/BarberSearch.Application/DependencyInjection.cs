@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Reviews;
+using BarberSearch.Application.Users.Passwords;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BarberSearch.Application;
@@ -24,8 +25,13 @@ public static class DependencyInjection
     {
         var assembly = typeof(DependencyInjection).Assembly;
 
-        // Пересчёт рейтинга — application-сервис, а не обработчик: его вызывают четыре
-        // команды отзыва, и каждая делает это внутри своей транзакции.
+        // Политика паролей не хранит состояния: словарь загружается лениво один раз,
+        // поэтому один экземпляр на приложение.
+        services.AddSingleton<IPasswordPolicy, PasswordPolicy>();
+
+        // Пересчёт рейтинга — application-сервис, а не обработчик: его вызывают три
+        // команды отзыва (правка, публикация, скрытие), и каждая делает это внутри своей
+        // транзакции. С R-35 создание отзыв не пересчитывает: отзыв создаётся скрытым.
         services.AddScoped<ReviewRatingRecalculator>();
 
         services.Scan(scan => scan.FromAssemblies([assembly])

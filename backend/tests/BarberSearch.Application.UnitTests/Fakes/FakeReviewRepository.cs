@@ -1,5 +1,6 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
@@ -52,7 +53,7 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             _reviews.TryGetValue(id, out var review)
                 ? review
                 : new Failure(Error.NotFound(
-                    "review.getById.notFound",
+                    ApiErrorCodes.Review.NotFound,
                     $"Review '{id}' was not found.",
                     id)));
 
@@ -65,7 +66,7 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
         if (review is null)
         {
             return Task.FromResult<Result<Review, Failure>>(new Failure(Error.NotFound(
-                "review.getByBookingId.notFound",
+                ApiErrorCodes.Review.NotFound,
                 $"Review of booking '{bookingId}' was not found.",
                 bookingId)));
         }
@@ -109,6 +110,32 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             Result.Success<IReadOnlyList<ReviewResponse>, Failure>(rows));
     }
 
+    public Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        IEnumerable<Review> query = _reviews.Values.Where(review => !review.IsPublished);
+
+        if (cursor is { } position)
+        {
+            query = query.Where(review =>
+                review.CreatedAt > position.CreatedAt
+                || (review.CreatedAt == position.CreatedAt
+                    && review.Id.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<ReviewResponse> rows = query
+            .OrderBy(review => review.CreatedAt)
+            .ThenBy(review => review.Id)
+            .Take(limit)
+            .Select(ToResponse)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<ReviewResponse>, Failure>(rows));
+    }
+
     public Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
@@ -137,7 +164,7 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
         if (_reviews.Values.Any(x => x.BookingId == review.BookingId))
         {
             return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
-                "review.add.duplicate",
+                ApiErrorCodes.Review.AddUniqueViolation,
                 "A review for this booking already exists."))));
         }
 

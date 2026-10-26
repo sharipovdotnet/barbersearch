@@ -115,6 +115,51 @@ public class EntityTests
     }
 
     [Fact]
+    public void Entity_ImplementsIEquatableOfEntity()
+    {
+        // R-41: типизированный Equals(Entity?) существовал без объявленного контракта.
+        Assert.True(typeof(IEquatable<Entity>).IsAssignableFrom(typeof(Entity)));
+
+        // Контракт реализован именно этим Equals(Entity?), а не отдельным методом-заглушкой.
+        var map = typeof(Entity).GetInterfaceMap(typeof(IEquatable<Entity>));
+
+        Assert.Same(
+            typeof(Entity).GetMethod(nameof(Equals), new[] { typeof(Entity) }),
+            Assert.Single(map.TargetMethods));
+    }
+
+    [Fact]
+    public void TypedEquals_ThroughInterface_MatchesOperatorAndObjectEquals()
+    {
+        var id = Guid.CreateVersion7();
+
+        var entity = new FirstEntity().WithId(id);
+        var proxy = new DerivedEntity().WithId(id);
+
+        IEquatable<Entity> equatable = entity;
+
+        // Типизированный вызов через интерфейс даёт тот же ответ, что == и Equals(object).
+        Assert.True(equatable.Equals(proxy));
+        Assert.True(entity == proxy);
+        Assert.True(entity.Equals((object)proxy));
+        Assert.Equal(entity.GetHashCode(), proxy.GetHashCode());
+        Assert.False(equatable.Equals(null));
+    }
+
+    [Fact]
+    public void TypedEquals_WithDifferentIds_IsFalse()
+    {
+        var left = new FirstEntity();
+        var right = new FirstEntity();
+
+        IEquatable<Entity> equatable = left;
+
+        Assert.False(equatable.Equals(right));
+        Assert.False(left == right);
+        Assert.False(left.Equals((object)right));
+    }
+
+    [Fact]
     public void FailedResult_ExposesAllErrors()
     {
         var failure = new Failure([

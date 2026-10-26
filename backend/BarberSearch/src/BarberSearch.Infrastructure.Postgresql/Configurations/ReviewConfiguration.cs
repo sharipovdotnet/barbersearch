@@ -26,6 +26,9 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
 
         builder.HasKey(x => x.Id).HasName("pk_reviews");
 
+        // Оптимистическая блокировка: конкурентный UPDATE не перезаписывает чужую правку (R-05).
+        builder.UseXminConcurrencyToken();
+
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -46,5 +49,11 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.HasIndex(x => new { x.BarberProfileId, x.CreatedAt })
             .IsDescending(false, true)
             .HasDatabaseName("ix_reviews_barber_profile_id_created_at");
+
+        // Очередь модерации: скрытые отзывы всех барберов, старые сверху (ASC-скан).
+        // Частичный индекс: опубликованные строки в него не попадают (R-35).
+        builder.HasIndex(x => new { x.CreatedAt, x.Id })
+            .HasFilter("is_published = false")
+            .HasDatabaseName("ix_reviews_moderation_created_at_id");
     }
 }
