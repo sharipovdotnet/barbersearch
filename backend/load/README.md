@@ -104,7 +104,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
 
 ## 5. Что именно измеряется
 
-- **search**: `GET api/barbers`; микс city / specializationId / serviceId / date /
+- **search**: `GET api/barbers`; микс city / specializationId / hairServiceId / date /
   cursor / pageSize, 16 параллельных клиентов, 5 с прогрева + 3 окна по 15 с.
 - **slots**: `GET api/barbers/{id}/slots`; 1 000 случайных барберов, 16 клиентов,
   прогрев + 3×15 с.
@@ -123,8 +123,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File load/run.ps1 `
   `reviewsCount` совпадают с ожидаемым набором (14 ранее скрытых отзывов), id
   совпадают. Последний барбер в манифесте — warm-up.
 - **review-create**: 50 одновременных `POST api/reviews` по завершённым броням
-  одного барбера, 5 разных барберов; проверяется `rating = round(sum/count, 2)`
-  и `reviewsCount`. Последний барбер — warm-up.
+  одного барбера, 5 разных барберов; с 2026-10-24 (R-35) создание оставляет
+  отзыв на модерации, поэтому harness публикует созданные id админом
+  (`POST api/reviews/{id}/publication`; latency публикации в статистику create
+  не входит) и только затем проверяет `rating = round(sum/count, 2)` и
+  `reviewsCount`. Последний барбер — warm-up.
 
 Бюджеты зафиксированы до прогона: search p95 200 / p99 500 мс (§15.7), booking
 p95 300 мс (§15.7), slots p95 300 / p99 800 мс, review publish/create p95 500 /
