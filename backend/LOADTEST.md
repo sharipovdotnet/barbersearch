@@ -79,6 +79,12 @@ restore с `nuget.org` в этой среде падает на SSL/package sour
 | review-publish-hide | 20 одновременных Publish/Hide отзывов одного барбера, 5 разных барберов | p95 < 500 ms, p99 < 1000 ms (задан до прогона) |
 | review-create | 50 одновременных `POST api/reviews` по завершённым броням одного барбера, 5 разных барберов | p95 < 500 ms, p99 < 1000 ms (задан до прогона) |
 
+> С 2026-10-24 (R-35) `POST api/reviews` создаёт отзыв **скрытым** (пре-модерация).
+> Harness сразу публикует созданные отзывы админом (`POST api/reviews/{id}/publication`) и
+> только затем проверяет `rating`/`reviewsCount`; latency публикации в статистику
+> `review-create` не входит. Числа ниже сняты до R-35, поэтому для review-create это
+> **верхняя оценка**: create больше не пересчитывает рейтинг, пересчёт ушёл в публикацию.
+
 Перед каждым измеряемым окном — прогрев: 5 с для search/slots, отдельные
 warm-up-барберы/слоты для write-сценариев. Baseline 2026-10-19 — 3 повтора;
 follow-up 2026-10-20 — 5 повторов (search дополнительно 8 прогонов по 20 с).
@@ -201,7 +207,8 @@ Follow-up 2026-10-20 (`Repeat=5`): 6 contended slots (1 warm-up + 5 measured),
 
 Для publish/hide итогом всегда были 14 ранее скрытых отзывов (6 исходно
 опубликованных скрывались), для create — 56 опубликованных (6 исходных + 50
-новых). Независимая SQL-проверка после прогона:
+новых: с R-35 harness публикует созданные отзывы админом до этой проверки). Независимая
+SQL-проверка после прогона:
 
 | Барбер | stored rating | stored count | actual published | actual avg |
 |---:|---:|---:|---:|---:|
@@ -274,10 +281,11 @@ statuses=0:20, 500:30; createdIds=0
 
 Исправление (отдельный коммит, не оптимизация):
 
-1. `BookingRepository.AddAsync` открывает явную транзакцию и берёт
-   transaction-scoped advisory lock по `barber_profile_id`
-   (`pg_advisory_xact_lock(hashtextextended(...))`) **до** вставки. Вставки одного
-   барбера сериализуются; первый коммитит, остальные получают `23P01` → 409.
+1. `CreateBookingHandler` внутри `IUnitOfWork` берёт transaction-scoped advisory lock
+   по `barber_profile_id` (`pg_advisory_xact_lock(hashtextextended(...))`) **до**
+   проверок ссылок и вставки; `BookingRepository.AddAsync` только сохраняет и
+   транзакцию не открывает (R-15). Вставки одного барбера сериализуются; первый
+   коммитит, остальные получают `23P01` → 409.
 2. `40P01` дополнительно маппится в `409 booking.add.deadlock` — defensive path,
    чтобы будущая смена ключа блокировки не вернула 500.
 3. Load-harness проверяет не только статусы, но и ровно одну активную строку в
