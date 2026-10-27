@@ -3,8 +3,11 @@ name: frontend-ci
 # Сборка и проверки frontend. Workflow лежит в корне репозитория, потому что
 # GitHub Actions читает только .github/workflows из корня.
 # Запускается только при изменениях frontend/ — правки backend его не трогают.
+# Push проверяется только на main: feature-ветки идут через pull_request, иначе
+# каждый пуш в PR запускал бы два одинаковых прогона.
 on:
   push:
+    branches: [main]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
