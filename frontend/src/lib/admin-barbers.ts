@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
+import { csrfHeaders } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 
 /**
@@ -173,4 +174,94 @@ export function describeAdminBarberDetailError(error: unknown): string {
 /** 401: сессия закончилась, страница предложит войти снова. */
 export function isBarberUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401
+}
+
+/** Действие администратора с профилем барбера. */
+export type AdminBarberAction =
+  | 'verify'
+  | 'unverify'
+  | 'grade'
+  | 'hide'
+  | 'show'
+
+export async function verifyBarber(barberId: string): Promise<void> {
+  await apiRequest<void>(`/barber-profiles/${barberId}/verification`, {
+    method: 'POST',
+    headers: await csrfHeaders(),
+  })
+}
+
+export async function unverifyBarber(barberId: string): Promise<void> {
+  await apiRequest<void>(`/barber-profiles/${barberId}/verification`, {
+    method: 'DELETE',
+    headers: await csrfHeaders(),
+  })
+}
+
+export async function changeBarberGrade(
+  barberId: string,
+  grade: BarberGrade
+): Promise<void> {
+  await apiRequest<void>(`/barber-profiles/${barberId}/grade`, {
+    method: 'PUT',
+    body: JSON.stringify({ grade }),
+    headers: await csrfHeaders(),
+  })
+}
+
+/** «Скрыть из поиска» — выключение профиля, а не новый статус домена. */
+export async function hideBarberFromSearch(barberId: string): Promise<void> {
+  await apiRequest<void>(`/barber-profiles/${barberId}/activation`, {
+    method: 'POST',
+    headers: await csrfHeaders(),
+  })
+}
+
+export async function returnBarberToSearch(barberId: string): Promise<void> {
+  await apiRequest<void>(`/barber-profiles/${barberId}/activation`, {
+    method: 'DELETE',
+    headers: await csrfHeaders(),
+  })
+}
+
+/**
+ * Ошибка действия: отдельные тексты для скрытого профиля и истёкшей сессии.
+ *
+ * Подтвердить профиль, скрытый из поиска, нельзя — это правило домена
+ * (`barberProfile.verify.inactive`), поэтому подсказка ведёт к возврату в поиск.
+ */
+export function describeAdminBarberActionError(
+  error: unknown,
+  action: AdminBarberAction
+): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403 || error.hasCode('auth.forbidden')) {
+      return 'Раздел доступен только администратору.'
+    }
+
+    if (error.status === 404 || error.hasCode('barberProfile.notFound')) {
+      return 'Профиль больше не существует. Обновите список.'
+    }
+
+    if (error.hasCode('barberProfile.verify.inactive')) {
+      return 'Нельзя подтвердить профиль, скрытый из поиска. Сначала верните его в поиск.'
+    }
+
+    if (error.hasCode('auth.csrf.invalid')) {
+      return 'Сессия устарела. Обновите страницу и повторите действие.'
+    }
+  }
+
+  switch (action) {
+    case 'verify':
+      return 'Не удалось подтвердить профиль. Попробуйте ещё раз.'
+    case 'unverify':
+      return 'Не удалось снять подтверждение. Попробуйте ещё раз.'
+    case 'grade':
+      return 'Не удалось изменить грейд. Попробуйте ещё раз.'
+    case 'hide':
+      return 'Не удалось скрыть профиль из поиска. Попробуйте ещё раз.'
+    case 'show':
+      return 'Не удалось вернуть профиль в поиск. Попробуйте ещё раз.'
+  }
 }

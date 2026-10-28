@@ -1,12 +1,24 @@
-import { type ReactNode } from 'react'
-import { ArrowLeft, CheckCircle2, Circle, Star } from 'lucide-react'
+﻿import { useState, type ReactNode } from 'react'
+import { ArrowLeft, CheckCircle2, Circle, Loader2, Star } from 'lucide-react'
 
 import { BarberStatusBadge } from '@/components/admin/barber-list'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { AdminBarberDetail } from '@/lib/admin-barbers'
-import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
+import type {
+  AdminBarberAction,
+  AdminBarberDetail,
+  BarberGrade,
+} from '@/lib/admin-barbers'
+import { BARBER_GRADE_LABELS, BARBER_GRADES } from '@/lib/admin-barbers'
 import type { AdminBarberDetailStatus } from '@/hooks/use-admin-barber'
 import {
   formatDateTime,
@@ -25,15 +37,30 @@ import {
  */
 export function BarberDetail({
   barber,
+  pendingAction,
+  actionError,
+  onVerify,
+  onUnverify,
+  onChangeGrade,
+  onHide,
+  onShow,
   onBack,
 }: {
   barber: AdminBarberDetail
+  pendingAction: AdminBarberAction | null
+  actionError: string | null
+  onVerify: () => void
+  onUnverify: () => void
+  onChangeGrade: (grade: BarberGrade) => void
+  onHide: () => void
+  onShow: () => void
   onBack: () => void
 }) {
   return (
     <section
       id="barber-detail"
       aria-labelledby="barber-detail-title"
+      aria-busy={pendingAction !== null}
       className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
     >
       <div className="space-y-5 p-4 sm:p-5">
@@ -116,7 +143,276 @@ export function BarberDetail({
         </dl>
 
         <ReadinessChecklist barber={barber} />
+
+        <BarberActions
+          barber={barber}
+          pendingAction={pendingAction}
+          actionError={actionError}
+          onVerify={onVerify}
+          onUnverify={onUnverify}
+          onChangeGrade={onChangeGrade}
+          onHide={onHide}
+          onShow={onShow}
+        />
       </div>
+    </section>
+  )
+}
+
+/**
+ * Административные действия с профилем.
+ *
+ * Подтверждение и скрытие взаимоисключающие: подтвердить профиль, скрытый из поиска,
+ * домен не даёт (`barberProfile.verify.inactive`), поэтому кнопка объясняет причину,
+ * а не просто гаснет. Скрытие и снятие подтверждения спрашивают подтверждение:
+ * у обоих одно последствие — профиль пропадает из выдачи и записи.
+ */
+function BarberActions({
+  barber,
+  pendingAction,
+  actionError,
+  onVerify,
+  onUnverify,
+  onChangeGrade,
+  onHide,
+  onShow,
+}: {
+  barber: AdminBarberDetail
+  pendingAction: AdminBarberAction | null
+  actionError: string | null
+  onVerify: () => void
+  onUnverify: () => void
+  onChangeGrade: (grade: BarberGrade) => void
+  onHide: () => void
+  onShow: () => void
+}) {
+  const [gradeDraft, setGradeDraft] = useState({
+    serverGrade: barber.grade,
+    value: barber.grade,
+  })
+  const [confirm, setConfirm] = useState<'hide' | 'unverify' | null>(null)
+  const isPending = pendingAction !== null
+
+  // Черновик грейда живёт до ответа сервера: после перечитывания карточки
+  // `barber.grade` меняется, и выбор снова берётся из данных, а не из памяти формы.
+  const grade =
+    gradeDraft.serverGrade === barber.grade
+      ? gradeDraft.value
+      : barber.grade
+
+  return (
+    <section
+      aria-labelledby="barber-actions-title"
+      className="space-y-4 border-t pt-4"
+    >
+      <h3 id="barber-actions-title" className="text-sm font-medium">
+        Действия
+      </h3>
+
+      {actionError && (
+        <p role="alert" className="text-sm text-destructive">
+          {actionError}
+        </p>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-sm">
+          {barber.isVerified
+            ? 'Профиль подтверждён и участвует в поиске.'
+            : 'Профиль ждёт проверки и в поиске не показывается.'}
+        </p>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {barber.isVerified ? (
+            <Button
+              variant="outline"
+              className="h-11 sm:h-9"
+              disabled={isPending}
+              onClick={() => setConfirm('unverify')}
+            >
+              {pendingAction === 'unverify' ? (
+                <>
+                  <Loader2
+                    data-icon="inline-start"
+                    aria-hidden
+                    className="animate-spin"
+                  />
+                  Снимаем…
+                </>
+              ) : (
+                'Снять подтверждение'
+              )}
+            </Button>
+          ) : (
+            <Button
+              className="h-11 sm:h-9"
+              disabled={isPending || !barber.isActive}
+              onClick={onVerify}
+            >
+              {pendingAction === 'verify' ? (
+                <>
+                  <Loader2
+                    data-icon="inline-start"
+                    aria-hidden
+                    className="animate-spin"
+                  />
+                  Подтверждаем…
+                </>
+              ) : (
+                'Подтвердить'
+              )}
+            </Button>
+          )}
+
+          <p className="text-xs text-muted-foreground sm:max-w-xs">
+            {barber.isVerified
+              ? 'Снятие подтверждения уберёт профиль из поиска и записи.'
+              : barber.isActive
+                ? 'Профиль появится в поиске и станет доступен для записи. Отменить это можно в любой момент.'
+                : 'Сначала верните профиль в поиск: подтверждение скрытого профиля домен не разрешает.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2 border-t pt-3">
+        <label htmlFor="barber-grade" className="text-sm font-medium">
+          Грейд
+        </label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <select
+            id="barber-grade"
+            value={grade}
+            disabled={isPending}
+            onChange={(event) =>
+              setGradeDraft({
+                serverGrade: barber.grade,
+                value: event.target.value as BarberGrade,
+              })
+            }
+            className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-56"
+          >
+            {BARBER_GRADES.map((value) => (
+              <option key={value} value={value}>
+                {BARBER_GRADE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+
+          <Button
+            variant="outline"
+            className="h-11 sm:h-9"
+            disabled={isPending || grade === barber.grade}
+            onClick={() => onChangeGrade(grade)}
+          >
+            {pendingAction === 'grade' ? (
+              <>
+                <Loader2
+                  data-icon="inline-start"
+                  aria-hidden
+                  className="animate-spin"
+                />
+                Сохраняем…
+              </>
+            ) : (
+              'Сохранить грейд'
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Грейд видят клиенты в карточке барбера. Это административное поле: сам
+          барбер его не меняет.
+        </p>
+      </div>
+
+      <div className="space-y-2 border-t pt-3">
+        <p className="text-sm font-medium">
+          {barber.isActive ? 'Профиль виден в поиске' : 'Профиль скрыт из поиска'}
+        </p>
+        <Button
+          variant={barber.isActive ? 'destructive' : 'outline'}
+          className="h-11 sm:h-9"
+          disabled={isPending}
+          onClick={barber.isActive ? () => setConfirm('hide') : onShow}
+        >
+          {pendingAction === 'hide' ? (
+            <>
+              <Loader2
+                data-icon="inline-start"
+                aria-hidden
+                className="animate-spin"
+              />
+              Скрываем…
+            </>
+          ) : pendingAction === 'show' ? (
+            <>
+              <Loader2
+                data-icon="inline-start"
+                aria-hidden
+                className="animate-spin"
+              />
+              Возвращаем…
+            </>
+          ) : barber.isActive ? (
+            'Скрыть из поиска'
+          ) : (
+            'Вернуть в поиск'
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {barber.isActive
+            ? 'Профиль исчезнет из поиска, но останется в системе: записи и отзывы сохранятся.'
+            : 'Профиль снова появится в поиске, если он подтверждён; неподтверждённый останется в очереди проверки.'}
+        </p>
+      </div>
+
+      <Dialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirm(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirm === 'hide'
+                ? 'Скрыть барбера из поиска?'
+                : 'Снять подтверждение?'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirm === 'hide'
+                ? 'Профиль исчезнет из поиска и станет недоступен для записи. Записи и отзывы сохранятся, вернуть профиль можно в любой момент.'
+                : 'Профиль исчезнет из поиска и станет недоступен для записи, пока вы не подтвердите его снова.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setConfirm(null)}
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                const action = confirm
+                setConfirm(null)
+
+                if (action === 'hide') {
+                  onHide()
+                } else if (action === 'unverify') {
+                  onUnverify()
+                }
+              }}
+            >
+              {confirm === 'hide' ? 'Скрыть из поиска' : 'Снять подтверждение'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

@@ -25,7 +25,17 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   ADMIN_BARBER_SEARCH_MAX_LENGTH,
   ADMIN_BARBER_STATUS_LABELS,
+  BARBER_GRADE_LABELS,
+  changeBarberGrade,
+  describeAdminBarberActionError,
+  hideBarberFromSearch,
+  isBarberUnauthorized,
+  returnBarberToSearch,
+  unverifyBarber,
+  verifyBarber,
+  type AdminBarberAction,
   type AdminBarberStatusFilter,
+  type BarberGrade,
 } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
 import { formatClockTime } from '@/lib/format'
@@ -37,6 +47,21 @@ const FILTERS: readonly AdminBarberStatusFilter[] = [
   'all',
   'hidden',
 ]
+
+type PendingAction = {
+  kind: AdminBarberAction
+  barberId: string
+} | null
+
+type Announcement = {
+  text: string
+  undo?: {
+    label: string
+    action: AdminBarberAction
+    barberId: string
+    barberName: string
+  }
+}
 
 /**
  * Экран «Барберы»: очередь проверки, поиск по имени и email, карточка профиля.
@@ -70,6 +95,22 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   const detail = useAdminBarber(barberId)
   const isWide = useMediaQuery('(min-width: 1024px)')
   const headingRef = useRef<HTMLHeadingElement | null>(null)
+
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [actionFailure, setActionFailure] = useState<{
+    barberId: string
+    message: string
+  } | null>(null)
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+  const [requiresSignIn, setRequiresSignIn] = useState(false)
+
+  const barber = detail.barber
+  const actionError =
+    barber && actionFailure?.barberId === barber.id
+      ? actionFailure.message
+      : null
+  const currentPendingAction =
+    barber && pendingAction?.barberId === barber.id ? pendingAction.kind : null
 
   // На широком экране первая строка открывается сразу: пустая правая колонка
   // выглядит как ошибка загрузки.
@@ -108,7 +149,75 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   }
 
   function handleSelect(id: string) {
+    setActionFailure(null)
     navigate(barbersPath(id))
+  }
+
+  async function runAction(
+    kind: AdminBarberAction,
+    target: { id: string; displayName: string },
+    grade?: BarberGrade
+  ) {
+    if (pendingAction) {
+      return
+    }
+
+    setPendingAction({ kind, barberId: target.id })
+    setActionFailure(null)
+
+    try {
+      switch (kind) {
+        case 'verify':
+          await verifyBarber(target.id)
+          break
+        case 'unverify':
+          await unverifyBarber(target.id)
+          break
+        case 'grade':
+          if (grade) {
+            await changeBarberGrade(target.id, grade)
+          }
+          break
+        case 'hide':
+          await hideBarberFromSearch(target.id)
+          break
+        case 'show':
+          await returnBarberToSearch(target.id)
+          break
+      }
+
+      setAnnouncement(announcementFor(kind, target, grade))
+
+      // Сервер — источник правды: рейтинг, статусы и чек-лист пересчитываются
+      // на его стороне, локальная копия после действия была бы догадкой.
+      detail.reload()
+      list.reload()
+    } catch (cause) {
+      if (isBarberUnauthorized(cause)) {
+        setRequiresSignIn(true)
+        return
+      }
+
+      setActionFailure({
+        barberId: target.id,
+        message: describeAdminBarberActionError(cause, kind),
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleUndo(entry: Announcement) {
+    if (!entry.undo || pendingAction) {
+      return
+    }
+
+    setAnnouncement(null)
+
+    await runAction(entry.undo.action, {
+      id: entry.undo.barberId,
+      displayName: entry.undo.barberName,
+    })
   }
 
   function handleBack() {
@@ -127,10 +236,17 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   const showGrid =
     list.status === 'ready' && (list.items.length > 0 || barberId !== null)
 
-  if (list.requiresSignIn) {
+  if (list.requiresSignIn || requiresSignIn) {
     return (
       <div className="mx-auto w-full max-w-md py-6">
-        <AdminSignInGate returnTo={barbersPath()} onSignedIn={list.reload} />
+        <AdminSignInGate
+          returnTo={barbersPath(barberId)}
+          onSignedIn={() => {
+            setRequiresSignIn(false)
+            list.reload()
+            detail.reload()
+          }}
+        />
       </div>
     )
   }
@@ -191,6 +307,38 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
         <p role="alert" className="text-sm text-destructive">
           {list.refreshError}
         </p>
+      )}
+
+      {announcement && (
+        <div
+          role="status"
+          className="flex flex-wrap items-start justify-between gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm"
+        >
+          <p className="min-w-0 flex-1">{announcement.text}</p>
+          <div className="flex items-center gap-1">
+            {announcement.undo && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-11 sm:h-7"
+                disabled={pendingAction !== null}
+                onClick={() => {
+                  void handleUndo(announcement)
+                }}
+              >
+                {announcement.undo.label}
+              </Button>
+            )}
+            <button
+              type="button"
+              aria-label="Скрыть сообщение"
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              onClick={() => setAnnouncement(null)}
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </div>
+        </div>
       )}
 
       {!isMobileDetail && (
@@ -302,8 +450,28 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
           <div
             className={cn('min-w-0', barberId ? 'block' : 'hidden lg:block')}
           >
-            {detail.barber ? (
-              <BarberDetail barber={detail.barber} onBack={handleBack} />
+            {barber ? (
+              <BarberDetail
+                barber={barber}
+                pendingAction={currentPendingAction}
+                actionError={actionError}
+                onVerify={() => {
+                  void runAction('verify', barber)
+                }}
+                onUnverify={() => {
+                  void runAction('unverify', barber)
+                }}
+                onChangeGrade={(grade) => {
+                  void runAction('grade', barber, grade)
+                }}
+                onHide={() => {
+                  void runAction('hide', barber)
+                }}
+                onShow={() => {
+                  void runAction('show', barber)
+                }}
+                onBack={handleBack}
+              />
             ) : barberId ? (
               <BarberDetailState
                 status={detail.status}
@@ -321,8 +489,68 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   )
 }
 
-function BarbersSkeleton() {
-  return (
+/**
+ * Текст объявления после действия. Подтверждение, скрытие и грейд обратимы,
+ * поэтому у каждого действия есть подсказка, как вернуть прежнее состояние.
+ */
+function announcementFor(
+  kind: AdminBarberAction,
+  target: { id: string; displayName: string },
+  grade?: BarberGrade
+): Announcement {
+  const name = target.displayName
+
+  switch (kind) {
+    case 'verify':
+      return {
+        text: `Профиль «${name}» подтверждён и появился в поиске.`,
+        undo: {
+          label: 'Снять подтверждение',
+          action: 'unverify',
+          barberId: target.id,
+          barberName: name,
+        },
+      }
+    case 'unverify':
+      return {
+        text: `Подтверждение снято: профиль «${name}» больше не в поиске.`,
+        undo: {
+          label: 'Подтвердить снова',
+          action: 'verify',
+          barberId: target.id,
+          barberName: name,
+        },
+      }
+    case 'hide':
+      return {
+        text: `Профиль «${name}» скрыт из поиска.`,
+        undo: {
+          label: 'Вернуть в поиск',
+          action: 'show',
+          barberId: target.id,
+          barberName: name,
+        },
+      }
+    case 'show':
+      return {
+        text: `Профиль «${name}» снова в поиске.`,
+        undo: {
+          label: 'Скрыть из поиска',
+          action: 'hide',
+          barberId: target.id,
+          barberName: name,
+        },
+      }
+    case 'grade':
+      return {
+        text: grade
+          ? `Грейд изменён: «${BARBER_GRADE_LABELS[grade]}».`
+          : 'Грейд изменён.',
+      }
+  }
+}
+
+function BarbersSkeleton() {  return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
         Загружаем барберов…

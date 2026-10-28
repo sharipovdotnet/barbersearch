@@ -105,6 +105,11 @@ export function useAdminBarber(
 
   const isCurrent = requestKey !== null && state.key === requestKey
 
+  // Перечитывание той же карточки (после действия) не должно мигать скелетоном:
+  // пока приходит свежий ответ, на экране остаются прежние данные.
+  const isSameBarber =
+    barberId !== null && state.key?.startsWith(`${barberId}:`) === true
+
   let status: AdminBarberDetailStatus = 'idle'
 
   if (barberId) {
@@ -120,7 +125,7 @@ export function useAdminBarber(
   }, [])
 
   return {
-    barber: isCurrent ? state.barber : null,
+    barber: isCurrent ? state.barber : isSameBarber ? state.barber : null,
     status,
     error: isCurrent ? state.error : null,
     reload,
