@@ -176,6 +176,11 @@ npm run preview
 # add or refresh a shadcn/ui component (writes into src/components/ui)
 npx shadcn add <name>            # uses the installed CLI 4.22.1
 npx shadcn@latest add <name>     # README command; may fetch a newer CLI
+
+# branch: always from the freshly fetched main (see §18), never from a sibling issue branch
+git fetch origin
+git checkout -b features/issue-N origin/main
+git push -u origin features/issue-N
 ```
 
 The backend must be running for anything under `/api`:
@@ -920,9 +925,15 @@ Ordered by user value, not by technical interest:
 - **Contract-first with the backend.** The API shape is owned by `../backend` (`backend/AGENT.md`
   §16–§17). Do not invent endpoints, rename fields client-side, or fork response types. If a
   contract must change, change the backend first and update frontend types in the same PR.
-- **Branch and commits.** Branches follow `features/issue-N`; changes reach `main` through a
-  PR. Commit style observed in history: `feat(frontend): …`, `chore(frontend): …`,
-  `docs: …`, `ci: …` — imperative English subject, one logical change per commit.
+- **Branch base — mandatory.** Every new branch is created **from `main`**, and from the freshly
+  fetched `origin/main`, never from a sibling `features/issue-*` branch and never from a stale
+  local `main`: `git fetch origin && git checkout -b features/issue-N origin/main`. If a branch
+  was started elsewhere, rebase or reset it onto `origin/main` before the first push. Changes
+  reach `main` only through a PR opened against `main`; a PR never targets another feature
+  branch.
+- **Commits.** Branches follow `features/issue-N`. Commit style observed in history:
+  `feat(frontend): …`, `chore(frontend): …`, `docs: …`, `ci: …` — imperative English subject,
+  one logical change per commit.
 - **Scope.** The workspace is `frontend/`. Do not edit backend code, root docs or
   `.agents/skills` unless the task explicitly requires it; if it does, say so in the PR.
 - **Dependencies.** Do not add a package without a stated reason (bundle cost, maintenance,
@@ -1025,4 +1036,5 @@ Copy this into the PR description and check every item that applies:
 - [ ] no new dependency without a reason and an owner decision (§17);
 - [ ] `AGENT.md` / `README.md` updated if a rule, command or contract changed;
 - [ ] `git status` contains only intended files (`dist/`, `node_modules/` are ignored);
+- [ ] branch was created from `origin/main` (§18), not from a sibling issue branch;
 - [ ] CI `frontend-ci` is green (lint + build).
