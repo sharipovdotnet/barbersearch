@@ -1,12 +1,13 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-13` (default `main`). The landing page, the customer
+> Code state: branch `features/issue-14` (default `main`). The landing page, the customer
 > account and the three admin sections (reviews, barbers, users) are implemented; barber
 > search, slots and booking screens are **not** wired to the API yet.
-> Verified on 2026-10-28: `npm run lint` — 0 warnings / 0 errors (74 files, 116 rules);
-> `npm run build` — success, 2223 modules, JS 517.19 kB (gzip 150.46 kB), CSS 69.41 kB
-> (gzip 12.22 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Verified on 2026-10-29: `npm run lint` — 0 warnings / 0 errors (75 files, 116 rules);
+> `npm run build` — success, 2225 modules, main JS 361.23 kB (gzip 118.01 kB) plus the lazy
+> `admin-page` 115.92 kB (gzip 25.26 kB) and `account-page` 40.34 kB (gzip 11.35 kB) chunks;
+> CSS 69.49 kB (gzip 12.23 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -55,7 +56,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-11` (default: `main`) |
+| Working branch | `features/issue-14` (default: `main`) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -127,7 +128,7 @@ frontend/                              ← workspace root, NOT the git root
 ├── dist/                              ← build output, git-ignored
 └── src/
     ├── main.tsx                       ← createRoot + StrictMode + SessionProvider + App
-    ├── App.tsx                        ← shell: header, page switch, footer; no page content
+    ├── App.tsx                        ← shell: header, lazy page under Suspense + error boundary, footer
     ├── index.css                      ← Tailwind v4 entry, design tokens, @layer base
     ├── components/
     │   ├── admin/                     ← /admin: rail, gates, queue, detail, tabs, rules
@@ -139,6 +140,7 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── review-tabs.tsx         manual tabs (no counts: API has no total)
     │   │   └── reviews-screen.tsx      list/detail state, actions, announcements
     │   ├── account/                   ← customer cabinet: bookings, gates, review dialog
+    │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── login-dialog.tsx           ← dialog, validation, server error mapping
     │   ├── session-provider.tsx       ← session bootstrap, signIn/signOut
@@ -222,13 +224,16 @@ The backend must be running for anything under `/api`:
 dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web
 ```
 
-**Verification snapshot, 2026-10-28:**
+**Verification snapshot, 2026-10-29:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 61 files, 116 rules
-npm run build → tsc -b + vite build OK, 2210 modules,
-                dist/assets/index-*.js  431.94 kB (gzip 133.47 kB)
-                dist/assets/index-*.css  67.17 kB (gzip  11.84 kB)
+npm run lint  → 0 warnings, 0 errors, 75 files, 116 rules
+npm run build → tsc -b + vite build OK, 2225 modules,
+                dist/assets/index-*.js          361.23 kB (gzip 118.01 kB)
+                dist/assets/admin-page-*.js     115.92 kB (gzip  25.26 kB)  lazy
+                dist/assets/account-page-*.js    40.34 kB (gzip  11.35 kB)  lazy
+                dist/assets/errors-*.js           4.46 kB (gzip   1.88 kB)  shared
+                dist/assets/index-*.css          69.49 kB (gzip  12.23 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -355,8 +360,13 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
-There is no lazy loading and no error boundary: every page ships in the initial bundle, and a
-render exception still blanks the app (§14).
+Route code is split. `AdminPage` and `AccountPage` are `React.lazy` imports in `App.tsx`,
+behind one `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the
+landing ships only the shell and itself. `AppErrorBoundary` wraps the page inside `<main>`:
+a render exception replaces the screen with a Russian message and «Обновить страницу» /
+«На главную» actions, while the header, footer and navigation stay usable. The boundary is
+re-keyed by top-level route, so following a link after a crash mounts a fresh one. There is
+no per-widget boundary — one crashing card still takes its whole page down (§14).
 
 ---
 
@@ -690,7 +700,9 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 
 ### 10.4 React
 
-- Function components and hooks only; no class components.
+- Function components and hooks only; no class components. The one exception is
+  `AppErrorBoundary` (§6.4): a React error boundary still needs `getDerivedStateFromError`, so
+  do not add a second class.
 - Hooks run at the top level — `react/rules-of-hooks` is an **error** in Oxlint.
 - Keep state minimal and local. Derive values during render; do not mirror props into state or
   sync derived state in an effect.
@@ -705,7 +717,8 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - `dangerouslySetInnerHTML` is forbidden. User-generated review text must render as text.
 - No direct DOM access except the root mount in `main.tsx`, `document.title` / the `noindex`
   meta on admin pages, the documented landing scroll, `window.scrollTo` on page and mobile-detail
-  changes, and `matchMedia` for the admin split view; prefer refs for everything else.
+  changes, `matchMedia` for the admin split view, and `window.location.reload()` in the
+  error-boundary fallback; prefer refs for everything else.
 - `StrictMode` stays on; do not remove it to hide double-effect symptoms.
 
 ### 10.5 Styling
@@ -809,31 +822,37 @@ keyboard/focus paths are implemented and were checked manually.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-10-28)
+### 12.1 Current build (2026-10-29)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` (single chunk) | 517.19 kB | 150.46 kB |
-| `index-*.css` | 69.41 kB | 12.22 kB |
+| `index-*.js` — shell, landing, session, UI kit | 361.23 kB | 118.01 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 115.92 kB | 25.26 kB |
+| `account-page-*.js` — lazy `/account` | 40.34 kB | 11.35 kB |
+| `errors-*.js` — shared by both lazy chunks | 4.46 kB | 1.88 kB |
+| `index-*.css` | 69.49 kB | 12.23 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2223 modules; build ≈ 1 s. There is **no code splitting**: every component, including the
-admin screen, is in the initial bundle. The admin review slice added ≈20 kB gzip, the barber
-slice another ≈7 kB, the users slice another ≈10 kB. The bundle is now **0.46 kB over the
-~150 kB gzip target** in §12.2, and the Vite chunk advisory fires. Route splitting (`React.lazy`
-+ `Suspense` around `/admin/**`) is the next foundation task (§16 item 7) — it needs its own
-branch, not a stage-3 PR.
+2225 modules; warm build ≈ 1 s (≈15 s on the first run of a session). The route split is in
+place: `App.tsx` imports the admin and account pages through `React.lazy` + `Suspense`, so the
+landing loads `index-*.js` + `index-*.css` only — 118.01 kB of JS (≈32 kB under the ~150 kB
+target in §12.2) plus 12.23 kB of CSS — and the lazy chunks are fetched on navigation.
+`index.html` preloads nothing but the entry, and the Vite chunk advisory no longer fires. The
+split cost one extra round trip on the first `/admin` or `/account` visit; both show the page
+skeleton meanwhile. The landing itself is still a single chunk and can grow with `HomePage`
+(§14).
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA; the current bundle uses 150.46 kB, so the next
-   non-essential UI slice waits for route splitting instead of widening the budget again.
-3. **Lazy-load below-the-fold and route-level code** once a router exists (`React.lazy` +
-   `Suspense`). Do not preload the booking flow on the landing page.
+   working target, not a stakeholder-approved SLA. The landing currently uses 118.01 kB of it;
+   role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
+3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`
+   and `/account` are split; do not statically import either from the shell, and do not preload
+   the booking flow on the landing page.
 4. **Icons:** import named icons from `lucide-react` (tree-shaken). Never
    `import * as icons`. Do not add an icon library alongside it.
 5. **Fonts:** Fontsource ships unicode-range subsets; the browser downloads only the subsets it
@@ -874,12 +893,12 @@ branch, not a stage-3 PR.
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
 | Barber search / card / slots | ❌ not wired; cards are demo data |
 | Booking flow | ❌ absent |
-| Routing | ✅ hand-rolled History API: `/`, `/account`, `/admin/**`; no lazy loading |
+| Routing | ✅ hand-rolled History API over `/`, `/account`, `/admin/**`; `AdminPage` and `AccountPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); admin keyboard/focus verified manually, no automated audit |
 | Responsive layout | ✅ landing and admin checked at 320 px / desktop; no tests |
 | Tests | ⚠️ backend unit + admin integration tests; frontend has no runner/CI test step |
-| Error boundary | ❌ absent |
+| Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ⚠️ hand-written types; no runtime validation |
 
@@ -892,10 +911,10 @@ the feature grows; **P3** cosmetic/structural.
 
 | # | Sev | Issue | Fix / decision |
 |---|---|---|---|
-| 1 | P1 | `App.tsx` still renders demo barbers and says «Демо-данные: карточки ещё не подключены к API» | Replace with `GET /api/barbers` in the next slice; delete the demo arrays |
+| 1 | P1 | `HomePage` still renders demo barbers and says «Демо-данные: карточки ещё не подключены к API» | Replace with `GET /api/barbers` in the next slice; delete the demo arrays |
 | 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
 | 3 | P1 | No `401` / refresh strategy. The access cookie lives 8 h; the client never calls `/auth/refresh`; after expiry the UI silently becomes anonymous on reload | Decide: silent refresh on `401` vs re-login prompt; wire the cookie refresh branch |
-| 4 | P1 | Hand-rolled router exists, but there is no error boundary and no lazy loading; a render exception blanks the page | Add a top-level boundary with a Russian fallback; split admin routes when the bundle grows |
+| 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
 | 5 | P2 | `apiRequest` casts JSON to `TResponse` without validation; a malformed `200` body reaches components as `undefined` | Validate responses (zod/valibot or hand-written guards) when contracts grow |
 | 6 | P2 | `isProblemDetails` only checks “non-null object”; non-ProblemDetails errors fall back to `HTTP ${status}` (English) | Strengthen the guard; map unknown errors to generic Russian copy in each screen |
 | 7 | P2 | CSRF is fetched per mutation, with no retry on `auth.csrf.invalid`; the user must close and reopen the dialog | Add one retry with a fresh token, or a shared CSRF helper that re-fetches once |
@@ -903,12 +922,12 @@ the feature grows; **P3** cosmetic/structural.
 | 9 | P2 | `VITE_API_PROXY_TARGET` is read from `process.env`, no `.env.example`, no `ImportMetaEnv` typing, and `.gitignore` does not ignore `.env` | Add `src/vite-env.d.ts`, `.env.example`, ignore `.env`; decide whether `.env` should feed the proxy |
 | 10 | P2 | Footer hardcodes «API: /api → localhost:5243» — wrong in production | Remove or make it dev-only |
 | 11 | P2 | No skip link; header skeleton has no accessible status; contrast and touch targets are unaudited | Address in the a11y slice (§11) |
-| 12 | P2 | `App.tsx` is a 248-line monolith mixing hero, steps, cards and footer | Extract section components when the page gains real data |
+| 12 | P2 | `HomePage` is a 240-line file mixing hero, steps, cards and footer | Extract section components when the page gains real data |
 | 13 | P3 | `shadcn` CLI is a runtime `dependency`; it is build-time only | Move to `devDependencies`; `shadcn/tailwind.css` still resolves at build time |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
 | 15 | P3 | `font-heading` is just an alias of the sans stack; there is no display typeface | Keep neutral, or decide on a display face (§17) |
 | 16 | P3 | Dark tokens exist but there is no toggle and no `prefers-color-scheme` handling | Add a theme toggle + persisted choice when dark mode is a product requirement |
-| 17 | P3 | One JS chunk for the whole app; no route-level splitting | Split when a router lands; measure the delta |
+| 17 | P3 | The landing, the shell and the shared session/UI code still ship in one 361 kB chunk | Keep the admin/account code lazy; split the landing into sections when it gains real data |
 | 18 | P3 | Node version is not pinned (no `.nvmrc`, no `engines`); local 24.12.0 vs CI 24 | Add one pinning mechanism (owner decision) |
 | 19 | P3 | `SessionUser.role` is `string`; UI will branch on roles later | Narrow it to a union of `Customer`, `Barber`, `Admin` once the contract is fixed |
 | 20 | P3 | No «Забыли пароль?» / «Регистрация» links in the login dialog | Product decision; registration and change-password exist, a reset flow needs backend work |
@@ -959,7 +978,9 @@ queue with publish/hide and the published tab; admin stage 2 — `/admin/barbers
 pending queue, search, the profile card with its readiness checklist and
 verify/unverify, grade and hide/return actions; admin stage 3 — `/admin/users` with the
 list (status/role filters, search), the user card, role change, block/unblock,
-email/phone confirmation and user creation with a one-time password.
+email/phone confirmation and user creation with a one-time password. **Completed 2026-10-29:**
+foundation — `AdminPage` and `AccountPage` are lazy chunks behind `Suspense`, and
+`AppErrorBoundary` catches render failures with a Russian fallback (§12.1).
 
 1. **Wire search** — `GET /api/barbers` with city/specialization/service/date filters, keyset
    `nextCursor`, debounce, loading/empty/error states; remove demo arrays.
@@ -971,8 +992,8 @@ email/phone confirmation and user creation with a one-time password.
    UX, pending/confirmed states.
 5. **My bookings** — `GET /api/bookings`, cancel/confirm actions, keyset pagination.
 6. **Reviews** — list published reviews, create/edit own review, explain pre-moderation.
-7. **Foundation** — lazy routes + error boundary; the hand-rolled router exists; split
-   `App.tsx` into sections.
+7. **Foundation (remaining)** — lazy routes and the route-level error boundary are done
+   (§12.1); split `HomePage` into section components.
 8. **Quality** — Vitest/RTL/MSW, Playwright + axe, CI test job, Lighthouse budget.
 9. **Auth completeness** — registration, refresh strategy, password change, role-aware
    header; a password-reset flow needs a backend slice first.
@@ -988,7 +1009,8 @@ email/phone confirmation and user creation with a one-time password.
 ## 17. Open questions
 
 1. **Router:** the hand-rolled history layer in `lib/router.ts` is in use for `/`, `/account`
-   and `/admin/**`. Revisit only if lazy loading or an error boundary needs a library.
+   and `/admin/**`, and it already carries lazy routes and the error boundary. Revisit only if
+   nested layouts, loaders or typed route params make a library pay for itself.
 2. **Server state:** TanStack Query vs hand-written effects + `AbortController`? Booking and
    slots benefit from caching/invalidation; the landing does not.
 3. **Forms/validation:** react-hook-form + zod, or keep the current controlled-form pattern?
