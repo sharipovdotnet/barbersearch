@@ -290,6 +290,41 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Админский список и карточка барберов.
+    /// </summary>
+    /// <remarks>
+    /// Отдельные коды, потому что это отдельный эндпоинт: клиент различает ошибку фильтра
+    /// админского списка и ошибку публичного поиска, хотя параметры похожи.
+    /// </remarks>
+    public static class AdminBarber
+    {
+        /// <summary>
+        /// Фильтр статуса не <c>all</c>, <c>pending</c> или <c>hidden</c>; <c>400</c>.
+        /// </summary>
+        public const string StatusInvalid = "admin.barbers.status";
+
+        /// <summary>
+        /// Поисковая строка длиннее допустимой; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "admin.barbers.search";
+
+        /// <summary>
+        /// Идентификатор профиля в запросе пуст; <c>400</c>.
+        /// </summary>
+        public const string InvalidId = "admin.barbers.id";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "admin.barbers.page.limit";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>admin.barbers.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "admin.barbers";
+    }
+
+    /// <summary>
     /// Салоны.
     /// </summary>
     public static class Salon

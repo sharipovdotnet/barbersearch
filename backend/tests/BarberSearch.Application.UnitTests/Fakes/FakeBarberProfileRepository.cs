@@ -1,6 +1,8 @@
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
@@ -28,6 +30,8 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     private readonly Dictionary<Guid, BarberProfile> _profiles = [];
     private readonly List<BarberSearchItemResponse> _searchItems = [];
     private readonly Dictionary<Guid, BarberProfileResponse> _cards = [];
+    private readonly List<AdminBarberResponse> _adminBarbers = [];
+    private readonly Dictionary<Guid, AdminBarberDetailResponse> _adminDetails = [];
     private Dictionary<Guid, BarberProfile>? _snapshot;
 
     public IReadOnlyCollection<BarberProfile> Profiles => _profiles.Values;
@@ -35,6 +39,17 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public IReadOnlyCollection<BarberSearchItemResponse> SearchItems => _searchItems;
 
     public BarberSearchFilter? LastSearchFilter { get; private set; }
+
+    /// <summary>
+    /// Что обработчик передал в админский список: статус, поиск, курсор и лимит.
+    /// </summary>
+    public AdminBarberStatus? LastAdminStatus { get; private set; }
+
+    public string? LastAdminSearch { get; private set; }
+
+    public AdminBarberCursor? LastAdminCursor { get; private set; }
+
+    public int? LastAdminLimit { get; private set; }
 
     /// <summary>
     /// Какие узкие чтения профиля вызвал обработчик: <c>root</c>, <c>salons</c>,
@@ -85,6 +100,11 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public void AddSearchItem(BarberSearchItemResponse item) => _searchItems.Add(item);
 
     public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
+
+    public void AddAdminBarber(AdminBarberResponse barber) => _adminBarbers.Add(barber);
+
+    public void AddAdminBarberDetail(AdminBarberDetailResponse barber)
+        => _adminDetails[barber.Id] = barber;
 
     /// <summary>
     /// Профиль из памяти — для проверок состояния после выполнения обработчика.
@@ -293,6 +313,75 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             ApiErrorCodes.Common.BarberSlotsSalonNotFound,
             $"Slot context for barber profile '{barberProfileId}' was not found.",
             barberProfileId)));
+    }
+
+    public Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
+        AdminBarberStatus status,
+        string? search,
+        AdminBarberCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        LastAdminStatus = status;
+        LastAdminSearch = search;
+        LastAdminCursor = cursor;
+        LastAdminLimit = limit;
+
+        var filtered = _adminBarbers.AsEnumerable();
+
+        filtered = status switch
+        {
+            AdminBarberStatus.Pending => filtered.Where(barber => !barber.IsVerified),
+            AdminBarberStatus.Hidden => filtered.Where(barber => !barber.IsActive),
+            _ => filtered
+        };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filtered = filtered.Where(barber =>
+                barber.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || barber.Email.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var descending = status != AdminBarberStatus.Pending;
+
+        filtered = descending
+            ? filtered.OrderByDescending(barber => barber.CreatedAt).ThenBy(barber => barber.Id)
+            : filtered.OrderBy(barber => barber.CreatedAt).ThenBy(barber => barber.Id);
+
+        if (cursor is { } position)
+        {
+            filtered = descending
+                ? filtered.Where(barber =>
+                    barber.CreatedAt < position.CreatedAt
+                    || (barber.CreatedAt == position.CreatedAt
+                        && barber.Id.CompareTo(position.Id) > 0))
+                : filtered.Where(barber =>
+                    barber.CreatedAt > position.CreatedAt
+                    || (barber.CreatedAt == position.CreatedAt
+                        && barber.Id.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<AdminBarberResponse> page = filtered.Take(limit).ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminBarberResponse>, Failure>(page));
+    }
+
+    public Task<Result<AdminBarberDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (_adminDetails.TryGetValue(id, out var detail))
+        {
+            return Task.FromResult<Result<AdminBarberDetailResponse, Failure>>(detail);
+        }
+
+        return Task.FromResult<Result<AdminBarberDetailResponse, Failure>>(
+            new Failure(Error.NotFound(
+                ApiErrorCodes.BarberProfile.NotFound,
+                $"Barber profile '{id}' was not found.",
+                id)));
     }
 
     public Task<UnitResult<Failure>> AddAsync(
