@@ -29,6 +29,8 @@ npm run preview  # serve dist/
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
+| `/admin/barbers` | barber queue: pending / all / hidden, search by name or email |
+| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide |
 
 The customer cabinet and the admin section are client-side gated; the API enforces roles
 separately (`AdminOnly`).
@@ -62,6 +64,19 @@ session itself lives for 8 hours of inactivity.
 
 The screen never shows a total count (the API does not provide one), never edits the client's
 text, and never offers bulk publication.
+
+## Admin barbers
+
+- `src/components/admin/barbers-screen.tsx` — filter, debounced search, split view, states.
+- `src/components/admin/barber-list.tsx`, `barber-detail.tsx` — table/cards and the card with
+  contacts, the readiness checklist and the actions.
+- `src/lib/admin-barbers.ts` — `GET /api/admin/barbers[?status&search]`,
+  `GET /api/admin/barbers/{id}`, verification/grade/activation calls.
+- `src/hooks/use-admin-barber-list.ts`, `use-admin-barber.ts` — list and card state.
+
+«Скрыть из поиска» reuses the existing activation flag — there is no separate hidden state in
+the domain. Confirming a hidden profile is rejected by the domain, so the button explains that
+the profile must be returned to search first.
 
 ## Layout
 

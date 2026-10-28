@@ -1,8 +1,11 @@
 # Админ-панель BarberSearch — хендофф дизайна
 
 > **Дата:** 28 октября 2026.
-> **Статус:** этап 1 реализован 28.10.2026 — каркас `/admin` и экран «Отзывы».
-> Backend: `GET /api/admin/reviews`, `GET /api/admin/reviews/{id}`; frontend:
+> **Статус:** этап 1 реализован 28.10.2026 — каркас `/admin` и экран «Отзывы»;
+> этап 2 реализован 28.10.2026 — раздел «Барберы»: очередь проверки, поиск,
+> карточка с чек-листом готовности и действия.
+> Backend: `GET /api/admin/reviews`, `GET /api/admin/reviews/{id}`,
+> `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}`; frontend:
 > `src/pages/admin-page.tsx`, `src/components/admin/**`, `src/lib/admin-*.ts`.
 > Следующие разделы — по §5.
 > **Как пользоваться:** прикрепи этот файл к новой сессии DSH или вставь его
@@ -156,7 +159,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Вход | `GET /api/auth/me` | — |
 | Очередь отзывов | `GET /api/reviews/moderation`, публикация/скрытие | Отдельный админский DTO с именем барбера, клиентом и визитом |
 | Опубликованные отзывы | скрытие | `GET /api/admin/reviews?status=published`, `GET /api/admin/reviews/{id}` |
-| Барберы | verify/unverify, grade, rating, activation | `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}` |
+| Барберы | verify/unverify, grade, rating, activation | `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}` — ✅ этап 2 |
 | Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` |
 | Каталог | create/update/activation | `GET` списков услуг, специализаций, салонов |
 | Брони | `GET /api/bookings` | Имена и контекст в ответе; поиск пользователя |
@@ -166,6 +169,11 @@ Git-корень на уровень выше рабочей папки, поэ�
 > Этап 1 (28.10.2026) закрыл админские чтения отзывов: `GET /api/admin/reviews`
 > и `GET /api/admin/reviews/{id}`. Публичные `ReviewResponse` и `BookingResponse`
 > не изменились и по-прежнему без PII.
+>
+> Этап 2 (28.10.2026) закрыл админские чтения барберов: `GET /api/admin/barbers`
+> (фильтр `all|pending|hidden`, поиск по имени и email, keyset-курсор) и
+> `GET /api/admin/barbers/{id}` (карточка с чек-листом готовности). Email владельца
+> есть только в админском контракте; публичный `BarberProfileResponse` не изменился.
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -346,6 +354,21 @@ Git-корень на уровень выше рабочей папки, поэ�
   «Старший барбер», «Арт-директор», «Тренер школы», «Управляющий»,
   «Соревновательный барбер», «Амбассадор бренда», «Владелец барбершопа».
 
+**Как реализовано (28.10.2026), с двумя отступлениями:**
+
+- Деталь — вторая колонка split-view, как у отзывов, а не `Sheet`: примитива
+  `Sheet` в `components/ui` нет, добавлять его ради одного экрана не стали,
+  а колонка даёт тот же сценарий «список слева, карточка справа» без новой
+  зависимости. На телефоне карточка по-прежнему занимает весь экран.
+- «Открыть публичную карточку» не выведена: публичного маршрута карточки
+  барбера ещё нет (`AGENT.md` §16, пункт 2). Ссылка появится вместе с ним.
+- «Скрыть из поиска» — это существующий флаг активации профиля
+  (`POST`/`DELETE api/barber-profiles/{id}/activation`), отдельного состояния
+  в домене не появилось.
+- Подтверждение скрытого профиля домен запрещает
+  (`barberProfile.verify.inactive`), поэтому кнопка не просто гаснет,
+  а объясняет, что сначала нужно вернуть профиль в поиск.
+
 ### 3.6 «Пользователи»
 
 Задача — роли, доступ, подтверждения.
@@ -494,7 +517,9 @@ Read-only история: когда, кто, что изменил, у како
    рейл, очередь, деталь, публикация/скрытие, вкладка опубликованных, пустые
    и ошибочные состояния.
 2. **«Барберы».** Список на проверке, деталь, чек-лист готовности,
-   подтверждение и грейд.
+   подтверждение и грейд. ✅ Реализовано 28.10.2026: `/admin/barbers`,
+   фильтры «На проверке / Все / Скрытые», поиск, split-view с карточкой,
+   шесть пунктов готовности, подтверждение, грейд и скрытие из поиска.
 3. **«Пользователи».** Список, роли, блокировка, подтверждения,
    создание с одноразовым паролем.
 4. **«Каталог».** Услуги, специализации, салоны; формы и выключение.
@@ -596,6 +621,40 @@ Read-only история: когда, кто, что изменил, у како
    Проверено: lint 0/0, build, backend unit/integration, 320 px и desktop через
    headless Chrome (включая клавиатуру, фокус и публикацию/скрытие).
 
+### Реализация этапа 2 — «Барберы» (28.10.2026)
+
+15. Backend: `AdminBarberResponse` (строка очереди) и `AdminBarberDetailResponse`
+   с `AdminBarberReadinessResponse` (`BarberProfiles/Admin`); публичный
+   `BarberProfileResponse` не трогали.
+16. Backend: запросы `GetAdminBarbers` (статус `all|pending|hidden`, поиск по
+   имени и email, keyset-курсор, `pageSize` 1..100) и `GetAdminBarber` (любой
+   статус, чек-лист), `AdminBarberStatus`, `AdminBarberCursor`, коды ошибок
+   `admin.barbers.*`.
+17. Backend: проекция в `BarberProfileRepository` — join по владельцу, `ILIKE`
+   с экранированием `%`, `_` и `\`, счётчики готовности подзапросами,
+   `COUNT(DISTINCT день)` для расписания; очередь проверки FIFO.
+18. Backend: `AdminBarbersController` — `GET api/admin/barbers`,
+   `GET api/admin/barbers/{id}`, политика `AdminOnly`. Миграций не потребовалось:
+   новых полей и индексов нет.
+19. Backend: тесты — unit (фильтр, порядок, курсор, поиск, лимиты, 404),
+   инфраструктура (трансляция SQL, `ILIKE`, `DISTINCT`) и integration
+   (очередь, поиск, чек-лист, 401/403) на PostgreSQL.
+20. Frontend: `lib/admin-path.ts` — маршруты `/admin/barbers[/{id}]`;
+   `admin-rail.tsx` — второй раздел из списка, а не копия разметки.
+21. Frontend: `lib/admin-barbers.ts` (типы, русские подписи грейдов, чтение,
+   действия, ошибки), `hooks/use-admin-barber-list.ts`, `use-admin-barber.ts`.
+22. Frontend: `components/admin/barbers-screen.tsx`, `barber-list.tsx`
+   (таблица/карточки, бейджи, «Показано N», курсор) и `barber-detail.tsx`
+   (контакты, чек-лист из шести пунктов, действия).
+23. Frontend: действия — подтверждение, снятие подтверждения, грейд, скрытие
+   и возврат в поиск; подтверждение скрытия/снятия в диалоге, `role="status"`
+   с отменой для каждого обратимого действия, перечитывание карточки и списка
+   после ответа сервера.
+24. Проверено: `npm run lint` — 0/0, `npm run build` (`tsc -b` + Vite) успешно,
+   backend unit (232 + 77) и integration (2 сценария этапа) зелёные.
+   Клик-сквозной сценарий в браузере не прогонялся: запущенный dev-бэкенд держит
+   старые сборки, для проверки его нужно перезапустить.
+
 ---
 
 ## 9. Карта файлов
@@ -603,6 +662,13 @@ Read-only история: когда, кто, что изменил, у како
 | Что | Путь |
 |---|---|
 | Правила frontend | `frontend/AGENT.md` |
+| Админка: страница | `frontend/src/pages/admin-page.tsx` |
+| Админка: маршруты | `frontend/src/lib/admin-path.ts` |
+| Админка: экран отзывов | `frontend/src/components/admin/reviews-screen.tsx` |
+| Админка: экран барберов | `frontend/src/components/admin/barbers-screen.tsx` |
+| Админка: список и карточка барбера | `frontend/src/components/admin/barber-list.tsx`, `barber-detail.tsx` |
+| Админка: API барберов | `frontend/src/lib/admin-barbers.ts` |
+| Админка: хуки | `frontend/src/hooks/use-admin-barber-list.ts`, `use-admin-barber.ts` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
 | Сессия | `frontend/src/components/session-provider.tsx`, `src/hooks/use-session.ts`, `src/lib/auth.ts` |
@@ -611,6 +677,7 @@ Read-only история: когда, кто, что изменил, у како
 | Токены | `frontend/src/index.css` |
 | Шапка | `frontend/src/components/site-header.tsx` |
 | Отзывы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/ReviewsController.cs` |
+| Барберы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/BarberProfilesController.cs`, `AdminBarbersController.cs` |
 | Пользователи (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/UsersController.cs` |
 | Аудит | `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Audit/AuditTrail.cs` |
 | Контракт отзыва | `backend/BarberSearch/src/BarberSearch.Contracts/Reviews/GetReviews/ReviewResponse.cs` |
