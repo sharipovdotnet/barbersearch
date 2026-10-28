@@ -1,18 +1,33 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 
+import { AppErrorBoundary } from '@/components/error-boundary'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
+import { Skeleton } from '@/components/ui/skeleton'
 import { isAdminPath } from '@/lib/admin-path'
 import { usePathname } from '@/lib/router'
-import { AccountPage } from '@/pages/account-page'
-import { AdminPage } from '@/pages/admin-page'
 import { HomePage } from '@/pages/home-page'
+
+// Админка и кабинет — отдельные чанки: витрине не нужен код экранов, закрытых ролью,
+// а админский бандл не должен удорожать первую загрузку (§12.2).
+const AdminPage = lazy(() =>
+  import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
+)
+
+const AccountPage = lazy(() =>
+  import('@/pages/account-page').then((module) => ({
+    default: module.AccountPage,
+  })),
+)
 
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
- * Маршрутов два, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
- * показывает витрину: отдельная страница 404 на двух маршрутах была бы шумом.
+ * Маршрутов три, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
+ * показывает витрину: отдельная страница 404 на трёх маршрутах была бы шумом.
+ *
+ * `key` на границе ошибок сбрасывает её состояние при смене страницы: после падения
+ * админки ссылка на витрину снова показывает рабочий экран.
  */
 function App() {
   const pathname = usePathname()
@@ -39,16 +54,42 @@ function App() {
       <SiteHeader />
 
       <main id="main" className="flex-1">
-        {isAdmin ? (
-          <AdminPage />
-        ) : pathname === '/account' ? (
-          <AccountPage />
-        ) : (
-          <HomePage />
-        )}
+        <AppErrorBoundary key={pageKey}>
+          <Suspense fallback={<RouteFallback />}>
+            {isAdmin ? (
+              <AdminPage />
+            ) : pathname === '/account' ? (
+              <AccountPage />
+            ) : (
+              <HomePage />
+            )}
+          </Suspense>
+        </AppErrorBoundary>
       </main>
 
       {!isAdmin && <SiteFooter />}
+    </div>
+  )
+}
+
+/**
+ * Заглушка на время загрузки чанка.
+ *
+ * Тот же ритм, что у скелетонов страниц, и текстовое объявление для скринридера:
+ * без него переход по ссылке на медленной сети выглядит как «ничего не произошло».
+ */
+function RouteFallback() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10"
+    >
+      <span className="sr-only">Загрузка страницы</span>
+      <Skeleton className="h-8 w-56" />
+      <Skeleton className="mt-6 h-4 w-full max-w-md" />
+      <Skeleton className="mt-3 h-4 w-full max-w-sm" />
+      <Skeleton className="mt-8 h-40 w-full" />
     </div>
   )
 }
