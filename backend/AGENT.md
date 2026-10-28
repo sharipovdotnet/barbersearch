@@ -1445,6 +1445,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `ReviewsController` | `api/reviews` | 6 (4 write + list + moderation queue) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
+| `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
 
 Conventions:
 
@@ -1566,6 +1567,23 @@ Read endpoints (added 2026-10-19):
   `COUNT(DISTINCT day_of_week)` over working schedules — one SQL query, no collection loads.
   Mutations stay on the existing admin actions: `verification`, `grade`, `activation`
   (the domain refuses to verify a hidden profile with `barberProfile.verify.inactive`).
+- **Admin users (2026-10-28).** `GET api/admin/users?status=all|active|blocked|unverified` and
+  `GET api/admin/users/{id}` are closed by `AdminOnly`; these are the first user reads in the API.
+  `AdminUserResponse` is the list row (email, first/last name, role, `isActive`, email/phone
+  verified, `barberProfileId`, `lastLoginAt`, `createdAt`), ordered `created_at DESC, id`;
+  the keyset cursor is `(created_at, id)`, `pageSize` defaults to 20 and is capped at 100.
+  Filters `status` (access state or unverified email) and `role` combine with an `ILIKE` search
+  over first name, last name and email (`%`, `_`, `\` escaped); a search longer than 100
+  characters, an unknown status/role or a bad cursor is `400` (`admin.users.*`).
+  `AdminUserDetailResponse` adds phone, avatar, login failures, lockout end and the linked barber
+  profile (`AdminUserBarberProfileResponse`) through one `LEFT JOIN`; customers and admins stay in
+  the result because the join is left, not inner. Mutations remain on `UsersController`
+  (`role`, `activation`, `email-verification`, `phone-verification`, `barber-profile`).
+  Two guards now protect the administrator set: `user.role.self` / `user.deactivation.self` (409,
+  an actor cannot change its own role or block itself) and `user.admin.last` (409, the operation
+  would leave the service without an active administrator). The last check runs inside
+  `IUnitOfWork` under `pg_advisory_xact_lock('barbersearch.admins')`
+  (`IUserRepository.AcquireAdminLockAsync`), so two concurrent demotions cannot both pass.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
