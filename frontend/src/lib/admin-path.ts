@@ -9,9 +9,11 @@ export type AdminTab = 'pending' | 'published'
 
 export type AdminRoute =
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
+  | { kind: 'barbers'; barberId: string | null }
   | { kind: 'notFound' }
 
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
+const BARBER_PATH = /^\/admin\/barbers\/([^/]+)$/
 
 const GUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -36,6 +38,16 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
     return { kind: 'reviews', tab, reviewId: null }
   }
 
+  if (pathname === '/admin/barbers') {
+    return { kind: 'barbers', barberId: null }
+  }
+
+  const barberMatch = BARBER_PATH.exec(pathname)
+
+  if (barberMatch?.[1]) {
+    return { kind: 'barbers', barberId: barberMatch[1] }
+  }
+
   const match = REVIEW_PATH.exec(pathname)
 
   if (match?.[1]) {
@@ -43,6 +55,18 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
   }
 
   return { kind: 'notFound' }
+}
+
+/** Адрес списка барберов: выбранный профиль — в пути. */
+export function barbersPath(barberId: string | null = null): string {
+  return barberId
+    ? `/admin/barbers/${encodeURIComponent(barberId)}`
+    : '/admin/barbers'
+}
+
+/** Идентификатор барбера должен быть GUID: иначе запрос заведомо не найдёт запись. */
+export function isBarberId(value: string): boolean {
+  return GUID_PATTERN.test(value)
 }
 
 /** Адрес списка отзывов: вкладка в query, выбранный отзыв — в пути. */

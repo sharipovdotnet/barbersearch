@@ -1,5 +1,7 @@
+using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
@@ -262,6 +264,42 @@ public interface IBarberProfileRepository
     Task<Result<bool, Failure>> HasSalonAsync(
         Guid barberProfileId,
         Guid salonId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница админского списка барберов: поиск по имени и email, фильтр по статусу.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания и без Include коллекций: email берётся join'ом по владельцу
+    /// профиля, счётчики готовности в списке не нужны. Порядок задаёт
+    /// <paramref name="status"/>: очередь проверки — <c>created_at ASC, id</c>, остальные —
+    /// <c>created_at DESC, id</c>. <paramref name="limit"/> — это pageSize + 1, поэтому
+    /// <c>limit &lt;= 0</c> — <c>400 admin.barbers.page.limit</c>.
+    /// </remarks>
+    /// <param name="status">Фильтр: все, на проверке или скрытые.</param>
+    /// <param name="search">Поиск по имени или email либо <c>null</c>.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
+        AdminBarberStatus status,
+        string? search,
+        AdminBarberCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Карточка барбера любого статуса вместе с чек-листом готовности.
+    /// </summary>
+    /// <remarks>
+    /// Публичное чтение <c>GetCardByIdAsync</c> отдаёт только активные и подтверждённые
+    /// профили; админскому экрану нужны и остальные. Счётчики готовности считаются
+    /// подзапросами, коллекции агрегата не загружаются.
+    /// </remarks>
+    /// <param name="id">Идентификатор профиля барбера.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<AdminBarberDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>

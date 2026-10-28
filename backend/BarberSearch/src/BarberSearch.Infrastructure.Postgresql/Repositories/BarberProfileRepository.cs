@@ -1,12 +1,16 @@
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Common;
@@ -424,6 +428,230 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .ToList();
     }
 
+    public async Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
+        AdminBarberStatus status,
+        string? search,
+        AdminBarberCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.AdminBarber.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminBarbersQuery(Context, status, search, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    public async Task<Result<AdminBarberDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await BuildAdminBarberDetailQuery(Context, id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return new Failure(Error.NotFound(
+                ApiErrorCodes.BarberProfile.NotFound,
+                $"Barber profile '{id}' was not found.",
+                id));
+        }
+
+        return ToAdminDetailResponse(row);
+    }
+
+    /// <summary>
+    /// Админская карточка барбера: профиль, владелец и счётчики готовности.
+    /// </summary>
+    /// <remarks>
+    /// Коллекции агрегата не загружаются: услуги, салоны, фото и рабочие дни считаются
+    /// подзапросами <c>COUNT</c>, поэтому карточка остаётся одним SQL-запросом.
+    /// Рабочие дни схлопываются в дни недели: чек-листу нужен ответ «сколько разных дней
+    /// расписано», а не число строк расписания по всем салонам.
+    /// </remarks>
+    internal static IQueryable<AdminBarberDetailRow> BuildAdminBarberDetailQuery(
+        ApplicationDbContext context,
+        Guid id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return from profile in context.BarberProfiles.AsNoTracking()
+               join user in context.Users.AsNoTracking() on profile.UserId equals user.Id
+               where profile.Id == id
+               select new AdminBarberDetailRow(
+                   profile.Id,
+                   profile.UserId,
+                   profile.DisplayName.Value,
+                   user.Email,
+                   user.PhoneNumber,
+                   user.AvatarUrl,
+                   profile.Grade,
+                   profile.Bio,
+                   profile.YearsOfExperience.Value,
+                   profile.Rating,
+                   profile.ReviewsCount,
+                   profile.IsActive,
+                   profile.IsVerified,
+                   user.IsEmailVerified,
+                   context.BarberServices.Count(
+                       service => service.BarberProfileId == profile.Id),
+                   context.BarberSalons.Count(
+                       link => link.BarberProfileId == profile.Id),
+                   context.WorkingSchedules
+                       .Where(schedule => !schedule.IsDayOff
+                           && context.BarberSalons.Any(link =>
+                               link.Id == schedule.BarberSalonId
+                               && link.BarberProfileId == profile.Id))
+                       .Select(schedule => schedule.DayOfWeek)
+                       .Distinct()
+                       .Count(),
+                   context.PortfolioPhotos.Count(
+                       photo => photo.BarberProfileId == profile.Id),
+                   profile.CreatedAt,
+                   profile.UpdatedAt);
+    }
+
+    private static AdminBarberDetailResponse ToAdminDetailResponse(AdminBarberDetailRow row)
+        => new(
+            row.Id,
+            row.UserId,
+            row.DisplayName,
+            row.Email,
+            row.PhoneNumber,
+            row.AvatarUrl,
+            row.Grade,
+            row.Bio,
+            row.YearsOfExperience,
+            row.Rating,
+            row.ReviewsCount,
+            row.IsActive,
+            row.IsVerified,
+            new AdminBarberReadinessResponse(
+                IsProfileFilled: !string.IsNullOrWhiteSpace(row.Bio)
+                    && row.YearsOfExperience > 0,
+                IsEmailVerified: row.IsEmailVerified,
+                ServicesCount: row.ServicesCount,
+                SalonsCount: row.SalonsCount,
+                ScheduleDaysCount: row.ScheduleDaysCount,
+                PhotosCount: row.PhotosCount),
+            row.CreatedAt,
+            row.UpdatedAt);
+
+    /// <summary>
+    /// Админская выборка барберов: профиль, владелец, поиск и курсор.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный <c>join</c> по пользователю нужен для email: навигации между агрегатами
+    /// в домене нет. Поиск идёт по имени профиля и email владельца через <c>ILIKE</c>:
+    /// регистр не важен, служебные символы шаблона экранируются, чтобы «%» в запросе
+    /// не превращался в «найти всё». Направление сортировки задаёт статус.
+    /// </remarks>
+    internal static IQueryable<AdminBarberResponse> BuildAdminBarbersQuery(
+        ApplicationDbContext context,
+        AdminBarberStatus status = AdminBarberStatus.All,
+        string? search = null,
+        AdminBarberCursor? cursor = null,
+        int? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var users = context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.Email
+            });
+
+        var joined = from profile in context.BarberProfiles.AsNoTracking()
+                     join user in users on profile.UserId equals user.Id
+                     select new
+                     {
+                         profile,
+                         user
+                     };
+
+        switch (status)
+        {
+            case AdminBarberStatus.Pending:
+                joined = joined.Where(row => !row.profile.IsVerified);
+                break;
+            case AdminBarberStatus.Hidden:
+                joined = joined.Where(row => !row.profile.IsActive);
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = BuildSearchPattern(search);
+
+            joined = joined.Where(row =>
+                EF.Functions.ILike(row.profile.DisplayName.Value, pattern, "\\")
+                || EF.Functions.ILike(row.user.Email, pattern, "\\"));
+        }
+
+        // Очередь проверки — FIFO: профиль, который ждёт дольше, стоит выше. Остальные
+        // списки — свежими сверху, как админский список опубликованных отзывов.
+        var descending = status != AdminBarberStatus.Pending;
+
+        if (cursor is { } position)
+        {
+            joined = descending
+                ? joined.Where(row =>
+                    row.profile.CreatedAt < position.CreatedAt
+                    || (row.profile.CreatedAt == position.CreatedAt
+                        && row.profile.Id.CompareTo(position.Id) > 0))
+                : joined.Where(row =>
+                    row.profile.CreatedAt > position.CreatedAt
+                    || (row.profile.CreatedAt == position.CreatedAt
+                        && row.profile.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = descending
+            ? joined
+                .OrderByDescending(row => row.profile.CreatedAt)
+                .ThenBy(row => row.profile.Id)
+            : joined
+                .OrderBy(row => row.profile.CreatedAt)
+                .ThenBy(row => row.profile.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(row => new AdminBarberResponse(
+            row.profile.Id,
+            row.profile.DisplayName.Value,
+            row.user.Email,
+            row.profile.Grade,
+            row.profile.Rating,
+            row.profile.ReviewsCount,
+            row.profile.IsActive,
+            row.profile.IsVerified,
+            row.profile.CreatedAt,
+            row.profile.UpdatedAt));
+    }
+
+    /// <summary>
+    /// Шаблон <c>ILIKE</c> для поиска по имени и email.
+    /// </summary>
+    /// <remarks>
+    /// <c>%</c>, <c>_</c> и <c>\</c> из пользовательского запроса экранируются: иначе поиск
+    /// «100%» находил бы всё, а «_» работал бы как любой одиночный символ.
+    /// </remarks>
+    private static string BuildSearchPattern(string search)
+        => "%" + search
+            .Trim()
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)
+        + "%";
+
     public async Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
@@ -784,4 +1012,29 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
         return profile;
     }
+
+    /// <summary>
+    /// Плоская строка админской карточки барбера до сборки вложенного чек-листа.
+    /// </summary>
+    internal sealed record AdminBarberDetailRow(
+        Guid Id,
+        Guid UserId,
+        string DisplayName,
+        string Email,
+        string? PhoneNumber,
+        string? AvatarUrl,
+        Grade Grade,
+        string? Bio,
+        int YearsOfExperience,
+        decimal? Rating,
+        int ReviewsCount,
+        bool IsActive,
+        bool IsVerified,
+        bool IsEmailVerified,
+        int ServicesCount,
+        int SalonsCount,
+        int ScheduleDaysCount,
+        int PhotosCount,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt);
 }

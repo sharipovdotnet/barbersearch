@@ -7,12 +7,16 @@ import {
   AdminSignInGate,
 } from '@/components/admin/admin-gate'
 import { AdminRail } from '@/components/admin/admin-rail'
+import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
 import { useSession } from '@/hooks/use-session'
 import { isAdminPath, parseAdminPath, reviewsPath } from '@/lib/admin-path'
 import { navigate, useLocation } from '@/lib/router'
 
-const ADMIN_TITLE = 'Отзывы — администрирование BarberSearch'
+const ADMIN_TITLES = {
+  reviews: 'Отзывы — администрирование BarberSearch',
+  barbers: 'Барберы — администрирование BarberSearch',
+} as const
 
 function splitLocation(location: string): { pathname: string; search: string } {
   const index = location.indexOf('?')
@@ -35,6 +39,8 @@ export function AdminPage() {
   const route = parseAdminPath(pathname, search)
   const { status, user } = useSession()
   const tab = route.kind === 'reviews' ? route.tab : 'pending'
+  const title =
+    route.kind === 'barbers' ? ADMIN_TITLES.barbers : ADMIN_TITLES.reviews
 
   // `/admin` — тот же экран, но канонический адрес ведёт на очередь отзывов.
   useEffect(() => {
@@ -46,7 +52,7 @@ export function AdminPage() {
   }, [pathname, tab])
 
   useEffect(() => {
-    document.title = ADMIN_TITLE
+    document.title = title
 
     // noindex не защищает данные — API закрыт ролью; это только гигиена выдачи.
     const meta = document.createElement('meta')
@@ -55,7 +61,7 @@ export function AdminPage() {
     document.head.append(meta)
 
     return () => meta.remove()
-  }, [])
+  }, [title])
 
   if (status === 'loading') {
     return <AdminPageSkeleton />
@@ -85,10 +91,16 @@ export function AdminPage() {
     )
   }
 
-  const isReviewDetail = route.reviewId !== null
+  if (route.kind === 'barbers') {
+    return (
+      <AdminShell hideRailOnMobile={route.barberId !== null}>
+        <BarbersScreen barberId={route.barberId} />
+      </AdminShell>
+    )
+  }
 
   return (
-    <AdminShell hideRailOnMobile={isReviewDetail}>
+    <AdminShell hideRailOnMobile={route.reviewId !== null}>
       <ReviewsScreen tab={route.tab} reviewId={route.reviewId} />
     </AdminShell>
   )

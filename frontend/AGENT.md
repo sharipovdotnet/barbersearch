@@ -544,6 +544,11 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context |
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
+| `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
+| `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist |
+| `POST` / `DELETE` | `/api/barber-profiles/{id}/verification` | admin | confirm / unconfirm a profile |
+| `PUT` | `/api/barber-profiles/{id}/grade` | admin | change the grade (`{ grade }`, enum as a string) |
+| `POST` / `DELETE` | `/api/barber-profiles/{id}/activation` | admin | hide from search / return to search |
 | `POST` / `DELETE` | `/api/reviews/{id}/publication` | admin | publish / hide; the client sends `X-CSRF-TOKEN` |
 
 The backend also exposes `POST /api/auth/refresh`, registration and password change; the
@@ -802,21 +807,21 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` (single chunk) | 431.94 kB | 133.47 kB |
-| `index-*.css` | 67.17 kB | 11.84 kB |
+| `index-*.js` (single chunk) | 468.47 kB | 140.46 kB |
+| `index-*.css` | 68.78 kB | 12.05 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2210 modules; build ≈ 7 s. There is **no code splitting**: every component, including the
-admin screen, is in the initial bundle. The admin slice added ≈20 kB gzip; the first router
-or booking flow should still split by route.
+2210 modules; build ≈ 5 s. There is **no code splitting**: every component, including the
+admin screen, is in the initial bundle. The admin review slice added ≈20 kB gzip, the barber
+slice another ≈7 kB; the first router or booking flow should still split by route.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA; the current bundle already uses 133.47 kB.
+   working target, not a stakeholder-approved SLA; the current bundle already uses 140.46 kB.
 3. **Lazy-load below-the-fold and route-level code** once a router exists (`React.lazy` +
    `Suspense`). Do not preload the booking flow on the landing page.
 4. **Icons:** import named icons from `lucide-react` (tree-shaken). Never
@@ -853,7 +858,8 @@ or booking flow should still split by route.
 | Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states |
-| Other admin sections | ❌ barbers, users, catalogue, bookings, audit — not implemented; no dead rail links |
+| Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo |
+| Other admin sections | ❌ users, catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
 | Barber search / card / slots | ❌ not wired; cards are demo data |
 | Booking flow | ❌ absent |
@@ -938,7 +944,9 @@ change); coverage is not a gate until the suite exists — critical paths first.
 Ordered by user value, not by technical interest:
 
 **Completed 2026-10-28:** admin stage 1 — `/admin` shell, role gates and the review
-queue with publish/hide and the published tab.
+queue with publish/hide and the published tab; admin stage 2 — `/admin/barbers` with the
+pending queue, search, the profile card with its readiness checklist and
+verify/unverify, grade and hide/return actions.
 
 1. **Wire search** — `GET /api/barbers` with city/specialization/service/date filters, keyset
    `nextCursor`, debounce, loading/empty/error states; remove demo arrays.
@@ -958,8 +966,8 @@ queue with publish/hide and the published tab.
 10. **Polish** — dark theme toggle, skip link, empty-state illustrations, form `errors` from
     the server mapped to fields.
 11. **Hardening** — runtime response validation, env typing, dependency review.
-12. **Admin continuation** — barbers, users, catalogue, bookings and the audit journal, in
-    that order (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract.
+12. **Admin continuation** — users, catalogue, bookings and the audit journal, in that order
+    (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Barbers are done.
 
 ---
 

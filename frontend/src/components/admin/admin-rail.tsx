@@ -1,18 +1,19 @@
 import { navigate, usePathname } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
+const SECTIONS = [
+  { href: '/admin/reviews', label: 'Отзывы' },
+  { href: '/admin/barbers', label: 'Барберы' },
+] as const
+
 /**
  * Рейл разделов администрирования.
  *
- * Пока реализован только один раздел, поэтому в навигации нет мёртвых ссылок «скоро».
+ * В навигации только работающие разделы: мёртвых ссылок «скоро» нет.
  * На мобильном рейл становится горизонтальной лентой под шапкой.
  */
 export function AdminRail() {
   const pathname = usePathname()
-  const isReviews =
-    pathname === '/admin' ||
-    pathname === '/admin/reviews' ||
-    pathname.startsWith('/admin/reviews/')
 
   return (
     <nav
@@ -23,24 +24,31 @@ export function AdminRail() {
         Разделы
       </p>
       <ul className="flex gap-1 overflow-x-auto lg:flex-col">
-        <li>
-          <a
-            href="/admin/reviews"
-            aria-current={isReviews ? 'page' : undefined}
-            className={cn(
-              'flex h-11 items-center rounded-lg px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-8',
-              isReviews
-                ? 'bg-muted font-medium text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-            onClick={(event) => {
-              event.preventDefault()
-              navigate('/admin/reviews')
-            }}
-          >
-            Отзывы
-          </a>
-        </li>
+        {SECTIONS.map((section) => {
+          const isCurrent =
+            pathname === section.href || pathname.startsWith(`${section.href}/`)
+
+          return (
+            <li key={section.href}>
+              <a
+                href={section.href}
+                aria-current={isCurrent ? 'page' : undefined}
+                className={cn(
+                  'flex h-11 items-center rounded-lg px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-8',
+                  isCurrent
+                    ? 'bg-muted font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate(section.href)
+                }}
+              >
+                {section.label}
+              </a>
+            </li>
+          )
+        })}
       </ul>
     </nav>
   )

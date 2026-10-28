@@ -1444,6 +1444,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
 | `ReviewsController` | `api/reviews` | 6 (4 write + list + moderation queue) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
+| `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
 
 Conventions:
 
@@ -1551,6 +1552,20 @@ Read endpoints (added 2026-10-19):
   Publication still uses the existing `POST`/`DELETE api/reviews/{id}/publication` actions;
   those actions do **not** yet run the antiforgery filter — the frontend sends `X-CSRF-TOKEN`,
   but the backend ignores it. Closing that gap is tracked on the frontend side (§14, item 23).
+- **Admin barbers (2026-10-28).** `GET api/admin/barbers?status=all|pending|hidden&search=…` and
+  `GET api/admin/barbers/{id}` are closed by `AdminOnly`. `AdminBarberResponse` is the queue row
+  (display name, owner email, grade, rating, review count, `isActive`, `isVerified`); it is a
+  separate contract from the public `BarberProfileResponse`, and the public card still has no
+  email. `pending` means `is_verified = false` and is ordered `created_at ASC, id` (FIFO);
+  `all` and `hidden` (`is_active = false`) are `created_at DESC, id`. The cursor is the existing
+  `(created_at, id)` pair; `pageSize` defaults to 20 and is capped at 100; an unknown status,
+  a search longer than 100 characters or a bad cursor is `400` (`admin.barbers.*`). The search is
+  `ILIKE` over the profile display name and the owner email with `%`, `_` and `\` escaped. The
+  card returns `AdminBarberDetailResponse` with `AdminBarberReadinessResponse`: profile filled,
+  email verified, and `COUNT` subqueries for services, salons, photos and
+  `COUNT(DISTINCT day_of_week)` over working schedules — one SQL query, no collection loads.
+  Mutations stay on the existing admin actions: `verification`, `grade`, `activation`
+  (the domain refuses to verify a hidden profile with `barberProfile.verify.inactive`).
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
