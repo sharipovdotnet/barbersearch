@@ -1,6 +1,7 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.Admin;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
@@ -16,11 +17,14 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionParticipant
 {
     private readonly Dictionary<Guid, Review> _reviews = [];
+    private readonly List<AdminReviewResponse> _adminReviews = [];
     private Dictionary<Guid, Review>? _snapshot;
 
     public IReadOnlyCollection<Review> Reviews => _reviews.Values;
 
     public void Add(Review review) => _reviews[review.Id] = review;
+
+    public void AddAdminReview(AdminReviewResponse review) => _adminReviews.Add(review);
 
     public void BeginTransaction()
         => _snapshot = _reviews.ToDictionary(
@@ -134,6 +138,66 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
 
         return Task.FromResult(
             Result.Success<IReadOnlyList<ReviewResponse>, Failure>(rows));
+    }
+
+    public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
+        bool isPublished,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminReviewResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.Review.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        IEnumerable<AdminReviewResponse> query = _adminReviews
+            .Where(review => review.IsPublished == isPublished);
+
+        if (cursor is { } position)
+        {
+            query = isPublished
+                ? query.Where(review =>
+                    review.CreatedAt < position.CreatedAt
+                    || (review.CreatedAt == position.CreatedAt
+                        && review.Id.CompareTo(position.Id) > 0))
+                : query.Where(review =>
+                    review.CreatedAt > position.CreatedAt
+                    || (review.CreatedAt == position.CreatedAt
+                        && review.Id.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<AdminReviewResponse> rows = (isPublished
+                ? query.OrderByDescending(review => review.CreatedAt)
+                : query.OrderBy(review => review.CreatedAt))
+            .ThenBy(review => review.Id)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminReviewResponse>, Failure>(rows));
+    }
+
+    public Task<Result<AdminReviewResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var review = _adminReviews.FirstOrDefault(candidate => candidate.Id == id);
+
+        if (review is null)
+        {
+            return Task.FromResult<Result<AdminReviewResponse, Failure>>(
+                new Failure(Error.NotFound(
+                    ApiErrorCodes.Review.NotFound,
+                    $"Review '{id}' was not found.",
+                    id)));
+        }
+
+        return Task.FromResult(Result.Success<AdminReviewResponse, Failure>(review));
     }
 
     public Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(

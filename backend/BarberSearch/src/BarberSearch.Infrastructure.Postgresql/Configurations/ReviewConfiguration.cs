@@ -55,5 +55,14 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.HasIndex(x => new { x.CreatedAt, x.Id })
             .HasFilter("is_published = false")
             .HasDatabaseName("ix_reviews_moderation_created_at_id");
+
+        // Админский список опубликованных: свежие сверху. Первый ключ — is_published:
+        // EF не различает два индекса с одинаковым набором колонок, поэтому фильтр
+        // по статусу входит в ключ, а частичный фильтр оставляет в индексе только
+        // опубликованные строки.
+        builder.HasIndex(x => new { x.IsPublished, x.CreatedAt, x.Id })
+            .IsDescending(false, true, false)
+            .HasFilter("is_published = true")
+            .HasDatabaseName("ix_reviews_published_created_at_id");
     }
 }

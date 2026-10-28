@@ -144,7 +144,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 13 controllers: 12 доменных (73 endpoints) + AuthController (8 actions)
+            ├── Controllers/              ← 14 controllers: 13 доменных (75 endpoints) + AuthController (8 actions)
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) + Logging + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
@@ -846,7 +846,7 @@ Suggested order:
    Swagger UI, JWT auth for `User`.
    **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   13 controllers with 81 endpoints (73 domain + 8 auth), the `ErrorType` → HTTP status mapping
+   14 controllers with 83 endpoints (75 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
    Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
@@ -1426,7 +1426,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**13 controllers, 81 endpoints: 73 domain + 8 auth** — one endpoint per Application handler, plus
+**14 controllers, 83 endpoints: 75 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1443,6 +1443,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
 | `ReviewsController` | `api/reviews` | 6 (4 write + list + moderation queue) |
+| `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 
 Conventions:
 
@@ -1523,7 +1524,8 @@ Read endpoints (added 2026-10-19):
 - **Visibility and access.** Search, card and slots return only `IsActive && IsVerified` barber
   profiles and only `IsActive` salons; an invisible profile/salon is `404`. Card returns only active
   barber services. Reviews return only `IsPublished` rows; the admin-only moderation queue
-  (`GET api/reviews/moderation`) is the one read that returns hidden rows. Reading the storefront is **anonymous**
+  (`GET api/reviews/moderation`) and the admin review list (`GET api/admin/reviews`) are the reads
+  that return hidden rows. Reading the storefront is **anonymous**
   (R-25, 2026-10-23): `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots` and
   `GET api/reviews` carry `[AllowAnonymous]` and the `reads` policy — 120 requests per minute per
   `RemoteIpAddress` (after `UseForwardedHeaders`), fixed window, `QueueLimit = 0`, `429` with
@@ -1534,6 +1536,21 @@ Read endpoints (added 2026-10-19):
   contracts.
   `Cache-Control` is **not** set: slots change as soon as a booking is created and there is no
   CDN/edge cache; adding one would need invalidation on booking writes.
+- **Admin reviews (2026-10-28).** `GET api/admin/reviews?status=pending|published` and
+  `GET api/admin/reviews/{id}` are closed by `AdminOnly`. The response is
+  `AdminReviewResponse` — a separate contract from `ReviewResponse`, with barber name/rating,
+  client name/email, and the visit (service, salon, price, start, `timeZoneId`). This is the only
+  review read that carries PII, and it is not shared with the storefront. `pending` is
+  `created_at ASC, id` (FIFO, served by `ix_reviews_moderation_created_at_id`); `published` is
+  `created_at DESC, id` (served by `ix_reviews_published_created_at_id`, partial
+  `is_published = true`). The cursor is the existing `(created_at, id)`; `pageSize` defaults to
+  20 and is capped at 100; an unknown status or bad cursor is `400`. The projection joins
+  reviews → bookings → users/barber_profiles/barber_services/hair_services/salons; those links are
+  not all FK-enforced on `reviews`/`bookings`, so a dangling historical row would drop out of the
+  admin list instead of appearing with missing context.
+  Publication still uses the existing `POST`/`DELETE api/reviews/{id}/publication` actions;
+  those actions do **not** yet run the antiforgery filter — the frontend sends `X-CSRF-TOKEN`,
+  but the backend ignores it. Closing that gap is tracked on the frontend side (§14, item 23).
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
