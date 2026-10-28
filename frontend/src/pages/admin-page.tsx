@@ -9,6 +9,7 @@ import {
 import { AdminRail } from '@/components/admin/admin-rail'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
+import { UsersScreen } from '@/components/admin/users-screen'
 import { useSession } from '@/hooks/use-session'
 import { isAdminPath, parseAdminPath, reviewsPath } from '@/lib/admin-path'
 import { navigate, useLocation } from '@/lib/router'
@@ -16,6 +17,7 @@ import { navigate, useLocation } from '@/lib/router'
 const ADMIN_TITLES = {
   reviews: 'Отзывы — администрирование BarberSearch',
   barbers: 'Барберы — администрирование BarberSearch',
+  users: 'Пользователи — администрирование BarberSearch',
 } as const
 
 function splitLocation(location: string): { pathname: string; search: string } {
@@ -40,7 +42,11 @@ export function AdminPage() {
   const { status, user } = useSession()
   const tab = route.kind === 'reviews' ? route.tab : 'pending'
   const title =
-    route.kind === 'barbers' ? ADMIN_TITLES.barbers : ADMIN_TITLES.reviews
+    route.kind === 'barbers'
+      ? ADMIN_TITLES.barbers
+      : route.kind === 'users'
+        ? ADMIN_TITLES.users
+        : ADMIN_TITLES.reviews
 
   // `/admin` — тот же экран, но канонический адрес ведёт на очередь отзывов.
   useEffect(() => {
@@ -95,6 +101,14 @@ export function AdminPage() {
     return (
       <AdminShell hideRailOnMobile={route.barberId !== null}>
         <BarbersScreen barberId={route.barberId} />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'users') {
+    return (
+      <AdminShell hideRailOnMobile={route.userId !== null}>
+        <UsersScreen userId={route.userId} />
       </AdminShell>
     )
   }

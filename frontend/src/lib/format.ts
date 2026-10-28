@@ -232,6 +232,11 @@ export function formatDateTime(
   return `${formatLongDay(iso, timeZone)} в ${formatTime(iso, timeZone)}`
 }
 
+/** «1 нояб. 18:30» — компактные дата и время строки списка. */
+export function formatShortDateTime(iso: string, timeZone?: string): string {
+  return `${formatShortDay(iso, timeZone)} ${formatTime(iso, timeZone)}`
+}
+
 const ratingFormatter = new Intl.NumberFormat('ru-RU', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,

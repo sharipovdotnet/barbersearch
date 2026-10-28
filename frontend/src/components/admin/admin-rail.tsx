@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 const SECTIONS = [
   { href: '/admin/reviews', label: 'Отзывы' },
   { href: '/admin/barbers', label: 'Барберы' },
+  { href: '/admin/users', label: 'Пользователи' },
 ] as const
 
 /**
