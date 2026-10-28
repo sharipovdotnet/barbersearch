@@ -232,6 +232,69 @@ export function formatDateTime(
   return `${formatLongDay(iso, timeZone)} в ${formatTime(iso, timeZone)}`
 }
 
+const ratingFormatter = new Intl.NumberFormat('ru-RU', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
+const clockFormatter = new Intl.DateTimeFormat('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+/** «4,8»; для отсутствующего рейтинга — прочерк. */
+export function formatRating(value: number | null): string {
+  return value === null ? '—' : ratingFormatter.format(value)
+}
+
+/** «24 отзыва», «1 отзыв», «21 отзыв». */
+export function formatReviewsCount(count: number): string {
+  return `${count} ${plural(count, ['отзыв', 'отзыва', 'отзывов'])}`
+}
+
+/** Сколько отзыв ждёт решения: «ждёт 3 дня», «ждёт 6 часов». */
+export function formatWaitingSince(iso: string, now: number): string {
+  const difference = Math.max(0, now - Date.parse(iso))
+  const minutes = Math.floor(difference / 60_000)
+
+  if (minutes < 1) {
+    return 'только что'
+  }
+
+  if (minutes < 60) {
+    return `ждёт ${minutes} ${plural(minutes, ['минуту', 'минуты', 'минут'])}`
+  }
+
+  const hours = Math.floor(minutes / 60)
+
+  if (hours < 24) {
+    return `ждёт ${hours} ${plural(hours, ['час', 'часа', 'часов'])}`
+  }
+
+  const days = Math.floor(hours / 24)
+  return `ждёт ${days} ${plural(days, ['день', 'дня', 'дней'])}`
+}
+
+/** «Дмитрий Крылов» → «Дмитрий К.» — строка очереди не должна расти. */
+export function formatShortName(fullName: string): string {
+  const words = fullName.trim().split(/\s+/).filter(Boolean)
+
+  if (words.length === 0) {
+    return 'Клиент'
+  }
+
+  if (words.length === 1) {
+    return words[0]
+  }
+
+  return `${words[0]} ${words[1].charAt(0).toUpperCase()}.`
+}
+
+/** «18:42» — время последнего успешного обновления. */
+export function formatClockTime(value: string | Date): string {
+  return clockFormatter.format(typeof value === 'string' ? new Date(value) : value)
+}
+
 /** «Артём Соколов» → «АС»; для аватара, когда фотографии нет. */
 export function getInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean)

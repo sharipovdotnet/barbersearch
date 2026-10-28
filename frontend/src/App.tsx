@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
+import { isAdminPath } from '@/lib/admin-path'
 import { usePathname } from '@/lib/router'
 import { AccountPage } from '@/pages/account-page'
+import { AdminPage } from '@/pages/admin-page'
 import { HomePage } from '@/pages/home-page'
 
 /**
@@ -14,13 +16,16 @@ import { HomePage } from '@/pages/home-page'
  */
 function App() {
   const pathname = usePathname()
+  const isAdmin = isAdminPath(pathname)
+  const pageKey = isAdmin ? 'admin' : pathname === '/account' ? 'account' : 'home'
 
   useEffect(() => {
-    // Переход между страницами начинается сверху; якорь витрины оставляем браузеру.
+    // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
+    // меняет только вложенный путь и не должен прокручивать очередь.
     if (!window.location.hash) {
       window.scrollTo({ top: 0 })
     }
-  }, [pathname])
+  }, [pageKey])
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -34,10 +39,16 @@ function App() {
       <SiteHeader />
 
       <main id="main" className="flex-1">
-        {pathname === '/account' ? <AccountPage /> : <HomePage />}
+        {isAdmin ? (
+          <AdminPage />
+        ) : pathname === '/account' ? (
+          <AccountPage />
+        ) : (
+          <HomePage />
+        )}
       </main>
 
-      <SiteFooter />
+      {!isAdmin && <SiteFooter />}
     </div>
   )
 }

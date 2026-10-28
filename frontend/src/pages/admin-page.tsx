@@ -1,0 +1,112 @@
+import { useEffect, type ReactNode } from 'react'
+
+import {
+  AdminForbidden,
+  AdminNotFound,
+  AdminPageSkeleton,
+  AdminSignInGate,
+} from '@/components/admin/admin-gate'
+import { AdminRail } from '@/components/admin/admin-rail'
+import { ReviewsScreen } from '@/components/admin/reviews-screen'
+import { useSession } from '@/hooks/use-session'
+import { isAdminPath, parseAdminPath, reviewsPath } from '@/lib/admin-path'
+import { navigate, useLocation } from '@/lib/router'
+
+const ADMIN_TITLE = 'Отзывы — администрирование BarberSearch'
+
+function splitLocation(location: string): { pathname: string; search: string } {
+  const index = location.indexOf('?')
+
+  return index === -1
+    ? { pathname: location, search: '' }
+    : { pathname: location.slice(0, index), search: location.slice(index) }
+}
+
+/**
+ * Раздел администрирования.
+ *
+ * Клиентская проверка роли — только UX: действия всё равно закрыты политикой
+ * `AdminOnly` на сервере. Аноним видит вход, пользователь без роли — отказ,
+ * и данные при этом не запрашиваются.
+ */
+export function AdminPage() {
+  const location = useLocation()
+  const { pathname, search } = splitLocation(location)
+  const route = parseAdminPath(pathname, search)
+  const { status, user } = useSession()
+  const tab = route.kind === 'reviews' ? route.tab : 'pending'
+
+  // `/admin` — тот же экран, но канонический адрес ведёт на очередь отзывов.
+  useEffect(() => {
+    if (pathname !== '/admin') {
+      return
+    }
+
+    navigate(reviewsPath(tab), { replace: true })
+  }, [pathname, tab])
+
+  useEffect(() => {
+    document.title = ADMIN_TITLE
+
+    // noindex не защищает данные — API закрыт ролью; это только гигиена выдачи.
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    meta.content = 'noindex, nofollow'
+    document.head.append(meta)
+
+    return () => meta.remove()
+  }, [])
+
+  if (status === 'loading') {
+    return <AdminPageSkeleton />
+  }
+
+  if (status === 'anonymous') {
+    return (
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-md items-center px-4 py-8">
+        <AdminSignInGate returnTo={location} />
+      </div>
+    )
+  }
+
+  if (!user || user.role !== 'Admin') {
+    return (
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-md items-center px-4 py-8">
+        <AdminForbidden />
+      </div>
+    )
+  }
+
+  if (!isAdminPath(pathname) || route.kind === 'notFound') {
+    return (
+      <AdminShell>
+        <AdminNotFound />
+      </AdminShell>
+    )
+  }
+
+  const isReviewDetail = route.reviewId !== null
+
+  return (
+    <AdminShell hideRailOnMobile={isReviewDetail}>
+      <ReviewsScreen tab={route.tab} reviewId={route.reviewId} />
+    </AdminShell>
+  )
+}
+
+function AdminShell({
+  children,
+  hideRailOnMobile = false,
+}: {
+  children: ReactNode
+  hideRailOnMobile?: boolean
+}) {
+  return (
+    <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:py-8">
+      <div className={hideRailOnMobile ? 'hidden lg:block' : undefined}>
+        <AdminRail />
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}

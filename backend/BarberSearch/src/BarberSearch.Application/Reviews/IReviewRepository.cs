@@ -1,4 +1,5 @@
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Reviews.Admin;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
@@ -79,6 +80,35 @@ public interface IReviewRepository
     Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
         ReviewCursor? cursor,
         int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница отзывов для админского экрана: скрытые (FIFO) или опубликованные (свежие сверху).
+    /// </summary>
+    /// <remarks>
+    /// Отдельная проекция от публичного <see cref="ReviewResponse"/>: в ответ входят имя барбера,
+    /// клиент и контекст визита. Данные доступны только администратору. Фильтр по статусу
+    /// и порядок задаёт <paramref name="isPublished"/>; курсор хранит пару <c>(created_at, id)</c>,
+    /// направление меняет только запрос. <paramref name="limit"/> — это pageSize + 1, поэтому
+    /// <c>limit &lt;= 0</c> — <c>400 review.page.limit</c>.
+    /// </remarks>
+    /// <param name="isPublished"><c>true</c> — опубликованные, <c>false</c> — очередь модерации.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
+        bool isPublished,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Один отзыв любого статуса для админской карточки.
+    /// </summary>
+    /// <param name="id">Идентификатор отзыва.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<AdminReviewResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>

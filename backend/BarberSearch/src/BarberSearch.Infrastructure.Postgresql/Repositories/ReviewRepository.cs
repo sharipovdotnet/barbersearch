@@ -1,6 +1,7 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.Admin;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Infrastructure.Postgresql.Audit;
@@ -204,6 +205,234 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         return rows;
     }
 
+    /// <summary>
+    /// Страница отзывов для админского экрана: скрытые (FIFO) или опубликованные (свежие сверху).
+    /// </summary>
+    /// <remarks>
+    /// Проекция собирает имя барбера, клиента и контекст визита из соседних агрегатов.
+    /// Это единственное чтение отзывов, которое отдаёт PII, поэтому оно закрыто
+    /// <c>AdminOnly</c> на контроллере. Фильтр и порядок задаёт <paramref name="isPublished"/>:
+    /// для очереди работает частичный индекс <c>ix_reviews_moderation_created_at_id</c>,
+    /// для опубликованных — <c>ix_reviews_published_created_at_id</c>.
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
+        bool isPublished,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Review.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminReviewsQuery(
+                Context,
+                isPublished: isPublished,
+                cursor: cursor,
+                descending: isPublished,
+                limit: limit)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToAdminResponse).ToList();
+    }
+
+    /// <summary>
+    /// Один отзыв любого статуса для админской карточки.
+    /// </summary>
+    public async Task<Result<AdminReviewResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await BuildAdminReviewsQuery(Context, reviewId: id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return new Failure(Error.NotFound(
+                ApiErrorCodes.Review.NotFound,
+                $"Review '{id}' was not found.",
+                id));
+        }
+
+        return ToAdminResponse(row);
+    }
+
+    /// <summary>
+    /// Общая проекция админского чтения отзыва: отзыв, визит, барбер, клиент, услуга и салон.
+    /// </summary>
+    /// <remarks>
+    /// Навигаций между агрегатами в домене нет, поэтому связи собираются явными join'ами
+    /// по идентификаторам. Проекция плоская: вложенные response-записи конструируются
+    /// в памяти, чтобы EF не собирал объектную модель в SQL.
+    /// </remarks>
+    internal static IQueryable<AdminReviewRow> BuildAdminReviewsQuery(
+        ApplicationDbContext context,
+        bool? isPublished = null,
+        Guid? reviewId = null,
+        ReviewCursor? cursor = null,
+        bool descending = false,
+        int? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var reviews = context.Reviews.AsNoTracking();
+        var bookings = context.Bookings.AsNoTracking();
+
+        var customers = context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.Email
+            });
+
+        var barbers = context.BarberProfiles
+            .AsNoTracking()
+            .Select(profile => new
+            {
+                profile.Id,
+                DisplayName = profile.DisplayName.Value,
+                profile.Rating,
+                profile.ReviewsCount,
+                profile.IsActive,
+                profile.IsVerified
+            });
+
+        var services = context.BarberServices
+            .AsNoTracking()
+            .Select(service => new
+            {
+                service.Id,
+                service.HairServiceId
+            });
+
+        var hairServices = context.HairServices
+            .AsNoTracking()
+            .Select(hairService => new
+            {
+                hairService.Id,
+                hairService.Name
+            });
+
+        var salons = context.Salons
+            .AsNoTracking()
+            .Select(salon => new
+            {
+                salon.Id,
+                salon.Name,
+                salon.TimeZoneId
+            });
+
+        var joined = from review in reviews
+                     join booking in bookings on review.BookingId equals booking.Id
+                     join customer in customers on review.UserId equals customer.Id
+                     join barber in barbers on review.BarberProfileId equals barber.Id
+                     join service in services on booking.BarberServiceId equals service.Id
+                     join hairService in hairServices on service.HairServiceId equals hairService.Id
+                     join salon in salons on booking.SalonId equals salon.Id
+                     select new
+                     {
+                         review,
+                         booking,
+                         customer,
+                         barber,
+                         hairService,
+                         salon
+                     };
+
+        // Фильтры и порядок применяются до проекции в запись: EF не транслирует
+        // Where/OrderBy поверх конструктора AdminReviewRow.
+        if (reviewId is { } id)
+        {
+            joined = joined.Where(row => row.review.Id == id);
+        }
+
+        if (isPublished is { } published)
+        {
+            joined = joined.Where(row => row.review.IsPublished == published);
+        }
+
+        if (cursor is { } position)
+        {
+            joined = descending
+                ? joined.Where(row =>
+                    row.review.CreatedAt < position.CreatedAt
+                    || (row.review.CreatedAt == position.CreatedAt
+                        && row.review.Id.CompareTo(position.Id) > 0))
+                : joined.Where(row =>
+                    row.review.CreatedAt > position.CreatedAt
+                    || (row.review.CreatedAt == position.CreatedAt
+                        && row.review.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = descending
+            ? joined.OrderByDescending(row => row.review.CreatedAt).ThenBy(row => row.review.Id)
+            : joined.OrderBy(row => row.review.CreatedAt).ThenBy(row => row.review.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(row => new AdminReviewRow(
+            row.review.Id,
+            row.review.Rating,
+            row.review.Text,
+            row.review.IsPublished,
+            row.review.CreatedAt,
+            row.review.UpdatedAt,
+            row.barber.Id,
+            row.barber.DisplayName,
+            row.barber.Rating,
+            row.barber.ReviewsCount,
+            row.barber.IsActive,
+            row.barber.IsVerified,
+            row.customer.Id,
+            row.customer.FirstName,
+            row.customer.LastName,
+            row.customer.Email,
+            row.booking.Id,
+            row.booking.StartAt,
+            row.booking.Price,
+            row.hairService.Name,
+            row.salon.Name,
+            row.salon.TimeZoneId));
+    }
+
+    private static AdminReviewResponse ToAdminResponse(AdminReviewRow row)
+    {
+        var fullName = $"{row.CustomerFirstName} {row.CustomerLastName}".Trim();
+
+        return new AdminReviewResponse(
+            row.Id,
+            row.Rating,
+            row.Text,
+            row.IsPublished,
+            row.CreatedAt,
+            row.UpdatedAt,
+            new AdminReviewBarberResponse(
+                row.BarberId,
+                row.BarberDisplayName,
+                row.BarberRating,
+                row.BarberReviewsCount,
+                row.BarberIsActive,
+                row.BarberIsVerified),
+            new AdminReviewCustomerResponse(
+                row.CustomerId,
+                string.IsNullOrWhiteSpace(fullName) ? row.CustomerEmail : fullName,
+                row.CustomerEmail),
+            new AdminReviewVisitResponse(
+                row.BookingId,
+                row.StartAt,
+                row.Price,
+                row.ServiceName,
+                row.SalonName,
+                row.TimeZoneId));
+    }
+
     public async Task<Result<ReviewRatingSummary, Failure>> GetRatingSummaryAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
@@ -279,4 +508,31 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
 
         return await SaveChangesAsync(ApiErrorCodes.Review.DeletePrefix, cancellationToken);
     }
+
+    /// <summary>
+    /// Плоская строка админского чтения до сборки вложенных response-записей.
+    /// </summary>
+    internal sealed record AdminReviewRow(
+        Guid Id,
+        int Rating,
+        string? Text,
+        bool IsPublished,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt,
+        Guid BarberId,
+        string BarberDisplayName,
+        decimal? BarberRating,
+        int BarberReviewsCount,
+        bool BarberIsActive,
+        bool BarberIsVerified,
+        Guid CustomerId,
+        string CustomerFirstName,
+        string CustomerLastName,
+        string CustomerEmail,
+        Guid BookingId,
+        DateTimeOffset StartAt,
+        decimal Price,
+        string ServiceName,
+        string SalonName,
+        string TimeZoneId);
 }

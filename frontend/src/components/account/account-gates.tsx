@@ -64,6 +64,7 @@ export function SignInGate({
  */
 export function RoleGate({ role }: { role: string }) {
   const isBarber = role === 'Barber'
+  const isAdmin = role === 'Admin'
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -73,24 +74,41 @@ export function RoleGate({ role }: { role: string }) {
             <ShieldAlert className="size-5 text-muted-foreground" aria-hidden />
           </div>
           <CardTitle>
-            {isBarber ? 'Это кабинет клиента' : 'Кабинет администратора ещё не готов'}
+            {isBarber
+              ? 'Это кабинет клиента'
+              : isAdmin
+                ? 'Вы администратор'
+                : 'Кабинет администратора ещё не готов'}
           </CardTitle>
           <CardDescription>
             {isBarber
               ? 'Вы вошли как барбер. Расписание и записи клиентов появятся в кабинете барбера — пока его нет.'
-              : 'Управление каталогом и модерацией отзывов появится отдельным разделом.'}
+              : isAdmin
+                ? 'Модерация отзывов, барберы и справочники — в отдельном разделе администрирования.'
+                : 'Управление каталогом и модерацией отзывов появится отдельным разделом.'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              navigate('/')
-            }}
-          >
-            На главную
-          </Button>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          {isAdmin ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                navigate('/admin')
+              }}
+            >
+              Открыть администрирование
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigate('/')
+              }}
+            >
+              На главную
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>
