@@ -424,6 +424,7 @@ public class RefreshTokenTests
             Users,
             Tokens,
             new FakeUnitOfWork(Users, Tokens),
+            FakeCurrentUser.Anonymous(isAdmin: true),
             Clock,
             NullLogger<ChangeUserRoleHandler>.Instance);
 
@@ -431,6 +432,7 @@ public class RefreshTokenTests
             Users,
             Tokens,
             new FakeUnitOfWork(Users, Tokens),
+            FakeCurrentUser.Anonymous(isAdmin: true),
             Clock,
             NullLogger<DeactivateUserHandler>.Instance);
 

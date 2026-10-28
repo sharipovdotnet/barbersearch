@@ -1,3 +1,5 @@
+using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -56,6 +58,62 @@ public interface IUserRepository
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница админского списка пользователей: фильтры статуса и роли, поиск и keyset-курсор.
+    /// </summary>
+    /// <remarks>
+    /// Список читается без отслеживания и всегда свежими сверху (<c>created_at DESC, id</c>).
+    /// <paramref name="limit"/> — уже увеличенный на единицу размер страницы: репозиторий
+    /// не решает, есть ли следующая страница, а возвращает на одну строку больше.
+    /// </remarks>
+    /// <param name="status">Фильтр статуса.</param>
+    /// <param name="role">Фильтр роли либо <c>null</c> для всех ролей.</param>
+    /// <param name="search">Поиск по имени, фамилии или email; <c>null</c> — без фильтра.</param>
+    /// <param name="cursor">Позиция последней строки предыдущей страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminUserResponse>, Failure>> GetAdminPageAsync(
+        AdminUserStatus status,
+        UserRole? role,
+        string? search,
+        AdminUserCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Админская карточка пользователя: контакты, доступ и привязанный профиль барбера.
+    /// </summary>
+    /// <remarks>
+    /// Читается одним SQL-запросом с <c>LEFT JOIN</c> по профилю барбера. Отсутствие
+    /// пользователя — <c>Error.NotFound</c> с кодом <c>admin.users.notFound</c>.
+    /// </remarks>
+    /// <param name="id">Идентификатор пользователя.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<AdminUserDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Сколько активных администраторов есть в системе.
+    /// </summary>
+    /// <remarks>
+    /// Нужно правилу «нельзя оставить сервис без администратора». Читается внутри
+    /// транзакции после <see cref="AcquireAdminLockAsync"/>: без блокировки два одновременных
+    /// понижения могли бы оба увидеть двух администраторов и снять обоих.
+    /// </remarks>
+    Task<Result<int, Failure>> CountActiveAdminsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Берёт транзакционную блокировку на смену ролей и блокировку пользователей.
+    /// </summary>
+    /// <remarks>
+    /// Это <c>pg_advisory_xact_lock</c> по постоянному ключу администраторов. Блокировка
+    /// снимается концом транзакции, поэтому метод обязан вызываться внутри
+    /// <c>IUnitOfWork.ExecuteAsync</c>. Сериализуются только редкие операции с ролями,
+    /// а не все записи пользователей.
+    /// </remarks>
+    Task<UnitResult<Failure>> AcquireAdminLockAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Занят ли адрес электронной почты. Проверка перед регистрацией, чтобы не ловить

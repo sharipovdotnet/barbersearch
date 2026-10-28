@@ -1,6 +1,8 @@
 using System.Reflection;
 using BarberSearch.Application.Users;
+using BarberSearch.Application.Users.Admin;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -13,10 +15,38 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 public sealed class FakeUserRepository : IUserRepository, IFakeTransactionParticipant
 {
     private readonly Dictionary<Guid, User> _users = [];
+    private readonly List<AdminUserResponse> _adminRows = [];
     private readonly HashSet<Guid> _existingIds = [];
+    private readonly Dictionary<Guid, KnownBarberProfile> _barberProfiles = [];
     private Dictionary<Guid, User>? _snapshot;
 
     public IReadOnlyCollection<User> Users => _users.Values;
+
+    /// <summary>
+    /// Параметры последнего админского запроса страницы: тесты проверяют, что обработчик
+    /// передал разобранные фильтры и увеличенный на единицу лимит.
+    /// </summary>
+    public AdminUserStatus? LastAdminStatus { get; private set; }
+
+    /// <summary>
+    /// Фильтр роли последнего админского запроса.
+    /// </summary>
+    public UserRole? LastAdminRole { get; private set; }
+
+    /// <summary>
+    /// Поисковая строка последнего админского запроса.
+    /// </summary>
+    public string? LastAdminSearch { get; private set; }
+
+    /// <summary>
+    /// Лимит последнего админского запроса.
+    /// </summary>
+    public int? LastAdminLimit { get; private set; }
+
+    /// <summary>
+    /// Сколько раз обработчик брал блокировку администраторов.
+    /// </summary>
+    public int AcquireAdminLockCallCount { get; private set; }
 
     /// <summary>
     /// Сколько раз обработчики загружали агрегат через <see cref="GetByIdAsync"/>.
@@ -39,6 +69,22 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     public Func<User, UnitResult<Failure>>? UpdateBehavior { get; set; }
 
     public void Add(User user) => _users[user.Id] = user;
+
+    /// <summary>
+    /// Добавляет строку админского списка: порядок и фильтры проверяются по ней,
+    /// а не по времени создания агрегата в памяти.
+    /// </summary>
+    public void AddAdminRow(AdminUserResponse row) => _adminRows.Add(row);
+
+    /// <summary>
+    /// Регистрирует профиль барбера, чтобы админская карточка показала его имя и статусы.
+    /// </summary>
+    public void AddBarberProfile(
+        Guid id,
+        string displayName,
+        bool isVerified = true,
+        bool isActive = true)
+        => _barberProfiles[id] = new KnownBarberProfile(displayName, isVerified, isActive);
 
     public void BeginTransaction()
         => _snapshot = _users.ToDictionary(
@@ -130,6 +176,146 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
+    /// <summary>
+    /// Админская страница: те же фильтры, что у PostgreSQL-репозитория, но в памяти.
+    /// </summary>
+    /// <remarks>
+    /// Повторяет порядок и семантику поиска (подстрока без учёта регистра, имя, фамилия
+    /// или email), чтобы тесты обработчика проверяли решения, а не SQL.
+    /// </remarks>
+    public Task<Result<IReadOnlyList<AdminUserResponse>, Failure>> GetAdminPageAsync(
+        AdminUserStatus status,
+        UserRole? role,
+        string? search,
+        AdminUserCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        LastAdminStatus = status;
+        LastAdminRole = role;
+        LastAdminSearch = search;
+        LastAdminLimit = limit;
+
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminUserResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.AdminUser.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        // Строки задаются тестом явно: порядок проверяется по created_at, а не по времени
+        // создания агрегата, которое в памяти совпадает до тика.
+        IEnumerable<AdminUserResponse> query = _adminRows;
+
+        query = status switch
+        {
+            AdminUserStatus.Active => query.Where(row => row.IsActive),
+            AdminUserStatus.Blocked => query.Where(row => !row.IsActive),
+            AdminUserStatus.Unverified => query.Where(row => !row.IsEmailVerified),
+            _ => query
+        };
+
+        if (role is { } roleFilter)
+        {
+            query = query.Where(row => row.Role == roleFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var needle = search.Trim();
+
+            query = query.Where(row =>
+                row.FirstName.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || row.LastName.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || row.Email.Contains(needle, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(row =>
+                row.CreatedAt < position.CreatedAt
+                || (row.CreatedAt == position.CreatedAt
+                    && row.Id.CompareTo(position.Id) > 0));
+        }
+
+        var rows = query
+            .OrderByDescending(row => row.CreatedAt)
+            .ThenBy(row => row.Id)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult<Result<IReadOnlyList<AdminUserResponse>, Failure>>(rows);
+    }
+
+    public Task<Result<AdminUserDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_users.TryGetValue(id, out var user))
+        {
+            return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(new Failure(
+                Error.NotFound(
+                    ApiErrorCodes.AdminUser.NotFound,
+                    $"User '{id}' was not found.",
+                    id)));
+        }
+
+        var profile = user.BarberProfileId is { } profileId
+            && _barberProfiles.TryGetValue(profileId, out var knownProfile)
+                ? new AdminUserBarberProfileResponse(
+                    profileId,
+                    knownProfile.DisplayName,
+                    knownProfile.IsVerified,
+                    knownProfile.IsActive)
+                : user.BarberProfileId is { } linkedId
+                    ? new AdminUserBarberProfileResponse(
+                        linkedId,
+                        "Профиль барбера",
+                        IsVerified: false,
+                        IsActive: false)
+                    : null;
+
+        var detail = new AdminUserDetailResponse(
+            user.Id,
+            user.Email,
+            user.FirstName,
+            user.LastName,
+            user.PhoneNumber,
+            user.AvatarUrl,
+            user.Role,
+            user.IsActive,
+            user.IsEmailVerified,
+            user.IsPhoneVerified,
+            user.BarberProfileId,
+            profile,
+            user.LastLoginAt,
+            user.LockoutEnd,
+            user.FailedLoginAttempts,
+            user.CreatedAt,
+            user.UpdatedAt);
+
+        return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(detail);
+    }
+
+    public Task<Result<int, Failure>> CountActiveAdminsAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<int, Failure>>(
+            _users.Values.Count(user => user.Role == UserRole.Admin && user.IsActive));
+
+    /// <summary>
+    /// Блокировка администраторов в памяти не нужна: тесты выполняются последовательно,
+    /// а проверяемое правило живёт в обработчике.
+    /// </summary>
+    public Task<UnitResult<Failure>> AcquireAdminLockAsync(
+        CancellationToken cancellationToken = default)
+    {
+        AcquireAdminLockCallCount++;
+
+        return Task.FromResult(UnitResult.Success<Failure>());
+    }
+
     public Task<Result<bool, Failure>> EmailExistsAsync(
         string email,
         CancellationToken cancellationToken = default)
@@ -182,4 +368,12 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
 
         return (User)memberwiseClone.Invoke(user, null)!;
     }
+
+    /// <summary>
+    /// Минимум данных профиля барбера, нужный админской карточке пользователя.
+    /// </summary>
+    private sealed record KnownBarberProfile(
+        string DisplayName,
+        bool IsVerified,
+        bool IsActive);
 }
