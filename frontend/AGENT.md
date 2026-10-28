@@ -1,11 +1,12 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-10` (default `main`). The landing page and cookie-based
-> sign-in are implemented; barber search, slots and booking screens are **not** wired to the API
-> yet. Verified on 2026-10-28: `npm run lint` — 0 warnings / 0 errors (21 files, 116 rules);
-> `npm run build` — success, 2170 modules, JS 349.44 kB (gzip 113.64 kB), CSS 51.75 kB
-> (gzip 9.44 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Code state: branch `features/issue-11` (default `main`). The landing page, the customer
+> account and the admin review queue are implemented; barber search, slots and booking
+> screens are **not** wired to the API yet.
+> Verified on 2026-10-28: `npm run lint` — 0 warnings / 0 errors (61 files, 116 rules);
+> `npm run build` — success, 2210 modules, JS 431.94 kB (gzip 133.47 kB), CSS 67.17 kB
+> (gzip 11.84 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -54,7 +55,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-10` (default: `main`) |
+| Working branch | `features/issue-11` (default: `main`) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -126,29 +127,61 @@ frontend/                              ← workspace root, NOT the git root
 ├── dist/                              ← build output, git-ignored
 └── src/
     ├── main.tsx                       ← createRoot + StrictMode + SessionProvider + App
-    ├── App.tsx                        ← landing page; demo data still inline
+    ├── App.tsx                        ← shell: header, page switch, footer; no page content
     ├── index.css                      ← Tailwind v4 entry, design tokens, @layer base
     ├── components/
+    │   ├── admin/                     ← /admin: rail, gates, queue, detail, tabs, rules
+    │   │   ├── admin-gate.tsx          sign-in / forbidden / not-found / skeleton
+    │   │   ├── admin-rail.tsx          rail with only implemented sections
+    │   │   ├── moderation-rules-dialog.tsx
+    │   │   ├── review-detail.tsx       rating, context, sticky actions, hide dialog
+    │   │   ├── review-queue.tsx        roving-tabindex rows and cursor pagination
+    │   │   ├── review-tabs.tsx         manual tabs (no counts: API has no total)
+    │   │   └── reviews-screen.tsx      list/detail state, actions, announcements
+    │   ├── account/                   ← customer cabinet: bookings, gates, review dialog
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── login-dialog.tsx           ← dialog, validation, server error mapping
     │   ├── session-provider.tsx       ← session bootstrap, signIn/signOut
-    │   └── ui/                        ← vendored shadcn/ui (11 files, do not hand-edit)
+    │   ├── site-header.tsx            ← marketing/admin header modes
+    │   ├── site-footer.tsx
+    │   └── ui/                        ← vendored shadcn/ui (12 files, do not hand-edit)
     │       ├── avatar.tsx   badge.tsx   button.tsx   card.tsx
     │       ├── checkbox.tsx dialog.tsx  field.tsx    input.tsx
-    │       └── label.tsx    separator.tsx skeleton.tsx
+    │       └── label.tsx    separator.tsx skeleton.tsx textarea.tsx
     ├── hooks/
+    │   ├── use-admin-review-list.ts   ← admin queue: pages, refresh, cursor, 401
+    │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
+    │   ├── use-barber-profiles.ts     ← public profile lookups for bookings
+    │   ├── use-bookings.ts            ← customer bookings, cursor, cancel
+    │   ├── use-media-query.ts         ← desktop preview vs mobile split-view
+    │   ├── use-now.ts                 ← minute ticker for waiting times
     │   └── use-session.ts             ← SessionContext + useSession()
+    ├── pages/
+    │   ├── account-page.tsx           ← customer cabinet
+    │   ├── admin-page.tsx             ← /admin route, gates, shell
+    │   └── home-page.tsx              ← landing
     └── lib/
+        ├── admin-path.ts              ← /admin path parsing/building, AdminTab
+        ├── admin-reviews.ts           ← admin review DTO, reads, publish/hide, errors
         ├── api.ts                     ← fetch wrapper, ApiError, ProblemDetails
         ├── auth.ts                    ← CSRF, signIn, signOut, fetchSession
+        ├── booking-status.ts          ← status labels/transitions
+        ├── bookings.ts                ← booking/review reads and writes
+        ├── calendar.ts                ← date helpers for the account calendar
+        ├── catalog.ts                 ← public barber profile cache
+        ├── csrf.ts                    ← one antiforgery-token helper for mutations
+        ├── errors.ts                  ← ProblemDetails → Russian copy
+        ├── format.ts                  ← dates, money, rating, waiting time
+        ├── router.ts                  ← History API store: pathname + location
         └── utils.ts                   ← `export { cn } from "cn"`
 ```
 
-**Import direction:** `App` → `components` → `hooks` → `lib`. `lib` never imports components or
-hooks. There are no barrel files (`index.ts`); import the concrete module.
+**Import direction:** `App` → `pages` → `components` → `hooks` → `lib`. `lib` never imports
+components, hooks or pages. There are no barrel files (`index.ts`); import the concrete module.
 
-A new top-level folder (`pages/`, `features/`, `store/`, …) is an architectural decision, not a
-free choice — discuss it in the PR and record the outcome here.
+A new top-level folder (`features/`, `store/`, …) is an architectural decision, not a free
+choice — discuss it in the PR and record the outcome here. `pages/` and `components/admin/`
+already exist.
 
 ---
 
@@ -192,10 +225,10 @@ dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web
 **Verification snapshot, 2026-10-28:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 21 files, 116 rules
-npm run build → tsc -b + vite build OK, 2170 modules,
-                dist/assets/index-*.js  349.44 kB (gzip 113.64 kB)
-                dist/assets/index-*.css  51.75 kB (gzip   9.44 kB)
+npm run lint  → 0 warnings, 0 errors, 61 files, 116 rules
+npm run build → tsc -b + vite build OK, 2210 modules,
+                dist/assets/index-*.js  431.94 kB (gzip 133.47 kB)
+                dist/assets/index-*.css  67.17 kB (gzip  11.84 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -304,11 +337,26 @@ component → hook / context → lib/auth.ts → lib/api.ts → fetch('/api/…'
 
 ### 6.4 Routing and rendering
 
-No router. The page is a single scrollable landing with `#how` and `#barbers` anchors; the
-search form calls `document.getElementById('barbers')?.scrollIntoView(...)`. There are no
-routes: navigation is limited to in-page hash anchors, and deep-linkable screens, route
-parameters and route-level code splitting do not exist yet. The app is client-rendered:
-no SSR, no hydration, no server components, no server actions.
+No router library; `src/lib/router.ts` is a small History API store. `usePathname()` returns the
+current path, `useLocation()` additionally returns the query string, and `navigate()` pushes or
+replaces history and notifies subscribers. Links stay real `<a href>`s, so middle-click and
+open-in-new-tab work.
+
+Three top-level areas:
+
+| Path | Page | Notes |
+|---|---|---|
+| `/` | `HomePage` | landing; unknown non-admin paths fall back here |
+| `/account` | `AccountPage` | customer cabinet; role gates for barber/admin |
+| `/admin` | `AdminPage` | redirects to `/admin/reviews`; unknown `/admin/*` shows «Раздел не найден» |
+
+Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
+`/admin/reviews?tab=published`. The selected review and the tab live in the URL, so reload and
+Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
+list stays open until a row is chosen.
+
+There is no lazy loading and no error boundary: every page ships in the initial bundle, and a
+render exception still blanks the app (§14).
 
 ---
 
@@ -385,7 +433,7 @@ reduced motion (`motion-safe:` / `motion-reduce:`) when it is added.
 
 ## 8. UI kit and composition
 
-`src/components/ui` contains **11 vendored shadcn/ui components** built on Base UI:
+`src/components/ui` contains **12 vendored shadcn/ui components** built on Base UI:
 
 | Component | Exports | Notes |
 |---|---|---|
@@ -400,6 +448,7 @@ reduced motion (`motion-safe:` / `motion-reduce:`) when it is added.
 | `avatar` | `Avatar`, `AvatarImage`, `AvatarFallback`, `AvatarBadge`, `AvatarGroup`, `AvatarGroupCount` | sizes `sm`, `default`, `lg` |
 | `separator` | `Separator` | |
 | `skeleton` | `Skeleton` | `animate-pulse`, `bg-muted` |
+| `textarea` | `Textarea` | multi-line input for review text |
 
 ### 8.1 Base UI, not Radix
 
@@ -493,9 +542,14 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/login/cookie` | anonymous, rate-limited, antiforgery | `{ email, password, rememberMe }` → `204` + HttpOnly cookies |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
+| `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context |
+| `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
+| `POST` / `DELETE` | `/api/reviews/{id}/publication` | admin | publish / hide; the client sends `X-CSRF-TOKEN` |
 
 The backend also exposes `POST /api/auth/refresh`, registration and password change; the
-frontend does not use them yet (§16).
+frontend calls none of registration/refresh yet (password change is wired in the account).
+`GET /api/reviews/moderation` still exists for compatibility but the admin screen uses the
+admin DTO: the public `ReviewResponse` deliberately has no names or visit context.
 
 `SessionUser` (mirrors `GET /auth/me`):
 
@@ -518,7 +572,11 @@ narrow it to a union (§14).
   is off) and an HttpOnly refresh cookie (default `14 days`). Production names use the `__Host-`
   prefix. JavaScript can neither read nor write them — never introduce a token-in-JS fallback.
 - Every **state-changing** request in the cookie branch carries `X-CSRF-TOKEN`, obtained from
-  `GET /api/auth/csrf` immediately before the request. There is no cached token.
+  `GET /api/auth/csrf` immediately before the request. There is no cached token. Booking,
+  review and admin-publication mutations use the same `lib/csrf.ts` helper.
+- The backend currently validates antiforgery only on auth actions; review publication accepts
+  the header but does not require it yet (§14). The client still sends it: the rule is
+  forward-compatible, and removing it would make the gap easy to miss.
 - The antiforgery token is bound to the authenticated identity: after sign-in the old token is
   invalid. `signIn` fetches a token before login (anonymous identity, valid for the login
   endpoint); the next mutation (`signOut`) fetches a fresh token. Any future mutation after
@@ -634,8 +692,9 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
   current `key={barber.name}` is demo-only and must become an ID when real data arrives.
 - Composition uses the Base UI `render` prop (§8), not `asChild`.
 - `dangerouslySetInnerHTML` is forbidden. User-generated review text must render as text.
-- No direct DOM access except the root mount in `main.tsx` and the documented demo scroll;
-  prefer refs.
+- No direct DOM access except the root mount in `main.tsx`, `document.title` / the `noindex`
+  meta on admin pages, the documented landing scroll, `window.scrollTo` on page and mobile-detail
+  changes, and `matchMedia` for the admin split view; prefer refs for everything else.
 - `StrictMode` stays on; do not remove it to hide double-effect symptoms.
 
 ### 10.5 Styling
@@ -730,9 +789,10 @@ of WCAG conformance.
 9. Text contrast must meet WCAG AA (4.5:1 for normal text, 3:1 for large text); check new
    token combinations rather than assuming `muted-foreground` passes on every surface.
 
-**Known gaps** (also in §14): no skip link; the header `Skeleton` has no accessible loading
-status; no automated axe/Playwright audit; contrast has not been measured; dialog focus
-behaviour is trusted from Base UI but not covered by a test.
+**Known gaps** (also in §14): no automated axe/Playwright audit; contrast has not been measured
+project-wide (the admin `warning` status was checked manually but not in CI); dialog focus
+behaviour is trusted from Base UI but not covered by a test. The skip link and the admin
+keyboard/focus paths are implemented and were checked manually.
 
 ---
 
@@ -742,21 +802,21 @@ behaviour is trusted from Base UI but not covered by a test.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` (single chunk) | 349.44 kB | 113.64 kB |
-| `index-*.css` | 51.75 kB | 9.44 kB |
+| `index-*.js` (single chunk) | 431.94 kB | 133.47 kB |
+| `index-*.css` | 67.17 kB | 11.84 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2170 modules; build ≈ 8 s. There is **no code splitting**: every component, including the
-login dialog, is in the initial bundle. That is acceptable for one page; the first router or
-booking flow must split by route.
+2210 modules; build ≈ 7 s. There is **no code splitting**: every component, including the
+admin screen, is in the initial bundle. The admin slice added ≈20 kB gzip; the first router
+or booking flow should still split by route.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA; the current bundle already uses 113.64 kB.
+   working target, not a stakeholder-approved SLA; the current bundle already uses 133.47 kB.
 3. **Lazy-load below-the-fold and route-level code** once a router exists (`React.lazy` +
    `Suspense`). Do not preload the booking flow on the landing page.
 4. **Icons:** import named icons from `lucide-react` (tree-shaken). Never
@@ -790,15 +850,18 @@ booking flow must split by route.
 | Sign-out | ✅ CSRF → logout; local state cleared in `finally` |
 | Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; 401 → anonymous |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
-| Registration / password change | ❌ no UI (backend endpoints exist; a password-reset flow does not exist server-side either) |
+| Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
+| Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
+| Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states |
+| Other admin sections | ❌ barbers, users, catalogue, bookings, audit — not implemented; no dead rail links |
+| Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
 | Barber search / card / slots | ❌ not wired; cards are demo data |
 | Booking flow | ❌ absent |
-| My bookings / reviews | ❌ absent |
-| Routing | ❌ single page, hash anchors only |
-| Design system | ✅ tokens + 11 shadcn/Base UI components; ❌ no dark toggle |
-| Accessibility | ⚠️ partial (§11) |
-| Responsive layout | ✅ landing is mobile-first; not covered by tests |
-| Tests | ❌ none; CI runs lint + build only |
+| Routing | ✅ hand-rolled History API: `/`, `/account`, `/admin/**`; no lazy loading |
+| Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
+| Accessibility | ⚠️ partial (§11); admin keyboard/focus verified manually, no automated audit |
+| Responsive layout | ✅ landing and admin checked at 320 px / desktop; no tests |
+| Tests | ⚠️ backend unit + admin integration tests; frontend has no runner/CI test step |
 | Error boundary | ❌ absent |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ⚠️ hand-written types; no runtime validation |
@@ -815,7 +878,7 @@ the feature grows; **P3** cosmetic/structural.
 | 1 | P1 | `App.tsx` still renders demo barbers and says «Демо-данные: карточки ещё не подключены к API» | Replace with `GET /api/barbers` in the next slice; delete the demo arrays |
 | 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
 | 3 | P1 | No `401` / refresh strategy. The access cookie lives 8 h; the client never calls `/auth/refresh`; after expiry the UI silently becomes anonymous on reload | Decide: silent refresh on `401` vs re-login prompt; wire the cookie refresh branch |
-| 4 | P1 | No router and no error boundary; a render exception blanks the page and screens cannot be deep-linked | Choose a router (§17), add a top-level boundary with a Russian fallback |
+| 4 | P1 | Hand-rolled router exists, but there is no error boundary and no lazy loading; a render exception blanks the page | Add a top-level boundary with a Russian fallback; split admin routes when the bundle grows |
 | 5 | P2 | `apiRequest` casts JSON to `TResponse` without validation; a malformed `200` body reaches components as `undefined` | Validate responses (zod/valibot or hand-written guards) when contracts grow |
 | 6 | P2 | `isProblemDetails` only checks “non-null object”; non-ProblemDetails errors fall back to `HTTP ${status}` (English) | Strengthen the guard; map unknown errors to generic Russian copy in each screen |
 | 7 | P2 | CSRF is fetched per mutation, with no retry on `auth.csrf.invalid`; the user must close and reopen the dialog | Add one retry with a fresh token, or a shared CSRF helper that re-fetches once |
@@ -834,6 +897,7 @@ the feature grows; **P3** cosmetic/structural.
 | 20 | P3 | No «Забыли пароль?» / «Регистрация» links in the login dialog | Product decision; registration and change-password exist, a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
+| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) does not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter | Add `[ValidateAntiforgeryHeader]` to the review actions and cover them with a cookie+CSRF integration test |
 
 ---
 
@@ -873,6 +937,9 @@ change); coverage is not a gate until the suite exists — critical paths first.
 
 Ordered by user value, not by technical interest:
 
+**Completed 2026-10-28:** admin stage 1 — `/admin` shell, role gates and the review
+queue with publish/hide and the published tab.
+
 1. **Wire search** — `GET /api/barbers` with city/specialization/service/date filters, keyset
    `nextCursor`, debounce, loading/empty/error states; remove demo arrays.
 2. **Barber card** — `GET /api/barbers/{id}`; services, salons, specializations, rating;
@@ -883,20 +950,23 @@ Ordered by user value, not by technical interest:
    UX, pending/confirmed states.
 5. **My bookings** — `GET /api/bookings`, cancel/confirm actions, keyset pagination.
 6. **Reviews** — list published reviews, create/edit own review, explain pre-moderation.
-7. **Foundation** — router + lazy routes + error boundary; split `App.tsx` into sections.
+7. **Foundation** — lazy routes + error boundary; the hand-rolled router exists; split
+   `App.tsx` into sections.
 8. **Quality** — Vitest/RTL/MSW, Playwright + axe, CI test job, Lighthouse budget.
 9. **Auth completeness** — registration, refresh strategy, password change, role-aware
    header; a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, skip link, empty-state illustrations, form `errors` from
     the server mapped to fields.
 11. **Hardening** — runtime response validation, env typing, dependency review.
+12. **Admin continuation** — barbers, users, catalogue, bookings and the audit journal, in
+    that order (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract.
 
 ---
 
 ## 17. Open questions
 
-1. **Router:** React Router, TanStack Router, or a hand-rolled history layer? Affects lazy
-   loading, deep links and error boundaries.
+1. **Router:** the hand-rolled history layer in `lib/router.ts` is in use for `/`, `/account`
+   and `/admin/**`. Revisit only if lazy loading or an error boundary needs a library.
 2. **Server state:** TanStack Query vs hand-written effects + `AbortController`? Booking and
    slots benefit from caching/invalidation; the landing does not.
 3. **Forms/validation:** react-hook-form + zod, or keep the current controlled-form pattern?
