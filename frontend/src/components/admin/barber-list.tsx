@@ -5,25 +5,32 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { AdminBarber } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
+import { barbersPath } from '@/lib/admin-path'
 import { formatRating, formatReviewsCount, getInitials } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 /**
  * Список барберов: таблица на широком экране и карточки на телефоне.
  *
  * Счётчика «всего» нет: API отдаёт только страницу, поэтому в подписи «Показано N»,
- * а не выдуманное общее число.
+ * а не выдуманное общее число. Выбранная строка подсвечивается, а ссылка в имени
+ * остаётся настоящей ссылкой: средний клик и «открыть в новой вкладке» работают.
  */
 export function BarberList({
   items,
+  selectedId,
   nextCursor,
   isLoadingMore,
   loadMoreError,
+  onSelect,
   onLoadMore,
 }: {
   items: AdminBarber[]
+  selectedId: string | null
   nextCursor: string | null
   isLoadingMore: boolean
   loadMoreError: string | null
+  onSelect: (barberId: string) => void
   onLoadMore: () => void
 }) {
   return (
@@ -55,34 +62,66 @@ export function BarberList({
             </tr>
           </thead>
           <tbody>
-            {items.map((barber) => (
-              <tr key={barber.id} className="border-b last:border-b-0">
-                <td className="px-3 py-3 align-middle">
-                  <BarberIdentity barber={barber} />
-                </td>
-                <td className="px-3 py-3 align-middle whitespace-nowrap">
-                  {BARBER_GRADE_LABELS[barber.grade]}
-                </td>
-                <td className="px-3 py-3 align-middle whitespace-nowrap">
-                  <BarberRating barber={barber} />
-                </td>
-                <td className="px-3 py-3 align-middle">
-                  <BarberStatusBadge barber={barber} />
-                </td>
-              </tr>
-            ))}
+            {items.map((barber) => {
+              const isSelected = barber.id === selectedId
+
+              return (
+                <tr
+                  key={barber.id}
+                  data-selected={isSelected ? 'true' : undefined}
+                  className={cn(
+                    'cursor-pointer border-b transition-colors last:border-b-0',
+                    isSelected ? 'bg-muted/60' : 'hover:bg-muted/30'
+                  )}
+                  onClick={() => onSelect(barber.id)}
+                >
+                  <td className="px-3 py-3 align-middle">
+                    <a
+                      href={barbersPath(barber.id)}
+                      aria-current={isSelected ? 'true' : undefined}
+                      className="block rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        onSelect(barber.id)
+                      }}
+                    >
+                      <BarberIdentity barber={barber} />
+                    </a>
+                  </td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">
+                    {BARBER_GRADE_LABELS[barber.grade]}
+                  </td>
+                  <td className="px-3 py-3 align-middle whitespace-nowrap">
+                    <BarberRating barber={barber} />
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    <BarberStatusBadge barber={barber} />
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 
         <ul className="divide-y lg:hidden">
           {items.map((barber) => (
-            <li key={barber.id} className="space-y-2 p-3">
-              <BarberIdentity barber={barber} />
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span>{BARBER_GRADE_LABELS[barber.grade]}</span>
-                <BarberRating barber={barber} />
-              </div>
-              <BarberStatusBadge barber={barber} />
+            <li key={barber.id}>
+              <a
+                href={barbersPath(barber.id)}
+                aria-current={barber.id === selectedId ? 'true' : undefined}
+                className="block space-y-2 p-3 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted/30"
+                onClick={(event) => {
+                  event.preventDefault()
+                  onSelect(barber.id)
+                }}
+              >
+                <BarberIdentity barber={barber} />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span>{BARBER_GRADE_LABELS[barber.grade]}</span>
+                  <BarberRating barber={barber} />
+                </div>
+                <BarberStatusBadge barber={barber} />
+              </a>
             </li>
           ))}
         </ul>
@@ -160,14 +199,32 @@ function BarberRating({ barber }: { barber: AdminBarber }) {
  * Бейдж статуса. Цвет не единственный сигнал: у каждого состояния свой текст,
  * а «Скрыт из поиска» ещё и объясняет последствие.
  */
-export function BarberStatusBadge({ barber }: { barber: AdminBarber }) {
+export function BarberStatusBadge({
+  barber,
+  className,
+}: {
+  barber: { isActive: boolean; isVerified: boolean }
+  className?: string
+}) {
   if (!barber.isActive) {
-    return <Badge variant="outline">Скрыт из поиска</Badge>
+    return (
+      <Badge variant="outline" className={className}>
+        Скрыт из поиска
+      </Badge>
+    )
   }
 
   if (!barber.isVerified) {
-    return <Badge variant="outline">На проверке</Badge>
+    return (
+      <Badge variant="outline" className={className}>
+        На проверке
+      </Badge>
+    )
   }
 
-  return <Badge variant="secondary">Подтверждён</Badge>
+  return (
+    <Badge variant="secondary" className={className}>
+      Подтверждён
+    </Badge>
+  )
 }

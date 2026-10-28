@@ -252,6 +252,16 @@ export function formatReviewsCount(count: number): string {
   return `${count} ${plural(count, ['отзыв', 'отзыва', 'отзывов'])}`
 }
 
+/** «5 дней», «1 день», «2 дня» — рабочее расписание в чек-листе готовности. */
+export function formatDaysCount(count: number): string {
+  return `${count} ${plural(count, ['день', 'дня', 'дней'])}`
+}
+
+/** «8 лет», «1 год», «2 года» — стаж барбера. */
+export function formatExperience(years: number): string {
+  return `${years} ${plural(years, ['год', 'года', 'лет'])}`
+}
+
 /** Сколько отзыв ждёт решения: «ждёт 3 дня», «ждёт 6 часов». */
 export function formatWaitingSince(iso: string, now: number): string {
   const difference = Math.max(0, now - Date.parse(iso))

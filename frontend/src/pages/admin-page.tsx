@@ -94,7 +94,7 @@ export function AdminPage() {
   if (route.kind === 'barbers') {
     return (
       <AdminShell hideRailOnMobile={route.barberId !== null}>
-        <BarbersScreen />
+        <BarbersScreen barberId={route.barberId} />
       </AdminShell>
     )
   }
