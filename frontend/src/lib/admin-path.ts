@@ -10,10 +10,12 @@ export type AdminTab = 'pending' | 'published'
 export type AdminRoute =
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
   | { kind: 'barbers'; barberId: string | null }
+  | { kind: 'users'; userId: string | null }
   | { kind: 'notFound' }
 
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
 const BARBER_PATH = /^\/admin\/barbers\/([^/]+)$/
+const USER_PATH = /^\/admin\/users\/([^/]+)$/
 
 const GUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -42,10 +44,20 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
     return { kind: 'barbers', barberId: null }
   }
 
+  if (pathname === '/admin/users') {
+    return { kind: 'users', userId: null }
+  }
+
   const barberMatch = BARBER_PATH.exec(pathname)
 
   if (barberMatch?.[1]) {
     return { kind: 'barbers', barberId: barberMatch[1] }
+  }
+
+  const userMatch = USER_PATH.exec(pathname)
+
+  if (userMatch?.[1]) {
+    return { kind: 'users', userId: userMatch[1] }
   }
 
   const match = REVIEW_PATH.exec(pathname)
@@ -66,6 +78,18 @@ export function barbersPath(barberId: string | null = null): string {
 
 /** Идентификатор барбера должен быть GUID: иначе запрос заведомо не найдёт запись. */
 export function isBarberId(value: string): boolean {
+  return GUID_PATTERN.test(value)
+}
+
+/** Адрес списка пользователей: выбранный аккаунт — в пути. */
+export function usersPath(userId: string | null = null): string {
+  return userId
+    ? `/admin/users/${encodeURIComponent(userId)}`
+    : '/admin/users'
+}
+
+/** Идентификатор пользователя должен быть GUID: иначе запрос заведомо не найдёт запись. */
+export function isUserId(value: string): boolean {
   return GUID_PATTERN.test(value)
 }
 

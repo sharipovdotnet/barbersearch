@@ -284,6 +284,30 @@ public static class ApiErrorCodes
         public const string AddUniqueViolation = AddPrefix + ".uniqueViolation";
 
         /// <summary>
+        /// Администратор пытается сменить роль себе; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Роль себе меняет другой администратор: иначе один промах в интерфейсе
+        /// закрывает владельцу доступ к разделу, из которого он эту роль менял.
+        /// </remarks>
+        public const string RoleSelfChange = "user.role.self";
+
+        /// <summary>
+        /// Администратор пытается заблокировать собственный доступ; <c>409</c>.
+        /// </summary>
+        public const string DeactivationSelf = "user.deactivation.self";
+
+        /// <summary>
+        /// Операция оставила бы сервис без активного администратора; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Срабатывает и на снятие роли <c>Admin</c>, и на блокировку последнего активного
+        /// администратора. Проверка выполняется под транзакционной блокировкой, поэтому два
+        /// одновременных понижения не могут обнулить список администраторов.
+        /// </remarks>
+        public const string LastAdmin = "user.admin.last";
+
+        /// <summary>
         /// Строку изменил или удалил параллельный запрос; <c>409</c>.
         /// </summary>
         public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
@@ -322,6 +346,51 @@ public static class ApiErrorCodes
         /// Префикс кодов проверки размера страницы; полный код — <c>admin.barbers.pageSize</c>.
         /// </summary>
         public const string PageSizePrefix = "admin.barbers";
+    }
+
+    /// <summary>
+    /// Админский список и карточка пользователей.
+    /// </summary>
+    /// <remarks>
+    /// Отдельные коды от <see cref="User"/>: это отдельный эндпоинт, и клиент различает
+    /// ошибку фильтра админского списка и ошибку операции над пользователем.
+    /// </remarks>
+    public static class AdminUser
+    {
+        /// <summary>
+        /// Пользователя с указанным идентификатором нет; <c>404</c>.
+        /// </summary>
+        public const string NotFound = "admin.users.notFound";
+
+        /// <summary>
+        /// Фильтр статуса не <c>all</c>, <c>active</c>, <c>blocked</c> или <c>unverified</c>; <c>400</c>.
+        /// </summary>
+        public const string StatusInvalid = "admin.users.status";
+
+        /// <summary>
+        /// Фильтр роли не <c>all</c>, <c>Customer</c>, <c>Barber</c> или <c>Admin</c>; <c>400</c>.
+        /// </summary>
+        public const string RoleInvalid = "admin.users.role";
+
+        /// <summary>
+        /// Поисковая строка длиннее допустимой; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "admin.users.search";
+
+        /// <summary>
+        /// Идентификатор пользователя в запросе пуст; <c>400</c>.
+        /// </summary>
+        public const string InvalidId = "admin.users.id";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "admin.users.page.limit";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>admin.users.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "admin.users";
     }
 
     /// <summary>

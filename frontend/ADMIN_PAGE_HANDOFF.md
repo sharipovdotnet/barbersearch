@@ -3,9 +3,12 @@
 > **Дата:** 28 октября 2026.
 > **Статус:** этап 1 реализован 28.10.2026 — каркас `/admin` и экран «Отзывы»;
 > этап 2 реализован 28.10.2026 — раздел «Барберы»: очередь проверки, поиск,
-> карточка с чек-листом готовности и действия.
+> карточка с чек-листом готовности и действия; этап 3 реализован 28.10.2026 —
+> раздел «Пользователи»: список, карточка, роли, блокировка, подтверждения
+> и создание с одноразовым паролем.
 > Backend: `GET /api/admin/reviews`, `GET /api/admin/reviews/{id}`,
-> `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}`; frontend:
+> `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}`,
+> `GET /api/admin/users`, `GET /api/admin/users/{id}`; frontend:
 > `src/pages/admin-page.tsx`, `src/components/admin/**`, `src/lib/admin-*.ts`.
 > Следующие разделы — по §5.
 > **Как пользоваться:** прикрепи этот файл к новой сессии DSH или вставь его
@@ -160,7 +163,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Очередь отзывов | `GET /api/reviews/moderation`, публикация/скрытие | Отдельный админский DTO с именем барбера, клиентом и визитом |
 | Опубликованные отзывы | скрытие | `GET /api/admin/reviews?status=published`, `GET /api/admin/reviews/{id}` |
 | Барберы | verify/unverify, grade, rating, activation | `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}` — ✅ этап 2 |
-| Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` |
+| Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` — ✅ этап 3 |
 | Каталог | create/update/activation | `GET` списков услуг, специализаций, салонов |
 | Брони | `GET /api/bookings` | Имена и контекст в ответе; поиск пользователя |
 | Журнал | таблица `audit_log` | `GET /api/admin/audit` (read-only) |
@@ -391,6 +394,18 @@ Git-корень на уровень выше рабочей папки, поэ�
   «Пользователь создан. Передайте пароль безопасным каналом —
   больше он не покажется»: отправки писем в системе нет.
 
+**Как реализовано (28.10.2026), с двумя отступлениями:**
+
+- Привязка профиля барбера не выведена: `PUT api/users/{id}/barber-profile/{profileId}`
+  требует идентификатор профиля, а выбрать его в интерфейсе не из чего —
+  списка профилей для этого действия нет. Вместо неё карточка показывает
+  уже привязанный профиль (имя, подтверждён, виден ли в поиске) и ссылку
+  «Открыть карточку» на `/admin/barbers/{id}`.
+- Защита «нельзя себе» и «последний администратор» — на бэкенде, а не только
+  в UI: коды `user.role.self`, `user.deactivation.self`, `user.admin.last`.
+  Интерфейс дополнительно скрывает смену роли и блокировку для собственного
+  аккаунта, но полагается на сервер как на источник истины.
+
 ### 3.7 «Каталог»
 
 Три вкладки: «Услуги», «Специализации», «Салоны». Везде таблица
@@ -490,9 +505,10 @@ Read-only история: когда, кто, что изменил, у како
 
 ## 4. Правила и риски
 
-1. **Последний админ.** Сейчас бэкенд не запрещает снять роль
-   с последнего администратора. Это надо закрыть либо правилом
-   в Application, либо хотя бы запретом на себя в UI.
+1. **Последний админ.** ✅ Закрыто на бэкенде 28.10.2026: смена роли
+   и блокировка проверяют число активных администраторов под
+   транзакционной блокировкой (`user.admin.last`), а действовать на себя
+   нельзя вовсе (`user.role.self`, `user.deactivation.self`).
 2. **Смена роли и блокировка** меняют `SecurityStamp` и завершают все
    сессии пользователя. Об этом надо писать в подтверждении.
 3. **Аудит каталога** не ведётся. Если каталог редактируется в админке,
@@ -521,7 +537,11 @@ Read-only история: когда, кто, что изменил, у како
    фильтры «На проверке / Все / Скрытые», поиск, split-view с карточкой,
    шесть пунктов готовности, подтверждение, грейд и скрытие из поиска.
 3. **«Пользователи».** Список, роли, блокировка, подтверждения,
-   создание с одноразовым паролем.
+   создание с одноразовым паролем. ✅ Реализовано 28.10.2026: `/admin/users`,
+   фильтры статуса и роли, поиск, split-view с карточкой, смена роли,
+   блокировка/разблокировка, подтверждение email и телефона, создание
+   пользователя с одноразовым паролем. Защита администраторов —
+   на бэкенде.
 4. **«Каталог».** Услуги, специализации, салоны; формы и выключение.
 5. **«Журнал».** Read-only история и diff.
 6. **«Брони» и «Сводка».** Поддержка и агрегаты, когда появятся контракты.
@@ -548,6 +568,23 @@ Read-only история: когда, кто, что изменил, у како
    с десктопа? Дизайн предполагает desktop-first с работоспособной
    мобильной модерацией.
 
+**Решено по факту этапа 3 (28.10.2026):**
+
+- Стартовый экран остался прежним — очередь отзывов; «Сводка» отложена.
+- Email клиента администратор видит полностью, но только в админских
+  контрактах (`AdminUserResponse` / `AdminUserDetailResponse`). Телефон
+  показывается в карточке, потому что без него поддержка не свяжется
+  с человеком.
+- Состояния «отклонён» нет: отзыв либо опубликован, либо скрыт.
+- Правило «последний администратор» живёт на бэкенде: смена роли
+  и блокировка проверяют число активных администраторов под
+  транзакционной блокировкой. Себя менять нельзя вообще — это отдельный
+  код `user.role.self` / `user.deactivation.self`.
+- Команда администраторов предполагается: автор действия в журнале
+  понадобится на этапе «Журнал», а не сейчас.
+- Мобильный сценарий сохранён: список → карточка на весь экран,
+  desktop-first split-view.
+
 ---
 
 ## 7. С чего начать в новой сессии
@@ -568,11 +605,13 @@ Read-only история: когда, кто, что изменил, у како
 
 ### Готовый промпт для новой сессии
 
-> Продолжаем дизайн и реализацию админ-панели BarberSearch. Контекст
-> и решения — в `frontend/ADMIN_PAGE_HANDOFF.md`. Сначала прочитай его
-> и `frontend/AGENT.md`, затем предложи план первого этапа
-> (каркас `/admin` + экран «Отзывы»). Ничего не меняй без моего
-> подтверждения.
+> Продолжаем реализацию админ-панели BarberSearch. Контекст и решения —
+> в `frontend/ADMIN_PAGE_HANDOFF.md`, правила — в `frontend/AGENT.md`.
+> Разделы «Отзывы», «Барберы» и «Пользователи» уже сделаны; следующий
+> по плану (§5) — «Каталог». Сначала прочитай оба файла и предложи план
+> этапа: какие админские чтения нужны для услуг, специализаций и салонов,
+> как выглядят формы и выключение, что делать с аудитом каталога. Код
+> не меняй до подтверждения.
 
 ---
 
@@ -655,6 +694,49 @@ Read-only история: когда, кто, что изменил, у како
    Клик-сквозной сценарий в браузере не прогонялся: запущенный dev-бэкенд держит
    старые сборки, для проверки его нужно перезапустить.
 
+### Реализация этапа 3 — «Пользователи» (28.10.2026)
+
+25. Backend: `AdminUserResponse` (строка списка) и `AdminUserDetailResponse`
+   с `AdminUserBarberProfileResponse` (`Users/Admin`); публичных DTO
+   пользователей не появилось — это первые чтения пользователей в API.
+26. Backend: запросы `GetAdminUsers` (статус `all|active|blocked|unverified`,
+   роль `Customer|Barber|Admin`, поиск по имени, фамилии и email, keyset-курсор,
+   `pageSize` 1..100) и `GetAdminUser` (любой пользователь, профиль барбера),
+   `AdminUserStatus`, `AdminUserCursor`, коды `admin.users.*`.
+27. Backend: проекция в `UserRepository` — `ILIKE` с экранированием `%`, `_`
+   и `\`, порядок `created_at DESC, id`, карточка одним SQL с `LEFT JOIN`
+   по `barber_profiles` (клиенты и администраторы не выпадают).
+28. Backend: `AdminUsersController` — `GET api/admin/users`,
+   `GET api/admin/users/{id}`, политика `AdminOnly`; миграций не потребовалось.
+29. Backend: защита администраторов — `user.role.self`, `user.deactivation.self`
+   и `user.admin.last`; проверка числа активных администраторов идёт внутри
+   транзакции под `pg_advisory_xact_lock('barbersearch.admins')`
+   (`IUserRepository.AcquireAdminLockAsync`), поэтому два одновременных
+   понижения не могут оставить сервис без управления.
+30. Backend: тесты — unit (фильтры, порядок, курсор, поиск, лимиты, 404,
+   правило последнего администратора), инфраструктура (трансляция SQL,
+   `LEFT JOIN`, `ILIKE`) и integration (список, карточка с профилем,
+   401/403, запрет на себя) на PostgreSQL.
+31. Frontend: `lib/admin-path.ts` — маршруты `/admin/users[/{id}]`;
+   `admin-rail.tsx` — третий раздел; `admin-page.tsx` — заголовок документа
+   и мобильная деталь без рейла.
+32. Frontend: `lib/admin-users.ts` (типы, русские подписи ролей и статусов,
+   чтение, действия, ошибки), `hooks/use-admin-user-list.ts`,
+   `use-admin-user.ts`.
+33. Frontend: `components/admin/users-screen.tsx` (фильтры статуса и роли,
+   поиск с debounce, split-view, состояния), `user-list.tsx` (строки ~64 px,
+   roving tabindex, карточки на мобильном) и `user-detail.tsx` (контакты,
+   подтверждения, метаданные входа, профиль барбера, диалоги смены роли
+   и блокировки, скрытие действий для себя).
+34. Frontend: `create-user-dialog.tsx` — email, имя, фамилия, роль, пароль
+   12–128 с генерацией, панель «пароль больше не покажется», копирование.
+35. Проверено: `npm run lint` — 0/0 (74 файла), `npm run build` — успешно
+   (2223 модуля, JS 517.19 kB / gzip 150.46 kB), backend unit
+   (184 + 255 + 80) и integration (20 сценариев) зелёные. Клик-сквозной
+   сценарий в браузере не прогонялся: запущенный dev-бэкенд держит старые
+   сборки, его нужно перезапустить. Бандл впервые превысил цель
+   ~150 kB gzip — следующий шаг — route splitting (`AGENT.md` §16 п. 7).
+
 ---
 
 ## 9. Карта файлов
@@ -669,6 +751,10 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: список и карточка барбера | `frontend/src/components/admin/barber-list.tsx`, `barber-detail.tsx` |
 | Админка: API барберов | `frontend/src/lib/admin-barbers.ts` |
 | Админка: хуки | `frontend/src/hooks/use-admin-barber-list.ts`, `use-admin-barber.ts` |
+| Админка: экран пользователей | `frontend/src/components/admin/users-screen.tsx` |
+| Админка: список, карточка и создание пользователя | `frontend/src/components/admin/user-list.tsx`, `user-detail.tsx`, `create-user-dialog.tsx` |
+| Админка: API пользователей | `frontend/src/lib/admin-users.ts` |
+| Админка: хуки пользователей | `frontend/src/hooks/use-admin-user-list.ts`, `use-admin-user.ts` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
 | Сессия | `frontend/src/components/session-provider.tsx`, `src/hooks/use-session.ts`, `src/lib/auth.ts` |
@@ -678,7 +764,7 @@ Read-only история: когда, кто, что изменил, у како
 | Шапка | `frontend/src/components/site-header.tsx` |
 | Отзывы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/ReviewsController.cs` |
 | Барберы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/BarberProfilesController.cs`, `AdminBarbersController.cs` |
-| Пользователи (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/UsersController.cs` |
+| Пользователи (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/UsersController.cs`, `AdminUsersController.cs` |
 | Аудит | `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Audit/AuditTrail.cs` |
 | Контракт отзыва | `backend/BarberSearch/src/BarberSearch.Contracts/Reviews/GetReviews/ReviewResponse.cs` |
 | Контракт брони | `backend/BarberSearch/src/BarberSearch.Contracts/Bookings/GetBookings/BookingResponse.cs` |

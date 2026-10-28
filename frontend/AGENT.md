@@ -1,12 +1,12 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-11` (default `main`). The landing page, the customer
-> account and the admin review queue are implemented; barber search, slots and booking
-> screens are **not** wired to the API yet.
-> Verified on 2026-10-28: `npm run lint` — 0 warnings / 0 errors (61 files, 116 rules);
-> `npm run build` — success, 2210 modules, JS 431.94 kB (gzip 133.47 kB), CSS 67.17 kB
-> (gzip 11.84 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Code state: branch `features/issue-13` (default `main`). The landing page, the customer
+> account and the three admin sections (reviews, barbers, users) are implemented; barber
+> search, slots and booking screens are **not** wired to the API yet.
+> Verified on 2026-10-28: `npm run lint` — 0 warnings / 0 errors (74 files, 116 rules);
+> `npm run build` — success, 2223 modules, JS 517.19 kB (gzip 150.46 kB), CSS 69.41 kB
+> (gzip 12.22 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -546,6 +546,12 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
 | `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
 | `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist |
+| `GET` | `/api/admin/users?status=all\|active\|blocked\|unverified&role=&search=` | admin | user list with role, access state and verifications |
+| `GET` | `/api/admin/users/{id}` | admin | user card with contacts and the linked barber profile |
+| `PUT` | `/api/users/{id}/role` | admin | change a role; `409 user.role.self` / `user.admin.last` |
+| `POST` / `DELETE` | `/api/users/{id}/activation` | admin | unblock / block; `409 user.deactivation.self` / `user.admin.last` |
+| `POST` | `/api/users/{id}/email-verification`, `/phone-verification` | admin | mark email / phone verified |
+| `POST` | `/api/users` | admin | create a user with a one-time password |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/verification` | admin | confirm / unconfirm a profile |
 | `PUT` | `/api/barber-profiles/{id}/grade` | admin | change the grade (`{ grade }`, enum as a string) |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/activation` | admin | hide from search / return to search |
@@ -807,21 +813,25 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` (single chunk) | 468.47 kB | 140.46 kB |
-| `index-*.css` | 68.78 kB | 12.05 kB |
+| `index-*.js` (single chunk) | 517.19 kB | 150.46 kB |
+| `index-*.css` | 69.41 kB | 12.22 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2210 modules; build ≈ 5 s. There is **no code splitting**: every component, including the
+2223 modules; build ≈ 1 s. There is **no code splitting**: every component, including the
 admin screen, is in the initial bundle. The admin review slice added ≈20 kB gzip, the barber
-slice another ≈7 kB; the first router or booking flow should still split by route.
+slice another ≈7 kB, the users slice another ≈10 kB. The bundle is now **0.46 kB over the
+~150 kB gzip target** in §12.2, and the Vite chunk advisory fires. Route splitting (`React.lazy`
++ `Suspense` around `/admin/**`) is the next foundation task (§16 item 7) — it needs its own
+branch, not a stage-3 PR.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA; the current bundle already uses 140.46 kB.
+   working target, not a stakeholder-approved SLA; the current bundle uses 150.46 kB, so the next
+   non-essential UI slice waits for route splitting instead of widening the budget again.
 3. **Lazy-load below-the-fold and route-level code** once a router exists (`React.lazy` +
    `Suspense`). Do not preload the booking flow on the landing page.
 4. **Icons:** import named icons from `lucide-react` (tree-shaken). Never
@@ -859,7 +869,8 @@ slice another ≈7 kB; the first router or booking flow should still split by ro
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states |
 | Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo |
-| Other admin sections | ❌ users, catalogue, bookings, audit — not implemented; no dead rail links |
+| Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password |
+| Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
 | Barber search / card / slots | ❌ not wired; cards are demo data |
 | Booking flow | ❌ absent |
@@ -946,7 +957,9 @@ Ordered by user value, not by technical interest:
 **Completed 2026-10-28:** admin stage 1 — `/admin` shell, role gates and the review
 queue with publish/hide and the published tab; admin stage 2 — `/admin/barbers` with the
 pending queue, search, the profile card with its readiness checklist and
-verify/unverify, grade and hide/return actions.
+verify/unverify, grade and hide/return actions; admin stage 3 — `/admin/users` with the
+list (status/role filters, search), the user card, role change, block/unblock,
+email/phone confirmation and user creation with a one-time password.
 
 1. **Wire search** — `GET /api/barbers` with city/specialization/service/date filters, keyset
    `nextCursor`, debounce, loading/empty/error states; remove demo arrays.
@@ -966,8 +979,9 @@ verify/unverify, grade and hide/return actions.
 10. **Polish** — dark theme toggle, skip link, empty-state illustrations, form `errors` from
     the server mapped to fields.
 11. **Hardening** — runtime response validation, env typing, dependency review.
-12. **Admin continuation** — users, catalogue, bookings and the audit journal, in that order
-    (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Barbers are done.
+12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
+    (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
+    barbers and users are done.
 
 ---
 
