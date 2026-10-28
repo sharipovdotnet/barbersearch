@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
+import { fetchCsrfToken } from '@/lib/csrf'
 
 /**
  * Браузерная аутентификация через cookie.
@@ -25,16 +26,7 @@ export type SignInCredentials = {
   rememberMe: boolean
 }
 
-type CsrfToken = {
-  token: string
-}
-
 const CSRF_HEADER = 'X-CSRF-TOKEN'
-
-async function fetchCsrfToken(): Promise<string> {
-  const { token } = await apiRequest<CsrfToken>('/auth/csrf')
-  return token
-}
 
 /** Текущий пользователь или `null`, если cookie-сессии нет. */
 export async function fetchSession(): Promise<SessionUser | null> {

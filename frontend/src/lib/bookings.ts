@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api'
+import { csrfHeaders } from '@/lib/csrf'
 
 /**
  * Брони клиента.
@@ -57,6 +58,7 @@ export async function fetchBookings(
 export async function cancelBooking(bookingId: string): Promise<void> {
   await apiRequest<void>(`/bookings/${bookingId}/cancellation`, {
     method: 'POST',
+    headers: await csrfHeaders(),
   })
 }
 
@@ -73,6 +75,7 @@ export type CreateReviewInput = {
 export async function createReview(input: CreateReviewInput): Promise<string> {
   const created = await apiRequest<{ id: string }>('/reviews', {
     method: 'POST',
+    headers: await csrfHeaders(),
     body: JSON.stringify(input),
   })
 
