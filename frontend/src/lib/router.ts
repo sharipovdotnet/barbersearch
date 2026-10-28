@@ -41,6 +41,20 @@ export function usePathname(): string {
   return useSyncExternalStore(subscribe, readPathname, () => '/')
 }
 
+function readLocation(): string {
+  return `${readPathname()}${window.location.search}`
+}
+
+/**
+ * Текущий адрес с query string.
+ *
+ * Нужен разделу администрирования: вкладка отзывов и выбранная карточка живут в URL,
+ * а `usePathname` поиск сознательно не отслеживает.
+ */
+export function useLocation(): string {
+  return useSyncExternalStore(subscribe, readLocation, () => '/')
+}
+
 /** Переход внутри приложения. Абсолютный адрес на чужой origin игнорируется. */
 export function navigate(to: string, options: { replace?: boolean } = {}) {
   const url = new URL(to, window.location.origin)

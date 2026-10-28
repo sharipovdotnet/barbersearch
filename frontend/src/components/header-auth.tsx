@@ -6,7 +6,8 @@ import { LoginDialog } from '@/components/login-dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { navigate } from '@/lib/router'
+import { isAdminPath } from '@/lib/admin-path'
+import { navigate, useLocation } from '@/lib/router'
 
 /**
  * Кнопка «Войти» или профиль текущего пользователя в шапке.
@@ -14,13 +15,16 @@ import { navigate } from '@/lib/router'
 export function HeaderAuth() {
   const { status, user, signOut } = useSession()
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const location = useLocation()
+  const pathname = location.split('?')[0] ?? ''
+  const redirectTo = isAdminPath(pathname) ? location : undefined
 
   if (status === 'loading') {
     return <Skeleton className="h-7 w-20" aria-hidden />
   }
 
   if (status === 'anonymous' || !user) {
-    return <LoginDialog />
+    return <LoginDialog redirectTo={redirectTo} />
   }
 
   async function handleSignOut() {
@@ -62,9 +66,12 @@ export function HeaderAuth() {
         size="sm"
         onClick={handleSignOut}
         disabled={isSigningOut}
+        aria-label={isSigningOut ? 'Выходим…' : 'Выйти'}
       >
         <LogOut data-icon="inline-start" aria-hidden />
-        {isSigningOut ? 'Выходим…' : 'Выйти'}
+        <span className="hidden sm:inline">
+          {isSigningOut ? 'Выходим…' : 'Выйти'}
+        </span>
       </Button>
     </>
   )

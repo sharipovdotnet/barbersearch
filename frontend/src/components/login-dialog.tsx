@@ -222,6 +222,7 @@ function LoginDialog({
   variant = 'ghost',
   size = 'sm',
   className,
+  redirectTo = '/account',
   onSignedIn,
 }: {
   /** Содержимое кнопки-триггера; по умолчанию — «Войти» с иконкой. */
@@ -229,6 +230,8 @@ function LoginDialog({
   variant?: 'ghost' | 'default'
   size?: 'sm' | 'default' | 'lg'
   className?: string
+  /** Куда вернуться после входа; по умолчанию — кабинет клиента. */
+  redirectTo?: string
   /** Дополнительное действие после успешного входа, например повторный запрос данных. */
   onSignedIn?: () => void
 }) {
@@ -254,8 +257,8 @@ function LoginDialog({
         <LoginForm
           onSuccess={() => {
             setIsOpen(false)
-            // После входа клиент попадает в свои записи — это и есть ответ на «что дальше».
-            navigate('/account')
+            // После входа пользователь возвращается туда, откуда открыл диалог.
+            navigate(redirectTo)
             onSignedIn?.()
           }}
         />
