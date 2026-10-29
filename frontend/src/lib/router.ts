@@ -80,6 +80,28 @@ export function navigate(to: string, options: { replace?: boolean } = {}) {
   window.dispatchEvent(new Event(NAVIGATE_EVENT))
 }
 
+/**
+ * Обычный левый клик без модификаторов.
+ *
+ * Только такой переход перехватывает SPA: Ctrl/Cmd-клик и средняя кнопка должны
+ * открыть ссылку в новой вкладке штатно, поэтому обработчик их не трогает.
+ */
+export function isPlainClick(event: {
+  button: number
+  metaKey: boolean
+  ctrlKey: boolean
+  shiftKey: boolean
+  altKey: boolean
+}): boolean {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  )
+}
+
 /** Прокрутка к секции витрины; `false`, если такой секции на странице нет. */
 export function scrollToSection(id: string): boolean {
   const target = document.getElementById(id)
