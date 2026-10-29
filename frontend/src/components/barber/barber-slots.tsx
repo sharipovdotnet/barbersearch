@@ -1,6 +1,10 @@
-import { TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { Check, TriangleAlert } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
 
+import {
+  BarberBooking,
+  type BookingSlotSnapshot,
+} from '@/components/barber/barber-booking'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,6 +20,7 @@ import {
   addDays,
   isSalonDate,
   todayInTimeZone,
+  type BarberSlot,
   type BarberSlots as BarberSlotsData,
 } from '@/lib/barber-slots'
 import { formatSalonDate, formatTime } from '@/lib/format'
@@ -27,6 +32,12 @@ const SKELETON_KEYS = Array.from(
   { length: 6 },
   (_, index) => `slot-skeleton-${index}`
 )
+
+/** Выбранный слот и снимок ответа `/slots`: после перезапроса слота в списке может не быть. */
+type SlotSelection = {
+  slot: BarberSlot
+  snapshot: BookingSlotSnapshot
+}
 
 /** «5 слотов», «1 слот», «2 слота» — объявление для `aria-live`. */
 function slotsCountLabel(count: number): string {
@@ -57,11 +68,11 @@ function resultMessage(slots: BarberSlotsData): string {
 }
 
 /**
- * Секция «Свободное время»: дата, услуга, салон и чипы времени.
+ * Секция «Свободное время»: дата, услуга, салон, чипы времени и запись.
  *
- * Только чтение: слоты не кликабельны и брони здесь нет — кнопка-пустышка хуже,
- * чем её отсутствие. Время показывается в поясе салона из ответа, без пересчёта
- * в пояс браузера. Запроса нет вовсе, если у барбера не указан ни один салон.
+ * Слоты кликабельны только при выбранной услуге: `POST /api/bookings` требует
+ * `barberServiceId`, а `/slots` без `hairServiceId` отдаёт его `null`. После брони
+ * панель с подтверждением остаётся, а список слотов перезапрашивается.
  */
 export function BarberSlots({ profile }: { profile: BarberProfile }) {
   const salons = profile.salons
@@ -97,14 +108,26 @@ function BarberSlotsSection({
   const maxDate = addDays(today, 30)
   const [date, setDate] = useState(today)
   const isDateValid = isSalonDate(date) && date >= today && date <= maxDate
+  const [selection, setSelection] = useState<SlotSelection | null>(null)
+  const focusSlotsRef = useRef(false)
+  const slotsRegionRef = useRef<HTMLDivElement>(null)
 
-  const { slots, status, error, retry } = useBarberSlots({
+  const { slots, status, error, retry, reload } = useBarberSlots({
     barberProfileId: profile.id,
     // Невалидную дату не отправляем: сервер ждёт `DateOnly` и ответит framework-400.
     date: isDateValid ? date : '',
     hairServiceId,
     salonId: salon.salonId,
   })
+
+  const selectedService =
+    hairServiceId === null
+      ? null
+      : (services.find((service) => service.hairServiceId === hairServiceId) ??
+        null)
+
+  const isSelectable =
+    hairServiceId !== null && slots !== null && slots.barberServiceId !== null
 
   let liveMessage = ''
 
@@ -117,16 +140,61 @@ function BarberSlotsSection({
   }
   // У `error` и `unavailable` свои живые регионы: второй не нужен.
 
+  useEffect(() => {
+    if (!focusSlotsRef.current || status !== 'ready' || slots === null) {
+      return
+    }
+
+    focusSlotsRef.current = false
+    slotsRegionRef.current
+      ?.querySelector<HTMLInputElement>('input[type="radio"]')
+      ?.focus()
+  }, [status, slots])
+
   function handleSalonChange(nextSalonId: string) {
     const nextSalon =
       salons.find((item) => item.salonId === nextSalonId) ?? salons[0]
     const nextToday = todayInTimeZone(nextSalon.timeZoneId)
 
     setSalonId(nextSalonId)
+    setSelection(null)
     // В другом поясе выбранная дата могла оказаться в прошлом — берём сегодня.
     setDate((current) =>
       isSalonDate(current) && current >= nextToday ? current : nextToday
     )
+  }
+
+  function handleDateChange(nextDate: string) {
+    setDate(nextDate)
+    setSelection(null)
+  }
+
+  function handleServiceChange(nextServiceId: string) {
+    setHairServiceId(nextServiceId === '' ? null : nextServiceId)
+    setSelection(null)
+  }
+
+  function handleSelect(slot: BarberSlot) {
+    if (slots === null || slots.barberServiceId === null) {
+      return
+    }
+
+    setSelection({
+      slot,
+      snapshot: {
+        date: slots.date,
+        timeZoneId: slots.timeZoneId,
+        salonId: slots.salonId,
+        barberServiceId: slots.barberServiceId,
+      },
+    })
+  }
+
+  // «Выбрать другое время» и «Записаться ещё раз»: закрыть панель и обновить список.
+  function handleClear() {
+    setSelection(null)
+    focusSlotsRef.current = true
+    reload()
   }
 
   return (
@@ -147,7 +215,7 @@ function BarberSlotsSection({
                 max={maxDate}
                 value={date}
                 className="h-11 sm:h-9"
-                onChange={(event) => setDate(event.target.value)}
+                onChange={(event) => handleDateChange(event.target.value)}
               />
             </div>
 
@@ -157,11 +225,7 @@ function BarberSlotsSection({
                 id="slots-service"
                 value={hairServiceId ?? ''}
                 className={SELECT_CLASSES}
-                onChange={(event) =>
-                  setHairServiceId(
-                    event.target.value === '' ? null : event.target.value
-                  )
-                }
+                onChange={(event) => handleServiceChange(event.target.value)}
               >
                 <option value="">Любая услуга</option>
                 {services.map((service) => (
@@ -206,23 +270,50 @@ function BarberSlotsSection({
           </p>
 
           {isDateValid ? (
-            <div className="space-y-3" aria-busy={status === 'loading'}>
+            <div className="space-y-3">
               <p className="text-sm font-medium">{formatSalonDate(date)}</p>
 
-              {status === 'loading' && <SlotsSkeleton />}
+              <div ref={slotsRegionRef} aria-busy={status === 'loading'}>
+                {status === 'loading' && <SlotsSkeleton />}
 
-              {status === 'ready' && slots !== null && (
-                <SlotsList slots={slots} />
-              )}
+                {status === 'ready' && slots !== null && (
+                  <SlotsList
+                    slots={slots}
+                    selectable={isSelectable}
+                    selectedStartAt={selection?.slot.startAt ?? null}
+                    onSelect={handleSelect}
+                  />
+                )}
 
-              {status === 'error' && (
-                <SlotsError message={error} onRetry={retry} />
-              )}
+                {status === 'error' && (
+                  <SlotsError message={error} onRetry={retry} />
+                )}
 
-              {status === 'unavailable' && (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {error}
+                {status === 'unavailable' && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {error}
+                  </p>
+                )}
+              </div>
+
+              {status === 'ready' && slots !== null && !isSelectable && (
+                <p className="text-sm text-muted-foreground">
+                  Выберите услугу, чтобы записаться.
                 </p>
+              )}
+
+              {selection !== null && (
+                <BarberBooking
+                  key={selection.slot.startAt}
+                  profile={profile}
+                  slots={selection.snapshot}
+                  slot={selection.slot}
+                  serviceName={selectedService?.name ?? 'Услуга'}
+                  price={selectedService?.price ?? null}
+                  onBooked={reload}
+                  onConflict={reload}
+                  onClear={handleClear}
+                />
               )}
             </div>
           ) : (
@@ -238,7 +329,19 @@ function BarberSlotsSection({
   )
 }
 
-function SlotsList({ slots }: { slots: BarberSlotsData }) {
+function SlotsList({
+  slots,
+  selectable,
+  selectedStartAt,
+  onSelect,
+}: {
+  slots: BarberSlotsData
+  selectable: boolean
+  selectedStartAt: string | null
+  onSelect: (slot: BarberSlot) => void
+}) {
+  const groupId = useId().replace(/:/g, '')
+
   if (!slots.isWorkingDay) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -255,18 +358,55 @@ function SlotsList({ slots }: { slots: BarberSlotsData }) {
     )
   }
 
+  if (!selectable) {
+    return (
+      <ul className="flex flex-wrap gap-2">
+        {slots.slots.map((slot) => (
+          <li key={slot.startAt}>
+            <span className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-sm text-foreground tabular-nums">
+              <time dateTime={slot.startAt}>
+                {formatTime(slot.startAt, slots.timeZoneId)}
+              </time>
+            </span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   return (
-    <ul className="flex flex-wrap gap-2">
-      {slots.slots.map((slot) => (
-        <li key={slot.startAt}>
-          <span className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-sm text-foreground tabular-nums">
-            <time dateTime={slot.startAt}>
-              {formatTime(slot.startAt, slots.timeZoneId)}
-            </time>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <fieldset>
+      <legend className="sr-only">Время приёма</legend>
+      <div className="flex flex-wrap gap-2">
+        {slots.slots.map((slot, index) => {
+          const inputId = `${groupId}-slot-${index}`
+          const isSelected = selectedStartAt === slot.startAt
+
+          return (
+            <div key={slot.startAt} className="relative">
+              <input
+                id={inputId}
+                type="radio"
+                name="barber-slot"
+                value={slot.startAt}
+                checked={isSelected}
+                className="peer sr-only"
+                onChange={() => onSelect(slot)}
+              />
+              <label
+                htmlFor={inputId}
+                className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent bg-muted px-3 text-sm text-foreground tabular-nums transition-colors select-none hover:bg-muted/70 peer-checked:border-primary peer-checked:bg-primary peer-checked:font-medium peer-checked:text-primary-foreground peer-checked:hover:bg-primary peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 sm:h-9"
+              >
+                <time dateTime={slot.startAt}>
+                  {formatTime(slot.startAt, slots.timeZoneId)}
+                </time>
+                {isSelected && <Check className="size-3.5" aria-hidden />}
+              </label>
+            </div>
+          )
+        })}
+      </div>
+    </fieldset>
   )
 }
 

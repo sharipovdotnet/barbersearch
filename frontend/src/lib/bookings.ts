@@ -58,6 +58,35 @@ export async function cancelBooking(bookingId: string): Promise<void> {
   })
 }
 
+export type CreateBookingInput = {
+  barberProfileId: string
+  barberServiceId: string
+  salonId: string
+  startAt: string
+  endAt: string
+  idempotencyKey: string
+  customerNote: string | null
+}
+
+/**
+ * Создание брони; возвращает `id` созданной записи.
+ *
+ * `startAt`/`endAt` отправляются ровно такими, какими пришли из `/slots`: сервер не
+ * сверяет время с расписанием, поэтому пересчёт длительности или пояса создал бы
+ * бронь не на тот слот. `X-CSRF-TOKEN` здесь не нужен — antiforgery на сервере
+ * проверяется только на действиях `AuthController` (§9.4).
+ */
+export async function createBooking(
+  input: CreateBookingInput
+): Promise<string> {
+  const created = await apiRequest<{ id: string }>('/bookings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+
+  return created.id
+}
+
 export type CreateReviewInput = {
   bookingId: string
   rating: number
