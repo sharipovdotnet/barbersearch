@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api'
 import { csrfHeaders } from '@/lib/csrf'
+import type { Page } from '@/lib/paging'
 
 /**
  * Брони клиента.
@@ -30,11 +31,6 @@ export type Booking = {
   customerNote: string | null
   barberNote: string | null
   createdAt: string
-}
-
-export type Page<T> = {
-  items: T[]
-  nextCursor: string | null
 }
 
 /** Размер страницы совпадает с дефолтом сервера: кабинет не запрашивает больше. */

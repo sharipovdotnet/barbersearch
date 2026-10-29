@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
+import type { BarberGrade } from '@/lib/barber-grade'
 import { csrfHeaders } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 
@@ -10,39 +11,10 @@ import { describeApiFailure } from '@/lib/errors'
  * наружу не показывается.
  */
 
-/** Грейды приходят строками — так же, как в публичной карточке. */
-export type BarberGrade =
-  | 'None'
-  | 'Intern'
-  | 'JuniorBarber'
-  | 'MiddleBarber'
-  | 'SeniorBarber'
-  | 'ArtDirector'
-  | 'BarberSchoolTrainer'
-  | 'Manager'
-  | 'CompetitionBarber'
-  | 'BrandAmbassador'
-  | 'BarbershopOwner'
-
-/** Русские подписи грейдов: значения из API остаются английскими. */
-export const BARBER_GRADE_LABELS: Record<BarberGrade, string> = {
-  None: 'Без грейда',
-  Intern: 'Стажёр',
-  JuniorBarber: 'Младший барбер',
-  MiddleBarber: 'Барбер',
-  SeniorBarber: 'Старший барбер',
-  ArtDirector: 'Арт-директор',
-  BarberSchoolTrainer: 'Тренер школы',
-  Manager: 'Управляющий',
-  CompetitionBarber: 'Соревновательный барбер',
-  BrandAmbassador: 'Амбассадор бренда',
-  BarbershopOwner: 'Владелец барбершопа',
-}
-
-/** Порядок в выборе грейда: от младшего к старшему, как в домене. */
-export const BARBER_GRADES = Object.keys(
-  BARBER_GRADE_LABELS
-) as readonly BarberGrade[]
+// Админские компоненты исторически импортируют словари отсюда; источник — общий
+// `barber-grade.ts`, потому что грейды нужны и витрине.
+export { BARBER_GRADE_LABELS, BARBER_GRADES } from '@/lib/barber-grade'
+export type { BarberGrade } from '@/lib/barber-grade'
 
 export type AdminBarberStatusFilter = 'all' | 'pending' | 'hidden'
 
