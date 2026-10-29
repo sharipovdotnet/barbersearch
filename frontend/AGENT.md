@@ -1,14 +1,18 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-15` (default `main`). The landing page searches real
-> barbers through `GET /api/barbers` (city + date, keyset pagination); the customer account
-> and the three admin sections (reviews, barbers, users) are implemented. Barber profile
-> cards (`GET /api/barbers/{id}`), slots and booking screens are **not** wired yet.
-> Verified on 2026-10-29: `npm run lint` — 0 warnings / 0 errors (85 files, 116 rules);
-> `npm run build` — success, 2234 modules, main JS 372.30 kB (gzip 121.11 kB) plus the lazy
-> `admin-page` 115.48 kB (gzip 25.04 kB) and `account-page` 40.38 kB (gzip 11.35 kB) chunks;
-> CSS 69.74 kB (gzip 12.30 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Code state: branch `features/issue-16` (default `main`). The landing page searches real
+> barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
+> links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
+> weekly schedule, specializations, rating). The customer account and the three admin
+> sections (reviews, barbers, users) are implemented. Slots and booking screens are **not**
+> wired yet.
+> Verified on 2026-10-30: `npm run lint` — 0 warnings / 0 errors (96 files, 116 rules);
+> `npm run build` — success, 2245 modules, entry `index-*.js` 304.05 kB (gzip 97.10 kB) with
+> the shared `errors-*.js` 69.51 kB (gzip 26.25 kB) that carries React, lazy `admin-page`
+> 115.45 kB (gzip 25.01 kB), `account-page` 39.92 kB (gzip 11.22 kB) and `barber-page`
+> 14.08 kB (gzip 4.28 kB); CSS 70.92 kB (gzip 12.44 kB). Local Node 24.12.0, npm 11.21.1;
+> CI uses Node 24.
 
 ---
 
@@ -35,9 +39,9 @@
 **BarberSearch** frontend — a client-rendered React single-page app for barber discovery and
 online booking. It talks to the ASP.NET Core API in `../backend` (see `backend/AGENT.md`).
 
-Current slice: a landing page with real barber search (city + date, keyset pagination) and a
-real cookie-based sign-in / sign-out flow. Text search, specialization/service filters and
-booking UI are not available yet.
+Current slice: a landing page with real barber search (city + date, keyset pagination), public
+barber profiles at `/barbers/{id}`, and a real cookie-based sign-in / sign-out flow. Text
+search, specialization/service filters, slots and booking UI are not available yet.
 
 Technical approach:
 
@@ -58,7 +62,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-15` (default: `main`) |
+| Working branch | `features/issue-16` (default: `main`) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -142,6 +146,14 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── review-tabs.tsx         manual tabs (no counts: API has no total)
     │   │   └── reviews-screen.tsx      list/detail state, actions, announcements
     │   ├── account/                   ← customer cabinet: bookings, gates, review dialog
+    │   ├── barber/                    ← public /barbers/{id}; the page only composes them
+    │   │   ├── barber-hero.tsx         initials, name, grade, «Проверен», rating, salon
+    │   │   ├── barber-about.tsx        bio, languages, certificates, achievements, goodies
+    │   │   ├── barber-services.tsx     price list with category and duration, no booking
+    │   │   ├── barber-salons.tsx       addresses, the primary salon and weekly schedules
+    │   │   ├── barber-specializations.tsx  names and descriptions; hidden when empty
+    │   │   ├── barber-section.tsx      shared section heading (h2) for the cards
+    │   │   └── barber-state.tsx        skeleton, error and not-found states
     │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── home/                      ← landing sections; the page only composes them
@@ -163,6 +175,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── use-admin-review-list.ts   ← admin queue: pages, refresh, cursor, 401
     │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
     │   ├── use-barber-search.ts       ← landing search: filters, cursor, abort, retry
+    │   ├── use-barber-profile.ts      ← one public profile: cache-first, abort, retry, 404
     │   ├── use-barber-profiles.ts     ← public profile lookups for bookings
     │   ├── use-bookings.ts            ← customer bookings, cursor, cancel
     │   ├── use-media-query.ts         ← desktop preview vs mobile split-view
@@ -171,6 +184,7 @@ frontend/                              ← workspace root, NOT the git root
     ├── pages/
     │   ├── account-page.tsx           ← customer cabinet
     │   ├── admin-page.tsx             ← /admin route, gates, shell
+    │   ├── barber-page.tsx            ← /barbers/{id}: title, back link, states, sections
     │   └── home-page.tsx              ← landing composition: title, hash scroll, sections
     └── lib/
         ├── admin-path.ts              ← /admin path parsing/building, AdminTab
@@ -178,11 +192,13 @@ frontend/                              ← workspace root, NOT the git root
         ├── api.ts                     ← fetch wrapper, ApiError, ProblemDetails
         ├── auth.ts                    ← CSRF, signIn, signOut, fetchSession
         ├── barber-grade.ts            ← grade union, Russian labels, ordered grades
+        ├── barber-path.ts             ← /barbers/{id} parsing/building, GUID check
+        ├── barber-profile-labels.ts   ← ServiceCategory/Language/PaymentMethod/DayOfWeek labels
         ├── barber-search.ts           ← GET /barbers: filters, item DTO, page size 12
         ├── booking-status.ts          ← status labels/transitions
         ├── bookings.ts                ← booking/review reads and writes
         ├── calendar.ts                ← date helpers for the account calendar
-        ├── catalog.ts                 ← public barber profile cache
+        ├── catalog.ts                 ← public profile DTO, shared module cache, fetch/load
         ├── csrf.ts                    ← one antiforgery-token helper for mutations
         ├── errors.ts                  ← ProblemDetails → Russian copy
         ├── format.ts                  ← dates, money, rating, waiting time
@@ -237,15 +253,17 @@ The backend must be running for anything under `/api`:
 dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web
 ```
 
-**Verification snapshot, 2026-10-29:**
+**Verification snapshot, 2026-10-30:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 85 files, 116 rules
-npm run build → tsc -b + vite build OK, 2234 modules,
-                dist/assets/index-*.js          372.30 kB (gzip 121.11 kB)
-                dist/assets/admin-page-*.js     115.48 kB (gzip  25.04 kB)  lazy
-                dist/assets/account-page-*.js    40.38 kB (gzip  11.35 kB)  lazy
-                dist/assets/index-*.css          69.74 kB (gzip  12.30 kB)
+npm run lint  → 0 warnings, 0 errors, 96 files, 116 rules
+npm run build → tsc -b + vite build OK, 2245 modules,
+                dist/assets/index-*.js          304.05 kB (gzip  97.10 kB)
+                dist/assets/errors-*.js          69.51 kB (gzip  26.25 kB)  shared, preloaded
+                dist/assets/admin-page-*.js     115.45 kB (gzip  25.01 kB)  lazy
+                dist/assets/account-page-*.js    39.92 kB (gzip  11.22 kB)  lazy
+                dist/assets/barber-page-*.js     14.08 kB (gzip   4.28 kB)  lazy
+                dist/assets/index-*.css          70.92 kB (gzip  12.44 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -359,11 +377,12 @@ current path, `useLocation()` additionally returns the query string, and `naviga
 replaces history and notifies subscribers. Links stay real `<a href>`s, so middle-click and
 open-in-new-tab work.
 
-Three top-level areas:
+Four top-level areas:
 
 | Path | Page | Notes |
 |---|---|---|
-| `/` | `HomePage` | landing; unknown non-admin paths fall back here |
+| `/` | `HomePage` | landing; unknown non-admin paths fall back here, including `/barbers` and `/barbers/a/b` |
+| `/barbers/{id}` | `BarberPage` | public profile; a non-GUID id renders not-found without a request; `404` from the API is not a redirect |
 | `/account` | `AccountPage` | customer cabinet; role gates for barber/admin |
 | `/admin` | `AdminPage` | redirects to `/admin/reviews`; unknown `/admin/*` shows «Раздел не найден» |
 
@@ -372,13 +391,14 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
-Route code is split. `AdminPage` and `AccountPage` are `React.lazy` imports in `App.tsx`,
-behind one `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the
-landing ships only the shell and itself. `AppErrorBoundary` wraps the page inside `<main>`:
+Route code is split. `AdminPage`, `AccountPage` and `BarberPage` are `React.lazy` imports in
+`App.tsx`, behind one `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»);
+the landing ships only the shell and itself. `AppErrorBoundary` wraps the page inside `<main>`:
 a render exception replaces the screen with a Russian message and «Обновить страницу» /
 «На главную» actions, while the header, footer and navigation stay usable. The boundary is
-re-keyed by top-level route, so following a link after a crash mounts a fresh one. There is
-no per-widget boundary — one crashing card still takes its whole page down (§14).
+re-keyed by top-level route, and the profile key includes the id (`barber:{id}`), so a crash on
+one profile does not stick to the next one. There is no per-widget boundary — one crashing
+card still takes its whole page down (§14).
 
 ---
 
@@ -565,6 +585,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; the UI sends `pageSize=12` |
+| `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules, specializations, rating; `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context |
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
 | `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
@@ -588,8 +609,8 @@ admin DTO: the public `ReviewResponse` deliberately has no names or visit contex
 `GET /api/barbers` accepts `specializationId` and `hairServiceId` too, but the landing does
 not send them: the catalogue has no list GETs (`GET /api/specializations` and
 `GET /api/hair-services` do not exist), so there is nothing to populate the filters with.
-There is also no free-text parameter. `GET /api/barbers/{id}` and
-`GET /api/barbers/{id}/slots` exist on the backend but are not called yet (§16).
+There is also no free-text parameter. `GET /api/barbers/{id}/slots` exists on the backend but
+is not called yet (§16).
 
 `SessionUser` (mirrors `GET /auth/me`):
 
@@ -844,37 +865,43 @@ keyboard/focus paths are implemented and were checked manually.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-10-29)
+### 12.1 Current build (2026-10-30)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session, UI kit | 372.30 kB | 121.11 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 115.48 kB | 25.04 kB |
-| `account-page-*.js` — lazy `/account` | 40.38 kB | 11.35 kB |
-| `index-*.css` | 69.74 kB | 12.30 kB |
+| `index-*.js` — shell, landing, search, session, UI kit | 304.05 kB | 97.10 kB |
+| `errors-*.js` — shared chunk with React and modules used by the entry and the lazy pages; preloaded with the entry | 69.51 kB | 26.25 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` | 14.08 kB | 4.28 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 115.45 kB | 25.01 kB |
+| `account-page-*.js` — lazy `/account` | 39.92 kB | 11.22 kB |
+| `catalog-*.js` — profile cache shared by the account and the profile page | 0.73 kB | 0.43 kB |
+| `index-*.css` | 70.92 kB | 12.44 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
-| `index.html` | 0.67 kB | — |
+| `index.html` | 0.84 kB | — |
 
-2234 modules; warm build ≈ 1 s (≈15 s on the first run of a session). The route split is in
-place: `App.tsx` imports the admin and account pages through `React.lazy` + `Suspense`, so the
-landing loads `index-*.js` + `index-*.css` only — 121.11 kB of JS (≈29 kB under the ~150 kB
-target in §12.2) plus 12.30 kB of CSS — and the lazy chunks are fetched on navigation.
-`index.html` preloads nothing but the entry, and the Vite chunk advisory does not fire. The
-split cost one extra round trip on the first `/admin` or `/account` visit; both show the page
-skeleton meanwhile. The old shared `errors-*.js` chunk is gone: the landing now imports
-`lib/errors` too, so it lives in `index-*.js`. The landing, the shell and the search code are
-still one chunk; the section files do not create extra chunks (§14, item 17).
+2245 modules; warm build ≈ 6 s (≈15 s on the first run of a session). The route split is in
+place: `App.tsx` imports the admin, account and profile pages through `React.lazy` + `Suspense`,
+so the landing loads `index-*.js` + the preloaded shared `errors-*.js` + `index-*.css` —
+123.71 kB of JS gzip (≈26 kB under the ~150 kB target in §12.2) plus 12.44 kB of CSS — and the
+lazy chunks are fetched on navigation. The shared chunk appeared in this slice: the profile page
+imports `lib/errors`, `lib/format` and `lib/catalog`, which the entry already used, so Rolldown
+hoisted React and those modules out of `index-*.js` (the raw entry dropped from 372.30 kB to
+304.05 kB). The real initial cost grew by ≈2.6 kB gzip against the 2026-10-29 baseline. A first
+`/barbers/{id}` visit costs one extra round trip (4.28 kB gzip) while the page skeleton shows;
+`admin-page` and `account-page` are unchanged. `index.html` preloads the entry, the runtime and
+the shared chunk, and the Vite chunk advisory does not fire. The landing, the shell and the
+search code are still one chunk; the section files do not create extra chunks (§14, item 17).
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 121.11 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 123.71 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
-3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`
-   and `/account` are split; do not statically import either from the shell, and do not preload
-   the booking flow on the landing page.
+3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
+   `/account` and `/barbers/{id}` are split; do not statically import either from the shell, and
+   do not preload the booking flow on the landing page.
 4. **Icons:** import named icons from `lucide-react` (tree-shaken). Never
    `import * as icons`. Do not add an icon library alongside it.
 5. **Fonts:** Fontsource ships unicode-range subsets; the browser downloads only the subsets it
@@ -913,9 +940,9 @@ still one chunk; the section files do not create extra chunks (§14, item 17).
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password |
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
-| Barber search / card / slots | ⚠️ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); the barber card (`{id}`) and slots are not |
+| Barber search / card / slots | ⚠️ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more) and `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry); slots and booking are not |
 | Booking flow | ❌ absent |
-| Routing | ✅ hand-rolled History API over `/`, `/account`, `/admin/**`; `AdminPage` and `AccountPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/admin/**`; `AdminPage`, `AccountPage` and `BarberPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
 | Responsive layout | ✅ landing and admin checked at 320/640/1280 px; no tests |
@@ -947,7 +974,7 @@ the feature grows; **P3** cosmetic/structural.
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
 | 15 | P3 | `font-heading` is just an alias of the sans stack; there is no display typeface | Keep neutral, or decide on a display face (§17) |
 | 16 | P3 | Dark tokens exist but there is no toggle and no `prefers-color-scheme` handling | Add a theme toggle + persisted choice when dark mode is a product requirement |
-| 17 | P3 | The landing, the shell and the shared session/UI/search code still ship in one 372 kB chunk | Keep the admin/account code lazy; split the landing further if the initial budget grows |
+| 17 | P3 | The landing, the shell and the shared session/UI/search code still ship in the entry chunk (304 kB + the 69 kB shared chunk) | Keep the admin/account/profile code lazy; split the landing further if the initial budget grows |
 | 18 | P3 | Node version is not pinned (no `.nvmrc`, no `engines`); local 24.12.0 vs CI 24 | Add one pinning mechanism (owner decision) |
 | 19 | P3 | `SessionUser.role` is `string`; UI will branch on roles later | Narrow it to a union of `Customer`, `Barber`, `Admin` once the contract is fixed |
 | 20 | P3 | No «Забыли пароль?» / «Регистрация» links in the login dialog | Product decision; registration and change-password exist, a reset flow needs backend work |
@@ -1008,15 +1035,18 @@ foundation — `AdminPage` and `AccountPage` are lazy chunks behind `Suspense`, 
 `GET /api/barbers` with city + date filters, keyset `nextCursor` (`pageSize` 12),
 «Показать ещё», and loading/empty/error/load-more states; the demo arrays and the notice
 that the cards were not connected to the API are gone, and `HomePage` is split into
-`components/home/*`.
-Specialization/service filters are **not** part of this slice: the catalogue still has no
-list GETs, so there is nothing to populate them with.
+`components/home/*`. Specialization/service filters are **not** part of that slice: the catalogue
+still has no list GETs, so there is nothing to populate them with. **Completed 2026-10-30:**
+barber card — the public `/barbers/{id}` as a lazy chunk, `GET /api/barbers/{id}` through the
+shared `lib/catalog.ts` cache (full DTO with services, salons + weekly schedules and
+specializations), the page sections (hero, about, services with prices and durations,
+specializations, salons, payment, late policy), loading/not-found/error/retry states, and search
+cards that are real links to the profile (middle click and new tabs work). Slots, booking and the
+review list are still absent.
 
-Roadmap numbers are stable for links: completed item 1 was removed, the remaining numbers do
-not shift.
+Roadmap numbers are stable for links: completed items 1 and 2 were removed, the remaining numbers
+do not shift.
 
-2. **Barber card** — `GET /api/barbers/{id}`; services, salons, specializations, rating;
-   `barberServiceId` vs `hairServiceId` distinction (backend §16).
 3. **Slots** — `GET /api/barbers/{id}/slots`; format UTC slots in `timeZoneId`, handle
    `isWorkingDay: false`.
 4. **Booking** — auth gate, `POST /api/bookings` with an idempotency key, `409` overlap/lock

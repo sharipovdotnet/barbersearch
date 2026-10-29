@@ -25,6 +25,7 @@ npm run preview  # serve dist/
 | Path | Screen |
 |---|---|
 | `/` | landing page: real barber search by city and date, how it works, account CTA |
+| `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | customer cabinet: bookings, cancellation, review, password |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
@@ -52,6 +53,26 @@ will follow once those read endpoints appear.
 - `src/lib/barber-search.ts` — filters, `BarberSearchItem`, `searchBarbers()`.
 - `src/hooks/use-barber-search.ts` — pages, abort of stale requests, retry, load-more state.
 - `src/components/home/` — hero/search form, results grid, cards and the account CTA.
+
+## Barber profile
+
+`/barbers/{id}` calls `GET /api/barbers/{id}` (anonymous, 120 requests per minute per IP; `404`
+for a missing, hidden or unconfirmed profile, `400` for an empty GUID). The page shows the name,
+Russian grade, «Проверен» badge, rating or «Пока нет отзывов», experience, bio, languages,
+certificates, achievements, comfort and communication lists, services with price and duration,
+specializations, salons with addresses and the weekly schedule, payment methods and the late
+policy. Empty blocks are hidden instead of rendering an empty heading.
+
+- `src/pages/barber-page.tsx` — document title, back link, states and section composition.
+- `src/components/barber/` — hero, about, services, specializations, salons and the state views.
+- `src/hooks/use-barber-profile.ts` — cache-first load, abort on id change/unmount, retry.
+- `src/lib/barber-path.ts`, `src/lib/catalog.ts` — route parsing and the shared profile cache.
+- `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
+
+Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
+There are **no** slots, no booking button and no review list yet: those are the next slices.
+Services carry `barberServiceId` (for a future `POST /api/bookings`) and `hairServiceId` (for
+search and slots); the page uses neither yet.
 
 ## API proxy
 
@@ -101,7 +122,7 @@ the profile must be returned to search first.
 - `AGENT.md` — durable frontend rules and reference for AI agents; read it before changing the
   project
 - `src/App.tsx` — shell: header, page switch, footer
-- `src/pages/` — `home-page`, `account-page`, `admin-page`
+- `src/pages/` — `home-page`, `account-page`, `admin-page`, `barber-page`
 - `src/components/ui` — shadcn/ui components, add more with `npx shadcn@latest add <name>`
 - `src/lib/utils.ts` — `cn` helper
 - `components.json` — shadcn/ui config and aliases (`@/`)
