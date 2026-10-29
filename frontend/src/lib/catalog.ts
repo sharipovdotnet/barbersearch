@@ -1,4 +1,11 @@
 import { apiRequest } from '@/lib/api'
+import type { BarberGrade } from '@/lib/barber-grade'
+import type {
+  DayOfWeek,
+  Language,
+  PaymentMethod,
+  ServiceCategory,
+} from '@/lib/barber-profile-labels'
 
 /**
  * Карточка барбера — единственный источник человекочитаемых данных о брони.
@@ -9,18 +16,32 @@ import { apiRequest } from '@/lib/api'
  * кабинет и карточка барбера делят одни и те же данные.
  */
 
-export type BarberService = {
+/** Услуга барбера в карточке: цена и длительность конкретного мастера. */
+export type BarberProfileService = {
+  /** Строка `barber_services` — её ждёт `POST /api/bookings` (R-20). */
   barberServiceId: string
+  /** Услуга справочника — её ждут поиск и слоты (R-20). */
   hairServiceId: string
   name: string
-  category: string
+  category: ServiceCategory
   defaultDurationMinutes: number
   price: number
   durationMinutes: number
   isActive: boolean
 }
 
-export type BarberSalon = {
+/** Недельное расписание пары (барбер, салон). */
+export type WorkingSchedule = {
+  id: string
+  dayOfWeek: DayOfWeek
+  /** `TimeOnly` из API (`09:00:00`), не ISO; для показа — `formatScheduleTime`. */
+  startTime: string
+  endTime: string
+  /** Выходной: время в ответе равно `00:00:00` и не показывается. */
+  isDayOff: boolean
+}
+
+export type BarberProfileSalon = {
   id: string
   salonId: string
   name: string
@@ -29,21 +50,38 @@ export type BarberSalon = {
   country: string
   timeZoneId: string
   isPrimary: boolean
+  workingSchedules: WorkingSchedule[]
 }
 
+export type BarberProfileSpecialization = {
+  id: string
+  specializationId: string
+  name: string
+  description: string | null
+}
+
+/** Публичная карточка: только поля без контактов владельца профиля. */
 export type BarberProfile = {
   id: string
   userId: string
   displayName: string
-  grade: string
+  grade: BarberGrade
   bio: string | null
   yearsOfExperience: number
+  languages: Language[]
+  certificatesAndTraining: string[]
   rating: number | null
   reviewsCount: number
+  achievements: string[]
+  paymentMethods: PaymentMethod[]
+  communicationFormat: string[]
+  goodies: string[]
+  latePolicy: string
   isActive: boolean
   isVerified: boolean
-  services: BarberService[]
-  salons: BarberSalon[]
+  services: BarberProfileService[]
+  salons: BarberProfileSalon[]
+  specializations: BarberProfileSpecialization[]
 }
 
 const profiles = new Map<string, BarberProfile>()
@@ -52,6 +90,25 @@ const inFlight = new Map<string, Promise<BarberProfile>>()
 /** Уже загруженная карточка — для синхронной отрисовки до ответа сети. */
 export function readCachedBarberProfile(id: string): BarberProfile | null {
   return profiles.get(id) ?? null
+}
+
+/**
+ * Свежий запрос карточки с записью в общий кэш.
+ *
+ * Нужен странице барбера: ей важен `signal`, чтобы отменить запрос при смене id,
+ * а `loadBarberProfile` дедуплицирует запросы кабинета и отменять их нельзя.
+ */
+export async function fetchBarberProfile(
+  id: string,
+  signal?: AbortSignal
+): Promise<BarberProfile> {
+  const profile = await apiRequest<BarberProfile>(
+    `/barbers/${id}`,
+    signal ? { signal } : {}
+  )
+
+  profiles.set(profile.id, profile)
+  return profile
 }
 
 /** Загрузка с дедупликацией: две брони одного барбера дают один запрос. */
@@ -66,9 +123,8 @@ export function loadBarberProfile(id: string): Promise<BarberProfile> {
     return pending
   }
 
-  const request = apiRequest<BarberProfile>(`/barbers/${id}`)
+  const request = fetchBarberProfile(id)
     .then((profile) => {
-      profiles.set(id, profile)
       inFlight.delete(id)
       return profile
     })
@@ -85,7 +141,7 @@ export function loadBarberProfile(id: string): Promise<BarberProfile> {
 export function findBookingService(
   profile: BarberProfile | undefined,
   barberServiceId: string
-): BarberService | null {
+): BarberProfileService | null {
   return (
     profile?.services.find(
       (service) => service.barberServiceId === barberServiceId
@@ -97,7 +153,7 @@ export function findBookingService(
 export function findBookingSalon(
   profile: BarberProfile | undefined,
   salonId: string
-): BarberSalon | null {
+): BarberProfileSalon | null {
   if (!profile) {
     return null
   }

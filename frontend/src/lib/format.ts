@@ -90,6 +90,19 @@ export function formatTime(iso: string, timeZone?: string): string {
   ).format(new Date(iso))
 }
 
+/**
+ * «09:00» из `TimeOnly` расписания.
+ *
+ * `formatTime` здесь не подходит: сервер присылает время локальным для салона и без
+ * даты (`09:00:00`), а `new Date` такого не понимает. Пересчитывать пояс не нужно —
+ * расписание уже в поясе салона.
+ */
+export function formatScheduleTime(value: string): string {
+  const match = /^(\d{2}):(\d{2})/.exec(value)
+
+  return match ? `${match[1]}:${match[2]}` : value
+}
+
 /** «сб, 1 ноября» — для героя-карточки. */
 export function formatLongDay(iso: string, timeZone?: string): string {
   return resolveFormatter(
