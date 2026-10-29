@@ -16,6 +16,8 @@ export type BarberSlotsController = {
   error: string | null
   /** Повтор текущего запроса: имеет смысл только для сети, `429` и `5xx`. */
   retry: () => void
+  /** Перезапрос тех же параметров: после брони или конфликта слоты устарели. */
+  reload: () => void
 }
 
 const SLOTS_FALLBACK = 'Не удалось загрузить свободное время.'
@@ -130,7 +132,8 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
     }
   }, [barberProfileId, date, hairServiceId, salonId, key, attempt])
 
-  const retry = useCallback(() => {
+  // Попытка в том же поколении: дата, услуга и салон не меняются, скелетон — да.
+  const reload = useCallback(() => {
     setAttempts((previous) => ({
       key,
       count: previous.key === key ? previous.count + 1 : 1,
@@ -144,6 +147,7 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
     slots: current.slots,
     status: current.status,
     error: current.error,
-    retry,
+    retry: reload,
+    reload,
   }
 }

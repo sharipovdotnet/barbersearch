@@ -69,24 +69,60 @@ required; `hairServiceId` comes from `services[].hairServiceId` and changes the 
 `salonId` is always sent and defaults to the primary salon. The date input opens on today in the
 salon time zone (`min` = today, `max` = today + 30 days), the service select offers
 «Любая услуга» plus the active services, and the salon select appears only when the barber has
-more than one salon. Slots are non-clickable `<time>` chips shown in the salon time zone
-(`timeZoneId`), never recomputed into the browser zone. A day off, a working day without slots,
-loading, a retryable network/`429`/`5xx` error, `404` (profile/salon/service) and `409` (broken
-salon time zone) each have their own Russian state; the previous request is aborted when the
-parameters change. There is **no** booking form yet, and no slots cache: slots change with
-bookings and time off.
+more than one salon. Slots are shown in the salon time zone (`timeZoneId`), never recomputed into
+the browser zone. A day off, a working day without slots, loading, a retryable
+network/`429`/`5xx` error, `404` (profile/salon/service) and `409` (broken salon time zone) each
+have their own Russian state; the previous request is aborted when the parameters change. There
+is no slots cache: slots change with bookings and time off.
+
+## Booking
+
+With «Любая услуга» the chips stay informational and a hint asks to choose a service: the API
+needs `barberServiceId`, and `/slots` returns it only when `hairServiceId` is sent. After a
+concrete service is chosen, the slots become native `<input type="radio">` chips inside a
+`<fieldset>` (arrow keys and Space work, the selected chip has a border, weight and check icon,
+and the focus ring stays visible). Selecting a slot mounts one panel under the list with the
+salon-local day and time, service, salon and price.
+
+The panel sends a real `POST /api/bookings` (authenticated customer, 30 writes per minute per
+user) with `barberProfileId`, `barberServiceId` and `salonId` from the `slots` response,
+`startAt`/`endAt` exactly as the API returned them, the trimmed comment or `null`, and a UUID
+`idempotencyKey` created once per panel. The client never derives the end time or converts the
+instants into the browser zone. `X-CSRF-TOKEN` is **not** sent: the backend does not validate
+antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
+
+- Anonymous visitor: the panel shows the summary, «Войдите, чтобы подтвердить запись» and
+  `LoginDialog` with `redirectTo={null}`. Sign-in updates the session without leaving the page;
+  the selected slot and the idempotency key survive, and the comment and «Записаться» appear.
+- `201` returns only `{ id }`: the panel shows «Заявка отправлена» with the `Pending` badge
+  («Ждёт подтверждения»), the submitted snapshot and links «Мои записи» / «Записаться ещё раз».
+  Slots are reloaded so the booked time disappears; the confirmation stays until the visitor
+  changes the date/service/salon or starts a new attempt.
+- `409 booking.add.overlap` → «Это время только что заняли. Выберите другое.» with a slot
+  reload; `409 booking.add.lockTimeout` → retry with the same key; `400 startAt.inPast`/`tooFar`
+  → «Это время уже прошло…» / «слишком далеко» with a slot reload; `401` asks to sign in and
+  then resubmits with the same key; `404` says the service or salon is no longer available;
+  `429`, network and `5xx` use `describeApiFailure` and retry with the same key. The same key is
+  reused for every retry of one attempt, so a repeated request returns `201` with the same `id`
+  instead of creating a second booking. The submit guard ignores a second click while a request
+  is pending.
 
 - `src/pages/barber-page.tsx` — document title, back link, states and section composition.
-- `src/components/barber/` — hero, slots, about, services, specializations, salons, state views.
+- `src/components/barber/` — hero, slots, booking panel, about, services, specializations,
+  salons, state views.
 - `src/hooks/use-barber-profile.ts` — cache-first load, abort on id change/unmount, retry.
-- `src/hooks/use-barber-slots.ts` — one slots request per parameter change, abort + generation, retry.
+- `src/hooks/use-barber-slots.ts` — one slots request per parameter change, abort + generation,
+  retry and `reload()` after a write.
+- `src/hooks/use-create-booking.ts` — one `POST /bookings`, double-click guard, failure kinds
+  (`retry`/`refresh`/`signIn`/`fatal`/`unavailable`).
 - `src/lib/barber-path.ts`, `src/lib/catalog.ts` — route parsing and the shared profile cache.
 - `src/lib/barber-slots.ts` — slots DTO, `fetchBarberSlots`, salon-local date helpers.
+- `src/lib/bookings.ts` — `createBooking`, the booking list and cancellation.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
-There is **no** booking button and no review list yet: booking is the next slice. Services carry
-`barberServiceId` (for the future `POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
+There is still no review list and no barber cabinet. Services carry `barberServiceId` (sent to
+`POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
 
 ## API proxy
 
@@ -102,8 +138,10 @@ VITE_API_PROXY_TARGET=https://localhost:7175 npm run dev
 The header button signs in through the browser (cookie) branch of the API:
 `GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`.
 Tokens never reach JavaScript: the session cookie and the refresh cookie are both `HttpOnly`.
-Every state-changing request carries `X-CSRF-TOKEN` from the CSRF endpoint: auth, booking,
-review and admin publication mutations use the helper in `src/lib/csrf.ts`.
+Every state-changing request carries `X-CSRF-TOKEN` from the CSRF endpoint: auth, review and
+admin publication mutations use the helper in `src/lib/csrf.ts`. The one exception is
+`POST /api/bookings`: the API does not validate antiforgery on bookings, so the client does not
+fetch or send a token there (see `AGENT.md` §9.4 and §14).
 `RememberMe` only tells the API whether the session cookie survives a browser restart — the
 session itself lives for 8 hours of inactivity.
 

@@ -1,19 +1,21 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-17` (default `main`). The landing page searches real
+> Code state: branch `features/issue-18` (default `main`). The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
-> `GET /api/barbers/{id}/slots` for the chosen salon-local date, service and salon. The
-> customer account and the three admin sections (reviews, barbers, users) are implemented.
-> Slots are not clickable and the booking screen is **not** wired yet.
-> Verified on 2026-10-30: `npm run lint` — 0 warnings / 0 errors (99 files, 116 rules);
-> `npm run build` — success, 2248 modules, entry `index-*.js` 298.45 kB (gzip 95.26 kB) with
-> the shared `errors-*.js` 75.55 kB (gzip 28.43 kB) that carries React, lazy `admin-page`
-> 115.44 kB (gzip 25.01 kB), `account-page` 39.93 kB (gzip 11.24 kB) and `barber-page`
-> 21.39 kB (gzip 6.24 kB); CSS 70.96 kB (gzip 12.45 kB). Local Node 24.12.0, npm 11.21.1;
-> CI uses Node 24.
+> `GET /api/barbers/{id}/slots` for the chosen salon-local date, service and salon. With a
+> concrete service chosen, a slot becomes a native radio: the in-card panel shows the summary,
+> signs the visitor in without leaving the page, sends a real `POST /api/bookings` with an
+> idempotency key, and keeps the confirmation or a Russian error in place. The customer
+> account and the three admin sections (reviews, barbers, users) are implemented; the barber
+> cabinet and booking confirmation by the barber are **not**.
+> Verified on 2026-10-30: `npm run lint` — 0 warnings / 0 errors (101 files, 116 rules);
+> `npm run build` — success, 2250 modules, entry `index-*.js` 373.49 kB (gzip 121.49 kB);
+> lazy `admin-page` 115.38 kB (gzip 25.03 kB), `account-page` 38.05 kB (gzip 10.67 kB),
+> `barber-page` 31.20 kB (gzip 8.74 kB) and the shared `bookings-*.js` 2.77 kB (gzip 1.32 kB);
+> CSS 72.43 kB (gzip 12.60 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -148,7 +150,8 @@ frontend/                              ← workspace root, NOT the git root
     │   │   └── reviews-screen.tsx      list/detail state, actions, announcements
     │   ├── account/                   ← customer cabinet: bookings, gates, review dialog
     │   ├── barber/                    ← public /barbers/{id}; the page only composes them
-    │   │   ├── barber-slots.tsx        date/service/salon controls and non-clickable time chips
+    │   │   ├── barber-slots.tsx        date/service/salon controls, slot radios, booking panel host
+    │   │   ├── barber-booking.tsx      summary, sign-in gate, note, submit, confirmation, errors
     │   │   ├── barber-hero.tsx         initials, name, grade, «Проверен», rating, salon
     │   │   ├── barber-about.tsx        bio, languages, certificates, achievements, goodies
     │   │   ├── barber-services.tsx     price list with category and duration, no booking
@@ -181,6 +184,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── use-barber-profiles.ts     ← public profile lookups for bookings
     │   ├── use-barber-slots.ts        ← free slots for one date: abort, generation, 404/409
     │   ├── use-bookings.ts            ← customer bookings, cursor, cancel
+    │   ├── use-create-booking.ts      ← one POST /bookings: idempotent retries, failure kinds
     │   ├── use-media-query.ts         ← desktop preview vs mobile split-view
     │   ├── use-now.ts                 ← minute ticker for waiting times
     │   └── use-session.ts             ← SessionContext + useSession()
@@ -200,7 +204,7 @@ frontend/                              ← workspace root, NOT the git root
         ├── barber-search.ts           ← GET /barbers: filters, item DTO, page size 12
         ├── barber-slots.ts            ← GET /barbers/{id}/slots: DTO, fetch, salon-local dates
         ├── booking-status.ts          ← status labels/transitions
-        ├── bookings.ts                ← booking/review reads and writes
+        ├── bookings.ts                ← booking creation/reads/cancel and review writes
         ├── calendar.ts                ← date helpers for the account calendar
         ├── catalog.ts                 ← public profile DTO, shared module cache, fetch/load
         ├── csrf.ts                    ← one antiforgery-token helper for mutations
@@ -405,7 +409,8 @@ one profile does not stick to the next one. There is no per-widget boundary — 
 card still takes its whole page down (§14).
 
 The slots section lives inside `/barbers/{id}` and adds no route: the date, service and salon
-are local state, and only those parameters trigger `/slots` requests.
+are local state, and only those parameters trigger `/slots` requests. Slot selection and the
+booking panel live on the same page; there is no booking route, modal or second step.
 
 ---
 
@@ -594,6 +599,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; the UI sends `pageSize=12` |
 | `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules, specializations, rating; `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/barbers/{id}/slots?date=&hairServiceId=&salonId=` | anonymous, 120/min per IP | free slots for a salon-local `YYYY-MM-DD`; `date` is required, `hairServiceId` is `hair_services.id` and sets the grid step, `salonId` defaults to the primary salon; `404` for a hidden profile, unknown salon or service; `409` for a missing or unresolvable salon time zone |
+| `POST` | `/api/bookings` | customer, cookie, 30/min per user | create one booking from a `/slots` snapshot (`startAt`/`endAt` sent as received); `201 { id }`, idempotent by `idempotencyKey` (a repeat returns `201` with the same id), `409` overlap/lockTimeout, `404` inactive service/salon, `400` start window or period; no `X-CSRF-TOKEN` (§9.4) |
 | `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context |
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
 | `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
@@ -641,15 +647,19 @@ narrow it to a union (§14).
   is off) and an HttpOnly refresh cookie (default `14 days`). Production names use the `__Host-`
   prefix. JavaScript can neither read nor write them — never introduce a token-in-JS fallback.
 - Every **state-changing** request in the cookie branch carries `X-CSRF-TOKEN`, obtained from
-  `GET /api/auth/csrf` immediately before the request. There is no cached token. Booking,
-  review and admin-publication mutations use the same `lib/csrf.ts` helper.
+  `GET /api/auth/csrf` immediately before the request. There is no cached token. Review and
+  admin-publication mutations use the same `lib/csrf.ts` helper. `POST /api/bookings` is the
+  exception: the backend does not validate antiforgery there, so the client neither fetches a
+  token nor sends the header for a booking (§14, item 23).
 - The backend currently validates antiforgery only on auth actions; review publication accepts
-  the header but does not require it yet (§14). The client still sends it: the rule is
-  forward-compatible, and removing it would make the gap easy to miss.
+  the header but does not require it, and booking creation is cookie-only without any check
+  (§14). Reviews still send the header: the rule is forward-compatible, and removing it would
+  make the gap easy to miss. Bookings do not send it, so the booking path has no stray
+  `GET /api/auth/csrf`.
 - The antiforgery token is bound to the authenticated identity: after sign-in the old token is
   invalid. `signIn` fetches a token before login (anonymous identity, valid for the login
-  endpoint); the next mutation (`signOut`) fetches a fresh token. Any future mutation after
-  login must do the same.
+  endpoint); the next mutation (`signOut`) fetches a fresh token. Any other future mutation
+  after login must do the same.
 - `RememberMe` only tells the API whether the **access** cookie survives a browser restart; it
   does not extend the 8-hour inactivity window or the refresh token lifetime.
 - In production, same-origin `/api` is assumed. If the SPA is served from another origin, the
@@ -790,7 +800,9 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 
 - HTTP only through `apiRequest`; do not call `fetch` in components.
 - Never store tokens in browser storage; auth is cookie-only.
-- Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`.
+- Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`, except
+  `POST /api/bookings`: the backend does not validate it there, and the booking path must not
+  fetch a token it will not use (§9.4).
 - `ApiError` is the only expected error type; map codes to Russian copy at the edge.
 - No mock data in production paths. Demo arrays are acceptable only while a screen is
   explicitly labelled as demo (as the landing is today) and are removed when the API is wired.
@@ -809,7 +821,8 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - External links opened in a new tab need `rel="noreferrer noopener"`.
 - React escapes text by default; keep it that way. Sanitise only if HTML rendering is ever
   explicitly required (it is not).
-- CSRF is mandatory for cookie mutations; do not disable it for convenience.
+- CSRF is mandatory for cookie mutations except booking creation, where the API does not check
+  it; do not disable it elsewhere for convenience (§14, item 23).
 
 ### 10.8 Definition of done
 
@@ -877,36 +890,37 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session, UI kit | 298.45 kB | 95.26 kB |
-| `errors-*.js` — shared chunk with React and modules used by the entry and the lazy pages; preloaded with the entry | 75.55 kB | 28.43 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with the slots section | 21.39 kB | 6.24 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 115.44 kB | 25.01 kB |
-| `account-page-*.js` — lazy `/account` | 39.93 kB | 11.24 kB |
-| `catalog-*.js` — profile cache shared by the account and the profile page | 0.73 kB | 0.44 kB |
-| `index-*.css` | 70.96 kB | 12.45 kB |
+| `index-*.js` — shell, landing, search, session, UI kit and React | 373.49 kB | 121.49 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots and the booking panel | 31.20 kB | 8.74 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 115.38 kB | 25.03 kB |
+| `account-page-*.js` — lazy `/account` | 38.05 kB | 10.67 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 2.77 kB | 1.32 kB |
+| `index-*.css` | 72.43 kB | 12.60 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
-| `index.html` | 0.84 kB | — |
+| `index.html` | 0.67 kB | — |
 
-2248 modules; warm build ≈ 1 s on this machine (≈15 s on the first run of a session). The route
-split is in place: `App.tsx` imports the admin, account and profile pages through `React.lazy` +
-`Suspense`, so the landing loads `index-*.js` + the preloaded shared `errors-*.js` + the
-rolldown runtime + `index-*.css` — 124.05 kB of JS gzip (≈26 kB under the ~150 kB target in
-§12.2) plus 12.45 kB of CSS — and the lazy chunks are fetched on navigation. Against the
-2026-10-30 barber-card baseline the initial JS is effectively flat: 124.05 vs 123.71 kB gzip
-(+0.34 kB, +0.3 %), consistent with the added `formatSalonDate` in the shared `format` module.
-The slots code itself is entirely in the lazy chunk: `barber-page` grew from 14.08/4.28 to
-21.39/6.24 kB (raw/gzip) while the raw entry fell from 304.05 to 298.45 kB, so the split moved
-modules between the entry and the shared chunk rather than widening the landing. `admin-page` and
-`account-page` are unchanged. `index.html` preloads the entry, the runtime and the shared chunk,
-and the Vite chunk advisory does not fire. The landing, the shell and the search code are still
-one chunk; the section files do not create extra chunks (§14, item 17).
+2250 modules; warm build ≈ 1 s on this machine (≈7 s on the first run of a session). The route
+split is still in place:
+`App.tsx` imports the admin, account and profile pages through `React.lazy` + `Suspense`, so the
+landing loads only the entry and `index-*.css` — 121.49 kB of JS gzip (≈28.5 kB under the
+~150 kB target in §12.2) plus 12.60 kB of CSS — and the lazy chunks are fetched on navigation.
+The booking slice regrouped the shared chunks: the former `errors-*.js` (75.55/28.43 kB, React
+and common modules) merged into the entry, while `bookings.ts` became its own shared lazy chunk
+because both the profile and the account import it. Entry + shared is 0.51 kB raw and 2.56 kB
+gzip **smaller** than the 124.05 kB slots baseline, so the `login-dialog.tsx` change (a few
+bytes in the entry) sits inside a net decrease, not an increase. The booking code is entirely
+in the lazy chunk: `barber-page` grew from 21.39/6.24 to 31.20/8.74 kB (raw/gzip). `admin-page`
+is flat within noise and `account-page` shrank because `bookings.ts` left it for the shared
+chunk. `index.html` preloads only the entry and the stylesheet; the Vite chunk advisory does
+not fire. The landing, the shell and the search code are still one chunk; the section files do
+not create extra chunks (§14, item 17).
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 124.05 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 121.49 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account` and `/barbers/{id}` are split; do not statically import either from the shell, and
@@ -949,8 +963,8 @@ one chunk; the section files do not create extra chunks (§14, item 17).
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password |
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
-| Barber search / card / slots | ⚠️ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; non-clickable chips in the salon time zone; working-day/empty/loading/error/404/409 states). Booking is not |
-| Booking flow | ❌ absent |
+| Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
+| Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber cabinet and booking confirmation by the barber are absent |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/admin/**`; `AdminPage`, `AccountPage` and `BarberPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
@@ -989,7 +1003,7 @@ the feature grows; **P3** cosmetic/structural.
 | 20 | P3 | No «Забыли пароль?» / «Регистрация» links in the login dialog | Product decision; registration and change-password exist, a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
-| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) does not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter | Add `[ValidateAntiforgeryHeader]` to the review actions and cover them with a cookie+CSRF integration test |
+| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter | Add `[ValidateAntiforgeryHeader]` to those actions and cover them with a cookie+CSRF integration test; the booking client then sends the header |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards) and #12 (the monolithic `HomePage`) are intentionally absent; the
@@ -1056,13 +1070,18 @@ slots — the «Свободное время» section on the same page reads `
 `hairServiceId` (R-20), and a salon select when the barber has several), renders
 non-clickable `<time>` chips in `timeZoneId`, and covers working-day/empty/loading/error/404/409
 states; one request per parameter change, stale requests aborted, no slots cache, no booking.
-The review list is still absent.
+**Completed 2026-10-30:** booking — slots become native radios only when a concrete service is
+chosen; the in-card booking panel shows the salon-local day/time, service, salon and price, lets
+a visitor sign in through `LoginDialog` (`redirectTo={null}`) without leaving the page, sends
+`POST /api/bookings` with a per-panel UUID idempotency key and no CSRF header, and replaces the
+form with a `201` confirmation carrying the `Pending` badge. Russian states cover `409`
+overlap/lockTimeout, `400` start window, `401`, `404` service/salon, `429`, network and `5xx`;
+slots are reloaded after a write, while the profile and catalogue caches are untouched. The
+barber cabinet and confirmation by the barber are still absent. The review list is still absent.
 
-Roadmap numbers are stable for links: completed items 1–3 were removed, the remaining numbers
+Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
 
-4. **Booking** — auth gate, `POST /api/bookings` with an idempotency key, `409` overlap/lock
-   UX, pending/confirmed states.
 5. **My bookings** — `GET /api/bookings`, cancel/confirm actions, keyset pagination.
 6. **Reviews** — list published reviews, create/edit own review, explain pre-moderation.
 7. **Foundation (remaining)** — lazy routes, the route-level error boundary and the landing
@@ -1214,7 +1233,8 @@ Copy this into the PR description and check every item that applies:
 - [ ] `npm run lint` — 0 warnings / 0 errors;
 - [ ] `npm run build` — succeeds, `tsc -b` clean; bundle delta noted if significant;
 - [ ] no `any`, no `@ts-ignore`, no `console.log`, no commented-out code;
-- [ ] no tokens in storage; `credentials: 'include'` and `X-CSRF-TOKEN` on mutations;
+- [ ] no tokens in storage; `credentials: 'include'` and `X-CSRF-TOKEN` on mutations except
+      `POST /api/bookings` (§9.4);
 - [ ] API errors mapped by `status` / `errorCodes`, Russian fallback, no raw `detail`;
 - [ ] loading, empty and error states implemented;
 - [ ] 320 px / tablet / desktop checked; no horizontal scroll;

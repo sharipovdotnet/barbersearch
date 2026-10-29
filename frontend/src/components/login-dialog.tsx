@@ -230,8 +230,8 @@ function LoginDialog({
   variant?: 'ghost' | 'default'
   size?: 'sm' | 'default' | 'lg'
   className?: string
-  /** Куда вернуться после входа; по умолчанию — кабинет клиента. */
-  redirectTo?: string
+  /** Куда вернуться после входа; по умолчанию — кабинет клиента, `null` — остаться здесь. */
+  redirectTo?: string | null
   /** Дополнительное действие после успешного входа, например повторный запрос данных. */
   onSignedIn?: () => void
 }) {
@@ -258,7 +258,10 @@ function LoginDialog({
           onSuccess={() => {
             setIsOpen(false)
             // После входа пользователь возвращается туда, откуда открыл диалог.
-            navigate(redirectTo)
+            // `null` — выбора слота на странице барбера: уходить с неё нельзя.
+            if (redirectTo) {
+              navigate(redirectTo)
+            }
             onSignedIn?.()
           }}
         />
