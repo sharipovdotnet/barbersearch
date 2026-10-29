@@ -10,8 +10,8 @@ import { formatDuration, formatPrice } from '@/lib/format'
 /**
  * Прайс мастера: цена и длительность конкретной услуги.
  *
- * Кнопок записи здесь нет: слоты и `POST /api/bookings` — следующий этап,
- * а кнопка-пустышка хуже, чем её отсутствие.
+ * Кнопок записи здесь нет: слоты и `POST /api/bookings` живут в «Свободном времени»
+ * выше, а кнопка-пустышка хуже, чем её отсутствие.
  */
 export function BarberServices({ profile }: { profile: BarberProfile }) {
   const services = profile.services.filter((service) => service.isActive)

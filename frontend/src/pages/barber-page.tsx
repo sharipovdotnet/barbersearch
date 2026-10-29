@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { BarberAbout } from '@/components/barber/barber-about'
 import { BarberHero } from '@/components/barber/barber-hero'
+import { BarberReviews } from '@/components/barber/barber-reviews'
 import { BarberSalons } from '@/components/barber/barber-salons'
 import { BarberServices } from '@/components/barber/barber-services'
 import { BarberSlots } from '@/components/barber/barber-slots'
@@ -23,9 +24,9 @@ import { goToSection, isPlainClick } from '@/lib/router'
  * Публичная карточка барбера.
  *
  * Свободное время и запись живут в `BarberSlots`: клиент выбирает слот и отправляет
- * бронь, не уходя со страницы. Список отзывов на этом этапе не показывается. Страница
- * собирается из секций, а состояния профиля (загрузка, ошибка, скрытый профиль) живут
- * в `use-barber-profile`.
+ * бронь, не уходя со страницы. Опубликованные отзывы барбера показывает `BarberReviews`
+ * (создание отзыва осталось в кабинете). Страница собирается из секций, а состояния
+ * профиля (загрузка, ошибка, скрытый профиль) живут в `use-barber-profile`.
  */
 export function BarberPage({ id }: { id: string }) {
   const { profile, status, error, retry } = useBarberProfile(id)
@@ -75,6 +76,7 @@ export function BarberPage({ id }: { id: string }) {
               <BarberSlots profile={profile} />
               <BarberAbout profile={profile} />
               <BarberServices profile={profile} />
+              <BarberReviews profile={profile} />
               <BarberSpecializations profile={profile} />
               <BarberSalons profile={profile} />
             </div>
