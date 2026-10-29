@@ -5,6 +5,7 @@ import { BarberAbout } from '@/components/barber/barber-about'
 import { BarberHero } from '@/components/barber/barber-hero'
 import { BarberSalons } from '@/components/barber/barber-salons'
 import { BarberServices } from '@/components/barber/barber-services'
+import { BarberSlots } from '@/components/barber/barber-slots'
 import { BarberSpecializations } from '@/components/barber/barber-specializations'
 import {
   BarberProfileError,
@@ -21,8 +22,9 @@ import { goToSection, isPlainClick } from '@/lib/router'
 /**
  * Публичная карточка барбера.
  *
- * Только чтение: ни записи, ни слотов, ни списка отзывов на этом этапе. Страница
- * собирается из секций, а состояния (загрузка, ошибка, скрытый профиль) живут
+ * Только чтение: записи и списка отзывов на этом этапе нет. Свободное время
+ * показывает `BarberSlots`, но слоты пока не кликабельны. Страница собирается из
+ * секций, а состояния профиля (загрузка, ошибка, скрытый профиль) живут
  * в `use-barber-profile`.
  */
 export function BarberPage({ id }: { id: string }) {
@@ -70,6 +72,7 @@ export function BarberPage({ id }: { id: string }) {
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
+              <BarberSlots profile={profile} />
               <BarberAbout profile={profile} />
               <BarberServices profile={profile} />
               <BarberSpecializations profile={profile} />

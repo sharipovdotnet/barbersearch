@@ -111,6 +111,20 @@ export function formatLongDay(iso: string, timeZone?: string): string {
   ).format(new Date(iso))
 }
 
+/**
+ * «понедельник, 2 ноября» из календарной даты `YYYY-MM-DD`.
+ *
+ * `formatLongDay` здесь не подходит: `YYYY-MM-DD` — не ISO-инстант, и в поясах
+ * западнее UTC он показал бы предыдущий день. Полночь UTC и `timeZone: 'UTC'`
+ * дают ровно ту дату, которую выбрали.
+ */
+export function formatSalonDate(date: string): string {
+  return resolveFormatter(
+    { weekday: 'long', day: 'numeric', month: 'long' },
+    'UTC'
+  ).format(new Date(`${date}T00:00:00Z`))
+}
+
 /** «1 нояб.» — компактная дата строки списка. */
 export function formatShortDay(iso: string, timeZone?: string): string {
   return resolveFormatter(
