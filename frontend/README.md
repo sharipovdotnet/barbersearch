@@ -24,7 +24,7 @@ npm run preview  # serve dist/
 
 | Path | Screen |
 |---|---|
-| `/` | landing page with demo barber cards |
+| `/` | landing page: real barber search by city and date, how it works, account CTA |
 | `/account` | customer cabinet: bookings, cancellation, review, password |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
@@ -34,6 +34,24 @@ npm run preview  # serve dist/
 
 The customer cabinet and the admin section are client-side gated; the API enforces roles
 separately (`AdminOnly`).
+
+## Barber search
+
+The landing calls `GET /api/barbers?city=&date=&cursor=&pageSize=` (anonymous, 120 requests
+per minute per IP). The v1 filters are a **city** (trimmed and compared exactly, case-sensitive)
+and an optional **date** — the barber has a working day on that weekday. Results are ordered
+`rating DESC NULLS LAST, id`; `pageSize` is 12 and the next page is fetched with the opaque
+`nextCursor` from the previous response. There is no text search, and the card shows no price
+or service tags because the search DTO has neither.
+
+Specialization and service filters are deliberately not in the UI yet: `specializationId` and
+`hairServiceId` are accepted by the API, but `GET /api/specializations` and
+`GET /api/hair-services` do not exist, so there is no list to populate a filter from. They
+will follow once those read endpoints appear.
+
+- `src/lib/barber-search.ts` — filters, `BarberSearchItem`, `searchBarbers()`.
+- `src/hooks/use-barber-search.ts` — pages, abort of stale requests, retry, load-more state.
+- `src/components/home/` — hero/search form, results grid, cards and the account CTA.
 
 ## API proxy
 
