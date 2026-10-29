@@ -75,6 +75,29 @@ network/`429`/`5xx` error, `404` (profile/salon/service) and `409` (broken salon
 have their own Russian state; the previous request is aborted when the parameters change. There
 is no slots cache: slots change with bookings and time off.
 
+### Reviews
+
+The profile also shows the published reviews of the barber:
+`GET /api/reviews?barberProfileId=&cursor=&pageSize=` (anonymous, 120 requests per minute per
+IP). `barberProfileId` is required, the UI always sends `pageSize=10`, and the next page is
+fetched with the opaque `nextCursor` from the previous response. The API returns only published
+reviews, newest first (`created_at DESC, id`). The DTO has no client names, avatars, service or
+visit time, so a review card shows only five stars with a text alternative, the numeric rating,
+the calendar date in the primary salon time zone and the text. The summary («4,0 · 2 отзыва»)
+comes from `rating`/`reviewsCount` of the already loaded profile, never from the current page.
+
+States: six skeleton cards while the first page loads, an empty list, a first-page error with
+`describeApiFailure` and «Повторить», a load-more error that keeps the shown cards, and
+«Показать ещё» that appends the next page without duplicates. After the last page the button
+disappears and focus moves to the section. A profile with `reviewsCount: 0` shows «Пока нет
+отзывов.» and makes no request at all. Creating a review stays in the customer account
+(`POST /api/reviews` on a completed booking, hidden until moderation); editing and the
+author-facing status are not implemented because the API has no “my reviews” read endpoint.
+
+- `src/lib/reviews.ts` — review DTO, page size 10, `fetchBarberReviews()`.
+- `src/hooks/use-barber-reviews.ts` — first page, cursor load-more, abort + generation, retry.
+- `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and pagination.
+
 ## Booking
 
 With «Любая услуга» the chips stay informational and a hint asks to choose a service: the API
@@ -121,8 +144,8 @@ antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
-There is still no review list and no barber cabinet. Services carry `barberServiceId` (sent to
-`POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
+There is still no barber cabinet and no review creation on the public profile. Services carry
+`barberServiceId` (sent to `POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
 
 ## API proxy
 
