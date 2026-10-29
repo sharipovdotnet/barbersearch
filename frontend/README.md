@@ -63,16 +63,30 @@ certificates, achievements, comfort and communication lists, services with price
 specializations, salons with addresses and the weekly schedule, payment methods and the late
 policy. Empty blocks are hidden instead of rendering an empty heading.
 
+«Свободное время» sits under the hero and calls `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=`
+(anonymous, 120 requests per minute per IP). `date` is the **salon-local** `YYYY-MM-DD` and is
+required; `hairServiceId` comes from `services[].hairServiceId` and changes the grid step;
+`salonId` is always sent and defaults to the primary salon. The date input opens on today in the
+salon time zone (`min` = today, `max` = today + 30 days), the service select offers
+«Любая услуга» plus the active services, and the salon select appears only when the barber has
+more than one salon. Slots are non-clickable `<time>` chips shown in the salon time zone
+(`timeZoneId`), never recomputed into the browser zone. A day off, a working day without slots,
+loading, a retryable network/`429`/`5xx` error, `404` (profile/salon/service) and `409` (broken
+salon time zone) each have their own Russian state; the previous request is aborted when the
+parameters change. There is **no** booking form yet, and no slots cache: slots change with
+bookings and time off.
+
 - `src/pages/barber-page.tsx` — document title, back link, states and section composition.
-- `src/components/barber/` — hero, about, services, specializations, salons and the state views.
+- `src/components/barber/` — hero, slots, about, services, specializations, salons, state views.
 - `src/hooks/use-barber-profile.ts` — cache-first load, abort on id change/unmount, retry.
+- `src/hooks/use-barber-slots.ts` — one slots request per parameter change, abort + generation, retry.
 - `src/lib/barber-path.ts`, `src/lib/catalog.ts` — route parsing and the shared profile cache.
+- `src/lib/barber-slots.ts` — slots DTO, `fetchBarberSlots`, salon-local date helpers.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
-There are **no** slots, no booking button and no review list yet: those are the next slices.
-Services carry `barberServiceId` (for a future `POST /api/bookings`) and `hairServiceId` (for
-search and slots); the page uses neither yet.
+There is **no** booking button and no review list yet: booking is the next slice. Services carry
+`barberServiceId` (for the future `POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
 
 ## API proxy
 
