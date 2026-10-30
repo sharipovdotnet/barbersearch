@@ -1,7 +1,7 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-23` (default `main`). The landing page searches real
+> Code state: branch `features/issue-24` (default `main`). The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
@@ -14,13 +14,16 @@
 > creation stays in the customer account and editing/author-facing status are absent. The
 > customer account, the three admin sections (reviews, barbers, users) and the barber cabinet
 > are implemented: a barber sees the bookings of their own profile at `/barber` and confirms,
-> completes, marks no-show, cancels and annotates them.
-> Verified on 2026-10-31: `npm run lint` — 0 warnings / 0 errors (123 files, 116 rules);
-> `npm run build` — success, 2272 modules, entry `index-*.js` 375.57 kB (gzip 122.15 kB);
-> lazy `admin-page` 114.41 kB (gzip 24.98 kB), `account-page` 35.34 kB (gzip 10.23 kB),
-> `barber-page` 37.17 kB (gzip 9.99 kB), `barber-cabinet-page` 25.59 kB (gzip 7.29 kB) and
-> the shared `booking-status-badge-*.js` 1.02 kB (gzip 0.56 kB);
-> CSS 73.08 kB (gzip 12.69 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> completes, marks no-show, cancels and annotates them. A visitor without an account can
+> register at `/register` (`POST /api/auth/register`, no CSRF token): the form signs the new
+> customer in and lands in `/account`.
+> Verified on 2026-10-31: `npm run lint` — 0 warnings / 0 errors (126 files, 116 rules);
+> `npm run build` — success, 2275 modules, entry `index-*.js` 376.43 kB (gzip 122.38 kB);
+> lazy `admin-page` 114.27 kB (gzip 24.95 kB), `account-page` 35.34 kB (gzip 10.24 kB),
+> `barber-page` 37.17 kB (gzip 9.99 kB), `barber-cabinet-page` 25.59 kB (gzip 7.29 kB),
+> `register-page` 9.75 kB (gzip 3.35 kB) and the shared `booking-status-badge-*.js`
+> 1.02 kB (gzip 0.55 kB);
+> CSS 73.31 kB (gzip 12.71 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -71,7 +74,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-16` (default: `main`) |
+| Working branch | `features/issue-24` (default: `main`) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -186,7 +189,8 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── home-hero.tsx           hero + search form
     │   │   ├── how-it-works.tsx        the three booking steps
     │   │   └── search-form.tsx         controlled city + date fields
-    │   ├── login-dialog.tsx           ← dialog, validation, server error mapping
+    │   ├── login-dialog.tsx           ← dialog, validation, server error mapping, register link
+    │   ├── register-form.tsx          ← registration form, field/server errors, auto sign-in
     │   ├── review-stars.tsx           ← shared five stars with a text alternative
     │   ├── session-provider.tsx       ← session bootstrap, signIn/signOut
     │   ├── site-header.tsx            ← marketing/admin header modes
@@ -216,7 +220,8 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── admin-page.tsx             ← /admin route, gates, shell
     │   ├── barber-cabinet-page.tsx    ← /barber: gates, title, booking list and dialogs
     │   ├── barber-page.tsx            ← /barbers/{id}: title, back link, states, sections
-    │   └── home-page.tsx              ← landing composition: title, hash scroll, sections
+    │   ├── home-page.tsx              ← landing composition: title, hash scroll, sections
+    │   └── register-page.tsx          ← /register: title, session gates, card and links
     └── lib/
         ├── account-path.ts            ← /account and /account/reviews path helpers
         ├── admin-path.ts              ← /admin path parsing/building, AdminTab
@@ -239,6 +244,7 @@ frontend/                              ← workspace root, NOT the git root
         ├── format.ts                  ← dates, money, rating, waiting time
         ├── my-reviews.ts              ← own review DTO, reads/updates/deletes
         ├── paging.ts                  ← Page<T>: items + opaque nextCursor
+        ├── register-path.ts           ← /register path helper
         ├── reviews.ts                 ← public review DTO, page size 10, fetch
         ├── router.ts                  ← History API store: pathname + location
         └── utils.ts                   ← `export { cn } from "cn"`
@@ -414,7 +420,7 @@ current path, `useLocation()` additionally returns the query string, and `naviga
 replaces history and notifies subscribers. Links stay real `<a href>`s, so middle-click and
 open-in-new-tab work.
 
-Six top-level areas:
+Seven top-level areas:
 
 | Path | Page | Notes |
 |---|---|---|
@@ -423,6 +429,7 @@ Six top-level areas:
 | `/account` | `AccountPage` | customer cabinet; role gates for barber/admin |
 | `/account/reviews` | `AccountReviewsPage` | author's own reviews: both statuses, edit and delete; lazy chunk `account-reviews-page` |
 | `/barber` | `BarberCabinetPage` | barber cabinet: own profile's bookings, confirm/complete/no-show/cancel/note; lazy chunk `barber-cabinet-page` |
+| `/register` | `RegisterPage` | customer self-registration: form for an anonymous visitor, «Вы уже вошли» gate for a signed-in one; lazy chunk `register-page` |
 | `/admin` | `AdminPage` | redirects to `/admin/reviews`; unknown `/admin/*` shows «Раздел не найден» |
 
 Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
@@ -430,10 +437,10 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
-Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage` and
-`BarberCabinetPage` are `React.lazy` imports in `App.tsx`, behind one `Suspense` with a
-skeleton fallback (`role="status"`, «Загрузка страницы»); the landing ships only the shell
-and itself.
+Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`,
+`BarberCabinetPage` and `RegisterPage` are `React.lazy` imports in `App.tsx`, behind one
+`Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the landing ships
+only the shell and itself.
 `AppErrorBoundary` wraps the page inside `<main>`:
 a render exception replaces the screen with a Russian message and «Обновить страницу» /
 «На главную» actions, while the header, footer and navigation stay usable. The boundary is
@@ -464,6 +471,14 @@ signed-in barber to `/barber` instead of `/account`. `isBarberCabinetPath` match
 `/barber`, so unknown `/barber/*` still falls back to the landing. Gates live above the list
 (anonymous, non-`Barber` role, `barberProfileId === null`), and the list mounts in a child
 component, so none of them fires `GET /api/barber/bookings`.
+
+`/register` is a flow, not a section: it has no header navigation item and is reached from the
+login dialog, from the `SignInGate` actions on `/account`, `/account/reviews` and `/barber`, and
+from a direct address. `isRegisterPath` matches exactly `/register`, so unknown `/register/*`
+falls back to the landing like any other unknown path; `App.tsx` checks it before
+`matchBarberPath`. The page mounts the form only for an anonymous visitor: a signed-in user gets
+the «Вы уже вошли» gate with a role-appropriate button and no data request, and the form itself
+is the only caller of `POST /api/auth/register`.
 
 ---
 
@@ -647,6 +662,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 |---|---|---|---|
 | `GET` | `/api/auth/csrf` | anonymous | `{ token }` for `X-CSRF-TOKEN` |
 | `POST` | `/api/auth/login/cookie` | anonymous, rate-limited, antiforgery | `{ email, password, rememberMe }` → `204` + HttpOnly cookies |
+| `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName }` → `201 { id }`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName` |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; the UI sends `pageSize=12` |
@@ -684,8 +700,8 @@ is no `GET /api/barber/bookings/{id}`: a list row already carries everything the
 need, and they go by the `id` from that row. `GET /api/bookings` stays the **customer's** list
 and is not reused by the cabinet — there the barber is the client, not the owner.
 
-The backend also exposes `POST /api/auth/refresh`, registration and password change; the
-frontend calls none of registration/refresh yet (password change is wired in the account).
+The backend also exposes `POST /api/auth/refresh`; the frontend does not call it yet
+(registration and password change are wired: `/register` and the account dialog).
 `GET /api/reviews/moderation` still exists for compatibility but the admin screen uses the
 admin DTO: the public `ReviewResponse` deliberately has no names or visit context.
 
@@ -718,14 +734,16 @@ narrow it to a union (§14).
 - Every **state-changing** request in the cookie branch carries `X-CSRF-TOKEN`, obtained from
   `GET /api/auth/csrf` immediately before the request. There is no cached token. Review,
   author-review and admin-publication mutations use the same `lib/csrf.ts` helper.
-  `GET /api/reviews/mine` reads without a token. `POST /api/bookings` is the
-  exception: the backend does not validate antiforgery there, so the client neither fetches a
-  token nor sends the header for a booking (§14, item 23).
+  `GET /api/reviews/mine` reads without a token. There are two exceptions: `POST /api/bookings`
+  and the anonymous `POST /api/auth/register` — neither action has the antiforgery filter on
+  the backend, so the client neither fetches a token nor sends the header for them (§14,
+  item 23).
 - The backend currently validates antiforgery only on auth actions; review publication accepts
   the header but does not require it, and booking creation is cookie-only without any check
-  (§14). Reviews still send the header: the rule is forward-compatible, and removing it would
-  make the gap easy to miss. Bookings do not send it, so the booking path has no stray
-  `GET /api/auth/csrf`.
+  (§14). Registration is an auth action without the filter: it is anonymous and therefore has no
+  identity to bind a token to, and the client sends no header there. Reviews still send the
+  header: the rule is forward-compatible, and removing it would make the gap easy to miss.
+  Bookings and registration do not send it, so neither path has a stray `GET /api/auth/csrf`.
 - The antiforgery token is bound to the authenticated identity: after sign-in the old token is
   invalid. `signIn` fetches a token before login (anonymous identity, valid for the login
   endpoint); the next mutation (`signOut`) fetches a fresh token. Any other future mutation
@@ -871,8 +889,8 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - HTTP only through `apiRequest`; do not call `fetch` in components.
 - Never store tokens in browser storage; auth is cookie-only.
 - Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`, except
-  `POST /api/bookings`: the backend does not validate it there, and the booking path must not
-  fetch a token it will not use (§9.4).
+  `POST /api/bookings` and `POST /api/auth/register`: the backend does not validate it there,
+  and neither path may fetch a token it will not use (§9.4).
 - `ApiError` is the only expected error type; map codes to Russian copy at the edge.
 - No mock data in production paths. Demo arrays are acceptable only while a screen is
   explicitly labelled as demo (as the landing is today) and are removed when the API is wired.
@@ -960,34 +978,31 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session, UI kit and React | 375.57 kB | 122.15 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 114.41 kB | 24.98 kB |
+| `index-*.js` — shell, landing, search, session, UI kit and React | 376.43 kB | 122.38 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 114.27 kB | 24.95 kB |
 | `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.17 kB | 9.99 kB |
-| `account-page-*.js` — lazy `/account` | 35.34 kB | 10.23 kB |
+| `account-page-*.js` — lazy `/account` | 35.34 kB | 10.24 kB |
 | `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.59 kB | 7.29 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.66 kB | 6.09 kB |
-| `account-gates-*.js` — sign-in/role gates shared by the account screens | 3.86 kB | 1.41 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.67 kB | 6.09 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 9.75 kB | 3.35 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
 | `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.18 kB | 0.61 kB |
-| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.56 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
-| `index-*.css` | 73.08 kB | 12.69 kB |
+| `index-*.css` | 73.31 kB | 12.71 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2272 modules; the warm rebuild took 0.93 s. The barber cabinet added a fifth lazy screen
-(`barber-cabinet-page`) instead of growing `/account` or `/barbers/{id}`: the page, the list,
-the row, three dialogs and the controller live there. Moving `BookingStatusBadge` out of
-`components/account/` into `components/booking-status-badge.tsx` produced a 1.02/0.56 kB
-chunk that the customer cabinet, the public booking panel and the new screen share (the badge
-looks unchanged); `use-now` became a 0.25/0.20 kB chunk for the same reason. `account-gates`
-grew by 0.17/0.03 kB for the barber button and the path helper. The entry grew by
-1.48 kB raw / 0.46 kB gzip — `barber-cabinet-path.ts` plus the extra `lazy()` wiring — which
-is slightly above the ~0.3 kB gzip review threshold; no other shell code changed. The admin
-code was not touched by this slice; its chunk measures 114.41/24.98 kB in this build. CSS grew
-by 0.02 kB raw. `index.html` preloads only the entry and the stylesheet; the Vite chunk advisory
-does not fire.
+2275 modules; the warm rebuild took 7.95 s. Registration added a sixth lazy screen
+(`register-page`) instead of widening the entry: the page, the form, the success card and the
+`register()` transport live there. The entry grew by 0.86 kB raw / 0.22 kB gzip — the extra
+`lazy()` wiring and `register-path.ts` — because the page itself is not in the shell.
+`account-gates` grew by 0.21/0.08 kB for the «Зарегистрироваться» action; `/account`,
+`/account/reviews` and `/barber` share that chunk. The admin chunk measures 114.27/24.95 kB in
+this build; it was not touched by this slice. CSS grew by 0.23 kB raw / 0.02 kB gzip.
+`index.html` preloads only the entry and the stylesheet; the Vite chunk advisory does not fire.
 
 ### 12.2 Rules
 
@@ -1037,11 +1052,12 @@ does not fire.
 | Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo |
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password |
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
-| Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
+| Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
+| Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, page size 10, opaque `nextCursor` and «Показать ещё», summary from `rating`/`reviewsCount`, skeleton/empty/error/load-more states, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage` and `BarberCabinetPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
 | Responsive layout | ✅ landing and admin checked at 320/640/1280 px; no tests |
@@ -1076,10 +1092,10 @@ the feature grows; **P3** cosmetic/structural.
 | 17 | P3 | The landing, the shell and the shared session/UI/search code still ship in the entry chunk (304 kB + the 69 kB shared chunk) | Keep the admin/account/profile code lazy; split the landing further if the initial budget grows |
 | 18 | P3 | Node version is not pinned (no `.nvmrc`, no `engines`); local 24.12.0 vs CI 24 | Add one pinning mechanism (owner decision) |
 | 19 | P3 | `SessionUser.role` is `string`; UI will branch on roles later | Narrow it to a union of `Customer`, `Barber`, `Admin` once the contract is fixed |
-| 20 | P3 | No «Забыли пароль?» / «Регистрация» links in the login dialog | Product decision; registration and change-password exist, a reset flow needs backend work |
+| 20 | P3 | No «Забыли пароль?» link in the login dialog | Registration is linked from the dialog and `/register`; a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
-| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter | Add `[ValidateAntiforgeryHeader]` to those actions and cover them with a cookie+CSRF integration test; the booking client then sends the header |
+| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #12 (the monolithic `HomePage`) and #24 (no author-facing review
@@ -1174,7 +1190,14 @@ locally without a second read, «Ближайшие» drops terminal rows (and l
 visible one empties), «История» keeps them with the new status, and focus moves to the row, the
 list heading or the note button. `BookingStatusBadge` moved to
 `components/booking-status-badge.tsx` and is shared by the customer cabinet, the public booking
-panel and the cabinet.
+panel and the cabinet. **Completed 2026-10-31:** registration — `/register` as a sixth lazy
+screen: a new customer creates an account through `POST /api/auth/register` (no
+`X-CSRF-TOKEN`), the form validates the fields client-side and maps every public code to
+Russian copy at the field or the form, `201` signs the same credentials in through the usual
+CSRF path and lands in `/account`, and a failed auto sign-in shows the «Аккаунт создан» card
+without a second registration. A signed-in visitor gets the «Вы уже вошли» gate with a
+role-appropriate button; `LoginDialog` and `SignInGate` link to the page. Password reset and
+email verification were out of scope.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1188,8 +1211,8 @@ do not shift.
    sections are done (§12.1); remaining: per-widget boundaries and a landing chunk split if
    the budget grows (§14, items 4 and 17).
 8. **Quality** — Vitest/RTL/MSW, Playwright + axe, CI test job, Lighthouse budget.
-9. **Auth completeness** — registration, refresh strategy, password change, role-aware
-   header; a password-reset flow needs a backend slice first.
+9. **Auth completeness** — registration and password change are done, refresh strategy and a
+   role-aware header remain; a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
     the server mapped to fields.
 11. **Hardening** — runtime response validation, env typing, dependency review.

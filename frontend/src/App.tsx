@@ -8,11 +8,13 @@ import { isAccountReviewsPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
+import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
 
-// Админка, кабинет, отзывы автора и карточка барбера — отдельные чанки: витрине не
-// нужен код экранов, закрытых ролью, а профиль не должен удорожать первую загрузку (§12.2).
+// Админка, кабинет, отзывы автора, карточка барбера и регистрация — отдельные чанки:
+// витрине не нужен код экранов, закрытых ролью, а профиль и регистрация не должны
+// удорожать первую загрузку (§12.2).
 const AdminPage = lazy(() =>
   import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
 )
@@ -41,11 +43,17 @@ const BarberCabinetPage = lazy(() =>
   })),
 )
 
+const RegisterPage = lazy(() =>
+  import('@/pages/register-page').then((module) => ({
+    default: module.RegisterPage,
+  })),
+)
+
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
- * Маршрутов пять, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
- * показывает витрину: отдельная страница 404 на пяти маршрутах была бы шумом.
+ * Маршрутов шесть, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
+ * показывает витрину: отдельная страница 404 на шести маршрутах была бы шумом.
  *
  * `key` на границе ошибок сбрасывает её состояние при смене страницы: после падения
  * админки ссылка на витрину снова показывает рабочий экран. Для профиля в ключ входит
@@ -53,21 +61,24 @@ const BarberCabinetPage = lazy(() =>
  */
 function App() {
   const pathname = usePathname()
+  const isRegister = isRegisterPath(pathname)
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAccountReviews = isAccountReviewsPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
-  const pageKey = isAdmin
-    ? 'admin'
-    : isAccountReviews
-      ? 'account-reviews'
-      : isBarberCabinet
-        ? 'barber-cabinet'
-        : pathname === '/account'
-          ? 'account'
-          : barberId !== null
-            ? `barber:${barberId}`
-            : 'home'
+  const pageKey = isRegister
+    ? 'register'
+    : isAdmin
+      ? 'admin'
+      : isAccountReviews
+        ? 'account-reviews'
+        : isBarberCabinet
+          ? 'barber-cabinet'
+          : pathname === '/account'
+            ? 'account'
+            : barberId !== null
+              ? `barber:${barberId}`
+              : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -91,7 +102,9 @@ function App() {
       <main id="main" className="flex-1">
         <AppErrorBoundary key={pageKey}>
           <Suspense fallback={<RouteFallback />}>
-            {isAdmin ? (
+            {isRegister ? (
+              <RegisterPage />
+            ) : isAdmin ? (
               <AdminPage />
             ) : isAccountReviews ? (
               <AccountReviewsPage />

@@ -26,6 +26,13 @@ export type SignInCredentials = {
   rememberMe: boolean
 }
 
+export type RegistrationInput = {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+}
+
 const CSRF_HEADER = 'X-CSRF-TOKEN'
 
 /** Текущий пользователь или `null`, если cookie-сессии нет. */
@@ -67,6 +74,22 @@ export async function signOut(): Promise<void> {
     method: 'POST',
     headers: { [CSRF_HEADER]: csrfToken },
   })
+}
+
+/**
+ * Самостоятельная регистрация клиента; возвращает id созданного пользователя.
+ *
+ * Это второе исключение по CSRF после создания брони: у действия нет antiforgery-фильтра,
+ * поэтому токен не запрашивается и заголовок не отправляется. Аккаунт создаёт только
+ * регистрация — вход в него остаётся обычным путём `signIn` (CSRF → login → `/auth/me`).
+ */
+export async function register(input: RegistrationInput): Promise<string> {
+  const created = await apiRequest<{ id: string }>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+
+  return created.id
 }
 
 /**
