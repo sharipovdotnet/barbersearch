@@ -1,7 +1,7 @@
 import { LogIn, ShieldAlert, TriangleAlert } from 'lucide-react'
 
 import { LoginDialog } from '@/components/login-dialog'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
-import { navigate } from '@/lib/router'
+import { REGISTER_PATH } from '@/lib/register-path'
+import { isPlainClick, navigate } from '@/lib/router'
+import { cn } from '@/lib/utils'
 
 /** Экран до входа: объясняет, что даёт кабинет, и даёт единственное действие. */
 export function SignInGate({
@@ -46,6 +48,18 @@ export function SignInGate({
             redirectTo={redirectTo}
             onSignedIn={onSignedIn}
           />
+          <a
+            href={REGISTER_PATH}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'w-full')}
+            onClick={(event) => {
+              if (isPlainClick(event)) {
+                event.preventDefault()
+                navigate(REGISTER_PATH)
+              }
+            }}
+          >
+            Зарегистрироваться
+          </a>
           <Button
             variant="ghost"
             size="sm"

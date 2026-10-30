@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ApiError } from '@/lib/api'
-import { navigate } from '@/lib/router'
+import { REGISTER_PATH } from '@/lib/register-path'
+import { isPlainClick, navigate } from '@/lib/router'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -89,7 +90,13 @@ function describeSignInError(error: unknown): string {
   return 'Не удалось войти. Попробуйте ещё раз.'
 }
 
-function LoginForm({ onSuccess }: { onSuccess: () => void }) {
+function LoginForm({
+  onSuccess,
+  onRegister,
+}: {
+  onSuccess: () => void
+  onRegister: () => void
+}) {
   const { signIn } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -201,6 +208,25 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         </p>
       )}
 
+      <p className="text-center text-sm text-muted-foreground">
+        Нет аккаунта?{' '}
+        <a
+          href={REGISTER_PATH}
+          className="rounded-sm font-medium text-foreground underline underline-offset-4 hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          onClick={(event) => {
+            // Ctrl/Cmd-клик не перехватываем: `/register` должен открыться в новой вкладке.
+            if (!isPlainClick(event)) {
+              return
+            }
+
+            event.preventDefault()
+            onRegister()
+          }}
+        >
+          Зарегистрироваться
+        </a>
+      </p>
+
       <DialogFooter>
         <Button type="submit" className="w-full sm:w-auto" disabled={isPending}>
           {isPending && (
@@ -263,6 +289,11 @@ function LoginDialog({
               navigate(redirectTo)
             }
             onSignedIn?.()
+          }}
+          onRegister={() => {
+            // Диалог живёт в шапке и без закрытия остался бы поверх `/register`.
+            setIsOpen(false)
+            navigate(REGISTER_PATH)
           }}
         />
       </DialogContent>
