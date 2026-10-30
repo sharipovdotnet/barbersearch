@@ -1,12 +1,15 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Reviews.CreateReview;
+using BarberSearch.Application.Reviews.DeleteReview;
 using BarberSearch.Application.Reviews.GetModerationQueue;
+using BarberSearch.Application.Reviews.GetMyReviews;
 using BarberSearch.Application.Reviews.GetReviews;
 using BarberSearch.Application.Reviews.HideReview;
 using BarberSearch.Application.Reviews.PublishReview;
 using BarberSearch.Application.Reviews.UpdateReview;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.CreateReview;
+using BarberSearch.Contracts.Reviews.GetMyReviews;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Contracts.Reviews.UpdateReview;
 using BarberSearch.Web.Auth;
@@ -20,7 +23,8 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace BarberSearch.Web.Controllers;
 
 /// <summary>
-/// Отзывы: публичный список, создание по брони, правка, публикация, скрытие и очередь модерации.
+/// Отзывы: публичный список, свой список автора, создание по брони, правка, удаление,
+/// публикация, скрытие и очередь модерации.
 /// </summary>
 /// <remarks>
 /// <c>GET api/reviews</c> открыт анонимно: список опубликованных отзывов — часть карточки
@@ -30,6 +34,12 @@ namespace BarberSearch.Web.Controllers;
 /// его только администратор. Очередь скрытых отзывов всех барберов —
 /// <c>GET api/reviews/moderation</c>, тоже только администратор. В ответе только
 /// идентификаторы и текст отзыва: ни вложенных данных автора или брони, ни контактных данных.
+/// <para>
+/// Чего нет в публичной выдаче, автор видит в своём списке: <c>GET api/reviews/mine</c> отдаёт
+/// отзывы текущего пользователя в обоих статусах и с контекстом визита, а
+/// <c>DELETE api/reviews/{id}</c> удаляет свой отзыв и пересчитывает рейтинг, если тот был
+/// опубликован.
+/// </para>
 /// <para>
 /// Барбер выводится из брони, а не приходит от клиента, поэтому отзыв нельзя привязать
 /// не к тому барберу. Рейтинг барбера меняется при публикации, скрытии и правке
@@ -97,6 +107,55 @@ public class ReviewsController : ApiController
         => ToActionResult(await handler.Handle(
             new GetModerationQueueQuery(cursor, pageSize),
             cancellationToken));
+
+    /// <summary>
+    /// Свои отзывы автора в любом статусе — для кабинета «Мои отзывы».
+    /// </summary>
+    /// <remarks>
+    /// Действие закрыто fallback-политикой: аноним получает <c>401</c>. Автор берётся из
+    /// claim'а <c>sub</c>, параметра <c>userId</c> нет — администратор тоже видит здесь только
+    /// свои отзывы, а для модерации есть <c>GET api/admin/reviews</c>. Возвращаются и скрытые,
+    /// и опубликованные отзывы: парная пре-модерация держит новый отзыв скрытым, поэтому до
+    /// публикации автор видит его только здесь. <c>isPublished = false</c> означает «на
+    /// модерации» (в том числе скрыт администратором — бэкенд не различает эти случаи).
+    /// <para>
+    /// Порядок — свежие сверху, пагинация курсорная. Отдельная политика <c>reads</c> не
+    /// добавляется: аутентифицированные чтения живут под общим лимитом 30/мин.
+    /// </para>
+    /// </remarks>
+    /// <param name="cursor">Непрозрачный курсор следующей страницы.</param>
+    /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet("mine")]
+    public async Task<ActionResult<PagedResponse<MyReviewResponse>>> GetMine(
+        [FromQuery] string? cursor,
+        [FromQuery] int? pageSize,
+        [FromServices] IQueryHandler<PagedResponse<MyReviewResponse>, GetMyReviewsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetMyReviewsQuery(cursor, pageSize),
+            cancellationToken));
+
+    /// <summary>
+    /// Удаляет свой отзыв. Опубликованный отзыв пересчитывает рейтинг в той же транзакции.
+    /// </summary>
+    /// <remarks>
+    /// Удалить может только автор: чужой отзыв — <c>403 auth.forbidden</c>, неизвестный или
+    /// уже удалённый — <c>404 review.notFound</c>. Администратор этим действием отзыв не
+    /// удаляет: у него есть скрытие <c>DELETE api/reviews/{id}/publication</c>. Удаление
+    /// жёсткое и освобождает уникальный индекс по брони, поэтому автор снова может оставить
+    /// отзыв по этому визиту.
+    /// </remarks>
+    /// <param name="reviewId">Идентификатор отзыва.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpDelete("{reviewId:guid}")]
+    public async Task<ActionResult> Delete(
+        Guid reviewId,
+        [FromServices] ICommandHandler<DeleteReviewCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(new DeleteReviewCommand(reviewId), cancellationToken));
 
     /// <summary>
     /// Создаёт отзыв по завершённой брони. Отзыв скрыт до публикации администратором.

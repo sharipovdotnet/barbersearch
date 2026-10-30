@@ -655,6 +655,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasDatabaseName("ix_reviews_published_created_at_id")
                         .HasFilter("is_published = true");
 
+                    b.HasIndex("UserId", "CreatedAt", "Id")
+                        .IsDescending(false, true, false)
+                        .HasDatabaseName("ix_reviews_user_id_created_at_id");
+
                     b.ToTable("reviews", null, t =>
                         {
                             t.HasCheckConstraint("ck_reviews_rating", "rating BETWEEN 1 AND 5");

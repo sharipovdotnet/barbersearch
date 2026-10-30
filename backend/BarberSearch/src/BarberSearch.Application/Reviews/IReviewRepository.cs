@@ -1,5 +1,6 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Reviews.Admin;
+using BarberSearch.Contracts.Reviews.GetMyReviews;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
@@ -78,6 +79,26 @@ public interface IReviewRepository
     /// <param name="limit">Сколько строк прочитать.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница «мои отзывы» — отзывы одного автора в любом статусе, свежие сверху.
+    /// </summary>
+    /// <remarks>
+    /// Фильтр по автору, а не по барберу: кабинет показывает только собственные отзывы,
+    /// поэтому и скрытые, и опубликованные строки попадают в одну выдачу. Порядок
+    /// <c>created_at DESC, id</c> обслуживает индекс <c>ix_reviews_user_id_created_at_id</c>.
+    /// Keyset-условие берётся из <paramref name="cursor"/>; <paramref name="limit"/> — это
+    /// pageSize + 1, поэтому <c>limit &lt;= 0</c> — <c>400 review.page.limit</c>.
+    /// </remarks>
+    /// <param name="userId">Автор отзыва — текущий пользователь.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<MyReviewResponse>, Failure>> GetMyPageAsync(
+        Guid userId,
         ReviewCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default);

@@ -2,6 +2,7 @@ using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.Admin;
+using BarberSearch.Contracts.Reviews.GetMyReviews;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using CSharpFunctionalExtensions;
@@ -140,6 +141,50 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             Result.Success<IReadOnlyList<ReviewResponse>, Failure>(rows));
     }
 
+    /// <summary>
+    /// Страница «мои отзывы»: фильтр по автору, оба статуса, порядок и keyset как в БД.
+    /// </summary>
+    /// <remarks>
+    /// Контекст визита фейк не моделирует — у <see cref="Review"/> его нет; он подставляется
+    /// заглушкой. Реальные имена барбера, услуги и салона проверяет интеграционный тест.
+    /// </remarks>
+    public Task<Result<IReadOnlyList<MyReviewResponse>, Failure>> GetMyPageAsync(
+        Guid userId,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<MyReviewResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.Review.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        IEnumerable<Review> query = _reviews.Values
+            .Where(review => review.UserId == userId);
+
+        if (cursor is { } position)
+        {
+            query = query.Where(review =>
+                review.CreatedAt < position.CreatedAt
+                || (review.CreatedAt == position.CreatedAt
+                    && review.Id.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<MyReviewResponse> rows = query
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenBy(review => review.Id)
+            .Take(limit)
+            .Select(ToMyResponse)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<MyReviewResponse>, Failure>(rows));
+    }
+
     public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
         bool isPublished,
         ReviewCursor? cursor,
@@ -245,7 +290,11 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
     public Task<UnitResult<Failure>> DeleteAsync(
         Review review,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        _reviews.Remove(review.Id);
+
+        return Task.FromResult(UnitResult.Success<Failure>());
+    }
 
     private static Review Clone(Review review)
     {
@@ -267,4 +316,21 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             review.IsPublished,
             review.CreatedAt,
             review.UpdatedAt);
+
+    private static MyReviewResponse ToMyResponse(Review review)
+        => new(
+            review.Id,
+            review.Rating,
+            review.Text,
+            review.IsPublished,
+            review.CreatedAt,
+            review.UpdatedAt,
+            new MyReviewBarberResponse(review.BarberProfileId, "Fake Barber"),
+            new MyReviewVisitResponse(
+                review.BookingId,
+                review.CreatedAt,
+                "UTC",
+                0m,
+                "Fake service",
+                "Fake salon"));
 }
