@@ -29,6 +29,7 @@ npm run preview  # serve dist/
 | `/account` | customer cabinet: bookings, cancellation, review, password |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
+| `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
@@ -240,11 +241,47 @@ The header button signs in through the browser (cookie) branch of the API:
 `GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`.
 Tokens never reach JavaScript: the session cookie and the refresh cookie are both `HttpOnly`.
 Every state-changing request carries `X-CSRF-TOKEN` from the CSRF endpoint: auth, review and
-admin publication mutations use the helper in `src/lib/csrf.ts`. The one exception is
-`POST /api/bookings`: the API does not validate antiforgery on bookings, so the client does not
-fetch or send a token there (see `AGENT.md` §9.4 and §14).
+admin publication mutations use the helper in `src/lib/csrf.ts`. There are two exceptions:
+`POST /api/bookings` and `POST /api/auth/register`. The API does not validate antiforgery on
+either, so the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14).
 `RememberMe` only tells the API whether the session cookie survives a browser restart — the
 session itself lives for 8 hours of inactivity.
+
+## Registration
+
+`/register` is the customer self-registration screen. It is not in the header navigation: the
+entry points are the «Нет аккаунта? Зарегистрироваться» link in the login dialog, the
+«Зарегистрироваться» action in `SignInGate` (so it appears on `/account`, `/account/reviews`
+and `/barber`), and a direct address. The page reads the session only and mounts the form for an
+anonymous visitor; a signed-in user gets «Вы уже вошли» with a button to `/account`, `/barber` or
+`/admin` by role, and the page makes no data request.
+
+The form sends one `POST /api/auth/register` with `{ email, password, firstName, lastName }` and
+**no** `X-CSRF-TOKEN` (the action has no antiforgery filter, like booking creation). The email
+and names are trimmed; the password is not. Client checks before the request: names are not
+empty, email matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at most 254 characters, the password is
+12–128 characters and differs from the email, its local part and both names, and the repeat
+matches. The top-10k password dictionary is a server check only — its public code is mapped to
+Russian copy, the dictionary is not reproduced on the client.
+
+On `201 { id }` the form signs in with the same credentials through the usual CSRF path
+(`GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`) and navigates to
+`/account`; the role is always `Customer` and `isEmailVerified` is `false`. If the auto sign-in
+fails, registration is **not** repeated (a second attempt would be `409`): the form is replaced
+by the «Аккаунт создан» card with a `LoginDialog` (`redirectTo="/account"`).
+
+Public codes are mapped at the field or the form: `user.create.emailTaken` (409),
+`auth.password.required` / `tooShort` / `tooLong` / `common` / `equalsEmail` / `equalsName`,
+`user.email`, `user.firstName`, `user.lastName`; `429`, offline, `5xx` and anything else have
+their own Russian text. The English `detail` is never shown. Both registration and sign-in use
+the auth rate limiter (10 requests per minute per IP), so a registration with its auto sign-in
+spends two of them. The new account is active immediately; email confirmation is out of scope.
+
+- `src/pages/register-page.tsx` — title, loading skeleton, anonymous card and the signed-in gate.
+- `src/components/register-form.tsx` — fields, client/server errors, submit guard and the
+  «Аккаунт создан» card.
+- `src/lib/auth.ts` — `RegistrationInput` and `register()`; `src/lib/register-path.ts` —
+  `REGISTER_PATH` / `isRegisterPath`.
 
 ## Admin reviews
 
@@ -276,7 +313,7 @@ the profile must be returned to search first.
   project
 - `src/App.tsx` — shell: header, page switch, footer
 - `src/pages/` — `home-page`, `account-page`, `account-reviews-page`, `barber-cabinet-page`,
-  `admin-page`, `barber-page`
+  `register-page`, `admin-page`, `barber-page`
 - `src/components/ui` — shadcn/ui components, add more with `npx shadcn@latest add <name>`
 - `src/lib/utils.ts` — `cn` helper
 - `components.json` — shadcn/ui config and aliases (`@/`)
