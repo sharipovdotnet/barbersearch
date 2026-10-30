@@ -27,6 +27,7 @@ npm run preview  # serve dist/
 | `/` | landing page: real barber search by city and date, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | customer cabinet: bookings, cancellation, review, password |
+| `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
@@ -91,12 +92,44 @@ States: six skeleton cards while the first page loads, an empty list, a first-pa
 «Показать ещё» that appends the next page without duplicates. After the last page the button
 disappears and focus moves to the section. A profile with `reviewsCount: 0` shows «Пока нет
 отзывов.» and makes no request at all. Creating a review stays in the customer account
-(`POST /api/reviews` on a completed booking, hidden until moderation); editing and the
-author-facing status are not implemented because the API has no “my reviews” read endpoint.
+(`POST /api/reviews` on a completed booking, hidden until moderation); editing and deleting go
+through the author list at `/account/reviews`.
 
 - `src/lib/reviews.ts` — review DTO, page size 10, `fetchBarberReviews()`.
 - `src/hooks/use-barber-reviews.ts` — first page, cursor load-more, abort + generation, retry.
 - `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and pagination.
+- `src/components/review-stars.tsx` — the shared five stars, used by both review lists.
+
+## My reviews
+
+`/account/reviews` is a separate lazy screen (not a tab of `/account`). It calls
+`GET /api/reviews/mine?pageSize=10` and lists the author's reviews in both statuses, newest
+first: the rating is a badge and a text label («Опубликован» / «На модерации»), and each row
+shows the barber's name as a real link, the visit date and time in the salon time zone, the
+service, the salon, the price and the review date. The API response carries the whole visit
+context, so the screen makes no `/bookings`, `/barbers/{id}` or public `/reviews` request;
+`userId`, email and `bookingId` never reach the DOM.
+
+Editing opens a dialog prefilled with the rating and text (rating 1–5, text up to 2000
+characters, trimmed to `null` when empty) and sends `PUT /api/reviews/{id}` with
+`X-CSRF-TOKEN`; `204` updates the row locally without a second read, and a published review
+changes on the barber card immediately. Deleting asks for confirmation in an `alertdialog` and
+sends `DELETE /api/reviews/{id}` with the CSRF header; a repeat `404` is treated as «уже
+удалён», and a `403` keeps the row with an error. Only the author can edit or delete — the admin
+has no bypass.
+
+States: skeleton while the first page loads, first-page error with «Повторить», load-more error
+that keeps the rows, «Показать ещё» with no duplicates, and an empty state with «Перейти к
+записям». If deleting empties the visible page while `nextCursor` is not null, the next page is
+loaded automatically. Focus returns to «Изменить» after an edit and moves to the next row's
+«Удалить» (or the list heading) after a delete.
+
+- `src/lib/my-reviews.ts` — `MyReview` DTO, `fetchMyReviews`, `updateMyReview`, `deleteMyReview`.
+- `src/hooks/use-my-reviews.ts` — pages, abort + generation, local updates, 401, `404` handling.
+- `src/pages/account-reviews-page.tsx` — gates, title, list composition and announcements.
+- `src/components/account/my-reviews-list.tsx`, `my-review-row.tsx`,
+  `review-status-badge.tsx`, `edit-review-dialog.tsx`, `delete-review-dialog.tsx`.
+- `src/lib/account-path.ts` — `/account` and `/account/reviews` path helpers.
 
 ## Booking
 
@@ -197,7 +230,8 @@ the profile must be returned to search first.
 - `AGENT.md` — durable frontend rules and reference for AI agents; read it before changing the
   project
 - `src/App.tsx` — shell: header, page switch, footer
-- `src/pages/` — `home-page`, `account-page`, `admin-page`, `barber-page`
+- `src/pages/` — `home-page`, `account-page`, `account-reviews-page`, `admin-page`,
+  `barber-page`
 - `src/components/ui` — shadcn/ui components, add more with `npx shadcn@latest add <name>`
 - `src/lib/utils.ts` — `cn` helper
 - `components.json` — shadcn/ui config and aliases (`@/`)
