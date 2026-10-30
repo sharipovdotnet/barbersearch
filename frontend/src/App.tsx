@@ -4,13 +4,14 @@ import { AppErrorBoundary } from '@/components/error-boundary'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isAccountReviewsPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { matchBarberPath } from '@/lib/barber-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
 
-// Админка, кабинет и карточка барбера — отдельные чанки: витрине не нужен код экранов,
-// закрытых ролью, а профиль не должен удорожать первую загрузку (§12.2).
+// Админка, кабинет, отзывы автора и карточка барбера — отдельные чанки: витрине не
+// нужен код экранов, закрытых ролью, а профиль не должен удорожать первую загрузку (§12.2).
 const AdminPage = lazy(() =>
   import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
 )
@@ -18,6 +19,12 @@ const AdminPage = lazy(() =>
 const AccountPage = lazy(() =>
   import('@/pages/account-page').then((module) => ({
     default: module.AccountPage,
+  })),
+)
+
+const AccountReviewsPage = lazy(() =>
+  import('@/pages/account-reviews-page').then((module) => ({
+    default: module.AccountReviewsPage,
   })),
 )
 
@@ -30,8 +37,8 @@ const BarberPage = lazy(() =>
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
- * Маршрутов четыре, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
- * показывает витрину: отдельная страница 404 на четырёх маршрутах была бы шумом.
+ * Маршрутов пять, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
+ * показывает витрину: отдельная страница 404 на пяти маршрутах была бы шумом.
  *
  * `key` на границе ошибок сбрасывает её состояние при смене страницы: после падения
  * админки ссылка на витрину снова показывает рабочий экран. Для профиля в ключ входит
@@ -41,13 +48,16 @@ function App() {
   const pathname = usePathname()
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
+  const isAccountReviews = isAccountReviewsPath(pathname)
   const pageKey = isAdmin
     ? 'admin'
-    : pathname === '/account'
-      ? 'account'
-      : barberId !== null
-        ? `barber:${barberId}`
-        : 'home'
+    : isAccountReviews
+      ? 'account-reviews'
+      : pathname === '/account'
+        ? 'account'
+        : barberId !== null
+          ? `barber:${barberId}`
+          : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -73,6 +83,8 @@ function App() {
           <Suspense fallback={<RouteFallback />}>
             {isAdmin ? (
               <AdminPage />
+            ) : isAccountReviews ? (
+              <AccountReviewsPage />
             ) : pathname === '/account' ? (
               <AccountPage />
             ) : barberId !== null ? (

@@ -4,6 +4,7 @@ import { Scissors } from 'lucide-react'
 import { HeaderAuth } from '@/components/header-auth'
 import { buttonVariants } from '@/components/ui/button'
 import { useSession } from '@/hooks/use-session'
+import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { cn } from '@/lib/utils'
 import { goToSection, navigate, usePathname } from '@/lib/router'
@@ -17,7 +18,7 @@ import { goToSection, navigate, usePathname } from '@/lib/router'
 export function SiteHeader() {
   const pathname = usePathname()
   const { status, user } = useSession()
-  const isAccount = pathname === '/account'
+  const isAccount = isAccountPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAuthenticated = status === 'authenticated' && Boolean(user)
   const isAdminUser = isAuthenticated && user?.role === 'Admin'
