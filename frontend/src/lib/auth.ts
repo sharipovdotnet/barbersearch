@@ -67,6 +67,26 @@ export async function signIn(
   return user
 }
 
+/**
+ * Один `POST /auth/refresh` в cookie-ветке: свежий CSRF → `204` + новые cookie.
+ *
+ * Тело не отправляется: сервер берёт refresh-токен из HttpOnly-cookie, а antiforgery
+ * проверяет по заголовку. Повтор на `401` выключен — этим вызовом продлевает сессию
+ * оркестратор `lib/session-refresh.ts`, а не транспорт.
+ */
+export async function requestSessionRefresh(): Promise<void> {
+  const csrfToken = await fetchCsrfToken()
+
+  await apiRequest<void>(
+    '/auth/refresh',
+    {
+      method: 'POST',
+      headers: { [CSRF_HEADER]: csrfToken },
+    },
+    { retryOnUnauthorized: false }
+  )
+}
+
 export async function signOut(): Promise<void> {
   const csrfToken = await fetchCsrfToken()
 
