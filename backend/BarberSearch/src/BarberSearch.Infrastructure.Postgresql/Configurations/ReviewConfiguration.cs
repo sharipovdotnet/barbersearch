@@ -64,5 +64,10 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .IsDescending(false, true, false)
             .HasFilter("is_published = true")
             .HasDatabaseName("ix_reviews_published_created_at_id");
+
+        // Список «мои отзывы»: свежие сверху, оба статуса, keyset (user_id, created_at, id).
+        builder.HasIndex(x => new { x.UserId, x.CreatedAt, x.Id })
+            .IsDescending(false, true, false)
+            .HasDatabaseName("ix_reviews_user_id_created_at_id");
     }
 }

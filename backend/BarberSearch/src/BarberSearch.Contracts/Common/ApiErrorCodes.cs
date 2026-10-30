@@ -577,6 +577,15 @@ public static class ApiErrorCodes
         public const string PageLimitInvalid = "review.page.limit";
 
         /// <summary>
+        /// Размер страницы «мои отзывы» вне диапазона <c>1..100</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Свой код, потому что это свой эндпоинт: клиент различает ошибку размера страницы
+        /// в кабинете и в публичном списке, хотя параметр называется одинаково.
+        /// </remarks>
+        public const string GetMyReviewsPageSizeInvalid = "review.getMyReviews.pageSize";
+
+        /// <summary>
         /// Префикс кодов сохранения отзыва; к нему добавляется суффикс из фабрик.
         /// </summary>
         public const string AddPrefix = "review.add";

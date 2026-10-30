@@ -2,6 +2,7 @@ using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.Admin;
+using BarberSearch.Contracts.Reviews.GetMyReviews;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Infrastructure.Postgresql.Audit;
@@ -204,6 +205,159 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
 
         return rows;
     }
+
+    /// <summary>
+    /// Страница «мои отзывы» — отзывы одного автора в любом статусе, свежие сверху.
+    /// </summary>
+    /// <remarks>
+    /// Автор фильтруется по <c>user_id</c>, статус не фильтруется: кабинету нужны и скрытые,
+    /// и опубликованные отзывы. Порядок <c>created_at DESC, id</c> обслуживает индекс
+    /// <c>ix_reviews_user_id_created_at_id</c>. Контекст визита собирается join'ами,
+    /// автор в проекцию не входит — это сам вызывающий. <paramref name="limit"/> &lt;= 0
+    /// даёт <c>400 review.page.limit</c> до SQL.
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<MyReviewResponse>, Failure>> GetMyPageAsync(
+        Guid userId,
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Review.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildMyReviewsQuery(Context, userId, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToMyResponse).ToList();
+    }
+
+    /// <summary>
+    /// Общая проекция списка «мои отзывы»: отзыв и контекст его визита, без автора.
+    /// </summary>
+    /// <remarks>
+    /// Join'ы внутренние, как в админской проекции: деактивированные профили, услуги и салоны
+    /// не удаляются, поэтому потерявших контекст строк не бывает, а fallback-имена не нужны.
+    /// Проекция плоская: вложенные response-записи конструируются в памяти, чтобы EF не собирал
+    /// объектную модель в SQL.
+    /// </remarks>
+    /// <param name="context">Контекст базы данных.</param>
+    /// <param name="userId">Автор отзыва.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать; <c>null</c> — без ограничения.</param>
+    internal static IQueryable<MyReviewRow> BuildMyReviewsQuery(
+        ApplicationDbContext context,
+        Guid userId,
+        ReviewCursor? cursor = null,
+        int? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var reviews = context.Reviews
+            .AsNoTracking()
+            .Where(review => review.UserId == userId);
+
+        var bookings = context.Bookings.AsNoTracking();
+
+        var barbers = context.BarberProfiles
+            .AsNoTracking()
+            .Select(profile => new
+            {
+                profile.Id,
+                DisplayName = profile.DisplayName.Value
+            });
+
+        var services = context.BarberServices
+            .AsNoTracking()
+            .Select(service => new
+            {
+                service.Id,
+                service.HairServiceId
+            });
+
+        var hairServices = context.HairServices
+            .AsNoTracking()
+            .Select(hairService => new
+            {
+                hairService.Id,
+                hairService.Name
+            });
+
+        var salons = context.Salons
+            .AsNoTracking()
+            .Select(salon => new
+            {
+                salon.Id,
+                salon.Name,
+                salon.TimeZoneId
+            });
+
+        var joined = from review in reviews
+                     join booking in bookings on review.BookingId equals booking.Id
+                     join barber in barbers on review.BarberProfileId equals barber.Id
+                     join service in services on booking.BarberServiceId equals service.Id
+                     join hairService in hairServices on service.HairServiceId equals hairService.Id
+                     join salon in salons on booking.SalonId equals salon.Id
+                     select new
+                     {
+                         review,
+                         booking,
+                         barber,
+                         hairService,
+                         salon
+                     };
+
+        if (cursor is { } position)
+        {
+            joined = joined.Where(row =>
+                row.review.CreatedAt < position.CreatedAt
+                || (row.review.CreatedAt == position.CreatedAt
+                    && row.review.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = joined
+            .OrderByDescending(row => row.review.CreatedAt)
+            .ThenBy(row => row.review.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(row => new MyReviewRow(
+            row.review.Id,
+            row.review.Rating,
+            row.review.Text,
+            row.review.IsPublished,
+            row.review.CreatedAt,
+            row.review.UpdatedAt,
+            row.barber.Id,
+            row.barber.DisplayName,
+            row.booking.Id,
+            row.booking.StartAt,
+            row.salon.TimeZoneId,
+            row.booking.Price,
+            row.hairService.Name,
+            row.salon.Name));
+    }
+
+    private static MyReviewResponse ToMyResponse(MyReviewRow row)
+        => new(
+            row.Id,
+            row.Rating,
+            row.Text,
+            row.IsPublished,
+            row.CreatedAt,
+            row.UpdatedAt,
+            new MyReviewBarberResponse(row.BarberId, row.BarberDisplayName),
+            new MyReviewVisitResponse(
+                row.BookingId,
+                row.StartAt,
+                row.TimeZoneId,
+                row.Price,
+                row.ServiceName,
+                row.SalonName));
 
     /// <summary>
     /// Страница отзывов для админского экрана: скрытые (FIFO) или опубликованные (свежие сверху).
@@ -535,4 +689,23 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         string ServiceName,
         string SalonName,
         string TimeZoneId);
+
+    /// <summary>
+    /// Плоская строка списка «мои отзывы»: отзыв и контекст визита, без автора.
+    /// </summary>
+    internal sealed record MyReviewRow(
+        Guid Id,
+        int Rating,
+        string? Text,
+        bool IsPublished,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt,
+        Guid BarberId,
+        string BarberDisplayName,
+        Guid BookingId,
+        DateTimeOffset StartAt,
+        string TimeZoneId,
+        decimal Price,
+        string ServiceName,
+        string SalonName);
 }
