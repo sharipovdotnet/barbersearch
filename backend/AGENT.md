@@ -366,7 +366,7 @@ session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not
 
 If even that fails, the fallback is a throwaway runner that loads the test assembly and invokes
 every `[Fact]` by reflection. This is faithful here because the three unit-test assemblies are
-**Domain — 184, Application — 212, Infrastructure — 71 `[Fact]` methods, no `[Theory]`, no
+**Domain — 184, Application — 270, Infrastructure — 83 `[Fact]` methods, no `[Theory]`, no
 fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -391,8 +391,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-10-25: domain **184**, application **212**, infrastructure **71**,
-integration **12** — все зелёные. История прогонов по срезам и негативные проверки —
+Актуальный baseline на 2026-10-30: domain **184**, application **270**, infrastructure **83**,
+integration **24** — все зелёные. История прогонов по срезам и негативные проверки —
 `HANDOFF.md` §2.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -651,19 +651,20 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 184 domain + 212 application + 71 infrastructure + 12 integration, все зелёные |
-| Application | ✅ 79 обработчиков (71 command + 8 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 184 domain + 270 application + 83 infrastructure + 24 integration, все зелёные |
+| Application | ✅ 81 обработчик (72 command + 9 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 13 контроллеров / 81 endpoint (73 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 16 контроллеров / 89 endpoint (81 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (15):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (17):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
-`DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`.
+`DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
+`AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -814,7 +815,7 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
    **Partly done:** the project exists (→ `Domain`, `Shared`), declares seven repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries **79 handlers (71 command + 8 query)** in per-entity
+   `Reviews/IReviewRepository.cs` — and carries **81 handlers (72 command + 9 query)** in per-entity
    folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
    `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
@@ -846,7 +847,7 @@ Suggested order:
    Swagger UI, JWT auth for `User`.
    **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   14 controllers with 83 endpoints (75 domain + 8 auth), the `ErrorType` → HTTP status mapping
+   16 controllers with 89 endpoints (81 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
    Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
@@ -900,8 +901,11 @@ Suggested order:
    не опубликует его существующим `POST api/reviews/{id}/publication`; скрытие —
    `DELETE api/reviews/{id}/publication`. Очередь скрытых отзывов всех барберов —
    `GET api/reviews/moderation` (AdminOnly, keyset, `created_at ASC, id` — старые сверху,
-   частичный индекс `ix_reviews_moderation_created_at_id`). Ограничение: автор не видит свой
-   отзыв до публикации — author-facing status list оставлен follow-up.
+   частичный индекс `ix_reviews_moderation_created_at_id`). Закрыто 2026-10-30 (issue-20):
+   автор видит свои отзывы в обоих статусах через `GET api/reviews/mine` и может удалить свой
+   отзыв через `DELETE api/reviews/{id}`. Ограничение осталось только в статусе: в таблице
+   один boolean, поэтому «на модерации» и «скрыт администратором» неразличимы, и UI не должен
+   обещать второе (§17.8).
 
 ---
 
@@ -1071,6 +1075,7 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `reviews` | `UNIQUE (booking_id)` | One review per booking (nothing in the domain prevents a second one today) |
 | `reviews` | `(barber_profile_id, created_at DESC, id) WHERE is_published` — partial | Published reviews of one barber, keyset order; hidden reviews never enter the public list |
 | `reviews` | `(created_at, id) WHERE is_published = false` — partial, `ix_reviews_moderation_created_at_id` (R-35) | Admin moderation queue, oldest first (FIFO): the same keyset pair as the public list, but ASC, so it has its own partial index |
+| `reviews` | `(user_id, created_at DESC, id)` — full, `ix_reviews_user_id_created_at_id` (issue-20) | Author's own list (`GET api/reviews/mine`): filter by author and keyset `created_at DESC, id`. Both statuses are returned, so the index is full, not partial |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -1426,7 +1431,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**14 controllers, 83 endpoints: 75 domain + 8 auth** — one endpoint per Application handler, plus
+**16 controllers, 89 endpoints: 81 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1442,7 +1447,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `SpecializationsController` | `api/specializations` | 4 |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
-| `ReviewsController` | `api/reviews` | 6 (4 write + list + moderation queue) |
+| `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
 | `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
@@ -1532,10 +1537,10 @@ Read endpoints (added 2026-10-19):
   `GET api/reviews` carry `[AllowAnonymous]` and the `reads` policy — 120 requests per minute per
   `RemoteIpAddress` (after `UseForwardedHeaders`), fixed window, `QueueLimit = 0`, `429` with
   `Retry-After`. The partition ignores `sub`, so signing in does not bypass the quota. Everything
-  else (including `GET api/bookings` and all review writes) is still closed by the fallback policy;
-  no response gained PII — search/card/slots expose public profile fields and active
-  services/salons, reviews expose ids, rating and text, and there is no email/phone in the read
-  contracts.
+  else (including `GET api/bookings`, `GET api/reviews/mine` and all review writes) is still closed
+  by the fallback policy; no response gained PII — search/card/slots expose public profile fields
+  and active services/salons, reviews expose ids, rating and text, and there is no email/phone in
+  the read contracts.
   `Cache-Control` is **not** set: slots change as soon as a booking is created and there is no
   CDN/edge cache; adding one would need invalidation on booking writes.
 - **Admin reviews (2026-10-28).** `GET api/admin/reviews?status=pending|published` and
@@ -1629,6 +1634,25 @@ Read endpoints (added 2026-10-19):
   review.cursor.invalid`. Admin-only (`[Authorize(Policy = AdminOnly)]`), because hidden rows are
   not part of the storefront; the partial index `ix_reviews_moderation_created_at_id`
   (`WHERE is_published = false`) serves the ASC scan.
+- **`GET api/reviews/mine` (2026-10-30, issue-20)** — the author's own reviews in both statuses,
+  order `created_at DESC, id` (newest first), keyset cursor, `PagedResponse<MyReviewResponse>`.
+  The author comes from `sub`; there is no `userId` parameter, so an admin also sees only their own
+  rows (moderation has `GET api/admin/reviews`). `pageSize` defaults to 20, is capped at 100, an
+  out-of-range value is `400 review.getMyReviews.pageSize`, a broken cursor is `400
+  review.cursor.invalid`. The response carries the barber name, service, salon, `timeZoneId`,
+  price and start of the visit, and no client PII (`email`, name and `userId` are absent).
+  `isPublished = false` means "on moderation" for both a never-published and an admin-hidden
+  review — the table holds one boolean (§12.9). Closed by the fallback policy (`401` for an
+  anonymous request); it deliberately does not take the `reads` policy, because authenticated
+  reads live under the global limiter. Served by `ix_reviews_user_id_created_at_id`.
+- **`DELETE api/reviews/{reviewId}` (2026-10-30, issue-20)** — hard-deletes the author's own review
+  and answers `204`. Ownership is checked strictly against `review.UserId`: a stranger (and an
+  admin) gets `403 auth.forbidden`, an unknown or already deleted id gets `404 review.notFound`
+  (there is no idempotent "already deleted" answer; the UI treats the 404 as such). Deleting a
+  published review recalculates `barber_profiles.rating`/`reviews_count` in the same transaction
+  (`IUnitOfWork` + `ReviewRatingRecalculator`; `null`/0 when no published reviews are left), while
+  a hidden review does not touch the summary. The hard delete frees `ux_reviews_booking_id`, so
+  the author can review that booking again.
 - **Review moderation and rating (2026-10-19; pre-moderation from 2026-10-24, R-35).**
   `POST api/reviews` creates a hidden review (`IsPublished = false`), so it does not change the
   public summary and does not wake the rating recalculator; an administrator later calls
@@ -1999,12 +2023,16 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 | `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
 | Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
 | `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент или барбер | — (admin обходит) |
-| `Review` | клиент по своей завершённой брони | автор | `Publish`/`Hide` |
+| `Review` | клиент по своей завершённой брони | автор; удаление — только автор, без admin-обхода | `Publish`/`Hide` |
 | `User` | `register` публично / admin | сам | роль, активация, верификация |
 
 Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой. `admin` обходит проверку через
 `ICurrentUser.IsAdmin` (claim роли; после смены роли старый токен отзывается security stamp'ом —
 §17.10). Исключение — создание отзыва: admin его не обходит, иначе появились бы фиктивные отзывы.
+Удаление отзыва (`DELETE api/reviews/{id}`, 2026-10-30) — второе исключение: владелец проверяется
+строго по `review.UserId`, поэтому админ тоже получает `403`. Администратор скрывает отзыв
+(`DELETE api/reviews/{id}/publication`), а не удаляет его след; удаление освобождает бронь для
+нового отзыва, и отдать это право админу значило бы дать ему менять историю автора.
 `Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
 проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
 
