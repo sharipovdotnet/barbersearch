@@ -6,6 +6,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { useSession } from '@/hooks/use-session'
 import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
+import { BARBER_CABINET_PATH, isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { cn } from '@/lib/utils'
 import { goToSection, navigate, usePathname } from '@/lib/router'
 
@@ -19,9 +20,11 @@ export function SiteHeader() {
   const pathname = usePathname()
   const { status, user } = useSession()
   const isAccount = isAccountPath(pathname)
+  const isBarberCabinet = isBarberCabinetPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAuthenticated = status === 'authenticated' && Boolean(user)
   const isAdminUser = isAuthenticated && user?.role === 'Admin'
+  const isBarberUser = isAuthenticated && user?.role === 'Barber'
 
   function handleSection(event: MouseEvent, id: string) {
     event.preventDefault()
@@ -67,22 +70,38 @@ export function SiteHeader() {
             >
               Как это работает
             </a>
-            {isAuthenticated && (
-              <a
-                href="/account"
-                aria-current={isAccount ? 'page' : undefined}
-                className={cn(
-                  'transition-colors hover:text-foreground',
-                  isAccount && 'font-medium text-foreground'
-                )}
-                onClick={(event) => {
-                  event.preventDefault()
-                  navigate('/account')
-                }}
-              >
-                Мои записи
-              </a>
-            )}
+            {isAuthenticated &&
+              (isBarberUser ? (
+                <a
+                  href={BARBER_CABINET_PATH}
+                  aria-current={isBarberCabinet ? 'page' : undefined}
+                  className={cn(
+                    'transition-colors hover:text-foreground',
+                    isBarberCabinet && 'font-medium text-foreground'
+                  )}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate(BARBER_CABINET_PATH)
+                  }}
+                >
+                  Кабинет барбера
+                </a>
+              ) : (
+                <a
+                  href="/account"
+                  aria-current={isAccount ? 'page' : undefined}
+                  className={cn(
+                    'transition-colors hover:text-foreground',
+                    isAccount && 'font-medium text-foreground'
+                  )}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate('/account')
+                  }}
+                >
+                  Мои записи
+                </a>
+              ))}
             {isAdminUser && (
               <a
                 href="/admin"
@@ -118,7 +137,7 @@ export function SiteHeader() {
               className={cn(buttonVariants({ size: 'sm' }), 'hidden sm:inline-flex')}
               onClick={(event) => handleSection(event, 'barbers')}
             >
-              {isAccount ? 'К поиску' : 'Найти барбера'}
+              {isAccount || isBarberCabinet ? 'К поиску' : 'Найти барбера'}
             </a>
           )}
         </div>

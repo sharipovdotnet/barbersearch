@@ -1,6 +1,6 @@
 import { Check, Star, X } from 'lucide-react'
 
-import { BookingStatusBadge } from '@/components/account/booking-status-badge'
+import { BookingStatusBadge } from '@/components/booking-status-badge'
 import type { BookingView } from '@/components/account/booking-view'
 import { Button } from '@/components/ui/button'
 import { canCancelBooking, canReviewBooking } from '@/lib/booking-status'

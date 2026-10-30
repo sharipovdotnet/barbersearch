@@ -6,6 +6,7 @@ import { SiteHeader } from '@/components/site-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isAccountReviewsPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
+import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
@@ -34,6 +35,12 @@ const BarberPage = lazy(() =>
   })),
 )
 
+const BarberCabinetPage = lazy(() =>
+  import('@/pages/barber-cabinet-page').then((module) => ({
+    default: module.BarberCabinetPage,
+  })),
+)
+
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
@@ -49,15 +56,18 @@ function App() {
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAccountReviews = isAccountReviewsPath(pathname)
+  const isBarberCabinet = isBarberCabinetPath(pathname)
   const pageKey = isAdmin
     ? 'admin'
     : isAccountReviews
       ? 'account-reviews'
-      : pathname === '/account'
-        ? 'account'
-        : barberId !== null
-          ? `barber:${barberId}`
-          : 'home'
+      : isBarberCabinet
+        ? 'barber-cabinet'
+        : pathname === '/account'
+          ? 'account'
+          : barberId !== null
+            ? `barber:${barberId}`
+            : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -85,6 +95,8 @@ function App() {
               <AdminPage />
             ) : isAccountReviews ? (
               <AccountReviewsPage />
+            ) : isBarberCabinet ? (
+              <BarberCabinetPage />
             ) : pathname === '/account' ? (
               <AccountPage />
             ) : barberId !== null ? (

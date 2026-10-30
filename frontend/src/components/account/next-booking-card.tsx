@@ -16,7 +16,7 @@ import {
   CardHeader,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { BookingStatusBadge } from '@/components/account/booking-status-badge'
+import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { StatusTimeline } from '@/components/account/status-timeline'
 import type { BookingView } from '@/components/account/booking-view'
 import { downloadBookingCalendar } from '@/lib/calendar'
