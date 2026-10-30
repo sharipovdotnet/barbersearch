@@ -300,6 +300,11 @@ export function formatReviewsCount(count: number): string {
   return `${count} ${plural(count, ['отзыв', 'отзыва', 'отзывов'])}`
 }
 
+/** «20 записей», «1 запись», «3 записи». */
+export function formatBookingsCount(count: number): string {
+  return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
+}
+
 /** «5 дней», «1 день», «2 дня» — рабочее расписание в чек-листе готовности. */
 export function formatDaysCount(count: number): string {
   return `${count} ${plural(count, ['день', 'дня', 'дней'])}`

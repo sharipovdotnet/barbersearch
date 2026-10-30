@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Loader2, TriangleAlert } from 'lucide-react'
 
-import { BookingStatusBadge } from '@/components/account/booking-status-badge'
+import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { LoginDialog } from '@/components/login-dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'

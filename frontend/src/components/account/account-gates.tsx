@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
 import { navigate } from '@/lib/router'
 
 /** Экран до входа: объясняет, что даёт кабинет, и даёт единственное действие. */
@@ -86,14 +87,25 @@ export function RoleGate({ role }: { role: string }) {
           </CardTitle>
           <CardDescription>
             {isBarber
-              ? 'Вы вошли как барбер. Расписание и записи клиентов появятся в кабинете барбера — пока его нет.'
+              ? 'Вы вошли как барбер. Это кабинет клиента: записи клиентов, подтверждение и заметки живут в кабинете барбера.'
               : isAdmin
                 ? 'Модерация отзывов, барберы и справочники — в отдельном разделе администрирования.'
                 : 'Управление каталогом и модерацией отзывов появится отдельным разделом.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
-          {isAdmin ? (
+          {isBarber && (
+            <Button
+              size="sm"
+              className="h-11 sm:h-8"
+              onClick={() => {
+                navigate(BARBER_CABINET_PATH)
+              }}
+            >
+              Открыть кабинет барбера
+            </Button>
+          )}
+          {isAdmin && (
             <Button
               size="sm"
               onClick={() => {
@@ -102,7 +114,8 @@ export function RoleGate({ role }: { role: string }) {
             >
               Открыть администрирование
             </Button>
-          ) : (
+          )}
+          {!isAdmin && (
             <Button
               variant="outline"
               size="sm"

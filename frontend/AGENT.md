@@ -1,7 +1,7 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-19` (default `main`). The landing page searches real
+> Code state: branch `features/issue-23` (default `main`). The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
@@ -12,13 +12,15 @@
 > the «Отзывы» section lists the barber's published reviews from `GET /api/reviews` (stars,
 > numeric rating, salon-local date, text; `nextCursor` and «Показать ещё»), while review
 > creation stays in the customer account and editing/author-facing status are absent. The
-> customer account and the three admin sections (reviews, barbers, users) are implemented; the
-> barber cabinet and booking confirmation by the barber are **not**.
-> Verified on 2026-10-30: `npm run lint` — 0 warnings / 0 errors (104 files, 116 rules);
-> `npm run build` — success, 2253 modules, entry `index-*.js` 373.61 kB (gzip 121.53 kB);
-> lazy `admin-page` 115.39 kB (gzip 25.10 kB), `account-page` 38.05 kB (gzip 10.67 kB),
-> `barber-page` 37.38 kB (gzip 10.07 kB) and the shared `bookings-*.js` 2.77 kB (gzip 1.32 kB);
-> CSS 72.80 kB (gzip 12.63 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> customer account, the three admin sections (reviews, barbers, users) and the barber cabinet
+> are implemented: a barber sees the bookings of their own profile at `/barber` and confirms,
+> completes, marks no-show, cancels and annotates them.
+> Verified on 2026-10-31: `npm run lint` — 0 warnings / 0 errors (123 files, 116 rules);
+> `npm run build` — success, 2272 modules, entry `index-*.js` 375.57 kB (gzip 122.15 kB);
+> lazy `admin-page` 114.41 kB (gzip 24.98 kB), `account-page` 35.34 kB (gzip 10.23 kB),
+> `barber-page` 37.17 kB (gzip 9.99 kB), `barber-cabinet-page` 25.59 kB (gzip 7.29 kB) and
+> the shared `booking-status-badge-*.js` 1.02 kB (gzip 0.56 kB);
+> CSS 73.08 kB (gzip 12.69 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -165,10 +167,16 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── barber-about.tsx        bio, languages, certificates, achievements, goodies
     │   │   ├── barber-services.tsx     price list with category and duration, no booking
     │   │   ├── barber-reviews.tsx      published reviews, summary, stars, cursor pagination
+    │   │   ├── barber-cabinet-gates.tsx  /barber gates: wrong role, unlinked profile, skeleton
+    │   │   ├── cabinet-booking-list.tsx  barber cabinet: tabs, rows, states, load-more
+    │   │   ├── cabinet-booking-row.tsx   one client booking: time, customer, actions, errors
+    │   │   ├── barber-note-dialog.tsx  note dialog with the 1000-character limit
+    │   │   ├── barber-booking-action-dialog.tsx  cancel and no-show alertdialogs
     │   │   ├── barber-salons.tsx       addresses, the primary salon and weekly schedules
     │   │   ├── barber-specializations.tsx  names and descriptions; hidden when empty
     │   │   ├── barber-section.tsx      shared section heading (h2) for the cards
     │   │   └── barber-state.tsx        skeleton, error and not-found states
+    │   ├── booking-status-badge.tsx    ← shared booking status badge (account, profile, cabinet)
     │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── home/                      ← landing sections; the page only composes them
@@ -191,6 +199,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── use-admin-review-list.ts   ← admin queue: pages, refresh, cursor, 401
     │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
     │   ├── use-barber-search.ts       ← landing search: filters, cursor, abort, retry
+    │   ├── use-barber-bookings.ts     ← barber cabinet: scope, cursor, five local mutations, 401
     │   ├── use-barber-profile.ts      ← one public profile: cache-first, abort, retry, 404
     │   ├── use-barber-profiles.ts     ← public profile lookups for bookings
     │   ├── use-barber-reviews.ts      ← barber reviews: first page, cursor, abort, retry
@@ -205,6 +214,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── account-page.tsx           ← customer cabinet
     │   ├── account-reviews-page.tsx   ← /account/reviews: gates, own reviews, dialogs
     │   ├── admin-page.tsx             ← /admin route, gates, shell
+    │   ├── barber-cabinet-page.tsx    ← /barber: gates, title, booking list and dialogs
     │   ├── barber-page.tsx            ← /barbers/{id}: title, back link, states, sections
     │   └── home-page.tsx              ← landing composition: title, hash scroll, sections
     └── lib/
@@ -214,6 +224,8 @@ frontend/                              ← workspace root, NOT the git root
         ├── api.ts                     ← fetch wrapper, ApiError, ProblemDetails
         ├── auth.ts                    ← CSRF, signIn, signOut, fetchSession
         ├── barber-grade.ts            ← grade union, Russian labels, ordered grades
+        ├── barber-bookings.ts         ← GET /barber/bookings, barber's read DTO, five write actions
+        ├── barber-cabinet-path.ts     ← /barber path helper
         ├── barber-path.ts             ← /barbers/{id} parsing/building, GUID check
         ├── barber-profile-labels.ts   ← ServiceCategory/Language/PaymentMethod/DayOfWeek labels
         ├── barber-search.ts           ← GET /barbers: filters, item DTO, page size 12
@@ -402,7 +414,7 @@ current path, `useLocation()` additionally returns the query string, and `naviga
 replaces history and notifies subscribers. Links stay real `<a href>`s, so middle-click and
 open-in-new-tab work.
 
-Five top-level areas:
+Six top-level areas:
 
 | Path | Page | Notes |
 |---|---|---|
@@ -410,6 +422,7 @@ Five top-level areas:
 | `/barbers/{id}` | `BarberPage` | public profile; a non-GUID id renders not-found without a request; `404` from the API is not a redirect |
 | `/account` | `AccountPage` | customer cabinet; role gates for barber/admin |
 | `/account/reviews` | `AccountReviewsPage` | author's own reviews: both statuses, edit and delete; lazy chunk `account-reviews-page` |
+| `/barber` | `BarberCabinetPage` | barber cabinet: own profile's bookings, confirm/complete/no-show/cancel/note; lazy chunk `barber-cabinet-page` |
 | `/admin` | `AdminPage` | redirects to `/admin/reviews`; unknown `/admin/*` shows «Раздел не найден» |
 
 Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
@@ -417,9 +430,10 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
-Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage` and `BarberPage` are
-`React.lazy` imports in `App.tsx`, behind one `Suspense` with a skeleton fallback
-(`role="status"`, «Загрузка страницы»); the landing ships only the shell and itself.
+Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage` and
+`BarberCabinetPage` are `React.lazy` imports in `App.tsx`, behind one `Suspense` with a
+skeleton fallback (`role="status"`, «Загрузка страницы»); the landing ships only the shell
+and itself.
 `AppErrorBoundary` wraps the page inside `<main>`:
 a render exception replaces the screen with a Russian message and «Обновить страницу» /
 «На главную» actions, while the header, footer and navigation stay usable. The boundary is
@@ -443,6 +457,13 @@ unknown `/account/*` still falls back to the landing. The list mounts in a child
 after the session and role checks, so an anonymous visitor sees the gate and no `mine` request.
 Status is a badge rather than a filter: the API has no status parameter, and client-side
 filtering would break keyset pagination.
+
+`/barber` is its own address: the customer cabinet and the barber cabinet show different
+entities (a client's visits vs. a barber's incoming bookings), and the header points a
+signed-in barber to `/barber` instead of `/account`. `isBarberCabinetPath` matches exactly
+`/barber`, so unknown `/barber/*` still falls back to the landing. Gates live above the list
+(anonymous, non-`Barber` role, `barberProfileId === null`), and the list mounts in a child
+component, so none of them fires `GET /api/barber/bookings`.
 
 ---
 
@@ -636,6 +657,12 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `PUT` | `/api/reviews/{id}` | author | `{ rating, text }` → `204`; edits published and hidden reviews; a published edit recalculates the barber rating immediately, a hidden one does not; `400 review.update.rating` / `review.update.text.tooLong`, `403 auth.forbidden`, `404 review.notFound`, `409 review.update.concurrencyConflict` |
 | `DELETE` | `/api/reviews/{id}` | author only (no admin bypass) | `204`; the booking is freed and a published review recalculates the rating; `403 auth.forbidden`; an unknown or already deleted id is `404 review.notFound` |
 | `POST` | `/api/bookings` | customer, cookie, 30/min per user | create one booking from a `/slots` snapshot (`startAt`/`endAt` sent as received); `201 { id }`, idempotent by `idempotencyKey` (a repeat returns `201` with the same id), `409` overlap/lockTimeout, `404` inactive service/salon, `400` start window or period; no `X-CSRF-TOKEN` (§9.4) |
+| `GET` | `/api/barber/bookings?scope=upcoming\|past&cursor=&pageSize=` | role `Barber` (policy `BarberOnly`) | the barber's own bookings, profile taken from the `barber_profile_id` claim (no profile parameter): `upcoming` (default) is `Pending`/`Confirmed` with `EndAt > now`, `start_at ASC`; `past` is everything else, `start_at DESC`; opaque `nextCursor`, the UI sends `pageSize=20`; `400 booking.getBarberBookings.scope`/`pageSize`, `400 booking.cursor.invalid`; `403 auth.forbidden` for a `Barber` without a linked profile; the DTO has the customer name and phone but no email, `userId` or `idempotencyKey` |
+| `POST` | `/api/bookings/{id}/confirmation` | owner barber | `Pending → Confirmed`, `204`; `403 auth.forbidden`, `404 booking.notFound`, `409 booking.confirm.invalidStatus` |
+| `POST` | `/api/bookings/{id}/completion` | owner barber | `Confirmed → Completed`, `204`; `409 booking.complete.invalidStatus` |
+| `POST` | `/api/bookings/{id}/no-show` | owner barber | `Confirmed → NoShow`, `204`; before `start_at` — `400 booking.markNoShow.tooEarly`; `409 booking.markNoShow.invalidStatus` |
+| `POST` | `/api/bookings/{id}/cancellation` | owner barber or the customer | `Pending\|Confirmed → Cancelled`, `204`; `409 booking.cancel.invalidStatus`; cancellation frees the slot |
+| `PUT` | `/api/bookings/{id}/barber-note` | owner barber | `{ note }` → `204`; the value is trimmed and an empty string is stored as `null`; more than 1000 characters — `400 booking.barberNote.tooLong` |
 | `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context |
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
 | `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
@@ -650,6 +677,12 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `PUT` | `/api/barber-profiles/{id}/grade` | admin | change the grade (`{ grade }`, enum as a string) |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/activation` | admin | hide from search / return to search |
 | `POST` / `DELETE` | `/api/reviews/{id}/publication` | admin | publish / hide; the client sends `X-CSRF-TOKEN` |
+
+Barber writes (`confirmation`, `completion`, `no-show`, `cancellation`, `barber-note`) are
+cookie mutations and send `X-CSRF-TOKEN`; `GET /api/barber/bookings` reads without it. There
+is no `GET /api/barber/bookings/{id}`: a list row already carries everything the five actions
+need, and they go by the `id` from that row. `GET /api/bookings` stays the **customer's** list
+and is not reused by the cabinet — there the barber is the client, not the owner.
 
 The backend also exposes `POST /api/auth/refresh`, registration and password change; the
 frontend calls none of registration/refresh yet (password change is wired in the account).
@@ -923,34 +956,38 @@ keyboard/focus paths are implemented and were checked manually.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-10-30)
+### 12.1 Current build (2026-10-31)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session, UI kit and React | 374.09 kB | 121.69 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.12 kB | 9.98 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 115.39 kB | 25.04 kB |
-| `account-page-*.js` — lazy `/account` | 35.28 kB | 10.23 kB |
+| `index-*.js` — shell, landing, search, session, UI kit and React | 375.57 kB | 122.15 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 114.41 kB | 24.98 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.17 kB | 9.99 kB |
+| `account-page-*.js` — lazy `/account` | 35.34 kB | 10.23 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.59 kB | 7.29 kB |
 | `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.66 kB | 6.09 kB |
-| `account-gates-*.js` — sign-in/role gates shared by both account screens | 3.69 kB | 1.38 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 2.17 kB | 1.08 kB |
-| `textarea-*.js` — shared `Textarea` for both review dialogs | 0.67 kB | 0.38 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 3.86 kB | 1.41 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.18 kB | 0.61 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.56 kB |
+| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
-| `index-*.css` | 73.06 kB | 12.69 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
+| `index-*.css` | 73.08 kB | 12.69 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2263 modules; warm build ≈ 1 s. The author-reviews slice added a fourth lazy screen
-(`account-reviews-page`) instead of growing `/account`: the list, its dialogs and the status
-badge live there. The split pulled `account-gates.tsx` and the shared `Textarea` out of
-`account-page` into their own chunks (both screens need them), so `account-page` shrank from
-38.05/10.67 to 35.28/10.23 kB, and moving `ReviewStars` to `components/review-stars.tsx` produced
-a 0.41/0.33 kB chunk that the barber profile and the author list share (`barber-page` is
-37.12/9.98, down 0.26/0.09). The entry grew by 0.48 kB raw / 0.16 kB gzip — `account-path.ts`
-plus the extra `lazy()` wiring — which is under the ~0.3 kB gzip review threshold, and the CSS by
-0.26/0.06 kB for the new utilities. `admin-page` is unchanged. `index.html` preloads only the
-entry and the stylesheet; the Vite chunk advisory does not fire. The landing, the shell and the
-search code are still one chunk; the section files do not create extra chunks (§14, item 17).
+2272 modules; the warm rebuild took 0.93 s. The barber cabinet added a fifth lazy screen
+(`barber-cabinet-page`) instead of growing `/account` or `/barbers/{id}`: the page, the list,
+the row, three dialogs and the controller live there. Moving `BookingStatusBadge` out of
+`components/account/` into `components/booking-status-badge.tsx` produced a 1.02/0.56 kB
+chunk that the customer cabinet, the public booking panel and the new screen share (the badge
+looks unchanged); `use-now` became a 0.25/0.20 kB chunk for the same reason. `account-gates`
+grew by 0.17/0.03 kB for the barber button and the path helper. The entry grew by
+1.48 kB raw / 0.46 kB gzip — `barber-cabinet-path.ts` plus the extra `lazy()` wiring — which
+is slightly above the ~0.3 kB gzip review threshold; no other shell code changed. The admin
+code was not touched by this slice; its chunk measures 114.41/24.98 kB in this build. CSS grew
+by 0.02 kB raw. `index.html` preloads only the entry and the stylesheet; the Vite chunk advisory
+does not fire.
 
 ### 12.2 Rules
 
@@ -994,6 +1031,7 @@ search code are still one chunk; the section files do not create extra chunks (�
 | Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; 401 → anonymous |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
 | Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
+| Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, keyset pagination, loading/empty/error/load-more states |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states |
 | Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo |
@@ -1001,9 +1039,9 @@ search code are still one chunk; the section files do not create extra chunks (�
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration / password reset | ❌ no UI for registration or reset; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
-| Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber cabinet and booking confirmation by the barber are absent |
+| Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, page size 10, opaque `nextCursor` and «Показать ещё», summary from `rating`/`reviewsCount`, skeleton/empty/error/load-more states, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage` and `BarberPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage` and `BarberCabinetPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
 | Responsive layout | ✅ landing and admin checked at 320/640/1280 px; no tests |
@@ -1114,8 +1152,8 @@ a visitor sign in through `LoginDialog` (`redirectTo={null}`) without leaving th
 `POST /api/bookings` with a per-panel UUID idempotency key and no CSRF header, and replaces the
 form with a `201` confirmation carrying the `Pending` badge. Russian states cover `409`
 overlap/lockTimeout, `400` start window, `401`, `404` service/salon, `429`, network and `5xx`;
-slots are reloaded after a write, while the profile and catalogue caches are untouched. The
-barber cabinet and confirmation by the barber are still absent. **Completed 2026-10-30:**
+slots are reloaded after a write, while the profile and catalogue caches are untouched. At that
+point the barber cabinet was not built yet. **Completed 2026-10-30:**
 reviews — the «Отзывы» section on `/barbers/{id}` lists the published reviews from
 `GET /api/reviews` (page size 10, opaque `nextCursor`, «Показать ещё»), takes its summary from
 `rating`/`reviewsCount` instead of the current page, shows stars with a text alternative, the
@@ -1128,6 +1166,15 @@ visit context from the same DTO, local row update after `PUT` (with `X-CSRF-TOKE
 an `alertdialog` where `404` means «уже удалён», loading/empty/error/load-more states and focus
 management. Editing and deleting a **published** review were not exercised live against the real
 barber to keep the demo rating intact; the server path is covered by backend tests.
+**Completed 2026-10-31:** barber cabinet — `/barber` as a fifth lazy screen with role gates
+(anonymous, customer, admin, a `Barber` without a linked profile), «Ближайшие»/«История» from
+`GET /api/barber/bookings` (opaque cursor, `pageSize=20`) and the five write actions (confirm,
+complete, no-show, cancel, barber note) with `X-CSRF-TOKEN`; mutations update the affected row
+locally without a second read, «Ближайшие» drops terminal rows (and loads the next page when the
+visible one empties), «История» keeps them with the new status, and focus moves to the row, the
+list heading or the note button. `BookingStatusBadge` moved to
+`components/booking-status-badge.tsx` and is shared by the customer cabinet, the public booking
+panel and the cabinet.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1148,7 +1195,8 @@ do not shift.
 11. **Hardening** — runtime response validation, env typing, dependency review.
 12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
     (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
-    barbers and users are done.
+    barbers and users are done. This is the admin-wide bookings view, not the barber's own
+    list: the cabinet at `/barber` is already done (§13).
 
 ---
 

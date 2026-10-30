@@ -28,14 +28,15 @@ npm run preview  # serve dist/
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | customer cabinet: bookings, cancellation, review, password |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
+| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden, search by name or email |
 | `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide |
 
-The customer cabinet and the admin section are client-side gated; the API enforces roles
-separately (`AdminOnly`).
+The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
+enforces roles separately (`AdminOnly`, `BarberOnly`).
 
 ## Barber search
 
@@ -131,6 +132,49 @@ loaded automatically. Focus returns to «Изменить» after an edit and mo
   `review-status-badge.tsx`, `edit-review-dialog.tsx`, `delete-review-dialog.tsx`.
 - `src/lib/account-path.ts` — `/account` and `/account/reviews` path helpers.
 
+## Barber cabinet
+
+`/barber` is a separate lazy screen for a signed-in `Barber` with a linked profile. It calls
+`GET /api/barber/bookings?scope=upcoming&pageSize=20` (the profile comes from the
+`barber_profile_id` claim, there is no profile query parameter) and switches to `scope=past`
+for «История». The server orders both scopes (`start_at ASC` for upcoming, `DESC` for history),
+so the client never sorts; the next page is fetched with the opaque `nextCursor` and appended
+without duplicate ids.
+
+A row shows the visit date and time in the salon time zone (`salon.timeZoneId`), the customer's
+name and, when present, a `tel:` phone link, the service, the salon name/city/address, the price
+and the status badge. Actions depend on status and time, not on the tab: `Pending` offers
+«Подтвердить», «Отменить» and «Заметка»; `Confirmed` offers «Завершить» and «Неявка» only once
+`startAt <= now` (the ticker updates every minute), «Отменить» in the upcoming tab and «Заметка»
+always; terminal bookings are read-only. The customer's comment and the barber's note render as
+text.
+
+Mutations wait for the server and update the row locally — there is no second `GET`: confirm
+changes the status to «Подтверждена»; complete, no-show and cancel remove the row from
+«Ближайшие» and keep it in «История» with the new status; the note dialog (1000 characters, an
+empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOKEN`; the list
+read does not. Double clicks are ignored while a request is in flight.
+
+States: skeleton while the first page loads (StrictMode may send a second, aborted request),
+first-page error with «Повторить», load-more error that keeps the rows, «Показать ещё»,
+«Ближайших записей нет.» and «История пуста.». A `401` on the list becomes the sign-in gate with
+a retry after login. A `409` says «Запись уже изменилась — обновите список.» with an «Обновить»
+button; `400 booking.markNoShow.tooEarly`, `403`, `404`, `429`, offline and `5xx` have their own
+Russian copy, and the English `detail` is never shown. Gates cover anonymous, customer, admin and
+a `Barber` without `barberProfileId`, and none of them sends a list request. Announcements and
+errors use `role="status"`/`role="alert"`; focus returns to the row or the list heading after an
+action.
+
+The header shows «Кабинет барбера» for a barber and «Мои записи» for everyone else. On
+`/account` a barber still sees the customer-cabinet gate, now with a button to the cabinet.
+
+- `src/pages/barber-cabinet-page.tsx` — gates, title, list composition and announcements.
+- `src/components/barber/barber-cabinet-gates.tsx`, `cabinet-booking-list.tsx`,
+  `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`, `barber-booking-action-dialog.tsx`.
+- `src/hooks/use-barber-bookings.ts` — scope, cursor, five local mutations, `401`, click guard.
+- `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
+  `src/lib/barber-cabinet-path.ts` — the `/barber` path helper.
+
 ## Booking
 
 With «Любая услуга» the chips stay informational and a hint asks to choose a service: the API
@@ -177,8 +221,9 @@ antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
-There is still no barber cabinet and no review creation on the public profile. Services carry
-`barberServiceId` (sent to `POST /api/bookings`) and `hairServiceId` (sent to `/slots`).
+Review creation on the public profile is not implemented: it lives in the customer account. The
+barber cabinet is at `/barber`. Services carry `barberServiceId` (sent to `POST /api/bookings`)
+and `hairServiceId` (sent to `/slots`).
 
 ## API proxy
 
@@ -230,8 +275,8 @@ the profile must be returned to search first.
 - `AGENT.md` — durable frontend rules and reference for AI agents; read it before changing the
   project
 - `src/App.tsx` — shell: header, page switch, footer
-- `src/pages/` — `home-page`, `account-page`, `account-reviews-page`, `admin-page`,
-  `barber-page`
+- `src/pages/` — `home-page`, `account-page`, `account-reviews-page`, `barber-cabinet-page`,
+  `admin-page`, `barber-page`
 - `src/components/ui` — shadcn/ui components, add more with `npx shadcn@latest add <name>`
 - `src/lib/utils.ts` — `cn` helper
 - `components.json` — shadcn/ui config and aliases (`@/`)
