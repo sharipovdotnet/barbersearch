@@ -17,11 +17,14 @@ export function SignInGate({
   title = 'Войдите, чтобы увидеть записи',
   description = 'Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю.',
   onSignedIn,
+  redirectTo = '/account',
 }: {
   title?: string
   description?: string
   /** Вызывается после входа: экран «сессия истекла» повторяет запрос данных. */
   onSignedIn?: () => void
+  /** Куда вернуться после входа; по умолчанию — «Мои записи». */
+  redirectTo?: string
 }) {
   return (
     <div className="mx-auto w-full max-w-md">
@@ -39,6 +42,7 @@ export function SignInGate({
             variant="default"
             size="lg"
             className="w-full"
+            redirectTo={redirectTo}
             onSignedIn={onSignedIn}
           />
           <Button

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Scissors, X } from 'lucide-react'
+import { MessageSquare, Scissors, X } from 'lucide-react'
 
 import { AccountSkeleton, BookingsErrorState, RoleGate, SignInGate } from '@/components/account/account-gates'
 import { BookingList, type BookingsTab } from '@/components/account/booking-list'
@@ -9,16 +9,18 @@ import { ChangePasswordDialog } from '@/components/account/change-password-dialo
 import { NextBookingCard } from '@/components/account/next-booking-card'
 import { HowItWorksCard, ProfileCard } from '@/components/account/profile-card'
 import { ReviewDialog } from '@/components/account/review-dialog'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
 import { useBookings } from '@/hooks/use-bookings'
 import { useSession } from '@/hooks/use-session'
+import { ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
 import type { SessionUser } from '@/lib/auth'
 import { isUpcomingBooking } from '@/lib/booking-status'
 import { formatDateTime } from '@/lib/format'
-import { goToSection, navigate } from '@/lib/router'
+import { goToSection, isPlainClick, navigate } from '@/lib/router'
+import { cn } from '@/lib/utils'
 
 /**
  * Кабинет клиента.
@@ -127,13 +129,34 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-          Мои записи
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Ближайший визит, история и отмена — без звонков в салон.
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+            Мои записи
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ближайший визит, история и отмена — без звонков в салон.
+          </p>
+        </div>
+
+        <div className="sm:pt-0.5">
+          <a
+            href={ACCOUNT_REVIEWS_PATH}
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'sm' }),
+              'min-h-9 sm:min-h-0'
+            )}
+            onClick={(event) => {
+              if (isPlainClick(event)) {
+                event.preventDefault()
+                navigate(ACCOUNT_REVIEWS_PATH)
+              }
+            }}
+          >
+            <MessageSquare data-icon="inline-start" aria-hidden />
+            Мои отзывы
+          </a>
+        </div>
       </header>
 
       {announcement && (
