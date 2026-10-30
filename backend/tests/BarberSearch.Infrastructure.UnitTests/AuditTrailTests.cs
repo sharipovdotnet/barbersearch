@@ -299,5 +299,12 @@ public class AuditTrailTests
 
             return true;
         }
+
+        public bool TryGetBarberProfileId(out Guid barberProfileId)
+        {
+            barberProfileId = Guid.Empty;
+
+            return false;
+        }
     }
 }

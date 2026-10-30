@@ -391,9 +391,9 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-10-30: domain **184**, application **270**, infrastructure **83**,
-integration **24** — все зелёные. История прогонов по срезам и негативные проверки —
-`HANDOFF.md` §2.
+Актуальный baseline на 2026-10-30 (после среза issue-22): domain **187**, application **282**,
+infrastructure **83**, integration **28** — все зелёные. История прогонов по срезам и негативные
+проверки — `HANDOFF.md` §2.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
 only the fallback for a harness where that still crashes. If you use it, delete both the throwaway
@@ -651,11 +651,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 184 domain + 270 application + 83 infrastructure + 24 integration, все зелёные |
-| Application | ✅ 81 обработчик (72 command + 9 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 282 application + 83 infrastructure + 28 integration, все зелёные |
+| Application | ✅ 82 обработчика (72 command + 10 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 16 контроллеров / 89 endpoint (81 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 17 контроллеров / 90 endpoint (82 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -815,7 +815,7 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
    **Partly done:** the project exists (→ `Domain`, `Shared`), declares seven repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries **81 handlers (72 command + 9 query)** in per-entity
+   `Reviews/IReviewRepository.cs` — and carries **82 handlers (72 command + 10 query)** in per-entity
    folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
    `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
@@ -847,7 +847,7 @@ Suggested order:
    Swagger UI, JWT auth for `User`.
    **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   16 controllers with 89 endpoints (81 domain + 8 auth), the `ErrorType` → HTTP status mapping
+   17 controllers with 90 endpoints (82 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
    Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
@@ -858,6 +858,12 @@ Suggested order:
    volume, a `pg_isready` healthcheck, an explicit UTF-8 locale and a `POSTGRES_PORT` override;
    `/health/live` and `/health/ready` are implemented (2026-10-21, §15.8, `DEPLOY.md`);
    still missing: a Dockerfile for the API, CI, and observability.
+
+**Barber cabinet (2026-10-30, issue-22).** Серверная половина кабинета барбера готова:
+`GET api/barber/bookings` отдаёт записи профиля из claim'а в двух скоупах, а
+`PUT api/bookings/{id}/barber-note` получил предел длины. Следующий срез — фронтенд `/barber`
+(issue-23) поверх этого чтения и существующих действий подтверждения, завершения, неявки
+и отмены; новых backend-эндпоинтов ему не нужно.
 
 ---
 
@@ -1431,7 +1437,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**16 controllers, 89 endpoints: 81 domain + 8 auth** — one endpoint per Application handler, plus
+**17 controllers, 90 endpoints: 82 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1447,6 +1453,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `SpecializationsController` | `api/specializations` | 4 |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
+| `BarberBookingsController` | `api/barber/bookings` | 1 (list of the barber's own bookings) |
 | `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
@@ -1624,6 +1631,29 @@ Read endpoints (added 2026-10-19):
 - **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`.
   A non-admin asking for another user's `userId` gets `403`; an admin filtering by a non-existent
   user gets `404`. Order is `start_at DESC, id`, keyset cursor, `PagedResponse<BookingResponse>`.
+- **`GET api/barber/bookings` (2026-10-30, issue-22)** — the barber's own bookings for the cabinet,
+  `[Authorize(Policy = BarberOnly)]`: anonymous `401`, `Customer`/`Admin` `403`. The barber profile
+  comes from the `barber_profile_id` claim, not from the query, so one barber cannot read another
+  barber's rows; a `Barber` whose account has no linked profile gets `403 auth.forbidden`.
+  `scope=upcoming` (default) is `Status IN (Pending, Confirmed) AND end_at > now`, ordered
+  `start_at ASC, id ASC`; `scope=past` is everything else (terminal status or `end_at <= now`),
+  ordered `start_at DESC, id DESC`. The boundary is `TimeProvider.GetUtcNow()`. The cursor is the
+  existing `BookingCursor` `(start_at, id)` and its comparison direction follows the scope
+  (strictly greater for `upcoming`, strictly smaller for `past`); `nextCursor` is the last row of
+  the page and `null` on the last page. `pageSize` defaults to 20 and is capped at 100; an unknown
+  scope is `400 booking.getBarberBookings.scope`, an out-of-range page size `400
+  booking.getBarberBookings.pageSize`, a broken cursor `400 booking.cursor.invalid`. The response
+  is `PagedResponse<BarberBookingResponse>`: id, status, start/end, price, both notes, customer
+  display name (first + last, trimmed, double spaces collapsed) and phone when filled, service name
+  and salon name/address/city/`timeZoneId`. Email, `userId`, `barberProfileId`, `idempotencyKey`
+  and `createdAt` are deliberately absent. One `AsNoTracking` join over
+  `bookings → users`, `barber_services → hair_services` and `salons`; price is the booking snapshot,
+  not the current service price. There is no `GET api/barber/bookings/{id}`: the row carries
+  everything the cabinet needs, and the write actions take the id from the list.
+  The only write-contract change in the slice: `PUT api/bookings/{id}/barber-note` now trims the
+  note, stores a blank note as `null` and rejects more than
+  `Constants.MAX_BARBER_NOTE_LENGTH` (1000) characters with `400 booking.barberNote.tooLong`;
+  the rule lives in `Booking.AddBarberNote`.
 - **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.
@@ -2036,6 +2066,14 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 `Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
 проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
 
+Чтение броней барбером (`GET api/barber/bookings`, 2026-10-30) — исключение из схемы «сначала
+ресурс, потом владение»: список не загружает ни одной брони до проверки, поэтому профиль берётся
+из claim'а `barber_profile_id` через `ICurrentUser.TryGetBarberProfileId`. Политика `BarberOnly`
+отсекает анонима (`401`) и роли `Customer`/`Admin` (`403`), а обработчик закрывает случай «роль
+`Barber` есть, профиль к аккаунту не привязан» — `403 auth.forbidden`. Query-параметра с
+идентификатором профиля нет сознательно: иначе проверка владения снова стала бы сравнением
+входа с ресурсом, а барбер мог бы читать чужие записи.
+
 Создание профиля (`POST api/barber-profiles`) с 2026-10-23 (R-26) сразу заполняет
 `User.BarberProfileId` в одной транзакции со вставкой профиля, поэтому claim
 `barber_profile_id` и `GET api/auth/me` больше не зависят от ручного
@@ -2047,10 +2085,10 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 
 Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
 3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
-Тесты: `tests/BarberSearch.Application.UnitTests` — 110 `[Fact]`: 41 прежний (29 на владение на
-фейковых репозиториях и `ICurrentUser` + 12 на refresh-токены), 44 на read-эндпоинты
-(курсоры/пагинация, поиск, карточка, слоты, брони, отзывы), 11 на создание брони (§15.5),
-8 на пересчёт рейтинга (§12.2, включая откат транзакции) и 6 на ссылочную целостность;
+Тесты: `tests/BarberSearch.Application.UnitTests` — 122 `[Fact]`: 41 прежний (29 на владение на
+фейковых репозиториях и `ICurrentUser` + 12 на refresh-токены), 56 на read-эндпоинты
+(курсоры/пагинация, поиск, карточка, слоты, брони, отзывы, записи барбера), 11 на создание брони
+(§15.5), 8 на пересчёт рейтинга (§12.2, включая откат транзакции) и 6 на ссылочную целостность;
 смоук на локальной PostgreSQL двумя пользователями
 (2026-10-19): свой профиль `204`, чужой `403`, своё избранное `204`, чужое `403`, admin-действие
 под Customer `403`.
