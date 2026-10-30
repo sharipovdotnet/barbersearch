@@ -138,6 +138,22 @@ export function formatWeekday(iso: string, timeZone?: string): string {
   return resolveFormatter({ weekday: 'short' }, timeZone).format(new Date(iso))
 }
 
+/**
+ * «18 октября 2026» — календарная дата отзыва без времени.
+ *
+ * `formatTime`/`formatShortDay` здесь не подходят: отзыву нужен год, а пояс салона
+ * переносит ночные инстанты на соседний день. `ru-RU` добавляет «г.» к году — в
+ * карточке отзыва он лишний.
+ */
+export function formatReviewDate(iso: string, timeZone?: string): string {
+  return resolveFormatter(
+    { day: 'numeric', month: 'long', year: 'numeric' },
+    timeZone
+  )
+    .format(new Date(iso))
+    .replace(/\s*г\.$/, '')
+}
+
 /** «Ноябрь 2026» — заголовок группы. */
 export function formatMonth(iso: string, timeZone?: string): string {
   const date = new Date(iso)
