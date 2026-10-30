@@ -145,6 +145,20 @@ public static class ApiErrorCodes
         /// Строку изменил или удалил параллельный запрос; <c>409</c>.
         /// </summary>
         public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
+
+        /// <summary>
+        /// Скоуп списка записей барбера не <c>upcoming</c> и не <c>past</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Свой код, а не общий код биндера: клиент различает ошибку параметра и не показывает
+        /// технический текст ASP.NET Core пользователю.
+        /// </remarks>
+        public const string GetBarberBookingsScope = "booking.getBarberBookings.scope";
+
+        /// <summary>
+        /// Заметка барбера длиннее <c>1000</c> символов; <c>400</c>.
+        /// </summary>
+        public const string BarberNoteTooLong = "booking.barberNote.tooLong";
     }
 
     /// <summary>

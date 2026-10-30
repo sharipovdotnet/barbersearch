@@ -1,5 +1,6 @@
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
@@ -146,6 +147,53 @@ public sealed class FakeBookingRepository : IBookingRepository
             Result.Success<IReadOnlyList<BookingResponse>, Failure>(rows));
     }
 
+    public Task<Result<IReadOnlyList<BarberBookingResponse>, Failure>> GetBarberPageAsync(
+        Guid barberProfileId,
+        BarberBookingScope scope,
+        DateTimeOffset now,
+        BookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        IEnumerable<Booking> query = _bookings.Values
+            .Where(booking => booking.BarberProfileId == barberProfileId);
+
+        // Тот же фильтр, что и в настоящем репозитории: скоуп решается временем окончания,
+        // а не только статусом.
+        query = scope == BarberBookingScope.Upcoming
+            ? query.Where(booking =>
+                (booking.Status == BookingStatus.Pending || booking.Status == BookingStatus.Confirmed)
+                && booking.EndAt > now)
+            : query.Where(booking =>
+                (booking.Status != BookingStatus.Pending && booking.Status != BookingStatus.Confirmed)
+                || booking.EndAt <= now);
+
+        if (cursor is { } position)
+        {
+            query = scope == BarberBookingScope.Upcoming
+                ? query.Where(booking =>
+                    booking.StartAt > position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) > 0))
+                : query.Where(booking =>
+                    booking.StartAt < position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) < 0));
+        }
+
+        query = scope == BarberBookingScope.Upcoming
+            ? query.OrderBy(booking => booking.StartAt).ThenBy(booking => booking.Id)
+            : query.OrderByDescending(booking => booking.StartAt).ThenByDescending(booking => booking.Id);
+
+        IReadOnlyList<BarberBookingResponse> rows = query
+            .Take(limit)
+            .Select(ToBarberResponse)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<BarberBookingResponse>, Failure>(rows));
+    }
+
     public Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(
         Guid barberProfileId,
         DateTimeOffset from,
@@ -239,4 +287,21 @@ public sealed class FakeBookingRepository : IBookingRepository
             booking.CustomerNote,
             booking.BarberNote,
             booking.CreatedAt);
+
+    /// <summary>
+    /// Запись барбера с синтетическим клиентом: фейк проверяет фильтры и порядок,
+    /// а имена и телефоны приходят из базы в интеграционных тестах.
+    /// </summary>
+    private static BarberBookingResponse ToBarberResponse(Booking booking)
+        => new(
+            booking.Id,
+            booking.Status,
+            booking.StartAt,
+            booking.EndAt,
+            booking.Price,
+            booking.CustomerNote,
+            booking.BarberNote,
+            new BarberBookingCustomerResponse($"Customer {booking.UserId:N}", null),
+            new BarberBookingServiceResponse($"Service {booking.BarberServiceId:N}"),
+            new BarberBookingSalonResponse("Fake salon", "Fake address", "Fake city", "Europe/Moscow"));
 }

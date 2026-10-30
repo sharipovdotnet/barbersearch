@@ -1,4 +1,5 @@
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
@@ -56,6 +57,30 @@ public interface IBookingRepository
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
         Guid? userId,
+        BookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница записей барбера для кабинета: ближайшие или история.
+    /// </summary>
+    /// <remarks>
+    /// Фильтр по <paramref name="barberProfileId"/> обязателен — профиль приходит из claim'а
+    /// сессии. Граница скоупа и направление keyset-сравнения зависят от
+    /// <paramref name="scope"/>: «ближайшие» — активные брони с <c>EndAt &gt; now</c> по
+    /// возрастанию, «история» — всё остальное по убыванию. Проекция собирает имя и телефон
+    /// клиента, услугу и салон; email и идентификаторы в ответ не попадают.
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль барбера из claim'а текущей сессии.</param>
+    /// <param name="scope">Скоуп выдачи.</param>
+    /// <param name="now">Текущий момент UTC — граница скоупов.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать (pageSize + 1).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<BarberBookingResponse>, Failure>> GetBarberPageAsync(
+        Guid barberProfileId,
+        BarberBookingScope scope,
+        DateTimeOffset now,
         BookingCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default);

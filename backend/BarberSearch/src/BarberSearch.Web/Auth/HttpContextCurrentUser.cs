@@ -37,6 +37,15 @@ public sealed class HttpContextCurrentUser : ICurrentUser
     }
 
     /// <inheritdoc />
+    public bool TryGetBarberProfileId(out Guid barberProfileId)
+    {
+        var value = _httpContextAccessor.HttpContext?.User
+            .FindFirstValue(ClaimsPrincipalFactory.BARBER_PROFILE_ID_CLAIM);
+
+        return Guid.TryParse(value, out barberProfileId);
+    }
+
+    /// <inheritdoc />
     public bool IsAdmin
         => string.Equals(
             _httpContextAccessor.HttpContext?.User

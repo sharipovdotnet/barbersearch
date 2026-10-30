@@ -1,5 +1,6 @@
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
@@ -149,6 +150,136 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return rows;
     }
 
+    public async Task<Result<IReadOnlyList<BarberBookingResponse>, Failure>> GetBarberPageAsync(
+        Guid barberProfileId,
+        BarberBookingScope scope,
+        DateTimeOffset now,
+        BookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Booking.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var bookings = Context.Bookings.AsNoTracking();
+
+        // Навигаций между агрегатами в домене нет, поэтому клиент, услуга и салон
+        // присоединяются явными join'ами по идентификаторам. Внутренние join'ы отсекают
+        // историческую строку с оборванной ссылкой: без контекста визита строка бесполезна.
+        var customers = Context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber
+            });
+
+        var barberServices = Context.BarberServices
+            .AsNoTracking()
+            .Select(service => new
+            {
+                service.Id,
+                service.HairServiceId
+            });
+
+        var hairServices = Context.HairServices
+            .AsNoTracking()
+            .Select(hairService => new
+            {
+                hairService.Id,
+                hairService.Name
+            });
+
+        var salons = Context.Salons
+            .AsNoTracking()
+            .Select(salon => new
+            {
+                salon.Id,
+                salon.Name,
+                salon.Address,
+                salon.City,
+                salon.TimeZoneId
+            });
+
+        var joined = from booking in bookings
+                     join customer in customers on booking.UserId equals customer.Id
+                     join service in barberServices on booking.BarberServiceId equals service.Id
+                     join hairService in hairServices on service.HairServiceId equals hairService.Id
+                     join salon in salons on booking.SalonId equals salon.Id
+                     where booking.BarberProfileId == barberProfileId
+                     select new
+                     {
+                         booking,
+                         customer,
+                         hairService,
+                         salon
+                     };
+
+        // Граница скоупа — EndAt, а не статус: активная бронь с прошедшим концом уже история,
+        // а терминальный статус никогда не попадает в «ближайшие».
+        joined = scope == BarberBookingScope.Upcoming
+            ? joined.Where(row =>
+                (row.booking.Status == BookingStatus.Pending
+                 || row.booking.Status == BookingStatus.Confirmed)
+                && row.booking.EndAt > now)
+            : joined.Where(row =>
+                (row.booking.Status != BookingStatus.Pending
+                 && row.booking.Status != BookingStatus.Confirmed)
+                || row.booking.EndAt <= now);
+
+        // Направление keyset-сравнения задаёт скоуп: «ближайшие» идут вперёд,
+        // история — назад, поэтому и курсор сравнивается в ту же сторону.
+        if (cursor is { } position)
+        {
+            joined = scope == BarberBookingScope.Upcoming
+                ? joined.Where(row =>
+                    row.booking.StartAt > position.StartAt
+                    || (row.booking.StartAt == position.StartAt
+                        && row.booking.Id.CompareTo(position.Id) > 0))
+                : joined.Where(row =>
+                    row.booking.StartAt < position.StartAt
+                    || (row.booking.StartAt == position.StartAt
+                        && row.booking.Id.CompareTo(position.Id) < 0));
+        }
+
+        var ordered = scope == BarberBookingScope.Upcoming
+            ? joined
+                .OrderBy(row => row.booking.StartAt)
+                .ThenBy(row => row.booking.Id)
+            : joined
+                .OrderByDescending(row => row.booking.StartAt)
+                .ThenByDescending(row => row.booking.Id);
+
+        var rows = await ordered
+            .Take(limit)
+            .Select(row => new BarberBookingRow(
+                row.booking.Id,
+                row.booking.Status,
+                row.booking.StartAt,
+                row.booking.EndAt,
+                row.booking.Price,
+                row.booking.CustomerNote,
+                row.booking.BarberNote,
+                row.customer.FirstName,
+                row.customer.LastName,
+                row.customer.PhoneNumber,
+                row.hairService.Name,
+                row.salon.Name,
+                row.salon.Address,
+                row.salon.City,
+                row.salon.TimeZoneId))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToBarberResponse).ToList();
+    }
+
     public async Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(
         Guid barberProfileId,
         DateTimeOffset from,
@@ -288,4 +419,68 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         Booking booking,
         CancellationToken cancellationToken = default)
         => await SaveGraphAsync(booking, ApiErrorCodes.Booking.UpdatePrefix, cancellationToken);
+
+    /// <summary>
+    /// Собирает вложенные response-записи из плоской строки и нормализует имя клиента.
+    /// </summary>
+    private static BarberBookingResponse ToBarberResponse(BarberBookingRow row)
+        => new(
+            row.Id,
+            row.Status,
+            row.StartAt,
+            row.EndAt,
+            row.Price,
+            row.CustomerNote,
+            row.BarberNote,
+            new BarberBookingCustomerResponse(
+                BuildCustomerName(row.CustomerFirstName, row.CustomerLastName),
+                string.IsNullOrWhiteSpace(row.CustomerPhoneNumber)
+                    ? null
+                    : row.CustomerPhoneNumber.Trim()),
+            new BarberBookingServiceResponse(row.ServiceName),
+            new BarberBookingSalonResponse(
+                row.SalonName,
+                row.SalonAddress,
+                row.SalonCity,
+                row.TimeZoneId));
+
+    /// <summary>
+    /// Имя клиента для списка: срезает края и схлопывает повторные пробелы.
+    /// </summary>
+    /// <remarks>
+    /// Домен не нормализует имя пользователя, поэтому «Иван  Петров» и «Иван Петров» могут
+    /// лежать в базе по-разному. Для строки списка нужен один вид — иначе вёрстка прыгает.
+    /// </remarks>
+    private static string BuildCustomerName(string firstName, string lastName)
+    {
+        var name = $"{firstName} {lastName}".Trim();
+
+        return name.Contains("  ", StringComparison.Ordinal)
+            ? string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            : name;
+    }
+
+    /// <summary>
+    /// Плоская строка чтения броней барбера до сборки вложенных response-записей.
+    /// </summary>
+    /// <remarks>
+    /// Вложенные записи конструируются в памяти, чтобы EF не собирал объектную модель в SQL,
+    /// — тот же приём, что в админском чтении отзывов.
+    /// </remarks>
+    internal sealed record BarberBookingRow(
+        Guid Id,
+        BookingStatus Status,
+        DateTimeOffset StartAt,
+        DateTimeOffset EndAt,
+        decimal Price,
+        string? CustomerNote,
+        string? BarberNote,
+        string CustomerFirstName,
+        string CustomerLastName,
+        string? CustomerPhoneNumber,
+        string ServiceName,
+        string SalonName,
+        string SalonAddress,
+        string SalonCity,
+        string TimeZoneId);
 }

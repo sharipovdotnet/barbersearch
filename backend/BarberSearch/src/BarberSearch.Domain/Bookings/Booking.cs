@@ -10,6 +10,15 @@ namespace BarberSearch.Domain.Bookings;
 /// </summary>
 public class Booking : AggregateRoot
 {
+    /// <summary>
+    /// Публичный код ошибки «заметка барбера длиннее предела»; <c>400</c>.
+    /// </summary>
+    /// <remarks>
+    /// Код живёт здесь, потому что правило принадлежит агрегату: домен не ссылается
+    /// на <c>BarberSearch.Contracts</c>, где лежит реестр публичных кодов.
+    /// </remarks>
+    private const string BARBER_NOTE_TOO_LONG_CODE = "booking.barberNote.tooLong";
+
     public Guid UserId { get; private set; }
     public Guid BarberProfileId { get; private set; }
     public Guid BarberServiceId { get; private set; }
@@ -206,9 +215,28 @@ public class Booking : AggregateRoot
         return DomainErrors.Ok();
     }
 
-    public UnitResult<Failure> AddBarberNote(string note)
+    /// <summary>
+    /// Записывает заметку барбера.
+    /// </summary>
+    /// <remarks>
+    /// Заметка нормализуется: пробелы по краям срезаются, пустая строка означает «заметки нет»
+    /// и сохраняется как <c>null</c>, чтобы клиент не различал пустую и отсутствующую заметку.
+    /// Предел длины проверяется здесь, а не только на входе API: правило принадлежит агрегату.
+    /// </remarks>
+    /// <param name="note">Текст заметки или <c>null</c>, чтобы очистить её.</param>
+    public UnitResult<Failure> AddBarberNote(string? note)
     {
-        BarberNote = note;
+        var normalizedNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+
+        if (normalizedNote is { Length: > Constants.MAX_BARBER_NOTE_LENGTH })
+        {
+            return DomainErrors.Fail(Error.Validation(
+                BARBER_NOTE_TOO_LONG_CODE,
+                $"Barber note cannot be longer than {Constants.MAX_BARBER_NOTE_LENGTH} characters.",
+                nameof(note)));
+        }
+
+        BarberNote = normalizedNote;
         MarkUpdated();
 
         return DomainErrors.Ok();

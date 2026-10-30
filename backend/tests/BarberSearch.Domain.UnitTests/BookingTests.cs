@@ -257,6 +257,47 @@ public class BookingTests
     }
 
     [Fact]
+    public void AddBarberNote_TrimsEdgesAndTreatsBlankAsNoNote()
+    {
+        var booking = CreateValidBooking();
+
+        Assert.True(booking.AddBarberNote("  Client is late  ").IsSuccess);
+        Assert.Equal("Client is late", booking.BarberNote);
+
+        Assert.True(booking.AddBarberNote("   ").IsSuccess);
+        Assert.Null(booking.BarberNote);
+
+        Assert.True(booking.AddBarberNote(null).IsSuccess);
+        Assert.Null(booking.BarberNote);
+    }
+
+    [Fact]
+    public void AddBarberNote_WithMaxLength_Succeeds()
+    {
+        var booking = CreateValidBooking();
+        var note = new string('a', Constants.MAX_BARBER_NOTE_LENGTH);
+
+        var result = booking.AddBarberNote(note);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(note, booking.BarberNote);
+    }
+
+    [Fact]
+    public void AddBarberNote_WithTooLongNote_ReturnsValidationAndKeepsPreviousNote()
+    {
+        var booking = CreateValidBooking();
+        Assert.True(booking.AddBarberNote("Previous").IsSuccess);
+
+        var result = booking.AddBarberNote(new string('a', Constants.MAX_BARBER_NOTE_LENGTH + 1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.barberNote.tooLong", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("Previous", booking.BarberNote);
+    }
+
+    [Fact]
     public void EveryBookingStatus_IsReachable()
     {
         var confirmed = CreateValidBooking();

@@ -28,6 +28,22 @@ public interface ICurrentUser
     bool TryGetUserId(out Guid userId);
 
     /// <summary>
+    /// Пытается получить идентификатор профиля барбера из claim'а <c>barber_profile_id</c>.
+    /// </summary>
+    /// <remarks>
+    /// Claim заполняется при входе, если профиль уже привязан к аккаунту. Профиль из claim'а,
+    /// а не из query, — единственный способ открыть барберу его собственные записи: параметра
+    /// с идентификатором профиля у чтения нет, поэтому чужой список запросить нечем.
+    /// </remarks>
+    /// <param name="barberProfileId">
+    /// Идентификатор профиля, если claim есть и разбирается; иначе <see cref="Guid.Empty"/>.
+    /// </param>
+    /// <returns>
+    /// <c>true</c>, если профиль привязан к текущей сессии; иначе <c>false</c>.
+    /// </returns>
+    bool TryGetBarberProfileId(out Guid barberProfileId);
+
+    /// <summary>
     /// Пришёл ли запрос от администратора.
     /// </summary>
     bool IsAdmin { get; }
