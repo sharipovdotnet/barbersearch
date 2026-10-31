@@ -1,12 +1,13 @@
-import { Loader2 } from 'lucide-react'
+import type { RefObject } from 'react'
 
+import { ListPager } from '@/components/list-pager'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import type { AdminBarber } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
 import { formatRating, formatReviewsCount, getInitials } from '@/lib/format'
+import { formatPageRange } from '@/lib/paging'
 import { cn } from '@/lib/utils'
 
 /**
@@ -15,23 +16,34 @@ import { cn } from '@/lib/utils'
  * Счётчика «всего» нет: API отдаёт только страницу, поэтому в подписи «Показано N»,
  * а не выдуманное общее число. Выбранная строка подсвечивается, а ссылка в имени
  * остаётся настоящей ссылкой: средний клик и «открыть в новой вкладке» работают.
+ * Перелистывание — общий `ListPager`: диапазон без выдуманного «из N».
  */
 export function BarberList({
   items,
   selectedId,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
+  offset,
+  pageIndex,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
+  focusTargetRef,
   onSelect,
-  onLoadMore,
+  onPrev,
+  onNext,
 }: {
   items: AdminBarber[]
   selectedId: string | null
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  offset: number
+  pageIndex: number
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
+  focusTargetRef: RefObject<HTMLElement | null>
   onSelect: (barberId: string) => void
-  onLoadMore: () => void
+  onPrev: () => void
+  onNext: () => void
 }) {
   return (
     <section aria-label="Барберы" className="space-y-3">
@@ -127,36 +139,20 @@ export function BarberList({
         </ul>
       </div>
 
-      <div className="flex flex-col items-center gap-2 pt-1">
-        {loadMoreError && (
-          <p role="alert" className="text-sm text-destructive">
-            {loadMoreError}
-          </p>
-        )}
-
-        {nextCursor && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-11 w-full sm:h-7"
-            disabled={isLoadingMore}
-            onClick={onLoadMore}
-          >
-            {isLoadingMore ? (
-              <>
-                <Loader2
-                  data-icon="inline-start"
-                  aria-hidden
-                  className="animate-spin"
-                />
-                Загружаем…
-              </>
-            ) : (
-              'Показать ещё'
-            )}
-          </Button>
-        )}
-      </div>
+      <ListPager
+        label="Страницы барберов"
+        rangeLabel={
+          items.length === 0 ? '' : formatPageRange(offset, items.length)
+        }
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        isLoading={isLoadingPage}
+        error={pageError}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageIndex={pageIndex}
+        focusTargetRef={focusTargetRef}
+      />
     </section>
   )
 }

@@ -37,7 +37,7 @@ export type MyReview = {
   visit: MyReviewVisit
 }
 
-/** Десять строк на страницу: «Показать ещё» остаётся редкой кнопкой. */
+/** Десять строк на страницу: пагинатор не должен быть редким. */
 export const MY_REVIEWS_PAGE_SIZE = 10
 
 export async function fetchMyReviews(

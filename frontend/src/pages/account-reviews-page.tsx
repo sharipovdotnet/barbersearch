@@ -139,11 +139,6 @@ function MyReviewsScreen() {
         ? 'Этот отзыв уже удалён.'
         : 'Отзыв удалён.'
     )
-
-    // Страница опустела, но сервер знает продолжение: иначе экран соврал бы «пусто».
-    if (reviews.items.length <= 1 && reviews.nextCursor !== null) {
-      reviews.loadMore()
-    }
   }
 
   return (
@@ -210,12 +205,16 @@ function MyReviewsScreen() {
           items={reviews.items}
           status={reviews.status}
           error={reviews.error}
-          nextCursor={reviews.nextCursor}
-          isLoadingMore={reviews.isLoadingMore}
-          loadMoreError={reviews.loadMoreError}
+          pageIndex={reviews.pageIndex}
+          offset={reviews.offset}
+          hasPrev={reviews.hasPrev}
+          hasNext={reviews.hasNext}
+          isLoadingPage={reviews.isLoadingPage}
+          pageError={reviews.pageError}
           headingRef={headingRef}
           onRetry={reviews.reload}
-          onLoadMore={reviews.loadMore}
+          onPrev={reviews.goPrev}
+          onNext={reviews.goNext}
           onRequestEdit={setEditTarget}
           onRequestDelete={setDeleteTarget}
           registerEditButton={registerEditButton}

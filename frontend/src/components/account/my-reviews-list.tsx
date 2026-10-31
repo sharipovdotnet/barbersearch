@@ -1,12 +1,13 @@
-import { useEffect, useRef, type RefObject } from 'react'
-import { Loader2, Star, TriangleAlert } from 'lucide-react'
+import { type RefObject } from 'react'
+import { Star, TriangleAlert } from 'lucide-react'
 
 import { MyReviewRow } from '@/components/account/my-review-row'
+import { ListPager } from '@/components/list-pager'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { MyReviewsStatus } from '@/hooks/use-my-reviews'
-import { formatReviewsCount } from '@/lib/format'
+import type { PagedListStatus } from '@/hooks/use-paged-list'
 import type { MyReview } from '@/lib/my-reviews'
+import { formatPageRange } from '@/lib/paging'
 import { isPlainClick, navigate } from '@/lib/router'
 
 const SKELETON_KEYS = Array.from(
@@ -15,75 +16,61 @@ const SKELETON_KEYS = Array.from(
 )
 
 /**
- * Список своих отзывов: пустое состояние, ошибки и догрузка.
+ * Список своих отзывов: пустое состояние, ошибки и постраничный футер.
  *
- * Ошибка дозагрузки живёт отдельно от первой страницы: уже показанные строки
- * остаются, а кнопка предлагает повтор. После последней страницы фокус уходит на
- * заголовок списка, иначе он терялся бы вместе с исчезнувшей кнопкой.
+ * Страницы, их кэш и пустая страница живут в `usePagedList`: здесь только вывод
+ * текущей страницы. Диапазон объявляет `ListPager`, поэтому второй такой озвучки
+ * на экране нет; фокус после «Назад»/«Дальше» тоже возвращает он.
  */
 export function MyReviewsList({
   items,
   status,
   error,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
+  pageIndex,
+  offset,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
   headingRef,
   onRetry,
-  onLoadMore,
+  onPrev,
+  onNext,
   onRequestEdit,
   onRequestDelete,
   registerEditButton,
   registerDeleteButton,
 }: {
   items: MyReview[]
-  status: MyReviewsStatus
+  status: PagedListStatus
   error: string | null
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  pageIndex: number
+  offset: number
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
   headingRef: RefObject<HTMLHeadingElement | null>
   onRetry: () => void
-  onLoadMore: () => void
+  onPrev: () => void
+  onNext: () => void
   onRequestEdit: (review: MyReview) => void
   onRequestDelete: (review: MyReview) => void
   registerEditButton: (id: string, element: HTMLButtonElement | null) => void
   registerDeleteButton: (id: string, element: HTMLButtonElement | null) => void
 }) {
-  const focusAfterLastPage = useRef(false)
-  const previousCursor = useRef<string | null>(null)
-
-  useEffect(() => {
-    const hadMore = previousCursor.current !== null
-    previousCursor.current = nextCursor
-
-    if (
-      !focusAfterLastPage.current ||
-      !hadMore ||
-      nextCursor !== null ||
-      status !== 'ready'
-    ) {
-      return
-    }
-
-    focusAfterLastPage.current = false
-    headingRef.current?.focus()
-  }, [nextCursor, status, headingRef])
-
   const isLoading = status === 'loading' || status === 'idle'
-  const isEmpty =
-    status === 'ready' &&
-    items.length === 0 &&
-    !isLoadingMore &&
-    loadMoreError === null
+  const isEmpty = status === 'ready' && items.length === 0 && pageIndex === 0
 
+  // Диапазон объявляет пагинатор: дублировать его здесь нельзя, остальные
+  // состояния списка остаются в этой живой области.
   const liveMessage = isLoading
     ? 'Загружаем отзывы…'
     : status === 'error'
       ? ''
       : isEmpty
         ? 'Пока нет отзывов.'
-        : `Загружено ${formatReviewsCount(items.length)}`
+        : ''
 
   return (
     <section aria-labelledby="my-reviews-heading" className="space-y-3">
@@ -95,7 +82,7 @@ export function MyReviewsList({
         id="my-reviews-heading"
         ref={headingRef}
         tabIndex={-1}
-        className="rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="scroll-mt-20 rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         Отзывы
       </h2>
@@ -152,54 +139,34 @@ export function MyReviewsList({
       )}
 
       {status === 'ready' && items.length > 0 && (
-        <>
-          <ul className="divide-y rounded-xl border bg-card">
-            {items.map((review) => (
-              <MyReviewRow
-                key={review.id}
-                review={review}
-                onRequestEdit={onRequestEdit}
-                onRequestDelete={onRequestDelete}
-                registerEditButton={registerEditButton}
-                registerDeleteButton={registerDeleteButton}
-              />
-            ))}
-          </ul>
-
-          {nextCursor !== null && (
-            <div className="flex flex-col items-center gap-2 pt-1">
-              {loadMoreError !== null && (
-                <p role="alert" className="text-center text-sm text-destructive">
-                  {loadMoreError}
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                aria-busy={isLoadingMore}
-                className="h-11 sm:h-9"
-                onClick={() => {
-                  focusAfterLastPage.current = true
-                  onLoadMore()
-                }}
-              >
-                {isLoadingMore && (
-                  <Loader2
-                    data-icon="inline-start"
-                    aria-hidden
-                    className="animate-spin"
-                  />
-                )}
-                {isLoadingMore
-                  ? 'Загружаем…'
-                  : loadMoreError !== null
-                    ? 'Повторить'
-                    : 'Показать ещё'}
-              </Button>
-            </div>
-          )}
-        </>
+        <ul className="divide-y rounded-xl border bg-card">
+          {items.map((review) => (
+            <MyReviewRow
+              key={review.id}
+              review={review}
+              onRequestEdit={onRequestEdit}
+              onRequestDelete={onRequestDelete}
+              registerEditButton={registerEditButton}
+              registerDeleteButton={registerDeleteButton}
+            />
+          ))}
+        </ul>
       )}
+
+      <ListPager
+        label="Страницы отзывов"
+        rangeLabel={
+          items.length === 0 ? '' : formatPageRange(offset, items.length)
+        }
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        isLoading={isLoadingPage}
+        error={pageError}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageIndex={pageIndex}
+        focusTargetRef={headingRef}
+      />
     </section>
   )
 }

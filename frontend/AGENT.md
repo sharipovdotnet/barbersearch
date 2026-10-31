@@ -1064,9 +1064,14 @@ of WCAG conformance.
 - Search results keep a persistent `aria-live="polite"` region for loading, the result count
   and the no-results message; skeletons are `aria-hidden`, the error state is `role="alert"`,
   and «Показать ещё» is not disabled while pending, so focus stays on it.
-- The public reviews section pages ten cards at a time, moves focus to the list after
-  «Назад»/«Дальше», scrolls the section heading back into view and announces the new range in an
-  `aria-live` region; a next-page error is `role="alert"` and keeps the shown cards.
+- Row lists are paged by the shared `ListPager` (`components/list-pager.tsx`), which owns the range
+  label, one `aria-live` announcement of the new range, `role="alert"` for a next-page error that
+  keeps the shown rows, `aria-busy` with an in-button spinner that does not shift the layout, edge
+  buttons disabled only at the edges (not while loading), and 44×44 icon buttons with Russian
+  `aria-label`s on narrow screens. After «Назад»/«Дальше» it moves focus to the screen's list target
+  with `preventScroll`, then scrolls it `block: 'start'` — without smooth motion when
+  `prefers-reduced-motion` is set. It never moves focus on the first render or after a filter change,
+  and a screen that already announces its actions does not add a second range announcement.
 - Decorative icons are `aria-hidden`; the logo link and nav anchors are real links.
 - Forms use `aria-invalid`, `aria-describedby`, `FieldError` with `role="alert"`, and
   `aria-busy` while pending.
@@ -1101,40 +1106,35 @@ keyboard/focus paths are implemented and were checked manually.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-10-31)
+### 12.1 Current build (2026-11-01)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.62 kB | 127.35 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 114.91 kB | 24.98 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 38.72 kB | 10.28 kB |
-| `account-page-*.js` — lazy `/account` | 35.48 kB | 10.26 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.66 kB | 7.33 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.79 kB | 6.11 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.59 kB | 127.36 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 111.78 kB | 24.12 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.81 kB | 9.48 kB |
+| `account-page-*.js` — lazy `/account` | 35.48 kB | 10.28 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.33 kB | 6.99 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.17 kB | 5.73 kB |
 | `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.36 kB |
-| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.48 kB |
+| `use-paged-list-*.js` — shared cursor pager used by the six row lists | 6.85 kB | 2.52 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
 | `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.22 kB | 0.64 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
-| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.37 kB |
+| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 74.26 kB | 12.85 kB |
+| `index-*.css` | 74.37 kB | 12.86 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2282 modules; the production build took 5.66 s. No new chunk: the guards are reachable from the
-entry through `lib/auth.ts` and `lib/csrf.ts`, so `response-guards.ts` lands there as well. The
-entry grew by 4.19 kB raw / 1.01 kB gzip against the issue-27 build (search filters, the
-`useSearchCatalogs` hook and the two catalogue guards), CSS by 0.45 kB / 0.09 kB gzip,
-`index.html` is unchanged and the Vite chunk advisory does not fire. Against the issue-26 build
-the entry had already grown by 7.52 kB raw / 2.27 kB gzip (strict guards for all
-read/mutation shapes, the CSRF-token guard and the `validate` plumbing); `admin-page` grew by
-1.00 kB raw / 0.13 kB gzip because the admin list/card guards are shared with the entry;
-`barber-page` shrank by 0.64 kB raw / 0.37 kB gzip (the public shape guards now live in the
-entry). CSS is 0.09 kB larger, `index.html` unchanged, and the Vite chunk advisory still does
-not fire. The issue-30 build (review pages instead of an appended list) grew `barber-page` by
-1.71 kB raw / 0.55 kB gzip and CSS by 0.41 kB / 0.04 kB gzip; the entry, `index.html`, the module
-count (2282) and the advisory are unchanged.
+2284 modules; the production build took 5.18 s. The issue-31 build added one shared lazy chunk,
+`use-paged-list-*.js` (6.85 kB raw / 2.52 kB gzip), which owns the page cache, the pager footer and
+`formatPageRange`; the per-screen pagination code moved into it. Against the issue-30 build
+`barber-page` shrank by 2.91 kB raw / 0.80 kB gzip, `admin-page` by 3.13 kB / 0.86 kB,
+`account-reviews-page` by 1.62 kB / 0.38 kB and `barber-cabinet-page` by 1.33 kB / 0.34 kB; the
+entry is unchanged (393.59 kB raw / 127.36 kB gzip), CSS grew by 0.11 kB raw, `index.html` is
+unchanged and the Vite chunk advisory does not fire.
 
 ### 12.2 Rules
 
@@ -1180,17 +1180,17 @@ count (2282) and the advisory are unchanged.
 | Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
 | Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
-| Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, keyset pagination, loading/empty/error/load-more states |
+| Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
-| Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states |
-| Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo |
-| Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password |
+| Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
+| Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить» |
+| Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить» |
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
-| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with «Назад»/«Дальше» that replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
+| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
@@ -1223,6 +1223,7 @@ the feature grows; **P3** cosmetic/structural.
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
 | 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
 | 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
+| 26 | P3 | `/account` «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so the shared pager cannot be used without hiding bookings; that list still appends with «Показать ещё» | Add a server-side `scope` to `GET /api/bookings` and page it like the other lists (§16) |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #5 (unvalidated `200` bodies),
@@ -1370,6 +1371,15 @@ loading, Russian `role="alert"` with «Повторить» on failure while cit
 the hero copy mentions the new filters, and the empty state explains them when neither city nor
 date is set. Only «Найти» sends a request; filters stay in state, not in the URL. The response
 guards cover both catalogue responses. No new dependencies, no schema migrations.
+
+**Completed 2026-11-01:** list pagination — the public reviews and the remaining five row lists
+(`/account/reviews`, `/barber`, `/admin/reviews`, `/admin/barbers`, `/admin/users`) moved to one
+shared cursor pager: `usePagedList` (page cache, opaque `nextCursor`, abort + generation, next-page
+error that keeps the rows, `replaceItem`/`removeItem` across cached pages, empty-page policy and an
+optional silent refresh) and `ListPager` (range from `formatPageRange`, one `aria-live`, focus and
+scroll only after a press, 44×44 buttons on mobile). Page sizes, copy and server order are
+unchanged; no new dependencies and no backend changes. `/` search and `/account` keep
+«Показать ещё» for the reasons recorded in §14 #26 and the README.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.

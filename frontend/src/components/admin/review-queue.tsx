@@ -1,10 +1,11 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
-import { Loader2, Star } from 'lucide-react'
+import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { Star } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { ListPager } from '@/components/list-pager'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type { AdminTab } from '@/lib/admin-path'
 import { formatShortDay, formatShortName, formatWaitingSince } from '@/lib/format'
+import { formatPageRange } from '@/lib/paging'
 import { cn } from '@/lib/utils'
 
 const WARNING_AFTER_MS = 48 * 60 * 60 * 1000
@@ -15,23 +16,35 @@ export function ReviewQueue({
   selectedId,
   tab,
   now,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
+  offset,
+  pageIndex,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
+  focusTargetRef,
   focusRequest,
   onSelect,
-  onLoadMore,
+  onPrev,
+  onNext,
 }: {
   items: AdminReview[]
   selectedId: string | null
   tab: AdminTab
   now: number
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  /** Сколько строк в предыдущих страницах — для подписи диапазона. */
+  offset: number
+  pageIndex: number
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
+  /** Заголовок списка: туда возвращается фокус после смены страницы. */
+  focusTargetRef: RefObject<HTMLElement | null>
   focusRequest: { id: string | null } | null
   onSelect: (reviewId: string) => void
-  onLoadMore: () => void
+  onPrev: () => void
+  onNext: () => void
 }) {
   const listRef = useRef<HTMLElement | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -168,32 +181,20 @@ export function ReviewQueue({
         })}
       </ul>
 
-      <div className="flex flex-col items-center gap-2 pt-1">
-        {loadMoreError && (
-          <p role="alert" className="text-sm text-destructive">
-            {loadMoreError}
-          </p>
-        )}
-
-        {nextCursor && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={isLoadingMore}
-            onClick={onLoadMore}
-          >
-            {isLoadingMore ? (
-              <>
-                <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
-                Загружаем…
-              </>
-            ) : (
-              'Показать ещё'
-            )}
-          </Button>
-        )}
-      </div>
+      <ListPager
+        label="Страницы отзывов"
+        rangeLabel={
+          items.length === 0 ? '' : formatPageRange(offset, items.length)
+        }
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        isLoading={isLoadingPage}
+        error={pageError}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageIndex={pageIndex}
+        focusTargetRef={focusTargetRef}
+      />
     </section>
   )
 }

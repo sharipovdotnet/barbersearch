@@ -33,6 +33,7 @@ import {
   returnBarberToSearch,
   unverifyBarber,
   verifyBarber,
+  type AdminBarber,
   type AdminBarberAction,
   type AdminBarberStatusFilter,
   type BarberGrade,
@@ -188,10 +189,26 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
 
       setAnnouncement(announcementFor(kind, target, grade))
 
-      // Сервер — источник правды: рейтинг, статусы и чек-лист пересчитываются
-      // на его стороне, локальная копия после действия была бы догадкой.
+      // Сервер — источник правды для карточки: рейтинг, статусы и чек-лист
+      // пересчитываются на его стороне. Строку списка правим локально сразу,
+      // поэтому результат действия виден, даже если тихое обновление не дойдёт.
       detail.reload()
-      list.reload()
+
+      const row = list.items.find((item) => item.id === target.id)
+
+      if (row) {
+        const next = updatedBarberRow(row, kind, grade)
+
+        if (matchesBarberFilter(next, filter)) {
+          list.replaceItem(next.id, next)
+        } else {
+          list.removeItem(next.id)
+        }
+      }
+
+      // Прежнее тихое обновление списка сохранено: «Обновлено в HH:MM» и
+      // остальные строки остаются серверной правдой, а карточка не сбрасывается.
+      list.refresh()
     } catch (cause) {
       if (isBarberUnauthorized(cause)) {
         setRequiresSignIn(true)
@@ -265,7 +282,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
+              className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
               Барберы
             </h1>
@@ -286,7 +303,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
               size="sm"
               className="h-11 sm:h-7"
               disabled={list.isRefreshing || list.status === 'loading'}
-              onClick={list.reload}
+              onClick={list.refresh}
             >
               {list.isRefreshing ? (
                 <Loader2
@@ -421,7 +438,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
         <BarbersEmpty
           filter={filter}
           search={trimmedSearch}
-          onRefresh={list.reload}
+          onRefresh={list.refresh}
         />
       )}
 
@@ -434,11 +451,16 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
               <BarberList
                 items={list.items}
                 selectedId={barberId}
-                nextCursor={list.nextCursor}
-                isLoadingMore={list.isLoadingMore}
-                loadMoreError={list.loadMoreError}
+                offset={list.offset}
+                pageIndex={list.pageIndex}
+                hasPrev={list.hasPrev}
+                hasNext={list.hasNext}
+                isLoadingPage={list.isLoadingPage}
+                pageError={list.pageError}
+                focusTargetRef={headingRef}
                 onSelect={handleSelect}
-                onLoadMore={list.loadMore}
+                onPrev={list.goPrev}
+                onNext={list.goNext}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -548,6 +570,52 @@ function announcementFor(
           : 'Грейд изменён.',
       }
   }
+}
+
+/**
+ * Строка после действия: команда меняет только своё поле, остальное берётся
+ * из уже загруженной страницы. Локальная правка видна сразу, не дожидаясь
+ * тихого обновления списка.
+ */
+function updatedBarberRow(
+  barber: AdminBarber,
+  kind: AdminBarberAction,
+  grade?: BarberGrade
+): AdminBarber {
+  switch (kind) {
+    case 'verify':
+      return { ...barber, isVerified: true }
+    case 'unverify':
+      return { ...barber, isVerified: false }
+    case 'grade':
+      return grade ? { ...barber, grade } : barber
+    case 'hide':
+      return { ...barber, isActive: false }
+    case 'show':
+      return { ...barber, isActive: true }
+  }
+}
+
+/**
+ * Подходит ли строка под выбранный фильтр.
+ *
+ * Сервер понимает «На проверке» как `!isVerified`, а «Скрытые» как `!isActive`
+ * (`BuildAdminBarbersQuery`), поэтому скрытый неподтверждённый профиль остаётся
+ * в очереди проверки — ровно так его вернёт и повторный запрос.
+ */
+function matchesBarberFilter(
+  barber: AdminBarber,
+  filter: AdminBarberStatusFilter
+): boolean {
+  if (filter === 'pending') {
+    return !barber.isVerified
+  }
+
+  if (filter === 'hidden') {
+    return !barber.isActive
+  }
+
+  return true
 }
 
 function BarbersSkeleton() {  return (

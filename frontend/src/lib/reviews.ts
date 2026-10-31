@@ -25,7 +25,7 @@ export type Review = {
   updatedAt: string
 }
 
-/** Десять карточек на страницу: кнопка «Показать ещё» не должна быть редкой. */
+/** Десять карточек на страницу: пагинатор не должен быть редким. */
 export const REVIEWS_PAGE_SIZE = 10
 
 export async function fetchBarberReviews(

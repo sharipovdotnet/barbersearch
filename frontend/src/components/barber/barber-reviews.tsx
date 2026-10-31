@@ -1,24 +1,29 @@
-import { ChevronLeft, ChevronRight, Loader2, TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, type RefObject } from 'react'
+import { TriangleAlert } from 'lucide-react'
+import { useCallback, useRef, type RefObject } from 'react'
 
 import { BarberSectionHeading } from '@/components/barber/barber-section'
+import { ListPager } from '@/components/list-pager'
 import { ReviewStars } from '@/components/review-stars'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useBarberReviews } from '@/hooks/use-barber-reviews'
+import { usePagedList } from '@/hooks/use-paged-list'
 import type { BarberProfile } from '@/lib/catalog'
 import {
   formatRating,
   formatReviewDate,
   formatReviewsCount,
 } from '@/lib/format'
-import type { Review } from '@/lib/reviews'
+import { formatPageRange } from '@/lib/paging'
+import { fetchBarberReviews, type Review } from '@/lib/reviews'
 
 const SKELETON_KEYS = Array.from(
   { length: 6 },
   (_, index) => `review-skeleton-${index}`
 )
+
+const REVIEWS_FALLBACK = 'Не удалось загрузить отзывы.'
+const PAGE_FALLBACK = 'Не удалось загрузить следующие отзывы.'
 
 /**
  * Секция «Отзывы» публичной карточки.
@@ -76,6 +81,14 @@ function BarberReviewsList({
   timeZone?: string
   sectionRef: RefObject<HTMLElement | null>
 }) {
+  const listRef = useRef<HTMLUListElement>(null)
+
+  const fetchPage = useCallback(
+    (cursor: string | null, signal: AbortSignal) =>
+      fetchBarberReviews(profileId, cursor, signal),
+    [profileId]
+  )
+
   const {
     items,
     status,
@@ -86,47 +99,19 @@ function BarberReviewsList({
     hasNext,
     isLoadingPage,
     pageError,
-    retry,
+    reload,
     goPrev,
     goNext,
-  } = useBarberReviews(profileId)
-
-  const listRef = useRef<HTMLUListElement>(null)
-  // Фокус и прокрутка нужны только после нажатия «Назад»/«Дальше»: при
-  // первой загрузке список ещё не с чем сравнивать.
-  const focusAfterNavigation = useRef(false)
-  const previousPageIndex = useRef(pageIndex)
-
-  useEffect(() => {
-    if (previousPageIndex.current === pageIndex) {
-      return
-    }
-
-    previousPageIndex.current = pageIndex
-
-    if (!focusAfterNavigation.current) {
-      return
-    }
-
-    focusAfterNavigation.current = false
-
-    const list = listRef.current
-    if (list === null) {
-      return
-    }
-
-    // Фокус уходит на новую страницу, а не остаётся на кнопке, которая вот-вот
-    // станет недоступной или уедет вниз вместе с изменившейся высотой списка.
-    // Прокручиваем к заголовку секции: вместе с ним видны сводка и диапазон.
-    list.focus({ preventScroll: true })
-    sectionRef.current?.scrollIntoView({
-      block: 'start',
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-    })
-  }, [pageIndex, sectionRef])
+  } = usePagedList<Review>({
+    getId: (review) => review.id,
+    fetchPage,
+    fallback: REVIEWS_FALLBACK,
+    pageFallback: PAGE_FALLBACK,
+  })
 
   const isEmpty = status === 'ready' && items.length === 0 && pageIndex === 0
-  const hasPagination = hasPrev || hasNext
+
+  // Диапазон объявляет пагинатор: второй такой же озвучки на экране быть не должно.
   const liveMessage =
     status === 'loading'
       ? 'Загружаем отзывы…'
@@ -136,37 +121,17 @@ function BarberReviewsList({
           ? isEmpty
             ? 'Пока нет отзывов.'
             : 'На этой странице отзывов нет.'
-          : `Отзывы ${offset + 1}–${offset + items.length} из ${reviewsCount}`
-
-  const handleNext = () => {
-    focusAfterNavigation.current = true
-    goNext()
-  }
-
-  const handlePrev = () => {
-    focusAfterNavigation.current = true
-    goPrev()
-  }
+          : ''
 
   return (
     <CardContent className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-sm">
-          <span className="font-medium tabular-nums">
-            {formatRating(rating)}
-          </span>
-          {' · '}
-          <span className="text-muted-foreground">
-            {formatReviewsCount(reviewsCount)}
-          </span>
-        </p>
-
-        {hasPagination && items.length > 0 && (
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {offset + 1}–{offset + items.length} из {reviewsCount}
-          </p>
-        )}
-      </div>
+      <p className="text-sm">
+        <span className="font-medium tabular-nums">{formatRating(rating)}</span>
+        {' · '}
+        <span className="text-muted-foreground">
+          {formatReviewsCount(reviewsCount)}
+        </span>
+      </p>
 
       <p aria-live="polite" className="sr-only">
         {liveMessage}
@@ -175,10 +140,7 @@ function BarberReviewsList({
       {status === 'loading' && <ReviewsSkeleton />}
 
       {status === 'error' && (
-        <ReviewsError
-          message={error ?? 'Не удалось загрузить отзывы.'}
-          onRetry={retry}
-        />
+        <ReviewsError message={error ?? REVIEWS_FALLBACK} onRetry={reload} />
       )}
 
       {isEmpty && (
@@ -205,63 +167,25 @@ function BarberReviewsList({
         </ul>
       )}
 
-      {status === 'ready' && hasPagination && (
-        <nav
-          aria-label="Страницы отзывов"
-          aria-busy={isLoadingPage}
-          className="space-y-3 border-t pt-4"
-        >
-          {pageError !== null && (
-            <p
-              role="alert"
-              className="flex items-start gap-2 text-sm text-destructive"
-            >
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-              {pageError}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 px-3 sm:h-9"
-              disabled={!hasPrev}
-              onClick={handlePrev}
-            >
-              <ChevronLeft data-icon="inline-start" aria-hidden />
-              Назад
-            </Button>
-
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-11 px-3 sm:h-9"
-              aria-busy={isLoadingPage}
-              disabled={!hasNext}
-              onClick={handleNext}
-            >
-              {pageError !== null ? 'Повторить' : 'Дальше'}
-              {isLoadingPage ? (
-                <Loader2
-                  data-icon="inline-end"
-                  aria-hidden
-                  className="animate-spin"
-                />
-              ) : (
-                <ChevronRight data-icon="inline-end" aria-hidden />
-              )}
-            </Button>
-          </div>
-        </nav>
-      )}
+      <ListPager
+        label="Страницы отзывов"
+        rangeLabel={
+          items.length === 0
+            ? ''
+            : formatPageRange(offset, items.length, reviewsCount)
+        }
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        isLoading={isLoadingPage}
+        error={pageError}
+        onPrev={goPrev}
+        onNext={goNext}
+        pageIndex={pageIndex}
+        focusTargetRef={listRef}
+        scrollTargetRef={sectionRef}
+      />
     </CardContent>
   )
-}
-
-/** Плавная прокрутка отключается для тех, кто просил меньше движения. */
-function prefersReducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 function ReviewCard({ review, timeZone }: { review: Review; timeZone?: string }) {
