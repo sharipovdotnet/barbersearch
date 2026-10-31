@@ -2,6 +2,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using Shared;
 using Xunit;
@@ -20,7 +21,7 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, null),
+            new SearchBarbersQuery(null, null, null, null, null, null, null),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -39,7 +40,7 @@ public class BarberSearchTests
         var date = new DateOnly(2026, 12, 1);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery(" Berlin ", specializationId, hairServiceId, date, null, 5),
+            new SearchBarbersQuery(" Berlin ", specializationId, hairServiceId, date, null, null, 5),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -59,7 +60,7 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery("   ", Guid.Empty, Guid.Empty, null, "  ", null),
+            new SearchBarbersQuery("   ", Guid.Empty, Guid.Empty, null, null, "  ", null),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -79,7 +80,7 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, 2),
+            new SearchBarbersQuery(null, null, null, null, null, null, 2),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -105,7 +106,7 @@ public class BarberSearchTests
         do
         {
             var page = await handler.Handle(
-                new SearchBarbersQuery(null, null, null, null, cursor, 2),
+                new SearchBarbersQuery(null, null, null, null, null, cursor, 2),
                 CancellationToken.None);
 
             Assert.True(page.IsSuccess);
@@ -128,10 +129,10 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var first = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, 1),
+            new SearchBarbersQuery(null, null, null, null, null, null, 1),
             CancellationToken.None);
         var second = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, first.Value.NextCursor, 1),
+            new SearchBarbersQuery(null, null, null, null, null, first.Value.NextCursor, 1),
             CancellationToken.None);
 
         Assert.True(first.IsSuccess);
@@ -149,10 +150,10 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var first = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, 2),
+            new SearchBarbersQuery(null, null, null, null, null, null, 2),
             CancellationToken.None);
         var second = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, first.Value.NextCursor, 2),
+            new SearchBarbersQuery(null, null, null, null, null, first.Value.NextCursor, 2),
             CancellationToken.None);
 
         Assert.True(first.IsSuccess);
@@ -171,7 +172,7 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var result = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, "broken", null),
+            new SearchBarbersQuery(null, null, null, null, null, "broken", null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -186,16 +187,75 @@ public class BarberSearchTests
         var handler = new SearchBarbersHandler(repository);
 
         var tooSmall = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, 0),
+            new SearchBarbersQuery(null, null, null, null, null, null, 0),
             CancellationToken.None);
         var tooLarge = await handler.Handle(
-            new SearchBarbersQuery(null, null, null, null, null, Pagination.MAX_PAGE_SIZE + 1),
+            new SearchBarbersQuery(null, null, null, null, null, null, Pagination.MAX_PAGE_SIZE + 1),
             CancellationToken.None);
 
         Assert.True(tooSmall.IsFailure);
         Assert.True(tooLarge.IsFailure);
         Assert.Equal(ErrorType.VALIDATION, tooSmall.Error.Errors[0].Type);
         Assert.Equal(ErrorType.VALIDATION, tooLarge.Error.Errors[0].Type);
+        Assert.Null(repository.LastSearchFilter);
+    }
+
+    [Theory]
+    [InlineData("ru")]
+    [InlineData(" RU ")]
+    [InlineData("En")]
+    public async Task Search_WithLanguage_ParsesEnumIgnoringCaseAndTrims(string language)
+    {
+        var repository = new FakeBarberProfileRepository();
+        var handler = new SearchBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new SearchBarbersQuery(null, null, null, null, language, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repository.LastSearchFilter);
+        Assert.Equal(
+            Enum.Parse<Language>(language.Trim(), ignoreCase: true),
+            repository.LastSearchFilter!.Language);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Search_WithBlankLanguage_DoesNotFilter(string? language)
+    {
+        var repository = new FakeBarberProfileRepository();
+        var handler = new SearchBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new SearchBarbersQuery(null, null, null, null, language, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repository.LastSearchFilter);
+        Assert.Null(repository.LastSearchFilter!.Language);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("xx")]
+    [InlineData("Ru,En")]
+    public async Task Search_WithUnknownLanguage_ReturnsValidationNotServerError(string language)
+    {
+        var repository = new FakeBarberProfileRepository();
+        var handler = new SearchBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new SearchBarbersQuery(null, null, null, null, language, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(
+            ApiErrorCodes.Common.BarberSearchLanguageInvalid,
+            result.Error.Errors[0].Code);
         Assert.Null(repository.LastSearchFilter);
     }
 
