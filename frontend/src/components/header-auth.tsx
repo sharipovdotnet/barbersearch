@@ -3,6 +3,7 @@ import { LogOut } from 'lucide-react'
 
 import { useSession } from '@/hooks/use-session'
 import { LoginDialog } from '@/components/login-dialog'
+import { SessionRetryButton } from '@/components/session-unavailable'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,6 +22,10 @@ export function HeaderAuth() {
 
   if (status === 'loading') {
     return <Skeleton className="h-7 w-20" aria-hidden />
+  }
+
+  if (status === 'unavailable') {
+    return <SessionRetryButton />
   }
 
   if (status === 'anonymous' || !user) {

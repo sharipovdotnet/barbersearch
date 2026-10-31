@@ -16,6 +16,7 @@ import {
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberNoteDialog } from '@/components/barber/barber-note-dialog'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { useBarberBookings } from '@/hooks/use-barber-bookings'
 import { useNow } from '@/hooks/use-now'
 import { useSession } from '@/hooks/use-session'
@@ -47,6 +48,12 @@ export function BarberCabinetPage() {
             Загружаем кабинет…
           </p>
           <BarberCabinetSkeleton />
+        </div>
+      )}
+
+      {status === 'unavailable' && (
+        <div className="flex min-h-[55vh] items-center justify-center py-6">
+          <SessionUnavailable />
         </div>
       )}
 

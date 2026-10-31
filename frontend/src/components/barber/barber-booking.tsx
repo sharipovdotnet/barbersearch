@@ -3,6 +3,7 @@ import { Loader2, TriangleAlert } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { LoginDialog } from '@/components/login-dialog'
+import { SessionRetryButton } from '@/components/session-unavailable'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -179,6 +180,18 @@ export function BarberBooking({
           <p role="status" className="sr-only">
             Проверяем вход…
           </p>
+        </div>
+      )}
+
+      {sessionStatus === 'unavailable' && (
+        <div className="space-y-3 border-t border-border pt-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Не удалось проверить сессию</p>
+            <p className="text-sm text-muted-foreground">
+              Сервер не ответил. Проверьте подключение и повторите попытку.
+            </p>
+          </div>
+          <SessionRetryButton />
         </div>
       )}
 

@@ -9,6 +9,7 @@ import { ChangePasswordDialog } from '@/components/account/change-password-dialo
 import { NextBookingCard } from '@/components/account/next-booking-card'
 import { HowItWorksCard, ProfileCard } from '@/components/account/profile-card'
 import { ReviewDialog } from '@/components/account/review-dialog'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,6 +40,12 @@ export function AccountPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && <AccountSkeleton />}
+
+      {status === 'unavailable' && (
+        <div className="flex min-h-[55vh] items-center justify-center py-6">
+          <SessionUnavailable />
+        </div>
+      )}
 
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">

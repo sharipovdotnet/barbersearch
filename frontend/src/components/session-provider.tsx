@@ -35,88 +35,128 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const statusRef = useRef<SessionStatus>('loading')
   const sessionDeadRef = useRef(false)
 
+  // Одна проверка сессии на провайдер: StrictMode и двойной клик не дают второй сети.
+  const bootstrapRef = useRef<Promise<void> | null>(null)
+  const mountedRef = useRef(false)
+
   useEffect(() => {
     statusRef.current = status
   }, [status])
+
+  /** Поздний ответ размонтированного провайдера не должен менять его состояние. */
+  const applySession = useCallback(
+    (nextUser: SessionUser | null, nextStatus: SessionStatus) => {
+      if (!mountedRef.current) {
+        return
+      }
+
+      setUser(nextUser)
+      setStatus(nextStatus)
+    },
+    []
+  )
+
+  /**
+   * Полная проверка сессии.
+   *
+   * `anonymous` ставится только по авторитетному `401`; сеть, `5xx` и `transient`
+   * при refresh — это `unavailable`, «проверить не удалось».
+   */
+  const bootstrap = useCallback((): Promise<void> => {
+    if (bootstrapRef.current) {
+      return bootstrapRef.current
+    }
+
+    const run = (async () => {
+      try {
+        let currentUser: SessionUser | null
+        try {
+          currentUser = await fetchSession()
+        } catch {
+          applySession(null, 'unavailable')
+          return
+        }
+
+        if (!mountedRef.current) {
+          return
+        }
+
+        if (currentUser) {
+          applySession(currentUser, 'authenticated')
+          return
+        }
+
+        if (!hasRememberHint()) {
+          applySession(null, 'anonymous')
+          return
+        }
+
+        const outcome = await refreshSession()
+        if (!mountedRef.current) {
+          return
+        }
+
+        if (outcome.kind === 'transient') {
+          // Подсказку не трогаем: «Повторить» или перезагрузка проверят сессию снова.
+          applySession(null, 'unavailable')
+          return
+        }
+
+        if (outcome.kind === 'terminal') {
+          // `terminal` уже снял подсказку и липкий до успешного входа.
+          applySession(null, 'anonymous')
+          return
+        }
+
+        try {
+          const recovered = await fetchSession()
+          if (!mountedRef.current) {
+            return
+          }
+
+          if (recovered) {
+            applySession(recovered, 'authenticated')
+            return
+          }
+
+          // Cookie только что обновлена, а `/auth/me` снова `401` — второй refresh не шлём.
+          clearRememberHint()
+          applySession(null, 'anonymous')
+        } catch {
+          // Сбой второго запроса — не признак мёртвой сессии; подсказку не трогаем.
+          applySession(null, 'unavailable')
+        }
+      } finally {
+        bootstrapRef.current = null
+      }
+    })()
+
+    bootstrapRef.current = run
+    return run
+  }, [applySession])
 
   // Восстанавливаем сессию по cookie при загрузке страницы: сервер — единственный источник
   // правды, локального хранилища токенов нет. Refresh зовём только по подсказке «Запомнить
   // меня»: без неё заход анонима не должен тратить лимитер на заведомо неудачную попытку.
   useEffect(() => {
-    let isActive = true
-
-    const bootstrap = async () => {
-      let currentUser: SessionUser | null
-      try {
-        currentUser = await fetchSession()
-      } catch {
-        // API недоступен: считаем сессию анонимной, а попытка входа покажет сетевую ошибку.
-        if (isActive) {
-          setUser(null)
-          setStatus('anonymous')
-        }
-        return
-      }
-
-      if (!isActive) {
-        return
-      }
-
-      if (currentUser) {
-        setUser(currentUser)
-        setStatus('authenticated')
-        return
-      }
-
-      if (!hasRememberHint()) {
-        setUser(null)
-        setStatus('anonymous')
-        return
-      }
-
-      const outcome = await refreshSession()
-      if (!isActive) {
-        return
-      }
-
-      if (outcome.kind !== 'refreshed') {
-        // `terminal` уже снял подсказку; `transient` её не трогает — перезагрузка повторит.
-        setUser(null)
-        setStatus('anonymous')
-        return
-      }
-
-      try {
-        const recovered = await fetchSession()
-        if (!isActive) {
-          return
-        }
-
-        if (recovered) {
-          setUser(recovered)
-          setStatus('authenticated')
-          return
-        }
-
-        // Cookie только что обновлена, а `/auth/me` снова `401` — второй refresh не шлём.
-        clearRememberHint()
-        setUser(null)
-        setStatus('anonymous')
-      } catch {
-        // Сбой второго запроса — это не признак мёртвой сессии; подсказку не трогаем.
-        if (isActive) {
-          setUser(null)
-          setStatus('anonymous')
-        }
-      }
-    }
-
+    mountedRef.current = true
     void bootstrap()
 
     return () => {
-      isActive = false
+      mountedRef.current = false
     }
-  }, [])
+  }, [bootstrap])
+
+  /** «Повторить» из шапки и экранов: одна проверка, скелетоны на время неё. */
+  const retrySession = useCallback(() => {
+    if (bootstrapRef.current) {
+      return
+    }
+
+    setStatus('loading')
+    statusRef.current = 'loading'
+    void bootstrap()
+  }, [bootstrap])
 
   // Прозрачное продление для данных: транспорт зовёт обработчик на `401` и повторяет запрос.
   useEffect(() => {
@@ -176,8 +216,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<SessionContextValue>(
-    () => ({ status, user, signIn, signOut }),
-    [status, user, signIn, signOut]
+    () => ({ status, user, signIn, signOut, retrySession }),
+    [status, user, signIn, signOut, retrySession]
   )
 
   return (
