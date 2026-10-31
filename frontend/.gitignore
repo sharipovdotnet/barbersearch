@@ -17,6 +17,12 @@ dist-ssr
 .env.*
 !.env.example
 
+# Playwright: отчёты, трейсы, скриншоты и storageState ролей не коммитятся.
+/playwright-report/
+/test-results/
+/blob-report/
+/e2e/.auth/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
