@@ -382,6 +382,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 profile.DisplayName.Value,
                 profile.Grade,
                 profile.YearsOfExperience.Value,
+                profile.Languages.ToList(),
                 profile.Rating,
                 profile.ReviewsCount,
                 profile.IsVerified,
