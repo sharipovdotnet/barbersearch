@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
 
 /**
@@ -58,33 +58,29 @@ export async function fetchBarberBookings(
 
 /** `Pending → Confirmed`; ответ — `204` без тела. */
 export async function confirmBooking(id: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${encodeURIComponent(id)}/confirmation`, {
+  await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/confirmation`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 /** `Confirmed → Completed`. */
 export async function completeBooking(id: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${encodeURIComponent(id)}/completion`, {
+  await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/completion`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 /** `Confirmed → NoShow`; раньше `start_at` сервер ответит `400`. */
 export async function markBookingNoShow(id: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${encodeURIComponent(id)}/no-show`, {
+  await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/no-show`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 /** `Pending|Confirmed → Cancelled`; отмена освобождает слот. */
 export async function cancelBooking(id: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${encodeURIComponent(id)}/cancellation`, {
+  await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/cancellation`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
@@ -95,9 +91,8 @@ export async function cancelBooking(id: string): Promise<void> {
  * правило только для счётчика и блокировки кнопки.
  */
 export async function saveBarberNote(id: string, note: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${encodeURIComponent(id)}/barber-note`, {
+  await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/barber-note`, {
     method: 'PUT',
-    headers: await csrfHeaders(),
     body: JSON.stringify({ note }),
   })
 }

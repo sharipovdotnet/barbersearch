@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
 
 /**
@@ -52,9 +52,8 @@ export async function fetchBookings(
 
 /** Отмена возможна только для `Pending` и `Confirmed` — это же проверяет домен. */
 export async function cancelBooking(bookingId: string): Promise<void> {
-  await apiRequest<void>(`/bookings/${bookingId}/cancellation`, {
+  await mutateWithCsrf<void>(`/bookings/${bookingId}/cancellation`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
@@ -98,9 +97,8 @@ export type CreateReviewInput = {
  * только после публикации администратором.
  */
 export async function createReview(input: CreateReviewInput): Promise<string> {
-  const created = await apiRequest<{ id: string }>('/reviews', {
+  const created = await mutateWithCsrf<{ id: string }>('/reviews', {
     method: 'POST',
-    headers: await csrfHeaders(),
     body: JSON.stringify(input),
   })
 

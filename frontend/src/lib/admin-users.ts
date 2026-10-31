@@ -1,5 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 
 /**
@@ -207,39 +207,34 @@ export async function changeUserRole(
   userId: string,
   role: AdminUserRole
 ): Promise<void> {
-  await apiRequest<void>(`/users/${userId}/role`, {
+  await mutateWithCsrf<void>(`/users/${userId}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role }),
-    headers: await csrfHeaders(),
   })
 }
 
 /** Блокировка — это снятие активации, отдельного статуса «заблокирован» нет. */
 export async function blockUser(userId: string): Promise<void> {
-  await apiRequest<void>(`/users/${userId}/activation`, {
+  await mutateWithCsrf<void>(`/users/${userId}/activation`, {
     method: 'DELETE',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function unblockUser(userId: string): Promise<void> {
-  await apiRequest<void>(`/users/${userId}/activation`, {
+  await mutateWithCsrf<void>(`/users/${userId}/activation`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function verifyUserEmail(userId: string): Promise<void> {
-  await apiRequest<void>(`/users/${userId}/email-verification`, {
+  await mutateWithCsrf<void>(`/users/${userId}/email-verification`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function verifyUserPhone(userId: string): Promise<void> {
-  await apiRequest<void>(`/users/${userId}/phone-verification`, {
+  await mutateWithCsrf<void>(`/users/${userId}/phone-verification`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
@@ -254,10 +249,9 @@ export type CreateUserInput = {
 export async function createUser(
   input: CreateUserInput
 ): Promise<{ id: string }> {
-  return apiRequest<{ id: string }>('/users', {
+  return mutateWithCsrf<{ id: string }>('/users', {
     method: 'POST',
     body: JSON.stringify(input),
-    headers: await csrfHeaders(),
   })
 }
 

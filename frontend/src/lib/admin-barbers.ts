@@ -1,6 +1,6 @@
 import { ApiError, apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 
 /**
@@ -157,16 +157,14 @@ export type AdminBarberAction =
   | 'show'
 
 export async function verifyBarber(barberId: string): Promise<void> {
-  await apiRequest<void>(`/barber-profiles/${barberId}/verification`, {
+  await mutateWithCsrf<void>(`/barber-profiles/${barberId}/verification`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function unverifyBarber(barberId: string): Promise<void> {
-  await apiRequest<void>(`/barber-profiles/${barberId}/verification`, {
+  await mutateWithCsrf<void>(`/barber-profiles/${barberId}/verification`, {
     method: 'DELETE',
-    headers: await csrfHeaders(),
   })
 }
 
@@ -174,25 +172,22 @@ export async function changeBarberGrade(
   barberId: string,
   grade: BarberGrade
 ): Promise<void> {
-  await apiRequest<void>(`/barber-profiles/${barberId}/grade`, {
+  await mutateWithCsrf<void>(`/barber-profiles/${barberId}/grade`, {
     method: 'PUT',
     body: JSON.stringify({ grade }),
-    headers: await csrfHeaders(),
   })
 }
 
 /** «Скрыть из поиска» — выключение профиля, а не новый статус домена. */
 export async function hideBarberFromSearch(barberId: string): Promise<void> {
-  await apiRequest<void>(`/barber-profiles/${barberId}/activation`, {
+  await mutateWithCsrf<void>(`/barber-profiles/${barberId}/activation`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function returnBarberToSearch(barberId: string): Promise<void> {
-  await apiRequest<void>(`/barber-profiles/${barberId}/activation`, {
+  await mutateWithCsrf<void>(`/barber-profiles/${barberId}/activation`, {
     method: 'DELETE',
-    headers: await csrfHeaders(),
   })
 }
 

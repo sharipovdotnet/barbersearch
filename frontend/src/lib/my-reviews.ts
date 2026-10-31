@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
 
 /**
@@ -68,17 +68,15 @@ export async function updateMyReview(
   id: string,
   input: UpdateMyReviewInput
 ): Promise<void> {
-  await apiRequest<void>(`/reviews/${encodeURIComponent(id)}`, {
+  await mutateWithCsrf<void>(`/reviews/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: await csrfHeaders(),
     body: JSON.stringify(input),
   })
 }
 
 /** Удаление только автором; повторный запрос по тому же id вернёт `404`. */
 export async function deleteMyReview(id: string): Promise<void> {
-  await apiRequest<void>(`/reviews/${encodeURIComponent(id)}`, {
+  await mutateWithCsrf<void>(`/reviews/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: await csrfHeaders(),
   })
 }

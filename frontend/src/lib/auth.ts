@@ -1,5 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
-import { fetchCsrfToken } from '@/lib/csrf'
+import { CSRF_HEADER, fetchCsrfToken, mutateWithCsrf } from '@/lib/csrf'
 
 /**
  * Браузерная аутентификация через cookie.
@@ -8,8 +8,8 @@ import { fetchCsrfToken } from '@/lib/csrf'
  * и ничего не возвращает в теле. Токены в JavaScript не попадают, поэтому после входа клиент
  * узнаёт пользователя из `GET api/auth/me`.
  *
- * Cookie-ветка защищена от CSRF: перед каждым изменяющим запросом берём токен из
- * `GET api/auth/csrf` и отправляем его в заголовке `X-CSRF-TOKEN`.
+ * Cookie-ветка защищена от CSRF: изменяющие запросы идут через `mutateWithCsrf` — свежий
+ * токен из `GET api/auth/csrf` в заголовке `X-CSRF-TOKEN` и один повтор на устаревший.
  */
 
 export type SessionUser = {
@@ -33,8 +33,6 @@ export type RegistrationInput = {
   lastName: string
 }
 
-const CSRF_HEADER = 'X-CSRF-TOKEN'
-
 /** Текущий пользователь или `null`, если cookie-сессии нет. */
 export async function fetchSession(): Promise<SessionUser | null> {
   try {
@@ -51,11 +49,9 @@ export async function fetchSession(): Promise<SessionUser | null> {
 export async function signIn(
   credentials: SignInCredentials
 ): Promise<SessionUser> {
-  const csrfToken = await fetchCsrfToken()
-
-  await apiRequest<void>('/auth/login/cookie', {
+  // У входа токен ещё анонимный — это нормально, повтор возьмёт новый анонимный.
+  await mutateWithCsrf<void>('/auth/login/cookie', {
     method: 'POST',
-    headers: { [CSRF_HEADER]: csrfToken },
     body: JSON.stringify(credentials),
   })
 
@@ -88,12 +84,7 @@ export async function requestSessionRefresh(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  const csrfToken = await fetchCsrfToken()
-
-  await apiRequest<void>('/auth/logout', {
-    method: 'POST',
-    headers: { [CSRF_HEADER]: csrfToken },
-  })
+  await mutateWithCsrf<void>('/auth/logout', { method: 'POST' })
 }
 
 /**
@@ -123,11 +114,8 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string
 ): Promise<void> {
-  const csrfToken = await fetchCsrfToken()
-
-  await apiRequest<void>('/auth/change-password', {
+  await mutateWithCsrf<void>('/auth/change-password', {
     method: 'POST',
-    headers: { [CSRF_HEADER]: csrfToken },
     body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
