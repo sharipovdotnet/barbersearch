@@ -24,7 +24,7 @@ npm run preview  # serve dist/
 
 | Path | Screen |
 |---|---|
-| `/` | landing page: real barber search by city and date, how it works, account CTA |
+| `/` | landing page: real barber search by city, date, language, specialization and service, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | customer cabinet: bookings, cancellation, review, password |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
@@ -41,20 +41,26 @@ enforces roles separately (`AdminOnly`, `BarberOnly`).
 
 ## Barber search
 
-The landing calls `GET /api/barbers?city=&date=&cursor=&pageSize=` (anonymous, 120 requests
-per minute per IP). The v1 filters are a **city** (trimmed and compared exactly, case-sensitive)
-and an optional **date** — the barber has a working day on that weekday. Results are ordered
-`rating DESC NULLS LAST, id`; `pageSize` is 12 and the next page is fetched with the opaque
-`nextCursor` from the previous response. There is no text search, and the card shows no price
-or service tags because the search DTO has neither.
+The landing calls `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=&cursor=&pageSize=`
+(anonymous, 120 requests per minute per IP). The filters are a **city** (trimmed and compared
+exactly, case-sensitive), an optional **date** — the barber has a working day on that weekday —
+one **language** (an enum name such as `Ru`), one **specialization** and one **hair service**;
+empty values are not sent at all. Results are ordered `rating DESC NULLS LAST, id`; `pageSize`
+is 12 and the next page is fetched with the opaque `nextCursor` from the previous response.
+There is no text search, and the card shows no price or service tags because the search DTO has
+neither.
 
-Specialization and service filters are deliberately not in the UI yet: `specializationId` and
-`hairServiceId` are accepted by the API, but `GET /api/specializations` and
-`GET /api/hair-services` do not exist, so there is no list to populate a filter from. They
-will follow once those read endpoints appear.
+The language select always lists the six known languages. The specialization and service selects
+come from `GET /api/specializations` and `GET /api/hair-services` (anonymous, active rows only,
+bare arrays, no pagination): an empty catalogue hides its select instead of showing a dead list.
+While they load the selects are disabled with «Загрузка…»; if the load fails they stay disabled
+and the form shows a Russian `role="alert"` with «Повторить» — city, date, language and «Найти»
+keep working. Only «Найти» sends a request; filters live in React state, not in the URL.
 
-- `src/lib/barber-search.ts` — filters, `BarberSearchItem`, `searchBarbers()`.
+- `src/lib/barber-search.ts` — filters, `emptyBarberSearchFilters`/`normalizeBarberSearchFilters`, `BarberSearchItem`, `searchBarbers()`.
 - `src/hooks/use-barber-search.ts` — pages, abort of stale requests, retry, load-more state.
+- `src/hooks/use-search-catalogs.ts` — parallel catalogue read, abort on unmount, retry.
+- `src/lib/specializations.ts`, `src/lib/hair-services.ts` — catalogue types and requests.
 - `src/components/home/` — hero/search form, results grid, cards and the account CTA.
 
 ## Barber profile

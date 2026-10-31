@@ -329,6 +329,14 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 && service.IsActive));
         }
 
+        if (filter.Language is { } language)
+        {
+            // Contains по primitive collection переводится в `languages @> ARRAY[1]`,
+            // его покрывает GIN-индекс ix_barber_profiles_languages: коллекция
+            // остаётся в базе, в память профили не тянутся.
+            query = query.Where(profile => profile.Languages.Contains(language));
+        }
+
         if (filter.Date is { } date)
         {
             var dayOfWeek = date.DayOfWeek;

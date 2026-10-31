@@ -1,4 +1,5 @@
 using BarberSearch.Application.Common;
+using BarberSearch.Domain.BarberProfiles.Enums;
 
 namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 
@@ -15,6 +16,7 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// Услуга справочника (<c>hair_services.id</c>); <c>null</c> — фильтр не задан.
 /// </param>
 /// <param name="Date">Дата, на которую у барбера есть рабочий день; <c>null</c> — фильтр не задан.</param>
+/// <param name="Language">Язык общения; <c>null</c> — фильтр не задан. Один язык, не мультивыбор.</param>
 /// <param name="Cursor">Позиция продолжения выдачи; <c>null</c> — первая страница.</param>
 /// <param name="Limit">Сколько строк прочитать из базы (pageSize + 1).</param>
 public sealed record BarberSearchFilter(
@@ -22,5 +24,6 @@ public sealed record BarberSearchFilter(
     Guid? SpecializationId,
     Guid? HairServiceId,
     DateOnly? Date,
+    Language? Language,
     BarberSearchCursor? Cursor,
     int Limit);

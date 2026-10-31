@@ -5,10 +5,14 @@ import { HomeCta } from '@/components/home/home-cta'
 import { HomeHero } from '@/components/home/home-hero'
 import { HowItWorks } from '@/components/home/how-it-works'
 import { useBarberSearch } from '@/hooks/use-barber-search'
-import type { BarberSearchFilters } from '@/lib/barber-search'
+import {
+  emptyBarberSearchFilters,
+  normalizeBarberSearchFilters,
+  type BarberSearchFilters,
+} from '@/lib/barber-search'
 import { scrollToSection } from '@/lib/router'
 
-const INITIAL_FILTERS: BarberSearchFilters = { city: '', date: '' }
+const INITIAL_FILTERS: BarberSearchFilters = emptyBarberSearchFilters()
 
 /**
  * Витрина: поиск барбера и объяснение того, как устроена запись.
@@ -31,10 +35,7 @@ export function HomePage() {
   }, [])
 
   function handleSearch(next: BarberSearchFilters) {
-    const applied: BarberSearchFilters = {
-      city: next.city.trim(),
-      date: next.date,
-    }
+    const applied = normalizeBarberSearchFilters(next)
 
     setFilters(applied)
     search.submit(applied)

@@ -8,10 +8,11 @@ import { isBarberSearchPage } from '@/lib/response-guards'
  * Публичный поиск барберов.
  *
  * `GET api/barbers` не умеет текстовый поиск и не отдаёт цены, специализации или
- * услуги: витрина фильтрует только по городу и дате. Город сервер сравнивает точно
- * (`salon.City == city`), поэтому клиент лишь обрезает пробелы и не меняет регистр.
- * Справочные `specializationId`/`hairServiceId` API принимает, но UI их пока не шлёт:
- * списочных GET для справочников нет.
+ * услуги: витрина фильтрует по городу, дате, языку, специализации и услуге.
+ * Город сервер сравнивает точно (`salon.City == city`), поэтому клиент лишь
+ * обрезает пробелы и не меняет регистр. Справочные `specializationId`,
+ * `hairServiceId` и `language` уходят только при выбранном значении: пустая
+ * строка — «фильтра нет», и сервер такой параметр не получает вовсе.
  */
 
 export type BarberSearchFilters = {
@@ -19,6 +20,40 @@ export type BarberSearchFilters = {
   city: string
   /** `YYYY-MM-DD` либо пустая строка — без фильтра. */
   date: string
+  /** `''` — без фильтра. */
+  specializationId: string
+  /** `''` — без фильтра. */
+  hairServiceId: string
+  /** `''` — без фильтра; один язык, не мультивыбор. */
+  language: Language | ''
+}
+
+/** Свежий объект пустых фильтров: форма и страница не делят одно состояние. */
+export function emptyBarberSearchFilters(): BarberSearchFilters {
+  return {
+    city: '',
+    date: '',
+    specializationId: '',
+    hairServiceId: '',
+    language: '',
+  }
+}
+
+/**
+ * Нормализует фильтры перед отправкой: город обрезается, остальные значения
+ * передаются как есть. Общая функция нужна и странице, и хуку, иначе новые поля
+ * теряются по дороге.
+ */
+export function normalizeBarberSearchFilters(
+  filters: BarberSearchFilters
+): BarberSearchFilters {
+  return {
+    city: filters.city.trim(),
+    date: filters.date,
+    specializationId: filters.specializationId,
+    hairServiceId: filters.hairServiceId,
+    language: filters.language,
+  }
 }
 
 /** Строка выдачи; полей цены и услуг здесь нет по контракту. */
@@ -61,6 +96,18 @@ export async function searchBarbers(
 
   if (filters.date !== '') {
     query.set('date', filters.date)
+  }
+
+  if (filters.specializationId !== '') {
+    query.set('specializationId', filters.specializationId)
+  }
+
+  if (filters.hairServiceId !== '') {
+    query.set('hairServiceId', filters.hairServiceId)
+  }
+
+  if (filters.language !== '') {
+    query.set('language', filters.language)
   }
 
   if (cursor) {

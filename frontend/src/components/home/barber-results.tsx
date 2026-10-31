@@ -200,10 +200,15 @@ function BarberResultsError({
 
 function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
   const city = filters.city.trim()
+  const hasNewFilters =
+    filters.language !== '' ||
+    filters.specializationId !== '' ||
+    filters.hairServiceId !== ''
 
   let title = 'Барберов пока нет'
   let text = 'Пока никто не подтверждён. Загляните позже.'
 
+  // Город и дата понятнее пользователю, поэтому подсказка про них приоритетнее.
   if (city !== '') {
     title = 'В этом городе никого не нашли'
     text =
@@ -212,6 +217,9 @@ function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
     title = 'На выбранную дату никого не нашли'
     text =
       'Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.'
+  } else if (hasNewFilters) {
+    title = 'С такими фильтрами никого не нашли'
+    text = 'Попробуйте другой язык, специализацию или услугу.'
   }
 
   return (

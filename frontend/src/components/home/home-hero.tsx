@@ -7,7 +7,7 @@ type HomeHeroProps = {
   onSearch: (filters: BarberSearchFilters) => void
 }
 
-/** Первый экран витрины: заголовок и форма поиска по городу и дате. */
+/** Первый экран витрины: заголовок и форма поиска по городу, дате и фильтрам. */
 export function HomeHero({ isSearching, onSearch }: HomeHeroProps) {
   return (
     <section className="mx-auto max-w-5xl px-4 pt-14 pb-10 sm:pt-20">
@@ -18,8 +18,8 @@ export function HomeHero({ isSearching, onSearch }: HomeHeroProps) {
         Найди барбера и запишись за минуту
       </h1>
       <p className="mt-4 max-w-xl text-muted-foreground">
-        Поиск по городу и дате среди подтверждённых барберов. Без звонков и
-        переписок.
+        Поиск по городу, дате, языку, специализации и услуге среди подтверждённых
+        барберов. Без звонков и переписок.
       </p>
 
       <SearchForm isSearching={isSearching} onSearch={onSearch} />

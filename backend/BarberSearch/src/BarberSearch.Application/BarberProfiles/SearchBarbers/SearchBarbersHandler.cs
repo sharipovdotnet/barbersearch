@@ -2,6 +2,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.BarberProfiles.Enums;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -57,11 +58,30 @@ public sealed class SearchBarbersHandler
             cursor = decoded.Value;
         }
 
+        Language? language = null;
+
+        if (!string.IsNullOrWhiteSpace(query.Language))
+        {
+            if (!TryParseLanguage(query.Language, out var parsedLanguage))
+            {
+                return new Failure(Error.Validation(
+                    ApiErrorCodes.Common.BarberSearchLanguageInvalid,
+                    $"""
+                     Unknown search language '{query.Language.Trim()}'.
+                     Allowed values: Ru, En, De, Kg, Tj, Uz.
+                     """,
+                    nameof(query.Language)));
+            }
+
+            language = parsedLanguage;
+        }
+
         var filter = new BarberSearchFilter(
             City: string.IsNullOrWhiteSpace(query.City) ? null : query.City.Trim(),
             SpecializationId: query.SpecializationId == Guid.Empty ? null : query.SpecializationId,
             HairServiceId: query.HairServiceId == Guid.Empty ? null : query.HairServiceId,
             Date: query.Date,
+            Language: language,
             Cursor: cursor,
             Limit: pageSize + 1);
 
@@ -82,5 +102,32 @@ public sealed class SearchBarbersHandler
             : null;
 
         return new PagedResponse<BarberSearchItemResponse>(items, nextCursor);
+    }
+
+    /// <summary>
+    /// Разбирает язык фильтра по имени enum без учёта регистра.
+    /// </summary>
+    /// <remarks>
+    /// Числовые формы отклоняются: <c>language=1</c> не должен молча означать <c>Ru</c>,
+    /// иначе опечатка клиента вернула бы чужие результаты вместо <c>400</c>.
+    /// </remarks>
+    /// <param name="value">Строка из query string.</param>
+    /// <param name="language">Разобранный язык при успехе.</param>
+    /// <returns><c>true</c>, если строка — известное имя enum.</returns>
+    private static bool TryParseLanguage(string value, out Language language)
+    {
+        var text = value.Trim();
+
+        if (text.Length == 0 || text.Any(char.IsDigit))
+        {
+            language = default;
+            return false;
+        }
+
+        return Enum.TryParse(text, ignoreCase: true, out language)
+            && Enum.IsDefined(language)
+            // Список через запятую (`Ru,En`) даёт числовое сочетание, которое может совпасть
+            // с другим членом enum (Ru|En = De). Принимаем только точное имя одного языка.
+            && string.Equals(Enum.GetName(language), text, StringComparison.OrdinalIgnoreCase);
     }
 }

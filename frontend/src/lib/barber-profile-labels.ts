@@ -26,14 +26,14 @@ export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
 
 export type Language = 'Ru' | 'En' | 'De' | 'Kg' | 'Tj' | 'Uz'
 
-/** Язык общения: `Ru` → «Русский». */
+/** Язык общения: значение — самоназвание, чтобы носитель узнал язык без перевода. */
 export const LANGUAGE_LABELS: Record<Language, string> = {
   Ru: 'Русский',
-  En: 'Английский',
-  De: 'Немецкий',
-  Kg: 'Киргизский',
-  Tj: 'Таджикский',
-  Uz: 'Узбекский',
+  En: 'English',
+  De: 'Deutsch',
+  Kg: 'Кыргызча',
+  Tj: 'Тоҷикӣ',
+  Uz: 'Oʻzbekcha',
 }
 
 export type PaymentMethod = 'Cash' | 'Card' | 'DigitalWallet' | 'Sbp' | 'BankTransfer'

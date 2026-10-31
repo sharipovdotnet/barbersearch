@@ -45,6 +45,10 @@ public class BarbersController : ApiController
     /// Это не <c>barberServiceId</c> из брони (R-20).
     /// </param>
     /// <param name="date">Дата, на которую у барбера есть рабочий день.</param>
+    /// <param name="language">
+    /// Язык общения именем enum (<c>Ru</c>, <c>en</c>). Пустая строка означает «без фильтра»,
+    /// неизвестное значение — <c>400</c> с кодом <c>barberSearch.language.invalid</c>.
+    /// </param>
     /// <param name="cursor">Непрозрачный курсор следующей страницы из предыдущего ответа.</param>
     /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
     /// <param name="handler">Обработчик запроса.</param>
@@ -57,6 +61,7 @@ public class BarbersController : ApiController
         [FromQuery] Guid? specializationId,
         [FromQuery] Guid? hairServiceId,
         [FromQuery] DateOnly? date,
+        [FromQuery] string? language,
         [FromQuery] string? cursor,
         [FromQuery] int? pageSize,
         [FromServices] IQueryHandler<PagedResponse<BarberSearchItemResponse>, SearchBarbersQuery> handler,
@@ -67,6 +72,7 @@ public class BarbersController : ApiController
                 specializationId,
                 hairServiceId,
                 date,
+                language,
                 cursor,
                 pageSize),
             cancellationToken));

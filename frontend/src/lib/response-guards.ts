@@ -24,9 +24,11 @@ import type {
   BarberProfileSpecialization,
   WorkingSchedule,
 } from '@/lib/catalog'
+import type { HairServiceOption } from '@/lib/hair-services'
 import type { MyReview } from '@/lib/my-reviews'
 import type { Page } from '@/lib/paging'
 import type { Review } from '@/lib/reviews'
+import type { SpecializationOption } from '@/lib/specializations'
 
 /**
  * Ручные guard'ы успешных ответов API.
@@ -270,6 +272,32 @@ export function isBarberSearchItem(value: unknown): value is BarberSearchItem {
 }
 
 export const isBarberSearchPage = isPageOf(isBarberSearchItem)
+
+/** Строка публичного справочника специализаций; описание может отсутствовать. */
+export function isSpecializationOption(
+  value: unknown
+): value is SpecializationOption {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isNullableString(value.description)
+  )
+}
+
+export const isSpecializationList = isArrayOf(isSpecializationOption)
+
+/** Строка публичного справочника услуг; длительность и описание UI не читает. */
+export function isHairServiceOption(value: unknown): value is HairServiceOption {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isServiceCategory(value.category)
+  )
+}
+
+export const isHairServiceList = isArrayOf(isHairServiceOption)
 
 function isWorkingSchedule(value: unknown): value is WorkingSchedule {
   return (

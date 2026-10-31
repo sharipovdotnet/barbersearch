@@ -1,8 +1,10 @@
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
@@ -37,9 +39,14 @@ internal sealed class TestData
     /// <summary>
     /// Создаёт пользователя-барбера и его профиль (активный, подтверждённый).
     /// </summary>
+    /// <remarks>
+    /// <paramref name="languages"/> по умолчанию <c>null</c>: домен подставляет <c>Ru</c>,
+    /// а существующие вызовы не меняются. Явный список нужен тестам фильтра по языку.
+    /// </remarks>
     public async Task<BarberProfile> CreateBarberProfileAsync(
         string displayName,
-        string? email = null)
+        string? email = null,
+        List<Language>? languages = null)
     {
         var user = await _app.CreateUserAsync(
             email ?? $"barber-{Guid.NewGuid():N}@barbersearch.test",
@@ -53,7 +60,7 @@ internal sealed class TestData
             displayName: displayName,
             yearsOfExperience: 5,
             bio: null,
-            languages: null,
+            languages: languages,
             certificatesAndTraining: null,
             achievements: null,
             paymentMethods: null,
@@ -186,6 +193,123 @@ internal sealed class TestData
         await db.SaveChangesAsync();
 
         return new SeededBarberWithSalons(user, profile, primary, secondary);
+    }
+
+    /// <summary>
+    /// Добавляет барберу активный салон в указанном городе — для фильтра по городу.
+    /// </summary>
+    public async Task<Salon> AttachSalonAsync(Guid barberProfileId, string city)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var salon = Require(Salon.Create(
+            name: $"Salon {Guid.NewGuid():N}",
+            address: "Teststrasse 1",
+            city: city,
+            country: "Germany",
+            timeZoneId: "Europe/Berlin",
+            latitude: 52.5200,
+            longitude: 13.4050));
+
+        var profile = await db.BarberProfiles
+            .Include(x => x.Salons)
+            .FirstAsync(x => x.Id == barberProfileId);
+
+        db.Salons.Add(salon);
+        Require(profile.AddSalon(salon.Id, isPrimary: true));
+        await db.SaveChangesAsync();
+
+        return salon;
+    }
+
+    /// <summary>
+    /// Создаёт строку справочника специализаций; <paramref name="isActive"/> = <c>false</c>
+    /// нужен, чтобы проверить «только активные».
+    /// </summary>
+    public async Task<Specialization> CreateSpecializationAsync(
+        string name,
+        bool isActive = true)
+    {
+        var specialization = Require(Specialization.Create(name, $"About {name}"));
+
+        if (!isActive)
+        {
+            Require(specialization.Deactivate());
+        }
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Specializations.Add(specialization);
+        await db.SaveChangesAsync();
+
+        return specialization;
+    }
+
+    /// <summary>
+    /// Создаёт строку справочника услуг; <paramref name="isActive"/> = <c>false</c> нужен,
+    /// чтобы проверить «только активные».
+    /// </summary>
+    public async Task<HairService> CreateHairServiceAsync(
+        string name,
+        ServiceCategory category = ServiceCategory.Haircut,
+        int defaultDurationMinutes = 30,
+        bool isActive = true)
+    {
+        var hairService = Require(HairService.Create(
+            name,
+            category,
+            defaultDurationMinutes,
+            $"About {name}"));
+
+        if (!isActive)
+        {
+            Require(hairService.Deactivate());
+        }
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.HairServices.Add(hairService);
+        await db.SaveChangesAsync();
+
+        return hairService;
+    }
+
+    /// <summary>
+    /// Привязывает специализацию к профилю через доменный метод — так же, как это делает
+    /// кабинет барбера.
+    /// </summary>
+    public async Task AddSpecializationAsync(Guid barberProfileId, Guid specializationId)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles
+            .Include(x => x.BarberSpecializations)
+            .FirstAsync(x => x.Id == barberProfileId);
+
+        Require(profile.AddSpecialization(specializationId));
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Привязывает услугу справочника к профилю с ценой и длительностью.
+    /// </summary>
+    public async Task AttachHairServiceAsync(
+        Guid barberProfileId,
+        Guid hairServiceId,
+        decimal price = 40.00m,
+        int durationMinutes = 30)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles
+            .Include(x => x.Services)
+            .FirstAsync(x => x.Id == barberProfileId);
+
+        Require(profile.AddService(hairServiceId, price, durationMinutes));
+        await db.SaveChangesAsync();
     }
 
     /// <summary>
