@@ -6,6 +6,7 @@ import type {
   PaymentMethod,
   ServiceCategory,
 } from '@/lib/barber-profile-labels'
+import { isBarberProfile } from '@/lib/response-guards'
 
 /**
  * Карточка барбера — единственный источник человекочитаемых данных о брони.
@@ -104,9 +105,11 @@ export async function fetchBarberProfile(
 ): Promise<BarberProfile> {
   const profile = await apiRequest<BarberProfile>(
     `/barbers/${id}`,
-    signal ? { signal } : {}
+    signal ? { signal } : {},
+    { validate: isBarberProfile }
   )
 
+  // Кэшируем только провалидированную карточку: битый ответ не должен жить в Map.
   profiles.set(profile.id, profile)
   return profile
 }

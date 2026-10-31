@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api'
+import { isBarberSlots } from '@/lib/response-guards'
 
 /**
  * Свободное время барбера на локальную дату салона.
@@ -107,6 +108,7 @@ export async function fetchBarberSlots(
 
   return apiRequest<BarberSlots>(
     `/barbers/${params.barberProfileId}/slots?${query.toString()}`,
-    signal ? { signal } : {}
+    signal ? { signal } : {},
+    { validate: isBarberSlots }
   )
 }

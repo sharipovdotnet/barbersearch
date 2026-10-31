@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
+import { isCsrfToken } from '@/lib/response-guards'
 
 /**
  * Antiforgery-токен для cookie-мутаций.
@@ -15,7 +16,9 @@ const CSRF_HEADER = 'X-CSRF-TOKEN'
 export { CSRF_HEADER }
 
 export async function fetchCsrfToken(): Promise<string> {
-  const { token } = await apiRequest<CsrfToken>('/auth/csrf')
+  const { token } = await apiRequest<CsrfToken>('/auth/csrf', {}, {
+    validate: isCsrfToken,
+  })
   return token
 }
 
@@ -29,12 +32,15 @@ export async function fetchCsrfToken(): Promise<string> {
  */
 export async function mutateWithCsrf<TResponse>(
   path: string,
-  init: MutationInit = {}
+  init: MutationInit<TResponse> = {}
 ): Promise<TResponse> {
+  const { validate, ...requestInit } = init
   const token = await fetchCsrfToken()
 
   try {
-    return await apiRequest<TResponse>(path, withCsrf(init, token))
+    return await apiRequest<TResponse>(path, withCsrf(requestInit, token), {
+      validate,
+    })
   } catch (error) {
     if (!isStaleCsrf(error, init.signal)) {
       throw error
@@ -43,14 +49,25 @@ export async function mutateWithCsrf<TResponse>(
 
   const freshToken = await fetchCsrfToken()
 
-  return apiRequest<TResponse>(path, withCsrf(init, freshToken))
+  return apiRequest<TResponse>(path, withCsrf(requestInit, freshToken), {
+    validate,
+  })
 }
 
-type MutationInit = Omit<RequestInit, 'headers'> & {
+type MutationInit<TResponse> = Omit<RequestInit, 'headers'> & {
+  headers?: Record<string, string>
+  /** Проверка успешного тела; у `204` проверять нечего. */
+  validate?: (body: unknown) => body is TResponse
+}
+
+type MutationRequestInit = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>
 }
 
-function withCsrf(init: MutationInit, token: string): RequestInit {
+function withCsrf(
+  init: MutationRequestInit,
+  token: string
+): RequestInit {
   return {
     ...init,
     headers: { ...init.headers, [CSRF_HEADER]: token },

@@ -46,9 +46,14 @@ export type UnauthorizedResult =
   | { retry: true }
   | { retry: false; error?: ApiError }
 
-type ApiRequestOptions = {
+export type ApiRequestOptions<TResponse> = {
   /** `false` отключает прозрачное продление сессии на `401` (сам refresh, вход, выход). */
   retryOnUnauthorized?: boolean
+  /**
+   * Проверка успешного тела: `false` → `ApiError` вместо `body as TResponse`.
+   * Не задана — поведение прежнее, тело принимается как есть.
+   */
+  validate?: (body: unknown) => body is TResponse
 }
 
 const API_PREFIX = '/api'
@@ -77,13 +82,13 @@ export function setUnauthorizedHandler(
 export async function apiRequest<TResponse>(
   path: string,
   init: RequestInit = {},
-  options: ApiRequestOptions = {}
+  options: ApiRequestOptions<TResponse> = {}
 ): Promise<TResponse> {
   const response = await send(path, init)
   const body = await readJson(response)
 
   if (response.ok) {
-    return body as TResponse
+    return successBody(response.status, body, options)
   }
 
   const error = toApiError(response.status, body)
@@ -102,10 +107,33 @@ export async function apiRequest<TResponse>(
   const retriedBody = await readJson(retried)
 
   if (retried.ok) {
-    return retriedBody as TResponse
+    return successBody(retried.status, retriedBody, options)
   }
 
   throw toApiError(retried.status, retriedBody)
+}
+
+/**
+ * Проверка успешного тела.
+ *
+ * `204` не валидируется — в ответе нет данных. Иначе guard из вызывающего кода
+ * решает, можно ли отдавать тело в UI: битый `200`/`201` становится `ApiError`
+ * с фактическим статусом, чтобы экран показал обычный fallback.
+ */
+function successBody<TResponse>(
+  status: number,
+  body: unknown,
+  options: ApiRequestOptions<TResponse>
+): TResponse {
+  if (status === 204) {
+    return body as TResponse
+  }
+
+  if (!options.validate || options.validate(body)) {
+    return body as TResponse
+  }
+
+  throw new ApiError(status, null, INVALID_RESPONSE_MESSAGE)
 }
 
 async function send(path: string, init: RequestInit): Promise<Response> {
@@ -134,7 +162,7 @@ function canRetryAfterUnauthorized(
   status: number,
   path: string,
   init: RequestInit,
-  options: ApiRequestOptions
+  options: Pick<ApiRequestOptions<never>, 'retryOnUnauthorized'>
 ): boolean {
   if (status !== 401 || options.retryOnUnauthorized === false) {
     return false
@@ -170,6 +198,9 @@ async function askForRetry(): Promise<UnauthorizedResult> {
 
 /** Нейтральный русский текст вместо `HTTP ${status}`: статус наружу не показывается. */
 const GENERIC_ERROR_MESSAGE = 'Запрос не выполнен.'
+
+/** Английских текстов нет: это ошибка контракта, а не ответа сервера. */
+const INVALID_RESPONSE_MESSAGE = 'Сервер вернул неожиданный ответ.'
 
 function toApiError(status: number, body: unknown): ApiError {
   const problem = isProblemDetails(body) ? body : null

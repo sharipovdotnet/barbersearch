@@ -1,6 +1,11 @@
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import {
+  isAdminUser,
+  isAdminUserPage,
+  isCreatedId,
+} from '@/lib/response-guards'
 
 /**
  * Админское чтение пользователей и действия с ними.
@@ -145,16 +150,20 @@ export async function fetchAdminUsers({
     query.set('cursor', cursor)
   }
 
-  return apiRequest<AdminUsersPage>(`/admin/users?${query.toString()}`, {
-    signal,
-  })
+  return apiRequest<AdminUsersPage>(
+    `/admin/users?${query.toString()}`,
+    { signal },
+    { validate: isAdminUserPage }
+  )
 }
 
 export async function fetchAdminUser(
   userId: string,
   signal?: AbortSignal
 ): Promise<AdminUserDetail> {
-  return apiRequest<AdminUserDetail>(`/admin/users/${userId}`, { signal })
+  return apiRequest<AdminUserDetail>(`/admin/users/${userId}`, { signal }, {
+    validate: isAdminUser,
+  })
 }
 
 /** Ошибка списка: 403 обрабатывает страница, остальное показывает текст. */
@@ -252,6 +261,7 @@ export async function createUser(
   return mutateWithCsrf<{ id: string }>('/users', {
     method: 'POST',
     body: JSON.stringify(input),
+    validate: isCreatedId,
   })
 }
 

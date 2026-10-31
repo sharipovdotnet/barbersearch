@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api'
 import type { Page } from '@/lib/paging'
+import { isReviewPage } from '@/lib/response-guards'
 
 /**
  * Публичные отзывы барбера.
@@ -44,6 +45,7 @@ export async function fetchBarberReviews(
   // Чтение без CSRF: токен нужен только мутациям.
   return apiRequest<Page<Review>>(
     `/reviews?${query.toString()}`,
-    signal ? { signal } : {}
+    signal ? { signal } : {},
+    { validate: isReviewPage }
   )
 }

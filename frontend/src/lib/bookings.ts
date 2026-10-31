@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
+import { isBookingPage, isCreatedId } from '@/lib/response-guards'
 
 /**
  * Брони клиента.
@@ -47,7 +48,9 @@ export async function fetchBookings(
     query.set('cursor', cursor)
   }
 
-  return apiRequest<Page<Booking>>(`/bookings?${query.toString()}`)
+  return apiRequest<Page<Booking>>(`/bookings?${query.toString()}`, {}, {
+    validate: isBookingPage,
+  })
 }
 
 /** Отмена возможна только для `Pending` и `Confirmed` — это же проверяет домен. */
@@ -78,10 +81,11 @@ export type CreateBookingInput = {
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<string> {
-  const created = await apiRequest<{ id: string }>('/bookings', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  const created = await apiRequest<{ id: string }>(
+    '/bookings',
+    { method: 'POST', body: JSON.stringify(input) },
+    { validate: isCreatedId }
+  )
 
   return created.id
 }
@@ -100,6 +104,7 @@ export async function createReview(input: CreateReviewInput): Promise<string> {
   const created = await mutateWithCsrf<{ id: string }>('/reviews', {
     method: 'POST',
     body: JSON.stringify(input),
+    validate: isCreatedId,
   })
 
   return created.id
