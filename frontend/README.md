@@ -235,13 +235,19 @@ profile). Point it elsewhere without touching the config:
 VITE_API_PROXY_TARGET=https://localhost:7175 npm run dev
 ```
 
+The footer repeats the address, and only in development: the line is behind
+`import.meta.env.DEV`, so a production build contains no `localhost:5243` in its DOM or JS.
+
 ## Authentication
 
 The header button signs in through the browser (cookie) branch of the API:
 `GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`.
 Tokens never reach JavaScript: the session cookie and the refresh cookie are both `HttpOnly`.
-Every state-changing request carries `X-CSRF-TOKEN` from the CSRF endpoint: auth, review and
-admin publication mutations use the helper in `src/lib/csrf.ts`. There are two exceptions:
+Every state-changing request goes through `mutateWithCsrf` in `src/lib/csrf.ts`: it fetches a
+fresh `X-CSRF-TOKEN` immediately before the request and, on `400 auth.csrf.invalid`, repeats the
+same mutation **once** with a new token. The antiforgery filter rejects the request before the
+action runs, so nothing was changed and the repeat is safe; a second failure shows the existing
+Russian text and the dialog stays usable — there is no third attempt. There are two exceptions:
 `POST /api/bookings` and `POST /api/auth/register`. The API does not validate antiforgery on
 either, so the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14).
 
@@ -269,6 +275,27 @@ A successful refresh does not call `/auth/me`: the repeated data request brings 
 keeps the auth limiter (10 requests per minute per IP, shared with sign-in, sign-out and
 registration) for real work.
 
+### Session check failed (`unavailable`)
+
+A session check that cannot reach the API is not a sign-out. When `GET /api/auth/me` answers
+`5xx` or the network is down on mount, when the bootstrap refresh is `transient`, or when the
+second `/auth/me` after a successful refresh fails, the provider sets
+`status = 'unavailable'`: the visitor is not asked to sign in and the screens do not fetch data.
+
+The screen shows a `SessionUnavailable` card («Не удалось проверить сессию» / «Сервер не
+ответил. Проверьте подключение и повторите попытку.») with «Повторить» on `/account`,
+`/account/reviews`, `/barber`, `/admin` and `/register`, a compact «Повторить» block in the
+booking panel, and a compact retry button in the header (an icon with the accessible name «Нет
+связи с сервером. Повторить проверку сессии» on narrow screens). No «Войти» button and no
+sign-in/role gates appear while the state is unknown. The landing, the barber card and the slots
+keep working: anonymous reads do not depend on the session.
+
+`retrySession()` runs the same bootstrap again under the `loading` status, the «Запомнить меня»
+hint and the one possible silent refresh included. It is single-flight, so StrictMode's double
+mount and a double click produce exactly one request; `200` becomes `authenticated`, `401`
+becomes `anonymous` and the normal gates return, another failure keeps `unavailable`. `401`
+itself remains the only authoritative “not signed in”.
+
 ### «Запомнить меня»
 
 The access cookie lives 8 hours (sliding), the refresh cookie 14 days. JavaScript cannot see
@@ -285,7 +312,9 @@ On load `GET /api/auth/me` decides:
 - `401` and **no** hint — anonymous, without a CSRF call or a refresh;
 - `401` and the hint — one refresh, then `/auth/me` again: this is how a remembered session
   survives a browser restart;
-- `401` even after a successful refresh — anonymous and the hint is removed (no second refresh).
+- `401` even after a successful refresh — anonymous and the hint is removed (no second refresh);
+- `5xx`, a network failure or a `transient` refresh — `unavailable` (see above); the hint is left
+  intact, so «Повторить» or the next reload tries again.
 
 Consequences worth knowing:
 
@@ -295,9 +324,11 @@ Consequences worth knowing:
   choice — known backend behaviour, recorded as debt §14 #25, the client cannot change it.
 
 Files: `src/lib/session-refresh.ts` (single-flight, Web Locks, outcome classification),
-`src/lib/session-hint.ts` (the hint cookie), `src/lib/api.ts` (one retry after `401`),
-`src/lib/auth.ts` (`requestSessionRefresh`), `src/components/session-provider.tsx` (bootstrap
-and the registered `401` handler).
+`src/lib/session-hint.ts` (the hint cookie), `src/lib/api.ts` (one retry after `401`, strict
+ProblemDetails parsing),
+`src/lib/auth.ts` (`requestSessionRefresh`), `src/components/session-provider.tsx` (bootstrap,
+`retrySession` and the registered `401` handler) and `src/components/session-unavailable.tsx`
+(the card and the header button).
 
 ## Registration
 
