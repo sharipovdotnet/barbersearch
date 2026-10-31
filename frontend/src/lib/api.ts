@@ -41,17 +41,78 @@ export class ApiError extends Error {
   }
 }
 
+/** Итог попытки продлить сессию: повторять запрос или отдать ошибку наверх. */
+export type UnauthorizedResult =
+  | { retry: true }
+  | { retry: false; error?: ApiError }
+
+type ApiRequestOptions = {
+  /** `false` отключает прозрачное продление сессии на `401` (сам refresh, вход, выход). */
+  retryOnUnauthorized?: boolean
+}
+
 const API_PREFIX = '/api'
 
+let unauthorizedHandler: (() => Promise<UnauthorizedResult>) | null = null
+
+/**
+ * Мост между транспортом и сессией.
+ *
+ * `api.ts` намеренно не знает про `auth.ts`, иначе получился бы цикл импортов
+ * (`auth` → `api` → `auth`). Обработчик регистрирует `SessionProvider`.
+ */
+export function setUnauthorizedHandler(
+  handler: (() => Promise<UnauthorizedResult>) | null
+): void {
+  unauthorizedHandler = handler
+}
+
+/**
+ * Запрос к API с одним прозрачным повтором после `401`.
+ *
+ * Повтор безопасен и для мутаций: `401` формирует middleware аутентификации **до** действия,
+ * поэтому запрос не был выполнен. Тело — строка, её можно отправить повторно; потоковые тела
+ * (`FormData`, `ReadableStream`) не повторяем. Второй `401` уже не продлевает сессию.
+ */
 export async function apiRequest<TResponse>(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  options: ApiRequestOptions = {}
 ): Promise<TResponse> {
+  const response = await send(path, init)
+  const body = await readJson(response)
+
+  if (response.ok) {
+    return body as TResponse
+  }
+
+  const error = toApiError(response.status, body)
+
+  if (!canRetryAfterUnauthorized(response.status, path, init, options)) {
+    throw error
+  }
+
+  const decision = await askForRetry()
+
+  if (!decision.retry) {
+    throw decision.error ?? error
+  }
+
+  const retried = await send(path, init)
+  const retriedBody = await readJson(retried)
+
+  if (retried.ok) {
+    return retriedBody as TResponse
+  }
+
+  throw toApiError(retried.status, retriedBody)
+}
+
+async function send(path: string, init: RequestInit): Promise<Response> {
   const { headers, ...requestInit } = init
 
-  let response: Response
   try {
-    response = await fetch(`${API_PREFIX}${path}`, {
+    return await fetch(`${API_PREFIX}${path}`, {
       ...requestInit,
       // Браузерная ветка аутентификации живёт на HttpOnly-cookie.
       credentials: 'include',
@@ -66,20 +127,55 @@ export async function apiRequest<TResponse>(
   } catch {
     throw new ApiError(0, null, 'Нет связи с сервером.')
   }
+}
 
-  const body = await readJson(response)
-
-  if (!response.ok) {
-    throw new ApiError(
-      response.status,
-      isProblemDetails(body) ? body : null,
-      body && isProblemDetails(body) && body.detail
-        ? body.detail
-        : `HTTP ${response.status}`
-    )
+/** Повторяем только `401` на данных: вход, `/auth/me` и refresh продлевать нечего. */
+function canRetryAfterUnauthorized(
+  status: number,
+  path: string,
+  init: RequestInit,
+  options: ApiRequestOptions
+): boolean {
+  if (status !== 401 || options.retryOnUnauthorized === false) {
+    return false
   }
 
-  return body as TResponse
+  if (path.startsWith('/auth/')) {
+    return false
+  }
+
+  if (init.signal?.aborted) {
+    return false
+  }
+
+  return (
+    init.body === undefined ||
+    init.body === null ||
+    typeof init.body === 'string'
+  )
+}
+
+async function askForRetry(): Promise<UnauthorizedResult> {
+  if (!unauthorizedHandler) {
+    return { retry: false }
+  }
+
+  try {
+    return await unauthorizedHandler()
+  } catch {
+    // Обработчик не должен бросать; исключение считаем отказом без повтора.
+    return { retry: false }
+  }
+}
+
+function toApiError(status: number, body: unknown): ApiError {
+  return new ApiError(
+    status,
+    isProblemDetails(body) ? body : null,
+    body && isProblemDetails(body) && body.detail
+      ? body.detail
+      : `HTTP ${status}`
+  )
 }
 
 async function readJson(response: Response): Promise<unknown> {

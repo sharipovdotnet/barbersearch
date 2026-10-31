@@ -244,8 +244,60 @@ Every state-changing request carries `X-CSRF-TOKEN` from the CSRF endpoint: auth
 admin publication mutations use the helper in `src/lib/csrf.ts`. There are two exceptions:
 `POST /api/bookings` and `POST /api/auth/register`. The API does not validate antiforgery on
 either, so the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14).
-`RememberMe` only tells the API whether the session cookie survives a browser restart — the
-session itself lives for 8 hours of inactivity.
+
+### Silent session refresh
+
+A `401` on a data request is absorbed by the transport: `src/lib/api.ts` asks the session
+provider for one refresh and repeats the same request exactly once. The refresh is
+`GET /api/auth/csrf` → `POST /api/auth/refresh` with the CSRF header and **no body** → `204`
+with both cookies rotated. It is single-flighted per tab in `src/lib/session-refresh.ts`, and
+`navigator.locks` keeps two tabs from presenting the same refresh token — the API revokes the
+whole chain and answers `401 auth.refresh.reused` on reuse.
+
+- **refreshed** — the request is retried, `status` never leaves `authenticated`, the header and
+  the screen do not flash.
+- **terminal** — any `401 auth.refresh.*` (`missing`, `invalid`, `revoked`, `expired`,
+  `inactive`, `reused`): the client becomes anonymous, the existing gates appear and the hint is
+  removed. The terminal state is sticky until the next sign-in, so a burst of `401` cannot cause
+  a refresh storm.
+- **transient** — `429`, network failure or `5xx`: the session and the header email stay, the
+  screen shows «Слишком много запросов…» / «Не удалось…» / «Нет связи…» with «Повторить», and the
+  retry goes through the refresh again.
+- **`400 auth.csrf.invalid`** — retried once with a freshly fetched token.
+
+A successful refresh does not call `/auth/me`: the repeated data request brings the data, which
+keeps the auth limiter (10 requests per minute per IP, shared with sign-in, sign-out and
+registration) for real work.
+
+### «Запомнить меня»
+
+The access cookie lives 8 hours (sliding), the refresh cookie 14 days. JavaScript cannot see
+either once the access cookie is gone, so the client sets its own **non-credential** hint
+`barbersearch.remember=1`: `Path=/`, `SameSite=Lax`, `Max-Age` 14 days, `Secure` on https, and
+deliberately not `HttpOnly`. It is the only cookie JavaScript reads, and it carries nothing but
+`'1'` — forging it only causes one failed refresh, and no `localStorage`/`sessionStorage` is
+used. The hint is set on a successful sign-in with «Запомнить меня», cleared on sign-out, on a
+sign-in without it and on a terminal refresh, and re-written after a successful refresh.
+
+On load `GET /api/auth/me` decides:
+
+- `200` — authenticated, as before;
+- `401` and **no** hint — anonymous, without a CSRF call or a refresh;
+- `401` and the hint — one refresh, then `/auth/me` again: this is how a remembered session
+  survives a browser restart;
+- `401` even after a successful refresh — anonymous and the hint is removed (no second refresh).
+
+Consequences worth knowing:
+
+- without «Запомнить меня», a reload after 8 idle hours still asks to sign in, even though the
+  refresh cookie remains alive; the asymmetry is deliberate (§6.2, §16);
+- a successful refresh makes the access cookie persistent on the backend regardless of the
+  choice — known backend behaviour, recorded as debt §14 #25, the client cannot change it.
+
+Files: `src/lib/session-refresh.ts` (single-flight, Web Locks, outcome classification),
+`src/lib/session-hint.ts` (the hint cookie), `src/lib/api.ts` (one retry after `401`),
+`src/lib/auth.ts` (`requestSessionRefresh`), `src/components/session-provider.tsx` (bootstrap
+and the registered `401` handler).
 
 ## Registration
 

@@ -63,7 +63,8 @@ Technical approach:
 - **shadcn/ui on Base UI primitives**, `base-nova` style; generated components live in
   `src/components/ui` and are treated as vendored code.
 - **Browser authentication via HttpOnly cookies + CSRF header.** No token ever reaches
-  JavaScript and nothing is stored in `localStorage` / `sessionStorage`.
+  JavaScript and nothing is stored in `localStorage` / `sessionStorage`. The only JS-readable
+  cookie is the non-credential hint `barbersearch.remember` (§9.4).
 
 ---
 
@@ -74,7 +75,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-24` (default: `main`) |
+| Working branch | `features/issue-25` (default: `main`) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -384,22 +385,37 @@ idempotent or guarded (the session bootstrap uses an `isActive` flag and ignores
 `status: 'loading' | 'authenticated' | 'anonymous'`, `user`, `signIn`, `signOut` through
 `SessionContext`; `useSession()` throws outside the provider.
 
-1. **Mount** — `fetchSession()` → `GET /api/auth/me`.
+1. **Mount (bootstrap)** — `fetchSession()` → `GET /api/auth/me`.
    - `200` → `user` is set, `status = 'authenticated'`.
-   - `401` → `fetchSession` returns `null`, `status = 'anonymous'`.
+   - `401` and **no** `barbersearch.remember` hint → `status = 'anonymous'`, without a CSRF call
+     or a refresh.
+   - `401` and the hint is present → `refreshSession()`: `GET /api/auth/csrf` →
+     `POST /api/auth/refresh` (`204`, rotated cookies) → a second `/auth/me`.
+     `refreshed` → `authenticated`; a second `401` → the hint is cleared and the user is
+     anonymous (no third request); `terminal` → hint cleared, anonymous; `transient` → anonymous
+     with the hint intact, so the next reload retries.
    - any other error (network, 500) is caught in the provider and also becomes `anonymous`;
      there is no offline banner (§14).
-2. **Sign in** — `signIn(credentials)` from `HeaderAuth` → `LoginDialog`:
+2. **Silent refresh on `401`** — `apiRequest` retries a data request exactly once after a `401`
+   through the handler the provider registers (`lib/session-refresh.ts`): one in-flight refresh
+   per tab, `navigator.locks` across tabs (§9.4). `status` stays `authenticated` for the whole
+   call, so the header and the data do not flash. `terminal` → `anonymous` and the existing
+   gates show; `transient` (`429`/`0`/`5xx`) keeps the session and surfaces the transport error
+   on the screen.
+3. **Sign in** — `signIn(credentials)` from `HeaderAuth` → `LoginDialog`:
    `GET /api/auth/csrf` → `POST /api/auth/login/cookie` (204) → `GET /api/auth/me` → set user.
-3. **Sign out** — `GET /api/auth/csrf` → `POST /api/auth/logout` (204); the provider clears the
-   local user in `finally`, even if the request fails. The cookie itself is cleared by the API
-   (or expires).
-4. **Loading UI** — while `status === 'loading'`, `HeaderAuth` renders a `Skeleton` instead of
-   «Войти» or the profile, so the header never flashes the wrong state.
+   `rememberMe` sets the `barbersearch.remember` hint, `rememberMe: false` clears it, and a
+   successful sign-in resets the sticky terminal refresh state.
+4. **Sign out** — `GET /api/auth/csrf` → `POST /api/auth/logout` (204); the provider clears the
+   hint and the local user in `finally`, even if the request fails. The cookie itself is cleared
+   by the API (or expires).
+5. **Loading UI** — while `status === 'loading'`, `HeaderAuth` renders a `Skeleton` instead of
+   «Войти» or the profile, so the header never flashes the wrong state. The bootstrap refresh
+   also runs under this status.
 
-There is **no auto-refresh**: the browser session cookie lives 8 hours (backend §17), and the
-frontend never calls `POST /api/auth/refresh`. After expiry the next `/auth/me` answers `401`
-and the user is treated as anonymous on reload (§14, §16).
+Conscious asymmetry: without the hint the bootstrap does **not** try to restore the session even
+though the refresh cookie may still be alive. A reload after 8 idle hours without «Запомнить
+меня» is a sign-in, not an error; do not “fix” it by refreshing on every anonymous visit.
 
 ### 6.3 Data flow
 
@@ -665,6 +681,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName }` → `201 { id }`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName` |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
+| `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; **no request body** in the browser branch → `204` + new cookies; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
 | `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; the UI sends `pageSize=12` |
 | `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules, specializations, rating; `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/barbers/{id}/slots?date=&hairServiceId=&salonId=` | anonymous, 120/min per IP | free slots for a salon-local `YYYY-MM-DD`; `date` is required, `hairServiceId` is `hair_services.id` and sets the grid step, `salonId` defaults to the primary salon; `404` for a hidden profile, unknown salon or service; `409` for a missing or unresolvable salon time zone |
@@ -700,8 +717,9 @@ is no `GET /api/barber/bookings/{id}`: a list row already carries everything the
 need, and they go by the `id` from that row. `GET /api/bookings` stays the **customer's** list
 and is not reused by the cabinet — there the barber is the client, not the owner.
 
-The backend also exposes `POST /api/auth/refresh`; the frontend does not call it yet
-(registration and password change are wired: `/register` and the account dialog).
+The frontend uses the **cookie branch** of `POST /api/auth/refresh` for silent session renewal
+(§9.4); the body-token branch belongs to non-browser clients and is not implemented here.
+Registration and password change are wired: `/register` and the account dialog.
 `GET /api/reviews/moderation` still exists for compatibility but the admin screen uses the
 admin DTO: the public `ReviewResponse` deliberately has no names or visit context.
 
@@ -731,6 +749,31 @@ narrow it to a union (§14).
 - The API sets an **HttpOnly** access cookie (`8 h`, or a session cookie when «Запомнить меня»
   is off) and an HttpOnly refresh cookie (default `14 days`). Production names use the `__Host-`
   prefix. JavaScript can neither read nor write them — never introduce a token-in-JS fallback.
+- **Refresh rotation and reuse detection.** Every `POST /api/auth/refresh` rotates both cookies;
+  presenting an already replaced refresh token is treated as theft: the whole chain is revoked
+  and the API answers `401 auth.refresh.reused` (the loser of a two-way race gets the same code).
+  Two refreshes with one token must never happen, so `lib/session-refresh.ts` keeps a single
+  in-flight promise per tab and takes `navigator.locks.request('barbersearch:session-refresh',
+  { mode: 'exclusive', signal: AbortSignal.timeout(10_000) })` across tabs. A lock timeout is a
+  `transient` failure; the refresh is not retried. Without `navigator.locks` (old browser) the
+  tab still works, but the cross-tab race remains — a documented residual risk.
+- **Refresh failure classes.** `401` with any `auth.refresh.*` code is terminal: the module stays
+  silent until a new sign-in (`resetSessionRefresh()`), and the hint is cleared. `400
+  auth.csrf.invalid` is retried exactly once with a fresh `GET /api/auth/csrf`. `429`, `status 0`,
+  `5xx` and other `4xx` are `transient`: the session and the hint survive, the screen shows the
+  transport failure. A successful refresh does **not** call `/auth/me`.
+- **Backend quirk:** a successful refresh writes the access cookie with `IsPersistent = true` and
+  `ExpiresUtc = now + 8 h` regardless of `RememberMe`. The client cannot control it; recorded as
+  debt #25 in §14.
+- **«Запомнить меня» hint** — `barbersearch.remember=1`, `Path=/`, `SameSite=Lax`,
+  `Max-Age=1209600` (14 days, as `RefreshTokenDays`), plus `Secure` when
+  `window.location.protocol === 'https:'`. No `HttpOnly` on purpose (the client reads it), no
+  `Domain`, no PII, `localStorage`/`sessionStorage` remain unused. It is **not a credential**: it
+  only decides whether the bootstrap may try one refresh, and forging it causes a single failed
+  refresh. `lib/session-hint.ts` sets it on a successful `signIn` with `rememberMe: true`, clears
+  it on `rememberMe: false`, on sign-out, on a terminal refresh and re-writes it (sliding 14 days)
+  after a successful refresh while it is present. Server-side nothing reads it: it is noise in
+  the request headers, not a contract.
 - Every **state-changing** request in the cookie branch carries `X-CSRF-TOKEN`, obtained from
   `GET /api/auth/csrf` immediately before the request. There is no cached token. Review,
   author-review and admin-publication mutations use the same `lib/csrf.ts` helper.
@@ -748,8 +791,11 @@ narrow it to a union (§14).
   invalid. `signIn` fetches a token before login (anonymous identity, valid for the login
   endpoint); the next mutation (`signOut`) fetches a fresh token. Any other future mutation
   after login must do the same.
-- `RememberMe` only tells the API whether the **access** cookie survives a browser restart; it
-  does not extend the 8-hour inactivity window or the refresh token lifetime.
+- `RememberMe` tells the API whether the **access** cookie survives a browser restart; on the
+  client it also sets the restore hint, so «Запомнить меня» governs whether a reload after the
+  access cookie expired can bring the session back at all (§6.2). It does not extend the 8-hour
+  inactivity window or the refresh token lifetime. Without the hint, a reload after 8 idle hours
+  is a sign-in even though the refresh cookie is still alive.
 - In production, same-origin `/api` is assumed. If the SPA is served from another origin, the
   backend needs explicit CORS `AllowedOrigins` and `Auth:CookieSameSite=None` (then cookies are
   `Secure`); `credentials: 'include'` already supports that. This deployment choice is open
@@ -780,6 +826,10 @@ Rules for new screens:
 5. Backend rate limits: login/auth `10/min`, writes `30/min`, anonymous reads `120/min`
    (backend §17.5). A `429` carries `Retry-After`; surface a calm retry message.
 6. Never show English `detail`, stack traces or HTTP status numbers to the user.
+7. `401` on a data request is taken by the transport: `apiRequest` asks the registered handler
+   for a silent refresh and retries the same request once (§9.4). The `requiresSignIn` branches
+   in hooks and the gates remain the fallback for a missing handler or a terminal session;
+   `403` is a foreign/closed role, never an expired session.
 
 ---
 
@@ -863,8 +913,9 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - `dangerouslySetInnerHTML` is forbidden. User-generated review text must render as text.
 - No direct DOM access except the root mount in `main.tsx`, `document.title` / the `noindex`
   meta on admin pages, the documented landing scroll, `window.scrollTo` on page and mobile-detail
-  changes, `matchMedia` for the admin split view, and `window.location.reload()` in the
-  error-boundary fallback; prefer refs for everything else.
+  changes, `matchMedia` for the admin split view, `document.cookie` for the non-credential
+  `barbersearch.remember` hint (`lib/session-hint.ts`, §9.4), and `window.location.reload()` in
+  the error-boundary fallback; prefer refs for everything else.
 - `StrictMode` stays on; do not remove it to hide double-effect symptoms.
 
 ### 10.5 Styling
@@ -887,7 +938,8 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 ### 10.6 API and state
 
 - HTTP only through `apiRequest`; do not call `fetch` in components.
-- Never store tokens in browser storage; auth is cookie-only.
+- Never store tokens in browser storage; auth is cookie-only. The only JS-readable cookie is the
+  `barbersearch.remember` hint — it is not a token and carries no identity (§9.4).
 - Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`, except
   `POST /api/bookings` and `POST /api/auth/register`: the backend does not validate it there,
   and neither path may fetch a token it will not use (§9.4).
@@ -978,11 +1030,11 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session, UI kit and React | 376.43 kB | 122.38 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh), UI kit and React | 379.15 kB | 123.34 kB |
 | `admin-page-*.js` — lazy `/admin/**` | 114.27 kB | 24.95 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.17 kB | 9.99 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.17 kB | 10.00 kB |
 | `account-page-*.js` — lazy `/account` | 35.34 kB | 10.24 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.59 kB | 7.29 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.59 kB | 7.30 kB |
 | `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.67 kB | 6.09 kB |
 | `register-page-*.js` — lazy `/register` with the form and the success card | 9.75 kB | 3.35 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
@@ -995,21 +1047,21 @@ keyboard/focus paths are implemented and were checked manually.
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2275 modules; the warm rebuild took 7.95 s. Registration added a sixth lazy screen
-(`register-page`) instead of widening the entry: the page, the form, the success card and the
-`register()` transport live there. The entry grew by 0.86 kB raw / 0.22 kB gzip — the extra
-`lazy()` wiring and `register-path.ts` — because the page itself is not in the shell.
-`account-gates` grew by 0.21/0.08 kB for the «Зарегистрироваться» action; `/account`,
-`/account/reviews` and `/barber` share that chunk. The admin chunk measures 114.27/24.95 kB in
-this build; it was not touched by this slice. CSS grew by 0.23 kB raw / 0.02 kB gzip.
-`index.html` preloads only the entry and the stylesheet; the Vite chunk advisory does not fire.
+2277 modules; the warm rebuild took 1.01 s. Silent session refresh has no chunk of its own:
+`lib/api.ts` (one retry after `401`) and `lib/session-refresh.ts` (single-flight + Web Locks)
+are reached from `lib/auth.ts` and the provider, so they land in the entry. The entry grew by
+2.72 kB raw / 0.96 kB gzip against the registration build; the two new modules and the bootstrap
+are the whole delta. `barber-page` gzip moved by 0.01 kB and `barber-cabinet-page` by 0.01 kB,
+which is measurement noise — no source in those chunks changed. CSS and `index.html` are
+unchanged; `index.html` preloads only the entry and the stylesheet, and the Vite chunk advisory
+does not fire.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 121.69 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 123.34 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account`, `/account/reviews` and `/barbers/{id}` are split; do not statically import either
@@ -1041,9 +1093,10 @@ this build; it was not touched by this slice. CSS grew by 0.23 kB raw / 0.02 kB 
 |---|---|
 | Landing page | ✅ hero, how-it-works, real barber search (city + date), footer; the search talks to the API |
 | Search form | ✅ city + date, submit reloads the list; filters live in React state, not in the URL |
-| Cookie sign-in | ✅ CSRF → login → `/auth/me`; session context; header states |
-| Sign-out | ✅ CSRF → logout; local state cleared in `finally` |
-| Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; 401 → anonymous |
+| Cookie sign-in | ✅ CSRF → login → `/auth/me`; session context; header states; «Запомнить меня» sets the restore hint |
+| Sign-out | ✅ CSRF → logout; local state and the hint cleared in `finally` |
+| Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; `401` → anonymous; with the «Запомнить меня» hint one silent refresh restores the session |
+| Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
 | Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
 | Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, keyset pagination, loading/empty/error/load-more states |
@@ -1076,7 +1129,6 @@ the feature grows; **P3** cosmetic/structural.
 | # | Sev | Issue | Fix / decision |
 |---|---|---|---|
 | 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
-| 3 | P1 | No `401` / refresh strategy. The access cookie lives 8 h; the client never calls `/auth/refresh`; after expiry the UI silently becomes anonymous on reload | Decide: silent refresh on `401` vs re-login prompt; wire the cookie refresh branch |
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
 | 5 | P2 | `apiRequest` casts JSON to `TResponse` without validation; a malformed `200` body reaches components as `undefined` | Validate responses (zod/valibot or hand-written guards) when contracts grow |
 | 6 | P2 | `isProblemDetails` only checks “non-null object”; non-ProblemDetails errors fall back to `HTTP ${status}` (English) | Strengthen the guard; map unknown errors to generic Russian copy in each screen |
@@ -1096,10 +1148,11 @@ the feature grows; **P3** cosmetic/structural.
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
 | 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
+| 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
-removed, so #1 (demo cards), #12 (the monolithic `HomePage`) and #24 (no author-facing review
-list) are intentionally absent; the remaining numbers do not shift.
+removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #12 (the monolithic `HomePage`) and
+#24 (no author-facing review list) are intentionally absent; the remaining numbers do not shift.
 
 ---
 
@@ -1197,7 +1250,16 @@ Russian copy at the field or the form, `201` signs the same credentials in throu
 CSRF path and lands in `/account`, and a failed auto sign-in shows the «Аккаунт создан» card
 without a second registration. A signed-in visitor gets the «Вы уже вошли» gate with a
 role-appropriate button; `LoginDialog` and `SignInGate` link to the page. Password reset and
-email verification were out of scope.
+email verification were out of scope. **Completed 2026-10-31:** silent session refresh —
+`apiRequest` takes a `401` on a data request and retries it once after one `POST
+/api/auth/refresh` in the cookie branch (CSRF header, no body, `204` + rotation); the attempt is
+single-flighted per tab and serialised across tabs with `navigator.locks`, `400
+auth.csrf.invalid` is retried once with a fresh token, `401 auth.refresh.*` is terminal and
+clears the non-credential `barbersearch.remember` hint, and `429`/`0`/`5xx` stay transient with
+the session intact. The bootstrap refreshes once only when the hint says the session was
+remembered, so a reload without «Запомнить меня» after 8 idle hours still asks to sign in.
+Documented consequences: the hint is not a credential, and the backend makes the access cookie
+persistent after a refresh (§14 #25). No backend changes.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1211,8 +1273,8 @@ do not shift.
    sections are done (§12.1); remaining: per-widget boundaries and a landing chunk split if
    the budget grows (§14, items 4 and 17).
 8. **Quality** — Vitest/RTL/MSW, Playwright + axe, CI test job, Lighthouse budget.
-9. **Auth completeness** — registration and password change are done, refresh strategy and a
-   role-aware header remain; a password-reset flow needs a backend slice first.
+9. **Auth completeness** — registration, password change and silent session refresh are done; a
+   role-aware header remains, and a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
     the server mapped to fields.
 11. **Hardening** — runtime response validation, env typing, dependency review.
@@ -1239,8 +1301,9 @@ do not shift.
    distinct display face? `font-heading` is currently aliased.
 7. **Testing:** which runner/E2E stack, and does E2E run against a real backend (seed data,
    Testcontainers) or mocked routes?
-8. **Refresh:** silent `POST /auth/refresh` on `401`, or force re-login when the 8-hour access
-   cookie expires?
+8. **Refresh (decided 2026-10-31):** silent `POST /auth/refresh` on `401`, plus one bootstrap
+   refresh when the «Запомнить меня» hint is present; a terminal refresh failure falls back to
+   re-login, a transient one keeps the session. The number stays for links.
 9. **Deployment origin:** same-origin `/api` (reverse proxy) vs a cross-site SPA (CORS +
    `SameSite=None`)? The frontend already sends credentials, but the backend config differs.
 10. **Dark mode:** default to system preference, light, or no toggle?
