@@ -85,12 +85,13 @@ test.describe('витрина и вход', () => {
     await dialog.expectClosed()
 
     // Шапка аутентифицированного пользователя: «Выйти» есть, анонимного «Войти» нет.
-    // Email на узком экране скрыт, поэтому проверяем доступные имена, а не текст.
-    await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible()
-    await expect(page.getByRole('banner').getByRole('button', { name: 'Войти' })).toHaveCount(0)
+    // Локатор ограничен шапкой: на /account есть и своя кнопка «Выйти».
+    const banner = page.getByRole('banner')
+    await expect(banner.getByRole('button', { name: 'Выйти' })).toBeVisible()
+    await expect(banner.getByRole('button', { name: 'Войти' })).toHaveCount(0)
 
     await page.reload()
 
-    await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible()
+    await expect(banner.getByRole('button', { name: 'Выйти' })).toBeVisible()
   })
 })
