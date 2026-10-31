@@ -121,7 +121,8 @@ carries ranges; `package-lock.json` is committed and CI installs with `npm ci`.
 - no server-state library (TanStack Query, SWR, RTK Query);
 - no form library (react-hook-form, Formik) and no schema validator (zod, valibot);
 - no global state manager (Zustand, Redux, Jotai);
-- no test runner (`vitest`, Jest), no component-testing library, no Playwright config;
+- no test runner (`vitest`, Jest) and no component-testing library; Playwright + axe are the only
+  test tooling and they run browser E2E, not units (§15);
 - no CSS-in-JS, CSS modules, ESLint, Prettier or Storybook;
 - no internationalisation framework; UI copy is hardcoded Russian.
 
@@ -1215,9 +1216,9 @@ unchanged and the Vite chunk advisory does not fire.
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
-| Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |
-| Responsive layout | ✅ landing and admin checked at 320/640/1280 px; no tests |
-| Tests | ⚠️ backend unit + admin integration tests; frontend has no runner/CI test step |
+| Accessibility | ⚠️ partial (§11); axe scans four screens in CI and the contrast token was fixed, the remaining findings are §14 #27 |
+| Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
+| Tests | ⚠️ backend unit + admin integration tests; frontend has Playwright + axe E2E and a CI job, but no unit runner (§14 #2, §15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1451,7 +1452,8 @@ do not shift.
 7. **Foundation (remaining)** — lazy routes, the route-level error boundary and the landing
    sections are done (§12.1); remaining: per-widget boundaries and a landing chunk split if
    the budget grows (§14, items 4 and 17).
-8. **Quality** — Vitest/RTL/MSW, Playwright + axe, CI test job, Lighthouse budget.
+8. **Quality** — Playwright + axe E2E and the separate CI job are done (#33); remaining: Vitest/RTL/MSW
+   units (#32) and a Lighthouse budget.
 9. **Auth completeness** — registration, password change and silent session refresh are done; a
    role-aware header remains, and a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
@@ -1579,7 +1581,8 @@ frontend eight are recorded in `skills-lock.json`. Update the README when the se
   server actions and route handlers do not.
 - **`frontend-design`** is aesthetic guidance. The neutral monochrome system is deliberate;
   do not restyle the product without an explicit request (§17).
-- **`playwright-best-practices`** applies once Playwright is installed; there is no config yet.
+- **`playwright-best-practices`** applies to `e2e/**`: page objects, fixtures, CI and axe are
+  already set up that way — keep locators role/label-based and tests independent.
 - **`web-design-guidelines`** is a review checklist, not a source of project rules.
 
 ### 19.4 Rules of engagement
