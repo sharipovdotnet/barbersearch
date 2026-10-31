@@ -40,6 +40,7 @@ import {
   type AdminUserAction,
   type AdminUserRole,
   type AdminUserRoleFilter,
+  type AdminUserRow,
   type AdminUserStatusFilter,
 } from '@/lib/admin-users'
 import { usersPath } from '@/lib/admin-path'
@@ -236,10 +237,26 @@ export function UsersScreen({ userId }: { userId: string | null }) {
         announcementFor(kind, target, previousRole, nextRole)
       )
 
-      // Сервер — источник правды: статусы подтверждений и блокировки меняются
-      // на его стороне, локальная копия после действия была бы догадкой.
+      // Сервер — источник правды для карточки. Строку списка правим локально
+      // сразу, поэтому результат действия виден, даже если тихое обновление
+      // списка не дойдёт.
       detail.reload()
-      list.reload()
+
+      const row = list.items.find((item) => item.id === target.id)
+
+      if (row) {
+        const next = updatedUserRow(row, kind, nextRole)
+
+        if (matchesUserFilters(next, statusFilter, roleFilter)) {
+          list.replaceItem(next.id, next)
+        } else {
+          list.removeItem(next.id)
+        }
+      }
+
+      // Прежнее тихое обновление списка сохранено: «Обновлено в HH:MM» и
+      // остальные строки остаются серверной правдой, а карточка не сбрасывается.
+      list.refresh()
     } catch (cause) {
       if (isUserUnauthorized(cause)) {
         setRequiresSignIn(true)
@@ -318,7 +335,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
+              className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
               Пользователи
             </h1>
@@ -339,7 +356,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               size="sm"
               className="h-11 sm:h-7"
               disabled={list.isRefreshing || list.status === 'loading'}
-              onClick={list.reload}
+              onClick={list.refresh}
             >
               {list.isRefreshing ? (
                 <Loader2
@@ -352,7 +369,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               )}
               {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
             </Button>
-            <CreateUserDialog onCreated={list.reload} />
+            <CreateUserDialog onCreated={list.refresh} />
           </div>
         </header>
       )}
@@ -459,7 +476,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
           status={statusFilter}
           role={roleFilter}
           search={trimmedSearch}
-          onRefresh={list.reload}
+          onRefresh={list.refresh}
         />
       )}
 
@@ -470,11 +487,16 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               <UserList
                 items={list.items}
                 selectedId={userId}
-                nextCursor={list.nextCursor}
-                isLoadingMore={list.isLoadingMore}
-                loadMoreError={list.loadMoreError}
+                offset={list.offset}
+                pageIndex={list.pageIndex}
+                hasPrev={list.hasPrev}
+                hasNext={list.hasNext}
+                isLoadingPage={list.isLoadingPage}
+                pageError={list.pageError}
+                focusTargetRef={headingRef}
                 onSelect={handleSelect}
-                onLoadMore={list.loadMore}
+                onPrev={list.goPrev}
+                onNext={list.goNext}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -598,6 +620,56 @@ function announcementFor(
       return { text: `Email подтверждён: «${name}».` }
     case 'verifyPhone':
       return { text: `Телефон подтверждён: «${name}».` }
+  }
+}
+
+/**
+ * Строка после действия: команда меняет только своё поле, остальное берётся
+ * из уже загруженной страницы. Локальная правка видна сразу, не дожидаясь
+ * тихого обновления списка.
+ */
+function updatedUserRow(
+  user: AdminUserRow,
+  kind: AdminUserAction,
+  role?: AdminUserRole
+): AdminUserRow {
+  switch (kind) {
+    case 'role':
+      return role ? { ...user, role } : user
+    case 'block':
+      return { ...user, isActive: false }
+    case 'unblock':
+      return { ...user, isActive: true }
+    case 'verifyEmail':
+      return { ...user, isEmailVerified: true }
+    case 'verifyPhone':
+      return { ...user, isPhoneVerified: true }
+  }
+}
+
+/**
+ * Подходит ли строка под фильтры статуса и роли — по тем же правилам, что
+ * в запросе сервера (`BuildAdminUsersQuery`): «Активные» — `isActive`,
+ * «Заблокированные» — `!isActive`, «Без подтверждения email» — `!isEmailVerified`.
+ */
+function matchesUserFilters(
+  user: AdminUserRow,
+  status: AdminUserStatusFilter,
+  role: AdminUserRoleFilter
+): boolean {
+  if (role !== 'all' && user.role !== role) {
+    return false
+  }
+
+  switch (status) {
+    case 'active':
+      return user.isActive
+    case 'blocked':
+      return !user.isActive
+    case 'unverified':
+      return !user.isEmailVerified
+    case 'all':
+      return true
   }
 }
 

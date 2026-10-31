@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
-import { ApiError } from '@/lib/api'
+import { usePagedList, type PagedListStatus } from '@/hooks/use-paged-list'
 import {
   cancelBooking as cancelBookingRequest,
   completeBooking as completeBookingRequest,
@@ -11,22 +11,27 @@ import {
   type BarberBooking,
   type BarberBookingScope,
 } from '@/lib/barber-bookings'
-import { describeApiFailure } from '@/lib/errors'
-
-export type BarberBookingsStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export type BarberBookingsController = {
   items: BarberBooking[]
-  status: BarberBookingsStatus
+  status: PagedListStatus
   /** Текст ошибки первой страницы; `null`, когда всё хорошо. */
   error: string | null
   /** 401 на списке: cookie-сессия кончилась, пока страница была открыта. */
   requiresSignIn: boolean
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  /** Номер показанной страницы, с нуля. */
+  pageIndex: number
+  /** Сколько строк в предыдущих страницах — для подписи диапазона. */
+  offset: number
+  hasPrev: boolean
+  hasNext: boolean
+  /** Грузится следующая страница; текущая остаётся на экране. */
+  isLoadingPage: boolean
+  /** Ошибка следующей страницы: показанные строки не стираются. */
+  pageError: string | null
   reload: () => void
-  loadMore: () => void
+  goPrev: () => void
+  goNext: () => void
   confirm: (id: string) => Promise<void>
   complete: (id: string) => Promise<void>
   markNoShow: (id: string) => Promise<void>
@@ -35,25 +40,9 @@ export type BarberBookingsController = {
 }
 
 const LIST_FALLBACK = 'Не удалось загрузить записи.'
-const LOAD_MORE_FALLBACK = 'Не удалось загрузить ещё записи.'
+const PAGE_FALLBACK = 'Не удалось загрузить ещё записи.'
 
-/** Дозагрузка не должна дублировать строки, даже если сервер их повторил. */
-function appendUnique(
-  previous: BarberBooking[],
-  next: BarberBooking[]
-): BarberBooking[] {
-  const known = new Set(previous.map((booking) => booking.id))
-  const merged = [...previous]
-
-  for (const booking of next) {
-    if (!known.has(booking.id)) {
-      known.add(booking.id)
-      merged.push(booking)
-    }
-  }
-
-  return merged
-}
+const getBookingId = (booking: BarberBooking): string => booking.id
 
 /** Терминальный статус уводит строку из «Ближайших»: история живёт в другом скоупе. */
 function isTerminal(status: BarberBooking['status']): boolean {
@@ -61,156 +50,88 @@ function isTerminal(status: BarberBooking['status']): boolean {
 }
 
 /**
- * Новый статус строки: в «Ближайших» терминальная строка исчезает, в «Истории»
- * остаётся на месте — она и так принадлежит этому скоупу.
+ * Новый вид строки: в «Ближайших» терминальный статус уводит её в историю, в
+ * «Истории» она остаётся на месте — там этот статус и так уместен. `null` — строку
+ * нужно убрать из списка (политику пустой страницы применяет общий хук).
  */
 function applyStatus(
-  items: BarberBooking[],
-  id: string,
+  booking: BarberBooking,
   next: BarberBooking['status'],
   scope: BarberBookingScope
-): BarberBooking[] {
+): BarberBooking | null {
   if (scope === 'upcoming' && isTerminal(next)) {
-    return items.filter((booking) => booking.id !== id)
+    return null
   }
 
-  return items.map((booking) =>
-    booking.id === id ? { ...booking, status: next } : booking
-  )
+  return { ...booking, status: next }
 }
 
 /**
  * Записи клиентов барбера: страница, курсор и пять локальных мутаций.
  *
- * После мутации список меняется на месте, без повторного `GET`: новый запрос сдвинул
- * бы курсор и вернул бы уже виденные строки. `409`/`404` пробрасываются в строку или
- * диалог — остальные строки при этом не трогаются.
+ * `upcoming` и `past` — разные серверные списки, поэтому `fetchPage` мемоизирован
+ * по `scope`: смена вкладки сама грузит первую страницу и чистит кэш посещённых.
+ * После мутации меняется только своя строка, без повторного `GET`: новый запрос
+ * сдвинул бы курсор и вернул бы уже виденные строки. `409`/`404` пробрасываются в
+ * строку или диалог — остальные строки при этом не трогаются.
  */
 export function useBarberBookings(
   scope: BarberBookingScope
 ): BarberBookingsController {
-  const [items, setItems] = useState<BarberBooking[]>([])
-  const [status, setStatus] = useState<BarberBookingsStatus>('idle')
-  const [error, setError] = useState<string | null>(null)
-  const [requiresSignIn, setRequiresSignIn] = useState(false)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const fetchPage = useCallback(
+    (cursor: string | null, signal: AbortSignal) =>
+      fetchBarberBookings(scope, cursor, signal),
+    [scope]
+  )
 
-  // Поколение отсекает поздние ответы отменённых запросов; StrictMode в разработке
-  // иначе запускает первую страницу дважды.
-  const versionRef = useRef(0)
-  const abortRef = useRef<AbortController | null>(null)
-  // Ссылка, а не состояние: двойной клик приходит раньше перерисовки с `isLoadingMore`.
-  const loadingMoreRef = useRef(false)
+  const {
+    items,
+    status,
+    error,
+    requiresSignIn,
+    pageIndex,
+    offset,
+    hasPrev,
+    hasNext,
+    isLoadingPage,
+    pageError,
+    reload,
+    goPrev,
+    goNext,
+    replaceItem,
+    removeItem,
+  } = usePagedList<BarberBooking>({
+    getId: getBookingId,
+    fetchPage,
+    fallback: LIST_FALLBACK,
+    pageFallback: PAGE_FALLBACK,
+    requiresAuth: true,
+  })
+
   // id с запросом в полёте: второй клик по той же строке молча игнорируется.
   const pendingMutationsRef = useRef(new Set<string>())
+  // Последняя показанная версия строки по id. Ответ приходит, когда страница могла
+  // уже смениться, а правка обязана примениться ко всем закэшированным страницам.
+  const knownBookingsRef = useRef(new Map<string, BarberBooking>())
 
-  const load = useCallback(async () => {
-    const current = versionRef.current + 1
-    versionRef.current = current
-
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-
-    setItems([])
-    setStatus('loading')
-    setError(null)
-    setRequiresSignIn(false)
-    setNextCursor(null)
-    setLoadMoreError(null)
-    setIsLoadingMore(false)
-    loadingMoreRef.current = false
-
-    try {
-      const page = await fetchBarberBookings(scope, null, controller.signal)
-
-      if (versionRef.current !== current) {
-        return
-      }
-
-      setItems(page.items)
-      setNextCursor(page.nextCursor)
-      setStatus('ready')
-    } catch (cause) {
-      if (versionRef.current !== current || controller.signal.aborted) {
-        return
-      }
-
-      if (cause instanceof ApiError && cause.status === 401) {
-        setRequiresSignIn(true)
-        setStatus('error')
-        return
-      }
-
-      setError(describeApiFailure(cause, LIST_FALLBACK))
-      setStatus('error')
-    }
-  }, [scope])
-
-  // Смена скоупа — это другой серверный список, а не фильтр по уже загруженному.
   useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- первая страница записей
-    void load()
-
-    return () => {
-      versionRef.current += 1
-      abortRef.current?.abort()
+    for (const booking of items) {
+      knownBookingsRef.current.set(booking.id, booking)
     }
-  }, [load])
-
-  const loadMore = useCallback(async () => {
-    if (nextCursor === null || loadingMoreRef.current) {
-      return
-    }
-
-    const current = versionRef.current
-    loadingMoreRef.current = true
-    setIsLoadingMore(true)
-    setLoadMoreError(null)
-
-    try {
-      const page = await fetchBarberBookings(scope, nextCursor)
-
-      if (versionRef.current !== current) {
-        return
-      }
-
-      setItems((previous) => appendUnique(previous, page.items))
-      setNextCursor(page.nextCursor)
-    } catch (cause) {
-      if (versionRef.current !== current) {
-        return
-      }
-
-      if (cause instanceof ApiError && cause.status === 401) {
-        setRequiresSignIn(true)
-        return
-      }
-
-      // Ошибка дозагрузки не стирает уже показанные строки.
-      setLoadMoreError(describeApiFailure(cause, LOAD_MORE_FALLBACK))
-    } finally {
-      if (versionRef.current === current) {
-        loadingMoreRef.current = false
-        setIsLoadingMore(false)
-      }
-    }
-  }, [nextCursor, scope])
+  }, [items])
 
   /**
    * Одна мутация с общим гардом: пока запрос в полёте, строка заперта.
    *
-   * `apply` меняет только свою строку после ответа сервера — оптимистичных правок
+   * `update` меняет только свою строку после ответа сервера — оптимистичных правок
    * здесь нет, потому что статус окончательно решает домен.
    */
   const mutate = useCallback(
     async (
       id: string,
       request: (id: string) => Promise<void>,
-      apply: (items: BarberBooking[]) => BarberBooking[]
-    ) => {
+      update: (booking: BarberBooking) => BarberBooking | null
+    ): Promise<void> => {
       if (pendingMutationsRef.current.has(id)) {
         return
       }
@@ -219,52 +140,62 @@ export function useBarberBookings(
 
       try {
         await request(id)
-        setItems(apply)
+
+        const booking = knownBookingsRef.current.get(id)
+
+        if (booking === undefined) {
+          return
+        }
+
+        const next = update(booking)
+
+        if (next === null) {
+          removeItem(id)
+          return
+        }
+
+        replaceItem(id, next)
       } finally {
         pendingMutationsRef.current.delete(id)
       }
     },
-    []
+    [removeItem, replaceItem]
   )
 
   const confirm = useCallback(
-    async (id: string) => {
-      await mutate(id, confirmBookingRequest, (previous) =>
-        applyStatus(previous, id, 'Confirmed', scope)
-      )
-    },
+    (id: string) =>
+      mutate(id, confirmBookingRequest, (booking) =>
+        applyStatus(booking, 'Confirmed', scope)
+      ),
     [mutate, scope]
   )
 
   const complete = useCallback(
-    async (id: string) => {
-      await mutate(id, completeBookingRequest, (previous) =>
-        applyStatus(previous, id, 'Completed', scope)
-      )
-    },
+    (id: string) =>
+      mutate(id, completeBookingRequest, (booking) =>
+        applyStatus(booking, 'Completed', scope)
+      ),
     [mutate, scope]
   )
 
   const markNoShow = useCallback(
-    async (id: string) => {
-      await mutate(id, markBookingNoShow, (previous) =>
-        applyStatus(previous, id, 'NoShow', scope)
-      )
-    },
+    (id: string) =>
+      mutate(id, markBookingNoShow, (booking) =>
+        applyStatus(booking, 'NoShow', scope)
+      ),
     [mutate, scope]
   )
 
   const cancel = useCallback(
-    async (id: string) => {
-      await mutate(id, cancelBookingRequest, (previous) =>
-        applyStatus(previous, id, 'Cancelled', scope)
-      )
-    },
+    (id: string) =>
+      mutate(id, cancelBookingRequest, (booking) =>
+        applyStatus(booking, 'Cancelled', scope)
+      ),
     [mutate, scope]
   )
 
   const saveNote = useCallback(
-    async (id: string, note: string) => {
+    async (id: string, note: string): Promise<void> => {
       // Сервер обрезает и нормализует так же; клиент повторяет правило, чтобы строка
       // сразу показывала то, что он сохранит.
       const normalized = note.trim() === '' ? null : note.trim()
@@ -272,33 +203,26 @@ export function useBarberBookings(
       await mutate(
         id,
         (bookingId) => saveBarberNote(bookingId, normalized ?? ''),
-        (previous) =>
-          previous.map((booking) =>
-            booking.id === id
-              ? { ...booking, barberNote: normalized }
-              : booking
-          )
+        (booking) => ({ ...booking, barberNote: normalized })
       )
     },
     [mutate]
   )
-
-  const reload = useCallback(() => {
-    void load()
-  }, [load])
 
   return {
     items,
     status,
     error,
     requiresSignIn,
-    nextCursor,
-    isLoadingMore,
-    loadMoreError,
+    pageIndex,
+    offset,
+    hasPrev,
+    hasNext,
+    isLoadingPage,
+    pageError,
     reload,
-    loadMore: () => {
-      void loadMore()
-    },
+    goPrev,
+    goNext,
     confirm,
     complete,
     markNoShow,

@@ -162,7 +162,7 @@ export function ReviewsScreen({
           reviewId: target.id,
         },
       })
-      list.reload()
+      list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {
         setRequiresSignIn(true)
@@ -203,7 +203,7 @@ export function ReviewsScreen({
           reviewId: target.id,
         },
       })
-      list.reload()
+      list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {
         setRequiresSignIn(true)
@@ -248,7 +248,7 @@ export function ReviewsScreen({
             ? 'Отзыв снова опубликован.'
             : 'Отзыв снова скрыт и вернулся в очередь.',
       })
-      list.reload()
+      list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {
         setRequiresSignIn(true)
@@ -301,7 +301,7 @@ export function ReviewsScreen({
 
   function handleRefresh() {
     setActionFailure(null)
-    list.reload()
+    list.refresh()
   }
 
   const returnTo = reviewId ? reviewsPath(tab, reviewId) : reviewsPath(tab)
@@ -340,7 +340,7 @@ export function ReviewsScreen({
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
+              className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
               Отзывы
             </h1>
@@ -440,7 +440,7 @@ export function ReviewsScreen({
       {isEmpty && (
         <ReviewsEmpty
           tab={tab}
-          onRefresh={list.reload}
+          onRefresh={list.refresh}
           onGoPending={() => navigate(reviewsPath('pending'))}
         />
       )}
@@ -459,15 +459,20 @@ export function ReviewsScreen({
                 selectedId={reviewId}
                 tab={tab}
                 now={now}
-                nextCursor={list.nextCursor}
-                isLoadingMore={list.isLoadingMore}
-                loadMoreError={list.loadMoreError}
+                offset={list.offset}
+                pageIndex={list.pageIndex}
+                hasPrev={list.hasPrev}
+                hasNext={list.hasNext}
+                isLoadingPage={list.isLoadingPage}
+                pageError={list.pageError}
+                focusTargetRef={headingRef}
                 focusRequest={focusRequest}
                 onSelect={(id) => {
                   setActionFailure(null)
                   navigate(reviewsPath(tab, id))
                 }}
-                onLoadMore={list.loadMore}
+                onPrev={list.goPrev}
+                onNext={list.goNext}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

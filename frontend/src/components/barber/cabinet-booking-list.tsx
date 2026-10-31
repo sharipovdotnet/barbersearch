@@ -1,18 +1,19 @@
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
-import { CalendarX, Loader2, TriangleAlert } from 'lucide-react'
+import { useRef, type KeyboardEvent, type RefObject } from 'react'
+import { CalendarX, TriangleAlert } from 'lucide-react'
 
 import {
   CabinetBookingRow,
   type RowHandle,
 } from '@/components/barber/cabinet-booking-row'
+import { ListPager } from '@/components/list-pager'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { BarberBookingsStatus } from '@/hooks/use-barber-bookings'
+import type { PagedListStatus } from '@/hooks/use-paged-list'
 import type {
   BarberBooking,
   BarberBookingScope,
 } from '@/lib/barber-bookings'
-import { formatBookingsCount } from '@/lib/format'
+import { formatPageRange } from '@/lib/paging'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -23,9 +24,9 @@ const TABS = [
 const SKELETON_KEYS = ['booking-skeleton-1', 'booking-skeleton-2', 'booking-skeleton-3']
 
 /**
- * Список записей клиентов: две вкладки, строки, пагинация и все состояния.
+ * Список записей клиентов: две вкладки, строки, страницы и все состояния.
  *
- * Счётчиков на вкладках нет: `nextCursor` не говорит, сколько всего записей. Пустые
+ * Счётчиков на вкладках нет: сервер не отдаёт общее число записей. Пустые
  * состояния тоже не выдумывают итог — только то, что видно в этом скоупе.
  */
 export function CabinetBookingList({
@@ -33,15 +34,19 @@ export function CabinetBookingList({
   items,
   status,
   error,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
+  pageIndex,
+  offset,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
   now,
   hasPastItems,
   headingRef,
   onScopeChange,
   onRetry,
-  onLoadMore,
+  onPrev,
+  onNext,
   onReload,
   onConfirm,
   onComplete,
@@ -52,18 +57,22 @@ export function CabinetBookingList({
 }: {
   scope: BarberBookingScope
   items: BarberBooking[]
-  status: BarberBookingsStatus
+  status: PagedListStatus
   error: string | null
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  pageIndex: number
+  offset: number
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
   now: number
   /** История уже показала хотя бы одну строку — можно предложить её открыть. */
   hasPastItems: boolean
   headingRef: RefObject<HTMLHeadingElement | null>
   onScopeChange: (scope: BarberBookingScope) => void
   onRetry: () => void
-  onLoadMore: () => void
+  onPrev: () => void
+  onNext: () => void
   onReload: () => void
   onConfirm: (id: string) => Promise<void>
   onComplete: (id: string) => Promise<void>
@@ -76,25 +85,6 @@ export function CabinetBookingList({
     upcoming: null,
     past: null,
   })
-  const focusAfterLastPage = useRef(false)
-  const previousCursor = useRef<string | null>(null)
-
-  useEffect(() => {
-    const hadMore = previousCursor.current !== null
-    previousCursor.current = nextCursor
-
-    if (
-      !focusAfterLastPage.current ||
-      !hadMore ||
-      nextCursor !== null ||
-      status !== 'ready'
-    ) {
-      return
-    }
-
-    focusAfterLastPage.current = false
-    headingRef.current?.focus()
-  }, [nextCursor, status, headingRef])
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -109,21 +99,16 @@ export function CabinetBookingList({
   }
 
   const isLoading = status === 'loading' || status === 'idle'
-  const isEmpty =
-    status === 'ready' &&
-    items.length === 0 &&
-    !isLoadingMore &&
-    loadMoreError === null
+  const isEmpty = status === 'ready' && items.length === 0
   const emptyTitle =
     scope === 'upcoming' ? 'Ближайших записей нет.' : 'История пуста.'
 
+  // Диапазон объявляет пагинатор: второй такой же озвучки на экране быть не должно.
   const liveMessage = isLoading
     ? 'Загружаем записи…'
-    : status === 'error'
-      ? ''
-      : isEmpty
-        ? emptyTitle
-        : `Загружено ${formatBookingsCount(items.length)}`
+    : isEmpty
+      ? emptyTitle
+      : ''
 
   return (
     <section aria-labelledby="barber-bookings-heading" className="space-y-3">
@@ -135,7 +120,7 @@ export function CabinetBookingList({
         id="barber-bookings-heading"
         ref={headingRef}
         tabIndex={-1}
-        className="rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="scroll-mt-20 rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         {scope === 'upcoming' ? 'Ближайшие записи' : 'История записей'}
       </h2>
@@ -243,7 +228,7 @@ export function CabinetBookingList({
         )}
 
         {status === 'ready' && items.length > 0 && (
-          <>
+          <div className="space-y-4">
             <ul className="divide-y rounded-xl border bg-card">
               {items.map((booking) => (
                 <CabinetBookingRow
@@ -262,42 +247,21 @@ export function CabinetBookingList({
               ))}
             </ul>
 
-            {nextCursor !== null && (
-              <div className="flex flex-col items-center gap-2 pt-1">
-                {loadMoreError !== null && (
-                  <p
-                    role="alert"
-                    className="text-center text-sm text-destructive"
-                  >
-                    {loadMoreError}
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-busy={isLoadingMore}
-                  className="h-11 sm:h-9"
-                  onClick={() => {
-                    focusAfterLastPage.current = true
-                    onLoadMore()
-                  }}
-                >
-                  {isLoadingMore && (
-                    <Loader2
-                      data-icon="inline-start"
-                      aria-hidden
-                      className="animate-spin"
-                    />
-                  )}
-                  {isLoadingMore
-                    ? 'Загружаем…'
-                    : loadMoreError !== null
-                      ? 'Повторить'
-                      : 'Показать ещё'}
-                </Button>
-              </div>
-            )}
-          </>
+            <ListPager
+              label="Страницы записей"
+              rangeLabel={
+                items.length === 0 ? '' : formatPageRange(offset, items.length)
+              }
+              hasPrev={hasPrev}
+              hasNext={hasNext}
+              isLoading={isLoadingPage}
+              error={pageError}
+              onPrev={onPrev}
+              onNext={onNext}
+              pageIndex={pageIndex}
+              focusTargetRef={headingRef}
+            />
+          </div>
         )}
       </div>
     </section>

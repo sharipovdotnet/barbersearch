@@ -1,9 +1,8 @@
-import { useRef, type KeyboardEvent } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useRef, type KeyboardEvent, type RefObject } from 'react'
 
+import { ListPager } from '@/components/list-pager'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   ADMIN_USER_ACTIVITY_LABELS,
   ADMIN_USER_ROLE_LABELS,
@@ -12,6 +11,7 @@ import {
   type AdminUserRow,
 } from '@/lib/admin-users'
 import { formatShortDateTime, getInitials } from '@/lib/format'
+import { formatPageRange } from '@/lib/paging'
 import { cn } from '@/lib/utils'
 
 /**
@@ -20,24 +20,35 @@ import { cn } from '@/lib/utils'
  * Счётчика «всего» нет: API отдаёт только страницу, поэтому в подписи «Показано N»,
  * а не выдуманное общее число. Строка на широком экране укладывается в одну линию,
  * а при нехватке места метаданные переносятся под имя — так список читается и в узкой
- * колонке split-view, и на телефоне.
+ * колонке split-view, и на телефоне. Перелистывание — общий `ListPager`: диапазон
+ * без выдуманного «из N».
  */
 export function UserList({
   items,
   selectedId,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
+  offset,
+  pageIndex,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
+  focusTargetRef,
   onSelect,
-  onLoadMore,
+  onPrev,
+  onNext,
 }: {
   items: AdminUserRow[]
   selectedId: string | null
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
+  offset: number
+  pageIndex: number
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
+  focusTargetRef: RefObject<HTMLElement | null>
   onSelect: (userId: string) => void
-  onLoadMore: () => void
+  onPrev: () => void
+  onNext: () => void
 }) {
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
@@ -163,36 +174,20 @@ export function UserList({
         })}
       </ul>
 
-      <div className="flex flex-col items-center gap-2 pt-1">
-        {loadMoreError && (
-          <p role="alert" className="text-sm text-destructive">
-            {loadMoreError}
-          </p>
-        )}
-
-        {nextCursor && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-11 w-full sm:h-7"
-            disabled={isLoadingMore}
-            onClick={onLoadMore}
-          >
-            {isLoadingMore ? (
-              <>
-                <Loader2
-                  data-icon="inline-start"
-                  aria-hidden
-                  className="animate-spin"
-                />
-                Загружаем…
-              </>
-            ) : (
-              'Показать ещё'
-            )}
-          </Button>
-        )}
-      </div>
+      <ListPager
+        label="Страницы пользователей"
+        rangeLabel={
+          items.length === 0 ? '' : formatPageRange(offset, items.length)
+        }
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        isLoading={isLoadingPage}
+        error={pageError}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageIndex={pageIndex}
+        focusTargetRef={focusTargetRef}
+      />
     </section>
   )
 }

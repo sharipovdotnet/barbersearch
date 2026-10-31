@@ -35,9 +35,28 @@ npm run preview  # serve dist/
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden, search by name or email |
 | `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide |
+| `/admin/users` | user list: status/role filters, search by name or email |
+| `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 
 The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
 enforces roles separately (`AdminOnly`, `BarberOnly`).
+
+## List pagination
+
+Lists that show records in rows share one controller (`src/hooks/use-paged-list.ts`) and one footer
+(`src/components/list-pager.tsx`): ten or twenty rows per page, «Дальше» only by the opaque
+`nextCursor` from the response, visited pages cached in memory so «Назад» makes no request, and the
+range from `formatPageRange()` in `src/lib/paging.ts` («11–20 из 32» only where the server returns a
+total, otherwise «21–40»). A next-page error keeps the visible rows and turns the button into
+«Повторить»; filters, tabs and search start a new first page.
+
+Two lists deliberately keep «Показать ещё»:
+
+- `/` — the search results are a grid of cards; appending keeps them comparable, while pages would
+  hide barbers the visitor has already seen;
+- `/account` — «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so
+  paginating the already-split list would hide bookings on another page. It needs a server-side
+  `scope` first (AGENT.md §14 #26).
 
 ## Barber search
 
@@ -100,16 +119,18 @@ States: six skeleton cards while the first page loads, an empty list, a first-pa
 «Дальше» into «Повторить». The list is paged ten cards at a time instead of growing: «Дальше»
 replaces the visible page with the next ten, «Назад» returns to a page that is already in memory
 without a request, and the profile keeps the same height instead of stretching with every click.
-The header shows the range («1–10 из 32»), focus moves to the list after a page change and the new
-range is announced through `aria-live`; the first and last pages disable the arrow instead of
-removing it. A profile with `reviewsCount: 0` shows «Пока нет отзывов.» and makes no request at
-all. Creating a review stays in the customer account
+The range («1–10 из 32») lives in the shared pager footer, not in the section header; after
+«Назад»/«Дальше» focus moves to the list, the section heading is scrolled into view and the pager
+announces the new range through one `aria-live` region. The first and last pages disable the arrow
+instead of removing it. A profile with `reviewsCount: 0` shows «Пока нет отзывов.» and makes no
+request at all. Creating a review stays in the customer account
 (`POST /api/reviews` on a completed booking, hidden until moderation); editing and deleting go
 through the author list at `/account/reviews`.
 
 - `src/lib/reviews.ts` — review DTO, page size 10, `fetchBarberReviews()`.
-- `src/hooks/use-barber-reviews.ts` — first page, cached pages, cursor-forward navigation,
-  abort + generation, retry.
+- `src/hooks/use-paged-list.ts` — the shared cursor-page controller (cache, «Назад» without a
+  request, abort + generation, next-page error, silent refresh).
+- `src/components/list-pager.tsx` — the shared pager footer (range, focus, `aria-live`, retry).
 - `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and the pager.
 - `src/components/review-stars.tsx` — the shared five stars, used by both review lists.
 
@@ -131,14 +152,18 @@ sends `DELETE /api/reviews/{id}` with the CSRF header; a repeat `404` is treated
 удалён», and a `403` keeps the row with an error. Only the author can edit or delete — the admin
 has no bypass.
 
-States: skeleton while the first page loads, first-page error with «Повторить», load-more error
-that keeps the rows, «Показать ещё» with no duplicates, and an empty state with «Перейти к
-записям». If deleting empties the visible page while `nextCursor` is not null, the next page is
-loaded automatically. Focus returns to «Изменить» after an edit and moves to the next row's
-«Удалить» (or the list heading) after a delete.
+States: skeleton while the first page loads, first-page error with «Повторить», a next-page error
+that keeps the rows and turns «Дальше» into «Повторить», and an empty state with «Перейти к
+записям». The list shows ten rows per page instead of growing: the range («11–20») and the arrows
+live in the shared pager footer. If deleting empties the visible page, the previous page is shown;
+on the first page the list is loaded again, and when there is no next cursor the empty state
+appears. Focus returns to «Изменить» after an edit and moves to the next row's «Удалить» (or the
+list heading) after a delete; the pager moves focus to the list heading only after a page button
+press.
 
 - `src/lib/my-reviews.ts` — `MyReview` DTO, `fetchMyReviews`, `updateMyReview`, `deleteMyReview`.
-- `src/hooks/use-my-reviews.ts` — pages, abort + generation, local updates, 401, `404` handling.
+- `src/hooks/use-my-reviews.ts` — the shared pager controller plus local update/delete, `401`
+  and `404` handling.
 - `src/pages/account-reviews-page.tsx` — gates, title, list composition and announcements.
 - `src/components/account/my-reviews-list.tsx`, `my-review-row.tsx`,
   `review-status-badge.tsx`, `edit-review-dialog.tsx`, `delete-review-dialog.tsx`.
@@ -150,8 +175,10 @@ loaded automatically. Focus returns to «Изменить» after an edit and mo
 `GET /api/barber/bookings?scope=upcoming&pageSize=20` (the profile comes from the
 `barber_profile_id` claim, there is no profile query parameter) and switches to `scope=past`
 for «История». The server orders both scopes (`start_at ASC` for upcoming, `DESC` for history),
-so the client never sorts; the next page is fetched with the opaque `nextCursor` and appended
-without duplicate ids.
+so the client never sorts; the next page is fetched with the opaque `nextCursor`. Twenty rows are
+shown per page instead of growing: a page replaces the visible rows, visited pages stay in memory
+for «Назад» without a request, and the range («21–40», never «из N» — the server returns no total)
+lives in the shared pager footer. Switching tabs starts from the first page and drops the cache.
 
 A row shows the visit date and time in the salon time zone (`salon.timeZoneId`), the customer's
 name and, when present, a `tel:` phone link, the service, the salon name/city/address, the price
@@ -168,14 +195,16 @@ empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOK
 read does not. Double clicks are ignored while a request is in flight.
 
 States: skeleton while the first page loads (StrictMode may send a second, aborted request),
-first-page error with «Повторить», load-more error that keeps the rows, «Показать ещё»,
-«Ближайших записей нет.» and «История пуста.». A `401` on the list becomes the sign-in gate with
+first-page error with «Повторить», a next-page error that keeps the rows and turns «Дальше» into
+«Повторить», «Ближайших записей нет.» and «История пуста.». An action that empties the visible
+page follows the shared policy: the previous page if it is not the first, otherwise the first page
+is loaded again. A `401` on the list becomes the sign-in gate with
 a retry after login. A `409` says «Запись уже изменилась — обновите список.» with an «Обновить»
 button; `400 booking.markNoShow.tooEarly`, `403`, `404`, `429`, offline and `5xx` have their own
 Russian copy, and the English `detail` is never shown. Gates cover anonymous, customer, admin and
 a `Barber` without `barberProfileId`, and none of them sends a list request. Announcements and
 errors use `role="status"`/`role="alert"`; focus returns to the row or the list heading after an
-action.
+action, and the pager moves it only after «Назад»/«Дальше».
 
 The header shows «Кабинет барбера» for a barber and «Мои записи» for everyone else. On
 `/account` a barber still sees the customer-cabinet gate, now with a button to the cabinet.
@@ -183,7 +212,8 @@ The header shows «Кабинет барбера» for a barber and «Мои з�
 - `src/pages/barber-cabinet-page.tsx` — gates, title, list composition and announcements.
 - `src/components/barber/barber-cabinet-gates.tsx`, `cabinet-booking-list.tsx`,
   `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`, `barber-booking-action-dialog.tsx`.
-- `src/hooks/use-barber-bookings.ts` — scope, cursor, five local mutations, `401`, click guard.
+- `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, five local mutations,
+  `401`, click guard.
 - `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
   `src/lib/barber-cabinet-path.ts` — the `/barber` path helper.
 
@@ -400,7 +430,13 @@ spends two of them. The new account is active immediately; email confirmation is
 - `src/lib/admin-path.ts` — `/admin` paths and the selected review in the URL.
 
 The screen never shows a total count (the API does not provide one), never edits the client's
-text, and never offers bulk publication.
+text, and never offers bulk publication. The queue is paged twenty rows at a time through the
+shared pager instead of growing: the tab (`pending`/`published`) is its own server list, so
+switching tabs starts from the first page, «Назад» uses the in-memory page and a next-page error
+keeps the rows. The range is «21–40» without «из N». The selected review lives in the URL and is
+not reset by a page change; on a narrow screen the list stays on its page when the detail card
+opens and closes. The «Обновить» toolbar keeps its quiet refresh (`isRefreshing`, `refreshError`,
+«Обновлено в HH:MM») without clearing the queue.
 
 ## Admin barbers
 
@@ -411,9 +447,24 @@ text, and never offers bulk publication.
   `GET /api/admin/barbers/{id}`, verification/grade/activation calls.
 - `src/hooks/use-admin-barber-list.ts`, `use-admin-barber.ts` — list and card state.
 
+The list is paged twenty rows at a time through the shared pager; the status filter and the
+debounced search are part of the server request, so changing either starts from the first page and
+drops the cached pages. Actions update the affected row locally (or remove it when it no longer
+matches the filter) and then re-sync quietly; the selected barber in the URL is not reset by a page
+change, and the mobile split keeps the list on its page.
+
 «Скрыть из поиска» reuses the existing activation flag — there is no separate hidden state in
 the domain. Confirming a hidden profile is rejected by the domain, so the button explains that
 the profile must be returned to search first.
+
+## Admin users
+
+`/admin/users` lists the users through `GET /api/admin/users` with status and role filters and a
+debounced name/email search, twenty rows per page through the same shared pager. Filters and search
+start from the first page; the selected user lives in the URL so paging does not close the card,
+and the mobile split keeps the list on its page. Role change, block/unblock and email/phone
+confirmation update the row locally (or remove it when it leaves the active filter) before the
+quiet re-sync. The screen never shows a total count, because the API does not return one.
 
 ## Layout
 

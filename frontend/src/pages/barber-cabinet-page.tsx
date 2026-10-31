@@ -171,18 +171,9 @@ function BarberBookingsScreen() {
   }
 
   function finishTerminal(nextId: string | null, message: string) {
+    // Пустую страницу после действия обрабатывает общий контроллер страниц.
     pendingFocus.current = { id: nextId, target: 'primary' }
     setAnnouncement(message)
-
-    // Строка была последней на странице, но сервер знает продолжение: иначе экран
-    // соврал бы «записей нет».
-    if (
-      scope === 'upcoming' &&
-      bookings.items.length <= 1 &&
-      bookings.nextCursor !== null
-    ) {
-      bookings.loadMore()
-    }
   }
 
   async function handleConfirm(id: string) {
@@ -267,9 +258,12 @@ function BarberBookingsScreen() {
           items={bookings.items}
           status={bookings.status}
           error={bookings.error}
-          nextCursor={bookings.nextCursor}
-          isLoadingMore={bookings.isLoadingMore}
-          loadMoreError={bookings.loadMoreError}
+          pageIndex={bookings.pageIndex}
+          offset={bookings.offset}
+          hasPrev={bookings.hasPrev}
+          hasNext={bookings.hasNext}
+          isLoadingPage={bookings.isLoadingPage}
+          pageError={bookings.pageError}
           now={now}
           hasPastItems={hasPastItems}
           headingRef={headingRef}
@@ -278,7 +272,8 @@ function BarberBookingsScreen() {
             setAnnouncement(null)
           }}
           onRetry={bookings.reload}
-          onLoadMore={bookings.loadMore}
+          onPrev={bookings.goPrev}
+          onNext={bookings.goNext}
           onReload={bookings.reload}
           onConfirm={handleConfirm}
           onComplete={handleComplete}
