@@ -184,7 +184,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── home/                      ← landing sections; the page only composes them
-    │   │   ├── barber-card.tsx         result card: name, grade, rating, experience, salon
+    │   │   ├── barber-card.tsx         result card: name, grade, rating, experience, languages, salon
     │   │   ├── barber-results.tsx      count, grid, skeletons, empty/error, «Показать ещё»
     │   │   ├── home-cta.tsx            «Уже записывались?» → /account
     │   │   ├── home-hero.tsx           hero + search form
@@ -321,8 +321,17 @@ does not fail the build.
 (the backend `http` launch profile). The proxy is **development-only**; the built app calls
 same-origin `/api` and expects a reverse proxy (or the API on the same origin) in production.
 
-Override the target without editing the config — the variable is read from the **process
-environment**, and the repository has no `.env` files:
+The target is read with `loadEnv(mode, process.cwd(), '')`, so a local `.env` file is enough —
+no config edits and no shell variable needed. Without any `.env` the default above applies.
+Copy the committed example once:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env.example` is committed and documents the variable; `.env` and `.env.*` are ignored
+(`!.env.example` keeps the example), so local values never enter the repository. A process
+variable still overrides the file:
 
 ```powershell
 $env:VITE_API_PROXY_TARGET = 'https://localhost:7175'; npm run dev
@@ -332,9 +341,13 @@ $env:VITE_API_PROXY_TARGET = 'https://localhost:7175'; npm run dev
 VITE_API_PROXY_TARGET=https://localhost:7175 npm run dev
 ```
 
+`src/vite-env.d.ts` is intentionally not added: `tsconfig.app.json` already has
+`"types": ["vite/client"]` for `import.meta.env`, and no new client-side `VITE_*` variable is
+read from `src/` (§14 #9).
+
 The HTTPS profile (`https://localhost:7175`) uses a development certificate. The proxy has no
 `secure: false`, so a self-signed certificate can make proxying fail; that path is not verified
-(§14). Prefer the `http` profile locally unless you are testing cookies over HTTPS.
+(§14 #22). Prefer the `http` profile locally unless you are testing cookies over HTTPS.
 
 ### 5.2 DSH sandbox caveat
 
@@ -674,8 +687,17 @@ All HTTP goes through `apiRequest<T>(path, init)` in `src/lib/api.ts`:
 (from the `errorCodes` extension), plus `hasCode(code)`. `status === 0` means the request never
 reached the server.
 
-The response body is cast to `TResponse` without runtime validation. Keep response types in
-`src/lib` in sync with the backend contracts; malformed `200` JSON is not detected today (§14).
+Successful bodies are validated by hand-written guards in `src/lib/response-guards.ts`.
+`apiRequest<T>(path, init, { validate })` runs `validate` on the parsed body — both for the
+first response and for the response after the transparent `401` retry — and throws
+`ApiError(response.status, null, 'Сервер вернул неожиданный ответ.')` when it does not match.
+The status is the real `200`/`201`, `problem` is `null` and `codes` is empty, so screens show
+their own Russian fallback with «Повторить» and a bad `/auth/me` body makes the session
+`unavailable`; no `HTTP …` or English `detail` ever reaches the DOM. Without `validate` the body
+is cast exactly as before (backward compatible), and `204` bodies are never validated. Guards
+check only the fields the UI reads, ignore extra fields, treat dates/times as opaque strings and
+accept only known `BookingStatus`/`BarberGrade`/… values, so a new server enum value becomes a
+screen error instead of a broken row (§14 #5).
 
 Failure bodies are not cast: `isProblemDetails` is a strict duck-typed guard. `status` must be a
 number, `title`/`detail` strings, `errorCodes` an array of strings, `errors` an object of string
@@ -713,7 +735,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; **no request body** in the browser branch → `204` + new cookies; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
-| `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; the UI sends `pageSize=12` |
+| `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; each item carries `languages` for the result card; the UI sends `pageSize=12` |
 | `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules, specializations, rating; `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/barbers/{id}/slots?date=&hairServiceId=&salonId=` | anonymous, 120/min per IP | free slots for a salon-local `YYYY-MM-DD`; `date` is required, `hairServiceId` is `hair_services.id` and sets the grid step, `salonId` defaults to the primary salon; `404` for a hidden profile, unknown salon or service; `409` for a missing or unresolvable salon time zone |
 | `GET` | `/api/reviews?barberProfileId=&cursor=&pageSize=` | anonymous, 120/min per IP | published reviews of one barber, newest first, keyset `nextCursor`; `barberProfileId` is required, the UI sends `pageSize=10`; only `isPublished = true`; `400` for a missing/empty id, bad `pageSize` or a broken cursor (`review.getReviews.*`, `review.cursor.invalid`); an unknown barber returns `200` with empty `items`, never `404` |
@@ -741,6 +763,9 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `PUT` | `/api/barber-profiles/{id}/grade` | admin | change the grade (`{ grade }`, enum as a string) |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/activation` | admin | hide from search / return to search |
 | `POST` / `DELETE` | `/api/reviews/{id}/publication` | admin | publish / hide; the client sends `X-CSRF-TOKEN` |
+
+Every response with a body in this table is checked by the strict guards from §9.1
+(`src/lib/response-guards.ts`); `204` actions have no body to validate.
 
 Barber writes (`confirmation`, `completion`, `no-show`, `cancellation`, `barber-note`) are
 cookie mutations and send `X-CSRF-TOKEN`; `GET /api/barber/bookings` reads without it. There
@@ -1069,38 +1094,38 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), UI kit and React | 381.91 kB | 124.07 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 113.91 kB | 24.85 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.65 kB | 10.10 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 389.43 kB | 126.34 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 114.91 kB | 24.98 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.01 kB | 9.73 kB |
 | `account-page-*.js` — lazy `/account` | 35.48 kB | 10.26 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.63 kB | 7.30 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.76 kB | 6.11 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.37 kB |
-| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.15 kB | 0.60 kB |
-| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.56 kB |
-| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.66 kB | 7.33 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.79 kB | 6.11 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.36 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.48 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.22 kB | 0.64 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
+| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.37 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
-| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
-| `index-*.css` | 73.31 kB | 12.71 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
+| `index-*.css` | 73.40 kB | 12.72 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2278 modules; the production build took 7.17 s. The unavailable card and retry button have no
-chunk of their own: `components/session-unavailable.tsx` is reachable from `HeaderAuth`, so they
-land in the entry and the lazy screens only re-export the import. The entry grew by 2.76 kB raw /
-0.73 kB gzip against the silent-refresh build (the new status, the retry path, the strict error
-guard and the card). `admin-page` shrank by 0.36 kB raw / 0.10 kB gzip because the CSRF helper
-moved to the entry; `barber-page` grew by 0.48 kB raw / 0.10 kB gzip (the compact retry block).
-CSS and `index.html` are unchanged; `index.html` preloads only the entry and the stylesheet, and
-the Vite chunk advisory does not fire.
+2279 modules; the production build took 6.08 s. No new chunk: the guards are reachable from the
+entry through `lib/auth.ts` and `lib/csrf.ts`, so `response-guards.ts` lands there as well. The
+entry grew by 7.52 kB raw / 2.27 kB gzip against the issue-26 build (strict guards for all
+read/mutation shapes, the CSRF-token guard and the `validate` plumbing); `admin-page` grew by
+1.00 kB raw / 0.13 kB gzip because the admin list/card guards are shared with the entry;
+`barber-page` shrank by 0.64 kB raw / 0.37 kB gzip (the public shape guards now live in the
+entry). CSS is 0.09 kB larger, `index.html` unchanged, and the Vite chunk advisory still does
+not fire.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 123.34 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 126.34 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account`, `/account/reviews` and `/barbers/{id}` are split; do not statically import either
@@ -1157,7 +1182,7 @@ the Vite chunk advisory does not fire.
 | Tests | ⚠️ backend unit + admin integration tests; frontend has no runner/CI test step |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
-| API typing | ⚠️ hand-written types; no runtime validation |
+| API typing | ✅ hand-written types + strict response guards |
 
 ---
 
@@ -1170,10 +1195,7 @@ the feature grows; **P3** cosmetic/structural.
 |---|---|---|---|
 | 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
-| 5 | P2 | `apiRequest` casts JSON to `TResponse` without validation; a malformed `200` body reaches components as `undefined` | Validate responses (zod/valibot or hand-written guards) when contracts grow |
-| 9 | P2 | `VITE_API_PROXY_TARGET` is read from `process.env`, no `.env.example`, no `ImportMetaEnv` typing, and `.gitignore` does not ignore `.env` | Add `src/vite-env.d.ts`, `.env.example`, ignore `.env`; decide whether `.env` should feed the proxy |
 | 11 | P2 | The header skeleton has no accessible status; contrast and touch targets are unaudited (the skip link exists) | Address in the a11y slice (§11) |
-| 13 | P3 | `shadcn` CLI is a runtime `dependency`; it is build-time only | Move to `devDependencies`; `shadcn/tailwind.css` still resolves at build time |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
 | 15 | P3 | `font-heading` is just an alias of the sans stack; there is no display typeface | Keep neutral, or decide on a display face (§17) |
 | 16 | P3 | Dark tokens exist but there is no toggle and no `prefers-color-scheme` handling | Add a theme toggle + persisted choice when dark mode is a product requirement |
@@ -1187,10 +1209,12 @@ the feature grows; **P3** cosmetic/structural.
 | 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
-removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #6 (lenient `isProblemDetails` and
-English `HTTP ${status}`), #7 (no CSRF retry), #8 (a backend outage treated as “anonymous”),
-#10 (the dev API hint in the footer), #12 (the monolithic `HomePage`) and #24 (no author-facing
-review list) are intentionally absent; the remaining numbers do not shift.
+removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #5 (unvalidated `200` bodies),
+#6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry), #8 (a backend
+outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`, `.env` not
+ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13 (`shadcn`
+CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally absent;
+the remaining numbers do not shift.
 
 ---
 
@@ -1309,7 +1333,16 @@ single-flight guard, so StrictMode and double clicks make one request; `200` →
 `400 auth.csrf.invalid`, a second failure surfacing the existing Russian copy. Failure bodies
 are parsed strictly (non-ProblemDetails → `problem = null`, neutral Russian message instead of
 `HTTP ${status}`), and the footer's `localhost:5243` hint is dev-only. No backend changes, no
-new dependencies.
+new dependencies. **Completed 2026-10-31:** response validation and env hardening — successful
+`200`/`201` bodies are checked by hand-written guards (`src/lib/response-guards.ts`) passed as
+`validate` to `apiRequest`/`mutateWithCsrf`, so a malformed body becomes
+`ApiError(status, null, 'Сервер вернул неожиданный ответ.')` and never reaches render: a screen
+shows its Russian fallback with «Повторить», a broken `/auth/me` becomes `unavailable`, and
+`204` bodies stay unvalidated. Every read and body-returning mutation from §9.3 is covered;
+extra fields are ignored and dates/times stay opaque strings. The dev proxy target now comes
+from `loadEnv` (`.env`, committed `.env.example`, `.env`/`.env.*` ignored, default
+`http://localhost:5243` unchanged) and `shadcn` moved to `devDependencies` (build-time only).
+No backend changes, no new dependencies, no test runner.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1327,8 +1360,10 @@ do not shift.
    role-aware header remains, and a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
     the server mapped to fields.
-11. **Hardening** — runtime validation of successful `200` bodies, env typing and dependency
-    review; error bodies are already parsed strictly and never leak English `detail` (§9.1).
+11. **Hardening** — done: runtime validation of successful `200`/`201` bodies, `.env`-driven
+    dev proxy and the `shadcn` dependency review (§9.1, §14 #5/#9/#13). Error bodies are parsed
+    strictly and never leak English `detail`. Remaining hardening work is a separate slice: the
+    test runner (§14 #2, §15) and the a11y pass (§14 #11, §11).
 12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
     (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
     barbers and users are done. This is the admin-wide bookings view, not the barber's own
