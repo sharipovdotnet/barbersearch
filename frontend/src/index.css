@@ -62,7 +62,9 @@
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* 0.556 давал 4.34:1 на `--muted` (#f5f5f5) — ниже порога AA 4.5:1, который
+       ловит axe на подписях, аватарах и `code` (issue #33, §11). */
+    --muted-foreground: oklch(0.54 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
