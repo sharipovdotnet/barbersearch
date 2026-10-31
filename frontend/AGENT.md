@@ -697,7 +697,10 @@ their own Russian fallback with «Повторить» and a bad `/auth/me` body
 is cast exactly as before (backward compatible), and `204` bodies are never validated. Guards
 check only the fields the UI reads, ignore extra fields, treat dates/times as opaque strings and
 accept only known `BookingStatus`/`BarberGrade`/… values, so a new server enum value becomes a
-screen error instead of a broken row (§14 #5).
+screen error instead of a broken row (§14 #5). The catalogue lists from `GET /api/specializations`
+and `GET /api/hair-services` are guards too (`isSpecializationList`, `isHairServiceList`): one
+broken element fails the whole list, so the form shows the usual Russian retry error rather than a
+crash or a half-filled select.
 
 Failure bodies are not cast: `isProblemDetails` is a strict duck-typed guard. `status` must be a
 number, `title`/`detail` strings, `errorCodes` an array of strings, `errors` an object of string
@@ -735,7 +738,9 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; **no request body** in the browser branch → `204` + new cookies; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
-| `GET` | `/api/barbers?city=&date=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, opaque keyset `nextCursor`; each item carries `languages` for the result card; the UI sends `pageSize=12` |
+| `GET` | `/api/barbers?city=&specializationId=&hairServiceId=&date=&language=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, one language as an enum name (`Ru`, `ru`; an unknown value is `400 barberSearch.language.invalid`), one specialization and one hair service (both `''` = no filter); opaque keyset `nextCursor`; each item carries `languages` for the result card; the UI sends `pageSize=12` |
+| `GET` | `/api/specializations` | anonymous, 120/min per IP | active specializations for the search filter: a bare array, no pagination, ordered by name; `[]` when the catalogue is empty; `description` may be `null` |
+| `GET` | `/api/hair-services` | anonymous, 120/min per IP | active hair services for the search filter: a bare array, no pagination, ordered by category then name; `[]` when the catalogue is empty; the UI reads only `id`, `name` and `category` |
 | `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules, specializations, rating; `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/barbers/{id}/slots?date=&hairServiceId=&salonId=` | anonymous, 120/min per IP | free slots for a salon-local `YYYY-MM-DD`; `date` is required, `hairServiceId` is `hair_services.id` and sets the grid step, `salonId` defaults to the primary salon; `404` for a hidden profile, unknown salon or service; `409` for a missing or unresolvable salon time zone |
 | `GET` | `/api/reviews?barberProfileId=&cursor=&pageSize=` | anonymous, 120/min per IP | published reviews of one barber, newest first, keyset `nextCursor`; `barberProfileId` is required, the UI sends `pageSize=10`; only `isPublished = true`; `400` for a missing/empty id, bad `pageSize` or a broken cursor (`review.getReviews.*`, `review.cursor.invalid`); an unknown barber returns `200` with empty `items`, never `404` |
@@ -779,10 +784,12 @@ Registration and password change are wired: `/register` and the account dialog.
 `GET /api/reviews/moderation` still exists for compatibility but the admin screen uses the
 admin DTO: the public `ReviewResponse` deliberately has no names or visit context.
 
-`GET /api/barbers` accepts `specializationId` and `hairServiceId` too, but the landing does
-not send them: the catalogue has no list GETs (`GET /api/specializations` and
-`GET /api/hair-services` do not exist), so there is nothing to populate the filters with.
-There is also no free-text parameter. `GET /api/barbers/{id}/slots` is called by the profile
+`GET /api/barbers` accepts `city`, `date`, `specializationId`, `hairServiceId` and `language`;
+the landing sends every non-empty filter. The two catalogue reads (`GET /api/specializations`,
+`GET /api/hair-services`) populate the selects; both are anonymous, return only active rows and
+have no pagination. An empty catalogue hides its select instead of rendering a dead list, and a
+failed catalogue request keeps city, date, language and «Найти» working with a Russian retry block.
+There is no free-text parameter. `GET /api/barbers/{id}/slots` is called by the profile
 page only (§9.3, §16); slots are mutable, so there is no slots cache.
 
 `SessionUser` (mirrors `GET /auth/me`):
@@ -1094,7 +1101,7 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 389.43 kB | 126.34 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.62 kB | 127.35 kB |
 | `admin-page-*.js` — lazy `/admin/**` | 114.91 kB | 24.98 kB |
 | `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.01 kB | 9.73 kB |
 | `account-page-*.js` — lazy `/account` | 35.48 kB | 10.26 kB |
@@ -1107,13 +1114,16 @@ keyboard/focus paths are implemented and were checked manually.
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.37 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 73.40 kB | 12.72 kB |
+| `index-*.css` | 73.85 kB | 12.81 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2279 modules; the production build took 6.08 s. No new chunk: the guards are reachable from the
+2282 modules; the production build took 5.66 s. No new chunk: the guards are reachable from the
 entry through `lib/auth.ts` and `lib/csrf.ts`, so `response-guards.ts` lands there as well. The
-entry grew by 7.52 kB raw / 2.27 kB gzip against the issue-26 build (strict guards for all
+entry grew by 4.19 kB raw / 1.01 kB gzip against the issue-27 build (search filters, the
+`useSearchCatalogs` hook and the two catalogue guards), CSS by 0.45 kB / 0.09 kB gzip,
+`index.html` is unchanged and the Vite chunk advisory does not fire. Against the issue-26 build
+the entry had already grown by 7.52 kB raw / 2.27 kB gzip (strict guards for all
 read/mutation shapes, the CSRF-token guard and the `validate` plumbing); `admin-page` grew by
 1.00 kB raw / 0.13 kB gzip because the admin list/card guards are shared with the entry;
 `barber-page` shrank by 0.64 kB raw / 0.37 kB gzip (the public shape guards now live in the
@@ -1125,7 +1135,7 @@ not fire.
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 126.34 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 127.35 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account`, `/account/reviews` and `/barbers/{id}` are split; do not statically import either
@@ -1155,8 +1165,8 @@ not fire.
 
 | Area | Status |
 |---|---|
-| Landing page | ✅ hero, how-it-works, real barber search (city + date), footer; the search talks to the API |
-| Search form | ✅ city + date, submit reloads the list; filters live in React state, not in the URL |
+| Landing page | ✅ hero, how-it-works, real barber search (city, date, language, specialization, service), footer; the search talks to the API |
+| Search form | ✅ city, date, language, specialization and service; submit reloads the list, filters live in React state, not in the URL |
 | Cookie sign-in | ✅ CSRF → login → `/auth/me` (one retry on a stale token); session context; header states; «Запомнить меня» sets the restore hint |
 | Sign-out | ✅ CSRF → logout (one retry on a stale token); local state and the hint cleared in `finally` |
 | Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; `401` → anonymous; with the «Запомнить меня» hint one silent refresh restores the session; a network/`5xx` failure or a `transient` refresh → `unavailable`, never anonymous |
@@ -1172,7 +1182,7 @@ not fire.
 | Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
-| Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, city + date, keyset, loading/empty/error/load-more); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
+| Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, page size 10, opaque `nextCursor` and «Показать ещё», summary from `rating`/`reviewsCount`, skeleton/empty/error/load-more states, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
@@ -1342,7 +1352,18 @@ shows its Russian fallback with «Повторить», a broken `/auth/me` beco
 extra fields are ignored and dates/times stay opaque strings. The dev proxy target now comes
 from `loadEnv` (`.env`, committed `.env.example`, `.env`/`.env.*` ignored, default
 `http://localhost:5243` unchanged) and `shadcn` moved to `devDependencies` (build-time only).
-No backend changes, no new dependencies, no test runner.
+No backend changes, no new dependencies, no test runner. **Completed 2026-10-31:** search filters
+— the landing searches by language, specialization and service in addition to city and date:
+`BarberSearchFilters` gained `language`/`specializationId`/`hairServiceId`, and
+`emptyBarberSearchFilters`/`normalizeBarberSearchFilters` are shared by `HomePage` and
+`useBarberSearch` so the new fields no longer get dropped before the request. The new
+`useSearchCatalogs` reads `GET /api/specializations` and `GET /api/hair-services` in parallel under
+one `AbortController` (StrictMode-safe, `loading | ready | error`, retry); `SearchForm` renders
+native selects (all six languages, catalogues hidden when empty, disabled «Загрузка…» while
+loading, Russian `role="alert"` with «Повторить» on failure while city/date/language keep working),
+the hero copy mentions the new filters, and the empty state explains them when neither city nor
+date is set. Only «Найти» sends a request; filters stay in state, not in the URL. The response
+guards cover both catalogue responses. No new dependencies, no schema migrations.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.

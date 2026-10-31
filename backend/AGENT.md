@@ -651,11 +651,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 282 application + 83 infrastructure + 28 integration, все зелёные |
-| Application | ✅ 82 обработчика (72 command + 10 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 295 application + 83 infrastructure + 31 integration; unit-проекты зелёные локально (2026-10-31), integration — в CI (локально Docker недоступен) |
+| Application | ✅ 84 обработчика (72 command + 12 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 17 контроллеров / 90 endpoint (82 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 17 контроллеров / 92 endpoint (84 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -847,7 +847,7 @@ Suggested order:
    Swagger UI, JWT auth for `User`.
    **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   17 controllers with 90 endpoints (82 domain + 8 auth), the `ErrorType` → HTTP status mapping
+   17 controllers with 92 endpoints (84 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
    Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
@@ -1054,7 +1054,7 @@ Ordered by impact on this domain, not by how interesting the work is.
 
 ### 15.1 The hot path
 
-1. **Search** — `GET /api/barbers?city=&specializationId=&hairServiceId=&date=` — read-heavy,
+1. **Search** — `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=` — read-heavy,
    the bulk of all traffic, fired on every filter change.
 2. **Slot lookup** — `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=` — computed from
    `WorkingSchedule` (now per salon) and `TimeOff`, minus existing `Booking` rows.
@@ -1437,7 +1437,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**17 controllers, 90 endpoints: 82 domain + 8 auth** — one endpoint per Application handler, plus
+**17 controllers, 92 endpoints: 84 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1449,8 +1449,8 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
 | `SalonsController` | `api/salons` | 5 |
-| `HairServicesController` | `api/hair-services` | 4 |
-| `SpecializationsController` | `api/specializations` | 4 |
+| `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
+| `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
 | `BarberBookingsController` | `api/barber/bookings` | 1 (list of the barber's own bookings) |
@@ -1484,12 +1484,13 @@ Conventions:
   атрибутов `[EnableRateLimiting]` нет. `GET`/`HEAD`/`OPTIONS`/`TRACE` не ограничиваются, а `429`
   приходит как `ProblemDetails` с `Retry-After` и `errorCodes: ["rateLimit.exceeded"]`. Явные
   политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48) и `reads` (120/мин на IP)
-  на четырёх публичных read-действиях (R-25, §17.5).
+  на шести публичных read-действиях (R-25, §17.5).
 - Create endpoints answer **201** with `CreatedResourceResponse` and deliberately **no `Location`**
   header (2026-10-25, R-42): none of the eight create endpoints has a self-URI readable right after
   creation. `GET api/bookings` and `GET api/reviews` are lists (the new review is hidden until
-  publication, R-35), `salons`/`hair-services`/`specializations`/`users` have no GET at all,
-  `GET api/auth/me` is not a resource-by-id, and `GET api/barbers/{id}` is 404 until the profile is
+  publication, R-35), `salons`/`users` have no GET at all, `hair-services`/`specializations` have
+  only the two public list GETs (no read by id), `GET api/auth/me` is not a resource-by-id, and
+  `GET api/barbers/{id}` is 404 until the profile is
   active and verified (`GetCardByIdAsync`). A dead link is worse than none. Revisit when a GET by
   id exists for a created resource — then `CreatedAtAction`/`Created(uri, value)`.
 - **`POST api/bookings` (2026-10-19).** The client comes from `sub`; the request carries no price
@@ -1540,8 +1541,9 @@ Read endpoints (added 2026-10-19):
   barber services. Reviews return only `IsPublished` rows; the admin-only moderation queue
   (`GET api/reviews/moderation`) and the admin review list (`GET api/admin/reviews`) are the reads
   that return hidden rows. Reading the storefront is **anonymous**
-  (R-25, 2026-10-23): `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots` and
-  `GET api/reviews` carry `[AllowAnonymous]` and the `reads` policy — 120 requests per minute per
+  (R-25, 2026-10-23): `GET api/barbers`, `GET api/barbers/{id}`, `GET api/barbers/{id}/slots`,
+  `GET api/reviews`, `GET api/specializations` and `GET api/hair-services` carry
+  `[AllowAnonymous]` and the `reads` policy — 120 requests per minute per
   `RemoteIpAddress` (after `UseForwardedHeaders`), fixed window, `QueueLimit = 0`, `429` with
   `Retry-After`. The partition ignores `sub`, so signing in does not bypass the quota. Everything
   else (including `GET api/bookings`, `GET api/reviews/mine` and all review writes) is still closed
@@ -1599,7 +1601,11 @@ Read endpoints (added 2026-10-19):
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
-  schedule for that weekday in at least one active salon; exact free time is `/slots`). Order is
+  schedule for that weekday in at least one active salon; exact free time is `/slots`) and
+  `language` (one value, enum name without case (`Ru`, `ru`); numeric forms are rejected.
+  `profile.Languages.Contains(language)` translates to `languages @> ARRAY[…]` on `integer[]`,
+  served by the GIN index `ix_barber_profiles_languages`. An unknown value is
+  `400 barberSearch.language.invalid`; `null`/blank means no filter). Order is
   `rating DESC NULLS LAST, id`, served by the expression index
   `ix_barber_profiles_search_keyset` (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND
   is_verified`, migration `AddSearchKeysetIndex`). Since R-38 it is the only search index on
@@ -1609,6 +1615,14 @@ Read endpoints (added 2026-10-19):
   `PagedResponse<BarberSearchItemResponse>` with
   `items` and an opaque base64url `nextCursor`; `pageSize` defaults to 20 and is capped at 100.
   A broken cursor or an out-of-range page size is `400`, not `500`.
+- **Public catalogues (2026-10-31, issue-29).** `GET api/specializations` and
+  `GET api/hair-services` are anonymous, `reads`-limited lists of active rows — a bare JSON array
+  without pagination (`200 []` for an empty catalogue), ordered by name and by category+name
+  respectively. Contracts: `SpecializationResponse(Id, Name, Description)` and
+  `HairServiceResponse(Id, Name, Category, DefaultDurationMinutes, Description)`; the handlers
+  read through `GetActiveAsync` and map, no repository filtering in the controller. The admin
+  write actions keep the class-level `[Authorize(AdminOnly)]`; `[AllowAnonymous]` on the action
+  overrides it. There is still no read by id.
 - **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
   rating; `404` for a missing/inactive/unverified profile. Response is `BarberProfileResponse` and
   nested records; no domain entity is serialized. Each service carries
