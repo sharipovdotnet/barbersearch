@@ -2,6 +2,7 @@ import { apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { Language } from '@/lib/barber-profile-labels'
 import type { Page } from '@/lib/paging'
+import { isBarberSearchPage } from '@/lib/response-guards'
 
 /**
  * Публичный поиск барберов.
@@ -66,7 +67,9 @@ export async function searchBarbers(
     query.set('cursor', cursor)
   }
 
-  return apiRequest<Page<BarberSearchItem>>(`/barbers?${query.toString()}`, {
-    signal,
-  })
+  return apiRequest<Page<BarberSearchItem>>(
+    `/barbers?${query.toString()}`,
+    { signal },
+    { validate: isBarberSearchPage }
+  )
 }

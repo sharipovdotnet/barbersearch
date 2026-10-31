@@ -1,5 +1,6 @@
 import { ApiError, apiRequest } from '@/lib/api'
 import { CSRF_HEADER, fetchCsrfToken, mutateWithCsrf } from '@/lib/csrf'
+import { isCreatedId, isSessionUser } from '@/lib/response-guards'
 
 /**
  * Браузерная аутентификация через cookie.
@@ -36,7 +37,9 @@ export type RegistrationInput = {
 /** Текущий пользователь или `null`, если cookie-сессии нет. */
 export async function fetchSession(): Promise<SessionUser | null> {
   try {
-    return await apiRequest<SessionUser>('/auth/me')
+    return await apiRequest<SessionUser>('/auth/me', {}, {
+      validate: isSessionUser,
+    })
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       return null
@@ -95,10 +98,11 @@ export async function signOut(): Promise<void> {
  * регистрация — вход в него остаётся обычным путём `signIn` (CSRF → login → `/auth/me`).
  */
 export async function register(input: RegistrationInput): Promise<string> {
-  const created = await apiRequest<{ id: string }>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  const created = await apiRequest<{ id: string }>(
+    '/auth/register',
+    { method: 'POST', body: JSON.stringify(input) },
+    { validate: isCreatedId }
+  )
 
   return created.id
 }

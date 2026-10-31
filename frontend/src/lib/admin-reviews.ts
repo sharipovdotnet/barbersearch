@@ -2,6 +2,7 @@ import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import type { AdminTab } from '@/lib/admin-path'
+import { isAdminReview, isAdminReviewPage } from '@/lib/response-guards'
 
 /**
  * Админское чтение отзывов и действия модерации.
@@ -73,16 +74,20 @@ export async function fetchAdminReviews({
     query.set('cursor', cursor)
   }
 
-  return apiRequest<AdminReviewPage>(`/admin/reviews?${query.toString()}`, {
-    signal,
-  })
+  return apiRequest<AdminReviewPage>(
+    `/admin/reviews?${query.toString()}`,
+    { signal },
+    { validate: isAdminReviewPage }
+  )
 }
 
 export async function fetchAdminReview(
   reviewId: string,
   signal?: AbortSignal
 ): Promise<AdminReview> {
-  return apiRequest<AdminReview>(`/admin/reviews/${reviewId}`, { signal })
+  return apiRequest<AdminReview>(`/admin/reviews/${reviewId}`, { signal }, {
+    validate: isAdminReview,
+  })
 }
 
 export async function publishReview(reviewId: string): Promise<void> {

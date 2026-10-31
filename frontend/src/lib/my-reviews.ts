@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
+import { isMyReviewPage } from '@/lib/response-guards'
 
 /**
  * Отзывы автора.
@@ -54,7 +55,8 @@ export async function fetchMyReviews(
   // Чтение без CSRF: токен нужен только мутациям.
   return apiRequest<Page<MyReview>>(
     `/reviews/mine?${query.toString()}`,
-    signal ? { signal } : {}
+    signal ? { signal } : {},
+    { validate: isMyReviewPage }
   )
 }
 

@@ -2,6 +2,7 @@ import { ApiError, apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import { isAdminBarber, isAdminBarberPage } from '@/lib/response-guards'
 
 /**
  * Админское чтение барберов и словари для экрана.
@@ -104,16 +105,20 @@ export async function fetchAdminBarbers({
     query.set('cursor', cursor)
   }
 
-  return apiRequest<AdminBarberPage>(`/admin/barbers?${query.toString()}`, {
-    signal,
-  })
+  return apiRequest<AdminBarberPage>(
+    `/admin/barbers?${query.toString()}`,
+    { signal },
+    { validate: isAdminBarberPage }
+  )
 }
 
 export async function fetchAdminBarber(
   barberId: string,
   signal?: AbortSignal
 ): Promise<AdminBarberDetail> {
-  return apiRequest<AdminBarberDetail>(`/admin/barbers/${barberId}`, { signal })
+  return apiRequest<AdminBarberDetail>(`/admin/barbers/${barberId}`, { signal }, {
+    validate: isAdminBarber,
+  })
 }
 
 /** Ошибка списка: 403 обрабатывает страница, остальное показывает текст. */

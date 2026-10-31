@@ -229,7 +229,15 @@ and `hairServiceId` (sent to `/slots`).
 ## API proxy
 
 In development Vite proxies `/api` to `http://localhost:5243` (the backend `http` launch
-profile). Point it elsewhere without touching the config:
+profile). The target comes from `.env` via `loadEnv`; copy the committed example once:
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` documents `VITE_API_PROXY_TARGET=http://localhost:5243`, and the same default
+applies without a `.env`. `.env` and `.env.*` are git-ignored (`!.env.example` keeps the
+example), so local values are never committed. A shell variable still overrides the file:
 
 ```bash
 VITE_API_PROXY_TARGET=https://localhost:7175 npm run dev
@@ -250,6 +258,12 @@ action runs, so nothing was changed and the repeat is safe; a second failure sho
 Russian text and the dialog stays usable — there is no third attempt. There are two exceptions:
 `POST /api/bookings` and `POST /api/auth/register`. The API does not validate antiforgery on
 either, so the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14).
+
+Successful responses are checked too: `apiRequest` accepts a hand-written guard from
+`src/lib/response-guards.ts` and turns a malformed `200`/`201` into a normal `ApiError`
+(«Сервер вернул неожиданный ответ.»). A screen then shows its own Russian fallback with
+«Повторить» instead of crashing on `undefined`, and a broken `/auth/me` ends in `unavailable`
+rather than the sign-in gate. English `detail` and `HTTP …` are still never shown.
 
 ### Silent session refresh
 
