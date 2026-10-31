@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '@/lib/api'
 import {
+  emptyBarberSearchFilters,
+  normalizeBarberSearchFilters,
   searchBarbers,
   type BarberSearchFilters,
   type BarberSearchItem,
@@ -27,7 +29,7 @@ export type BarberSearchController = {
 
 type LoadMode = 'replace' | 'append'
 
-const INITIAL_FILTERS: BarberSearchFilters = { city: '', date: '' }
+const INITIAL_FILTERS: BarberSearchFilters = emptyBarberSearchFilters()
 
 const SEARCH_FALLBACK =
   'Не удалось загрузить барберов. Обновите страницу и попробуйте снова.'
@@ -163,10 +165,7 @@ export function useBarberSearch(): BarberSearchController {
 
   const submit = useCallback(
     (filters: BarberSearchFilters) => {
-      const next: BarberSearchFilters = {
-        city: filters.city.trim(),
-        date: filters.date,
-      }
+      const next = normalizeBarberSearchFilters(filters)
 
       filtersRef.current = next
       lastFailedRef.current = null
