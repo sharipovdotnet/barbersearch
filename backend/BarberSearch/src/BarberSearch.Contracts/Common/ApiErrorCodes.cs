@@ -682,6 +682,15 @@ public static class ApiErrorCodes
         public const string BarberSearchLimitInvalid = "barberSearch.search.limit";
 
         /// <summary>
+        /// Язык в фильтре поиска барберов не является известным именем enum; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код, а не framework-ошибка биндера: клиент различает кривой фильтр
+        /// и серверный сбой и не показывает технический текст пользователю.
+        /// </remarks>
+        public const string BarberSearchLanguageInvalid = "barberSearch.language.invalid";
+
+        /// <summary>
         /// У профиля барбера нет активного салона или указанный салон не активен; <c>404</c>.
         /// </summary>
         public const string BarberSlotsSalonNotFound = "barberSlots.salon.notFound";

@@ -19,6 +19,10 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// «услуга барбера» (R-20).
 /// </param>
 /// <param name="Date">Дата, на которую барбер работает.</param>
+/// <param name="Language">
+/// Язык общения именем enum (<c>Ru</c>, <c>ru</c>); пустая строка — без фильтра,
+/// неизвестное значение — <c>400</c>.
+/// </param>
 /// <param name="Cursor">Курсор следующей страницы.</param>
 /// <param name="PageSize">Размер страницы; <c>null</c> — значение по умолчанию.</param>
 public record SearchBarbersQuery(
@@ -26,5 +30,6 @@ public record SearchBarbersQuery(
     Guid? SpecializationId,
     Guid? HairServiceId,
     DateOnly? Date,
+    string? Language,
     string? Cursor,
     int? PageSize) : IQuery<PagedResponse<BarberSearchItemResponse>>;
