@@ -37,8 +37,10 @@ public abstract class ApiController : ControllerBase
     /// Заголовок <c>Location</c> сознательно не выставляется — решение R-42 от 2026-10-25:
     /// ни у одного из восьми create-эндпоинтов нет self-URI, читаемого сразу после создания.
     /// <c>GET api/bookings</c> и <c>GET api/reviews</c> — только списки (созданный отзыв к тому же
-    /// скрыт до публикации), у <c>salons</c>, <c>hair-services</c>, <c>specializations</c> и
-    /// <c>users</c> чтения нет, <c>GET api/auth/me</c> — не ресурс по id, а единственный GET по id
+    /// скрыт до публикации), у <c>salons</c> и <c>users</c> чтения нет, у <c>hair-services</c>
+    /// и <c>specializations</c> есть только публичные списки активных строк
+    /// (<c>GET api/hair-services</c>, <c>GET api/specializations</c>) без чтения по id,
+    /// <c>GET api/auth/me</c> — не ресурс по id, а единственный GET по id
     /// среди них, <c>GET api/barbers/{id}</c>, отдаёт лишь активный и подтверждённый профиль
     /// (<c>GetCardByIdAsync</c>: <c>IsActive &amp;&amp; IsVerified</c>) и сразу после создания
     /// отвечает 404. Ссылка в никуда хуже её отсутствия. Пересмотреть, когда у созданного ресурса
