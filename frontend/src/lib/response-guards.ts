@@ -259,7 +259,6 @@ export function isBarberSearchItem(value: unknown): value is BarberSearchItem {
     isString(value.displayName) &&
     isBarberGrade(value.grade) &&
     isNumber(value.yearsOfExperience) &&
-    isArrayOf(isLanguage)(value.languages) &&
     isNullable(isNumber)(value.rating) &&
     isNumber(value.reviewsCount) &&
     isBoolean(value.isVerified) &&
