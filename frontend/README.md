@@ -18,6 +18,10 @@ npm run dev      # http://localhost:5173 (Vite picks the next free port if busy)
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 npm run preview  # serve dist/
+
+npm run test:e2e:install   # once: download Chromium for Playwright
+npm run test:e2e           # Playwright + axe against a real API (see «E2E»)
+npm run test:e2e:ui        # the same in the Playwright UI mode
 ```
 
 ## Routes
@@ -465,6 +469,94 @@ start from the first page; the selected user lives in the URL so paging does not
 and the mobile split keeps the list on its page. Role change, block/unblock and email/phone
 confirmation update the row locally (or remove it when it leaves the active filter) before the
 quiet re-sync. The screen never shows a total count, because the API does not return one.
+
+## E2E
+
+Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
+stack and no mocked success responses. The suite covers the six paged lists from #31, sign-in,
+public reviews and an axe scan of four screens. `npm test` (Vitest) stays separate and fast; E2E
+never runs inside it.
+
+### One-time setup
+
+```bash
+npm run test:e2e:install          # Chromium
+```
+
+A separate database is mandatory — never `barbersearch` and never `barbersearch_load`:
+
+```bash
+createdb -h localhost -U postgres barbersearch_e2e
+```
+
+The API must be running on `http://localhost:5243` (the `http` profile, which Vite proxies):
+
+```bash
+# from ../backend
+ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;Username=postgres;Password=postgres" \
+  dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
+```
+
+Migrations and both seed files (the backend's minimal seed plus the E2E fixtures):
+
+```bash
+# from ../backend, with ConnectionStrings__Postgres pointing at barbersearch_e2e
+dotnet ef database update \
+  --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql \
+  --startup-project BarberSearch/src/BarberSearch.Web
+
+# from frontend
+psql -h localhost -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 -q \
+  -f ../backend/load/seed/minimal.sql
+npm run test:e2e:seed             # wrapper around e2e/fixtures/seed.sql
+```
+
+`npm run test:e2e:seed` reads `E2E_SEED_DATABASE_URL`, then `ConnectionStrings__Postgres`, then a
+local default — and refuses to run against any database except `barbersearch_e2e` (the SQL file
+checks the name itself as well). Rerun it whenever the fixtures could have been mutated: the tests
+that edit and delete restore their own rows, but the seed is the authoritative reset.
+
+### Running
+
+```bash
+npm run test:e2e          # desktop (1280×900), mobile (375×812) and the 320 px pager project
+npm run test:e2e:ui
+```
+
+Playwright starts `npm run dev` itself when nothing is listening on 5173 and reuses a running server
+outside CI. If the API is down, `e2e/global-setup.ts` fails immediately with the command to start it
+instead of silently skipping.
+
+| Project | Viewport | What runs there |
+|---|---|---|
+| `auth` | — | signs the four fixture accounts in through the API and writes `e2e/.auth/*.json` |
+| `desktop-chromium` | 1280×900 | every spec except the 320 px and mutation ones |
+| `mobile-chromium` | 375×812 | the same on a phone |
+| `narrow-320` | 320×800 | `pager-320.spec.ts` only |
+| `mutations-chromium` | 1280×900 | the specs that edit or delete rows, last, once |
+
+### Fixtures and accounts
+
+`e2e/fixtures/seed.sql` creates fixed UUIDs: one showcase barber with 12 published reviews, 52
+history bookings and 21 upcoming ones, two customers with 12 reviews each, an admin, twelve extra
+barbers in one city (so search has a second page) and 25 users in total (so `/admin/users` has two).
+All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
+only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
+
+Credentials and the API URL can be overridden with `E2E_CUSTOMER_EMAIL`, `E2E_CUSTOMER_PASSWORD`,
+`E2E_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_BASE_URL`, `E2E_API_URL`.
+
+### Artifacts
+
+`playwright-report/` (html) and `test-results/` (traces, screenshots, video of failures) are written
+on every run and are git-ignored. `e2e/.auth/` holds the `storageState` files and is ignored too.
+
+### Notes
+
+- Each test gets its own `X-Forwarded-For` so the API read limiter (120 requests per minute per IP)
+  does not fail an otherwise healthy run; the limiter itself is untouched (`e2e/fixtures/test.ts`).
+- Russian copy is asserted on purpose in a few tests; they say so in a comment.
+- Mutating specs restore what they change, so a second `npm run test:e2e` is green without a reseed.
 
 ## Layout
 

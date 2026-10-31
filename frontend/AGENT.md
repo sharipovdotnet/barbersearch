@@ -298,6 +298,22 @@ The backend must be running for anything under `/api`:
 dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web
 ```
 
+## E2E (Playwright + axe)
+
+The browser suite is separate from the app build and needs the API, PostgreSQL and the
+`barbersearch_e2e` database (§15, README «E2E»). Without a reachable API `e2e/global-setup.ts`
+fails immediately with the command to start it — there is no silent skip.
+
+```powershell
+npm run test:e2e:install   # once: Chromium for the Playwright version in package-lock
+npm run test:e2e:seed      # reset fixtures (refuses any database but barbersearch_e2e)
+npm run test:e2e           # desktop + mobile + 320 px + mutations, in that order
+npm run test:e2e:ui        # UI mode
+```
+
+`npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
+`frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
+
 **Verification snapshot, 2026-10-30:**
 
 ```text
@@ -370,9 +386,14 @@ workspace or changing npm permissions.
 ### 5.3 CI
 
 `.github/workflows/frontend-ci.yml` runs on `frontend/**` changes (push to `main`, every PR,
-manual dispatch): Node 24, `npm ci`, `npm run lint`, `npm run build`. There is no test step yet
+manual dispatch): Node 24, `npm ci`, `npm run lint`, `npm run build`. There is no unit-test step yet
 (§15). The workflow file sits at the repository root because GitHub only reads
 `.github/workflows` from there.
+
+`.github/workflows/frontend-e2e.yml` is the slow job and stays out of the fast one: Postgres 18
+service, migrations, both seed files, the API on `:5243`, Chromium and `npm run test:e2e`, with
+`playwright-report`/`test-results` uploaded always. It triggers on `frontend/**`, `backend/**` and
+its own file, has `timeout-minutes: 30` and cancels a superseded run.
 
 ---
 
@@ -1097,10 +1118,11 @@ of WCAG conformance.
 9. Text contrast must meet WCAG AA (4.5:1 for normal text, 3:1 for large text); check new
    token combinations rather than assuming `muted-foreground` passes on every surface.
 
-**Known gaps** (also in §14): no automated axe/Playwright audit; contrast has not been measured
-project-wide (the admin `warning` status was checked manually but not in CI); dialog focus
-behaviour is trusted from Base UI but not covered by a test. The skip link and the admin
-keyboard/focus paths are implemented and were checked manually.
+**Known gaps** (also in §14): §14 #27 covers what the axe scan still reports — the accessible names
+of the pager buttons and the admin queue rows do not contain their visible text (WCAG 2.5.3), and on
+a narrow screen the queue's `aria-controls` points at the unrendered `#review-detail`. The contrast
+defect the same scan found (`muted-foreground` on `muted`, 4.34:1) is fixed in the token (4.54:1).
+The skip link and the admin keyboard/focus paths are implemented and were checked manually.
 
 ---
 
@@ -1209,9 +1231,9 @@ the feature grows; **P3** cosmetic/structural.
 
 | # | Sev | Issue | Fix / decision |
 |---|---|---|---|
-| 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
+| 2 | P1 | ~~No test runner, no tests; CI cannot catch regressions beyond types/lint~~ — E2E (Playwright + axe) landed in #33, unit tests (#32) are still missing | Vitest + RTL + MSW for the logic that E2E does not reach (§15); E2E already guards the paged lists, session and a11y |
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
-| 11 | P2 | The header skeleton has no accessible status; contrast and touch targets are unaudited (the skip link exists) | Address in the a11y slice (§11) |
+| 11 | P2 | ~~The header skeleton has no accessible status; contrast and touch targets are unaudited~~ — axe now scans four screens in CI and the `muted-foreground` contrast token was fixed in #33 | Remaining: the header skeleton still has no status text, contrast is checked only on those four screens, and axe reports only `critical`/`serious` |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
 | 15 | P3 | `font-heading` is just an alias of the sans stack; there is no display typeface | Keep neutral, or decide on a display face (§17) |
 | 16 | P3 | Dark tokens exist but there is no toggle and no `prefers-color-scheme` handling | Add a theme toggle + persisted choice when dark mode is a product requirement |
@@ -1224,6 +1246,7 @@ the feature grows; **P3** cosmetic/structural.
 | 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
 | 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 | 26 | P3 | `/account` «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so the shared pager cannot be used without hiding bookings; that list still appends with «Показать ещё» | Add a server-side `scope` to `GET /api/bookings` and page it like the other lists (§16) |
+| 27 | P2 | axe keeps two `serious` findings that the E2E scan records but does not fail on: visible «Назад»/«Дальше» and the composed row text are missing from the accessible names of `ListPager` buttons and the admin queue rows (WCAG 2.5.3), and on narrow screens the queue's `aria-controls="review-detail"` points at an element that is not rendered | Rename the pager buttons so the visible word is part of the name (`aria-label` containing it, tests matching by regex) and build the row name from the visible text with `aria-labelledby`; render the detail panel or drop `aria-controls` when it is absent on mobile. Then delete the allow-list in `e2e/specs/a11y.spec.ts` |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #5 (unvalidated `200` bodies),
@@ -1237,17 +1260,34 @@ the remaining numbers do not shift.
 
 ## 15. Testing
 
-**Today:** no test framework, no `test` script, no E2E. CI runs `npm ci`, `npm run lint` and
-`npm run build`. The `playwright-best-practices` skill is installed but unused.
+**Today:** two layers, one gap.
 
-**Target stack (proposal, not installed):**
+- **E2E — installed (#33).** Playwright 1.64 + `@axe-core/playwright` in `devDependencies`;
+  `playwright.config.ts`, specs in `e2e/specs/**`, page objects in `e2e/pages/**`, fixtures
+  (`seed.sql`, `accounts.ts`, `api.ts`, the rate-limit-isolating `test.ts`) in `e2e/fixtures/**`.
+  It runs the real SPA against the real API and `barbersearch_e2e` — no mocked success responses.
+  Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
+  (`pager-320.spec.ts` only), `mutations-chromium` (edit/delete specs, last), plus the `auth`
+  setup project. CI job: `.github/workflows/frontend-e2e.yml`.
+- **Unit — missing (#32).** No Vitest, no `test` script: `npm test` does not exist yet, so a PR
+  cannot run it. `frontend-ci` keeps running `npm ci`, `npm run lint` and `npm run build`.
 
-- **Vitest** + **jsdom** + **React Testing Library** for units and components;
-- **MSW** (or a typed `fetch` stub) for API behaviour;
-- **Playwright** + `@axe-core/playwright` for critical flows and accessibility;
-- scripts `npm test` / `npm run test:e2e`, and a CI job after lint/build.
+**What E2E covers now:** public-review paging (forward/back, cache, focus, live region, next-page
+error), search append, sign-in (validation, wrong credentials, session survives reload),
+`/account/reviews` paging and its 401 gate, `/barber` tabs and the empty-page-after-action policy,
+`/admin/reviews` and `/admin/users` paging, filters and URL-held selection, the 320 px pager, axe on
+`/`, `/barbers/{id}`, the login dialog and `/admin/reviews`, and the keyboard path.
 
-**What to cover first, in order:**
+**What is still only reachable from unit tests** (the reason #32 stays open):
+`apiRequest` and `describeSignInError` branches, `SessionProvider` under StrictMode and
+`retrySession`, `HeaderAuth` states, and every in-screen copy that E2E does not reach.
+
+**Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the test
+password `e2e-password`; each test gets its own data or restores what it changes; a test that asserts
+Russian copy says so in a comment (copy can change); no `waitForTimeout` as synchronisation; E2E never
+mocks a successful response — `page.route` only injects failures or proves a request is absent.
+
+**Unit-test plan for #32, in order** (item 6 of the old list is E2E and is done — see above):
 
 1. `apiRequest`: non-2xx → `ApiError` with status/codes; empty `204`; invalid JSON; transport
    failure (`status === 0`); `errorCodes` parsing.
@@ -1258,8 +1298,10 @@ the remaining numbers do not shift.
    `retrySession` outcomes, sign-in and sign-out transitions, one request under StrictMode.
 5. `HeaderAuth`: loading skeleton, anonymous CTA, `unavailable` retry button, authenticated
    profile, sign-out disabled state.
-6. E2E: sign in → header shows the user → sign out; wrong password; backend unavailable;
-   mobile viewport; keyboard-only dialog; axe scan on the landing and login dialog.
+6. ~~E2E: sign in → header shows the user → sign out; wrong password; backend unavailable;
+   mobile viewport; keyboard-only dialog; axe scan on the landing and login dialog~~ — covered by
+   `e2e/specs/search-login.spec.ts` and `e2e/specs/a11y.spec.ts`, including the state after a
+   network outage of `/auth/me`.
 
 **Rules:** no real user data or production secrets in tests; mock the network at the boundary,
 not the `apiRequest` module; a test that asserts Russian copy must say so explicitly (copy can
@@ -1380,6 +1422,23 @@ optional silent refresh) and `ListPager` (range from `formatPageRange`, one `ari
 scroll only after a press, 44×44 buttons on mobile). Page sizes, copy and server order are
 unchanged; no new dependencies and no backend changes. `/` search and `/account` keep
 «Показать ещё» for the reasons recorded in §14 #26 and the README.
+
+**Completed 2026-11-01:** E2E and a11y — Playwright 1.64 with `@axe-core/playwright` runs against
+the real API and a real PostgreSQL (`barbersearch_e2e`, never the dev database): `playwright.config.ts`
+with the `auth` setup project (API sign-in → `storageState` per role), `desktop-chromium` (1280×900),
+`mobile-chromium` (375×812), `narrow-320` for the pager spec and a `mutations-chromium` project that
+runs the editing/deleting specs last. `e2e/pages/**` holds the page objects (role and label locators,
+one shared `ListPagerComponent`); `e2e/fixtures/seed.sql` seeds fixed UUIDs — 12 published reviews and
+21 upcoming bookings for the showcase barber, two customers with 12 reviews each, 25 users in total —
+and refuses any database but `barbersearch_e2e`. Covered: public-review paging (one `GET` forward,
+zero on «Назад», focus and viewport, live region, next-page error with retry), search append, sign-in,
+`/account/reviews` paging and its 401 gate, `/barber` tabs and empty-page-after-action, `/admin/reviews`
+and `/admin/users` paging, URL-held selection and filters, axe on four screens plus the keyboard path
+(Escape closes the login dialog and returns focus). The audit found real defects: the `muted-foreground`
+token was 4.34:1 on `muted` and is now 4.54:1 (AA), and the remaining `critical`/`serious` findings are
+recorded as §14 #27 instead of being silenced. `.github/workflows/frontend-e2e.yml` runs the same seed
+and specs in CI with Postgres 18 and uploads the report and traces. `npm test` (Vitest, #32) stays
+separate; no backend, runtime dependency or `ui/**` changes.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1553,6 +1612,8 @@ Copy this into the PR description and check every item that applies:
 - [ ] generated `ui/**` not hand-edited; CLI used if a component was added/updated;
 - [ ] no new dependency without a reason and an owner decision (§17);
 - [ ] `AGENT.md` / `README.md` updated if a rule, command or contract changed;
+- [ ] `npm run test:e2e` green locally (API up, `barbersearch_e2e` seeded) when the change touches
+      lists, session, admin or copy the specs assert;
 - [ ] `git status` contains only intended files (`dist/`, `node_modules/` are ignored);
 - [ ] branch was created from `origin/main` (§18), not from a sibling issue branch;
-- [ ] CI `frontend-ci` is green (lint + build).
+- [ ] CI `frontend-ci` is green (lint + build); `frontend-e2e` green when the E2E job applies.
