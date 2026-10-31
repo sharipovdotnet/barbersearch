@@ -10,7 +10,8 @@
 > signs the visitor in without leaving the page, sends a real `POST /api/bookings` with an
 > idempotency key, and keeps the confirmation or a Russian error in place. Below the services
 > the «Отзывы» section lists the barber's published reviews from `GET /api/reviews` (stars,
-> numeric rating, salon-local date, text; `nextCursor` and «Показать ещё»), while review
+> numeric rating, salon-local date, text; ten per page with «Назад»/«Дальше», opaque `nextCursor`),
+> while review
 > creation stays in the customer account and editing/author-facing status are absent. The
 > customer account, the three admin sections (reviews, barbers, users) and the barber cabinet
 > are implemented: a barber sees the bookings of their own profile at `/barber` and confirms,
@@ -507,8 +508,8 @@ booking panel live on the same page; there is no booking route, modal or second 
 
 The reviews section also lives inside `/barbers/{id}`, between «Услуги» and «Специализации»,
 and adds no route. It mounts only when `reviewsCount > 0`, reads `GET /api/reviews` once per
-mount and follows `nextCursor` from «Показать ещё»; the date/service/salon controls of the
-slots section do not affect it.
+mount and follows `nextCursor` page by page, replacing the visible ten instead of appending; the
+date/service/salon controls of the slots section do not affect it.
 
 `/account/reviews` is a separate address, not a tab inside `/account`: it has its own title,
 pagination and dialogs, can be linked and opened in a new tab, and keeps `/account` from
@@ -1063,6 +1064,9 @@ of WCAG conformance.
 - Search results keep a persistent `aria-live="polite"` region for loading, the result count
   and the no-results message; skeletons are `aria-hidden`, the error state is `role="alert"`,
   and «Показать ещё» is not disabled while pending, so focus stays on it.
+- The public reviews section pages ten cards at a time, moves focus to the list after
+  «Назад»/«Дальше», scrolls the section heading back into view and announces the new range in an
+  `aria-live` region; a next-page error is `role="alert"` and keeps the shown cards.
 - Decorative icons are `aria-hidden`; the logo link and nav anchors are real links.
 - Forms use `aria-invalid`, `aria-describedby`, `FieldError` with `role="alert"`, and
   `aria-busy` while pending.
@@ -1103,7 +1107,7 @@ keyboard/focus paths are implemented and were checked manually.
 |---|---|---|
 | `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.62 kB | 127.35 kB |
 | `admin-page-*.js` — lazy `/admin/**` | 114.91 kB | 24.98 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.01 kB | 9.73 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 38.72 kB | 10.28 kB |
 | `account-page-*.js` — lazy `/account` | 35.48 kB | 10.26 kB |
 | `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.66 kB | 7.33 kB |
 | `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.79 kB | 6.11 kB |
@@ -1114,7 +1118,7 @@ keyboard/focus paths are implemented and were checked manually.
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.37 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 73.85 kB | 12.81 kB |
+| `index-*.css` | 74.26 kB | 12.85 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
@@ -1128,7 +1132,9 @@ read/mutation shapes, the CSRF-token guard and the `validate` plumbing); `admin-
 1.00 kB raw / 0.13 kB gzip because the admin list/card guards are shared with the entry;
 `barber-page` shrank by 0.64 kB raw / 0.37 kB gzip (the public shape guards now live in the
 entry). CSS is 0.09 kB larger, `index.html` unchanged, and the Vite chunk advisory still does
-not fire.
+not fire. The issue-30 build (review pages instead of an appended list) grew `barber-page` by
+1.71 kB raw / 0.55 kB gzip and CSS by 0.41 kB / 0.04 kB gzip; the entry, `index.html`, the module
+count (2282) and the advisory are unchanged.
 
 ### 12.2 Rules
 
@@ -1184,7 +1190,7 @@ not fire.
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
-| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, page size 10, opaque `nextCursor` and «Показать ещё», summary from `rating`/`reviewsCount`, skeleton/empty/error/load-more states, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
+| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with «Назад»/«Дальше» that replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, cursor pagination) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); the landing search, admin keyboard/focus paths were checked manually, no automated audit |

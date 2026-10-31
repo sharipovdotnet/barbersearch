@@ -96,16 +96,21 @@ the calendar date in the primary salon time zone and the text. The summary («4,
 comes from `rating`/`reviewsCount` of the already loaded profile, never from the current page.
 
 States: six skeleton cards while the first page loads, an empty list, a first-page error with
-`describeApiFailure` and «Повторить», a load-more error that keeps the shown cards, and
-«Показать ещё» that appends the next page without duplicates. After the last page the button
-disappears and focus moves to the section. A profile with `reviewsCount: 0` shows «Пока нет
-отзывов.» and makes no request at all. Creating a review stays in the customer account
+`describeApiFailure` and «Повторить», and a next-page error that keeps the shown cards and turns
+«Дальше» into «Повторить». The list is paged ten cards at a time instead of growing: «Дальше»
+replaces the visible page with the next ten, «Назад» returns to a page that is already in memory
+without a request, and the profile keeps the same height instead of stretching with every click.
+The header shows the range («1–10 из 32»), focus moves to the list after a page change and the new
+range is announced through `aria-live`; the first and last pages disable the arrow instead of
+removing it. A profile with `reviewsCount: 0` shows «Пока нет отзывов.» and makes no request at
+all. Creating a review stays in the customer account
 (`POST /api/reviews` on a completed booking, hidden until moderation); editing and deleting go
 through the author list at `/account/reviews`.
 
 - `src/lib/reviews.ts` — review DTO, page size 10, `fetchBarberReviews()`.
-- `src/hooks/use-barber-reviews.ts` — first page, cursor load-more, abort + generation, retry.
-- `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and pagination.
+- `src/hooks/use-barber-reviews.ts` — first page, cached pages, cursor-forward navigation,
+  abort + generation, retry.
+- `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and the pager.
 - `src/components/review-stars.tsx` — the shared five stars, used by both review lists.
 
 ## My reviews

@@ -1,4 +1,4 @@
-import { Loader2, TriangleAlert } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, type RefObject } from 'react'
 
 import { BarberSectionHeading } from '@/components/barber/barber-section'
@@ -37,8 +37,7 @@ export function BarberReviews({ profile }: { profile: BarberProfile }) {
     <section
       ref={sectionRef}
       aria-labelledby="barber-reviews-heading"
-      tabIndex={-1}
-      className="scroll-mt-20 rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="scroll-mt-20"
     >
       <Card>
         <BarberSectionHeading id="barber-reviews-heading">
@@ -81,53 +80,93 @@ function BarberReviewsList({
     items,
     status,
     error,
-    nextCursor,
-    isLoadingMore,
-    loadMoreError,
+    pageIndex,
+    offset,
+    hasPrev,
+    hasNext,
+    isLoadingPage,
+    pageError,
     retry,
-    loadMore,
+    goPrev,
+    goNext,
   } = useBarberReviews(profileId)
 
-  // Фокус уходит на секцию, когда «Показать ещё» исчезает вместе с последней страницей.
-  const focusAfterLastPage = useRef(false)
-  const previousCursor = useRef<string | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  // Фокус и прокрутка нужны только после нажатия «Назад»/«Дальше»: при
+  // первой загрузке список ещё не с чем сравнивать.
+  const focusAfterNavigation = useRef(false)
+  const previousPageIndex = useRef(pageIndex)
 
   useEffect(() => {
-    const hadMore = previousCursor.current !== null
-    previousCursor.current = nextCursor
-
-    if (
-      !focusAfterLastPage.current ||
-      !hadMore ||
-      nextCursor !== null ||
-      status !== 'ready'
-    ) {
+    if (previousPageIndex.current === pageIndex) {
       return
     }
 
-    focusAfterLastPage.current = false
-    sectionRef.current?.focus()
-  }, [nextCursor, status, sectionRef])
+    previousPageIndex.current = pageIndex
 
-  const isEmpty = status === 'ready' && items.length === 0
+    if (!focusAfterNavigation.current) {
+      return
+    }
+
+    focusAfterNavigation.current = false
+
+    const list = listRef.current
+    if (list === null) {
+      return
+    }
+
+    // Фокус уходит на новую страницу, а не остаётся на кнопке, которая вот-вот
+    // станет недоступной или уедет вниз вместе с изменившейся высотой списка.
+    // Прокручиваем к заголовку секции: вместе с ним видны сводка и диапазон.
+    list.focus({ preventScroll: true })
+    sectionRef.current?.scrollIntoView({
+      block: 'start',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    })
+  }, [pageIndex, sectionRef])
+
+  const isEmpty = status === 'ready' && items.length === 0 && pageIndex === 0
+  const hasPagination = hasPrev || hasNext
   const liveMessage =
     status === 'loading'
       ? 'Загружаем отзывы…'
       : status === 'error'
         ? ''
-        : isEmpty
-          ? 'Пока нет отзывов.'
-          : `Загружено ${formatReviewsCount(items.length)}`
+        : items.length === 0
+          ? isEmpty
+            ? 'Пока нет отзывов.'
+            : 'На этой странице отзывов нет.'
+          : `Отзывы ${offset + 1}–${offset + items.length} из ${reviewsCount}`
+
+  const handleNext = () => {
+    focusAfterNavigation.current = true
+    goNext()
+  }
+
+  const handlePrev = () => {
+    focusAfterNavigation.current = true
+    goPrev()
+  }
 
   return (
     <CardContent className="space-y-4">
-      <p className="text-sm">
-        <span className="font-medium tabular-nums">{formatRating(rating)}</span>
-        {' · '}
-        <span className="text-muted-foreground">
-          {formatReviewsCount(reviewsCount)}
-        </span>
-      </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-sm">
+          <span className="font-medium tabular-nums">
+            {formatRating(rating)}
+          </span>
+          {' · '}
+          <span className="text-muted-foreground">
+            {formatReviewsCount(reviewsCount)}
+          </span>
+        </p>
+
+        {hasPagination && items.length > 0 && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {offset + 1}–{offset + items.length} из {reviewsCount}
+          </p>
+        )}
+      </div>
 
       <p aria-live="polite" className="sr-only">
         {liveMessage}
@@ -146,53 +185,83 @@ function BarberReviewsList({
         <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
       )}
 
-      {status === 'ready' && items.length > 0 && (
-        <>
-          <ul className="divide-y">
-            {items.map((review) => (
-              <ReviewCard key={review.id} review={review} timeZone={timeZone} />
-            ))}
-          </ul>
+      {status === 'ready' && items.length === 0 && pageIndex > 0 && (
+        <p className="text-sm text-muted-foreground">
+          На этой странице отзывов нет.
+        </p>
+      )}
 
-          {nextCursor !== null && (
-            <div className="flex flex-col items-center gap-2 pt-1">
-              {loadMoreError !== null && (
-                <p
-                  role="alert"
-                  className="text-center text-sm text-destructive"
-                >
-                  {loadMoreError}
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 sm:h-10"
-                aria-busy={isLoadingMore}
-                onClick={() => {
-                  focusAfterLastPage.current = true
-                  loadMore()
-                }}
-              >
-                {isLoadingMore && (
-                  <Loader2
-                    data-icon="inline-start"
-                    aria-hidden
-                    className="animate-spin"
-                  />
-                )}
-                {isLoadingMore
-                  ? 'Загружаем…'
-                  : loadMoreError !== null
-                    ? 'Повторить'
-                    : 'Показать ещё'}
-              </Button>
-            </div>
+      {status === 'ready' && items.length > 0 && (
+        <ul
+          key={pageIndex}
+          ref={listRef}
+          tabIndex={-1}
+          aria-label="Отзывы барбера"
+          className="scroll-mt-20 divide-y rounded-lg motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          {items.map((review) => (
+            <ReviewCard key={review.id} review={review} timeZone={timeZone} />
+          ))}
+        </ul>
+      )}
+
+      {status === 'ready' && hasPagination && (
+        <nav
+          aria-label="Страницы отзывов"
+          aria-busy={isLoadingPage}
+          className="space-y-3 border-t pt-4"
+        >
+          {pageError !== null && (
+            <p
+              role="alert"
+              className="flex items-start gap-2 text-sm text-destructive"
+            >
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+              {pageError}
+            </p>
           )}
-        </>
+
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 px-3 sm:h-9"
+              disabled={!hasPrev}
+              onClick={handlePrev}
+            >
+              <ChevronLeft data-icon="inline-start" aria-hidden />
+              Назад
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-11 px-3 sm:h-9"
+              aria-busy={isLoadingPage}
+              disabled={!hasNext}
+              onClick={handleNext}
+            >
+              {pageError !== null ? 'Повторить' : 'Дальше'}
+              {isLoadingPage ? (
+                <Loader2
+                  data-icon="inline-end"
+                  aria-hidden
+                  className="animate-spin"
+                />
+              ) : (
+                <ChevronRight data-icon="inline-end" aria-hidden />
+              )}
+            </Button>
+          </div>
+        </nav>
       )}
     </CardContent>
   )
+}
+
+/** Плавная прокрутка отключается для тех, кто просил меньше движения. */
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 function ReviewCard({ review, timeZone }: { review: Review; timeZone?: string }) {
