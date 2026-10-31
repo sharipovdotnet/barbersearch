@@ -168,14 +168,13 @@ async function askForRetry(): Promise<UnauthorizedResult> {
   }
 }
 
+/** Нейтральный русский текст вместо `HTTP ${status}`: статус наружу не показывается. */
+const GENERIC_ERROR_MESSAGE = 'Запрос не выполнен.'
+
 function toApiError(status: number, body: unknown): ApiError {
-  return new ApiError(
-    status,
-    isProblemDetails(body) ? body : null,
-    body && isProblemDetails(body) && body.detail
-      ? body.detail
-      : `HTTP ${status}`
-  )
+  const problem = isProblemDetails(body) ? body : null
+
+  return new ApiError(status, problem, problem?.detail ?? GENERIC_ERROR_MESSAGE)
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -191,6 +190,55 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * Мусор в теле ошибки (HTML, `text/plain`, чужой JSON) не должен притворяться
+ * ProblemDetails: иначе `hasCode` начнёт доверять случайному полю `errorCodes`.
+ */
 function isProblemDetails(value: unknown): value is ProblemDetails {
-  return typeof value === 'object' && value !== null
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  if (candidate.status !== undefined && typeof candidate.status !== 'number') {
+    return false
+  }
+
+  if (candidate.title !== undefined && typeof candidate.title !== 'string') {
+    return false
+  }
+
+  if (candidate.detail !== undefined && typeof candidate.detail !== 'string') {
+    return false
+  }
+
+  if (
+    candidate.errorCodes !== undefined &&
+    (!Array.isArray(candidate.errorCodes) ||
+      !candidate.errorCodes.every((code) => typeof code === 'string'))
+  ) {
+    return false
+  }
+
+  if (candidate.errors !== undefined) {
+    const errors = candidate.errors
+
+    if (typeof errors !== 'object' || errors === null || Array.isArray(errors)) {
+      return false
+    }
+
+    const messages = Object.values(errors as Record<string, unknown>)
+
+    if (
+      !messages.every(
+        (value) =>
+          Array.isArray(value) && value.every((item) => typeof item === 'string')
+      )
+    ) {
+      return false
+    }
+  }
+
+  return true
 }

@@ -1,5 +1,5 @@
 import { ApiError, apiRequest } from '@/lib/api'
-import { csrfHeaders } from '@/lib/csrf'
+import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import type { AdminTab } from '@/lib/admin-path'
 
@@ -86,16 +86,14 @@ export async function fetchAdminReview(
 }
 
 export async function publishReview(reviewId: string): Promise<void> {
-  await apiRequest<void>(`/reviews/${reviewId}/publication`, {
+  await mutateWithCsrf<void>(`/reviews/${reviewId}/publication`, {
     method: 'POST',
-    headers: await csrfHeaders(),
   })
 }
 
 export async function hideReview(reviewId: string): Promise<void> {
-  await apiRequest<void>(`/reviews/${reviewId}/publication`, {
+  await mutateWithCsrf<void>(`/reviews/${reviewId}/publication`, {
     method: 'DELETE',
-    headers: await csrfHeaders(),
   })
 }
 

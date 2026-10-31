@@ -3,6 +3,7 @@ import { CircleCheck } from 'lucide-react'
 
 import { RegisterForm } from '@/components/register-form'
 import { LoginDialog } from '@/components/login-dialog'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -33,6 +34,9 @@ export function RegisterPage() {
   return (
     <div className="mx-auto w-full max-w-md px-4 py-8 sm:py-10">
       {status === 'loading' && <RegisterSkeleton />}
+
+      {/* Пока неизвестно, есть ли сессия, форму показывать нельзя: регистрация поверх аккаунта. */}
+      {status === 'unavailable' && <SessionUnavailable />}
 
       {status === 'anonymous' && (
         <div className="flex flex-col gap-4">

@@ -10,6 +10,7 @@ import { AdminRail } from '@/components/admin/admin-rail'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
 import { UsersScreen } from '@/components/admin/users-screen'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { useSession } from '@/hooks/use-session'
 import { isAdminPath, parseAdminPath, reviewsPath } from '@/lib/admin-path'
 import { navigate, useLocation } from '@/lib/router'
@@ -71,6 +72,15 @@ export function AdminPage() {
 
   if (status === 'loading') {
     return <AdminPageSkeleton />
+  }
+
+  // До проверки роли: иначе неизвестная сессия выглядела бы как «Нет доступа».
+  if (status === 'unavailable') {
+    return (
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-md items-center px-4 py-8">
+        <SessionUnavailable />
+      </div>
+    )
   }
 
   if (status === 'anonymous') {

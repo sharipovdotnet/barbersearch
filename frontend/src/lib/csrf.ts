@@ -1,4 +1,4 @@
-import { apiRequest } from '@/lib/api'
+import { ApiError, apiRequest } from '@/lib/api'
 
 /**
  * Antiforgery-токен для cookie-мутаций.
@@ -12,11 +12,57 @@ type CsrfToken = {
 
 const CSRF_HEADER = 'X-CSRF-TOKEN'
 
+export { CSRF_HEADER }
+
 export async function fetchCsrfToken(): Promise<string> {
   const { token } = await apiRequest<CsrfToken>('/auth/csrf')
   return token
 }
 
-export async function csrfHeaders(): Promise<Record<string, string>> {
-  return { [CSRF_HEADER]: await fetchCsrfToken() }
+/**
+ * Мутация с antiforgery-токеном и одним повтором на устаревший токен.
+ *
+ * `auth.csrf.invalid` формирует antiforgery-фильтр **до** действия, поэтому первая
+ * попытка не изменила данные и повтор безопасен; тело — строка, её можно отправить
+ * снова. Второй `400` уходит наверх без третьего запроса, остальные ошибки не
+ * повторяются вовсе.
+ */
+export async function mutateWithCsrf<TResponse>(
+  path: string,
+  init: MutationInit = {}
+): Promise<TResponse> {
+  const token = await fetchCsrfToken()
+
+  try {
+    return await apiRequest<TResponse>(path, withCsrf(init, token))
+  } catch (error) {
+    if (!isStaleCsrf(error, init.signal)) {
+      throw error
+    }
+  }
+
+  const freshToken = await fetchCsrfToken()
+
+  return apiRequest<TResponse>(path, withCsrf(init, freshToken))
+}
+
+type MutationInit = Omit<RequestInit, 'headers'> & {
+  headers?: Record<string, string>
+}
+
+function withCsrf(init: MutationInit, token: string): RequestInit {
+  return {
+    ...init,
+    headers: { ...init.headers, [CSRF_HEADER]: token },
+  }
+}
+
+/** Отменённый запрос не повторяем: токен тут ни при чём. */
+function isStaleCsrf(error: unknown, signal?: AbortSignal | null): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    error.hasCode('auth.csrf.invalid') &&
+    signal?.aborted !== true
+  )
 }

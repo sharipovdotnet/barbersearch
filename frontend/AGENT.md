@@ -382,8 +382,25 @@ idempotent or guarded (the session bootstrap uses an `isActive` flag and ignores
 ### 6.2 Session lifecycle
 
 `SessionProvider` is the only application-wide state container. It exposes
-`status: 'loading' | 'authenticated' | 'anonymous'`, `user`, `signIn`, `signOut` through
-`SessionContext`; `useSession()` throws outside the provider.
+`status: 'loading' | 'authenticated' | 'anonymous' | 'unavailable'`, `user`, `signIn`,
+`signOut` and `retrySession` through `SessionContext`; `useSession()` throws outside the
+provider.
+
+| Situation | `status` | `user` | «Запомнить меня» hint |
+|---|---|---|---|
+| `GET /auth/me` `200` | `authenticated` | the user | untouched |
+| `401`, no hint | `anonymous` | `null` | untouched |
+| `401` + hint → `refreshed` → `/auth/me` `200` | `authenticated` | the user | refreshed (sliding 14 days) |
+| `401` + hint → `refreshed` → `/auth/me` `401` | `anonymous` | `null` | cleared |
+| `401` + hint → `terminal` | `anonymous` | `null` | cleared, sticky until sign-in |
+| `401` + hint → `transient` (`429`/`0`/`5xx`) | `unavailable` | `null` | untouched |
+| `/auth/me` throws a non-`401` (network/`5xx`) | `unavailable` | `null` | untouched |
+| `refreshed`, the second `/auth/me` throws | `unavailable` | `null` | untouched |
+
+`unavailable` means “could not check”, not “signed out”: the header shows the compact retry
+button, the account screens show the `SessionUnavailable` card, no sign-in or role gate appears,
+no session data request is mounted, and the provider neither reads nor writes the hint. Only a
+successful `signIn` clears `terminal`.
 
 1. **Mount (bootstrap)** — `fetchSession()` → `GET /api/auth/me`.
    - `200` → `user` is set, `status = 'authenticated'`.
@@ -392,26 +409,33 @@ idempotent or guarded (the session bootstrap uses an `isActive` flag and ignores
    - `401` and the hint is present → `refreshSession()`: `GET /api/auth/csrf` →
      `POST /api/auth/refresh` (`204`, rotated cookies) → a second `/auth/me`.
      `refreshed` → `authenticated`; a second `401` → the hint is cleared and the user is
-     anonymous (no third request); `terminal` → hint cleared, anonymous; `transient` → anonymous
-     with the hint intact, so the next reload retries.
-   - any other error (network, 500) is caught in the provider and also becomes `anonymous`;
-     there is no offline banner (§14).
-2. **Silent refresh on `401`** — `apiRequest` retries a data request exactly once after a `401`
+     anonymous (no third request); `terminal` → hint cleared, anonymous; `transient`, and a
+     failed second `/auth/me`, → `unavailable` with the hint intact, so «Повторить» or the next
+     reload tries again.
+   - any other error (network, `5xx`) also becomes `unavailable` — never `anonymous`.
+2. **Retry** — `retrySession()` from the header button or the `SessionUnavailable` card sets
+   `status = 'loading'` (header and screens show skeletons) and runs the same bootstrap with the
+   same outcome table. StrictMode's double mount and rapid double clicks share one in-flight
+   promise, so one click is one network sequence; a response that arrives after unmount changes
+   no state (`mountedRef`).
+3. **Silent refresh on `401`** — `apiRequest` retries a data request exactly once after a `401`
    through the handler the provider registers (`lib/session-refresh.ts`): one in-flight refresh
    per tab, `navigator.locks` across tabs (§9.4). `status` stays `authenticated` for the whole
    call, so the header and the data do not flash. `terminal` → `anonymous` and the existing
    gates show; `transient` (`429`/`0`/`5xx`) keeps the session and surfaces the transport error
    on the screen.
-3. **Sign in** — `signIn(credentials)` from `HeaderAuth` → `LoginDialog`:
+4. **Sign in** — `signIn(credentials)` from `HeaderAuth` → `LoginDialog`:
    `GET /api/auth/csrf` → `POST /api/auth/login/cookie` (204) → `GET /api/auth/me` → set user.
    `rememberMe` sets the `barbersearch.remember` hint, `rememberMe: false` clears it, and a
    successful sign-in resets the sticky terminal refresh state.
-4. **Sign out** — `GET /api/auth/csrf` → `POST /api/auth/logout` (204); the provider clears the
-   hint and the local user in `finally`, even if the request fails. The cookie itself is cleared
-   by the API (or expires).
-5. **Loading UI** — while `status === 'loading'`, `HeaderAuth` renders a `Skeleton` instead of
-   «Войти» or the profile, so the header never flashes the wrong state. The bootstrap refresh
-   also runs under this status.
+5. **Sign out** — CSRF → `POST /api/auth/logout` (204); the provider clears the hint and the
+   local user in `finally`, even if the request fails. The cookie itself is cleared by the API
+   (or expires).
+6. **Loading and unavailable UI** — while `status === 'loading'`, `HeaderAuth` renders a
+   `Skeleton` instead of «Войти» or the profile, so the header never flashes the wrong state.
+   `unavailable` is its own branch (`SessionRetryButton` in the header, `SessionUnavailable` on
+   `/account`, `/account/reviews`, `/barber`, `/admin` and `/register`, a compact retry block in
+   the booking panel); it never renders «Войти» and never mounts data.
 
 Conscious asymmetry: without the hint the bootstrap does **not** try to restore the session even
 though the refresh cookie may still be alive. A reload after 8 idle hours without «Запомнить
@@ -653,6 +677,13 @@ reached the server.
 The response body is cast to `TResponse` without runtime validation. Keep response types in
 `src/lib` in sync with the backend contracts; malformed `200` JSON is not detected today (§14).
 
+Failure bodies are not cast: `isProblemDetails` is a strict duck-typed guard. `status` must be a
+number, `title`/`detail` strings, `errorCodes` an array of strings, `errors` an object of string
+arrays; arrays, `null` and a body of any other shape are rejected. A body that fails the guard
+becomes `problem = null` with empty `codes`, and `ApiError.message` is the neutral Russian
+«Запрос не выполнен.» — screens still map it through `describeApiFailure` and show their own
+fallback. `HTTP ${status}` is never used as copy.
+
 ### 9.2 ProblemDetails
 
 Failures follow RFC 7807 with a project extension (backend `FailureProblemDetails`):
@@ -774,13 +805,18 @@ narrow it to a union (§14).
   it on `rememberMe: false`, on sign-out, on a terminal refresh and re-writes it (sliding 14 days)
   after a successful refresh while it is present. Server-side nothing reads it: it is noise in
   the request headers, not a contract.
-- Every **state-changing** request in the cookie branch carries `X-CSRF-TOKEN`, obtained from
-  `GET /api/auth/csrf` immediately before the request. There is no cached token. Review,
-  author-review and admin-publication mutations use the same `lib/csrf.ts` helper.
-  `GET /api/reviews/mine` reads without a token. There are two exceptions: `POST /api/bookings`
-  and the anonymous `POST /api/auth/register` — neither action has the antiforgery filter on
-  the backend, so the client neither fetches a token nor sends the header for them (§14,
-  item 23).
+- Every **state-changing** request in the cookie branch goes through `mutateWithCsrf` in
+  `src/lib/csrf.ts`: it fetches `GET /api/auth/csrf` immediately before the request (no cached
+  token) and sends `X-CSRF-TOKEN`. On `400 auth.csrf.invalid` it retries **exactly once** with a
+  fresh token: the antiforgery filter rejects the request before the action runs, so the first
+  attempt changed nothing and the repeat is safe, and the body is a string that can be sent
+  again. `status 0`, `429`, `403`, `409`, `401` and other errors are not retried, an aborted
+  signal is not retried, and a second `auth.csrf.invalid` reaches the screen with the existing
+  Russian text. Auth, booking, review, barber and admin-user mutations all use the helper; only
+  `fetchCsrfToken` remains for the refresh path. Reads carry no token. There are two exceptions:
+  `POST /api/bookings` and the anonymous `POST /api/auth/register` — neither action has the
+  antiforgery filter on the backend, so the client neither fetches a token nor sends the header
+  for them (§14, item 23).
 - The backend currently validates antiforgery only on auth actions; review publication accepts
   the header but does not require it, and booking creation is cookie-only without any check
   (§14). Registration is an auth action without the filter: it is anonymous and therefore has no
@@ -830,6 +866,9 @@ Rules for new screens:
    for a silent refresh and retries the same request once (§9.4). The `requiresSignIn` branches
    in hooks and the gates remain the fallback for a missing handler or a terminal session;
    `403` is a foreign/closed role, never an expired session.
+8. A failed **session check** is not “signed out”: `5xx`, network failure or a transient refresh
+   during bootstrap gives `unavailable`, and the UI offers «Повторить» (§6.2). A `5xx` on a data
+   request while the session is `authenticated` is still the screen's own transport error.
 
 ---
 
@@ -1030,16 +1069,16 @@ keyboard/focus paths are implemented and were checked manually.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh), UI kit and React | 379.15 kB | 123.34 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 114.27 kB | 24.95 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.17 kB | 10.00 kB |
-| `account-page-*.js` — lazy `/account` | 35.34 kB | 10.24 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.59 kB | 7.30 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.67 kB | 6.09 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 9.75 kB | 3.35 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), UI kit and React | 381.91 kB | 124.07 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 113.91 kB | 24.85 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 37.65 kB | 10.10 kB |
+| `account-page-*.js` — lazy `/account` | 35.48 kB | 10.26 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 25.63 kB | 7.30 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 19.76 kB | 6.11 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.37 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.18 kB | 0.61 kB |
-| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.15 kB | 0.60 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.56 kB |
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
@@ -1047,14 +1086,14 @@ keyboard/focus paths are implemented and were checked manually.
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2277 modules; the warm rebuild took 1.01 s. Silent session refresh has no chunk of its own:
-`lib/api.ts` (one retry after `401`) and `lib/session-refresh.ts` (single-flight + Web Locks)
-are reached from `lib/auth.ts` and the provider, so they land in the entry. The entry grew by
-2.72 kB raw / 0.96 kB gzip against the registration build; the two new modules and the bootstrap
-are the whole delta. `barber-page` gzip moved by 0.01 kB and `barber-cabinet-page` by 0.01 kB,
-which is measurement noise — no source in those chunks changed. CSS and `index.html` are
-unchanged; `index.html` preloads only the entry and the stylesheet, and the Vite chunk advisory
-does not fire.
+2278 modules; the production build took 7.17 s. The unavailable card and retry button have no
+chunk of their own: `components/session-unavailable.tsx` is reachable from `HeaderAuth`, so they
+land in the entry and the lazy screens only re-export the import. The entry grew by 2.76 kB raw /
+0.73 kB gzip against the silent-refresh build (the new status, the retry path, the strict error
+guard and the card). `admin-page` shrank by 0.36 kB raw / 0.10 kB gzip because the CSRF helper
+moved to the entry; `barber-page` grew by 0.48 kB raw / 0.10 kB gzip (the compact retry block).
+CSS and `index.html` are unchanged; `index.html` preloads only the entry and the stylesheet, and
+the Vite chunk advisory does not fire.
 
 ### 12.2 Rules
 
@@ -1093,9 +1132,10 @@ does not fire.
 |---|---|
 | Landing page | ✅ hero, how-it-works, real barber search (city + date), footer; the search talks to the API |
 | Search form | ✅ city + date, submit reloads the list; filters live in React state, not in the URL |
-| Cookie sign-in | ✅ CSRF → login → `/auth/me`; session context; header states; «Запомнить меня» sets the restore hint |
-| Sign-out | ✅ CSRF → logout; local state and the hint cleared in `finally` |
-| Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; `401` → anonymous; with the «Запомнить меня» hint one silent refresh restores the session |
+| Cookie sign-in | ✅ CSRF → login → `/auth/me` (one retry on a stale token); session context; header states; «Запомнить меня» sets the restore hint |
+| Sign-out | ✅ CSRF → logout (one retry on a stale token); local state and the hint cleared in `finally` |
+| Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; `401` → anonymous; with the «Запомнить меня» hint one silent refresh restores the session; a network/`5xx` failure or a `transient` refresh → `unavailable`, never anonymous |
+| Session unavailable / retry | ✅ fourth status; `SessionUnavailable` card on `/account`, `/account/reviews`, `/barber`, `/admin`, `/register`, a compact retry block in the booking panel and `SessionRetryButton` in the header; `retrySession` is single-flight (StrictMode and a double click give one request), `200` → authenticated, `401` → anonymous, another failure → `unavailable` again |
 | Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
 | Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
@@ -1131,11 +1171,7 @@ the feature grows; **P3** cosmetic/structural.
 | 2 | P1 | No test runner, no tests; CI cannot catch regressions beyond types/lint | Add Vitest + RTL + MSW, then Playwright (§15) |
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
 | 5 | P2 | `apiRequest` casts JSON to `TResponse` without validation; a malformed `200` body reaches components as `undefined` | Validate responses (zod/valibot or hand-written guards) when contracts grow |
-| 6 | P2 | `isProblemDetails` only checks “non-null object”; non-ProblemDetails errors fall back to `HTTP ${status}` (English) | Strengthen the guard; map unknown errors to generic Russian copy in each screen |
-| 7 | P2 | CSRF is fetched per mutation, with no retry on `auth.csrf.invalid`; the user must close and reopen the dialog | Add one retry with a fresh token, or a shared CSRF helper that re-fetches once |
-| 8 | P2 | Session bootstrap treats a backend outage like “anonymous” (`catch` clears the user) | Distinguish `401` from transport/`5xx`; show a non-blocking «нет связи» state |
 | 9 | P2 | `VITE_API_PROXY_TARGET` is read from `process.env`, no `.env.example`, no `ImportMetaEnv` typing, and `.gitignore` does not ignore `.env` | Add `src/vite-env.d.ts`, `.env.example`, ignore `.env`; decide whether `.env` should feed the proxy |
-| 10 | P2 | Footer hardcodes «API: /api → localhost:5243» — wrong in production | Remove or make it dev-only |
 | 11 | P2 | The header skeleton has no accessible status; contrast and touch targets are unaudited (the skip link exists) | Address in the a11y slice (§11) |
 | 13 | P3 | `shadcn` CLI is a runtime `dependency`; it is build-time only | Move to `devDependencies`; `shadcn/tailwind.css` still resolves at build time |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
@@ -1151,8 +1187,10 @@ the feature grows; **P3** cosmetic/structural.
 | 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
-removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #12 (the monolithic `HomePage`) and
-#24 (no author-facing review list) are intentionally absent; the remaining numbers do not shift.
+removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #6 (lenient `isProblemDetails` and
+English `HTTP ${status}`), #7 (no CSRF retry), #8 (a backend outage treated as “anonymous”),
+#10 (the dev API hint in the footer), #12 (the monolithic `HomePage`) and #24 (no author-facing
+review list) are intentionally absent; the remaining numbers do not shift.
 
 ---
 
@@ -1175,10 +1213,10 @@ removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #12 (the monolithic
 2. `describeSignInError`: each branch, including unknown errors and ordering (429 before codes).
 3. `LoginDialog`: validation messages, pending state, success closes, locked-out / 429 / CSRF
    errors, labels and `aria-describedby`.
-4. `SessionProvider`: `/auth/me` user, `401` → anonymous, network error → anonymous, sign-in and
-   sign-out transitions, effect cleanup under StrictMode.
-5. `HeaderAuth`: loading skeleton, anonymous CTA, authenticated profile, sign-out disabled
-   state.
+4. `SessionProvider`: `/auth/me` user, `401` → anonymous, network error → `unavailable`,
+   `retrySession` outcomes, sign-in and sign-out transitions, one request under StrictMode.
+5. `HeaderAuth`: loading skeleton, anonymous CTA, `unavailable` retry button, authenticated
+   profile, sign-out disabled state.
 6. E2E: sign in → header shows the user → sign out; wrong password; backend unavailable;
    mobile viewport; keyboard-only dialog; axe scan on the landing and login dialog.
 
@@ -1259,7 +1297,19 @@ clears the non-credential `barbersearch.remember` hint, and `429`/`0`/`5xx` stay
 the session intact. The bootstrap refreshes once only when the hint says the session was
 remembered, so a reload without «Запомнить меня» after 8 idle hours still asks to sign in.
 Documented consequences: the hint is not a credential, and the backend makes the access cookie
-persistent after a refresh (§14 #25). No backend changes.
+persistent after a refresh (§14 #25). No backend changes. **Completed 2026-10-31:** network
+outage handling — a fourth session status, `unavailable`: a network/`5xx` failure of `GET
+/auth/me`, a `transient` refresh during bootstrap and a failed second `/auth/me` no longer
+pretend the user is anonymous. The header shows a compact «Повторить», `/account`,
+`/account/reviews`, `/barber`, `/admin` and `/register` show the `SessionUnavailable` card and
+mount no data, the booking panel shows the compact retry block, and the landing keeps working
+from anonymous reads. `retrySession` re-runs the whole bootstrap (hint included) under a
+single-flight guard, so StrictMode and double clicks make one request; `200` → authenticated,
+`401` → anonymous. CSRF mutations moved to `mutateWithCsrf`: one retry with a fresh token on
+`400 auth.csrf.invalid`, a second failure surfacing the existing Russian copy. Failure bodies
+are parsed strictly (non-ProblemDetails → `problem = null`, neutral Russian message instead of
+`HTTP ${status}`), and the footer's `localhost:5243` hint is dev-only. No backend changes, no
+new dependencies.
 
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
@@ -1277,7 +1327,8 @@ do not shift.
    role-aware header remains, and a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
     the server mapped to fields.
-11. **Hardening** — runtime response validation, env typing, dependency review.
+11. **Hardening** — runtime validation of successful `200` bodies, env typing and dependency
+    review; error bodies are already parsed strictly and never leak English `detail` (§9.1).
 12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
     (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
     barbers and users are done. This is the admin-wide bookings view, not the barber's own

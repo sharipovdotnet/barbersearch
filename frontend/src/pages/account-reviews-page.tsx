@@ -9,6 +9,7 @@ import {
 import { DeleteReviewDialog } from '@/components/account/delete-review-dialog'
 import { EditReviewDialog } from '@/components/account/edit-review-dialog'
 import { MyReviewsList } from '@/components/account/my-reviews-list'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { buttonVariants } from '@/components/ui/button'
 import { useMyReviews } from '@/hooks/use-my-reviews'
 import { useSession } from '@/hooks/use-session'
@@ -34,6 +35,12 @@ export function AccountReviewsPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && <AccountSkeleton />}
+
+      {status === 'unavailable' && (
+        <div className="flex min-h-[55vh] items-center justify-center py-6">
+          <SessionUnavailable />
+        </div>
+      )}
 
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
