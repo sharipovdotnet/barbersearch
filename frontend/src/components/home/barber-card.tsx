@@ -1,10 +1,11 @@
-import { MapPin, Star } from 'lucide-react'
+import { Languages, MapPin, Star } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BARBER_GRADE_LABELS } from '@/lib/barber-grade'
 import { barberPath } from '@/lib/barber-path'
+import { LANGUAGE_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberSearchItem } from '@/lib/barber-search'
 import {
   formatExperience,
@@ -19,12 +20,16 @@ import { isPlainClick, navigate } from '@/lib/router'
  *
  * Ссылка без `preventDefault` на модифицированный клик оставляет браузеру средний клик
  * и «открыть в новой вкладке»; обычный клик перехватывает SPA. Цены, услуг и кнопки
- * записи внутри нет: DTO поиска их не отдаёт.
+ * записи внутри нет: DTO поиска их не отдаёт. Языки приходят в строке выдачи, поэтому
+ * клиент видит их до перехода в профиль.
  */
 export function BarberCard({ barber }: { barber: BarberSearchItem }) {
   const location = [barber.primarySalonName, barber.city]
     .filter(Boolean)
     .join(' · ')
+  const languages = barber.languages
+    .map((language) => LANGUAGE_LABELS[language])
+    .join(', ')
   const href = barberPath(barber.id)
 
   return (
@@ -87,6 +92,16 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
           <p className="text-sm text-muted-foreground">
             Стаж: {formatExperience(barber.yearsOfExperience)}
           </p>
+
+          {languages !== '' && (
+            <p className="flex items-start gap-1 text-sm text-muted-foreground">
+              <Languages className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 break-words">
+                <span className="sr-only">Языки: </span>
+                {languages}
+              </span>
+            </p>
+          )}
         </CardContent>
       </Card>
     </a>

@@ -81,7 +81,7 @@ export function BarberResults({
         Барберы рядом
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Подтверждённые барберы с рейтингом, стажем и салоном.
+        Подтверждённые барберы с рейтингом, стажем, языками и салоном.
       </p>
 
       <Separator className="my-6" />

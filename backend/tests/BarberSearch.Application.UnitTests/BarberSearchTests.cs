@@ -224,6 +224,7 @@ public class BarberSearchTests
             $"Barber {idSuffix}",
             Grade.MiddleBarber,
             5,
+            [Language.Ru],
             itemRating,
             itemRating is null ? 0 : 1,
             true,

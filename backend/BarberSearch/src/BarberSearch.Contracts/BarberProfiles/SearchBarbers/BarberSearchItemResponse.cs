@@ -14,6 +14,7 @@ namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 /// <param name="DisplayName">Отображаемое имя мастера.</param>
 /// <param name="Grade">Грейд барбера.</param>
 /// <param name="YearsOfExperience">Стаж в годах.</param>
+/// <param name="Languages">Языки общения.</param>
 /// <param name="Rating">Средний рейтинг в шкале 1.00..5.00 либо <c>null</c>, если отзывов нет.</param>
 /// <param name="ReviewsCount">Количество опубликованных отзывов.</param>
 /// <param name="IsVerified">Подтверждён ли профиль администратором.</param>
@@ -25,6 +26,7 @@ public record BarberSearchItemResponse(
     string DisplayName,
     Grade Grade,
     int YearsOfExperience,
+    IReadOnlyList<Language> Languages,
     decimal? Rating,
     int ReviewsCount,
     bool IsVerified,
