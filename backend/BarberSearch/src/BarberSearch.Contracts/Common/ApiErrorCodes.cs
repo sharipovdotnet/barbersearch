@@ -156,6 +156,15 @@ public static class ApiErrorCodes
         public const string GetBarberBookingsScope = "booking.getBarberBookings.scope";
 
         /// <summary>
+        /// Скоуп списка броней клиента не <c>all</c>, не <c>upcoming</c> и не <c>past</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код от <see cref="GetBarberBookingsScope"/>: у клиентского списка
+        /// значение по умолчанию <c>all</c> и другой набор допустимых значений.
+        /// </remarks>
+        public const string GetBookingsScope = "booking.getBookings.scope";
+
+        /// <summary>
         /// Заметка барбера длиннее <c>1000</c> символов; <c>400</c>.
         /// </summary>
         public const string BarberNoteTooLong = "booking.barberNote.tooLong";

@@ -327,17 +327,17 @@ npm run test:e2e:ui        # UI mode
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-10-30:**
+**Verification snapshot, 2026-11-01:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 96 files, 116 rules
-npm run build → tsc -b + vite build OK, 2245 modules,
-                dist/assets/index-*.js          304.05 kB (gzip  97.10 kB)
-                dist/assets/errors-*.js          69.51 kB (gzip  26.25 kB)  shared, preloaded
-                dist/assets/admin-page-*.js     115.45 kB (gzip  25.01 kB)  lazy
-                dist/assets/account-page-*.js    39.92 kB (gzip  11.22 kB)  lazy
-                dist/assets/barber-page-*.js     14.08 kB (gzip   4.28 kB)  lazy
-                dist/assets/index-*.css          70.92 kB (gzip  12.44 kB)
+npm run lint  → 0 warnings, 0 errors, 179 files, 116 rules
+npm run build → tsc -b + vite build OK, 2285 modules,
+                dist/assets/index-*.js          393.75 kB (gzip 127.38 kB)
+                dist/assets/admin-page-*.js     111.68 kB (gzip  24.13 kB)  lazy
+                dist/assets/barber-page-*.js     35.80 kB (gzip   9.47 kB)  lazy
+                dist/assets/account-page-*.js    34.60 kB (gzip  10.13 kB)  lazy
+                dist/assets/paging-*.js           6.93 kB (gzip   2.54 kB)  shared
+                dist/assets/index-*.css          74.40 kB (gzip  12.88 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -782,6 +782,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `PUT` | `/api/reviews/{id}` | author | `{ rating, text }` → `204`; edits published and hidden reviews; a published edit recalculates the barber rating immediately, a hidden one does not; `400 review.update.rating` / `review.update.text.tooLong`, `403 auth.forbidden`, `404 review.notFound`, `409 review.update.concurrencyConflict` |
 | `DELETE` | `/api/reviews/{id}` | author only (no admin bypass) | `204`; the booking is freed and a published review recalculates the rating; `403 auth.forbidden`; an unknown or already deleted id is `404 review.notFound` |
 | `POST` | `/api/bookings` | customer, cookie, 30/min per user | create one booking from a `/slots` snapshot (`startAt`/`endAt` sent as received); `201 { id }`, idempotent by `idempotencyKey` (a repeat returns `201` with the same id), `409` overlap/lockTimeout, `404` inactive service/salon, `400` start window or period; a cookie mutation, the client sends `X-CSRF-TOKEN` (§9.4) |
+| `GET` | `/api/bookings?scope=all\|upcoming\|past&cursor=&pageSize=` | authenticated (cookie or Bearer) | the customer's own bookings: `all` is the default and keeps the previous behaviour (every status, `start_at DESC`), `upcoming` is `Pending`/`Confirmed` with `EndAt > now` ordered `start_at ASC`, `past` is everything else (a terminal status or `EndAt <= now`) ordered `start_at DESC`; opaque `nextCursor`, the UI sends `pageSize=20`; `400 booking.getBookings.scope` / `booking.getBookings.pageSize`, `400 booking.cursor.invalid`; the admin `userId` filter combines with any scope (`403` for a non-admin asking for another user, `404` for an unknown user); a read, so no CSRF; `PagedResponse<BookingResponse>` has no total |
 | `GET` | `/api/barber/bookings?scope=upcoming\|past&cursor=&pageSize=` | role `Barber` (policy `BarberOnly`) | the barber's own bookings, profile taken from the `barber_profile_id` claim (no profile parameter): `upcoming` (default) is `Pending`/`Confirmed` with `EndAt > now`, `start_at ASC`; `past` is everything else, `start_at DESC`; opaque `nextCursor`, the UI sends `pageSize=20`; `400 booking.getBarberBookings.scope`/`pageSize`, `400 booking.cursor.invalid`; `403 auth.forbidden` for a `Barber` without a linked profile; the DTO has the customer name and phone but no email, `userId` or `idempotencyKey` |
 | `POST` | `/api/bookings/{id}/confirmation` | owner barber | `Pending → Confirmed`, `204`; `403 auth.forbidden`, `404 booking.notFound`, `409 booking.confirm.invalidStatus` |
 | `POST` | `/api/bookings/{id}/completion` | owner barber | `Confirmed → Completed`, `204`; `409 booking.complete.invalidStatus` |
@@ -809,8 +810,10 @@ Every response with a body in this table is checked by the strict guards from §
 Barber writes (`confirmation`, `completion`, `no-show`, `cancellation`, `barber-note`) are
 cookie mutations and send `X-CSRF-TOKEN`; `GET /api/barber/bookings` reads without it. There
 is no `GET /api/barber/bookings/{id}`: a list row already carries everything the five actions
-need, and they go by the `id` from that row. `GET /api/bookings` stays the **customer's** list
-and is not reused by the cabinet — there the barber is the client, not the owner.
+need, and they go by the `id` from that row. `GET /api/bookings` stays the **customer's** list —
+its `scope` is exactly the «Предстоящие»/«История» pair at `/account` — and is not reused by the
+cabinet: there the barber is the client, not the owner, and `/api/barber/bookings` has its own
+scopes.
 
 The frontend uses the **cookie branch** of `POST /api/auth/refresh` for silent session renewal
 (§9.4); the body-token branch belongs to non-browser clients and is not implemented here.
@@ -1161,31 +1164,29 @@ contrast on screens outside the axe matrix.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.72 kB | 127.37 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 111.69 kB | 24.14 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.81 kB | 9.48 kB |
-| `account-page-*.js` — lazy `/account` | 35.48 kB | 10.28 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.33 kB | 6.99 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.17 kB | 5.73 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.75 kB | 127.38 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 111.68 kB | 24.13 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.80 kB | 9.47 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 34.60 kB | 10.13 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.32 kB | 6.99 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.16 kB | 5.72 kB |
 | `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.36 kB |
-| `use-paged-list-*.js` — shared cursor pager used by the six row lists | 6.93 kB | 2.54 kB |
+| `paging-*.js` — shared cursor pager used by the seven row lists | 6.93 kB | 2.54 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.22 kB | 0.64 kB |
-| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.64 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 0.96 kB | 0.52 kB |
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
-| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 74.43 kB | 12.88 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
+| `index-*.css` | 74.40 kB | 12.88 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2285 modules. The issue-31 build added one shared lazy chunk,
-`use-paged-list-*.js` (6.85 kB raw / 2.52 kB gzip), which owns the page cache, the pager footer and
-`formatPageRange`; the per-screen pagination code moved into it. Against the issue-30 build
-`barber-page` shrank by 2.91 kB raw / 0.80 kB gzip, `admin-page` by 3.13 kB / 0.86 kB,
-`account-reviews-page` by 1.62 kB / 0.38 kB and `barber-cabinet-page` by 1.33 kB / 0.34 kB; the
-entry is unchanged (393.59 kB raw / 127.36 kB gzip), CSS grew by 0.11 kB raw, `index.html` is
-unchanged and the Vite chunk advisory does not fire.
+2285 modules. The issue-36 build moved `/account` from its own append hook to the shared pager:
+`account-page` shrank by 0.88 kB raw / 0.15 kB gzip, the shared `bookings` chunk grew by 0.03 kB
+(the transport now builds the `scope` query and the signal), the entry is unchanged and no new
+chunk appeared. `paging-*.js` is the old `use-paged-list` chunk with the same contents — it also
+serves `/account` now.
 
 ### 12.2 Rules
 
@@ -1230,7 +1231,7 @@ unchanged and the Vite chunk advisory does not fire.
 | Session unavailable / retry | ✅ fourth status; `SessionUnavailable` card on `/account`, `/account/reviews`, `/barber`, `/admin`, `/register`, a compact retry block in the booking panel and `SessionRetryButton` in the header; `retrySession` is single-flight (StrictMode and a double click give one request), `200` → authenticated, `401` → anonymous, another failure → `unavailable` again |
 | Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
-| Customer cabinet | ✅ bookings, cancellation, review dialog, password change, role gates |
+| Customer cabinet | ✅ `/account`: «Предстоящие»/«История» are two server lists from `GET /api/bookings?scope=upcoming\|past` (the server filters, orders and paginates; twenty rows, shared pager with cached pages and «Назад» without a request), hero «Ближайшая запись» is the first `upcoming` row, history is lazy (requested on its first open), cancellation leaves the row in history and follows the shared empty-page policy, tab switch starts the first page of its own scope, states cover loading/empty/first-page error/next-page error/`401`; no tab counters and no «Показать ещё»; review dialog, password change, role gates |
 | Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
@@ -1246,7 +1247,7 @@ unchanged and the Vite chunk advisory does not fire.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 68 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `refreshSession`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 73 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1271,7 +1272,6 @@ the feature grows; **P3** cosmetic/structural.
 | 20 | P3 | No «Забыли пароль?» link in the login dialog | Registration is linked from the dialog and `/register`; a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
-| 26 | P3 | `/account` «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so the shared pager cannot be used without hiding bookings; that list still appends with «Показать ещё» | Add a server-side `scope` to `GET /api/bookings` and page it like the other lists (§16) |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
@@ -1280,7 +1280,8 @@ removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy)
 `.env` not ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13
 (`shadcn` CLI as a runtime dependency), #23 (the CSRF gap on booking creation and review
 publication, closed by #35), #24 (no author-facing review list), #25 (refresh ignored
-«Запомнить меня», closed by #35) and #27 (a11y debt: pager and queue names, the header skeleton
+«Запомнить меня», closed by #35), #26 (the client-side split of the booking list and «Показать
+ещё» at `/account`, closed by #36) and #27 (a11y debt: pager and queue names, the header skeleton
 status, the narrow-screen `aria-controls`, and the axe allow-list) are intentionally absent; the
 remaining numbers do not shift.
 
@@ -1308,8 +1309,10 @@ remaining numbers do not shift.
 
 **What E2E covers now:** public-review paging (forward/back, cache, focus, live region, next-page
 error), search append, sign-in (validation, wrong credentials, session survives reload),
-`/account/reviews` paging and its 401 gate, `/barber` tabs and the empty-page-after-action policy,
-`/admin/reviews` and `/admin/users` paging, filters and URL-held selection, the 320 px pager, and an
+`/account/reviews` paging and its 401 gate, `/account` — two server tabs («Предстоящие»/«История»
+twenty rows, «Дальше»/«Назад», no «Показать ещё», hero from the first row, cancellation moves the
+row to history), `/barber` tabs and the empty-page-after-action policy, `/admin/reviews` and
+`/admin/users` paging, filters and URL-held selection, the 320 px pager, and an
 axe scan of every screen and role at 1280 (`/`, `/barbers/{id}`, `/register`, the open login dialog,
 `/account`, `/account/reviews`, `/barber`, `/admin/reviews` pending and published, `/admin/barbers`,
 `/admin/users`, with the split-view detail cards) and at 320 (`/barbers/{id}`, `/admin/reviews` and
@@ -1327,7 +1330,9 @@ outcomes, the hint-driven refresh, `unavailable`, `retrySession`, sign-in/sign-o
 loading `role="status"`, the unavailable retry name, the disabled «Выходим…»); `ListPager` (names
 start with the visible word, the retry name, `aria-busy`, edge-disabled buttons, callbacks);
 `createBooking` (a fresh `GET /auth/csrf`, the `X-CSRF-TOKEN` header, one retry on
-`auth.csrf.invalid` with the same body, no retry on `409`); `refreshSession` (the `{ rememberMe }`
+`auth.csrf.invalid` with the same body, no retry on `409`); `fetchBookings` (the default
+`?scope=all&pageSize=20`, `upcoming` without a cursor, `past` with one, an empty cursor left out of
+the URL, the `signal` passed through); `refreshSession` (the `{ rememberMe }`
 body built from the hint). Tests are colocated (`*.test.ts(x)`) and compare Russian copy as a
 whole string, saying in the test title
 that it is copy.
@@ -1491,10 +1496,19 @@ tokens (4.82:1 and 4.92:1). A new keyboard spec covers Tab, arrows, Home/End, En
 `:focus-visible` and focus that stays in the queue after publishing; `HeaderAuth` and `ListPager`
 got unit tests. No backend, `ui/**`, visible copy or fixture changes.
 
-Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
+**Completed 2026-11-01:** my bookings (#36) — `GET /api/bookings` gained `scope=all|upcoming|past`
+(`all` is the default and keeps the previous order, `upcoming` is `Pending`/`Confirmed` with
+`EndAt > now` ascending, `past` is the complement descending; an unknown scope is `400
+booking.getBookings.scope`), so `/account` stopped splitting one list on the client: «Предстоящие»
+and «История» are two `usePagedList` controllers with the shared `ListPager` inside the tab panel,
+the hero is the first upcoming row, history is lazy, tab counters and «Показать ещё» are gone, and
+cancellation removes the row from «Предстоящие» under the empty-page policy while the visit shows
+up in history. One PR touched both `backend` and `frontend`; no new dependencies and no migrations
+(the existing `(user_id, start_at)` index covers both cursor directions).
+
+Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
-5. **My bookings** — `GET /api/bookings`, cancel/confirm actions, keyset pagination.
 6. **Reviews** — the public list on `/barbers/{id}` is done, creation lives in the customer
    account, and the author list with edit/delete is done at `/account/reviews` (§13). Remaining:
    explaining pre-moderation and the difference between “on moderation” and “hidden by an

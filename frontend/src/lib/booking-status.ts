@@ -1,4 +1,4 @@
-import type { Booking, BookingStatus } from '@/lib/bookings'
+import type { BookingStatus } from '@/lib/bookings'
 
 /** Подписи и правила жизненного цикла брони — в одном месте, чтобы не расходились. */
 
@@ -39,11 +39,4 @@ export function canCancelBooking(status: BookingStatus): boolean {
 /** Отзыв возможен только по завершённому визиту. */
 export function canReviewBooking(status: BookingStatus): boolean {
   return status === 'Completed'
-}
-
-/** Предстоящая запись: живая бронь, время которой ещё не наступило. */
-export function isUpcomingBooking(booking: Booking, now: number): boolean {
-  return (
-    isActiveBooking(booking.status) && Date.parse(booking.startAt) >= now
-  )
 }

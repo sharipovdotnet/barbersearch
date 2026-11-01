@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MessageSquare, Scissors, X } from 'lucide-react'
 
 import { AccountSkeleton, BookingsErrorState, RoleGate, SignInGate } from '@/components/account/account-gates'
@@ -14,12 +14,12 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
-import { useBookings } from '@/hooks/use-bookings'
+import { useCustomerBookings } from '@/hooks/use-bookings'
 import { useSession } from '@/hooks/use-session'
 import { ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
 import type { SessionUser } from '@/lib/auth'
-import { isUpcomingBooking } from '@/lib/booking-status'
 import { formatDateTime } from '@/lib/format'
+import { formatPageRange } from '@/lib/paging'
 import { goToSection, isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
@@ -27,8 +27,10 @@ import { cn } from '@/lib/utils'
  * Кабинет клиента.
  *
  * Страница отвечает на один вопрос — «что у меня с визитами» — и не пытается быть
- * дашбордом: сверху ближайшая запись, ниже предстоящие и история, сбоку аккаунт.
- * Клиент, барбер и администратор видят разные экраны: реализован только клиентский.
+ * дашбордом: сверху ближайшая запись, ниже «Предстоящие» и «История», сбоку аккаунт.
+ * Вкладки — два независимых серверных списка: скоуп (`upcoming`/`past`) определяет
+ * сервер, клиент только переключает вкладку и листает страницы. Клиент, барбер и
+ * администратор видят разные экраны: реализован только клиентский.
  */
 export function AccountPage() {
   const { status, user } = useSession()
@@ -68,13 +70,24 @@ export function AccountPage() {
 
 function CustomerCabinet({ user }: { user: SessionUser }) {
   const { signOut } = useSession()
-  const bookings = useBookings()
-  const { profiles, failed: profilesFailed } = useBarberProfiles(
-    bookings.items.map((booking) => booking.barberProfileId)
-  )
+  const [tab, setTab] = useState<BookingsTab>('upcoming')
+  // История ленивая: на входе в кабинет грузятся только «Предстоящие».
+  const historyEnabled = tab === 'history'
+  const { upcoming, history, cancelBooking } = useCustomerBookings({
+    historyEnabled,
+  })
+
+  // Активный список задаёт и строки, и пагинатор: у вкладок разные курсоры.
+  const list = tab === 'history' ? history : upcoming
+  const heroBooking = upcoming.items[0] ?? null
+
+  const { profiles, failed: profilesFailed } = useBarberProfiles([
+    ...upcoming.items.map((booking) => booking.barberProfileId),
+    ...history.items.map((booking) => booking.barberProfileId),
+    ...(heroBooking ? [heroBooking.barberProfileId] : []),
+  ])
 
   const [now, setNow] = useState(() => Date.now())
-  const [tab, setTab] = useState<BookingsTab>('upcoming')
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null)
   const [reviewTarget, setReviewTarget] = useState<BookingView | null>(null)
@@ -82,6 +95,10 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
     () => new Set()
   )
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
+  // История уже показала хотя бы одну строку: пустым «Предстоящим» есть что предложить.
+  const [knownHistory, setKnownHistory] = useState(false)
+
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // «через 2 часа» и «сегодня» устаревают молча: пересчитываем раз в минуту,
   // а не на каждый рендер.
@@ -90,31 +107,30 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
     return () => window.clearInterval(timer)
   }, [])
 
-  const views = useMemo(
+  useEffect(() => {
+    if (history.status === 'ready' && history.items.length > 0) {
+      // oxlint-disable-next-line react/set-state-in-effect -- история открыта и непустая
+      setKnownHistory(true)
+    }
+  }, [history.status, history.items.length])
+
+  // Своя карточка на каждой строке: имя и адрес приходят из профиля барбера,
+  // а не из брони, поэтому вид собирается после профилей.
+  const hero = useMemo(
     () =>
-      bookings.items.map((booking) =>
-        buildBookingView(booking, profiles[booking.barberProfileId])
-      ),
-    [bookings.items, profiles]
+      heroBooking
+        ? buildBookingView(heroBooking, profiles[heroBooking.barberProfileId])
+        : null,
+    [heroBooking, profiles]
   )
 
-  const { upcoming, history } = useMemo(() => {
-    const next = views
-      .filter((view) => isUpcomingBooking(view.booking, now))
-      .sort((left, right) =>
-        left.booking.startAt.localeCompare(right.booking.startAt)
-      )
-    const upcomingIds = new Set(next.map((view) => view.booking.id))
-    const past = views
-      .filter((view) => !upcomingIds.has(view.booking.id))
-      .sort((left, right) =>
-        right.booking.startAt.localeCompare(left.booking.startAt)
-      )
-
-    return { upcoming: next, history: past }
-  }, [views, now])
-
-  const hero = upcoming[0] ?? null
+  const listViews = useMemo(
+    () =>
+      list.items.map((booking) =>
+        buildBookingView(booking, profiles[booking.barberProfileId])
+      ),
+    [list.items, profiles]
+  )
 
   async function handleSignOut() {
     await signOut()
@@ -133,6 +149,15 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
       'Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.'
     )
   }
+
+  function handleSignedIn() {
+    upcoming.reload()
+    list.reload()
+  }
+
+  const requiresSignIn = upcoming.requiresSignIn || list.requiresSignIn
+  const isHeroLoading = upcoming.status === 'loading' || upcoming.status === 'idle'
+  const isListLoading = list.status === 'loading' || list.status === 'idle'
 
   return (
     <div className="space-y-5">
@@ -183,63 +208,71 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
         </div>
       )}
 
-      {bookings.requiresSignIn ? (
+      {requiresSignIn ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
             title="Сессия истекла"
             description="Войдите снова, чтобы увидеть свои записи: cookie-сессия закончилась, пока страница была открыта."
-            onSignedIn={bookings.reload}
+            onSignedIn={handleSignedIn}
           />
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
           <div className="space-y-6">
-            {(bookings.status === 'loading' || bookings.status === 'idle') && (
-              <ContentSkeleton />
-            )}
+            {isHeroLoading && <Skeleton className="h-64 rounded-xl" />}
 
-            {bookings.status === 'error' && (
+            {upcoming.status === 'error' && (
               <BookingsErrorState
-                message={bookings.error ?? 'Не удалось загрузить записи.'}
-                onRetry={bookings.reload}
+                message={upcoming.error ?? 'Не удалось загрузить записи.'}
+                onRetry={upcoming.reload}
               />
             )}
 
-            {bookings.status === 'ready' && (
-              <>
-                {hero ? (
-                  <NextBookingCard
-                    view={hero}
-                    now={now}
-                    onRequestCancel={() => setCancelTarget(hero)}
-                  />
-                ) : (
-                  <NoUpcomingCard hasHistory={history.length > 0} />
-                )}
+            {upcoming.status === 'ready' &&
+              (hero ? (
+                <NextBookingCard
+                  view={hero}
+                  now={now}
+                  onRequestCancel={() => setCancelTarget(hero)}
+                />
+              ) : (
+                <NoUpcomingCard hasHistory={knownHistory} />
+              ))}
 
-                {bookings.items.length > 0 && (
-                  <BookingList
-                    upcoming={upcoming}
-                    history={history}
-                    tab={tab}
-                    onTabChange={setTab}
-                    reviewedIds={reviewedIds}
-                    nextCursor={bookings.nextCursor}
-                    isLoadingMore={bookings.isLoadingMore}
-                    loadMoreError={bookings.loadMoreError}
-                    onLoadMore={bookings.loadMore}
-                    onRequestCancel={setCancelTarget}
-                    onRequestReview={setReviewTarget}
-                  />
-                )}
+            {isListLoading && <ListSkeleton />}
 
-                {profilesFailed && (
-                  <p className="text-xs text-muted-foreground">
-                    Часть карточек барберов не загрузилась — имена и адреса могут
-                    быть неполными.
-                  </p>
-                )}
-              </>
+            {list.status === 'error' && (
+              <BookingsErrorState
+                message={list.error ?? 'Не удалось загрузить записи.'}
+                onRetry={list.reload}
+              />
+            )}
+
+            {list.status === 'ready' && (
+              <BookingList
+                items={listViews}
+                tab={tab}
+                onTabChange={setTab}
+                reviewedIds={reviewedIds}
+                rangeLabel={formatPageRange(list.offset, list.items.length)}
+                hasPrev={list.hasPrev}
+                hasNext={list.hasNext}
+                isLoadingPage={list.isLoadingPage}
+                pageError={list.pageError}
+                onPrev={list.goPrev}
+                onNext={list.goNext}
+                pageIndex={list.pageIndex}
+                focusTargetRef={panelRef}
+                onRequestCancel={setCancelTarget}
+                onRequestReview={setReviewTarget}
+              />
+            )}
+
+            {profilesFailed && (
+              <p className="text-xs text-muted-foreground">
+                Часть карточек барберов не загрузилась — имена и адреса могут быть
+                неполными.
+              </p>
             )}
           </div>
 
@@ -257,7 +290,7 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
       <CancelBookingDialog
         view={cancelTarget}
         onClose={() => setCancelTarget(null)}
-        onConfirm={bookings.cancelBooking}
+        onConfirm={cancelBooking}
         onCancelled={handleCancelled}
       />
 
@@ -329,18 +362,16 @@ function NoUpcomingCard({ hasHistory }: { hasHistory: boolean }) {
   )
 }
 
-function ContentSkeleton() {
+/** Скелетон активной вкладки: строки списка, а не всей страницы. */
+function ListSkeleton() {
   return (
     <>
       <p role="status" className="sr-only">
         Загружаем записи…
       </p>
-      <div className="space-y-6" aria-hidden>
-        <Skeleton className="h-64 rounded-xl" />
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-64 rounded-lg" />
-          <Skeleton className="h-52 rounded-xl" />
-        </div>
+      <div className="space-y-3" aria-hidden>
+        <Skeleton className="h-8 w-64 rounded-lg" />
+        <Skeleton className="h-52 rounded-xl" />
       </div>
     </>
   )

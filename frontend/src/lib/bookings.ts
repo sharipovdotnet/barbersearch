@@ -9,6 +9,8 @@ import { isBookingPage, isCreatedId } from '@/lib/response-guards'
  * Контракт `GET api/bookings` отдаёт только идентификаторы связанных агрегатов —
  * имя барбера, услуга и салон догружаются из карточки барбера (`lib/catalog.ts`).
  * Пагинация курсорная: `nextCursor` возвращается как есть и не разбирается на клиенте.
+ * Скоуп вкладок определяет сервер: `all` (по умолчанию), `upcoming` и `past` — разные
+ * выборки, у каждой свой курсор и своё направление сравнения.
  */
 
 export type BookingStatus =
@@ -17,6 +19,9 @@ export type BookingStatus =
   | 'Cancelled'
   | 'Completed'
   | 'NoShow'
+
+/** Скоуп списка броней; `all` — прежнее поведение и значение по умолчанию. */
+export type BookingScope = 'all' | 'upcoming' | 'past'
 
 export type Booking = {
   id: string
@@ -38,9 +43,12 @@ export type Booking = {
 export const BOOKINGS_PAGE_SIZE = 20
 
 export async function fetchBookings(
-  cursor?: string | null
+  scope: BookingScope = 'all',
+  cursor: string | null = null,
+  signal?: AbortSignal
 ): Promise<Page<Booking>> {
   const query = new URLSearchParams({
+    scope,
     pageSize: String(BOOKINGS_PAGE_SIZE),
   })
 
@@ -48,9 +56,11 @@ export async function fetchBookings(
     query.set('cursor', cursor)
   }
 
-  return apiRequest<Page<Booking>>(`/bookings?${query.toString()}`, {}, {
-    validate: isBookingPage,
-  })
+  return apiRequest<Page<Booking>>(
+    `/bookings?${query.toString()}`,
+    signal ? { signal } : {},
+    { validate: isBookingPage }
+  )
 }
 
 /** Отмена возможна только для `Pending` и `Confirmed` — это же проверяет домен. */

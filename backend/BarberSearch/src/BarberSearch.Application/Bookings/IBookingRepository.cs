@@ -43,20 +43,27 @@ public interface IBookingRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Страница броней в порядке <c>start_at DESC, id</c>.
+    /// Страница броней выбранного скоупа.
     /// </summary>
     /// <remarks>
     /// <paramref name="userId"/> = <c>null</c> — все брони (сценарий администратора).
+    /// Граница и направление keyset-сравнения зависят от <paramref name="scope"/>:
+    /// <c>all</c> — прежний <c>start_at DESC, id ASC</c>, «ближайшие» — активные брони
+    /// с <c>EndAt &gt; now</c> по возрастанию, история — всё остальное по убыванию.
     /// Keyset-условие берётся из <paramref name="cursor"/>; <paramref name="limit"/> —
     /// это pageSize + 1, чтобы обработчик отличил последнюю страницу от неполной.
     /// Читается без отслеживания и проецируется сразу в <see cref="BookingResponse"/>.
     /// </remarks>
     /// <param name="userId">Клиент или <c>null</c> для всех броней.</param>
+    /// <param name="scope">Скоуп выдачи.</param>
+    /// <param name="now">Текущий момент UTC — граница скоупов.</param>
     /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
     /// <param name="limit">Сколько строк прочитать.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
         Guid? userId,
+        BookingScope scope,
+        DateTimeOffset now,
         BookingCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default);

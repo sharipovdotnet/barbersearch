@@ -33,7 +33,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 |---|---|
 | `/` | landing page: real barber search by city, date, language, specialization and service, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
-| `/account` | customer cabinet: bookings, cancellation, review, password |
+| `/account` | customer cabinet: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation, review, password |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
@@ -57,13 +57,14 @@ range from `formatPageRange()` in `src/lib/paging.ts` («11–20 из 32» only 
 total, otherwise «21–40»). A next-page error keeps the visible rows and turns the button into
 «Повторить»; filters, tabs and search start a new first page.
 
-Two lists deliberately keep «Показать ещё»:
+One list deliberately keeps «Показать ещё»:
 
 - `/` — the search results are a grid of cards; appending keeps them comparable, while pages would
-  hide barbers the visitor has already seen;
-- `/account` — «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so
-  paginating the already-split list would hide bookings on another page. It needs a server-side
-  `scope` first (AGENT.md §14 #26).
+  hide barbers the visitor has already seen.
+
+Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
+`/admin/barbers` and `/admin/users` — pages with the same footer. The customer cabinet was the last
+exception: it split one server list on the client, which the server-side `scope` fixed (#36).
 
 ## Barber search
 
@@ -175,6 +176,33 @@ press.
 - `src/components/account/my-reviews-list.tsx`, `my-review-row.tsx`,
   `review-status-badge.tsx`, `edit-review-dialog.tsx`, `delete-review-dialog.tsx`.
 - `src/lib/account-path.ts` — `/account` and `/account/reviews` path helpers.
+
+## Customer cabinet
+
+`/account` shows the customer's bookings. Both tabs are **server lists** from
+`GET /api/bookings?scope=…&pageSize=20`: `upcoming` is `Pending`/`Confirmed` with `EndAt > now`
+ordered by start ascending, `past` is everything else (a terminal status or `EndAt <= now`), newest
+first; `all` stays the default for other clients of the endpoint. The client sends the scope and
+never sorts or splits the rows: switching a tab starts the first page of its own scope, and the
+shared pager (twenty rows, cached pages, «Назад» without a request) lives inside the tab panel. The
+tab labels carry no counters — the response has no total, and the page length is not the count.
+
+The hero card «Ближайшая запись» is the first row of «Предстоящие» (never of history), so it is
+stable on the first page and moves after a cancellation. «История» is lazy: it is requested only
+when the tab is opened for the first time. Cancelling waits for `204` and then removes the row from
+«Предстоящие» under the shared empty-page policy; the cancelled visit appears at the top of
+«История» the next time that tab loads. Barber names and salon addresses still come from
+`GET /api/barbers/{id}` for the visible rows and the hero only, not for the hidden list.
+
+States: hero/list skeletons, a first-page error with «Повторить», a next-page error inside the
+pager (the rows stay), the sign-in gate on `401`, and per-tab empty states. A next-page error in
+one tab does not clear the other. The review and password dialogs are unchanged.
+
+- `src/pages/account-page.tsx` — gates, hero, tabs and the dialogs.
+- `src/hooks/use-bookings.ts` — `useCustomerBookings`: two `usePagedList` controllers
+  (`upcoming`/`past`), the lazy history switch and cancellation.
+- `src/components/account/booking-list.tsx` — tabs, month groups per page, rows and the shared pager.
+- `src/lib/bookings.ts` — `Booking`, `BookingScope`, `fetchBookings(scope, cursor, signal)`.
 
 ## Barber cabinet
 
@@ -572,8 +600,10 @@ without a debt number is not allowed.
 ### Fixtures and accounts
 
 `e2e/fixtures/seed.sql` creates fixed UUIDs: one showcase barber with 12 published reviews, 52
-history bookings and 21 upcoming ones, two customers with 12 reviews each, an admin, twelve extra
-barbers in one city (so search has a second page) and 25 users in total (so `/admin/users` has two).
+history bookings and 21 upcoming ones, two customers with 12 reviews each (the `e2e-customer` also
+gets 21 upcoming and 21 history bookings, so both `/account` tabs have two pages), an admin, twelve
+extra barbers in one city (so search has a second page) and 25 users in total (so `/admin/users`
+has two).
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

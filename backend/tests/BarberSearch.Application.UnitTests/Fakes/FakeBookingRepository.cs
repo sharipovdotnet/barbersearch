@@ -117,6 +117,8 @@ public sealed class FakeBookingRepository : IBookingRepository
 
     public Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
         Guid? userId,
+        BookingScope scope,
+        DateTimeOffset now,
         BookingCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
@@ -128,17 +130,52 @@ public sealed class FakeBookingRepository : IBookingRepository
             query = query.Where(booking => booking.UserId == filterUserId);
         }
 
+        // Тот же фильтр, что и в настоящем репозитории: скоуп решается временем окончания,
+        // а не только статусом.
+        query = scope switch
+        {
+            BookingScope.Upcoming => query.Where(booking =>
+                (booking.Status == BookingStatus.Pending || booking.Status == BookingStatus.Confirmed)
+                && booking.EndAt > now),
+            BookingScope.Past => query.Where(booking =>
+                (booking.Status != BookingStatus.Pending && booking.Status != BookingStatus.Confirmed)
+                || booking.EndAt <= now),
+            _ => query
+        };
+
         if (cursor is { } position)
         {
-            query = query.Where(booking =>
-                booking.StartAt < position.StartAt
-                || (booking.StartAt == position.StartAt
-                    && booking.Id.CompareTo(position.Id) > 0));
+            query = scope switch
+            {
+                BookingScope.Upcoming => query.Where(booking =>
+                    booking.StartAt > position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) > 0)),
+                BookingScope.Past => query.Where(booking =>
+                    booking.StartAt < position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) < 0)),
+                _ => query.Where(booking =>
+                    booking.StartAt < position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) > 0))
+            };
         }
 
+        query = scope switch
+        {
+            BookingScope.Upcoming => query
+                .OrderBy(booking => booking.StartAt)
+                .ThenBy(booking => booking.Id),
+            BookingScope.Past => query
+                .OrderByDescending(booking => booking.StartAt)
+                .ThenByDescending(booking => booking.Id),
+            _ => query
+                .OrderByDescending(booking => booking.StartAt)
+                .ThenBy(booking => booking.Id)
+        };
+
         IReadOnlyList<BookingResponse> rows = query
-            .OrderByDescending(booking => booking.StartAt)
-            .ThenBy(booking => booking.Id)
             .Take(limit)
             .Select(ToResponse)
             .ToList();
