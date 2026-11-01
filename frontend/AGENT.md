@@ -327,17 +327,17 @@ npm run test:e2e:ui        # UI mode
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-11-01:**
+**Verification snapshot, 2026-11-02:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 179 files, 116 rules
-npm run build → tsc -b + vite build OK, 2285 modules,
-                dist/assets/index-*.js          393.75 kB (gzip 127.38 kB)
-                dist/assets/admin-page-*.js     111.68 kB (gzip  24.13 kB)  lazy
-                dist/assets/barber-page-*.js     35.80 kB (gzip   9.47 kB)  lazy
-                dist/assets/account-page-*.js    34.60 kB (gzip  10.13 kB)  lazy
-                dist/assets/paging-*.js           6.93 kB (gzip   2.54 kB)  shared
-                dist/assets/index-*.css          74.40 kB (gzip  12.88 kB)
+npm run lint  → 0 warnings, 0 errors, 192 files, 116 rules
+npm run build → tsc -b + vite build OK, 2294 modules,
+                dist/assets/index-*.js          394.52 kB (gzip 127.54 kB)
+                dist/assets/admin-page-*.js     151.83 kB (gzip  33.79 kB)  lazy
+                dist/assets/barber-page-*.js     35.76 kB (gzip   9.46 kB)  lazy
+                dist/assets/account-page-*.js    34.58 kB (gzip  10.13 kB)  lazy
+                dist/assets/paging-*.js           7.53 kB (gzip   2.77 kB)  shared
+                dist/assets/index-*.css          74.66 kB (gzip  12.96 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
