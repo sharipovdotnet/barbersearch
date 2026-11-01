@@ -19,6 +19,9 @@ npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 npm run preview  # serve dist/
 
+npm test           # Vitest unit suite: no API, no browser (see «Testing»)
+npm run test:watch # the same suite in watch mode
+
 npm run test:e2e:install   # once: download Chromium for Playwright
 npm run test:e2e           # Playwright + axe against a real API (see «E2E»)
 npm run test:e2e:ui        # the same in the Playwright UI mode
@@ -469,6 +472,29 @@ start from the first page; the selected user lives in the URL so paging does not
 and the mobile split keeps the list on its page. Role change, block/unblock and email/phone
 confirmation update the row locally (or remove it when it leaves the active filter) before the
 quiet re-sync. The screen never shows a total count, because the API does not return one.
+
+## Testing
+
+Two layers, both in CI: Vitest for the logic, Playwright for the browser.
+
+### Unit — `npm test`
+
+Vitest + jsdom + Testing Library, with MSW as the only network boundary (`src/test/msw/**`;
+`onUnhandledFrame: 'error'`, so an unmocked request fails the test). It runs in about 15 seconds,
+needs no API and no database, and covers:
+
+- `apiRequest` — successful and `204` bodies, broken JSON, `ProblemDetails` and the strict guard,
+  transport failure, `validate`, and the single `401` retry (never on `/auth/*`);
+- `describeSignInError` — the whole §9.5 table, including the order `429` → codes → `401`;
+- `LoginDialog` — client validation, pending state, success, mapped server errors, labels and ARIA;
+- `SessionProvider` — bootstrap outcomes, the «Запомнить меня» refresh, `unavailable`,
+  `retrySession`, sign-in/sign-out, the hint cookie and exactly one `/auth/me` under `StrictMode`.
+
+Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
+and compare Russian copy as a whole string, saying in the test title that it is copy.
+
+Not covered by the unit layer: `HeaderAuth` states, the screens and hooks, and everything that
+needs the real API, router, cookies or focus — that is the E2E layer below.
 
 ## E2E
 
