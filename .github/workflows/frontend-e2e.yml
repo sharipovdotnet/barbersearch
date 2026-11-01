@@ -1,0 +1,159 @@
+name: frontend-e2e
+
+# Сквозные браузерные тесты frontend (Playwright + axe): реальный API, реальный
+# PostgreSQL и отдельная БД barbersearch_e2e. Быстрый frontend-ci (lint/build)
+# этот job не замедляет: он отдельный и запускается только по своим путям.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/frontend-e2e.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/frontend-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Строка подключения одна на все шаги: миграции, seed, API и psql.
+  PGPASSWORD: postgres
+  ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=barbersearch_e2e;Username=postgres;Password=postgres'
+
+jobs:
+  e2e:
+    name: Playwright and axe
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        # Та же мажорная версия, что в backend/docker-compose.yml.
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: barbersearch_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d barbersearch_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            backend/**/*.csproj
+            backend/global.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # dotnet-ef нужен для миграций; версия совпадает с локальной (AGENT.md §5).
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.10
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Build API
+        working-directory: backend
+        run: dotnet build BarberSearch/BarberSearch.sln --nologo
+
+      - name: Apply migrations
+        working-directory: backend
+        run: >
+          dotnet ef database update
+          --project BarberSearch/src/BarberSearch.Infrastructure.Postgresql
+          --startup-project BarberSearch/src/BarberSearch.Web
+          --no-build
+
+      # Оба seed-файла: базовые данные бэкенда и фикстуры E2E (18 пользователей,
+      # отзывы, записи). seed.sql сам откажется работать не с barbersearch_e2e.
+      - name: Seed database
+        run: |
+          psql -h localhost -p 5432 -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 \
+            -q -f backend/load/seed/minimal.sql
+          psql -h localhost -p 5432 -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 \
+            -q -f frontend/e2e/fixtures/seed.sql
+
+      # Ключ подписи токенов приходит только из окружения (backend/AGENT.md §5.5);
+      # для одноразового стенда он генерируется на месте и нигде не хранится.
+      - name: Generate test signing key
+        run: echo "Auth__SigningKey=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
+      - name: Start API
+        working-directory: backend
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+        run: |
+          nohup dotnet run --project BarberSearch/src/BarberSearch.Web \
+            --launch-profile http --no-build > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://localhost:5243/health/ready > /dev/null; then
+              echo "API готов"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API не ответил на /health/ready за 120 с" >&2
+          tail -n 100 "$RUNNER_TEMP/api.log" >&2
+          exit 1
+
+      # Браузеры кэшируются по версии Playwright из lock-файла.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E
+        working-directory: frontend
+        run: npm run test:e2e
+
+      # Трейсы, скриншоты и html-отчёт нужны при падении: без них разбор дороже прогона.
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 14
+
+      - name: API log
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/api.log"
