@@ -1,6 +1,7 @@
 using BarberSearch.Application.Bookings.GetBookings;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.Bookings.GetBookings;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
 using Shared;
 using Xunit;
@@ -22,7 +23,7 @@ public class BookingReadTests
         bookings.Add(CreateBooking(Guid.CreateVersion7(), BaseTime.AddHours(2)));
 
         var result = await CreateHandler(customerId, bookings)
-            .Handle(new GetBookingsQuery(null, null, null), CancellationToken.None);
+            .Handle(new GetBookingsQuery(null, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Value.Items.Count);
@@ -36,7 +37,7 @@ public class BookingReadTests
         var handler = CreateHandler(customerId, new FakeBookingRepository());
 
         var result = await handler.Handle(
-            new GetBookingsQuery(Guid.CreateVersion7(), null, null),
+            new GetBookingsQuery(Guid.CreateVersion7(), null, null, null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -54,7 +55,7 @@ public class BookingReadTests
                 Guid.CreateVersion7(),
                 bookings,
                 isAdmin: true)
-            .Handle(new GetBookingsQuery(null, null, null), CancellationToken.None);
+            .Handle(new GetBookingsQuery(null, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Value.Items.Count);
@@ -76,7 +77,7 @@ public class BookingReadTests
                 bookings,
                 isAdmin: true,
                 users)
-            .Handle(new GetBookingsQuery(targetUserId, null, null), CancellationToken.None);
+            .Handle(new GetBookingsQuery(targetUserId, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Single(result.Value.Items);
@@ -92,7 +93,7 @@ public class BookingReadTests
             isAdmin: true);
 
         var result = await handler.Handle(
-            new GetBookingsQuery(Guid.CreateVersion7(), null, null),
+            new GetBookingsQuery(Guid.CreateVersion7(), null, null, null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -120,7 +121,7 @@ public class BookingReadTests
         do
         {
             var page = await handler.Handle(
-                new GetBookingsQuery(null, cursor, 2),
+                new GetBookingsQuery(null, null, cursor, 2),
                 CancellationToken.None);
 
             Assert.True(page.IsSuccess);
@@ -143,7 +144,7 @@ public class BookingReadTests
     public async Task Get_WithBrokenCursor_ReturnsValidation()
     {
         var result = await CreateHandler(Guid.CreateVersion7(), new FakeBookingRepository())
-            .Handle(new GetBookingsQuery(null, "broken", null), CancellationToken.None);
+            .Handle(new GetBookingsQuery(null, null, "broken", null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
@@ -155,16 +156,33 @@ public class BookingReadTests
         var handler = CreateHandler(Guid.CreateVersion7(), new FakeBookingRepository());
 
         var tooSmall = await handler.Handle(
-            new GetBookingsQuery(null, null, 0),
+            new GetBookingsQuery(null, null, null, 0),
             CancellationToken.None);
         var tooLarge = await handler.Handle(
-            new GetBookingsQuery(null, null, 101),
+            new GetBookingsQuery(null, null, null, 101),
             CancellationToken.None);
 
         Assert.True(tooSmall.IsFailure);
         Assert.True(tooLarge.IsFailure);
         Assert.Equal(ErrorType.VALIDATION, tooSmall.Error.Errors[0].Type);
         Assert.Equal(ErrorType.VALIDATION, tooLarge.Error.Errors[0].Type);
+    }
+
+    /// <summary>
+    /// Неизвестный скоуп — ошибка параметра, а не пустой список: клиент различает
+    /// опечатку в запросе и «броней нет».
+    /// </summary>
+    [Fact]
+    public async Task Get_WithUnknownScope_ReturnsValidation()
+    {
+        var result = await CreateHandler(Guid.CreateVersion7(), new FakeBookingRepository())
+            .Handle(new GetBookingsQuery(null, "soon", null, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(
+            ApiErrorCodes.Booking.GetBookingsScope,
+            result.Error.Errors[0].Code);
     }
 
     private static readonly DateTimeOffset BaseTime =
@@ -178,7 +196,8 @@ public class BookingReadTests
         => new(
             bookings,
             users ?? new FakeUserRepository(),
-            new FakeCurrentUser(currentUserId, isAdmin));
+            new FakeCurrentUser(currentUserId, isAdmin),
+            new FakeTimeProvider(BaseTime));
 
     private static Booking CreateBooking(Guid userId, DateTimeOffset startAt)
         => Booking.Create(

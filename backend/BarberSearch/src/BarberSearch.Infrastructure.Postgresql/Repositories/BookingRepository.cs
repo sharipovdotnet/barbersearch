@@ -100,6 +100,8 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
 
     public async Task<Result<IReadOnlyList<BookingResponse>, Failure>> GetPageAsync(
         Guid? userId,
+        BookingScope scope,
+        DateTimeOffset now,
         BookingCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
@@ -119,17 +121,58 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             query = query.Where(booking => booking.UserId == filterUserId);
         }
 
+        // Граница скоупа — EndAt, а не статус: активная бронь с прошедшим концом уже
+        // история, а терминальный статус никогда не попадает в «ближайшие».
+        query = scope switch
+        {
+            BookingScope.Upcoming => query.Where(booking =>
+                (booking.Status == BookingStatus.Pending
+                 || booking.Status == BookingStatus.Confirmed)
+                && booking.EndAt > now),
+            BookingScope.Past => query.Where(booking =>
+                (booking.Status != BookingStatus.Pending
+                 && booking.Status != BookingStatus.Confirmed)
+                || booking.EndAt <= now),
+            _ => query
+        };
+
+        // Направление keyset-сравнения задаёт скоуп: «ближайшие» идут вперёд,
+        // история — назад, а `all` сохраняет прежний тай-брейк `id ASC` при
+        // `start_at DESC`. Поэтому три ветки, а не две.
         if (cursor is { } position)
         {
-            query = query.Where(booking =>
-                booking.StartAt < position.StartAt
-                || (booking.StartAt == position.StartAt
-                    && booking.Id.CompareTo(position.Id) > 0));
+            query = scope switch
+            {
+                BookingScope.Upcoming => query.Where(booking =>
+                    booking.StartAt > position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) > 0)),
+                BookingScope.Past => query.Where(booking =>
+                    booking.StartAt < position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) < 0)),
+                _ => query.Where(booking =>
+                    booking.StartAt < position.StartAt
+                    || (booking.StartAt == position.StartAt
+                        && booking.Id.CompareTo(position.Id) > 0))
+            };
         }
 
-        var rows = await query
-            .OrderByDescending(booking => booking.StartAt)
-            .ThenBy(booking => booking.Id)
+        var ordered = scope switch
+        {
+            BookingScope.Upcoming => query
+                .OrderBy(booking => booking.StartAt)
+                .ThenBy(booking => booking.Id),
+            BookingScope.Past => query
+                .OrderByDescending(booking => booking.StartAt)
+                .ThenByDescending(booking => booking.Id),
+            // `all` сохраняет прежний порядок и тай-брейк: внешние клиенты видят тот же список.
+            _ => query
+                .OrderByDescending(booking => booking.StartAt)
+                .ThenBy(booking => booking.Id)
+        };
+
+        var rows = await ordered
             .Take(limit)
             .Select(booking => new BookingResponse(
                 booking.Id,

@@ -2,10 +2,80 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '@/lib/api'
-import { createBooking, type CreateBookingInput } from '@/lib/bookings'
+import { createBooking, fetchBookings, type CreateBookingInput } from '@/lib/bookings'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
+
+/** Скоуп — часть контракта списка: сервер фильтрует вкладки, а не клиент. */
+describe('fetchBookings', () => {
+  it('по умолчанию просит скоуп all и двадцать строк', async () => {
+    const requests = captureBookingRequests()
+
+    await expect(fetchBookings()).resolves.toStrictEqual({
+      items: [],
+      nextCursor: null,
+    })
+
+    expect(requests).toStrictEqual(['?scope=all&pageSize=20'])
+  })
+
+  it('просит upcoming без курсора на первой странице', async () => {
+    const requests = captureBookingRequests()
+
+    await fetchBookings('upcoming', null)
+
+    expect(requests).toStrictEqual(['?scope=upcoming&pageSize=20'])
+  })
+
+  it('передаёт скоуп и курсор как есть', async () => {
+    const requests = captureBookingRequests()
+
+    await fetchBookings('past', 'cursor-1')
+
+    expect(requests).toStrictEqual([
+      '?scope=past&pageSize=20&cursor=cursor-1',
+    ])
+  })
+
+  it('пустой курсор не попадает в запрос', async () => {
+    const requests = captureBookingRequests()
+
+    await fetchBookings('upcoming', '')
+
+    expect(requests).toStrictEqual(['?scope=upcoming&pageSize=20'])
+  })
+
+  it('передаёт signal отмены в запрос', async () => {
+    server.use(
+      http.get('/api/bookings', () => {
+        return HttpResponse.json({ items: [], nextCursor: null })
+      })
+    )
+
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      fetchBookings('all', null, controller.signal)
+    ).rejects.toThrow()
+  })
+})
+
+/** Перехватывает GET-запросы списка и возвращает пустую страницу. */
+function captureBookingRequests(): string[] {
+  const requests: string[] = []
+
+  server.use(
+    http.get('/api/bookings', ({ request }) => {
+      requests.push(new URL(request.url).search)
+
+      return HttpResponse.json({ items: [], nextCursor: null })
+    })
+  )
+
+  return requests
+}
 
 /**
  * Создание брони — cookie-мутация, поэтому antiforgery обязателен с этапа #35.

@@ -32,9 +32,13 @@ public class BookingsController : ApiController
     /// <remarks>
     /// Обычный пользователь не может запросить чужой список — это 403. Администратор
     /// может сузить выдачу параметром <paramref name="userId"/>; несуществующий клиент
-    /// даёт 404. Порядок — свежие сверху, пагинация курсорная.
+    /// даёт 404. <paramref name="scope"/> делит список на вкладки: <c>all</c> по умолчанию
+    /// (прежний порядок, свежие сверху), <c>upcoming</c> — активные брони с
+    /// <c>EndAt &gt; now</c> по возрастанию, <c>past</c> — остальные по убыванию.
+    /// Пагинация курсорная; направление курсора задаёт скоуп.
     /// </remarks>
     /// <param name="userId">Клиент для администратора; остальным доступен только свой id.</param>
+    /// <param name="scope">Скоуп выдачи: <c>all</c>, <c>upcoming</c> или <c>past</c>.</param>
     /// <param name="cursor">Непрозрачный курсор следующей страницы.</param>
     /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
     /// <param name="handler">Обработчик запроса.</param>
@@ -42,12 +46,13 @@ public class BookingsController : ApiController
     [HttpGet]
     public async Task<ActionResult<PagedResponse<BookingResponse>>> Get(
         [FromQuery] Guid? userId,
+        [FromQuery] string? scope,
         [FromQuery] string? cursor,
         [FromQuery] int? pageSize,
         [FromServices] IQueryHandler<PagedResponse<BookingResponse>, GetBookingsQuery> handler,
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
-            new GetBookingsQuery(userId, cursor, pageSize),
+            new GetBookingsQuery(userId, scope, cursor, pageSize),
             cancellationToken));
 
     /// <summary>

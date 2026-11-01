@@ -15,26 +15,36 @@ namespace BarberSearch.Application.Bookings.GetBookings;
 /// Владение проверяется здесь, а не в контроллере: чужой <c>userId</c> — это 403,
 /// а не пустой список, чтобы клиент не путал «нет прав» с «нет броней». Администратор
 /// обходит проверку; для несуществующего клиента он получает 404.
+/// <para>
+/// Граница скоупов считается от <see cref="TimeProvider"/>, а не от системных часов:
+/// «сейчас» — бизнес-решение (AGENT.md §7.6), и в тестах оно управляемое.
+/// </para>
 /// </remarks>
 public sealed class GetBookingsHandler
     : IQueryHandler<PagedResponse<BookingResponse>, GetBookingsQuery>
 {
+    private const string PAGE_SIZE_ERROR_PREFIX = "booking.getBookings";
+
     private readonly IBookingRepository _bookingRepository;
     private readonly IUserRepository _userRepository;
     private readonly ICurrentUser _currentUser;
+    private readonly TimeProvider _timeProvider;
 
     public GetBookingsHandler(
         IBookingRepository bookingRepository,
         IUserRepository userRepository,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(bookingRepository);
         ArgumentNullException.ThrowIfNull(userRepository);
         ArgumentNullException.ThrowIfNull(currentUser);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         _bookingRepository = bookingRepository;
         _userRepository = userRepository;
         _currentUser = currentUser;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -54,9 +64,18 @@ public sealed class GetBookingsHandler
 
         var currentUserId = userIdResult.Value;
 
+        var scope = ParseScope(query.Scope);
+        if (scope is null)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Booking.GetBookingsScope,
+                "Scope must be either 'all', 'upcoming' or 'past'.",
+                nameof(query.Scope)));
+        }
+
         var pageSize = query.PageSize ?? Pagination.DEFAULT_PAGE_SIZE;
 
-        if (Pagination.ValidatePageSize(pageSize, "booking.getBookings") is { } pageSizeError)
+        if (Pagination.ValidatePageSize(pageSize, PAGE_SIZE_ERROR_PREFIX) is { } pageSizeError)
         {
             return pageSizeError;
         }
@@ -115,8 +134,12 @@ public sealed class GetBookingsHandler
             cursor = decoded.Value;
         }
 
+        var now = _timeProvider.GetUtcNow();
+
         var rowsResult = await _bookingRepository.GetPageAsync(
             filterUserId,
+            scope.Value,
+            now,
             cursor,
             pageSize + 1,
             cancellationToken);
@@ -137,4 +160,16 @@ public sealed class GetBookingsHandler
 
         return new PagedResponse<BookingResponse>(items, nextCursor);
     }
+
+    /// <summary>
+    /// Разбирает скоуп: пустая строка и <c>null</c> — прежнее <c>all</c>, регистр не важен.
+    /// </summary>
+    private static BookingScope? ParseScope(string? scope)
+        => scope?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "all" => BookingScope.All,
+            "upcoming" => BookingScope.Upcoming,
+            "past" => BookingScope.Past,
+            _ => null
+        };
 }

@@ -17,7 +17,9 @@
 -- Что даёт разметка для тестов:
 --   B1 (9e100000-…-0001)        12 опубликованных отзывов (2 страницы по 10), 52 записи
 --                               в истории, 21 предстоящая запись (вторая страница — одна строка)
---   e2e-customer                12 своих отзывов (вторая страница — 2 строки)
+--   e2e-customer                12 своих отзывов (вторая страница — 2 строки),
+--                               21 предстоящая запись и 21 запись истории — две вкладки
+--                               «/account» по две страницы (20 + одна строка)
 --   e2e-mutations               12 своих отзывов (вторая страница — 2 строки) + 2 свободные
 --                               записи под восстановление после удаления отзыва
 --   B2…B13                      12 барберов, по 2 опубликованных отзыва; 13 профилей в «Москве»
@@ -401,6 +403,57 @@ SELECT
     timestamptz '2026-03-01 10:00+00' + (n || ' days')::interval,
     timestamptz '2026-03-01 10:00+00' + (n || ' days')::interval
 FROM generate_series(1, 12) AS n;
+
+-- 5.4.1 Клиент e2e-customer: 21 предстоящая запись — «Предстоящие» на две страницы
+--       (20 строк + одна). Барберы B2…B13 по кругу, каждый на своём дне в 09:00 UTC:
+--       у одного барбера не больше двух записей, поэтому exclusion-ограничение
+--       не срабатывает. Строки нужны account-bookings.spec.ts (пагинатор, hero)
+--       и account-bookings-mutations.spec.ts (отмена уменьшает страницу до 19).
+INSERT INTO bookings
+    (id, user_id, barber_profile_id, barber_service_id, salon_id,
+     start_at, end_at, price, status, idempotency_key, customer_note, barber_note,
+     created_at, updated_at)
+SELECT
+    md5('e2e-customer-upcoming:' || n)::uuid,
+    '9e000000-0000-4000-8000-000000000003'::uuid,
+    ('9e100000-0000-4000-8000-' || lpad((2 + ((n - 1) % 12))::text, 12, '0'))::uuid,
+    ('9e300000-0000-4000-8000-' || lpad((2 + ((n - 1) % 12))::text, 12, '0'))::uuid,
+    '9e400000-0000-4000-8000-000000000001'::uuid,
+    date_trunc('day', now()) + (n || ' days')::interval + interval '9 hours',
+    date_trunc('day', now()) + (n || ' days')::interval + interval '9 hours 30 minutes',
+    30.00,
+    CASE WHEN n % 2 = 0 THEN 1 ELSE 2 END,
+    'e2e-customer-upcoming-' || n,
+    NULL,
+    NULL,
+    now(),
+    now()
+FROM generate_series(1, 21) AS n;
+
+-- 5.4.2 Клиент e2e-customer: 9 прошедших записей со статусами 3/5 (отменена/неявка).
+--       Вместе с 12 завершёнными из 5.4 они дают ровно 21 строку истории — тоже две
+--       страницы (20 + одна). Статус не Completed намеренно: завершённый визит
+--       предлагал бы отзыв, а эти строки нужны только пагинатору и порядку.
+INSERT INTO bookings
+    (id, user_id, barber_profile_id, barber_service_id, salon_id,
+     start_at, end_at, price, status, idempotency_key, customer_note, barber_note,
+     created_at, updated_at)
+SELECT
+    md5('e2e-customer-history:' || n)::uuid,
+    '9e000000-0000-4000-8000-000000000003'::uuid,
+    ('9e100000-0000-4000-8000-' || lpad((2 + ((n - 1) % 12))::text, 12, '0'))::uuid,
+    ('9e300000-0000-4000-8000-' || lpad((2 + ((n - 1) % 12))::text, 12, '0'))::uuid,
+    '9e400000-0000-4000-8000-000000000001'::uuid,
+    now() - ((2 * n) || ' days')::interval + interval '15 hours',
+    now() - ((2 * n) || ' days')::interval + interval '15 hours 30 minutes',
+    30.00,
+    CASE WHEN n % 2 = 0 THEN 5 ELSE 3 END,
+    'e2e-customer-history-' || n,
+    NULL,
+    NULL,
+    now(),
+    now()
+FROM generate_series(1, 9) AS n;
 
 -- 5.5 Клиент e2e-mutations: 12 записей с отзывами (вторая страница — две строки)
 --     и 2 свободные записи без отзыва — на них тест пересоздаёт удалённый отзыв.

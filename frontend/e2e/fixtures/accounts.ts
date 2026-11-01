@@ -43,11 +43,17 @@ export const fixtures = {
   barberProfileId: '9e100000-0000-4000-8000-000000000001',
   barberServiceId: '9e300000-0000-4000-8000-000000000001',
   salonId: '9e400000-0000-4000-8000-000000000001',
+  /** Барбер B2: ближайшая запись клиента и восстановление после её отмены. */
+  customerBarberProfileId: '9e100000-0000-4000-8000-000000000002',
+  customerBarberServiceId: '9e300000-0000-4000-8000-000000000002',
   city: 'Москва',
   /** 12 опубликованных отзывов витрины и 21 предстоящая запись кабинета. */
   publicReviews: { first: 10, total: 12 },
   upcomingBookings: 21,
   historyBookings: 52,
+  /** Две вкладки `/account`: по 21 строке, то есть по две страницы по 20. */
+  customerUpcomingBookings: 21,
+  customerHistoryBookings: 21,
 } as const
 
 /** Размеры страниц фронтенда: те же числа стоят в `src/lib/*`. */
@@ -56,6 +62,7 @@ export const pageSize = {
   myReviews: 10,
   cabinet: 20,
   admin: 20,
+  account: 20,
   search: 12,
 } as const
 

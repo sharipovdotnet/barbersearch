@@ -1,8 +1,9 @@
-import { useRef, type KeyboardEvent } from 'react'
-import { Loader2, Scissors } from 'lucide-react'
+import { useRef, type KeyboardEvent, type RefObject } from 'react'
+import { Scissors } from 'lucide-react'
 
 import { BookingRow } from '@/components/account/booking-row'
 import type { BookingView } from '@/components/account/booking-view'
+import { ListPager } from '@/components/list-pager'
 import { Button } from '@/components/ui/button'
 import { formatMonth } from '@/lib/format'
 import { goToSection } from '@/lib/router'
@@ -14,6 +15,12 @@ const TABS = [
   { id: 'upcoming', label: 'Предстоящие' },
   { id: 'history', label: 'История' },
 ] as const
+
+/** Подпись навигации пагинатора: у вкладок разные списки и разные курсоры. */
+const PAGER_LABELS: Record<BookingsTab, string> = {
+  upcoming: 'Страницы предстоящих записей',
+  history: 'Страницы истории',
+}
 
 type MonthGroup = {
   key: string
@@ -41,32 +48,45 @@ function groupByMonth(items: BookingView[]): MonthGroup[] {
 /**
  * Список записей с переключателем «Предстоящие / История».
  *
- * Разделение клиентское: сервер отдаёт брони одним потоком по времени начала,
- * а кабинет показывает будущее отдельно от прошлого. Догрузка по курсору относится
- * к истории — предстоящие всегда попадают на первую страницу.
+ * Вкладки — два независимых серверных списка, поэтому пагинатор живёт внутри
+ * `tabpanel` и листает только свою выборку. Группировка по месяцам считается по
+ * странице: месяц может разорваться между страницами — склеивать их на клиенте
+ * значило бы грузить строки, которых на странице нет.
+ *
+ * Счётчиков на вкладках нет: общего числа сервер не отдаёт, а длина страницы не
+ * равна числу записей. Подпись диапазона живёт в пагинаторе.
  */
 export function BookingList({
-  upcoming,
-  history,
+  items,
   tab,
   onTabChange,
   reviewedIds,
-  nextCursor,
-  isLoadingMore,
-  loadMoreError,
-  onLoadMore,
+  rangeLabel,
+  hasPrev,
+  hasNext,
+  isLoadingPage,
+  pageError,
+  onPrev,
+  onNext,
+  pageIndex,
+  focusTargetRef,
   onRequestCancel,
   onRequestReview,
 }: {
-  upcoming: BookingView[]
-  history: BookingView[]
+  items: BookingView[]
   tab: BookingsTab
   onTabChange: (tab: BookingsTab) => void
   reviewedIds: ReadonlySet<string>
-  nextCursor: string | null
-  isLoadingMore: boolean
-  loadMoreError: string | null
-  onLoadMore: () => void
+  rangeLabel: string
+  hasPrev: boolean
+  hasNext: boolean
+  isLoadingPage: boolean
+  pageError: string | null
+  onPrev: () => void
+  onNext: () => void
+  pageIndex: number
+  /** Цель фокуса и прокрутки после смены страницы — сама панель вкладки. */
+  focusTargetRef: RefObject<HTMLDivElement | null>
   onRequestCancel: (view: BookingView) => void
   onRequestReview: (view: BookingView) => void
 }) {
@@ -75,7 +95,6 @@ export function BookingList({
     history: null,
   })
 
-  const items = tab === 'upcoming' ? upcoming : history
   const groups = groupByMonth(items)
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -99,7 +118,6 @@ export function BookingList({
         >
           {TABS.map((item) => {
             const isSelected = item.id === tab
-            const count = item.id === 'upcoming' ? upcoming.length : history.length
 
             return (
               <button
@@ -111,7 +129,7 @@ export function BookingList({
                 role="tab"
                 id={`bookings-tab-${item.id}`}
                 aria-selected={isSelected}
-                aria-controls={isSelected ? 'bookings-panel' : undefined}
+                aria-controls="bookings-panel"
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => onTabChange(item.id)}
                 onKeyDown={handleTabKeyDown}
@@ -123,9 +141,6 @@ export function BookingList({
                 )}
               >
                 {item.label}
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {count}
-                </span>
               </button>
             )
           })}
@@ -135,65 +150,49 @@ export function BookingList({
       <div
         role="tabpanel"
         id="bookings-panel"
+        ref={focusTargetRef}
+        tabIndex={-1}
         aria-labelledby={`bookings-tab-${tab}`}
-        className="space-y-3"
+        aria-busy={isLoadingPage}
+        className="scroll-mt-20 space-y-3 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        {groups.length === 0 && !(tab === 'history' && nextCursor) ? (
+        {groups.length === 0 ? (
           <TabEmptyState tab={tab} />
         ) : (
-          groups.length > 0 && (
-            <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-              {groups.map((group, index) => (
-                <div key={group.key} className={index > 0 ? 'border-t' : undefined}>
-                  <h3 className="border-b bg-muted/40 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                    {group.label}
-                  </h3>
-                  <ul className="divide-y">
-                    {group.items.map((view) => (
-                      <BookingRow
-                        key={view.booking.id}
-                        view={view}
-                        isReviewed={reviewedIds.has(view.booking.id)}
-                        onRequestCancel={() => onRequestCancel(view)}
-                        onRequestReview={() => onRequestReview(view)}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-
-        {tab === 'history' && nextCursor && (
-          <div className="flex flex-col items-center gap-2 pt-1">
-            {loadMoreError && (
-              <p role="alert" className="text-sm text-destructive">
-                {loadMoreError}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {items.length === 0
-                ? 'Ранние визиты ещё не загружены.'
-                : `Показаны последние ${items.length} записей.`}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onLoadMore}
-              disabled={isLoadingMore}
-            >
-              {isLoadingMore ? (
-                <>
-                  <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
-                  Загружаем…
-                </>
-              ) : (
-                'Показать ещё'
-              )}
-            </Button>
+          <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+            {groups.map((group, index) => (
+              <div key={group.key} className={index > 0 ? 'border-t' : undefined}>
+                <h3 className="border-b bg-muted/40 px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {group.label}
+                </h3>
+                <ul className="divide-y">
+                  {group.items.map((view) => (
+                    <BookingRow
+                      key={view.booking.id}
+                      view={view}
+                      isReviewed={reviewedIds.has(view.booking.id)}
+                      onRequestCancel={() => onRequestCancel(view)}
+                      onRequestReview={() => onRequestReview(view)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
+
+        <ListPager
+          label={PAGER_LABELS[tab]}
+          rangeLabel={rangeLabel}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
+          isLoading={isLoadingPage}
+          error={pageError}
+          onPrev={onPrev}
+          onNext={onNext}
+          pageIndex={pageIndex}
+          focusTargetRef={focusTargetRef}
+        />
       </div>
     </section>
   )
