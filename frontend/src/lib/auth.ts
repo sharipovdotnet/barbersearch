@@ -69,11 +69,15 @@ export async function signIn(
 /**
  * Один `POST /auth/refresh` в cookie-ветке: свежий CSRF → `204` + новые cookie.
  *
- * Тело не отправляется: сервер берёт refresh-токен из HttpOnly-cookie, а antiforgery
- * проверяет по заголовку. Повтор на `401` выключен — этим вызовом продлевает сессию
- * оркестратор `lib/session-refresh.ts`, а не транспорт.
+ * `rememberMe` — решение вызывающего, а не догадка транспорта: подсказку
+ * `barbersearch.remember` читает `lib/session-refresh.ts`. Сервер применяет её к
+ * access-cookie: `true` — постоянная, `false` — сессионная. Refresh-токен остаётся
+ * в HttpOnly-cookie, в теле только флаг. Повтор на `401` выключен — этим вызовом
+ * продлевает сессию оркестратор, а не транспорт.
  */
-export async function requestSessionRefresh(): Promise<void> {
+export async function requestSessionRefresh(
+  rememberMe: boolean
+): Promise<void> {
   const csrfToken = await fetchCsrfToken()
 
   await apiRequest<void>(
@@ -81,6 +85,7 @@ export async function requestSessionRefresh(): Promise<void> {
     {
       method: 'POST',
       headers: { [CSRF_HEADER]: csrfToken },
+      body: JSON.stringify({ rememberMe }),
     },
     { retryOnUnauthorized: false }
   )

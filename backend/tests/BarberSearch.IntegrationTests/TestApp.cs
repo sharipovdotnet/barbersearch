@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http.Json;
+using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Contracts.Common;
@@ -178,6 +180,81 @@ public sealed class TestApp : IAsyncDisposable
         var tokens = await LoginAsync(email, password);
         Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+    }
+
+    /// <summary>
+    /// Браузерная сессия: отдельный клиент с cookie-контейнером и свежим antiforgery-токеном.
+    /// </summary>
+    /// <remarks>
+    /// Базовый адрес — <c>https://localhost</c>: в <c>Testing</c> все cookie <c>Secure</c>, и
+    /// контейнер не отправил бы их обратно по http. TLS <c>TestServer</c> не терминирует —
+    /// схема нужна только для <c>Request.IsHttps</c> и решений cookie-контейнера.
+    /// <para>
+    /// Токен берётся повторно **после** входа: antiforgery-токен привязан к личности, и
+    /// анонимный токен на первой мутации дал бы <c>400 auth.csrf.invalid</c>.
+    /// </para>
+    /// </remarks>
+    public async Task<CookieSession> SignInWithCookieAsync(
+        string email,
+        bool rememberMe = false,
+        string password = Password)
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("https://localhost")
+        });
+        client.Timeout = TimeSpan.FromSeconds(60);
+
+        var loginToken = await GetCsrfTokenAsync(client);
+
+        using (var loginRequest = new HttpRequestMessage(HttpMethod.Post, "api/auth/login/cookie")
+        {
+            Content = JsonContent.Create(new LoginRequest(email, password, rememberMe))
+        })
+        {
+            loginRequest.Headers.Add(AuthConstants.CSRF_HEADER_NAME, loginToken);
+
+            using var loginResponse = await client.SendAsync(loginRequest);
+
+            if (loginResponse.StatusCode != HttpStatusCode.NoContent)
+            {
+                var detail = await loginResponse.Content.ReadAsStringAsync();
+                client.Dispose();
+
+                throw new InvalidOperationException(
+                    $"Cookie sign-in for '{email}' failed: {loginResponse.StatusCode} {detail}");
+            }
+        }
+
+        var csrfToken = await GetCsrfTokenAsync(client);
+
+        return new CookieSession(client, csrfToken);
+    }
+
+    /// <summary>
+    /// Выдаёт antiforgery-токен для cookie-контейнера клиента (и ставит его cookie).
+    /// </summary>
+    public static async Task<string> GetCsrfTokenAsync(HttpClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        using var response = await client.GetAsync("api/auth/csrf");
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException(
+                $"GET api/auth/csrf failed: {response.StatusCode}");
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<CsrfResponse>();
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Token))
+        {
+            throw new InvalidOperationException("GET api/auth/csrf returned an empty token.");
+        }
+
+        return body.Token;
     }
 
     /// <inheritdoc />

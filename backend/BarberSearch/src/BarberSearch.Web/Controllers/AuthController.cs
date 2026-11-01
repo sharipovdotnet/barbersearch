@@ -52,6 +52,8 @@ public class AuthController : ApiController
     /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Регистрация анонимна и не несёт ambient-идентичности: привязывать токен не к чему.
+    [SkipCookieAntiforgery]
     [HttpPost("register")]
     public async Task<ActionResult<CreatedResourceResponse>> Register(
         [FromBody] RegisterRequest request,
@@ -88,6 +90,8 @@ public class AuthController : ApiController
     /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Body-ветка отдаёт токены в теле и не опирается на cookie; cookie-вход защищён атрибутом.
+    [SkipCookieAntiforgery]
     [HttpPost("login")]
     public async Task<ActionResult<TokenResponse>> Login(
         [FromBody] LoginRequest request,
@@ -191,9 +195,14 @@ public class AuthController : ApiController
     /// Ротация обязательна при каждом вызове. Повторно предъявленный заменённый токен —
     /// признак кражи: вся цепочка отзывается, клиент получает <c>401 auth.refresh.reused</c>.
     /// Cookie-ветка требует antiforgery: запрос опирается на cookie, а не на заголовок.
+    /// <c>rememberMe</c> влияет только на cookie-ветку: <c>true</c> ставит постоянную
+    /// access-cookie, <c>false</c> и отсутствие поля — сессионную. Refresh-токен в теле
+    /// переключает действие на внешнюю ветку, и тогда cookie не ставятся вовсе.
     /// </remarks>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Cookie-ветка проверяет токен вручную, body-ветке CSRF не нужен: cookie не используются.
+    [SkipCookieAntiforgery]
     [HttpPost("refresh")]
     public async Task<ActionResult> Refresh(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request,
@@ -252,6 +261,9 @@ public class AuthController : ApiController
             return Ok(CreateTokenResponse(result.Value.User, issued, issuer, timeProvider));
         }
 
+        // Ветка не зависит от формы тела: наличие rememberMe не делает клиента внешним.
+        var rememberMe = request?.RememberMe ?? false;
+
         var principal = ClaimsPrincipalFactory.CreatePrincipal(
             result.Value.User,
             CookieAuthenticationDefaults.AuthenticationScheme);
@@ -261,8 +273,12 @@ public class AuthController : ApiController
             principal,
             new AuthenticationProperties
             {
-                IsPersistent = true,
-                ExpiresUtc = timeProvider.GetUtcNow().AddHours(authOptions.CookieHours)
+                // «Запомнить меня» приходит через refresh и решает, переживёт ли access-cookie
+                // перезапуск браузера. Без явного поля — сессионная cookie.
+                IsPersistent = rememberMe,
+                ExpiresUtc = rememberMe
+                    ? timeProvider.GetUtcNow().AddHours(authOptions.CookieHours)
+                    : null
             });
 
         RefreshTokenCookie.Append(
@@ -287,6 +303,8 @@ public class AuthController : ApiController
     /// </remarks>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Проверка зависит от ветки (cookie или тело) и уже выполнена внутри действия.
+    [SkipCookieAntiforgery]
     [HttpPost("logout")]
     public async Task<ActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequest? request,
@@ -330,8 +348,9 @@ public class AuthController : ApiController
     /// Смена пароля вошедшим пользователем. Отзывает все refresh-токены пользователя.
     /// </summary>
     /// <remarks>
-    /// Пользователь берётся из claims, поэтому чужой пароль сменить нельзя. Cookie-ветка
-    /// требует antiforgery, Bearer-ветка — нет: у неё нет ambient-учётных данных.
+    /// Пользователь берётся из claims, поэтому чужой пароль сменить нельзя. Cookie-ветку
+    /// закрывает глобальный antiforgery-фильтр; Bearer-ветка его не трогает — у неё нет
+    /// ambient-учётных данных, а значит и CSRF.
     /// </remarks>
     [Authorize]
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
@@ -341,18 +360,8 @@ public class AuthController : ApiController
         [FromServices] ICommandHandler<ChangePasswordCommand> handler,
         [FromServices] AuthOptions authOptions,
         [FromServices] IWebHostEnvironment environment,
-        [FromServices] IAntiforgery antiforgery,
         CancellationToken cancellationToken)
     {
-        if (!IsBearerRequest())
-        {
-            var csrf = await ValidateAntiforgeryAsync(antiforgery);
-            if (csrf is not null)
-            {
-                return csrf;
-            }
-        }
-
         if (!Guid.TryParse(User.FindFirstValue(ClaimsPrincipalFactory.SUB_CLAIM), out var userId))
         {
             return Unauthorized();

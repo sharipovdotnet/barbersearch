@@ -134,6 +134,10 @@ export async function createUpcomingBooking(
   })
 
   try {
+    // Контекст уже аутентифицирован storageState клиента, поэтому токен привязан к его
+    // личности: анонимный токен получил бы 400 на первой же попытке.
+    const token = await csrfToken(context)
+
     for (let dayOffset = 22; dayOffset < 30; dayOffset += 1) {
       const start = new Date()
       start.setUTCDate(start.getUTCDate() + dayOffset)
@@ -142,6 +146,7 @@ export async function createUpcomingBooking(
       const end = new Date(start.getTime() + 30 * 60_000)
 
       const response = await context.post('/api/bookings', {
+        headers: { 'X-CSRF-TOKEN': token },
         data: {
           barberProfileId: ids.barberProfileId,
           barberServiceId: ids.barberServiceId,
@@ -149,8 +154,8 @@ export async function createUpcomingBooking(
           startAt: start.toISOString(),
           endAt: end.toISOString(),
           // Ключ уникален для попытки: повтор с тем же ключом вернул бы уже
-      // отменённую запись (idempotent replay) и не восстановил бы страницу.
-      idempotencyKey: `e2e-restore-${start.toISOString()}-${Date.now()}`,
+          // отменённую запись (idempotent replay) и не восстановил бы страницу.
+          idempotencyKey: `e2e-restore-${start.toISOString()}-${Date.now()}`,
           customerNote: null,
         },
       })
