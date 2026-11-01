@@ -20,9 +20,9 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { ApiError } from '@/lib/api'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate } from '@/lib/router'
+import { describeSignInError } from '@/lib/sign-in-errors'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -50,44 +50,6 @@ function validate(email: string, password: string): LoginErrors {
   }
 
   return errors
-}
-
-/**
- * Переводит ProblemDetails от API в понятный текст.
- *
- * Коды берутся из `LoginUserHandler` и `ValidateAntiforgeryHeaderAttribute`: разбирать
- * английский `detail` нельзя — он не является контрактом.
- */
-function describeSignInError(error: unknown): string {
-  if (!(error instanceof ApiError)) {
-    return 'Не удалось войти. Попробуйте ещё раз.'
-  }
-
-  if (error.status === 0) {
-    return 'Нет связи с сервером. Проверьте подключение и повторите попытку.'
-  }
-
-  if (error.status === 429) {
-    return 'Слишком много попыток входа. Подождите минуту и повторите.'
-  }
-
-  if (error.hasCode('auth.login.lockedOut')) {
-    return 'Слишком много неудачных попыток. Вход временно заблокирован — попробуйте позже.'
-  }
-
-  if (error.hasCode('auth.login.inactive')) {
-    return 'Аккаунт деактивирован. Восстановить доступ поможет поддержка.'
-  }
-
-  if (error.hasCode('auth.csrf.invalid')) {
-    return 'Сессия устарела. Закройте окно и попробуйте снова.'
-  }
-
-  if (error.hasCode('auth.login.invalidCredentials') || error.status === 401) {
-    return 'Неверный email или пароль.'
-  }
-
-  return 'Не удалось войти. Попробуйте ещё раз.'
 }
 
 function LoginForm({
