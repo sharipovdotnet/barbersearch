@@ -116,7 +116,10 @@ export function ListPager({
         <Button
           type="button"
           variant="outline"
-          aria-label="Предыдущая страница"
+          // Имя начинается с видимого слова: голосовое управление и диктовка
+          // ищут «Назад», а не «Предыдущая страница» (WCAG 2.5.3). Текст скрыт
+          // на узком экране через CSS, но имя одно на обе ширины.
+          aria-label="Назад — предыдущая страница"
           className="h-11 w-11 px-0 sm:h-9 sm:w-auto sm:px-3"
           disabled={!hasPrev}
           onClick={handlePrev}
@@ -133,7 +136,9 @@ export function ListPager({
           type="button"
           variant="secondary"
           aria-label={
-            error === null ? 'Следующая страница' : 'Повторить загрузку'
+            error === null
+              ? 'Дальше — следующая страница'
+              : 'Повторить — загрузить следующую страницу'
           }
           aria-busy={isLoading}
           className="h-11 w-11 px-0 sm:h-9 sm:w-auto sm:px-3"

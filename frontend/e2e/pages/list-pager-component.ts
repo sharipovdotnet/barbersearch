@@ -15,18 +15,22 @@ export class ListPagerComponent {
     this.root = page.getByRole('navigation', { name: label })
   }
 
-  /** Кнопка «Назад»: `aria-label` не зависит от ширины экрана. */
+  /**
+   * Кнопка «Назад»: имя начинается с видимого слова (WCAG 2.5.3), хвост
+   * «— предыдущая страница» уточняет действие. Матч по регулярке, а не
+   * `exact`: проверяем именно видимую часть, а не весь `aria-label`.
+   */
   get previous(): Locator {
-    return this.root.getByRole('button', { name: 'Предыдущая страница' })
+    return this.root.getByRole('button', { name: /^Назад/ })
   }
 
   /** Кнопка «Дальше»; при ошибке страницы она же становится повтором. */
   get next(): Locator {
-    return this.root.getByRole('button', { name: 'Следующая страница' })
+    return this.root.getByRole('button', { name: /^Дальше/ })
   }
 
   get retry(): Locator {
-    return this.root.getByRole('button', { name: 'Повторить загрузку' })
+    return this.root.getByRole('button', { name: /^Повторить/ })
   }
 
   /** Видимый диапазон: `1–10 из 12` или `21–40`, если сервер не отдаёт total. */
