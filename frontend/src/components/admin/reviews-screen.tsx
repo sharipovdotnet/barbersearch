@@ -467,6 +467,10 @@ export function ReviewsScreen({
                 pageError={list.pageError}
                 focusTargetRef={headingRef}
                 focusRequest={focusRequest}
+                // Панель детали рендерится только вместе с выбранным отзывом:
+                // на телефоне список живёт без неё, и `aria-controls` вести
+                // в пустоту не должен.
+                detailPanelId={review ? 'review-detail' : null}
                 onSelect={(id) => {
                   setActionFailure(null)
                   navigate(reviewsPath(tab, id))
