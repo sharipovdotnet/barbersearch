@@ -1,13 +1,11 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-6`; **10 projects**. The domain rework was committed on
-> `features/issue-1` (the last *pre-rework* commit was `78a9858`, against which §3–§9 were
-> originally verified on 2026-10-12). The slice **R-01…R-54** is committed on `features/issue-6`
-> and pushed to origin (see `HANDOFF.md` §0.1 for the commit list and the 2026-10-26 evidence).
-> Tests: **184 domain + 212 application + 71 infrastructure + 12 integration**, all green in both
-> Debug and Release. §9.13 lists the open minor issues only; the closed history is in
-> `HANDOFF.md` §2.
+> Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> commit and PR history. §9.13 lists the open minor issues only; the closed history is in
+> `CODE-REVIEW.md`.
+> Tests: **187 domain + 295 application + 83 infrastructure + 50 integration**, all green in both
+> Debug and Release.
 
 ---
 
@@ -391,9 +389,9 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-10-30 (после среза issue-22): domain **187**, application **282**,
-infrastructure **83**, integration **28** — все зелёные. История прогонов по срезам и негативные
-проверки — `HANDOFF.md` §2.
+Актуальный baseline на 2026-11-01 (после среза issue-35): domain **187**, application **295**,
+infrastructure **83**, integration **50** — все зелёные. История прогонов по срезам и негативные
+проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
 only the fallback for a harness where that still crashes. If you use it, delete both the throwaway
@@ -629,7 +627,7 @@ The rules below were pushed to the application layer because the aggregate canno
    (`booking.create.period.tooLong`, `Constants.MAX_BOOKING_DURATION_MINUTES`). Absolute
    `DateTimeOffset` comparison makes the salon time zone irrelevant; the tolerance absorbs
    client/server clock skew. Deriving `EndAt` from `BarberService.DurationMinutes` is still a
-   separate slice (`HANDOFF.md` §2.3). **Closed 2026-10-22 (R-04).**
+   separate slice. **Closed 2026-10-22 (R-04).**
 6. **"What time is it now?"** — the domain does not take a clock. Technical audit stamps
    (`Entity.CreatedAt` / `Entity.UpdatedAt`, `User.RecordLogin` → `LastLoginAt`) are written with
    the system clock (`DateTimeOffset.UtcNow`) on purpose: no domain invariant reads them, so a
@@ -644,14 +642,13 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-10-25; детальная инвентаризация — `HANDOFF.md` §0/§2, нагрузка — `LOADTEST.md`,
-эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-01; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 295 application + 83 infrastructure + 31 integration; unit-проекты зелёные локально (2026-10-31), integration — в CI (локально Docker недоступен) |
+| Tests | ✅ 187 domain + 295 application + 83 infrastructure + 50 integration; unit-проекты зелёные локально (2026-11-01), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 84 обработчика (72 command + 12 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
@@ -681,7 +678,7 @@ Application (§17.8), а не в контроллерах.
 
 **Closed history.** Закрытые подпункты §9 (обработка ошибок, `UpdateProfile`, `Grade`, шкала
 рейтинга, владение детьми, `IsPrimary`, мёртвое состояние, `Entity.Equals`, `Shared`) —
-исправленные дефекты домена. Решения и доказательства — `HANDOFF.md` §2 и `CODE-REVIEW.md`
+исправленные дефекты домена. Решения и доказательства — `CODE-REVIEW.md`
 (R-39, R-40, R-44). §9.3 и §9.7 оставлены, потому что на них ссылается §15.2; §9.13 — открытые
 мелочи.
 
@@ -926,7 +923,7 @@ Suggested order:
   (aggregate roots) → mutating methods returning `UnitResult<Failure>` with `MarkUpdated()` →
   a VO for any non-trivial primitive.
 - **Documentation policy.** `AGENT.md` is durable rules and reference, not a changelog: run
-  results, "what was done" blocks and per-slice history belong to `HANDOFF.md` / `CODE-REVIEW.md`.
+  results, "what was done" blocks and per-slice history belong to the PR description / `CODE-REVIEW.md`.
   Section numbers are stable — code, docs and XML comments link to `§N.M`; rename a section only
   together with every reference. XML docs describe the contract and the reason, not the signature.
   Splitting this file by layer is a separate slice and must update every reference first: `AGENT.md`
@@ -1240,7 +1237,7 @@ absorbs client/server clock skew. `Booking.Create` caps the client-supplied inte
 minutes (`booking.create.period.tooLong`). Constants: `BOOKING_HORIZON_DAYS`,
 `BOOKING_START_TOLERANCE_MINUTES`, `MAX_BOOKING_DURATION_MINUTES` in `Domain/Constants.cs`.
 `EndAt` is still taken from the request; deriving it from `BarberService.DurationMinutes`
-remains a separate slice (`HANDOFF.md` §2.3).
+remains a separate slice.
 
 **Optimistic concurrency (2026-10-22, R-05).** Every aggregate entity — the seven roots and the
 seven child rows — is mapped with a shadow `uint xmin` row-version
@@ -1565,8 +1562,9 @@ Read endpoints (added 2026-10-19):
   not all FK-enforced on `reviews`/`bookings`, so a dangling historical row would drop out of the
   admin list instead of appearing with missing context.
   Publication still uses the existing `POST`/`DELETE api/reviews/{id}/publication` actions;
-  those actions do **not** yet run the antiforgery filter — the frontend sends `X-CSRF-TOKEN`,
-  but the backend ignores it. Closing that gap is tracked on the frontend side (§14, item 23).
+  those actions run the global cookie-antiforgery filter (#35), so a cookie client without a
+  valid `X-CSRF-TOKEN` pair gets `400 auth.csrf.invalid` before anything is published, and the
+  frontend sends the header (§17.5).
 - **Admin barbers (2026-10-28).** `GET api/admin/barbers?status=all|pending|hidden&search=…` and
   `GET api/admin/barbers/{id}` are closed by `AdminOnly`. `AdminBarberResponse` is the queue row
   (display name, owner email, grade, rating, review count, `isActive`, `isVerified`); it is a
@@ -1790,7 +1788,7 @@ activity of the barber service and takes the price from it.
 | `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
 | `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword` |
 | `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens` |
-| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
 
 ### 17.2 Эндпоинты
@@ -1800,7 +1798,7 @@ activity of the barber service and takes the price from it.
 | POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается |
 | POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
 | POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly access-cookie (8 часов) + HttpOnly refresh-cookie |
-| POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie, тело — 200 + новые access/refresh |
+| POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie (`rememberMe` — постоянная или сессионная access-cookie), тело — 200 + новые access/refresh без cookie |
 | POST | `api/auth/logout` | аноним, rate limit; antiforgery только для cookie | отзывает refresh и гасит cookie; внешний клиент передаёт refresh в теле |
 | POST | `api/auth/change-password` | аутентификация; antiforgery только для cookie | меняет пароль и отзывает все refresh-токены |
 | GET | `api/auth/me` | аутентификация | claims текущего пользователя |
@@ -1961,12 +1959,21 @@ cookie и остаток refresh-срока в `TokenResponse`. Бизнес-«�
   остаётся для всего остального, включая `GET api/bookings` и write-эндпоинты отзывов.
   `Cache-Control` на анонимной выдаче не ставится: слоты меняются при создании брони, а
   edge-кэша в проекте нет (§16).
-- Antiforgery — только cookie-ветка. Используется свой
-  `ValidateAntiforgeryHeaderAttribute` (через `IAntiforgery`), а не `[ValidateAntiForgeryToken]`:
-  штатный фильтр живёт в MVC ViewFeatures и требует `AddControllersWithViews()`.
-  `refresh`, `logout` и `change-password` проверяют токен вручную и только когда запрос опирается
-  на cookie; запрос с refresh-токеном в теле или Bearer-заголовком не CSRF-уязвим.
-  Antiforgery-cookie — `HttpOnly`, `Path=/`, следует `Auth:CookieSameSite`/`Secure`.
+- Antiforgery — глобальный фильтр для cookie-мутаций. `CookieMutationAntiforgeryFilter`
+  (`IAsyncAuthorizationFilter`) зарегистрирован в `Program.cs` на все контроллеры, поэтому
+  новый `POST`/`PUT`/`DELETE` не останется без защиты из-за забытого атрибута. Порядок
+  пропусков фиксирован: безопасные методы (`GET`/`HEAD`/`OPTIONS`/`TRACE`) → маркер
+  `[SkipCookieAntiforgery]` → `Authorization: Bearer …` (ambient-учётных данных нет) →
+  неаутентифицированный `User` (аноним должен получить `401` от политики, а не `400`).
+  Всё остальное валидируется через `IAntiforgery`; ошибка — `400 auth.csrf.invalid` в той же
+  форме `ProblemDetails`, что у `ValidateAntiforgeryHeaderAttribute`. Свой атрибут, а не
+  `[ValidateAntiForgeryToken]`: штатный фильтр живёт в MVC ViewFeatures и требует
+  `AddControllersWithViews()`. Исключения и причины: `register` — анонимное действие без
+  ambient-идентичности; `login` — body-ветка выдаёт токены в теле (`login/cookie` защищён
+  отдельным `ValidateAntiforgeryHeaderAttribute`); `refresh` и `logout` — ветка зависит от
+  тела, проверка уже реализована внутри действия. `change-password` маркера не имеет:
+  cookie-ветку закрывает фильтр, Bearer-ветка не проверяется. Antiforgery-cookie — `HttpOnly`,
+  `Path=/`, следует `Auth:CookieSameSite`/`Secure`.
 - CORS — только явные origins из `Cors:AllowedOrigins` и только с `AllowCredentials`;
   wildcard отклоняется на старте. Для cross-site SPA нужны `Auth:CookieSameSite=None`
   (тогда cookie `Secure`) и тот же origin в CORS; для same-site — `Lax`.
@@ -2143,11 +2150,14 @@ WHERE id = @id AND revoked_at IS NULL` с проверкой `rowsAffected` (R-0
 
 **Ветки.** Браузер: refresh в HttpOnly-cookie `barbersearch.refresh` (Development) /
 `__Host-barbersearch-refresh` (Production), `Path=/`, `Secure` вне Development, `SameSite` из
-`Auth:CookieSameSite`; cookie-ветка требует antiforgery и отвечает `204` с новыми access-cookie
-и refresh-cookie. Refresh-cookie ставится с абсолютным сроком `RefreshTokenDays` независимо от
-`RememberMe`: флаг по-прежнему управляет только access-cookie (8 часов против сессионной).
+`Auth:CookieSameSite`; cookie-ветка требует antiforgery (глобальный фильтр пропускает
+действие по маркеру, проверка выполнена внутри) и отвечает `204` с новыми access-cookie
+и refresh-cookie. `RefreshTokenRequest.RememberMe` применяется к access-cookie: `true` —
+постоянная (`ExpiresUtc = now + CookieHours`), `false` и отсутствие поля — сессионная.
+Refresh-cookie ставится с абсолютным сроком `RefreshTokenDays` независимо от флага.
+Поле не переключает ветку: она определяется только по `RefreshToken` в теле.
 Внешний клиент: refresh в теле `RefreshTokenRequest`, ответ `200 TokenResponse`
-с новым access и refresh; antiforgery не нужен, потому что ambient-учётных данных нет.
+с новым access и refresh; antiforgery не нужен, cookie не ставятся.
 
 **Отзыв.** `logout` — один предъявленный токен; смена пароля (`POST api/auth/change-password`),
 смена роли и деактивация пользователя — все живые токены (`RevokeAllForUserAsync`). Смена пароля,
