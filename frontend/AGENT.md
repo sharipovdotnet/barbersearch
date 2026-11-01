@@ -18,13 +18,13 @@
 > completes, marks no-show, cancels and annotates them. A visitor without an account can
 > register at `/register` (`POST /api/auth/register`, no CSRF token): the form signs the new
 > customer in and lands in `/account`.
-> Verified on 2026-10-31: `npm run lint` — 0 warnings / 0 errors (126 files, 116 rules);
-> `npm run build` — success, 2275 modules, entry `index-*.js` 376.43 kB (gzip 122.38 kB);
-> lazy `admin-page` 114.27 kB (gzip 24.95 kB), `account-page` 35.34 kB (gzip 10.24 kB),
-> `barber-page` 37.17 kB (gzip 9.99 kB), `barber-cabinet-page` 25.59 kB (gzip 7.29 kB),
-> `register-page` 9.75 kB (gzip 3.35 kB) and the shared `booking-status-badge-*.js`
+> Verified on 2026-11-01: `npm run lint` — 0 warnings / 0 errors (180 files, 116 rules);
+> `npm run build` — success, 2285 modules, entry `index-*.js` 393.72 kB (gzip 127.37 kB);
+> lazy `admin-page` 111.69 kB (gzip 24.14 kB), `account-page` 35.48 kB (gzip 10.28 kB),
+> `barber-page` 35.81 kB (gzip 9.47 kB), `barber-cabinet-page` 24.33 kB (gzip 6.99 kB),
+> `register-page` 9.80 kB (gzip 3.37 kB) and the shared `booking-status-badge-*.js`
 > 1.02 kB (gzip 0.55 kB);
-> CSS 73.31 kB (gzip 12.71 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> CSS 74.43 kB (gzip 12.88 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 
 ---
 
@@ -1105,7 +1105,18 @@ of WCAG conformance.
   `aria-label`s on narrow screens. After «Назад»/«Дальше» it moves focus to the screen's list target
   with `preventScroll`, then scrolls it `block: 'start'` — without smooth motion when
   `prefers-reduced-motion` is set. It never moves focus on the first render or after a filter change,
-  and a screen that already announces its actions does not add a second range announcement.
+  and a screen that already announces its actions does not add a second range announcement. Both
+  button names start with the visible word and keep one name on both widths (WCAG 2.5.3): «Назад —
+  предыдущая страница», «Дальше — следующая страница» and, in the next-page error state,
+  «Повторить — загрузить следующую страницу». The text is hidden by CSS below `sm`, the name is not.
+- The admin review queue names each row from its **rendered** spans with `aria-labelledby`
+  (rating, `formatShortName`, waiting time) — never from the full name the user cannot see — keeps
+  `aria-current` and the roving `tabIndex`, and sets `aria-controls="review-detail"` only when that
+  panel is rendered in the current viewport. `/admin/users` rows take their name from their visible
+  content and set `aria-controls="user-detail"` on the same rule.
+- The header skeleton is a `role="status"` wrapper with `sr-only` «Проверяем сессию…» around an
+  `aria-hidden` `Skeleton`; the status exists only in the `loading` branch, so it is not announced
+  on every navigation.
 - Decorative icons are `aria-hidden`; the logo link and nav anchors are real links.
 - Forms use `aria-invalid`, `aria-describedby`, `FieldError` with `role="alert"`, and
   `aria-busy` while pending.
@@ -1131,11 +1142,12 @@ of WCAG conformance.
 9. Text contrast must meet WCAG AA (4.5:1 for normal text, 3:1 for large text); check new
    token combinations rather than assuming `muted-foreground` passes on every surface.
 
-**Known gaps** (also in §14): §14 #27 covers what the axe scan still reports — the accessible names
-of the pager buttons and the admin queue rows do not contain their visible text (WCAG 2.5.3), and on
-a narrow screen the queue's `aria-controls` points at the unrendered `#review-detail`. The contrast
-defect the same scan found (`muted-foreground` on `muted`, 4.34:1) is fixed in the token (4.54:1).
-The skip link and the admin keyboard/focus paths are implemented and were checked manually.
+**Known gaps** (also in §14): there are no known `critical`/`serious` axe findings — the gate in
+`e2e/specs/a11y.spec.ts` and `e2e/specs/a11y-narrow.spec.ts` blocks them on every screen, role and
+both widths (1280 and 320), and any exception would have to carry a §14 number. `moderate`/`minor`
+findings are recorded as `axe-advisory` annotations in the Playwright report but do not fail the
+run. Out of scope and unaudited: Lighthouse, visual regressions, the dark theme (no toggle yet) and
+contrast on screens outside the axe matrix.
 
 ---
 
@@ -1145,25 +1157,25 @@ The skip link and the admin keyboard/focus paths are implemented and were checke
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.59 kB | 127.36 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 111.78 kB | 24.12 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.72 kB | 127.37 kB |
+| `admin-page-*.js` — lazy `/admin/**` | 111.69 kB | 24.14 kB |
 | `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.81 kB | 9.48 kB |
 | `account-page-*.js` — lazy `/account` | 35.48 kB | 10.28 kB |
 | `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.33 kB | 6.99 kB |
 | `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.17 kB | 5.73 kB |
 | `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.36 kB |
-| `use-paged-list-*.js` — shared cursor pager used by the six row lists | 6.85 kB | 2.52 kB |
+| `use-paged-list-*.js` — shared cursor pager used by the six row lists | 6.93 kB | 2.54 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
 | `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.22 kB | 0.64 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 1.02 kB | 0.55 kB |
 | `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 74.37 kB | 12.86 kB |
+| `index-*.css` | 74.43 kB | 12.88 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2284 modules; the production build took 5.18 s. The issue-31 build added one shared lazy chunk,
+2285 modules. The issue-31 build added one shared lazy chunk,
 `use-paged-list-*.js` (6.85 kB raw / 2.52 kB gzip), which owns the page cache, the pager footer and
 `formatPageRange`; the per-screen pagination code moved into it. Against the issue-30 build
 `barber-page` shrank by 2.91 kB raw / 0.80 kB gzip, `admin-page` by 3.13 kB / 0.86 kB,
@@ -1228,9 +1240,9 @@ unchanged and the Vite chunk advisory does not fire.
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
-| Accessibility | ⚠️ partial (§11); axe scans four screens in CI and the contrast token was fixed, the remaining findings are §14 #27 |
+| Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 52 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 63 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1245,7 +1257,7 @@ the feature grows; **P3** cosmetic/structural.
 | # | Sev | Issue | Fix / decision |
 |---|---|---|---|
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
-| 11 | P2 | ~~The header skeleton has no accessible status; contrast and touch targets are unaudited~~ — axe now scans four screens in CI and the `muted-foreground` contrast token was fixed in #33 | Remaining: the header skeleton still has no status text, contrast is checked only on those four screens, and axe reports only `critical`/`serious` |
+| 11 | P3 | Touch targets and dark-theme contrast are still unaudited: axe runs the light theme at 1280 and 320 only; the header skeleton status and the pager/queue names are fixed (#34) | Spot-check touch targets and dark tokens whenever the palette changes; a Lighthouse pass would cover both |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
 | 15 | P3 | `font-heading` is just an alias of the sans stack; there is no display typeface | Keep neutral, or decide on a display face (§17) |
 | 16 | P3 | Dark tokens exist but there is no toggle and no `prefers-color-scheme` handling | Add a theme toggle + persisted choice when dark mode is a product requirement |
@@ -1258,15 +1270,15 @@ the feature grows; **P3** cosmetic/structural.
 | 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
 | 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 | 26 | P3 | `/account` «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so the shared pager cannot be used without hiding bookings; that list still appends with «Показать ещё» | Add a server-side `scope` to `GET /api/bookings` and page it like the other lists (§16) |
-| 27 | P2 | axe keeps two `serious` findings that the E2E scan records but does not fail on: visible «Назад»/«Дальше» and the composed row text are missing from the accessible names of `ListPager` buttons and the admin queue rows (WCAG 2.5.3), and on narrow screens the queue's `aria-controls="review-detail"` points at an element that is not rendered | Rename the pager buttons so the visible word is part of the name (`aria-label` containing it, tests matching by regex) and build the row name from the visible text with `aria-labelledby`; render the detail panel or drop `aria-controls` when it is absent on mobile. Then delete the allow-list in `e2e/specs/a11y.spec.ts` |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
 `200` bodies), #6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry),
 #8 (a backend outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`,
 `.env` not ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13
-(`shadcn` CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally
-absent; the remaining numbers do not shift.
+(`shadcn` CLI as a runtime dependency), #24 (no author-facing review list) and #27 (a11y debt:
+pager and queue names, the header skeleton status, the narrow-screen `aria-controls`, and the axe
+allow-list) are intentionally absent; the remaining numbers do not shift.
 
 ---
 
@@ -1279,8 +1291,8 @@ absent; the remaining numbers do not shift.
   (`seed.sql`, `accounts.ts`, `api.ts`, the rate-limit-isolating `test.ts`) in `e2e/fixtures/**`.
   It runs the real SPA against the real API and `barbersearch_e2e` — no mocked success responses.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
-  (`pager-320.spec.ts` only), `mutations-chromium` (edit/delete specs, last), plus the `auth`
-  setup project. CI job: `.github/workflows/frontend-e2e.yml`.
+  (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
+  specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
 - **Unit — installed (#32).** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
@@ -1293,8 +1305,13 @@ absent; the remaining numbers do not shift.
 **What E2E covers now:** public-review paging (forward/back, cache, focus, live region, next-page
 error), search append, sign-in (validation, wrong credentials, session survives reload),
 `/account/reviews` paging and its 401 gate, `/barber` tabs and the empty-page-after-action policy,
-`/admin/reviews` and `/admin/users` paging, filters and URL-held selection, the 320 px pager, axe on
-`/`, `/barbers/{id}`, the login dialog and `/admin/reviews`, and the keyboard path.
+`/admin/reviews` and `/admin/users` paging, filters and URL-held selection, the 320 px pager, and an
+axe scan of every screen and role at 1280 (`/`, `/barbers/{id}`, `/register`, the open login dialog,
+`/account`, `/account/reviews`, `/barber`, `/admin/reviews` pending and published, `/admin/barbers`,
+`/admin/users`, with the split-view detail cards) and at 320 (`/barbers/{id}`, `/admin/reviews` and
+`/admin/users` without a detail panel). The keyboard layer covers the pager (Tab/Enter/Space), the
+login dialog (Escape and focus return) and the review queue (Tab, arrows, Home/End, Enter/Space,
+`:focus-visible`, and focus that stays in the queue after publishing).
 
 **What the unit layer covers:** `apiRequest` (bodies, `204`, broken JSON, `ProblemDetails` and the
 strict guard, transport failure, `validate`, the `401` retry rules and the `/auth/*` exception);
@@ -1302,16 +1319,18 @@ strict guard, transport failure, `validate`, the `401` retry rules and the `/aut
 non-`ApiError`); `LoginDialog` (client validation, pending state, success closes the dialog, mapped
 server errors, labels with `aria-invalid`/`aria-describedby`); `SessionProvider` (bootstrap
 outcomes, the hint-driven refresh, `unavailable`, `retrySession`, sign-in/sign-out, the «Запомнить
-меня» cookie, exactly one `/auth/me` under `StrictMode`). Tests are colocated (`*.test.ts(x)`) and
-compare Russian copy as a whole string, saying in the test title that it is copy.
+меня» cookie, exactly one `/auth/me` under `StrictMode`); `HeaderAuth` (all four statuses, the
+loading `role="status"`, the unavailable retry name, the disabled «Выходим…»); `ListPager` (names
+start with the visible word, the retry name, `aria-busy`, edge-disabled buttons, callbacks). Tests
+are colocated (`*.test.ts(x)`) and compare Russian copy as a whole string, saying in the test title
+that it is copy.
 
-**What is not covered yet:** `HeaderAuth` render states, the screens and the hooks
-(`use-paged-list`, the admin queues, the cabinets), the in-screen copy E2E does not reach,
-keyboard/a11y beyond the four axe-scanned screens, and visual regressions. Coverage is not a gate.
+**What is not covered yet:** the screens and the hooks (`use-paged-list`, the admin queues, the
+cabinets), in-screen copy E2E does not reach, axe `moderate`/`minor` findings (annotated in the
+report, not gated), the dark theme and visual regressions. Coverage is not a gate.
 
-**Next in the unit layer:** `HeaderAuth` render states — loading skeleton, anonymous CTA,
-`unavailable` retry button, authenticated profile and the disabled sign-out — then the hooks and
-the screens, one promised behaviour at a time.
+**Next in the unit layer:** the hooks behind the paged lists (`use-paged-list`, the admin queues,
+the cabinets), one promised behaviour at a time.
 
 **Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the
 `e2e-password` test password; each test gets its own data or restores what it changes; mock the
@@ -1452,6 +1471,19 @@ recorded as §14 #27 instead of being silenced. `.github/workflows/frontend-e2e.
 and specs in CI with Postgres 18 and uploads the report and traces. `npm test` (Vitest, #32) stays
 separate; no backend, runtime dependency or `ui/**` changes.
 
+**Completed 2026-11-01:** accessibility pass (#34) — the axe gate blocks `critical`/`serious` on
+every screen and role at 1280 (`e2e/specs/a11y.spec.ts`) and on the narrow branches at 320
+(`e2e/specs/a11y-narrow.spec.ts`), and the allow-list is gone: an exception now needs a §14 number.
+`ListPager` names start with the visible word («Назад — предыдущая страница», «Дальше — следующая
+страница», «Повторить — загрузить следующую страницу»), admin queue rows are named from their
+rendered spans with `aria-labelledby`, `aria-controls` is set only when the detail panel is rendered
+(`/admin/reviews` and `/admin/users`), and the header skeleton is a `role="status"` with `sr-only`
+«Проверяем сессию…». The wider scan surfaced two real contrast defects — `text-destructive` on
+`bg-destructive/10` (3.99:1) and `text-warning` on `bg-warning/10` (4.41:1) — fixed in the light
+tokens (4.82:1 and 4.92:1). A new keyboard spec covers Tab, arrows, Home/End, Enter/Space,
+`:focus-visible` and focus that stays in the queue after publishing; `HeaderAuth` and `ListPager`
+got unit tests. No backend, `ui/**`, visible copy or fixture changes.
+
 Roadmap numbers are stable for links: completed items 1–4 were removed, the remaining numbers
 do not shift.
 
@@ -1463,8 +1495,8 @@ do not shift.
 7. **Foundation (remaining)** — lazy routes, the route-level error boundary and the landing
    sections are done (§12.1); remaining: per-widget boundaries and a landing chunk split if
    the budget grows (§14, items 4 and 17).
-8. **Quality** — Playwright + axe E2E and the separate CI job are done (#33); remaining: Vitest/RTL/MSW
-   units (#32) and a Lighthouse budget.
+8. **Quality** — Playwright + axe E2E and the separate CI job are done (#33); the full a11y gate
+   (#34) and Vitest/RTL/MSW units (#32) are done. Remaining: a Lighthouse budget.
 9. **Auth completeness** — registration, password change and silent session refresh are done; a
    role-aware header remains, and a password-reset flow needs a backend slice first.
 10. **Polish** — dark theme toggle, empty-state illustrations, form `errors` from
@@ -1472,7 +1504,8 @@ do not shift.
 11. **Hardening** — done: runtime validation of successful `200`/`201` bodies, `.env`-driven
     dev proxy and the `shadcn` dependency review (§9.1, §14 #5/#9/#13). Error bodies are parsed
     strictly and never leak English `detail`. Remaining hardening work is a separate slice: the
-    test runner (§14 #2, §15) and the a11y pass (§14 #11, §11).
+    test runner (§14 #2, §15) is done, the a11y pass (#34, §11) is done; touch targets and the dark
+    theme are still unaudited (§14 #11).
 12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
     (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
     barbers and users are done. This is the admin-wide bookings view, not the barber's own
@@ -1622,7 +1655,12 @@ Copy this into the PR description and check every item that applies:
 - [ ] API errors mapped by `status` / `errorCodes`, Russian fallback, no raw `detail`;
 - [ ] loading, empty and error states implemented;
 - [ ] 320 px / tablet / desktop checked; no horizontal scroll;
-- [ ] keyboard path, focus visibility, labels and `aria-live`/`role="alert"` checked;
+- [ ] axe is clean on the affected screens and roles in **both** widths (`a11y` at 1280,
+      `a11y-narrow` at 320) and the keyboard path is checked: Tab order, arrows/Home/End in the
+      queue, Enter/Space, Escape in dialogs, visible focus; no allow-list entry without a §14
+      number;
+- [ ] labels, `aria-live` regions and `role="alert"`/`role="status"` checked; accessible names of
+      buttons and rows contain their visible text (WCAG 2.5.3);
 - [ ] dark theme tokens not broken (if tokens were added);
 - [ ] generated `ui/**` not hand-edited; CLI used if a component was added/updated;
 - [ ] no new dependency without a reason and an owner decision (§17);

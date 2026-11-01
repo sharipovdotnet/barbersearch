@@ -500,8 +500,8 @@ needs the real API, router, cookies or focus — that is the E2E layer below.
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the six paged lists from #31, sign-in,
-public reviews and an axe scan of four screens. `npm test` (Vitest) stays separate and fast; E2E
-never runs inside it.
+public reviews, the keyboard paths and an axe scan of every screen and role in two widths
+(1280 and 320). `npm test` (Vitest) stays separate and fast; E2E never runs inside it.
 
 ### One-time setup
 
@@ -540,12 +540,12 @@ npm run test:e2e:seed             # wrapper around e2e/fixtures/seed.sql
 `npm run test:e2e:seed` reads `E2E_SEED_DATABASE_URL`, then `ConnectionStrings__Postgres`, then a
 local default — and refuses to run against any database except `barbersearch_e2e` (the SQL file
 checks the name itself as well). Rerun it whenever the fixtures could have been mutated: the tests
-that edit and delete restore their own rows, but the seed is the authoritative reset.
+that edit, delete or publish restore their own rows, but the seed is the authoritative reset.
 
 ### Running
 
 ```bash
-npm run test:e2e          # desktop (1280×900), mobile (375×812) and the 320 px pager project
+npm run test:e2e          # desktop (1280×900), mobile (375×812) and narrow (320×800)
 npm run test:e2e:ui
 ```
 
@@ -556,10 +556,18 @@ instead of silently skipping.
 | Project | Viewport | What runs there |
 |---|---|---|
 | `auth` | — | signs the four fixture accounts in through the API and writes `e2e/.auth/*.json` |
-| `desktop-chromium` | 1280×900 | every spec except the 320 px and mutation ones |
-| `mobile-chromium` | 375×812 | the same on a phone |
-| `narrow-320` | 320×800 | `pager-320.spec.ts` only |
-| `mutations-chromium` | 1280×900 | the specs that edit or delete rows, last, once |
+| `desktop-chromium` | 1280×900 | every spec except the 320 px, `a11y-narrow` and mutation ones |
+| `mobile-chromium` | 375×812 | the same on a phone, without the axe specs (the gate runs 1280 and 320) |
+| `narrow-320` | 320×800 | `pager-320.spec.ts` and `a11y-narrow.spec.ts` |
+| `mutations-chromium` | 1280×900 | the specs that edit, delete or publish rows, last, once |
+
+### Accessibility gate
+
+`e2e/specs/a11y.spec.ts` scans every screen and role at 1280, `e2e/specs/a11y-narrow.spec.ts` the
+narrow branches at 320. Only `critical` and `serious` fail the run; `moderate`/`minor` findings are
+written to the Playwright report as `axe-advisory` annotations. There is **no allow-list**: a known
+finding is fixed or gets a new number in `AGENT.md` §14 and an entry that cites it — an exception
+without a debt number is not allowed.
 
 ### Fixtures and accounts
 
