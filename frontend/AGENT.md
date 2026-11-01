@@ -141,7 +141,8 @@ frontend/                              ← workspace root, NOT the git root
 ├── vite.config.ts                     ← React + Tailwind plugins, @ alias, /api proxy
 ├── tsconfig.json                      ← solution file: references app + node configs
 ├── tsconfig.app.json                  ← src/, DOM libs, strict, bundler mode
-├── tsconfig.node.json                 ← vite.config.ts only, Node types
+├── tsconfig.node.json                 ← vite.config.ts + vitest.config.ts, Node types
+├── vitest.config.ts                   ← unit tests: jsdom, setup file, @ alias, no CSS
 ├── components.json                    ← shadcn config: base-nova, neutral, aliases, lucide
 ├── .oxlintrc.json                     ← react/typeScript/oxc plugins, ui/** override
 ├── public/
@@ -225,7 +226,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── barber-page.tsx            ← /barbers/{id}: title, back link, states, sections
     │   ├── home-page.tsx              ← landing composition: title, hash scroll, sections
     │   └── register-page.tsx          ← /register: title, session gates, card and links
-    └── lib/
+    ├── lib/
         ├── account-path.ts            ← /account and /account/reviews path helpers
         ├── admin-path.ts              ← /admin path parsing/building, AdminTab
         ├── admin-reviews.ts           ← admin review DTO, reads, publish/hide, errors
@@ -250,7 +251,14 @@ frontend/                              ← workspace root, NOT the git root
         ├── register-path.ts           ← /register path helper
         ├── reviews.ts                 ← public review DTO, page size 10, fetch
         ├── router.ts                  ← History API store: pathname + location
+        ├── sign-in-errors.ts          ← sign-in ProblemDetails → Russian copy (§9.5)
         └── utils.ts                   ← `export { cn } from "cn"`
+    └── test/                          ← unit-test infrastructure (§15)
+        ├── setup.ts                   ← jest-dom, MSW lifecycle, jsdom polyfills, state resets
+        └── msw/
+            ├── handlers.ts            ← default handlers, `problemDetails`, `unauthorized`
+            ├── requests.ts            ← request counters for «one `/auth/me`» assertions
+            └── server.ts              ← `setupServer(handlers)`
 ```
 
 **Import direction:** `App` → `pages` → `components` → `hooks` → `lib`. `lib` never imports
@@ -282,6 +290,10 @@ npm run build           # tsc -b && vite build
 
 # serve the built dist/ locally (Vite preview, default port 4173)
 npm run preview
+
+# unit tests (Vitest + Testing Library + MSW; no API, no browser)
+npm test                # vitest run — the `frontend-ci` job runs this between Lint and Build
+npm run test:watch      # the same suite in watch mode
 
 # add or refresh a shadcn/ui component (writes into src/components/ui)
 npx shadcn add <name>            # uses the installed CLI 4.22.1
@@ -387,9 +399,8 @@ workspace or changing npm permissions.
 ### 5.3 CI
 
 `.github/workflows/frontend-ci.yml` runs on `frontend/**` changes (push to `main`, every PR,
-manual dispatch): Node 24, `npm ci`, `npm run lint`, `npm run build`. There is no unit-test step yet
-(§15). The workflow file sits at the repository root because GitHub only reads
-`.github/workflows` from there.
+manual dispatch): Node 24, `npm ci`, `npm run lint`, `npm test`, `npm run build`. The workflow file
+sits at the repository root because GitHub only reads `.github/workflows` from there.
 
 `.github/workflows/frontend-e2e.yml` is the slow job and stays out of the fast one: Postgres 18
 service, migrations, both seed files, the API on `:5243`, Chromium and `npm run test:e2e`, with
@@ -894,7 +905,8 @@ narrow it to a union (§14).
 
 ### 9.5 Error handling rules
 
-`describeSignInError` in `login-dialog.tsx` is the reference implementation. Order matters:
+`describeSignInError` in `src/lib/sign-in-errors.ts` is the reference implementation (the login
+dialog imports it; the branches are unit-tested in `sign-in-errors.test.ts`). Order matters:
 
 | Condition | Detection | User-facing result |
 |---|---|---|
@@ -1218,7 +1230,7 @@ unchanged and the Vite chunk advisory does not fire.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ⚠️ partial (§11); axe scans four screens in CI and the contrast token was fixed, the remaining findings are §14 #27 |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ⚠️ backend unit + admin integration tests; frontend has Playwright + axe E2E and a CI job, but no unit runner (§14 #2, §15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 52 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1232,7 +1244,6 @@ the feature grows; **P3** cosmetic/structural.
 
 | # | Sev | Issue | Fix / decision |
 |---|---|---|---|
-| 2 | P1 | ~~No test runner, no tests; CI cannot catch regressions beyond types/lint~~ — E2E (Playwright + axe) landed in #33, unit tests (#32) are still missing | Vitest + RTL + MSW for the logic that E2E does not reach (§15); E2E already guards the paged lists, session and a11y |
 | 4 | P3 | No error boundary at the widget level: one crashing admin panel or account card replaces the whole page, because the only boundary wraps the route | Wrap a widget in its own boundary only where the rest of the screen must survive the crash; the route boundary in `App.tsx` stays the default |
 | 11 | P2 | ~~The header skeleton has no accessible status; contrast and touch targets are unaudited~~ — axe now scans four screens in CI and the `muted-foreground` contrast token was fixed in #33 | Remaining: the header skeleton still has no status text, contrast is checked only on those four screens, and axe reports only `critical`/`serious` |
 | 14 | P3 | Generated `ui/**` uses double quotes / `"use client"` while app code uses single quotes; `"use client"` is a no-op in Vite | Accept as vendored style; do not reformat; keep CLI updates simple |
@@ -1250,18 +1261,18 @@ the feature grows; **P3** cosmetic/structural.
 | 27 | P2 | axe keeps two `serious` findings that the E2E scan records but does not fail on: visible «Назад»/«Дальше» and the composed row text are missing from the accessible names of `ListPager` buttons and the admin queue rows (WCAG 2.5.3), and on narrow screens the queue's `aria-controls="review-detail"` points at an element that is not rendered | Rename the pager buttons so the visible word is part of the name (`aria-label` containing it, tests matching by regex) and build the row name from the visible text with `aria-labelledby`; render the detail panel or drop `aria-controls` when it is absent on mobile. Then delete the allow-list in `e2e/specs/a11y.spec.ts` |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
-removed, so #1 (demo cards), #3 (no `401`/refresh strategy), #5 (unvalidated `200` bodies),
-#6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry), #8 (a backend
-outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`, `.env` not
-ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13 (`shadcn`
-CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally absent;
-the remaining numbers do not shift.
+removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
+`200` bodies), #6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry),
+#8 (a backend outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`,
+`.env` not ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13
+(`shadcn` CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally
+absent; the remaining numbers do not shift.
 
 ---
 
 ## 15. Testing
 
-**Today:** two layers, one gap.
+**Today:** two layers, both installed.
 
 - **E2E — installed (#33).** Playwright 1.64 + `@axe-core/playwright` in `devDependencies`;
   `playwright.config.ts`, specs in `e2e/specs/**`, page objects in `e2e/pages/**`, fixtures
@@ -1270,8 +1281,14 @@ the remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` only), `mutations-chromium` (edit/delete specs, last), plus the `auth`
   setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — missing (#32).** No Vitest, no `test` script: `npm test` does not exist yet, so a PR
-  cannot run it. `frontend-ci` keeps running `npm ci`, `npm run lint` and `npm run build`.
+- **Unit — installed (#32).** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+  `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
+  the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
+  (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
+  `build`. `globals: false`, so `describe`/`it`/`expect` are imported from `vitest` and
+  `tsconfig.app.json` keeps `types: ["vite/client"]`. Network is only MSW, with
+  `onUnhandledFrame: 'error'` (msw 3 renamed msw 2's `onUnhandledRequest`); `restoreMocks`,
+  `clearMocks` and `unstubGlobals` are on.
 
 **What E2E covers now:** public-review paging (forward/back, cache, focus, live region, next-page
 error), search append, sign-in (validation, wrong credentials, session survives reload),
@@ -1279,34 +1296,28 @@ error), search append, sign-in (validation, wrong credentials, session survives 
 `/admin/reviews` and `/admin/users` paging, filters and URL-held selection, the 320 px pager, axe on
 `/`, `/barbers/{id}`, the login dialog and `/admin/reviews`, and the keyboard path.
 
-**What is still only reachable from unit tests** (the reason #32 stays open):
-`apiRequest` and `describeSignInError` branches, `SessionProvider` under StrictMode and
-`retrySession`, `HeaderAuth` states, and every in-screen copy that E2E does not reach.
+**What the unit layer covers:** `apiRequest` (bodies, `204`, broken JSON, `ProblemDetails` and the
+strict guard, transport failure, `validate`, the `401` retry rules and the `/auth/*` exception);
+`describeSignInError` (every branch, the order `429` → codes → `401`, unknown codes,
+non-`ApiError`); `LoginDialog` (client validation, pending state, success closes the dialog, mapped
+server errors, labels with `aria-invalid`/`aria-describedby`); `SessionProvider` (bootstrap
+outcomes, the hint-driven refresh, `unavailable`, `retrySession`, sign-in/sign-out, the «Запомнить
+меня» cookie, exactly one `/auth/me` under `StrictMode`). Tests are colocated (`*.test.ts(x)`) and
+compare Russian copy as a whole string, saying in the test title that it is copy.
 
-**Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the test
-password `e2e-password`; each test gets its own data or restores what it changes; a test that asserts
-Russian copy says so in a comment (copy can change); no `waitForTimeout` as synchronisation; E2E never
-mocks a successful response — `page.route` only injects failures or proves a request is absent.
+**What is not covered yet:** `HeaderAuth` render states, the screens and the hooks
+(`use-paged-list`, the admin queues, the cabinets), the in-screen copy E2E does not reach,
+keyboard/a11y beyond the four axe-scanned screens, and visual regressions. Coverage is not a gate.
 
-**Unit-test plan for #32, in order** (item 6 of the old list is E2E and is done — see above):
+**Next in the unit layer:** `HeaderAuth` render states — loading skeleton, anonymous CTA,
+`unavailable` retry button, authenticated profile and the disabled sign-out — then the hooks and
+the screens, one promised behaviour at a time.
 
-1. `apiRequest`: non-2xx → `ApiError` with status/codes; empty `204`; invalid JSON; transport
-   failure (`status === 0`); `errorCodes` parsing.
-2. `describeSignInError`: each branch, including unknown errors and ordering (429 before codes).
-3. `LoginDialog`: validation messages, pending state, success closes, locked-out / 429 / CSRF
-   errors, labels and `aria-describedby`.
-4. `SessionProvider`: `/auth/me` user, `401` → anonymous, network error → `unavailable`,
-   `retrySession` outcomes, sign-in and sign-out transitions, one request under StrictMode.
-5. `HeaderAuth`: loading skeleton, anonymous CTA, `unavailable` retry button, authenticated
-   profile, sign-out disabled state.
-6. ~~E2E: sign in → header shows the user → sign out; wrong password; backend unavailable;
-   mobile viewport; keyboard-only dialog; axe scan on the landing and login dialog~~ — covered by
-   `e2e/specs/search-login.spec.ts` and `e2e/specs/a11y.spec.ts`, including the state after a
-   network outage of `/auth/me`.
-
-**Rules:** no real user data or production secrets in tests; mock the network at the boundary,
-not the `apiRequest` module; a test that asserts Russian copy must say so explicitly (copy can
-change); coverage is not a gate until the suite exists — critical paths first.
+**Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the
+`e2e-password` test password; each test gets its own data or restores what it changes; mock the
+network at the boundary (MSW in units, the real API in E2E: `page.route` only injects failures or
+proves a request is absent); a test that asserts Russian copy says so explicitly (copy can change);
+no `waitForTimeout`/`sleep` as synchronisation; coverage is not a gate — critical paths first.
 
 ---
 
@@ -1603,6 +1614,7 @@ frontend eight are recorded in `skills-lock.json`. Update the README when the se
 Copy this into the PR description and check every item that applies:
 
 - [ ] `npm run lint` — 0 warnings / 0 errors;
+- [ ] `npm test` — green, no `act(...)` warnings, no open handles;
 - [ ] `npm run build` — succeeds, `tsc -b` clean; bundle delta noted if significant;
 - [ ] no `any`, no `@ts-ignore`, no `console.log`, no commented-out code;
 - [ ] no tokens in storage; `credentials: 'include'` and `X-CSRF-TOKEN` on mutations except
