@@ -53,4 +53,20 @@ export class AdminReviewsPage {
   async waitForFirstPage(): Promise<void> {
     await expect(this.rows).toHaveCount(pageSize.admin)
   }
+
+  /**
+   * id отзыва из доступного имени строки: `aria-labelledby` ссылается на
+   * `review-<id>-rating`, `-name` и `-meta`.
+   */
+  async reviewId(row: Locator): Promise<string> {
+    const labelledBy = await row.getAttribute('aria-labelledby')
+    const match = labelledBy?.match(/^review-([0-9a-f-]{36})-rating/)
+
+    expect(
+      match,
+      `строка ссылается на видимые спаны, получено «${labelledBy}»`
+    ).not.toBeNull()
+
+    return (match as RegExpExecArray)[1]
+  }
 }
