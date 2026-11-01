@@ -494,6 +494,10 @@ export function UsersScreen({ userId }: { userId: string | null }) {
                 isLoadingPage={list.isLoadingPage}
                 pageError={list.pageError}
                 focusTargetRef={headingRef}
+                // Карточка рендерится только при выбранном пользователе: на
+                // телефоне список живёт без неё, поэтому `aria-controls`
+                // ссылается на существующий элемент или отсутствует.
+                detailPanelId={user ? 'user-detail' : null}
                 onSelect={handleSelect}
                 onPrev={list.goPrev}
                 onNext={list.goNext}

@@ -21,7 +21,15 @@ export function HeaderAuth() {
   const redirectTo = isAdminPath(pathname) ? location : undefined
 
   if (status === 'loading') {
-    return <Skeleton className="h-7 w-20" aria-hidden />
+    // Пока сессия проверяется, скринридер должен знать, что идёт загрузка,
+    // а не «ничего нет». Статус живёт только в этом состоянии: в остальных
+    // у шапки есть кнопка или ссылка с внятным именем.
+    return (
+      <div role="status">
+        <span className="sr-only">Проверяем сессию…</span>
+        <Skeleton className="h-7 w-20" aria-hidden />
+      </div>
+    )
   }
 
   if (status === 'unavailable') {

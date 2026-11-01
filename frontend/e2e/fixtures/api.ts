@@ -87,6 +87,24 @@ export async function restoreDeletedReviews(
   }
 }
 
+/** Вернуть отзыв в очередь модерации: снять публикацию (восстановление фикстур). */
+export async function hidePublishedReview(
+  request: APIRequestContext,
+  reviewId: string
+): Promise<void> {
+  const token = await csrfToken(request)
+
+  const response = await request.delete(
+    `/api/reviews/${reviewId}/publication`,
+    { headers: { 'X-CSRF-TOKEN': token } }
+  )
+
+  expect(
+    response.status(),
+    'DELETE /api/reviews/{id}/publication'
+  ).toBe(204)
+}
+
 /**
  * Запись на будущее для восстановления «Ближайших» после терминального действия.
  *

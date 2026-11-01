@@ -38,14 +38,27 @@ export default defineConfig({
     {
       name: 'desktop-chromium',
       dependencies: ['auth'],
-      testIgnore: [/pager-320\.spec\.ts/, /mutations\.spec\.ts/],
+      // axe — только в двух ширинах матрицы (§6): 1280 здесь и 320 в `narrow-320`.
+      testIgnore: [
+        /pager-320\.spec\.ts/,
+        /a11y-narrow\.spec\.ts/,
+        /mutations\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } },
     },
     {
       name: 'mobile-chromium',
       dependencies: ['auth'],
       // Мутирующие сцены меняют фикстуры — гоняем их один раз, на десктопе.
-      testIgnore: [/pager-320\.spec\.ts/, /mutations\.spec\.ts/],
+      // axe-спеки не дублируются в 375: гейт держит 1280 и 320. Клавиатура
+      // очереди проверяется в split-view на десктопе: на телефоне список
+      // заменяется карточкой.
+      testIgnore: [
+        /pager-320\.spec\.ts/,
+        /a11y(-narrow)?\.spec\.ts/,
+        /admin-queue-keyboard\.spec\.ts/,
+        /mutations\.spec\.ts/,
+      ],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 375, height: 812 },
@@ -62,11 +75,12 @@ export default defineConfig({
       testMatch: /mutations\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } },
     },
-    // Узкий экран — только там, где он важен: одна строка пагинатора и 44×44.
+    // Узкий экран — только там, где он важен: строка пагинатора, 44×44
+    // и ветка разметки без панели детали.
     {
       name: 'narrow-320',
       dependencies: ['auth'],
-      testMatch: /pager-320\.spec\.ts/,
+      testMatch: /(pager-320|a11y-narrow)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 320, height: 800 },

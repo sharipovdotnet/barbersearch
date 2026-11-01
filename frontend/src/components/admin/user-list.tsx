@@ -33,6 +33,7 @@ export function UserList({
   isLoadingPage,
   pageError,
   focusTargetRef,
+  detailPanelId,
   onSelect,
   onPrev,
   onNext,
@@ -46,6 +47,8 @@ export function UserList({
   isLoadingPage: boolean
   pageError: string | null
   focusTargetRef: RefObject<HTMLElement | null>
+  /** `id` панели карточки, если она отрисована в этом вьюпорте; иначе `null`. */
+  detailPanelId: string | null
   onSelect: (userId: string) => void
   onPrev: () => void
   onNext: () => void
@@ -106,12 +109,14 @@ export function UserList({
       <ul className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
         {items.map((user, index) => {
           const isSelected = user.id === selectedId
-          const name = getUserDisplayName(user)
           const lastLoginAt =
             user.lastLoginAt === null
               ? null
               : formatShortDateTime(user.lastLoginAt)
 
+          // Имя строки — её видимый текст: имя, email, бейджи и дата входа.
+          // Собранный `aria-label` дублировал подписи и терял инициалы аватара,
+          // из-за чего имя расходилось с экраном (WCAG 2.5.3).
           return (
             <li key={user.id}>
               <button
@@ -124,21 +129,7 @@ export function UserList({
                 }}
                 type="button"
                 aria-current={isSelected ? 'true' : undefined}
-                aria-controls="user-detail"
-                aria-label={[
-                  name,
-                  user.email,
-                  ADMIN_USER_ROLE_LABELS[user.role],
-                  user.isActive
-                    ? ADMIN_USER_ACTIVITY_LABELS.active
-                    : ADMIN_USER_ACTIVITY_LABELS.blocked,
-                  lastLoginAt === null
-                    ? 'ещё не входил'
-                    : `последний вход ${lastLoginAt}`,
-                  user.isEmailVerified ? null : 'email не подтверждён',
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
+                aria-controls={detailPanelId ?? undefined}
                 tabIndex={index === tabbableIndex ? 0 : -1}
                 onClick={() => onSelect(user.id)}
                 onKeyDown={(event) => handleKeyDown(event, index)}

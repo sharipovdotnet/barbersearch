@@ -24,6 +24,7 @@ export function ReviewQueue({
   pageError,
   focusTargetRef,
   focusRequest,
+  detailPanelId,
   onSelect,
   onPrev,
   onNext,
@@ -42,6 +43,8 @@ export function ReviewQueue({
   /** Заголовок списка: туда возвращается фокус после смены страницы. */
   focusTargetRef: RefObject<HTMLElement | null>
   focusRequest: { id: string | null } | null
+  /** `id` панели детали, если она отрисована в этом вьюпорте; иначе `null`. */
+  detailPanelId: string | null
   onSelect: (reviewId: string) => void
   onPrev: () => void
   onNext: () => void
@@ -128,6 +131,10 @@ export function ReviewQueue({
               ? formatWaitingSince(review.createdAt, now)
               : `опубликован ${formatShortDay(review.createdAt)}`
 
+          // Имя строки собирается из тех же спанов, что видит пользователь:
+          // полное ФИО здесь недопустимо, на экране стоит сокращённое (2.5.3).
+          const rowId = `review-${review.id}`
+
           return (
             <li key={review.id}>
               <button
@@ -140,8 +147,8 @@ export function ReviewQueue({
                 }}
                 type="button"
                 aria-current={isSelected ? 'true' : undefined}
-                aria-controls="review-detail"
-                aria-label={`${review.customer.fullName}, оценка ${review.rating} из 5, ${secondaryText}`}
+                aria-controls={detailPanelId ?? undefined}
+                aria-labelledby={`${rowId}-rating ${rowId}-name ${rowId}-meta`}
                 tabIndex={index === tabbableIndex ? 0 : -1}
                 onClick={() => onSelect(review.id)}
                 onKeyDown={(event) => handleKeyDown(event, index)}
@@ -152,15 +159,22 @@ export function ReviewQueue({
                     : 'border-transparent hover:bg-muted/30'
                 )}
               >
-                <span className="flex w-10 shrink-0 items-baseline gap-0.5 text-sm font-medium tabular-nums">
+                <span
+                  id={`${rowId}-rating`}
+                  className="flex w-10 shrink-0 items-baseline gap-0.5 text-sm font-medium tabular-nums"
+                >
                   {review.rating}
                   <Star className="size-3 fill-current text-muted-foreground" aria-hidden />
-                </span>
+                </span>{' '}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {formatShortName(review.customer.fullName)}
-                  </span>
                   <span
+                    id={`${rowId}-name`}
+                    className="block truncate text-sm font-medium"
+                  >
+                    {formatShortName(review.customer.fullName)}
+                  </span>{' '}
+                  <span
+                    id={`${rowId}-meta`}
                     className={cn(
                       'flex items-center gap-1.5 text-xs',
                       isOverdue ? 'text-foreground' : 'text-muted-foreground'
