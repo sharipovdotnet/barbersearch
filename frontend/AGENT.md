@@ -1262,12 +1262,11 @@ the feature grows; **P3** cosmetic/structural.
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
-`200` bodies),
-#6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry), #8 (a backend
-outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`, `.env` not
-ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13 (`shadcn`
-CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally absent;
-the remaining numbers do not shift.
+`200` bodies), #6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry),
+#8 (a backend outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`,
+`.env` not ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13
+(`shadcn` CLI as a runtime dependency) and #24 (no author-facing review list) are intentionally
+absent; the remaining numbers do not shift.
 
 ---
 
@@ -1310,18 +1309,15 @@ compare Russian copy as a whole string, saying in the test title that it is copy
 (`use-paged-list`, the admin queues, the cabinets), the in-screen copy E2E does not reach,
 keyboard/a11y beyond the four axe-scanned screens, and visual regressions. Coverage is not a gate.
 
-**Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the test
-password `e2e-password`; each test gets its own data or restores what it changes; a test that asserts
-Russian copy says so in a comment (copy can change); no `waitForTimeout` as synchronisation; E2E never
-mocks a successful response — `page.route` only injects failures or proves a request is absent.
-
 **Next in the unit layer:** `HeaderAuth` render states — loading skeleton, anonymous CTA,
 `unavailable` retry button, authenticated profile and the disabled sign-out — then the hooks and
 the screens, one promised behaviour at a time.
 
-**Rules:** no real user data or production secrets in tests; mock the network at the boundary,
-not the `apiRequest` module; a test that asserts Russian copy must say so explicitly (copy can
-change); coverage is not a gate — critical paths first.
+**Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the
+`e2e-password` test password; each test gets its own data or restores what it changes; mock the
+network at the boundary (MSW in units, the real API in E2E: `page.route` only injects failures or
+proves a request is absent); a test that asserts Russian copy says so explicitly (copy can change);
+no `waitForTimeout`/`sleep` as synchronisation; coverage is not a gate — critical paths first.
 
 ---
 
