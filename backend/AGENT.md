@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-01 (после среза issue-35): domain **187**, application **295**,
-infrastructure **83**, integration **50** — все зелёные. История прогонов по срезам и негативные
+Актуальный baseline на 2026-11-01 (после среза issue-36): domain **187**, application **296**,
+infrastructure **83**, integration **61** — все зелёные. История прогонов по срезам и негативные
 проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -648,7 +648,7 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 295 application + 83 infrastructure + 50 integration; unit-проекты зелёные локально (2026-11-01), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 187 domain + 296 application + 83 infrastructure + 61 integration; unit-проекты зелёные локально (2026-11-01), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 84 обработчика (72 command + 12 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
@@ -1069,7 +1069,8 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
 | `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global |
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
-| `bookings` | `(start_at DESC, id)` | Administrator's all-bookings list; user list is covered by `(user_id, start_at)` |
+| `bookings` | `(start_at DESC, id)` | Administrator's all-bookings list (scope `all` without a `userId` filter) |
+| `bookings` | `(user_id, start_at)` | The customer's list (`GET api/bookings`) in every scope and both cursor directions (issue-36): filter by `user_id`, then an ordered scan of `start_at` in either direction. No new migration was needed |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
 | `time_offs` | `(barber_profile_id, start_at)` | Vacation lookup during slot computation |
 | `barber_salons` | `EXCLUDE USING btree (barber_profile_id WITH =) WHERE (is_primary) DEFERRABLE INITIALLY DEFERRED` | Enforces the "one primary salon" invariant at the DB level too, without rejecting the transient state inside one `SaveChanges` (R-06) |
@@ -1640,9 +1641,20 @@ Read endpoints (added 2026-10-19):
   `Salon.TimeZoneId` (historical data only — writes now validate it in `Salon.Create` /
   `UpdateLocation`) is `409` (`barberSlots.timeZone.missing` / `.unknown`) and an error-level log,
   never a `500`; R-01.
-- **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`.
-  A non-admin asking for another user's `userId` gets `403`; an admin filtering by a non-existent
-  user gets `404`. Order is `start_at DESC, id`, keyset cursor, `PagedResponse<BookingResponse>`.
+- **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`
+  (issue-36 added the scopes). `scope=all|upcoming|past`: `all` is the default and keeps the old
+  behaviour exactly (`start_at DESC, id ASC`, every status, `all` without the parameter) so the
+  admin filter and external clients do not change; `upcoming` is `Status IN (Pending, Confirmed)
+  AND end_at > now` ordered `start_at ASC, id ASC`; `past` is the complement (a terminal status or
+  `end_at <= now`) ordered `start_at DESC, id DESC`. The boundary is `end_at`, not `start_at`, and
+  `now` comes from `TimeProvider.GetUtcNow()`. The keyset comparison direction follows the scope —
+  strictly greater in `upcoming`, strictly smaller in `past`, and `id ASC` with `start_at <` in
+  `all` — so one cursor never skips or duplicates a row. A non-admin asking for another user's
+  `userId` gets `403`; an admin filtering by a non-existent user gets `404`; both apply with any
+  scope. `scope` is trimmed and case-insensitive; an unknown value is `400
+  booking.getBookings.scope`, an out-of-range `pageSize` `400 booking.getBookings.pageSize`, a
+  broken cursor `400 booking.cursor.invalid`. The response stays `PagedResponse<BookingResponse>`
+  with no total count, and the read is still authenticated but CSRF-free (a read, not a mutation).
 - **`GET api/barber/bookings` (2026-10-30, issue-22)** — the barber's own bookings for the cabinet,
   `[Authorize(Policy = BarberOnly)]`: anonymous `401`, `Customer`/`Admin` `403`. The barber profile
   comes from the `barber_profile_id` claim, not from the query, so one barber cannot read another
