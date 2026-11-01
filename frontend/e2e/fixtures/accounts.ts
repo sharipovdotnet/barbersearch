@@ -54,6 +54,25 @@ export const fixtures = {
   /** Две вкладки `/account`: по 21 строке, то есть по две страницы по 20. */
   customerUpcomingBookings: 21,
   customerHistoryBookings: 21,
+  /** Активная услуга и салон витрины: их используют все 13 профилей фикстур. */
+  activeHairServiceId: '9e500000-0000-4000-8000-000000000001',
+  /** Выключенные строки каталога: публичные чтения их не отдают (см. `seed.sql`). */
+  hiddenHairServiceId: '9e500000-0000-4000-8000-000000000002',
+  hiddenSpecializationIds: {
+    fade: '9e600000-0000-4000-8000-000000000001',
+    beard: '9e600000-0000-4000-8000-000000000002',
+  },
+  hiddenSalonId: '9e400000-0000-4000-8000-000000000002',
+  /** Подписи строк, на которые опираются спеки админского каталога. */
+  catalogueLabels: {
+    activeHairService: 'E2E Стрижка',
+    hiddenHairService: 'E2E Борода',
+    hiddenSpecialization: 'E2E Фейд',
+    activeSalon: 'E2E Studio',
+    hiddenSalon: 'E2E Studio Nord',
+  },
+  /** Число барберов фикстур: `usageCount` активной услуги и активного салона. */
+  barbersUsingActiveCatalogueRows: 13,
 } as const
 
 /** Размеры страниц фронтенда: те же числа стоят в `src/lib/*`. */

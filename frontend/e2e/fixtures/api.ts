@@ -19,6 +19,43 @@ type Page = {
   nextCursor: string | null
 }
 
+/**
+ * Мутация админского каталога через API — восстановление фикстур в `finally`.
+ *
+ * Каталог правится теми же эндпоинтами, что и публичный: активация, правка строки,
+ * контакты салона. Нас интересует только результат (`2xx`), потому что тест уже проверил
+ * ветку интерфейса; повторная активация идемпотентна, поэтому вызов безопасен, даже если
+ * строка уже в нужном состоянии.
+ */
+export async function adminCatalogueMutation(
+  playwright: PlaywrightApi,
+  method: 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  data?: unknown
+): Promise<void> {
+  const context = await playwright.request.newContext({
+    baseURL,
+    storageState: storageStatePath('admin'),
+  })
+
+  try {
+    const token = await csrfToken(context)
+
+    const response = await context.fetch(path, {
+      method,
+      headers: { 'X-CSRF-TOKEN': token },
+      ...(data === undefined ? {} : { data }),
+    })
+
+    expect(
+      [200, 201, 204],
+      `${method} ${path}: ${response.status()}`
+    ).toContain(response.status())
+  } finally {
+    await context.dispose()
+  }
+}
+
 /** Все свои отзывы, сшивая страницы курсором. */
 export async function fetchAllMyReviews(request: APIRequestContext): Promise<MyReviewDto[]> {
   const items: MyReviewDto[] = []

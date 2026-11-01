@@ -44,6 +44,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide |
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
+| `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
 
 The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
 enforces roles separately (`AdminOnly`, `BarberOnly`).
@@ -65,6 +66,15 @@ One list deliberately keeps «Показать ещё»:
 Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
 `/admin/barbers` and `/admin/users` — pages with the same footer. The customer cabinet was the last
 exception: it split one server list on the client, which the server-side `scope` fixed (#36).
+
+The three admin catalogue dictionaries are the second, different exception: `/admin/catalogue` has
+**no pager at all**. A dictionary is dozens of rows, the public `GET /api/hair-services` and
+`GET /api/specializations` are bare arrays too, and a row the admin just created has to be visible
+immediately instead of on «page 3». So `GET /api/admin/catalogue/*` returns `IReadOnlyList<T>`, the
+screen has no «Показать ещё» and no row counters, and the number in the «Барберы» column is
+`usageCount` from the API, not the length of the array. When a dictionary outgrows a screen, paging
+it becomes a separate decision (a text keyset, which the project does not have yet) — not a quiet
+change to this screen.
 
 ## Barber search
 
@@ -501,6 +511,58 @@ and the mobile split keeps the list on its page. Role change, block/unblock and 
 confirmation update the row locally (or remove it when it leaves the active filter) before the
 quiet re-sync. The screen never shows a total count, because the API does not return one.
 
+## Admin catalogue
+
+`/admin/catalogue` shows three dictionaries — services, specializations and salons — in three
+tabs. The tab lives in `?tab=services|specializations|salons` (`services` by default, so
+`/admin/catalogue` is the canonical address) and survives a reload and «Назад»; an unknown value
+falls back to services instead of «Раздел не найден». The rail gained the fourth item between
+«Барберы» and «Пользователи», and the page is `noindex` like the rest of the admin.
+
+- `src/lib/admin-catalogue.ts` — three admin reads, all mutations of the existing endpoints, the
+  labels and `describeAdminCatalogueError`.
+- `src/lib/response-guards.ts` — `isAdminHairServiceList`, `isAdminSpecializationList`,
+  `isAdminSalonList`.
+- `src/hooks/use-admin-catalogue.ts` — the list controller: `status`/`search` are part of the
+  request, a late answer of a cancelled request is dropped by generation, quiet `refresh()`, and a
+  discriminated union so a table only sees rows of its own tab.
+- `src/components/admin/catalogue-screen.tsx` — header, tabs, status filter, debounced search, the
+  active panel and the dialogs; `catalogue-tabs.tsx`, `catalogue-table.tsx`,
+  `hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`,
+  `catalogue-action-dialog.tsx` — the parts.
+- `src/lib/admin-path.ts` — `catalogue` route, `CatalogueTab`, `cataloguePath()`,
+  `parseCatalogueTab()`.
+
+What it does:
+
+- Shows the **full** dictionary, including rows that are switched off: `status=all` is the default
+  precisely so a hidden row can be found and switched back on. The status filter is one segmented
+  `role="group"` («Все», «Активные», «Выключенные») shared by the tabs; changing a tab resets the
+  search but keeps the status. Search is debounced by 300 ms, capped at 100 characters, and hits the
+  name (salons — name and city).
+- «Барберы» is `usageCount` from the API: the number of **active and verified** barber profiles that
+  use the row right now (for a service, only active `barber_services` links count). The screen never
+  derives it from the array length and shows no other counters.
+- The status is text («Активна»/«Выключена», «Активен»/«Выключен» for salons), not only a colour.
+  On `lg` and wider the rows are a `<table>` with a `sr-only` `<caption>` and `th scope="col"`; on
+  narrower screens they become cards. Neither produces horizontal scroll at 320 px.
+- Create and edit run through existing endpoints: `POST/PUT /api/hair-services`,
+  `POST/PUT /api/specializations`, `POST /api/salons` and the two independent salon `PUT`s. The
+  service category cannot change after creation (the domain forbids it) and the salon name is
+  read-only («Название задаётся при создании») because the domain has no rename. The time zone is
+  a native `<select>` over `Intl.supportedValuesOf('timeZone')` with the current value always
+  present — a typo would break slot calculation (`salon.timeZoneId.unknown`).
+- A salon edit sends `PUT /salons/{id}/location` and then `PUT /salons/{id}/contact-info`. If the
+  second call fails the first one has already been applied: the dialog shows the error, refreshes
+  the list and does **not** claim «Сохранено».
+- «Выключить» is an `alertdialog` that names the consequence and, for services and salons, the
+  number of barbers; «Включить» is a plain confirmation. After `204` the list refreshes quietly, the
+  row keeps its place, focus returns to its button and the action is announced in `role="status"`.
+  `409`/`404` are shown in the dialog and the list is re-read.
+- There is **no delete**: the domain only deactivates, and there are no bulk actions. The catalogue
+  is **not** written to `audit_log` — the `AuditTrail` allowlist covers `User`, `BarberProfile` and
+  `Review` only — so the screen does not promise an audit.
+
 ## Testing
 
 Two layers, both in CI: Vitest for the logic, Playwright for the browser.
@@ -516,7 +578,12 @@ needs no API and no database, and covers:
 - `describeSignInError` — the whole §9.5 table, including the order `429` → codes → `401`;
 - `LoginDialog` — client validation, pending state, success, mapped server errors, labels and ARIA;
 - `SessionProvider` — bootstrap outcomes, the «Запомнить меня» refresh, `unavailable`,
-  `retrySession`, sign-in/sign-out, the hint cookie and exactly one `/auth/me` under `StrictMode`.
+  `retrySession`, sign-in/sign-out, the hint cookie and exactly one `/auth/me` under `StrictMode`;
+- `admin-catalogue` — the three list URLs (`status` always, `search` only when non-empty, `all` by
+  default), the strict list guards accepting extra fields and rejecting a broken body,
+  `DELETE /activation` with `X-CSRF-TOKEN` and one retry on `auth.csrf.invalid`, the complete
+  `POST /api/salons` body, and the error mapping for a concurrency conflict, an unknown time zone
+  and an unknown failure.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -603,7 +670,10 @@ without a debt number is not allowed.
 history bookings and 21 upcoming ones, two customers with 12 reviews each (the `e2e-customer` also
 gets 21 upcoming and 21 history bookings, so both `/account` tabs have two pages), an admin, twelve
 extra barbers in one city (so search has a second page) and 25 users in total (so `/admin/users`
-has two).
+has two). For the admin catalogue it adds **hidden** rows only — the service «E2E Борода», two
+specializations and the salon «E2E Studio Nord»: an active row would land in the public filters and
+cards and shift the counters of `search-login`, `a11y` and the barber cards, while hidden rows are
+invisible to public reads.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

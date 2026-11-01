@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-01 (после среза issue-36): domain **187**, application **296**,
-infrastructure **83**, integration **61** — все зелёные. История прогонов по срезам и негативные
+Актуальный baseline на 2026-11-02 (после среза issue-37): domain **187**, application **307**,
+infrastructure **83**, integration **79** — все зелёные. История прогонов по срезам и негативные
 проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -642,17 +642,17 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-01; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-02; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 296 application + 83 infrastructure + 61 integration; unit-проекты зелёные локально (2026-11-01), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 84 обработчика (72 command + 12 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 307 application + 83 infrastructure + 79 integration; unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 87 обработчиков (72 command + 15 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 17 контроллеров / 92 endpoint (84 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 18 контроллеров / 95 endpoint (87 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -1103,6 +1103,17 @@ orphans do not block the migration; `deploy/find-dangling-references.sql` lists 
 validated manually after cleanup. The repositories' `ExistsAsync` checks are the user-facing
 `404`; the FK is the last line of defence.
 
+**Catalogue counters (2026-11-02, issue-37).** `usageCount` in the admin catalogue is a correlated
+`COUNT` over `barber_services`, `barber_specializations` and `barber_salons` joined to
+`barber_profiles` with `is_active AND is_verified` (a service link must also be `is_active`), so it
+is served by the existing `ix_barber_services_hair_service_id_barber_profile_id`,
+`ix_barber_specializations_specialization_id_barber_profile_id` and `ix_barber_salons_salon_id`
+indexes from the table above — no migration and no new index. The dictionary search is a plain
+`ILIKE` without a trigram index on purpose: a dictionary is dozens of rows, a sequential scan is
+cheaper than maintaining an index, and the order (`category, name, id` / `name, id` /
+`city, name, id`) is a sort over the same small set. Add an index only with
+`EXPLAIN (ANALYZE, BUFFERS)` evidence.
+
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
 `User.NormalizeEmail` (`Trim().ToLowerInvariant()`), validates it through
@@ -1435,7 +1446,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**17 controllers, 92 endpoints: 84 domain + 8 auth** — one endpoint per Application handler, plus
+**18 controllers, 95 endpoints: 87 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1456,6 +1467,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
 | `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
+| `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
 
 Conventions:
 
@@ -1597,6 +1609,25 @@ Read endpoints (added 2026-10-19):
   would leave the service without an active administrator). The last check runs inside
   `IUnitOfWork` under `pg_advisory_xact_lock('barbersearch.admins')`
   (`IUserRepository.AcquireAdminLockAsync`), so two concurrent demotions cannot both pass.
+- **Admin catalogue (2026-11-02).** `GET api/admin/catalogue/hair-services|specializations|salons`
+  are closed by `AdminOnly` and return the **full** dictionary including hidden rows: the public
+  reads (`GET api/hair-services`, `GET api/specializations`) only expose active rows and salons had
+  no read at all, so an administrator could not find a row to edit or switch back on. `status` is
+  `all` (default), `active` or `hidden` — `all` by default is the point of the screen, not a
+  convenience; `search` is `ILIKE` over the name (salons — name and city) with `%`, `_` and `\`
+  escaped, trimmed, and capped at 100 characters. `AdminHairServiceResponse`,
+  `AdminSpecializationResponse` and `AdminSalonResponse` carry every edit field plus `isActive` and
+  `usageCount` — the number of **active and verified** barber profiles using the row
+  (`DISTINCT barber_profile_id` over `barber_services`/`barber_specializations`/`barber_salons`,
+  and for a service only links with `barber_services.is_active`). Orders are `category, name, id`,
+  `name, id` and `city, name, id`. Responses are bare arrays (`IReadOnlyList<T>`): dictionaries are
+  dozens of rows, and the row just created must be visible immediately, so there is no `cursor` or
+  `pageSize` (an explicit exception to the pager rule, recorded in `frontend/README.md`); when a
+  dictionary grows, paging it is a separate decision with a text keyset. Unknown `status` is
+  `400 admin.catalogue.status`, a longer search `400 admin.catalogue.search`. Mutations stay on
+  `HairServicesController`, `SpecializationsController` and `SalonsController` — no admin mutation
+  precedent was created. **Catalogue edits are not written to `audit_log`:** the `AuditTrail`
+  allowlist covers only `User`, `BarberProfile` and `Review`; the admin UI promises no audit.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off

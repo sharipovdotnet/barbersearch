@@ -795,6 +795,9 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist |
 | `GET` | `/api/admin/users?status=all\|active\|blocked\|unverified&role=&search=` | admin | user list with role, access state and verifications |
 | `GET` | `/api/admin/users/{id}` | admin | user card with contacts and the linked barber profile |
+| `GET` | `/api/admin/catalogue/hair-services?status=&search=` | admin | the **full** catalogue including hidden rows: a bare array, no pagination; `status` is `all` (default), `active` or `hidden`; every row carries `isActive` and `usageCount` (active verified barbers with an active link); order category, name, id; `400 admin.catalogue.status` / `admin.catalogue.search` |
+| `GET` | `/api/admin/catalogue/specializations?status=&search=` | admin | the same contract for specializations: `name`, `description`, `isActive`, `usageCount`; order name, id |
+| `GET` | `/api/admin/catalogue/salons?status=&search=` | admin | the same contract for salons, with every edit field (`address`, `city`, `postalCode`, `country`, `timeZoneId`, coordinates, contacts), `isActive` and `usageCount`; search matches name **and** city; order city, name, id |
 | `PUT` | `/api/users/{id}/role` | admin | change a role; `409 user.role.self` / `user.admin.last` |
 | `POST` / `DELETE` | `/api/users/{id}/activation` | admin | unblock / block; `409 user.deactivation.self` / `user.admin.last` |
 | `POST` | `/api/users/{id}/email-verification`, `/phone-verification` | admin | mark email / phone verified |
@@ -828,6 +831,12 @@ have no pagination. An empty catalogue hides its select instead of rendering a d
 failed catalogue request keeps city, date, language and «Найти» working with a Russian retry block.
 There is no free-text parameter. `GET /api/barbers/{id}/slots` is called by the profile
 page only (§9.3, §16); slots are mutable, so there is no slots cache.
+
+The three admin catalogue reads are the deliberate exception to «list = pager» (§13): dictionaries
+are dozens of rows, the public reads are bare arrays too, and a row created by the admin must be
+visible immediately rather than on «page 3». They are the only reads in this table without
+`cursor`/`pageSize`; when a dictionary outgrows a screen this becomes a separate decision with a
+text keyset, which the project does not have yet.
 
 `SessionUser` (mirrors `GET /auth/me`):
 
@@ -1160,40 +1169,40 @@ contrast on screens outside the axe matrix.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-11-01)
+### 12.1 Current build (2026-11-02)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 393.75 kB | 127.38 kB |
-| `admin-page-*.js` — lazy `/admin/**` | 111.68 kB | 24.13 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.80 kB | 9.47 kB |
-| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 34.60 kB | 10.13 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.32 kB | 6.99 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.16 kB | 5.72 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.36 kB |
-| `paging-*.js` — shared cursor pager used by the seven row lists | 6.93 kB | 2.54 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 394.52 kB | 127.54 kB |
+| `admin-page-*.js` — lazy `/admin/**` (reviews, barbers, users, catalogue) | 151.83 kB | 33.79 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.76 kB | 9.46 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 34.58 kB | 10.13 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.28 kB | 6.96 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.11 kB | 5.70 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.37 kB |
+| `paging-*.js` — shared cursor pager used by the seven row lists | 7.53 kB | 2.77 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.64 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.65 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile and the cabinet | 0.96 kB | 0.52 kB |
-| `textarea-*.js` — shared `Textarea` for the review and note dialogs | 0.67 kB | 0.38 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
-| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.20 kB |
-| `index-*.css` | 74.40 kB | 12.88 kB |
+| `shield-alert-*.js`, `circle-check-*.js`, `arrow-left-*.js` — icons shared by two lazy chunks | 0.81 kB total | 0.64 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
+| `index-*.css` | 74.66 kB | 12.96 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.67 kB | — |
 
-2285 modules. The issue-36 build moved `/account` from its own append hook to the shared pager:
-`account-page` shrank by 0.88 kB raw / 0.15 kB gzip, the shared `bookings` chunk grew by 0.03 kB
-(the transport now builds the `scope` query and the signal), the entry is unchanged and no new
-chunk appeared. `paging-*.js` is the old `use-paged-list` chunk with the same contents — it also
-serves `/account` now.
+2294 modules. The issue-37 build added the catalogue to the lazy admin chunk: `admin-page` grew by
+40.15 kB raw / 9.66 kB gzip (three tables, three dialogs and the confirmation), the entry by
+0.77 kB / 0.16 kB (the `admin-path` tab parser and the shared guards), and the small `Textarea`
+chunk disappeared because the catalogue dialogs pull it into the same lazy chunk. Every other
+lazy screen is within 0.14 kB of the previous build; `index-*.css` grew by 0.26 kB / 0.08 kB.
 
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 127.35 kB of it;
+   working target, not a stakeholder-approved SLA. The landing currently uses 127.54 kB of it;
    role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account`, `/account/reviews` and `/barbers/{id}` are split; do not statically import either
@@ -1237,17 +1246,18 @@ serves `/account` now.
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить» |
-| Other admin sections | ❌ catalogue, bookings, audit — not implemented; no dead rail links |
+| Admin catalogue | ✅ `/admin/catalogue`: three tabs in `?tab=` (services/specializations/salons), full dictionary including hidden rows, status filter and debounced search, `usageCount` per row, create/edit dialogs on the existing endpoints, hide/return with an `alertdialog` that explains the consequence and the barber count, status as text, adaptive tables (no horizontal scroll at 320), quiet «Обновить»; **no pagination** (dictionaries are small, see §9.3) and no delete — the domain only deactivates. Catalogue edits are **not written to `audit_log`** (the `AuditTrail` allowlist covers `User`, `BarberProfile`, `Review`); the screen does not promise an audit |
+| Other admin sections | ❌ admin bookings and the audit journal — not implemented; no dead rail links |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**` (reviews, barbers, catalogue, users); `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 73 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 85 tests in 9 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, and the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1312,13 +1322,20 @@ error), search append, sign-in (validation, wrong credentials, session survives 
 `/account/reviews` paging and its 401 gate, `/account` — two server tabs («Предстоящие»/«История»
 twenty rows, «Дальше»/«Назад», no «Показать ещё», hero from the first row, cancellation moves the
 row to history), `/barber` tabs and the empty-page-after-action policy, `/admin/reviews` and
-`/admin/users` paging, filters and URL-held selection, the 320 px pager, and an
-axe scan of every screen and role at 1280 (`/`, `/barbers/{id}`, `/register`, the open login dialog,
-`/account`, `/account/reviews`, `/barber`, `/admin/reviews` pending and published, `/admin/barbers`,
-`/admin/users`, with the split-view detail cards) and at 320 (`/barbers/{id}`, `/admin/reviews` and
-`/admin/users` without a detail panel). The keyboard layer covers the pager (Tab/Enter/Space), the
-login dialog (Escape and focus return) and the review queue (Tab, arrows, Home/End, Enter/Space,
-`:focus-visible`, and focus that stays in the queue after publishing).
+`/admin/users` paging, filters and URL-held selection, `/admin/catalogue` (three tabs, `?tab=` in
+the URL and across a reload, status filter, name and city search, `usageCount` from the API, no
+pager), the catalogue mutations (hide an active service with the barber count in the
+`alertdialog`, rename a hidden specialization, edit salon contacts through both `PUT`s, and an
+empty create form that shows client errors without a request — every scenario restores its row in
+`finally`), the 320 px pager, and an axe scan of every screen and role at 1280 (`/`,
+`/barbers/{id}`, `/register`, the open login dialog, `/account`, `/account/reviews`, `/barber`,
+`/admin/reviews` pending and published, `/admin/barbers`, `/admin/users`, `/admin/catalogue` on the
+services tab and `/admin/catalogue?tab=salons` with the edit form open, plus the split-view detail
+cards) and at 320 (`/barbers/{id}`, `/admin/reviews`, `/admin/users` without a detail panel and
+`/admin/catalogue?tab=salons`, which also asserts zero horizontal overflow). The keyboard layer
+covers the pager (Tab/Enter/Space), the login dialog (Escape and focus return) and the review queue
+(Tab, arrows, Home/End, Enter/Space, `:focus-visible`, and focus that stays in the queue after
+publishing).
 
 **What the unit layer covers:** `apiRequest` (bodies, `204`, broken JSON, `ProblemDetails` and the
 strict guard, transport failure, `validate`, the `401` retry rules and the `/auth/*` exception);
@@ -1333,8 +1350,12 @@ start with the visible word, the retry name, `aria-busy`, edge-disabled buttons,
 `auth.csrf.invalid` with the same body, no retry on `409`); `fetchBookings` (the default
 `?scope=all&pageSize=20`, `upcoming` without a cursor, `past` with one, an empty cursor left out of
 the URL, the `signal` passed through); `refreshSession` (the `{ rememberMe }`
-body built from the hint). Tests are colocated (`*.test.ts(x)`) and compare Russian copy as a
-whole string, saying in the test title
+body built from the hint); `admin-catalogue` (the list URLs — `status` always, a non-empty `search`
+only, `all` by default — the strict list guards accepting extra fields and rejecting a broken body,
+`DELETE /activation` with `X-CSRF-TOKEN` and one retry on `auth.csrf.invalid`, the full
+`POST /api/salons` body, and the error mapping for `409 …update.concurrencyConflict`,
+`400 salon.timeZoneId.unknown` and an unknown failure). Tests are colocated (`*.test.ts(x)`) and
+compare Russian copy as a whole string, saying in the test title
 that it is copy.
 
 **What is not covered yet:** the screens and the hooks (`use-paged-list`, the admin queues, the
@@ -1506,6 +1527,25 @@ cancellation removes the row from «Предстоящие» under the empty-pag
 up in history. One PR touched both `backend` and `frontend`; no new dependencies and no migrations
 (the existing `(user_id, start_at)` index covers both cursor directions).
 
+**Completed 2026-11-02:** admin catalogue (#37) — `/admin/catalogue` closes the last admin
+section without a UI: the rail gained the fourth item, `AdminRoute` knows `catalogue` with its tab
+in `?tab=services|specializations|salons` (default `services`, an unknown value falls back instead of
+404), and `CatalogueScreen` renders three dictionaries. The backend was the blocker: public
+`GET /api/hair-services`/`/api/specializations` returned only active rows and salons had no read at
+all, so the stage added `GET /api/admin/catalogue/{hair-services|specializations|salons}`
+(`status=all|active|hidden`, search, `usageCount` = active verified barbers, `400
+admin.catalogue.status|search`, full dictionary without pagination) while mutations stay on the
+existing endpoints. The screen has a segmented status filter, a 300 ms debounced search, three
+adaptive tables (cards below `lg`, status as text, no horizontal scroll at 320), create/edit
+dialogs (`salon` edits send `PUT location` then `PUT contact-info`; the name is read-only because
+the domain has no rename; the time zone is a native select over
+`Intl.supportedValuesOf('timeZone')`), and hide/return behind an `alertdialog` that names the
+number of barbers and the consequence. No `usePagedList`/`ListPager` here on purpose (§9.3), no
+delete, no audit (§13). One PR touched both catalogues; unit tests grew to 85, E2E gained the
+catalogue read and mutation specs plus axe at 1280 and 320, and the admin shell got `min-w-0` on
+its grid columns (the horizontal rail used to stretch the page to 384 px at 320). No new
+dependencies, no migrations, no `ui/**` changes.
+
 Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
@@ -1527,10 +1567,11 @@ do not shift.
     strictly and never leak English `detail`. Remaining hardening work is a separate slice: the
     test runner (§14 #2, §15) is done, the a11y pass (#34, §11) is done; touch targets and the dark
     theme are still unaudited (§14 #11).
-12. **Admin continuation** — catalogue, bookings and the audit journal, in that order
-    (see `ADMIN_PAGE_HANDOFF.md` §5); each needs its own admin read contract. Reviews,
-    barbers and users are done. This is the admin-wide bookings view, not the barber's own
-    list: the cabinet at `/barber` is already done (§13).
+12. **Admin continuation** — the catalogue is done (#37, §13); the remaining sections are admin
+    bookings and the audit journal, in that order (see `ADMIN_PAGE_HANDOFF.md` §5). Each needs its
+    own admin read contract and each is a separate slice. Reviews, barbers, users and the catalogue
+    are done. This is the admin-wide bookings view, not the barber's own list: the cabinet at
+    `/barber` is already done (§13).
 
 ---
 

@@ -1,3 +1,5 @@
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Salons.Admin;
 using BarberSearch.Domain.Salons;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -9,6 +11,27 @@ namespace BarberSearch.Application.Salons;
 /// </summary>
 public interface ISalonRepository
 {
+    /// <summary>
+    /// Админский справочник салонов: полный список, включая выключенные строки, с фильтром
+    /// статуса и поиском по названию и городу.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания; порядок — город, название, идентификатор. Поиск идёт через
+    /// <c>ILIKE</c> с экранированием служебных символов шаблона. Страниц нет: справочник
+    /// маленький и отдаётся целиком — до этого этапа у салонов не было ни одного чтения.
+    /// </remarks>
+    /// <param name="status">Фильтр статуса строки.</param>
+    /// <param name="search">Поиск по названию или городу; <c>null</c> — без фильтра.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>
+    /// Строки справочника со всеми полями формы; <c>usageCount</c> — число активных
+    /// подтверждённых профилей, работающих в салоне.
+    /// </returns>
+    Task<Result<IReadOnlyList<AdminSalonResponse>, Failure>> GetAdminListAsync(
+        AdminCatalogueStatus status,
+        string? search,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Салон по идентификатору.
     /// </summary>

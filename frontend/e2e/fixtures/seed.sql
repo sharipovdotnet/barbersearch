@@ -186,6 +186,69 @@ ON CONFLICT (id) DO UPDATE SET
     is_active = EXCLUDED.is_active,
     updated_at = now();
 
+-- Выключенные строки справочников для админского каталога (`/admin/catalogue`).
+--
+-- Только выключенные: активная услуга, специализация или салон попадают в публичные
+-- фильтры витрины и на карточки барберов, и чужие спеки (`search-login`, `a11y`,
+-- карточки барберов) поехали бы по счётчикам. Выключенные строки публичные чтения
+-- не отдают, поэтому фикстуры видны только админскому каталогу.
+--
+-- Опираются на них: `admin-catalogue.spec.ts` (вкладки, фильтр статуса, поиск,
+-- `usageCount` = 0 у выключенных строк) и `admin-catalogue-mutations.spec.ts`
+-- (выключение/включение, переименование, правка контактов).
+INSERT INTO hair_services
+    (id, name, description, category, default_duration_minutes,
+     is_active, created_at, updated_at)
+VALUES
+    ('9e500000-0000-4000-8000-000000000002', 'E2E Борода',
+     'Выключенная услуга E2E-фикстур', 2, 45, false, now(), now())
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    category = EXCLUDED.category,
+    default_duration_minutes = EXCLUDED.default_duration_minutes,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
+-- Специализации: публичный справочник фикстур пуст, поэтому здесь только выключенные
+-- строки — на витрине их нет, а админский каталог видит.
+INSERT INTO specializations
+    (id, name, description, is_active, created_at, updated_at)
+VALUES
+    ('9e600000-0000-4000-8000-000000000001', 'E2E Фейд',
+     'Выключенная специализация E2E-фикстур', false, now(), now()),
+    ('9e600000-0000-4000-8000-000000000002', 'E2E Борода',
+     'Выключенная специализация E2E-фикстур', false, now(), now())
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
+-- Выключенный салон: публичный поиск и карточки его не показывают, админский каталог
+-- видит и позволяет включить обратно. Правка контактов в mutations-спеке возвращает
+-- телефон в `finally`, а повторный сид восстанавливает все поля строки.
+INSERT INTO salons
+    (id, name, address, city, postal_code, country, time_zone_id,
+     latitude, longitude, phone_number, website_url, is_active, created_at, updated_at)
+VALUES
+    ('9e400000-0000-4000-8000-000000000002', 'E2E Studio Nord', 'ул. Северная, 2',
+     'Санкт-Петербург', '190000', 'Russia', 'Europe/Moscow', 59.9386, 30.3141,
+     '+78120000000', NULL, false, now(), now())
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    address = EXCLUDED.address,
+    city = EXCLUDED.city,
+    postal_code = EXCLUDED.postal_code,
+    country = EXCLUDED.country,
+    time_zone_id = EXCLUDED.time_zone_id,
+    latitude = EXCLUDED.latitude,
+    longitude = EXCLUDED.longitude,
+    phone_number = EXCLUDED.phone_number,
+    website_url = EXCLUDED.website_url,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
 -- 4. Профили барберов: витринный B1 и B2…B13 для пагинации поиска.
 INSERT INTO barber_profiles
     (id, user_id, display_name, grade, bio, languages, years_of_experience,

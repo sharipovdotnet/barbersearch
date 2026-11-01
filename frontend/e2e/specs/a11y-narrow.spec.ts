@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { ProfilePage } from '../pages/profile-page'
@@ -57,5 +58,28 @@ test.describe('axe: 320 px, админка без выбранной строк�
     await expect(adminUsers.heading).toBeVisible()
 
     await expectNoBlockingViolations(page, '/admin/users @320', test.info())
+  })
+
+  test('каталог: салоны карточками, без горизонтального скролла', async ({ page }) => {
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto('salons')
+    await catalogue.waitForRows()
+    await expect(catalogue.heading).toBeVisible()
+
+    // На 320 таблица скрыта: карточки не должны расширять страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/catalogue?tab=salons @320',
+      test.info()
+    )
   })
 })

@@ -1,3 +1,5 @@
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.HairServices.Admin;
 using BarberSearch.Domain.HairServices;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -9,6 +11,28 @@ namespace BarberSearch.Application.HairServices;
 /// </summary>
 public interface IHairServiceRepository
 {
+    /// <summary>
+    /// Админский справочник услуг: полный список, включая выключенные строки, с фильтром
+    /// статуса и поиском по названию.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания; порядок — категория, название, идентификатор. Поиск
+    /// идёт через <c>ILIKE</c> с экранированием <c>%</c>, <c>_</c> и <c>\</c>, поэтому символы
+    /// шаблона остаются литералами. Страниц нет: справочник маленький и отдаётся целиком,
+    /// а созданная строка должна быть видна сразу.
+    /// </remarks>
+    /// <param name="status">Фильтр статуса строки.</param>
+    /// <param name="search">Поиск по названию; <c>null</c> — без фильтра.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>
+    /// Строки справочника; <c>usageCount</c> — число активных подтверждённых профилей,
+    /// у которых есть включённая связь с услугой.
+    /// </returns>
+    Task<Result<IReadOnlyList<AdminHairServiceResponse>, Failure>> GetAdminListAsync(
+        AdminCatalogueStatus status,
+        string? search,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Услуга по идентификатору.
     /// </summary>

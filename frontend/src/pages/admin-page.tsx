@@ -8,18 +8,39 @@ import {
 } from '@/components/admin/admin-gate'
 import { AdminRail } from '@/components/admin/admin-rail'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
+import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
 import { UsersScreen } from '@/components/admin/users-screen'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { useSession } from '@/hooks/use-session'
-import { isAdminPath, parseAdminPath, reviewsPath } from '@/lib/admin-path'
+import {
+  isAdminPath,
+  parseAdminPath,
+  reviewsPath,
+  type AdminRoute,
+} from '@/lib/admin-path'
 import { navigate, useLocation } from '@/lib/router'
 
 const ADMIN_TITLES = {
   reviews: 'Отзывы — администрирование BarberSearch',
   barbers: 'Барберы — администрирование BarberSearch',
+  catalogue: 'Каталог — администрирование BarberSearch',
   users: 'Пользователи — администрирование BarberSearch',
 } as const
+
+/** Заголовок вкладки по маршруту: `notFound` показывается как отзывы. */
+function titleFor(route: AdminRoute): string {
+  switch (route.kind) {
+    case 'barbers':
+      return ADMIN_TITLES.barbers
+    case 'users':
+      return ADMIN_TITLES.users
+    case 'catalogue':
+      return ADMIN_TITLES.catalogue
+    default:
+      return ADMIN_TITLES.reviews
+  }
+}
 
 function splitLocation(location: string): { pathname: string; search: string } {
   const index = location.indexOf('?')
@@ -42,12 +63,7 @@ export function AdminPage() {
   const route = parseAdminPath(pathname, search)
   const { status, user } = useSession()
   const tab = route.kind === 'reviews' ? route.tab : 'pending'
-  const title =
-    route.kind === 'barbers'
-      ? ADMIN_TITLES.barbers
-      : route.kind === 'users'
-        ? ADMIN_TITLES.users
-        : ADMIN_TITLES.reviews
+  const title = titleFor(route)
 
   // `/admin` — тот же экран, но канонический адрес ведёт на очередь отзывов.
   useEffect(() => {
@@ -123,6 +139,14 @@ export function AdminPage() {
     )
   }
 
+  if (route.kind === 'catalogue') {
+    return (
+      <AdminShell>
+        <CatalogueScreen tab={route.tab} />
+      </AdminShell>
+    )
+  }
+
   return (
     <AdminShell hideRailOnMobile={route.reviewId !== null}>
       <ReviewsScreen tab={route.tab} reviewId={route.reviewId} />
@@ -139,7 +163,9 @@ function AdminShell({
 }) {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:py-8">
-      <div className={hideRailOnMobile ? 'hidden lg:block' : undefined}>
+      {/* `min-w-0` на обоих столбцах: без него горизонтальный рейл растягивает
+          grid-элемент по min-content, и страница получает горизонтальный скролл на 320. */}
+      <div className={hideRailOnMobile ? 'hidden min-w-0 lg:block' : 'min-w-0'}>
         <AdminRail />
       </div>
       <div className="min-w-0">{children}</div>

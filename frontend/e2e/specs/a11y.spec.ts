@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { CabinetPage } from '../pages/cabinet-page'
@@ -168,6 +169,36 @@ test.describe('axe: админка', () => {
     await expect(page.locator('#user-detail')).toBeVisible()
 
     await expectNoBlockingViolations(page, '/admin/users', test.info())
+  })
+
+  test('/admin/catalogue: вкладка «Услуги»', async ({ page }) => {
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto()
+    await catalogue.waitForRows()
+    await expect(catalogue.heading).toBeVisible()
+    await expect(catalogue.tabs).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/admin/catalogue', test.info())
+  })
+
+  test('/admin/catalogue?tab=salons: широкая таблица и форма правки', async ({
+    page,
+  }) => {
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto('salons')
+    await catalogue.waitForRows()
+    await catalogue
+      .editButton(fixtures.catalogueLabels.hiddenSalon)
+      .click()
+    await expect(catalogue.dialog).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/catalogue?tab=salons + форма',
+      test.info()
+    )
   })
 })
 
