@@ -2,7 +2,9 @@ using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
+using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.Users;
@@ -193,6 +195,73 @@ internal sealed class TestData
         await db.SaveChangesAsync();
 
         return new SeededBarberWithSalons(user, profile, primary, secondary);
+    }
+
+    /// <summary>
+    /// Создаёт завершённую бронь и отзыв по ней; <paramref name="published"/> = <c>true</c>
+    /// публикует отзыв сразу (для негативного кейса «скрытие без токена не сработало»).
+    /// </summary>
+    /// <remarks>
+    /// Бронь завершена доменными методами, а не SQL: отзыв можно создать только по
+    /// состоявшемуся визиту, и тест не должен обходить это правило.
+    /// </remarks>
+    public async Task<Guid> CreateReviewAsync(
+        SeededBarber barber,
+        Guid customerId,
+        int rating = 5,
+        bool published = false)
+    {
+        ArgumentNullException.ThrowIfNull(barber);
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var startAt = DateTimeOffset.UtcNow.AddDays(-2);
+        var booking = Require(Booking.Create(
+            customerId,
+            barber.Profile.Id,
+            barber.Service.Id,
+            barber.Salon.Id,
+            startAt,
+            startAt.AddMinutes(30),
+            45m,
+            $"review-seed-{Guid.NewGuid():N}"));
+
+        Require(booking.Confirm());
+        Require(booking.Complete());
+
+        var review = Require(Review.Create(booking, customerId, rating, "Seeded review"));
+
+        if (published)
+        {
+            Require(review.Publish());
+        }
+
+        db.Bookings.Add(booking);
+        db.Reviews.Add(review);
+        await db.SaveChangesAsync();
+
+        return review.Id;
+    }
+
+    /// <summary>
+    /// Создаёт заблокированного пользователя — цель для <c>POST api/users/{id}/activation</c>.
+    /// </summary>
+    public async Task<User> CreateBlockedUserAsync(string email)
+    {
+        var created = await _app.CreateUserAsync(email);
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Загружаем в этом контексте: xmin — shadow-свойство, и у сущности из чужого
+        // контекста его значения нет, поэтому UPDATE с optimistic concurrency дал бы 0 строк.
+        var user = await db.Users.SingleAsync(candidate => candidate.Id == created.Id);
+
+        Require(user.Deactivate());
+        await db.SaveChangesAsync();
+
+        return user;
     }
 
     /// <summary>

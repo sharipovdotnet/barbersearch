@@ -454,7 +454,7 @@ successful `signIn` clears `terminal`.
    - `401` and **no** `barbersearch.remember` hint → `status = 'anonymous'`, without a CSRF call
      or a refresh.
    - `401` and the hint is present → `refreshSession()`: `GET /api/auth/csrf` →
-     `POST /api/auth/refresh` (`204`, rotated cookies) → a second `/auth/me`.
+     `POST /api/auth/refresh` with `{ rememberMe }` (`204`, rotated cookies) → a second `/auth/me`.
      `refreshed` → `authenticated`; a second `401` → the hint is cleared and the user is
      anonymous (no third request); `terminal` → hint cleared, anonymous; `transient`, and a
      failed second `/auth/me`, → `unavailable` with the hint intact, so «Повторить» or the next
@@ -771,7 +771,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName }` → `201 { id }`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName` |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
-| `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; **no request body** in the browser branch → `204` + new cookies; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
+| `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; the browser branch sends `{ rememberMe }` (no token in the body) → `204` + new cookies, and `rememberMe: true` makes the access cookie persistent; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
 | `GET` | `/api/barbers?city=&specializationId=&hairServiceId=&date=&language=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, one language as an enum name (`Ru`, `ru`; an unknown value is `400 barberSearch.language.invalid`), one specialization and one hair service (both `''` = no filter); opaque keyset `nextCursor`; each item carries `languages` for the result card; the UI sends `pageSize=12` |
 | `GET` | `/api/specializations` | anonymous, 120/min per IP | active specializations for the search filter: a bare array, no pagination, ordered by name; `[]` when the catalogue is empty; `description` may be `null` |
 | `GET` | `/api/hair-services` | anonymous, 120/min per IP | active hair services for the search filter: a bare array, no pagination, ordered by category then name; `[]` when the catalogue is empty; the UI reads only `id`, `name` and `category` |
@@ -781,7 +781,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/reviews/mine?cursor=&pageSize=` | authenticated, cookie | the author's own reviews in both statuses, newest first, keyset `nextCursor`; the UI sends `pageSize=10`; `401` for anonymous; `400 review.getMyReviews.pageSize` / `review.cursor.invalid`; an empty list is `200` with `items: []` |
 | `PUT` | `/api/reviews/{id}` | author | `{ rating, text }` → `204`; edits published and hidden reviews; a published edit recalculates the barber rating immediately, a hidden one does not; `400 review.update.rating` / `review.update.text.tooLong`, `403 auth.forbidden`, `404 review.notFound`, `409 review.update.concurrencyConflict` |
 | `DELETE` | `/api/reviews/{id}` | author only (no admin bypass) | `204`; the booking is freed and a published review recalculates the rating; `403 auth.forbidden`; an unknown or already deleted id is `404 review.notFound` |
-| `POST` | `/api/bookings` | customer, cookie, 30/min per user | create one booking from a `/slots` snapshot (`startAt`/`endAt` sent as received); `201 { id }`, idempotent by `idempotencyKey` (a repeat returns `201` with the same id), `409` overlap/lockTimeout, `404` inactive service/salon, `400` start window or period; no `X-CSRF-TOKEN` (§9.4) |
+| `POST` | `/api/bookings` | customer, cookie, 30/min per user | create one booking from a `/slots` snapshot (`startAt`/`endAt` sent as received); `201 { id }`, idempotent by `idempotencyKey` (a repeat returns `201` with the same id), `409` overlap/lockTimeout, `404` inactive service/salon, `400` start window or period; a cookie mutation, the client sends `X-CSRF-TOKEN` (§9.4) |
 | `GET` | `/api/barber/bookings?scope=upcoming\|past&cursor=&pageSize=` | role `Barber` (policy `BarberOnly`) | the barber's own bookings, profile taken from the `barber_profile_id` claim (no profile parameter): `upcoming` (default) is `Pending`/`Confirmed` with `EndAt > now`, `start_at ASC`; `past` is everything else, `start_at DESC`; opaque `nextCursor`, the UI sends `pageSize=20`; `400 booking.getBarberBookings.scope`/`pageSize`, `400 booking.cursor.invalid`; `403 auth.forbidden` for a `Barber` without a linked profile; the DTO has the customer name and phone but no email, `userId` or `idempotencyKey` |
 | `POST` | `/api/bookings/{id}/confirmation` | owner barber | `Pending → Confirmed`, `204`; `403 auth.forbidden`, `404 booking.notFound`, `409 booking.confirm.invalidStatus` |
 | `POST` | `/api/bookings/{id}/completion` | owner barber | `Confirmed → Completed`, `204`; `409 booking.complete.invalidStatus` |
@@ -859,9 +859,11 @@ narrow it to a union (§14).
   auth.csrf.invalid` is retried exactly once with a fresh `GET /api/auth/csrf`. `429`, `status 0`,
   `5xx` and other `4xx` are `transient`: the session and the hint survive, the screen shows the
   transport failure. A successful refresh does **not** call `/auth/me`.
-- **Backend quirk:** a successful refresh writes the access cookie with `IsPersistent = true` and
-  `ExpiresUtc = now + 8 h` regardless of `RememberMe`. The client cannot control it; recorded as
-  debt #25 in §14.
+- **«Запомнить меня» on refresh.** The browser branch sends `{ rememberMe }` with every
+  refresh (`lib/auth.ts` is the transport; the hint is read by `lib/session-refresh.ts`). The
+  API applies the flag to the **access** cookie: `true` — persistent for 8 hours, `false` and
+  an absent field — a session cookie. The refresh cookie keeps its own 14-day lifetime in
+  both cases.
 - **«Запомнить меня» hint** — `barbersearch.remember=1`, `Path=/`, `SameSite=Lax`,
   `Max-Age=1209600` (14 days, as `RefreshTokenDays`), plus `Secure` when
   `window.location.protocol === 'https:'`. No `HttpOnly` on purpose (the client reads it), no
@@ -879,25 +881,27 @@ narrow it to a union (§14).
   again. `status 0`, `429`, `403`, `409`, `401` and other errors are not retried, an aborted
   signal is not retried, and a second `auth.csrf.invalid` reaches the screen with the existing
   Russian text. Auth, booking, review, barber and admin-user mutations all use the helper; only
-  `fetchCsrfToken` remains for the refresh path. Reads carry no token. There are two exceptions:
-  `POST /api/bookings` and the anonymous `POST /api/auth/register` — neither action has the
-  antiforgery filter on the backend, so the client neither fetches a token nor sends the header
-  for them (§14, item 23).
-- The backend currently validates antiforgery only on auth actions; review publication accepts
-  the header but does not require it, and booking creation is cookie-only without any check
-  (§14). Registration is an auth action without the filter: it is anonymous and therefore has no
-  identity to bind a token to, and the client sends no header there. Reviews still send the
-  header: the rule is forward-compatible, and removing it would make the gap easy to miss.
-  Bookings and registration do not send it, so neither path has a stray `GET /api/auth/csrf`.
+  `fetchCsrfToken` remains for the refresh path. Reads carry no token. The single exception is
+  the anonymous `POST /api/auth/register`: the action has no ambient identity, so the client
+  neither fetches a token nor sends the header for it.
+- The API runs a **global cookie-antiforgery filter** since #35: any authenticated cookie
+  mutation without a valid cookie + `X-CSRF-TOKEN` pair is `400 auth.csrf.invalid` **before**
+  the action, in every controller. The deliberate skips are the anonymous `register` and the
+  body branches of `login`, `refresh` and `logout`; `login/cookie` is anonymous at that point,
+  so the filter passes it through, and its own `[ValidateAntiforgeryHeader]` does the check.
+  Review publication now requires the header instead of merely accepting it; booking creation
+  sends it as well. Registration stays without a filter and without a stray
+  `GET /api/auth/csrf`.
 - The antiforgery token is bound to the authenticated identity: after sign-in the old token is
   invalid. `signIn` fetches a token before login (anonymous identity, valid for the login
   endpoint); the next mutation (`signOut`) fetches a fresh token. Any other future mutation
   after login must do the same.
-- `RememberMe` tells the API whether the **access** cookie survives a browser restart; on the
-  client it also sets the restore hint, so «Запомнить меня» governs whether a reload after the
-  access cookie expired can bring the session back at all (§6.2). It does not extend the 8-hour
-  inactivity window or the refresh token lifetime. Without the hint, a reload after 8 idle hours
-  is a sign-in even though the refresh cookie is still alive.
+- `RememberMe` tells the API whether the **access** cookie survives a browser restart; it is
+  sent on `login/cookie` and on every silent refresh, and the API applies it to the access
+  cookie there. On the client it also sets the restore hint, so «Запомнить меня» governs
+  whether a reload after the access cookie expired can bring the session back at all (§6.2).
+  It does not extend the 8-hour inactivity window or the refresh token lifetime. Without the
+  hint, a reload after 8 idle hours is a sign-in even though the refresh cookie is still alive.
 - In production, same-origin `/api` is assumed. If the SPA is served from another origin, the
   backend needs explicit CORS `AllowedOrigins` and `Auth:CookieSameSite=None` (then cookies are
   `Secure`); `credentials: 'include'` already supports that. This deployment choice is open
@@ -1046,9 +1050,9 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - HTTP only through `apiRequest`; do not call `fetch` in components.
 - Never store tokens in browser storage; auth is cookie-only. The only JS-readable cookie is the
   `barbersearch.remember` hint — it is not a token and carries no identity (§9.4).
-- Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`, except
-  `POST /api/bookings` and `POST /api/auth/register`: the backend does not validate it there,
-  and neither path may fetch a token it will not use (§9.4).
+- Every mutating cookie request must send `X-CSRF-TOKEN` from `/auth/csrf`. The only exception
+  is `POST /api/auth/register`: the action is anonymous, the backend does not validate the token
+  there, and the path must not fetch a token it will not use (§9.4).
 - `ApiError` is the only expected error type; map codes to Russian copy at the edge.
 - No mock data in production paths. Demo arrays are acceptable only while a screen is
   explicitly labelled as demo (as the landing is today) and are removed when the API is wired.
@@ -1067,8 +1071,8 @@ bundler`, `jsx: react-jsx`, `target: ES2023`.
 - External links opened in a new tab need `rel="noreferrer noopener"`.
 - React escapes text by default; keep it that way. Sanitise only if HTML rendering is ever
   explicitly required (it is not).
-- CSRF is mandatory for cookie mutations except booking creation, where the API does not check
-  it; do not disable it elsewhere for convenience (§14, item 23).
+- CSRF is mandatory for every cookie mutation except anonymous registration, where the API has
+  no identity to bind a token to; do not disable it elsewhere for convenience (§9.4).
 
 ### 10.8 Definition of done
 
@@ -1236,13 +1240,13 @@ unchanged and the Vite chunk advisory does not fire.
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
-| Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
+| Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
 | Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**`; `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 63 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 68 tests: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `refreshSession`) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1267,8 +1271,6 @@ the feature grows; **P3** cosmetic/structural.
 | 20 | P3 | No «Забыли пароль?» link in the login dialog | Registration is linked from the dialog and `/register`; a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
-| 23 | P2 | Review publication (`POST`/`DELETE /api/reviews/{id}/publication`) and booking creation (`POST /api/bookings`) do not validate `X-CSRF-TOKEN`; only auth actions use the antiforgery filter, and registration is an anonymous auth action without it | Add `[ValidateAntiforgeryHeader]` to the review and booking actions and cover them with a cookie+CSRF integration test; the booking client then sends the header. Registration stays anonymous without a filter, so its client keeps sending no token |
-| 25 | P2 | A successful `POST /api/auth/refresh` sets the access cookie with `IsPersistent = true` and `ExpiresUtc = now + 8 h` regardless of `RememberMe`, so the backend cannot honour a session the user did not ask to remember | Pass `RememberMe` through the refresh request and apply it to the access cookie there; the client already exposes the hint it would send |
 | 26 | P3 | `/account` «Мои записи» splits one server list into «Предстоящие»/«История» on the client, so the shared pager cannot be used without hiding bookings; that list still appends with «Показать ещё» | Add a server-side `scope` to `GET /api/bookings` and page it like the other lists (§16) |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
@@ -1276,9 +1278,11 @@ removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy)
 `200` bodies), #6 (lenient `isProblemDetails` and English `HTTP ${status}`), #7 (no CSRF retry),
 #8 (a backend outage treated as “anonymous”), #9 (`process.env` proxy target, no `.env.example`,
 `.env` not ignored), #10 (the dev API hint in the footer), #12 (the monolithic `HomePage`), #13
-(`shadcn` CLI as a runtime dependency), #24 (no author-facing review list) and #27 (a11y debt:
-pager and queue names, the header skeleton status, the narrow-screen `aria-controls`, and the axe
-allow-list) are intentionally absent; the remaining numbers do not shift.
+(`shadcn` CLI as a runtime dependency), #23 (the CSRF gap on booking creation and review
+publication, closed by #35), #24 (no author-facing review list), #25 (refresh ignored
+«Запомнить меня», closed by #35) and #27 (a11y debt: pager and queue names, the header skeleton
+status, the narrow-screen `aria-controls`, and the axe allow-list) are intentionally absent; the
+remaining numbers do not shift.
 
 ---
 
@@ -1321,8 +1325,11 @@ server errors, labels with `aria-invalid`/`aria-describedby`); `SessionProvider`
 outcomes, the hint-driven refresh, `unavailable`, `retrySession`, sign-in/sign-out, the «Запомнить
 меня» cookie, exactly one `/auth/me` under `StrictMode`); `HeaderAuth` (all four statuses, the
 loading `role="status"`, the unavailable retry name, the disabled «Выходим…»); `ListPager` (names
-start with the visible word, the retry name, `aria-busy`, edge-disabled buttons, callbacks). Tests
-are colocated (`*.test.ts(x)`) and compare Russian copy as a whole string, saying in the test title
+start with the visible word, the retry name, `aria-busy`, edge-disabled buttons, callbacks);
+`createBooking` (a fresh `GET /auth/csrf`, the `X-CSRF-TOKEN` header, one retry on
+`auth.csrf.invalid` with the same body, no retry on `409`); `refreshSession` (the `{ rememberMe }`
+body built from the hint). Tests are colocated (`*.test.ts(x)`) and compare Russian copy as a
+whole string, saying in the test title
 that it is copy.
 
 **What is not covered yet:** the screens and the hooks (`use-paged-list`, the admin queues, the
@@ -1651,7 +1658,7 @@ Copy this into the PR description and check every item that applies:
 - [ ] `npm run build` — succeeds, `tsc -b` clean; bundle delta noted if significant;
 - [ ] no `any`, no `@ts-ignore`, no `console.log`, no commented-out code;
 - [ ] no tokens in storage; `credentials: 'include'` and `X-CSRF-TOKEN` on mutations except
-      `POST /api/bookings` (§9.4);
+      anonymous registration (§9.4);
 - [ ] API errors mapped by `status` / `errorCodes`, Russian fallback, no raw `detail`;
 - [ ] loading, empty and error states implemented;
 - [ ] 320 px / tablet / desktop checked; no horizontal scroll;

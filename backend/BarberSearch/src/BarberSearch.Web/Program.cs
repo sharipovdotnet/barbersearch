@@ -49,7 +49,10 @@ builder.Services.AddRequestTimeouts(RequestTimeoutSettings.Configure);
 
 // Перечисления в JSON — строками: Grade, Language, PaymentMethod и UserRole читаются из тела
 // по имени, а не по числу, и так же попадают в схему OpenAPI. Целые числа отклоняются (R-23).
-builder.Services.AddControllers()
+// Antiforgery — фильтром на все контроллеры: следующая cookie-мутация не должна остаться
+// без защиты из-за забытого атрибута. Исключения помечены [SkipCookieAntiforgery].
+builder.Services.AddControllers(options =>
+        options.Filters.Add<CookieMutationAntiforgeryFilter>())
     .AddJsonOptions(options => JsonSettings.Configure(options.JsonSerializerOptions));
 
 // Ответы об ошибках в формате ProblemDetails: контроллеры отдают их сами (см. Web/Common),

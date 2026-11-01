@@ -75,17 +75,18 @@ export type CreateBookingInput = {
  *
  * `startAt`/`endAt` отправляются ровно такими, какими пришли из `/slots`: сервер не
  * сверяет время с расписанием, поэтому пересчёт длительности или пояса создал бы
- * бронь не на тот слот. `X-CSRF-TOKEN` здесь не нужен — antiforgery на сервере
- * проверяется только на действиях `AuthController` (§9.4).
+ * бронь не на тот слот. С #35 это cookie-мутация, поэтому запрос идёт через
+ * `mutateWithCsrf`: один повтор на `auth.csrf.invalid` безопасен, потому что фильтр
+ * отклоняет запрос до действия, а `idempotencyKey` в теле не меняется.
  */
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<string> {
-  const created = await apiRequest<{ id: string }>(
-    '/bookings',
-    { method: 'POST', body: JSON.stringify(input) },
-    { validate: isCreatedId }
-  )
+  const created = await mutateWithCsrf<{ id: string }>('/bookings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    validate: isCreatedId,
+  })
 
   return created.id
 }

@@ -108,7 +108,8 @@ async function withCrossTabLock(
 async function performRefresh(): Promise<RefreshOutcome> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await requestSessionRefresh()
+      // Подсказку читаем здесь, а не в транспорте: lib/auth.ts остаётся простым POST.
+      await requestSessionRefresh(hasRememberHint())
       return { kind: 'refreshed' }
     } catch (cause) {
       if (!(cause instanceof ApiError)) {
