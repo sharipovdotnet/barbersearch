@@ -364,7 +364,7 @@ session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not
 
 If even that fails, the fallback is a throwaway runner that loads the test assembly and invokes
 every `[Fact]` by reflection. This is faithful here because the three unit-test assemblies are
-**Domain — 184, Application — 270, Infrastructure — 83 `[Fact]` methods, no `[Theory]`, no
+**Domain — 187, Application — 368, Infrastructure — 83 `[Fact]` methods, no `[Theory]`, no
 fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
@@ -389,9 +389,9 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-02 (после среза issue-38): domain **187**, application **338**,
-infrastructure **83**, integration **93** — все зелёные. История прогонов по срезам и негативные
-проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
+Актуальный baseline на 2026-11-02 (после среза issue-39): domain **187**, application **368**,
+infrastructure **83**, integration **109** — всего 747, все зелёные. История прогонов по срезам и
+негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
 only the fallback for a harness where that still crashes. If you use it, delete both the throwaway
@@ -648,20 +648,21 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 338 application + 83 infrastructure + 93 integration; unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 88 обработчиков (72 command + 16 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 368 application + 83 infrastructure + 109 integration (747 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 90 обработчиков (72 command + 18 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 19 контроллеров / 96 endpoint (88 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 20 контроллеров / 98 endpoint (90 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (18):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (19):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
-`AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`.
+`AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
+`AddAdminBookingsStatusIndex`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -1069,7 +1070,8 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
 | `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global |
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
-| `bookings` | `(start_at DESC, id)` | Administrator's all-bookings list (scope `all` without a `userId` filter) |
+| `bookings` | `(start_at DESC, id)` | Administrator's bookings in the unfiltered page: `GET api/bookings` scope `all` without a `userId` filter and the first page of `GET api/admin/bookings` when no status is chosen. The status-filtered admin page is served by the next row |
+| `bookings` | `(status, start_at DESC, id)` — `ix_bookings_status_start_at_id` (issue-39) | The admin bookings list with a status filter: the filter column first, then the exact keyset order, so a rare status is an `Index Scan` without `Sort` instead of a bitmap scan plus a sort over the whole table |
 | `bookings` | `(user_id, start_at)` | The customer's list (`GET api/bookings`) in every scope and both cursor directions (issue-36): filter by `user_id`, then an ordered scan of `start_at` in either direction. No new migration was needed |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
 | `time_offs` | `(barber_profile_id, start_at)` | Vacation lookup during slot computation |
@@ -1127,6 +1129,26 @@ period filter, so the separate index was redundant and was dropped. The entity-t
 filters keep the same plan shape (61 rows scanned for 20 `review` matches, 906 for the actor
 substring); no `(entity_type, …)` index was added — with three types the filter discards at most
 two thirds of the rows, and no sort or full scan appeared.
+
+**Admin bookings status index (2026-11-02, issue-39).** `GET api/admin/bookings` orders
+`start_at DESC, id` with keyset paging, so its first page initially borrowed the existing
+`ix_bookings_start_at_id`. On the load database (1,200,021 bookings, 14,002 users, 12,000 barber
+profiles, 400 salons) the first page without filters is an `Index Scan` of that index, 21 rows, no
+`Sort`, ~1.2 ms, and the exact-booking-id search is `pk_bookings`, 1 row, 1.2 ms. A filtered page
+told a different story: `status = 2` (`Confirmed`, 36k rows) was an `Index Scan` plus a filter that
+removed 21 rows in 28 ms, `status = 1` (11 rows) fell back to a Bitmap Heap Scan plus a `Sort`
+(117 ms), and `status = 3` (`Cancelled`, 240k rows, most of them older than the `Completed` rows)
+removed 876,011 rows by filter and took ~3.3 s — a first page that read almost the whole table.
+That violates the criterion «Index Scan without `Sort` and without reading the whole table on the
+first page», so the candidate `(status, start_at DESC, id)` was measured: `status = 3` 3.4 ms and
+`status = 1` 0.4 ms, both `Index Scan`, no `Sort`, no rows removed. Migration
+`AddAdminBookingsStatusIndex` therefore creates `ix_bookings_status_start_at_id`; the old
+`ix_bookings_start_at_id` stays because it serves the unfiltered page. The candidate index was
+dropped from the load database after measuring (the migration creates it in real databases).
+Without the measurement no index would have been added. The email search keeps a sequential scan
+of the 14k-row `users` table, a bitmap scan on `ix_bookings_user_id_start_at` and a top-N sort
+(177 ms for one customer's 600 bookings); no trigram index was added, which is a separate decision.
+Evidence: `frontend/verification/issue-39-explain.txt` and `issue-39-explain-index.txt`.
 
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
@@ -1460,7 +1482,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**19 controllers, 96 endpoints: 88 domain + 8 auth** — one endpoint per Application handler, plus
+**20 controllers, 98 endpoints: 90 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1483,6 +1505,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
 | `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
+| `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
 
 Conventions:
 
@@ -1668,6 +1691,35 @@ Read endpoints (added 2026-10-19):
   specialization and booking edits are not written to `audit_log`** — this is a known limitation,
   not a bug, and the UI states it. Retention, export and full-text search over `payload` are not
   part of this slice.
+- **Admin bookings (2026-11-02, issue-39).** `GET api/admin/bookings?status=&search=&cursor=&pageSize=`
+  and `GET api/admin/bookings/{id}` are closed by `AdminOnly`; these are the first admin reads of
+  `bookings` and answer `PagedResponse<AdminBookingResponse>` / `AdminBookingResponse`. Order is
+  `start_at DESC, id ASC`, the cursor is the opaque `(start_at, id)` pair with the `admin.bookings`
+  scope tag (a cursor from another list is `400 admin.bookings.cursor.invalid` instead of paging a
+  foreign order), and `pageSize` defaults to 20 and is capped at 100 (`400
+  admin.bookings.pageSize`; a non-positive repository limit is `400 admin.bookings.page.limit`).
+  `status` is `all` (default) or a `BookingStatus` name compared after `Trim` without case
+  (`all`, `Pending`, `Confirmed`, `Completed`, `Cancelled`, `NoShow`); numbers and unknown strings
+  are `400 admin.bookings.status`, because `upcoming`/`past` are scopes, not statuses. `search` is
+  trimmed and capped at 100 characters: a value that parses as a GUID matches `booking.Id`
+  **exactly**, anything else is a customer-email substring through `ILIKE` with `%`, `_` and `\`
+  escaped (`LikePattern`) — not a customer name, a phone, the barber's email or an id prefix.
+  One `AsNoTracking` projection with **inner** joins `bookings → users` (customer),
+  `barber_profiles` (display name), `barber_services → hair_services` (service name) and `salons`
+  (name, address, city, `time_zone_id`); a historical row with a dangling link drops out, the same
+  documented behaviour as `GET api/barber/bookings`, because a card without context is useless.
+  The DTO carries the price snapshot, both notes and `createdAt`, plus the customer's first/last
+  name, **email** and phone, the barber, the service and the salon with `timeZoneId`. Email and
+  phone are PII and exist **only** in this admin contract: `BookingResponse` is unchanged, and so
+  are `GetPageAsync`/`GetBarberPageAsync` and the two customer/barber list contracts — `GET
+  api/bookings` keeps its `scope` and `userId` behaviour exactly. `GET api/admin/bookings/{id}`
+  uses the same projection and answers `404 admin.bookings.notFound`. Mutations stay on
+  `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
+  and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation,
+  reschedule, price/note edit, delete or refund anywhere in the API. **Admin cancellation and
+  no-show are not written to `audit_log`:** the `AuditTrail` allowlist covers only `User`,
+  `BarberProfile` and `Review`, so the journal does not show them — a known limitation, not a bug;
+  widening the allowlist is a separate slice.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
@@ -1819,7 +1871,7 @@ Deliberately absent:
 
 Health checks are **not** controllers: `/health/live` and `/health/ready` are mapped in
 `Program.cs` via `MapHealthChecks` / `Deployment/HealthCheckExtensions` (see §15.8 and
-`DEPLOY.md`). They do not change the 81-endpoint controller surface.
+`DEPLOY.md`). They do not change the 98-endpoint controller surface.
 
 Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
 `hairServiceId`/`date` (the parameter was then named `serviceId`; renamed by R-20), two pages
