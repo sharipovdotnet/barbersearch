@@ -4,6 +4,7 @@ using BarberSearch.Application.Users.AddUserFavorite;
 using BarberSearch.Application.Users.ChangeUserRole;
 using BarberSearch.Application.Users.CreateUser;
 using BarberSearch.Application.Users.DeactivateUser;
+using BarberSearch.Application.Users.GetMyProfile;
 using BarberSearch.Application.Users.LinkUserBarberProfile;
 using BarberSearch.Application.Users.MarkUserEmailAsVerified;
 using BarberSearch.Application.Users.MarkUserPhoneAsVerified;
@@ -14,6 +15,7 @@ using BarberSearch.Application.Users.UpdateUserProfile;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.ChangeUserRole;
 using BarberSearch.Contracts.Users.CreateUser;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Contracts.Users.UpdateUserProfile;
 using BarberSearch.Domain.Users;
 using BarberSearch.Web.Auth;
@@ -72,6 +74,21 @@ public class UsersController : ApiController
 
         return ToCreatedResult(await handler.Handle(command, cancellationToken));
     }
+
+    /// <summary>
+    /// Профиль текущего пользователя для личного кабинета.
+    /// </summary>
+    /// <remarks>
+    /// Идентификатор берётся из claims: чужой профиль этим адресом не прочитать. Ответ
+    /// приходит из базы, поэтому после правки профиля кабинет видит актуальные имя,
+    /// телефон и подтверждения, а не значения из выданной cookie.
+    /// </remarks>
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<ActionResult<MyProfileResponse>> GetMe(
+        [FromServices] IQueryHandler<MyProfileResponse, GetMyProfileQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(new GetMyProfileQuery(), cancellationToken));
 
     /// <summary>
     /// Обновляет профиль пользователя. Свой — сам пользователь, чужой — только администратор.

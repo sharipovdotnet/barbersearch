@@ -3,6 +3,7 @@ using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -182,6 +183,43 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         }
 
         return ToAdminDetailResponse(row);
+    }
+
+    /// <summary>
+    /// Узкая проекция профиля кабинета: без избранного, пароля и служебных полей.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания: экран только показывает данные. Отсутствие пользователя —
+    /// <c>404 user.notFound</c>, как и у остальных чтений пользователя.
+    /// </remarks>
+    public async Task<Result<MyProfileResponse, Failure>> GetMyProfileAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = await Context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == id)
+            .Select(user => new MyProfileResponse(
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
+                user.AvatarUrl,
+                user.Role,
+                user.BarberProfileId,
+                user.IsEmailVerified,
+                user.IsPhoneVerified,
+                user.CreatedAt,
+                user.LastLoginAt))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (profile is null)
+        {
+            return NotFound(ApiErrorCodes.User.NotFound, nameof(User), id);
+        }
+
+        return profile;
     }
 
     public async Task<Result<int, Failure>> CountActiveAdminsAsync(
