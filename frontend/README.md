@@ -41,8 +41,8 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
-| `/admin/barbers` | barber queue: pending / all / hidden, search by name or email |
-| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide |
+| `/admin/barbers` | barber queue: pending / all / hidden (filter in `?status=all\|hidden`, `pending` by default), search by name or email |
+| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide; the current filter stays in `?status=` |
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 | `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
@@ -505,9 +505,12 @@ opens and closes. The «Обновить» toolbar keeps its quiet refresh (`isR
 
 The list is paged twenty rows at a time through the shared pager; the status filter and the
 debounced search are part of the server request, so changing either starts from the first page and
-drops the cached pages. Actions update the affected row locally (or remove it when it no longer
-matches the filter) and then re-sync quietly; the selected barber in the URL is not reset by a page
-change, and the mobile split keeps the list on its page.
+drops the cached pages. The filter is in the URL (`?status=`), together with the card, so a reload
+keeps the pair and the card can never show a profile from another filter: switching the filter
+navigates to the list without an id (the first row of the new filter opens on a wide screen), and
+an applied search drops the previous selection the same way. Actions update the affected row
+locally (or remove it when it no longer matches the filter) and then re-sync quietly; the selected
+barber in the URL is not reset by a page change, and the mobile split keeps the list on its page.
 
 «Скрыть из поиска» reuses the existing activation flag — there is no separate hidden state in
 the domain. Confirming a hidden profile is rejected by the domain, so the button explains that

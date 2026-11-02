@@ -10,10 +10,20 @@ export type AdminTab = 'pending' | 'published'
 /** Вкладка каталога: какой справочник показан. Живёт в `?tab=`, по умолчанию услуги. */
 export type CatalogueTab = 'services' | 'specializations' | 'salons'
 
+/**
+ * Фильтр списка барберов: какой профиль показан. Живёт в `?status=`,
+ * по умолчанию очередь проверки.
+ */
+export type AdminBarberStatusFilter = 'all' | 'pending' | 'hidden'
+
 export type AdminRoute =
   | { kind: 'summary' }
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
-  | { kind: 'barbers'; barberId: string | null }
+  | {
+      kind: 'barbers'
+      barberId: string | null
+      status: AdminBarberStatusFilter
+    }
   | { kind: 'users'; userId: string | null }
   | { kind: 'catalogue'; tab: CatalogueTab }
   | { kind: 'bookings'; bookingId: string | null }
@@ -29,6 +39,12 @@ const CATALOGUE_TABS: readonly CatalogueTab[] = [
   'services',
   'specializations',
   'salons',
+]
+
+const BARBER_STATUSES: readonly AdminBarberStatusFilter[] = [
+  'all',
+  'pending',
+  'hidden',
 ]
 
 const GUID_PATTERN =
@@ -61,7 +77,7 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
   }
 
   if (pathname === '/admin/barbers') {
-    return { kind: 'barbers', barberId: null }
+    return { kind: 'barbers', barberId: null, status: parseBarberStatus(search) }
   }
 
   if (pathname === '/admin/users') {
@@ -87,7 +103,11 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
   const barberMatch = BARBER_PATH.exec(pathname)
 
   if (barberMatch?.[1]) {
-    return { kind: 'barbers', barberId: barberMatch[1] }
+    return {
+      kind: 'barbers',
+      barberId: barberMatch[1],
+      status: parseBarberStatus(search),
+    }
   }
 
   const userMatch = USER_PATH.exec(pathname)
@@ -111,11 +131,34 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
   return { kind: 'notFound' }
 }
 
-/** Адрес списка барберов: выбранный профиль — в пути. */
-export function barbersPath(barberId: string | null = null): string {
-  return barberId
+/**
+ * Разбирает `?status=` барберов: неизвестное значение — очередь проверки.
+ *
+ * Так же ведёт себя `?tab=` каталога и отзывов: ссылка с опечаткой не должна
+ * давать «Раздел не найден», потому что раздел существует.
+ */
+export function parseBarberStatus(search: string): AdminBarberStatusFilter {
+  const value = new URLSearchParams(search).get('status')
+
+  return BARBER_STATUSES.find((status) => status === value) ?? 'pending'
+}
+
+/**
+ * Адрес списка барберов: выбранный профиль — в пути, фильтр — в `?status=`.
+ *
+ * Фильтр едет в адресе вместе с карточкой, иначе перезагрузка или ссылка на
+ * профиль открывала бы карточку в чужой выборке. Значение по умолчанию
+ * (очередь проверки) в ссылку не попадает.
+ */
+export function barbersPath(
+  barberId: string | null = null,
+  status: AdminBarberStatusFilter = 'pending'
+): string {
+  const base = barberId
     ? `/admin/barbers/${encodeURIComponent(barberId)}`
     : '/admin/barbers'
+
+  return status === 'pending' ? base : `${base}?status=${status}`
 }
 
 /** Идентификатор барбера должен быть GUID: иначе запрос заведомо не найдёт запись. */
