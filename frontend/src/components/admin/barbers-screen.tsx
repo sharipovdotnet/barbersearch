@@ -68,14 +68,19 @@ type Announcement = {
  * Экран «Барберы»: очередь проверки, поиск по имени и email, карточка профиля.
  *
  * Сетка — split-view на широком экране; на телефоне список и карточка сменяют
- * друг друга, а выбранный профиль живёт в адресе, поэтому перезагрузка не теряет
- * контекст.
+ * друг друга, а выбранный профиль и фильтр живут в адресе, поэтому перезагрузка
+ * не теряет контекст и карточка не остаётся от чужой выборки.
  *
  * Поиск отправляется с задержкой: сервер ищет по подстроке, и запрос на каждую
  * букву только грел бы лимит. Счётчиков на фильтрах нет — API не отдаёт общее число.
  */
-export function BarbersScreen({ barberId }: { barberId: string | null }) {
-  const [filter, setFilter] = useState<AdminBarberStatusFilter>('pending')
+export function BarbersScreen({
+  barberId,
+  status,
+}: {
+  barberId: string | null
+  status: AdminBarberStatusFilter
+}) {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
 
@@ -92,7 +97,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
     return () => window.clearTimeout(timer)
   }, [searchInput, search])
 
-  const list = useAdminBarberList({ status: filter, search })
+  const list = useAdminBarberList({ status, search })
   const detail = useAdminBarber(barberId)
   const isWide = useMediaQuery('(min-width: 1024px)')
   const headingRef = useRef<HTMLHeadingElement | null>(null)
@@ -113,6 +118,22 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   const currentPendingAction =
     barber && pendingAction?.barberId === barber.id ? pendingAction.kind : null
 
+  // Применённый поиск меняет выборку, но адреса не касается: карточку прошлого
+  // запроса снимаем сами. Смена фильтра уходит в адрес и сбрасывает выбор там.
+  const appliedSearch = useRef(search)
+
+  useEffect(() => {
+    if (appliedSearch.current === search) {
+      return
+    }
+
+    appliedSearch.current = search
+
+    if (barberId !== null) {
+      navigate(barbersPath(null, status), { replace: true })
+    }
+  }, [search, barberId, status])
+
   // На широком экране первая строка открывается сразу: пустая правая колонка
   // выглядит как ошибка загрузки.
   useEffect(() => {
@@ -125,8 +146,8 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
       return
     }
 
-    navigate(barbersPath(list.items[0].id), { replace: true })
-  }, [isWide, barberId, list.status, list.items])
+    navigate(barbersPath(list.items[0].id, status), { replace: true })
+  }, [isWide, barberId, list.status, list.items, status])
 
   // На телефоне карточка заменяет список — переход должен начинаться сверху.
   useEffect(() => {
@@ -138,20 +159,24 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   }, [barberId, isWide])
 
   function handleFilterChange(next: AdminBarberStatusFilter) {
-    if (next === filter) {
+    if (next === status) {
       return
     }
 
-    setFilter(next)
     // Поиск сбрасывается вместе с фильтром: иначе «На проверке» с прошлым запросом
     // выглядит как пустая очередь, хотя дело в поиске.
     setSearchInput('')
     setSearch('')
+
+    // Фильтр — часть выборки, а карточка прошлой выборки в неё не входит: переход
+    // в адрес без id закрывает её, а на широком экране автовыбор откроет первую
+    // строку нового фильтра.
+    navigate(barbersPath(null, next))
   }
 
   function handleSelect(id: string) {
     setActionFailure(null)
-    navigate(barbersPath(id))
+    navigate(barbersPath(id, status))
   }
 
   async function runAction(
@@ -199,7 +224,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
       if (row) {
         const next = updatedBarberRow(row, kind, grade)
 
-        if (matchesBarberFilter(next, filter)) {
+        if (matchesBarberFilter(next, status)) {
           list.replaceItem(next.id, next)
         } else {
           list.removeItem(next.id)
@@ -238,7 +263,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   }
 
   function handleBack() {
-    navigate(barbersPath())
+    navigate(barbersPath(null, status))
 
     // Фокус возвращается на заголовок, а не в <body>: на телефоне списка ещё нет,
     // пока страница не перерисовалась.
@@ -248,7 +273,10 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
   }
 
   const trimmedSearch = searchInput.trim()
-  const isEmpty = list.status === 'ready' && list.items.length === 0
+  // Большой пустой блок — состояние «ничего не выбрано»: когда карточка открыта,
+  // он дублировал бы подпись пустой страницы и показывал два пустых состояния сразу.
+  const isEmpty =
+    list.status === 'ready' && list.items.length === 0 && barberId === null
   const isMobileDetail = !isWide && barberId !== null
   const showGrid =
     list.status === 'ready' && (list.items.length > 0 || barberId !== null)
@@ -257,7 +285,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
     return (
       <div className="mx-auto w-full max-w-md py-6">
         <AdminSignInGate
-          returnTo={barbersPath(barberId)}
+          returnTo={barbersPath(barberId, status)}
           onSignedIn={() => {
             setRequiresSignIn(false)
             list.reload()
@@ -366,7 +394,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
             className="inline-flex items-center gap-0.5 self-start rounded-lg bg-muted p-0.5"
           >
             {FILTERS.map((item) => {
-              const isSelected = item === filter
+              const isSelected = item === status
 
               return (
                 <button
@@ -436,7 +464,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
 
       {isEmpty && (
         <BarbersEmpty
-          filter={filter}
+          status={status}
           search={trimmedSearch}
           onRefresh={list.refresh}
         />
@@ -450,6 +478,7 @@ export function BarbersScreen({ barberId }: { barberId: string | null }) {
             {list.items.length > 0 ? (
               <BarberList
                 items={list.items}
+                status={status}
                 selectedId={barberId}
                 offset={list.offset}
                 pageIndex={list.pageIndex}
@@ -660,11 +689,11 @@ function BarbersError({
 }
 
 function BarbersEmpty({
-  filter,
+  status,
   search,
   onRefresh,
 }: {
-  filter: AdminBarberStatusFilter
+  status: AdminBarberStatusFilter
   search: string
   onRefresh: () => void
 }) {
@@ -685,7 +714,7 @@ function BarbersEmpty({
     )
   }
 
-  if (filter === 'pending') {
+  if (status === 'pending') {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
         <div className="flex size-10 items-center justify-center rounded-full bg-muted">
@@ -717,10 +746,10 @@ function BarbersEmpty({
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {filter === 'hidden' ? 'Скрытых профилей нет' : 'Барберов пока нет'}
+          {status === 'hidden' ? 'Скрытых профилей нет' : 'Барберов пока нет'}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          {filter === 'hidden'
+          {status === 'hidden'
             ? 'Никто не убран из поиска: все профили либо подтверждены, либо ждут проверки.'
             : 'Профили появятся здесь, как только барберы их создадут.'}
         </p>

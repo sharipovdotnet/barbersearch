@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { ListPager } from '@/components/list-pager'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import type { AdminBarber } from '@/lib/admin-barbers'
+import type { AdminBarber, AdminBarberStatusFilter } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
 import { formatRating, formatReviewsCount, getInitials } from '@/lib/format'
@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
  */
 export function BarberList({
   items,
+  status,
   selectedId,
   offset,
   pageIndex,
@@ -33,6 +34,8 @@ export function BarberList({
   onNext,
 }: {
   items: AdminBarber[]
+  /** Фильтр списка: уходит в ссылку строки, чтобы карточка открылась в своей выборке. */
+  status: AdminBarberStatusFilter
   selectedId: string | null
   offset: number
   pageIndex: number
@@ -89,7 +92,7 @@ export function BarberList({
                 >
                   <td className="px-3 py-3 align-middle">
                     <a
-                      href={barbersPath(barber.id)}
+                      href={barbersPath(barber.id, status)}
                       aria-current={isSelected ? 'true' : undefined}
                       className="block rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                       onClick={(event) => {
@@ -119,7 +122,7 @@ export function BarberList({
           {items.map((barber) => (
             <li key={barber.id}>
               <a
-                href={barbersPath(barber.id)}
+                href={barbersPath(barber.id, status)}
                 aria-current={barber.id === selectedId ? 'true' : undefined}
                 className="block space-y-2 p-3 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted/30"
                 onClick={(event) => {

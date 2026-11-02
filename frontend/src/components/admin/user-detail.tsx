@@ -312,14 +312,14 @@ function BarberProfileBlock({ user }: { user: AdminUserDetail }) {
                 : 'Профиль не показывается в поиске, пока не подтверждён и не активен.'}
           </p>
           <a
-            href={barbersPath(barberProfileId)}
+            href={barbersPath(barberProfileId, 'all')}
             className={cn(
               buttonVariants({ variant: 'outline', size: 'sm' }),
               'mt-2 h-11 sm:h-7'
             )}
             onClick={(event) => {
               event.preventDefault()
-              navigate(barbersPath(barberProfileId))
+              navigate(barbersPath(barberProfileId, 'all'))
             }}
           >
             Открыть карточку

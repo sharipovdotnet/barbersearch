@@ -2,6 +2,7 @@ import { ApiError, apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { AdminBarberStatusFilter } from '@/lib/admin-path'
 import { isAdminBarber, isAdminBarberPage } from '@/lib/response-guards'
 
 /**
@@ -17,7 +18,9 @@ import { isAdminBarber, isAdminBarberPage } from '@/lib/response-guards'
 export { BARBER_GRADE_LABELS, BARBER_GRADES } from '@/lib/barber-grade'
 export type { BarberGrade } from '@/lib/barber-grade'
 
-export type AdminBarberStatusFilter = 'all' | 'pending' | 'hidden'
+// Фильтр — часть адреса раздела (`?status=`), поэтому тип живёт в `admin-path`;
+// здесь он остаётся точкой импорта для экрана и словарей.
+export type { AdminBarberStatusFilter } from '@/lib/admin-path'
 
 export const ADMIN_BARBER_STATUS_LABELS: Record<
   AdminBarberStatusFilter,

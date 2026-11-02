@@ -533,6 +533,15 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
+The barbers list is a third address with a query: `/admin/barbers`, `/admin/barbers/{id}` and
+`/admin/barbers?status=all|hidden`. The filter lives in the URL together with the card, so a
+reload keeps both and a card can never belong to another filter. Switching the filter navigates
+to the list without an id (the first row of the new filter opens with `replace` on desktop), and
+an applied search does the same with `replace`; `barbersPath()` therefore always carries the
+status of the card it builds (`pending` is omitted, the queue is the default). The list's
+«Скрытые»/«Все» filter is the only state that moved into the URL — the search (name or email)
+stays in React state, like the email search of the bookings and audit screens.
+
 Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`,
 `BarberCabinetPage` and `RegisterPage` are `React.lazy` imports in `App.tsx`, behind one
 `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the landing ships
@@ -1287,7 +1296,7 @@ change to `ui/**`.
 | Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
-| Admin barbers | ✅ pending/all/hidden filter, name/email search, URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить» |
+| Admin barbers | ✅ pending/all/hidden filter in `?status=` (the card is in the path, the filter is in the query, so a reload keeps both and the card never belongs to another filter), name/email search (React state, reset with the filter; an applied search drops the previous selection), URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin catalogue | ✅ `/admin/catalogue`: three tabs in `?tab=` (services/specializations/salons), full dictionary including hidden rows, status filter and debounced search, `usageCount` per row, create/edit dialogs on the existing endpoints, hide/return with an `alertdialog` that explains the consequence and the barber count, status as text, adaptive tables (no horizontal scroll at 320), quiet «Обновить»; **no pagination** (dictionaries are small, see §9.3) and no delete — the domain only deactivates. Catalogue edits are **not written to `audit_log`** (the `AuditTrail` allowlist covers `User`, `BarberProfile`, `Review`); the screen does not promise an audit |
 | Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone), barber, service, salon, price, both notes, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are not written to `audit_log`** (the `AuditTrail` allowlist covers `User`, `BarberProfile`, `Review`), so the screen does not promise an audit |
@@ -1303,7 +1312,7 @@ change to `ui/**`.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 203 tests in 21 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, error mapping, actor labels, the expandable diff, the entity-type filter and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, and `usePagedList`'s immediate reset when its source changes) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 213 tests in 22 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, error mapping, actor labels, the expandable diff, the entity-type filter and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, and `usePagedList`'s immediate reset when its source changes) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1449,15 +1458,19 @@ block and a malformed `oldest` while accepting `oldest: null` and extra fields, 
 fallback error mapping); `SummaryScreen` (the three blocks with their numbers, `href`s and copy, the
 honest zeros, the `401` gate, the first-page error with «Повторить», the refresh error that keeps
 the blocks, exactly one request per «Обновить» and the «Обновлено в …» label); and the
-`formatProfilesCount`/`formatSalonsCount` plural forms. `admin-path` also covers the `bookings`
-route, its GUID detail and `bookingsPath()`, and the `summary` route, its nested-path `notFound`
-and the unchanged `/admin` → reviews redirect. Tests are colocated (`*.test.ts(x)`) and compare
-Russian copy as a whole string, saying in the test title that it is copy.
+`formatProfilesCount`/`formatSalonsCount` plural forms. `BarbersScreen` (the URL filter, a filter
+switch that drops the previous card and opens the first row of the new filter, and an applied
+search that drops the previous card); `admin-path` also covers the `bookings` route, its GUID
+detail and `bookingsPath()`, the `barbers` route with `?status=all|hidden` and `barbersPath()`
+(the status is omitted for the default queue and kept next to a card), and the `summary` route,
+its nested-path `notFound` and the unchanged `/admin` → reviews redirect. Tests are colocated
+(`*.test.ts(x)`) and compare Russian copy as a whole string, saying in the test title that it is
+copy.
 
 **What is not covered yet:** most screens and the hooks (the admin queues, the cabinets) — the
-audit, admin-bookings and reviews screens, `AuditEntry` / `BookingDetail` and `usePagedList`
-itself are the exceptions with direct tests — in-screen copy E2E does not reach, axe
-`moderate`/`minor` findings (annotated in the report, not gated), the dark theme and visual
+audit, admin-bookings, reviews and barbers screens, `AuditEntry` / `BookingDetail` and
+`usePagedList` itself are the exceptions with direct tests — in-screen copy E2E does not reach,
+axe `moderate`/`minor` findings (annotated in the report, not gated), the dark theme and visual
 regressions. Coverage is not a gate.
 
 **Next in the unit layer:** the hooks behind the paged lists (the admin queues, the cabinets);
