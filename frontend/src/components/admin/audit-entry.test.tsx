@@ -32,6 +32,38 @@ const ACTIVE_CHANGE: AdminAuditEntry = {
   changes: [{ field: 'isActive', from: true, to: false }],
 }
 
+const SALON_ENTRY: AdminAuditEntry = {
+  ...ROLE_CHANGE,
+  id: '9e700000-0000-4000-8000-000000000022',
+  occurredAt: '2026-09-10T10:16:10+00:00',
+  action: 'salon.updated',
+  entityType: 'salon',
+  entityId: '9e400000-0000-4000-8000-000000000001',
+  changes: [
+    { field: 'phoneNumber', from: '+70000000009', to: '+70000000010' },
+  ],
+}
+
+const BOOKING_ENTRY: AdminAuditEntry = {
+  ...ROLE_CHANGE,
+  id: '9e700000-0000-4000-8000-000000000025',
+  occurredAt: '2026-09-10T10:16:40+00:00',
+  action: 'booking.updated',
+  entityType: 'booking',
+  entityId: '9e900000-0000-4000-8000-000000000024',
+  changes: [{ field: 'status', from: 'Pending', to: 'Cancelled' }],
+}
+
+const HAIR_SERVICE_ENTRY: AdminAuditEntry = {
+  ...ROLE_CHANGE,
+  id: '9e700000-0000-4000-8000-000000000023',
+  occurredAt: '2026-09-10T10:16:20+00:00',
+  action: 'hair_service.updated',
+  entityType: 'hair_service',
+  entityId: '9e500000-0000-4000-8000-000000000001',
+  changes: [{ field: 'name', from: 'E2E Стрижка', to: 'E2E Стрижка 2' }],
+}
+
 function renderEntry(entry: AdminAuditEntry): void {
   render(
     <ul>
@@ -128,5 +160,69 @@ describe('AuditEntry', () => {
     expect(screen.getByText('Клиент → Администратор')).toBeVisible()
     // Вторая панель существует, но скрыта: раскрытие независимое.
     expect(screen.getByText('Да → Нет')).not.toBeVisible()
+  })
+
+  it('строка салона показывает «Салон», строка брони — «Бронь»', () => {
+    render(
+      <ul>
+        <AuditEntry entry={SALON_ENTRY} />
+        <AuditEntry entry={BOOKING_ENTRY} />
+      </ul>
+    )
+
+    expect(screen.getByText('Салон')).toBeInTheDocument()
+    expect(screen.getByText('Бронь')).toBeInTheDocument()
+  })
+
+  it('раскрытый diff брони показывает русский статус', async () => {
+    const user = userEvent.setup()
+
+    renderEntry(BOOKING_ENTRY)
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('Статус')).toBeVisible()
+    expect(screen.getByText('Ждёт подтверждения → Отменена')).toBeVisible()
+  })
+
+  it('раскрытый diff услуги переводит поле «name» в «Название»', async () => {
+    const user = userEvent.setup()
+
+    renderEntry(HAIR_SERVICE_ENTRY)
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('Название')).toBeVisible()
+    expect(screen.getByText('E2E Стрижка → E2E Стрижка 2')).toBeVisible()
+  })
+
+  it('неизвестный тип и поле показываются строкой сервера', async () => {
+    const user = userEvent.setup()
+
+    renderEntry({
+      ...ROLE_CHANGE,
+      entityType: 'coupon',
+      action: 'coupon.updated',
+      changes: [{ field: 'couponCode', from: 'A', to: 'B' }],
+    })
+
+    expect(screen.getByText('coupon')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('couponCode')).toBeVisible()
+    expect(screen.getByText('A → B')).toBeVisible()
+  })
+
+  it('boolean-поле называется «Активность», а не «Доступ»', async () => {
+    const user = userEvent.setup()
+
+    renderEntry(ACTIVE_CHANGE)
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('Активность')).toBeVisible()
+    expect(screen.queryByText('Доступ')).not.toBeInTheDocument()
+    expect(screen.getByText('Да → Нет')).toBeVisible()
   })
 })

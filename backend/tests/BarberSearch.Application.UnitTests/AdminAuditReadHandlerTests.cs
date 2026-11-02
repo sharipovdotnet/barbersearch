@@ -61,6 +61,12 @@ public class AdminAuditReadHandlerTests
     [InlineData("User", AdminAuditEntityType.User)]
     [InlineData("REVIEW", AdminAuditEntityType.Review)]
     [InlineData(" barber_profile ", AdminAuditEntityType.BarberProfile)]
+    [InlineData("salon", AdminAuditEntityType.Salon)]
+    [InlineData(" SALON ", AdminAuditEntityType.Salon)]
+    [InlineData("hair_service", AdminAuditEntityType.HairService)]
+    [InlineData("Hair_Service", AdminAuditEntityType.HairService)]
+    [InlineData("specialization", AdminAuditEntityType.Specialization)]
+    [InlineData(" booking ", AdminAuditEntityType.Booking)]
     public async Task Get_ParsesEntityTypeCaseInsensitively(
         string? value,
         AdminAuditEntityType expected)
@@ -80,6 +86,9 @@ public class AdminAuditReadHandlerTests
     [InlineData("wrong")]
     [InlineData("up")]
     [InlineData("0")]
+    [InlineData("8")]
+    [InlineData("services")]
+    [InlineData("bookings")]
     public async Task Get_WithUnknownEntityType_ReturnsValidation(string value)
     {
         var repository = new FakeAuditLogRepository();
@@ -253,6 +262,33 @@ public class AdminAuditReadHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("admin.audit.page.limit", result.Error.Errors[0].Code);
     }
+
+    /// <summary>
+    /// Имена storage совпадают со строками, которые пишет <c>AuditTrail</c>: snake_case,
+    /// без CLR-имён и без чисел. Проверяются все семь аудируемых типов.
+    /// </summary>
+    [Theory]
+    [InlineData(AdminAuditEntityType.User, AdminAuditEntityTypes.USER)]
+    [InlineData(AdminAuditEntityType.BarberProfile, AdminAuditEntityTypes.BARBER_PROFILE)]
+    [InlineData(AdminAuditEntityType.Review, AdminAuditEntityTypes.REVIEW)]
+    [InlineData(AdminAuditEntityType.Salon, AdminAuditEntityTypes.SALON)]
+    [InlineData(AdminAuditEntityType.HairService, AdminAuditEntityTypes.HAIR_SERVICE)]
+    [InlineData(AdminAuditEntityType.Specialization, AdminAuditEntityTypes.SPECIALIZATION)]
+    [InlineData(AdminAuditEntityType.Booking, AdminAuditEntityTypes.BOOKING)]
+    public void ToStorageName_MapsEveryAuditedType(
+        AdminAuditEntityType entityType,
+        string expected)
+        => Assert.Equal(expected, AdminAuditEntityTypes.ToStorageName(entityType));
+
+    [Fact]
+    public void ToStorageName_ThrowsForAll()
+        => Assert.Throws<ArgumentOutOfRangeException>(
+            () => AdminAuditEntityTypes.ToStorageName(AdminAuditEntityType.All));
+
+    [Fact]
+    public void ToStorageName_ThrowsForUnknownValue()
+        => Assert.Throws<ArgumentOutOfRangeException>(
+            () => AdminAuditEntityTypes.ToStorageName((AdminAuditEntityType)99));
 
     private static AdminAuditEntryResponse CreateRow(DateTimeOffset occurredAt)
         => new(

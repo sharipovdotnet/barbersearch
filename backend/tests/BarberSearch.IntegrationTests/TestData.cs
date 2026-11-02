@@ -642,14 +642,51 @@ internal sealed class TestData
     }
 
     /// <summary>
-    /// Число строк журнала аудита: тест «правки каталога не аудируются» сравнивает его до и после.
+    /// Читает строки журнала аудита напрямую из контекста: тест сравнивает фактическую запись
+    /// (<c>action</c>, <c>entity_type</c>, <c>entity_id</c>, автора и <c>payload</c>),
+    /// а не только ответ API. Порядок — свежие сверху, как у админской ленты.
     /// </summary>
-    public async Task<int> CountAuditRowsAsync()
+    public async Task<IReadOnlyList<AuditRowSnapshot>> ReadAuditRowsAsync()
     {
         await using var scope = _app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        return await db.AuditLogs.CountAsync();
+        var rows = await db.AuditLogs
+            .AsNoTracking()
+            .OrderByDescending(row => row.OccurredAt)
+            .ThenByDescending(row => row.Id)
+            .ToListAsync();
+
+        return rows
+            .Select(row => new AuditRowSnapshot(
+                row.Id,
+                row.OccurredAt,
+                row.ActorUserId,
+                row.Action,
+                row.EntityType,
+                row.EntityId,
+                row.Payload))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Число строк журнала аудита; <paramref name="entityType"/> сужает счётчик до одного типа
+    /// — так проверяется «создание брони не добавило ни одной строки <c>booking</c>».
+    /// </summary>
+    /// <param name="entityType">Стабильное имя типа или <c>null</c> — все строки.</param>
+    public async Task<int> CountAuditRowsAsync(string? entityType = null)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var query = db.AuditLogs.AsNoTracking();
+
+        if (entityType is not null)
+        {
+            query = query.Where(row => row.EntityType == entityType);
+        }
+
+        return await query.CountAsync();
     }
 
     private static T Require<T>(Result<T, Failure> result)

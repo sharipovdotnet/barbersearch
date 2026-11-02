@@ -91,16 +91,22 @@ export const fixtures = {
     inactiveSalons: 1,
   },
   /**
-   * Журнал `/admin/audit`: 21 строка на 2026-09-10 UTC (страница «1–20» + «21–21»).
+   * Журнал `/admin/audit`: 25 строк на 2026-09-10 UTC (страница «1–20» + «21–25»).
    * `roleChangeRowId` — строка 20 с diff'ом «Роль: Клиент → Администратор»,
    * `systemRowId` — самая свежая строка 21 без автора («Система»).
+   * `salonRowId`/`hairServiceRowId`/`specializationRowId`/`bookingRowId` — строки
+   * новых типов #41 (22…25) для фильтров и русских diff'ов.
    */
   journal: {
     day: '2026-09-10',
     pageSize: 20,
-    total: 21,
+    total: 25,
     roleChangeRowId: '9e700000-0000-4000-8000-000000000020',
     systemRowId: '9e700000-0000-4000-8000-000000000021',
+    salonRowId: '9e700000-0000-4000-8000-000000000022',
+    hairServiceRowId: '9e700000-0000-4000-8000-000000000023',
+    specializationRowId: '9e700000-0000-4000-8000-000000000024',
+    bookingRowId: '9e700000-0000-4000-8000-000000000025',
   },
   /**
    * Брони `/admin/bookings`: отдельный клиент и 24 строки на 2026-09-12 UTC

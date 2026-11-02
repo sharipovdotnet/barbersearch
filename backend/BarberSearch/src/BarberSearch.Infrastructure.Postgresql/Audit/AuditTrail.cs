@@ -3,7 +3,11 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Reviews;
+using BarberSearch.Domain.Salons;
+using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -27,10 +31,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Audit;
 /// и не может получить scoped <see cref="ICurrentUser"/>.
 /// </para>
 /// <para>
-/// Аудируются только <see cref="User"/>, <see cref="BarberProfile"/> и <see cref="Review"/>,
-/// и только свойства из allowlist. Логины (<c>LastLoginAt</c>, <c>FailedLoginAttempts</c>)
-/// и правки профиля без административного смысла не пишутся: иначе таблица превращается
-/// в шум, в котором не видно смены роли и скрытия отзыва.
+/// Аудируются <see cref="User"/>, <see cref="BarberProfile"/>, <see cref="Review"/>,
+/// <see cref="Salon"/>, <see cref="HairService"/>, <see cref="Specialization"/> и
+/// <see cref="Booking"/>, и только свойства из allowlist. У брони пишутся только изменения
+/// (<see cref="Booking.Status"/> и <see cref="Booking.BarberNote"/>): создание брони —
+/// действие клиента, а строка аудита на каждую бронь раздувала бы журнал без новой
+/// информации, которую бронь уже не хранит. Логины (<c>LastLoginAt</c>,
+/// <c>FailedLoginAttempts</c>) и правки профиля без административного смысла не пишутся:
+/// иначе таблица превращается в шум, в котором не видно смены роли и скрытия отзыва.
+/// Дети <see cref="BarberProfile"/> (услуги, салоны, расписание, портфолио, отпуска) —
+/// не отдельные агрегаты и в allowlist не входят: их правки строки не дают.
 /// </para>
 /// <para>
 /// Секреты не попадают в БД в открытом виде: значения свойств, имя которых содержит
@@ -100,8 +110,80 @@ public sealed class AuditTrail
                     nameof(Review.Rating),
                     nameof(Review.Text),
                     nameof(Review.IsPublished)
-                ])
+                ]),
+
+            // Салон: имя попадает в values строки создания (переименования салона нет),
+            // контакты и координаты администратор правит существующими ручками, выключение
+            // пишет isActive. Дети салона (BarberSalon, WorkingSchedule) — другие агрегаты,
+            // их правки сюда не относятся.
+            [typeof(Salon)] = new(
+                "salon",
+                [
+                    nameof(Salon.Name),
+                    nameof(Salon.Address),
+                    nameof(Salon.City),
+                    nameof(Salon.PostalCode),
+                    nameof(Salon.Country),
+                    nameof(Salon.TimeZoneId),
+                    nameof(Salon.Latitude),
+                    nameof(Salon.Longitude),
+                    nameof(Salon.PhoneNumber),
+                    nameof(Salon.WebsiteUrl),
+                    nameof(Salon.IsActive)
+                ]),
+
+            // Услуга каталога: Update меняет имя, описание и длительность, а категория
+            // задаётся только при создании — она нужна в values, а не в changes.
+            // Переименование audit'ится как updated с name from/to.
+            [typeof(HairService)] = new(
+                "hair_service",
+                [
+                    nameof(HairService.Name),
+                    nameof(HairService.Description),
+                    nameof(HairService.Category),
+                    nameof(HairService.DefaultDurationMinutes),
+                    nameof(HairService.IsActive)
+                ]),
+
+            // Специализация: Rename меняет имя и описание, активация — isActive.
+            // Переименование аудируется как updated с name from/to.
+            [typeof(Specialization)] = new(
+                "specialization",
+                [
+                    nameof(Specialization.Name),
+                    nameof(Specialization.Description),
+                    nameof(Specialization.IsActive)
+                ]),
+
+            // Бронь: только Status и BarberNote — единственные поля, которые сегодня могут
+            // измениться (Confirm/Cancel/Complete/MarkNoShow/AddBarberNote). StartAt/EndAt/
+            // Price/UserId/BarberProfileId/SalonId/BarberServiceId не меняются ни одной
+            // операцией, а перенос и правка цены — отдельный срез, который расширит allowlist
+            // вместе с форматом дат в UI. IdempotencyKey не аудируется никогда: это
+            // технический ключ клиента, а не история изменения.
+            // AuditsCreation: false — создание брони не пишется сознательно: бронь уже хранит
+            // владельца, время и цену, а строка на каждую бронь (1,2 млн в load-базе) раздувает
+            // audit_log без новой информации. Журнал отвечает на «кто отменил/подтвердил/
+            // отметил неявку и когда», а не на «кто забронировал».
+            [typeof(Booking)] = new(
+                "booking",
+                [
+                    nameof(Booking.Status),
+                    nameof(Booking.BarberNote)
+                ],
+                AuditsCreation: false)
         };
+
+    /// <summary>
+    /// Стабильные имена всех аудируемых типов — единый источник для guard-теста, который
+    /// сверяет allowlist с реестром фильтра <c>entityType</c>. Имена совпадают
+    /// с <c>AdminAuditEntityTypes.ToStorageName</c> по построению.
+    /// </summary>
+    internal static IReadOnlyCollection<string> EntityTypeNames
+        => AUDITED_ENTITIES.Values
+            .Select(policy => policy.EntityType)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
 
     private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _timeProvider;
@@ -171,8 +253,9 @@ public sealed class AuditTrail
     }
 
     /// <summary>
-    /// Строит строку аудита для одной записи change tracker. <c>null</c> — писать нечего
-    /// (например, у <c>Modified</c> не изменилось ни одно свойство allowlist).
+    /// Строит строку аудита для одной записи change tracker. <c>null</c> — писать нечего:
+    /// у <c>Modified</c> не изменилось ни одно свойство allowlist, либо тип создаётся
+    /// с <see cref="AuditedEntity.AuditsCreation"/> = <c>false</c> (создание брони).
     /// </summary>
     private static AuditLogEntry? CreateRow(
         EntityEntry entry,
@@ -181,6 +264,13 @@ public sealed class AuditTrail
         Guid? actorUserId)
     {
         if (entry.Property("Id").CurrentValue is not Guid entityId)
+        {
+            return null;
+        }
+
+        // Флаг политики, а не случайная ветка: создание брони — действие клиента, и строка
+        // на каждую бронь не даёт журналу новой информации (см. комментарий allowlist).
+        if (entry.State == EntityState.Added && !policy.AuditsCreation)
         {
             return null;
         }
@@ -363,7 +453,17 @@ public sealed class AuditTrail
         => JsonNamingPolicy.CamelCase.ConvertName(propertyName);
 
     /// <summary>
-    /// Правило аудита одного типа: стабильное имя и allowlist свойств.
+    /// Правило аудита одного типа: стабильное имя, allowlist свойств и признак
+    /// «писать ли строку создания».
     /// </summary>
-    private sealed record AuditedEntity(string EntityType, IReadOnlyList<string> Properties);
+    /// <param name="EntityType">Стабильное snake_case-имя типа в <c>audit_log</c>.</param>
+    /// <param name="Properties">Свойства, которые имеют административный смысл.</param>
+    /// <param name="AuditsCreation">
+    /// <c>false</c> — создание сущности строки не пишет. У брони это осознанное решение:
+    /// бронь хранит владельца, время и цену, а журнал фиксирует изменения.
+    /// </param>
+    private sealed record AuditedEntity(
+        string EntityType,
+        IReadOnlyList<string> Properties,
+        bool AuditsCreation = true);
 }

@@ -2,6 +2,12 @@ import { ApiError, apiRequest } from '@/lib/api'
 import type { AdminUserRole } from '@/lib/admin-users'
 import { ADMIN_USER_ROLE_LABELS } from '@/lib/admin-users'
 import { BARBER_GRADE_LABELS, type BarberGrade } from '@/lib/barber-grade'
+import {
+  SERVICE_CATEGORY_LABELS,
+  type ServiceCategory,
+} from '@/lib/barber-profile-labels'
+import { bookingStatusLabel } from '@/lib/booking-status'
+import type { BookingStatus } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
 import { isAdminAuditPage } from '@/lib/response-guards'
 
@@ -13,20 +19,37 @@ import { isAdminAuditPage } from '@/lib/response-guards'
  * имя могло быть переименовано или удалено, и «актуальное» имя рядом с историческим
  * diff'ом только вводило бы в заблуждение.
  *
- * Аудит покрывает `User`, `BarberProfile` и `Review` (allowlist `AuditTrail`).
- * Правки каталога, салонов, услуг, специализаций и броней в журнал не попадают —
- * это известное ограничение, и экран его не обещает.
+ * Аудит покрывает семь типов (`allowlist` `AuditTrail`): `User`, `BarberProfile`,
+ * `Review`, `Salon`, `HairService`, `Specialization` и `Booking`; у брони
+ * пишутся только смена статуса и заметка барбера. Создание брони сознательно
+ * не аудируется — бронь уже хранит владельца, время и цену, а строка на каждую
+ * бронь раздувала бы журнал без новой информации. Дети `BarberProfile` в allowlist
+ * не входят. Ретенции, партиционирования и экспорта нет, поэтому журнал растёт
+ * монотонно и читается страницами. Удалений каталога в API нет, и экран не
+ * обещает «настоящую» историю удалений.
  */
 
-/** Тип сущности фильтра: `all` — без фильтра, остальные три — allowlist аудита. */
-export type AdminAuditEntityType = 'all' | 'user' | 'barber_profile' | 'review'
+/** Тип сущности фильтра: `all` — без фильтра, остальные семь — allowlist аудита. */
+export type AdminAuditEntityType =
+  | 'all'
+  | 'user'
+  | 'barber_profile'
+  | 'review'
+  | 'salon'
+  | 'hair_service'
+  | 'specialization'
+  | 'booking'
 
-/** Порядок опций фильтра: от широкого к узкому. */
+/** Порядок опций фильтра: прежние значения не сдвигаются, новые дописаны. */
 export const ADMIN_AUDIT_ENTITY_TYPES: readonly AdminAuditEntityType[] = [
   'all',
   'user',
   'barber_profile',
   'review',
+  'salon',
+  'hair_service',
+  'specialization',
+  'booking',
 ]
 
 export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
@@ -34,6 +57,10 @@ export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
   user: 'Пользователь',
   barber_profile: 'Барбер',
   review: 'Отзыв',
+  salon: 'Салон',
+  hair_service: 'Услуга',
+  specialization: 'Специализация',
+  booking: 'Бронь',
 }
 
 /**
@@ -49,11 +76,17 @@ export const ADMIN_AUDIT_ACTION_LABELS: Record<string, string> = {
 /**
  * Русские подписи полей allowlist. Неизвестное поле показывается camelCase как есть:
  * выдуманное название скрыло бы, что сервер прислал новое поле.
+ *
+ * Здесь только поля, которые реально приходят с расширенным allowlist. Подписи
+ * `startAt`/`endAt`/`price`/`salonId`/`barberServiceId` появятся вместе с переносом
+ * и правкой цены, а не заранее.
  */
 export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   email: 'Email',
   role: 'Роль',
-  isActive: 'Доступ',
+  // «Активность» вместо «Доступ»: подпись обслуживает и пользователя, и строку
+  // каталога, где «Доступ: Да» читалось бы неверно.
+  isActive: 'Активность',
   isEmailVerified: 'Email подтверждён',
   isPhoneVerified: 'Телефон подтверждён',
   passwordHash: 'Пароль',
@@ -66,6 +99,21 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   bookingId: 'Бронь',
   text: 'Текст отзыва',
   isPublished: 'Опубликован',
+  name: 'Название',
+  description: 'Описание',
+  category: 'Категория',
+  defaultDurationMinutes: 'Длительность, мин',
+  address: 'Адрес',
+  city: 'Город',
+  postalCode: 'Индекс',
+  country: 'Страна',
+  timeZoneId: 'Пояс салона',
+  latitude: 'Широта',
+  longitude: 'Долгота',
+  phoneNumber: 'Телефон',
+  websiteUrl: 'Сайт',
+  status: 'Статус',
+  barberNote: 'Заметка барбера',
 }
 
 /**
@@ -127,8 +175,9 @@ export function formatAuditAction(action: string): string {
  * Значение поля diff'а для показа.
  *
  * `null` — прочерк (для создания и удаления это честно), boolean — «Да»/«Нет»,
- * `[redacted]` — «скрыто». Роль и грейд получают русские подписи, но неизвестное
- * значение остаётся исходной строкой. Никакой HTML не собирается.
+ * `[redacted]` — «скрыто». Роль, грейд, статус брони и категория услуги получают
+ * русские подписи, но неизвестное значение остаётся исходной строкой. Никакой
+ * HTML не собирается.
  */
 export function formatAuditValue(
   field: string,
@@ -152,6 +201,16 @@ export function formatAuditValue(
 
   if (field === 'grade') {
     return BARBER_GRADE_LABELS[value as BarberGrade] ?? String(value)
+  }
+
+  // Проверяемый каст: обе функции сами возвращают исходную строку для
+  // неизвестного значения, поэтому приведение типа здесь безопасно.
+  if (field === 'status' && typeof value === 'string') {
+    return bookingStatusLabel(value as BookingStatus)
+  }
+
+  if (field === 'category' && typeof value === 'string') {
+    return SERVICE_CATEGORY_LABELS[value as ServiceCategory] ?? value
   }
 
   return String(value)

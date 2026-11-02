@@ -53,6 +53,22 @@ const ENTRIES = {
       changes: [{ field: 'isPublished', from: false, to: true }],
     },
   ],
+  salon: [
+    {
+      id: '9e700000-0000-4000-8000-000000000022',
+      occurredAt: '2026-09-10T10:16:10+00:00',
+      action: 'salon.updated',
+      entityType: 'salon',
+      entityId: '9e400000-0000-4000-8000-000000000001',
+      actor: {
+        id: '9e000000-0000-4000-8000-000000000001',
+        email: 'e2e-admin@barbersearch.test',
+      },
+      changes: [
+        { field: 'phoneNumber', from: '+70000000009', to: '+70000000010' },
+      ],
+    },
+  ],
 }
 
 type Entry = (typeof ENTRIES)['all'][number]
@@ -138,6 +154,50 @@ describe('AuditScreen', () => {
     })
 
     // Курсор прошлой страницы не переиспользуется: фильтр начинает с начала.
+    expect(requests.at(-1)?.has('cursor')).toBe(false)
+  })
+
+  it('смена фильтра на «Салон» отправляет entityType=salon и начинает первую страницу без курсора', async () => {
+    const user = userEvent.setup()
+    const requests: URLSearchParams[] = []
+
+    server.use(
+      http.get('/api/admin/audit', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requests.push(params)
+
+        return HttpResponse.json({
+          items:
+            params.get('entityType') === 'salon' ? ENTRIES.salon : ENTRIES.all,
+          nextCursor: 'cursor-2',
+        })
+      })
+    )
+
+    render(<AuditScreen />)
+
+    await screen.findByRole('list', { name: 'Записи журнала' })
+
+    // Уходим на вторую страницу: теперь у списка есть курсор, который фильтр
+    // не должен переиспользовать.
+    await user.click(
+      screen.getByRole('button', { name: 'Дальше — следующая страница' })
+    )
+
+    await waitFor(() => {
+      expect(requests.at(-1)?.get('cursor')).toBe('cursor-2')
+    })
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Тип сущности' }),
+      'salon'
+    )
+
+    await waitFor(() => {
+      expect(requests.at(-1)?.get('entityType')).toBe('salon')
+    })
+
+    // Новый фильтр — новый список: запрос первой страницы без курсора.
     expect(requests.at(-1)?.has('cursor')).toBe(false)
   })
 

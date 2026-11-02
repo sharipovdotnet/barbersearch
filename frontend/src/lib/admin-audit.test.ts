@@ -5,6 +5,8 @@ import { ApiError } from '@/lib/api'
 import {
   ADMIN_AUDIT_ACTOR_MAX_LENGTH,
   ADMIN_AUDIT_ENTITY_LABELS,
+  ADMIN_AUDIT_ENTITY_TYPES,
+  ADMIN_AUDIT_FIELD_LABELS,
   ADMIN_AUDIT_PAGE_SIZE,
   describeAdminAuditError,
   fetchAdminAuditEntries,
@@ -203,6 +205,29 @@ describe('formatAuditValue', () => {
     expect(formatAuditValue('grade', 'SeniorBarber')).toBe('Старший барбер')
   })
 
+  it('статус брони — русская подпись, неизвестный — исходная строка', () => {
+    expect(formatAuditValue('status', 'Pending')).toBe('Ждёт подтверждения')
+    expect(formatAuditValue('status', 'Confirmed')).toBe('Подтверждена')
+    expect(formatAuditValue('status', 'Cancelled')).toBe('Отменена')
+    expect(formatAuditValue('status', 'Completed')).toBe('Завершена')
+    expect(formatAuditValue('status', 'NoShow')).toBe('Неявка')
+    expect(formatAuditValue('status', 'Scheduled')).toBe('Scheduled')
+  })
+
+  it('категория услуги — русская подпись, неизвестная — исходная строка', () => {
+    expect(formatAuditValue('category', 'Haircut')).toBe('Стрижка')
+    expect(formatAuditValue('category', 'Beard')).toBe('Борода')
+    expect(formatAuditValue('category', 'Massage')).toBe('Massage')
+  })
+
+  it('телефон, сайт и координаты остаются как пришли', () => {
+    expect(formatAuditValue('phoneNumber', '+70000000009')).toBe('+70000000009')
+    expect(formatAuditValue('websiteUrl', 'https://studio.test')).toBe(
+      'https://studio.test'
+    )
+    expect(formatAuditValue('latitude', 55.7558)).toBe('55.7558')
+  })
+
   it('число и неизвестное поле остаются как есть', () => {
     expect(formatAuditValue('rating', 5)).toBe('5')
     expect(formatAuditValue('favouriteColor', 'green')).toBe('green')
@@ -222,12 +247,50 @@ describe('formatAuditAction', () => {
 })
 
 describe('подписи и константы контракта', () => {
+  it('типы сущностей — восемь значений, новые дописаны после прежних', () => {
+    expect(ADMIN_AUDIT_ENTITY_TYPES).toStrictEqual([
+      'all',
+      'user',
+      'barber_profile',
+      'review',
+      'salon',
+      'hair_service',
+      'specialization',
+      'booking',
+    ])
+  })
+
   it('подписи типов сущностей — русские', () => {
     expect(ADMIN_AUDIT_ENTITY_LABELS).toStrictEqual({
       all: 'Все сущности',
       user: 'Пользователь',
       barber_profile: 'Барбер',
       review: 'Отзыв',
+      salon: 'Салон',
+      hair_service: 'Услуга',
+      specialization: 'Специализация',
+      booking: 'Бронь',
+    })
+  })
+
+  it('подписи полей каталога, салона и брони — русские', () => {
+    expect(ADMIN_AUDIT_FIELD_LABELS).toMatchObject({
+      name: 'Название',
+      description: 'Описание',
+      category: 'Категория',
+      defaultDurationMinutes: 'Длительность, мин',
+      address: 'Адрес',
+      city: 'Город',
+      postalCode: 'Индекс',
+      country: 'Страна',
+      timeZoneId: 'Пояс салона',
+      latitude: 'Широта',
+      longitude: 'Долгота',
+      phoneNumber: 'Телефон',
+      websiteUrl: 'Сайт',
+      status: 'Статус',
+      barberNote: 'Заметка барбера',
+      isActive: 'Активность',
     })
   })
 
