@@ -214,7 +214,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── booking-status-badge.tsx    ← shared booking status badge (account, profile, cabinet)
     │   ├── cookie-notice.tsx           ← informational cookie bar under the header: one «Понятно», no consent wall
     │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
-    │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
+    │   ├── header-auth.tsx            ← «Войти» / аватар с меню аккаунта
     │   ├── home/                      ← landing sections; the page only composes them
     │   │   ├── barber-card.tsx         result card: name, grade, rating, experience, languages, salon
     │   │   ├── barber-results.tsx      count, grid, skeletons, empty/error, «Показать ещё»
@@ -228,10 +228,11 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── session-provider.tsx       ← session bootstrap, signIn/signOut
     │   ├── site-header.tsx            ← marketing/admin header modes
     │   ├── site-footer.tsx
-    │   └── ui/                        ← vendored shadcn/ui (12 files, do not hand-edit)
+    │   └── ui/                        ← vendored shadcn/ui (13 files, do not hand-edit)
     │       ├── avatar.tsx   badge.tsx   button.tsx   card.tsx
     │       ├── checkbox.tsx dialog.tsx  field.tsx    input.tsx
-    │       └── label.tsx    separator.tsx skeleton.tsx textarea.tsx
+    │       ├── label.tsx    separator.tsx skeleton.tsx textarea.tsx
+    │       └── dropdown-menu.tsx
     ├── hooks/
     │   ├── use-admin-review-list.ts   ← admin queue: pages, refresh, cursor, 401
     │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
@@ -692,7 +693,7 @@ reduced motion (`motion-safe:` / `motion-reduce:`) when it is added.
 
 ## 8. UI kit and composition
 
-`src/components/ui` contains **12 vendored shadcn/ui components** built on Base UI:
+`src/components/ui` contains **13 vendored shadcn/ui components** built on Base UI:
 
 | Component | Exports | Notes |
 |---|---|---|
@@ -700,6 +701,7 @@ reduced motion (`motion-safe:` / `motion-reduce:`) when it is added.
 | `badge` | `Badge`, `badgeVariants` | `default`, `secondary`, `destructive`, `outline`, `ghost`, `link`; supports `render` |
 | `card` | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardAction`, `CardContent`, `CardFooter` | `size="sm"`; footer gets a muted strip |
 | `dialog` | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose`, `DialogOverlay`, `DialogPortal` | Base UI focus trap and escape handling |
+| `dropdown-menu` | `DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuGroup`, `DropdownMenuLabel`, `DropdownMenuItem`, `DropdownMenuSeparator`, `DropdownMenuShortcut`, `DropdownMenuSub*`, `DropdownMenuCheckboxItem`, `DropdownMenuRadio*`, `DropdownMenuPortal` | Base UI Menu; items open on `mousedown` and render as `div` — a link item needs `render={<a href>}` plus `nativeButton={false}`; `closeOnClick={false}` keeps the menu open for a pending action |
 | `field` | `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldGroup`, `FieldSet`, `FieldLegend`, `FieldSeparator`, `FieldContent`, `FieldTitle` | form layout + `data-invalid` semantics |
 | `input` | `Input` | Base UI input, `h-8`, 16 px on mobile / 14 px from `md` |
 | `label` | `Label` | |
@@ -1206,6 +1208,13 @@ of WCAG conformance.
   `aria-hidden` `Skeleton`; the status exists only in the `loading` branch, so it is not announced
   on every navigation.
 - Decorative icons are `aria-hidden`; the logo link and nav anchors are real links.
+- The header bar holds two section links and the account menu. The menu trigger is a
+  `<button aria-label="Меню аккаунта">` with `aria-haspopup="menu"` and `aria-expanded`; the panel
+  is a portaled Base UI menu, so it owns arrow keys, Escape and focus return to the trigger, and
+  its items are `menuitem`s whose links keep their `href`. Personal sections and «Выйти» live in
+  the menu rather than the bar: that is what keeps the header one line and free of wrapping at any
+  width. The trigger is 44 px on `max-sm` and 32 px on desktop; nav links are `whitespace-nowrap`
+  pills, so a longer label can never collapse into two lines.
 - Forms use `aria-invalid`, `aria-describedby`, `FieldError` with `role="alert"`, and
   `aria-busy` while pending.
 - Dialogs use Base UI, which provides focus trapping, escape-to-close and focus return; the

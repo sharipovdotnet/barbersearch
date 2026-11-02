@@ -84,14 +84,21 @@ test.describe('витрина и вход', () => {
     await dialog.signInAs('customer')
     await dialog.expectClosed()
 
-    // Шапка аутентифицированного пользователя: «Выйти» есть, анонимного «Войти» нет.
-    // Локатор ограничен шапкой: на /account есть и своя кнопка «Выйти».
+    // Шапка аутентифицированного пользователя: меню аккаунта вместо «Войти».
+    // «Выйти» — пункт этого меню, поэтому сначала открываем его; панель меню
+    // рендерится в портал и лежит вне <header>.
     const banner = page.getByRole('banner')
-    await expect(banner.getByRole('button', { name: 'Выйти' })).toBeVisible()
+    const accountMenu = banner.getByRole('button', { name: 'Меню аккаунта' })
+
+    await expect(accountMenu).toBeVisible()
     await expect(banner.getByRole('button', { name: 'Войти' })).toHaveCount(0)
+
+    await accountMenu.click()
+    await expect(page.getByRole('menuitem', { name: 'Выйти' })).toBeVisible()
+    await page.keyboard.press('Escape')
 
     await page.reload()
 
-    await expect(banner.getByRole('button', { name: 'Выйти' })).toBeVisible()
+    await expect(accountMenu).toBeVisible()
   })
 })

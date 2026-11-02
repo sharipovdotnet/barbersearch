@@ -1,18 +1,33 @@
-import { useState } from 'react'
-import { LogOut } from 'lucide-react'
+import { useState, type MouseEvent } from 'react'
+import { LogOut, Scissors, ShieldCheck, UserRound } from 'lucide-react'
 
 import { useSession } from '@/hooks/use-session'
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionRetryButton } from '@/components/session-unavailable'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
+import { BARBER_CABINET_PATH, isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { navigate, useLocation } from '@/lib/router'
 
 /**
- * Кнопка «Войти» или профиль текущего пользователя в шапке.
+ * Кнопка «Войти» или меню аккаунта в шапке.
+ *
+ * Личные разделы и выход живут в меню за аватаром, а не отдельными ссылками в полосе:
+ * так шапка не зависит от длины адреса и количества ролей и остаётся в одну строку
+ * на любой ширине. Пункты-ссылки остаются настоящими `<a href>`, поэтому работают
+ * средняя кнопка и открытие в новой вкладке.
  */
 export function HeaderAuth() {
   const { status, user, signOut } = useSession()
@@ -32,7 +47,7 @@ export function HeaderAuth() {
     return (
       <div role="status">
         <span className="sr-only">Проверяем сессию…</span>
-        <Skeleton className="h-7 w-20" aria-hidden />
+        <Skeleton className="size-7 rounded-full max-sm:size-11" aria-hidden />
       </div>
     )
   }
@@ -44,6 +59,10 @@ export function HeaderAuth() {
   if (status === 'anonymous' || !user) {
     return <LoginDialog redirectTo={redirectTo} />
   }
+
+  const isAccount = isAccountPath(pathname)
+  const isBarberCabinet = isBarberCabinetPath(pathname)
+  const isAdmin = isAdminPath(pathname)
 
   async function handleSignOut() {
     setIsSigningOut(true)
@@ -57,40 +76,81 @@ export function HeaderAuth() {
     }
   }
 
+  /** Обычный клик ведёт внутри SPA, а Ctrl/⌘-клик оставляем браузеру. */
+  function handleNavigate(event: MouseEvent<Element>, href: string) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return
+    }
+
+    event.preventDefault()
+    navigate(href)
+  }
+
   return (
-    <>
-      <a
-        href="/account"
-        aria-label="Мой кабинет"
-        title="Мой кабинет"
-        className="rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={(event) => {
-          event.preventDefault()
-          navigate('/account')
-        }}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full max-sm:size-11"
+            aria-label="Меню аккаунта"
+            title="Меню аккаунта"
+          />
+        }
       >
         <Avatar size="sm" aria-hidden>
           <AvatarFallback>{user.email.slice(0, 1).toUpperCase()}</AvatarFallback>
         </Avatar>
-      </a>
-      <span
-        className="hidden max-w-40 truncate text-sm text-muted-foreground lg:inline"
-        title={user.email}
-      >
-        {user.email}
-      </span>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleSignOut}
-        disabled={isSigningOut}
-        aria-label={isSigningOut ? 'Выходим…' : 'Выйти'}
-      >
-        <LogOut data-icon="inline-start" aria-hidden />
-        <span className="hidden sm:inline">
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="max-w-56 truncate" title={user.email}>
+            {user.email}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          nativeButton={false}
+          aria-current={isAccount ? 'page' : undefined}
+          render={<a href="/account" />}
+          onClick={(event) => handleNavigate(event, '/account')}
+        >
+          <UserRound aria-hidden />
+          Мой кабинет
+        </DropdownMenuItem>
+        {user.role === 'Barber' && (
+          <DropdownMenuItem
+            nativeButton={false}
+            aria-current={isBarberCabinet ? 'page' : undefined}
+            render={<a href={BARBER_CABINET_PATH} />}
+            onClick={(event) => handleNavigate(event, BARBER_CABINET_PATH)}
+          >
+            <Scissors aria-hidden />
+            Кабинет барбера
+          </DropdownMenuItem>
+        )}
+        {user.role === 'Admin' && (
+          <DropdownMenuItem
+            nativeButton={false}
+            aria-current={isAdmin ? 'page' : undefined}
+            render={<a href="/admin" />}
+            onClick={(event) => handleNavigate(event, '/admin')}
+          >
+            <ShieldCheck aria-hidden />
+            Администрирование
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={isSigningOut}
+          closeOnClick={false}
+          onClick={handleSignOut}
+        >
+          <LogOut aria-hidden />
           {isSigningOut ? 'Выходим…' : 'Выйти'}
-        </span>
-      </Button>
-    </>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
