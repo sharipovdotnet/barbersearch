@@ -51,6 +51,12 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     public int? LastAdminLimit { get; private set; }
 
+    /// <summary>Ответ <see cref="CountPendingAsync"/>: неподтверждённых профилей в сценарии.</summary>
+    public int PendingCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика очереди проверки.</summary>
+    public Failure? CountPendingFailure { get; set; }
+
     /// <summary>
     /// Какие узкие чтения профиля вызвал обработчик: <c>root</c>, <c>salons</c>,
     /// <c>salons+schedules</c>, <c>services</c>, <c>photos</c>, <c>specializations</c>,
@@ -314,6 +320,12 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             $"Slot context for barber profile '{barberProfileId}' was not found.",
             barberProfileId)));
     }
+
+    public Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(CountPendingFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingCount));
 
     public Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
         AdminBarberStatus status,

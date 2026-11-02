@@ -648,11 +648,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 368 application + 83 infrastructure + 109 integration (747 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 90 обработчиков (72 command + 18 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 377 application + 83 infrastructure + 114 integration (761 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 91 обработчик (72 command + 19 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 20 контроллеров / 98 endpoint (90 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 21 контроллер / 99 endpoint (91 доменный + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -1150,6 +1150,21 @@ of the 14k-row `users` table, a bitmap scan on `ix_bookings_user_id_start_at` an
 (177 ms for one customer's 600 bookings); no trigram index was added, which is a separate decision.
 Evidence: `frontend/verification/issue-39-explain.txt` and `issue-39-explain-index.txt`.
 
+**Admin summary (2026-11-02, issue-40).** `GET api/admin/summary` reads three counts and the
+first row of the moderation queue with the existing `BuildAdminReviewsQuery(isPublished: false,
+limit: 1)`. Measured on the migrated copy of the load database (`barbersearch_load_40`: 80 332
+reviews / 20 024 unpublished, 12 000 profiles / 1 000 unverified, 400 salons with none inactive):
+the review count is an `Index Only Scan` of the partial `ix_reviews_moderation_created_at_id`
+(3.9 ms), the profile count is a `Seq Scan` over 12 000 rows (3.4 ms), the salon count is an
+`Index Only Scan` of `ix_salons_city_is_active` (0.03 ms), and the oldest-row query is an
+`Index Scan` of the partial moderation index without `Sort` (0.7 ms, 21 buffers). The criterion
+for adding an index — a `Sort` over the whole unpublished set, reading the whole table for the
+oldest row, or more than ~100 ms — was not met, so **no migration was added**. A `COUNT(*)` is
+not accelerated by an index anyway: it reads every row, and the partial index serves the order,
+not the count. The count and the page are two reads without a transaction; publishing the oldest
+review between them yields `pendingCount > 0` with `oldest = null`, which is a race, not an
+error. Evidence: `frontend/verification/issue-40-explain.txt`.
+
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
 `User.NormalizeEmail` (`Trim().ToLowerInvariant()`), validates it through
@@ -1506,6 +1521,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 | `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
+| `AdminSummaryController` | `api/admin/summary` | 1 (aggregate read, admin only, no parameters) |
 
 Conventions:
 
@@ -1720,6 +1736,26 @@ Read endpoints (added 2026-10-19):
   no-show are not written to `audit_log`:** the `AuditTrail` allowlist covers only `User`,
   `BarberProfile` and `Review`, so the journal does not show them — a known limitation, not a bug;
   widening the allowlist is a separate slice.
+- **Admin summary (2026-11-02, issue-40).** `GET api/admin/summary` is the only aggregate read
+  of the admin API: no parameters, no pagination and no cursor, closed by `AdminOnly`. It answers
+  `AdminSummaryResponse { reviews: { pendingCount, oldest }, barbers: { unverifiedCount },
+  salons: { inactiveCount } }`, where each number uses **exactly** the predicate of its section:
+  `is_published = false` (the «На модерации» tab — including reviews hidden by an administrator,
+  because `is_published` is one flag and `Hide()` returns the review to the same queue),
+  `is_verified = false` (`AdminBarberStatus.Pending`, **without** `is_active`; adding it would
+  diverge from the «На проверке» queue) and `is_active = false` (`AdminCatalogueStatus.Hidden`
+  for salons). `oldest` is the first row of the existing FIFO moderation page
+  (`GetAdminPageAsync(isPublished: false, cursor: null, limit: 1)`) — not a second SQL — and is
+  `null` when the queue is empty; the count and the page are two reads without a transaction, so
+  a review published between them gives `pendingCount > 0` with `oldest: null`, which the UI
+  renders as a number rather than a `500`. `AdminSummaryOldestReviewResponse` is compact: id,
+  rating, `createdAt`, barber display name and customer `FullName` — **no email and no phone**;
+  the full visit context and PII stay in `GET api/admin/reviews`, and `customerDisplayName` keeps
+  that contract's behaviour (an empty name falls back to the email). The summary only reads: it
+  adds no mutation and writes nothing to `audit_log`, and the existing list contracts are
+  unchanged — `PagedResponse<T>` still has no `total`, because the number is needed by one screen
+  and not by the shared pagination contract. No new `ApiErrorCodes` group: a failed read is the
+  common `500 internal.database`, and empty queues are `0`/`null`, not an error.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off

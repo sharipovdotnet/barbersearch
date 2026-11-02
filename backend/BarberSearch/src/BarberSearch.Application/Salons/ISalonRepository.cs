@@ -33,6 +33,17 @@ public interface ISalonRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько салонов выключено — ровно <see cref="AdminCatalogueStatus.Hidden"/> для салонов.
+    /// </summary>
+    /// <remarks>
+    /// Предикат — <c>is_active = false</c>: то же, что фильтр «Выключенные» админского каталога.
+    /// Счётчик не делает join'ов: связи барберов с выключенным салоном сохраняются, и они
+    /// не меняют ответ «сколько салонов не участвует в поиске».
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountInactiveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Салон по идентификатору.
     /// </summary>
     Task<Result<Salon, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

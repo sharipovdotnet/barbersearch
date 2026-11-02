@@ -289,6 +289,18 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько профилей ждёт подтверждения — ровно <see cref="AdminBarberStatus.Pending"/>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат — <c>is_verified = false</c> и <b>без</b> <c>is_active</c>: очередь «На проверке»
+    /// не прячет профиль, выключенный из поиска, и добавление <c>is_active</c> разошлось бы
+    /// с разделом. Счётчик не делает join'ов с владельцем: email в сводке не нужен, а строка
+    /// с оборванной ссылкой (сегодня это невозможно) была бы посчитана и не показана в списке.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Карточка барбера любого статуса вместе с чек-листом готовности.
     /// </summary>
     /// <remarks>

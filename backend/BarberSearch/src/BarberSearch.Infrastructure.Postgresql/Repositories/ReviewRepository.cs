@@ -395,6 +395,25 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
     }
 
     /// <summary>
+    /// Сколько отзывов ждёт публикации — ровно вкладка «На модерации».
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>is_published = false</c> — тот же, что у <see cref="GetAdminPageAsync"/>
+    /// с <c>isPublished: false</c>: число в сводке обязано совпадать с размером очереди.
+    /// Индексом «для счётчика» это не ускорить — <c>COUNT(*)</c> всё равно читает все строки,
+    /// а частичный <c>ix_reviews_moderation_created_at_id</c> ускоряет порядок, не количество.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.Reviews
+            .AsNoTracking()
+            .CountAsync(review => !review.IsPublished, cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
+    /// <summary>
     /// Один отзыв любого статуса для админской карточки.
     /// </summary>
     public async Task<Result<AdminReviewResponse, Failure>> GetAdminByIdAsync(

@@ -12,6 +12,10 @@ import type {
 } from '@/lib/admin-bookings'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
+  AdminSummary,
+  AdminSummaryOldestReview,
+} from '@/lib/admin-summary'
+import type {
   AdminAuditActor,
   AdminAuditChange,
   AdminAuditEntry,
@@ -77,6 +81,20 @@ function isBoolean(value: unknown): value is boolean {
 
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+/**
+ * Счётчик очереди: целое, не меньше нуля.
+ *
+ * `-1`, `1.5` и `NaN` — битый ответ, а не «почти число»: сводка обещает количество строк,
+ * и дробное значение скрыло бы нарушение контракта.
+ */
+function isNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value >= 0
+  )
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -743,4 +761,52 @@ export function isAdminBooking(value: unknown): value is AdminBooking {
 }
 
 export const isAdminBookingPage = isPageOf(isAdminBooking)
+
+/**
+ * Самая старая строка очереди модерации: оценки 1..5, все строки обязательны.
+ *
+ * Email клиента в этом контракте нет — только имя; `barberDisplayName` и
+ * `customerDisplayName` экран показывает как есть.
+ */
+function isAdminSummaryOldestReview(
+  value: unknown
+): value is AdminSummaryOldestReview {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    typeof value.rating === 'number' &&
+    Number.isInteger(value.rating) &&
+    value.rating >= 1 &&
+    value.rating <= 5 &&
+    isString(value.createdAt) &&
+    isString(value.barberDisplayName) &&
+    isString(value.customerDisplayName)
+  )
+}
+
+/**
+ * Тело админской сводки: три обязательных блока и неотрицательные целые счётчики.
+ *
+ * `oldest` — `null` (очередь пуста) или компактная строка. Лишние поля игнорируются:
+ * `total`/`nextCursor` контракт не обещает, но и не запрещает; guard их не требует.
+ */
+export function isAdminSummary(value: unknown): value is AdminSummary {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.reviews) ||
+    !isRecord(value.barbers) ||
+    !isRecord(value.salons)
+  ) {
+    return false
+  }
+
+  const { reviews, barbers, salons } = value
+
+  return (
+    isNonNegativeInteger(reviews.pendingCount) &&
+    (reviews.oldest === null || isAdminSummaryOldestReview(reviews.oldest)) &&
+    isNonNegativeInteger(barbers.unverifiedCount) &&
+    isNonNegativeInteger(salons.inactiveCount)
+  )
+}
 

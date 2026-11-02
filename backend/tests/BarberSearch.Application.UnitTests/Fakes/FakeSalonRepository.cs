@@ -1,4 +1,4 @@
-﻿using BarberSearch.Application.Common;
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
 using BarberSearch.Contracts.Salons.Admin;
 using BarberSearch.Domain.Salons;
@@ -31,6 +31,12 @@ public sealed class FakeSalonRepository : ISalonRepository
     /// <summary>Поиск после разбора обработчиком: <c>null</c>, если фильтра нет.</summary>
     public string? LastSearch { get; private set; }
 
+    /// <summary>Ответ <see cref="CountInactiveAsync"/>: выключенных салонов в сценарии.</summary>
+    public int InactiveCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика выключенных салонов.</summary>
+    public Failure? CountInactiveFailure { get; set; }
+
     public void AddExisting(Guid id) => _existingIds.Add(id);
 
     public void AddAdminRow(AdminSalonResponse row) => _adminRows.Add(row);
@@ -39,6 +45,12 @@ public sealed class FakeSalonRepository : ISalonRepository
         Guid id,
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_existingIds.Contains(id));
+
+    public Task<Result<int, Failure>> CountInactiveAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(CountInactiveFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(InactiveCount));
 
     public Task<Result<IReadOnlyList<AdminSalonResponse>, Failure>> GetAdminListAsync(
         AdminCatalogueStatus status,

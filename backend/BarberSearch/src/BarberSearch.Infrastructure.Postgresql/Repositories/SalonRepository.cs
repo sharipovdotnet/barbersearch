@@ -74,6 +74,24 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         return rows;
     }
 
+    /// <summary>
+    /// Сколько салонов выключено — ровно <see cref="AdminCatalogueStatus.Hidden"/>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>is_active = false</c> — тот же, что у <see cref="GetAdminListAsync"/>
+    /// со статусом <c>Hidden</c>: число в сводке обязано совпадать с разделом каталога.
+    /// Связи барберов с выключенным салоном сохраняются, поэтому join'ов у счётчика нет.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountInactiveAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.Salons
+            .AsNoTracking()
+            .CountAsync(salon => !salon.IsActive, cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
     public async Task<Result<Salon, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
