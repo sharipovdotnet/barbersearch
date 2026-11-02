@@ -4,8 +4,8 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **187 domain + 295 application + 83 infrastructure + 50 integration**, all green in both
-> Debug and Release.
+> Tests: **187 domain + 395 application + 94 infrastructure + 127 integration (803 total)**,
+> all green in both Debug and Release.
 
 ---
 
@@ -648,10 +648,10 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 377 application + 83 infrastructure + 114 integration (761 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 187 domain + 395 application + 94 infrastructure + 127 integration (803 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 91 обработчик (72 command + 19 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
+| Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`, создание не пишется); `bookings.*` без FK сознательно |
 | Web | ✅ 21 контроллер / 99 endpoint (91 доменный + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
@@ -1165,6 +1165,25 @@ not the count. The count and the page are two reads without a transaction; publi
 review between them yields `pendingCount > 0` with `oldest = null`, which is a race, not an
 error. Evidence: `frontend/verification/issue-40-explain.txt`.
 
+**Audit entity types (2026-11-02, issue-41).** The `entityType` filter grew from three types to
+seven, so the issue-38 decision was re-measured on a migrated copy of the load database with
+**1,000,000 synthetic `audit_log` rows** distributed `user` 40 %, `barber_profile` 15 %, `review`
+15 %, `booking` 25 % and `salon`/`hair_service`/`specialization` ≈1.67 % each (the remaining 5 %
+split evenly). Four `EXPLAIN (ANALYZE, BUFFERS)` plans, all using the existing
+`ix_audit_log_occurred_at_id`: the first page without a filter is an `Index Scan`, 20 rows,
+**0.090 ms**; `entity_type = 'booking'` is the same scan with **50 000 rows removed by the filter**
+and **12.985 ms**; `entity_type = 'salon'` (the rarest type) removes **33 333 rows** and takes
+**7.728 ms**; the rare-type keyset second page (the `(occurred_at, id)` cursor condition plus the
+type filter) takes **15.203 ms**. No plan contains a `Sort` or a `Seq Scan`, and every number is
+far below the ~100 ms criterion, so **no index migration was added** — 19 migrations stay, and
+`AddAuditEntityTypeKeysetIndex` was not created. The filter is cheap because rows arrive in time
+order and a rare type is still ≈1.67 % of the table: 20 matches cost a few tens of thousands of
+index entries, not a full scan. The existing `ix_audit_log_entity_type_entity_id`
+(`entity_type, entity_id`) is **not** a substitute for the per-type feed: it serves one entity's
+history (`entity_type = … AND entity_id = …`), not the `occurred_at DESC, id` order, so it would
+still need a sort for a type-only filter. Evidence: `frontend/verification/issue-41-explain.txt`
+and the reproducible `issue-41-explain.sql`.
+
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
 `User.NormalizeEmail` (`Trim().ToLowerInvariant()`), validates it through
@@ -1443,17 +1462,31 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 - **Аудит изменений (R-34).** Таблица `audit_log`: `occurred_at`, `actor_user_id` (nullable),
   `action`, `entity_type`, `entity_id`, `payload jsonb`. Строка аудита добавляется в тот же
   `SaveChanges`, что и изменение (`AuditTrail.Capture` в `RepositoryBase.SaveChangesAsync`),
-  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Аудируются только `user`,
-  `barber_profile`, `review` по allowlist: роль, активность, подтверждения email/телефона,
-  привязка профиля, грейд/верификация/рейтинг, публикация, рейтинг и текст отзыва. Логины
-  (`last_login_at`, `failed_login_attempts`, `lockout_end`), `updated_at` и `xmin` не пишутся —
-  это шум. В `payload` (camelCase, enum'ы строками) значения свойств, имя которых содержит
-  `password`, `hash`, `stamp`, `token` или `secret`, заменяются на `[redacted]`; строки длиннее
-  500 символов обрезаются с маркером. Чтение при инциденте: история сущности —
+  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Allowlist — семь типов: `user`,
+  `barber_profile`, `review`, `salon`, `hair_service`, `specialization` и `booking`, у каждого
+  свой список свойств. `user`/`barber_profile` — роль, активность, подтверждения email/телефона,
+  привязка профиля, грейд/верификация/рейтинг; `review` — публикация, рейтинг и текст; `salon` —
+  имя (только в `values` создания: переименования салона в API нет), адрес, город, пояс,
+  координаты, контакты и `isActive`; `hair_service` — имя, описание, категория, длительность и
+  `isActive`; `specialization` — имя, описание и `isActive`; `booking` — **только** `Status` и
+  `BarberNote`
+  (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`), потому что других изменяемых
+  полей у брони сегодня нет. **Создание брони не аудируется сознательно**
+  (`AuditsCreation: false`): бронь уже хранит клиента, время и цену, а строка на каждую бронь
+  (1,2 млн в нагрузочной базе) раздувала бы журнал без новой информации; журнал отвечает на
+  «кто отменил/подтвердил/отметил неявку», а не на «кто забронировал». Дети `BarberProfile`
+  (`BarberService`, `BarberSalon`, `WorkingSchedule`, `PortfolioPhoto`, `TimeOff`) в allowlist
+  не входят. Логины (`last_login_at`, `failed_login_attempts`, `lockout_end`), `updated_at` и
+  `xmin` не пишутся — это шум. В `payload` (camelCase, enum'ы строками) значения свойств, имя
+  которых содержит `password`, `hash`, `stamp`, `token` или `secret`, заменяются на
+  `[redacted]`; строки длиннее 500 символов обрезаются с маркером; `IdempotencyKey` в allowlist
+  брони не входит и в payload не попадает. Чтение при инциденте: история сущности —
   `SELECT * FROM audit_log WHERE entity_type = 'user' AND entity_id = '…' ORDER BY occurred_at`
-  (индекс `ix_audit_log_entity_type_entity_id`), действия пользователя — по `actor_user_id`,
-  последние события — по `occurred_at DESC, id` (`ix_audit_log_occurred_at_id`, с issue-38).
-  Ретенции и партиционирования пока нет — это отдельный срез.
+  (индекс `ix_audit_log_entity_type_entity_id`), лента одного типа —
+  `SELECT * FROM audit_log WHERE entity_type = 'salon' ORDER BY occurred_at DESC, id LIMIT 20`
+  (`ix_audit_log_occurred_at_id`; с issue-41 так же фильтруются `booking`, `hair_service` и
+  `specialization`), действия пользователя — по `actor_user_id`, последние события — по
+  `occurred_at DESC, id`. Ретенции, партиционирования и экспорта нет — это отдельные срезы.
 
 ### 15.9 Order of operations
 
@@ -1690,9 +1723,12 @@ Read endpoints (added 2026-10-19):
   dictionary grows, paging it is a separate decision with a text keyset. Unknown `status` is
   `400 admin.catalogue.status`, a longer search `400 admin.catalogue.search`. Mutations stay on
   `HairServicesController`, `SpecializationsController` and `SalonsController` — no admin mutation
-  precedent was created. **Catalogue edits are not written to `audit_log`:** the `AuditTrail`
-  allowlist covers only `User`, `BarberProfile` and `Review`; the admin UI promises no audit.
-- **Admin audit (2026-11-02, issue-38).** `GET api/admin/audit?entityType=all|user|barber_profile|review&actor=&from=&to=&cursor=&pageSize=`
+  precedent was created. **Catalogue edits are written to `audit_log`** since issue-41: creating,
+  renaming, editing and deactivating a service, a specialization or a salon writes
+  `hair_service.*`, `specialization.*` or `salon.*` rows with the allowlisted fields, and the
+  journal's `entityType` filter exposes each type separately. Deleting is still not possible — the
+  domain only deactivates, so the journal cannot show a catalogue delete.
+- **Admin audit (2026-11-02, issue-38; extended by issue-41).** `GET api/admin/audit?entityType=all|user|barber_profile|review|salon|hair_service|specialization|booking&actor=&from=&to=&cursor=&pageSize=`
   is the first read of `audit_log` (R-34) and is closed by `AdminOnly`; there is no write action,
   and none will be added — the journal is immutable. The response is
   `PagedResponse<AdminAuditEntryResponse>`: id, `occurredAt`, `action` (`{entity}.{created|updated|deleted}`),
@@ -1713,10 +1749,15 @@ Read endpoints (added 2026-10-19):
   `admin.audit` scope tag (a cursor from another list is rejected instead of paginating a foreign
   order), and `pageSize` defaults to 20 and is capped at 100. The entity **name is deliberately
   not resolved**: the record may be renamed or deleted, so the row carries `entity_id` only.
-  The journal covers only `User`, `BarberProfile` and `Review`; **catalogue, salon, service,
-  specialization and booking edits are not written to `audit_log`** — this is a known limitation,
-  not a bug, and the UI states it. Retention, export and full-text search over `payload` are not
-  part of this slice.
+  The journal covers **seven entity types** — `User`, `BarberProfile`, `Review`, `Salon`,
+  `HairService`, `Specialization` and `Booking` (the last four were added by issue-41; booking
+  rows record only `Status` and `BarberNote` changes, and booking creation is deliberately not
+  audited, while `BarberProfile` children stay out of the allowlist). `entityType` therefore
+  accepts `all|user|barber_profile|review|salon|hair_service|specialization|booking`, trimmed and
+  case-insensitive; numbers and unknown strings are still `400 admin.audit.entityType`. Nothing
+  else about the read-only contract changed: there is no new endpoint and no mutation, `total`,
+  `pageSize`, the cursor, the order and the payload format are untouched. Retention, export,
+  partitioning and full-text search over `payload` are not part of this slice.
 - **Admin bookings (2026-11-02, issue-39).** `GET api/admin/bookings?status=&search=&cursor=&pageSize=`
   and `GET api/admin/bookings/{id}` are closed by `AdminOnly`; these are the first admin reads of
   `bookings` and answer `PagedResponse<AdminBookingResponse>` / `AdminBookingResponse`. Order is
@@ -1743,9 +1784,12 @@ Read endpoints (added 2026-10-19):
   `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
   and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation,
   reschedule, price/note edit, delete or refund anywhere in the API. **Admin cancellation and
-  no-show are not written to `audit_log`:** the `AuditTrail` allowlist covers only `User`,
-  `BarberProfile` and `Review`, so the journal does not show them — a known limitation, not a bug;
-  widening the allowlist is a separate slice.
+  no-show are written to `audit_log`** since issue-41: the `Booking` allowlist records `Status`
+  and `BarberNote` changes as `booking.updated`, with the acting administrator as the actor, so
+  the journal shows them under `entityType=booking`. Creating a booking is deliberately **not**
+  audited (`AuditsCreation: false`) — the row already holds the customer, the time and the price,
+  and a line per booking would grow the journal without new information. Retention and export
+  remain separate slices.
 - **Admin summary (2026-11-02, issue-40).** `GET api/admin/summary` is the only aggregate read
   of the admin API: no parameters, no pagination and no cursor, closed by `AdminOnly`. It answers
   `AdminSummaryResponse { reviews: { pendingCount, oldest }, barbers: { unverifiedCount },

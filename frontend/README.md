@@ -659,9 +659,10 @@ What it does:
   number of barbers; «Включить» is a plain confirmation. After `204` the list refreshes quietly, the
   row keeps its place, focus returns to its button and the action is announced in `role="status"`.
   `409`/`404` are shown in the dialog and the list is re-read.
-- There is **no delete**: the domain only deactivates, and there are no bulk actions. The catalogue
-  is **not** written to `audit_log` — the `AuditTrail` allowlist covers `User`, `BarberProfile` and
-  `Review` only — so the screen does not promise an audit.
+- There is **no delete**: the domain only deactivates, and there are no bulk actions. Catalogue
+  edits **are** written to `audit_log` as `salon.*`, `hair_service.*` and `specialization.*` rows,
+  so they appear in «Admin audit»; retention and export remain separate slices. The catalogue
+  screen itself adds no journal UI.
 
 ## Admin bookings
 
@@ -718,9 +719,12 @@ What it cannot do, on purpose:
 - The email search, the status filter and the text stay in React state and are **not** written to
   `?…`: the email is PII and does not belong in browser history or proxy logs. Only the booking id
   is in the address, because a direct link to a booking from a ticket is the point of the screen.
-- **Bookings are not audited.** `AuditTrail` writes only `User`, `BarberProfile` and `Review` to
-  `audit_log`, so an admin cancellation or no-show does not appear in `/admin/audit`. The screen
-  does not promise an audit; widening the allowlist is a separate slice.
+- **Booking changes are audited, booking creation is not.** `AuditTrail` writes a `booking.updated`
+  row for every status or barber-note change — including the admin cancellation and no-show on this
+  screen — so they appear in `/admin/audit` under the «Бронь» filter. Creating a booking writes
+  **no** row: `AuditsCreation: false`, because the booking already stores the customer, the time
+  and the price, and a line per booking would grow the journal without new information. Retention
+  and export remain separate slices.
 - Filters by date, barber and salon, bulk operations, a calendar/timeline and CSV export are not
   part of this screen.
 
@@ -788,10 +792,11 @@ an expandable per-row diff. The journal is the last rail item, the route is the 
 `/admin/audit` (no card route and no builder — a row already carries its whole diff), and the page
 is `noindex` like the rest of the admin.
 
-- `src/lib/admin-audit.ts` — types, `ADMIN_AUDIT_ENTITY_LABELS`/`_ACTION_LABELS`/`_FIELD_LABELS`,
-  `formatAuditAction` (the label comes from the tail after the last dot of `user.updated`),
-  `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто», Russian role
-  and grade labels with the raw string as a fallback), `fetchAdminAuditEntries` and
+- `src/lib/admin-audit.ts` — types, `ADMIN_AUDIT_ENTITY_TYPES`/`_LABELS`/`_ACTION_LABELS`/
+  `_FIELD_LABELS`, `formatAuditAction` (the label comes from the tail after the last dot of
+  `user.updated`), `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто»,
+  Russian role, grade, booking-status and service-category labels with the raw string as a
+  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`), `fetchAdminAuditEntries` and
   `describeAdminAuditError`.
 - `src/lib/response-guards.ts` — `isAdminAuditEntry`/`isAdminAuditPage`: non-empty ids and action,
   a nullable actor with a string id and nullable email, and changes whose `from`/`to` are JSON
@@ -805,22 +810,25 @@ is `noindex` like the rest of the admin.
 What it does:
 
 - Filters: a native `<select>` for the entity type («Все сущности», «Пользователь», «Барбер»,
-  «Отзыв»), a debounced (300 ms) author email search capped at 100 characters, and «С даты» /
-  «По дату». The two dates are **inclusive UTC days** — the visible hint says so — while a row's
-  time is shown in the browser's local time zone. «Сбросить фильтры» appears only when at least
-  one filter is off its default. The filters live in React state and are **not** written to `?…`:
-  the author email is PII and does not belong in browser history or proxy logs.
+  «Отзыв», «Салон», «Услуга», «Специализация», «Бронь»), a debounced (300 ms) author email search
+  capped at 100 characters, and «С даты» / «По дату». The two dates are **inclusive UTC days** —
+  the visible hint says so — while a row's time is shown in the browser's local time zone.
+  «Сбросить фильтры» appears only when at least one filter is off its default. The filters live in
+  React state and are **not** written to `?…`: the author email is PII and does not belong in
+  browser history or proxy logs.
 - The list is paged: twenty rows per page, «Дальше» only by the server's opaque `nextCursor`,
   «Назад» from the in-memory page cache, a next-page error that keeps the rows and turns the
-  button into «Повторить». The range is «1–20» / «21–21» without «из N» — the API returns no total.
+  button into «Повторить». The range is «1–20» / «21–25» without «из N» — the API returns no total.
 - A row shows `<time>` in local time, the actor (`actor.email`, «Система» when `actor` is `null`,
   «Удалённый пользователь» when the account is gone and `email` is `null`), the entity type plus
   the first 8 characters of `entity_id` (the full id is in `title`; the entity name is **not**
   resolved — it may have been renamed or deleted), and the action label from the tail of
   `action`. «Показать изменения» / «Скрыть изменения» is the only button in a row: it carries
   `aria-expanded` and `aria-controls`, keeps the focus and expands a `<dl>` of `field: from → to`
-  with Russian field names («Роль: Клиент → Администратор»). An unreadable payload is honest:
-  «Изменения не записаны.» Rows expand independently.
+  with Russian field names («Роль: Клиент → Администратор», «Телефон: +70000000009 →
+  +70000000010», «Статус: Подтверждена → Неявка»). Booking statuses and service categories are
+  rendered in Russian, and `isActive` is «Активность» (it serves both a user and a catalogue row).
+  An unreadable payload is honest: «Изменения не записаны.» Rows expand independently.
 - States: skeleton with `aria-busy`, «Журнал пуст» without filters / «Ничего не найдено» with
   them, a first-page error with its reason and «Повторить» (never the English `detail` or the
   status code), a next-page error in the pager without clearing the rows, `401` → the sign-in gate
@@ -828,10 +836,12 @@ What it does:
 - The journal is **immutable**: there is no write endpoint, no «Изменить», «Выключить», «Удалить»
   or «Очистить журнал», and no «Показать ещё». `AuditTrail` writes the table on every
   `SaveChanges`; the screen only reads.
-- The honest limitation is part of the copy and the docs: the audit covers only `User`,
-  `BarberProfile` and `Review`, so catalogue, salon, service, specialization and booking edits are
-  **not** in the journal. Widening the `AuditTrail` allowlist, retention and export are separate
-  slices.
+- The journal covers **seven** entity types — `User`, `BarberProfile`, `Review`, `Salon`,
+  `HairService`, `Specialization` and `Booking`. Booking rows carry only `Status` and `BarberNote`
+  changes: creating a booking is deliberately not audited (`AuditsCreation: false`), and
+  `BarberProfile` children (services, salons, schedules, photos, time off) are not covered either.
+  The journal stays immutable and read-only; retention, partitioning and export are still separate
+  slices, and catalogue deletes do not exist in the API.
 
 ## Testing
 
@@ -857,12 +867,16 @@ needs no API and no database, and covers:
 - `admin-audit` — the URL contract (`entityType` always, `actor`/`from`/`to` only when non-empty,
   the cursor last and no `pageSize`), the strict page guard accepting extra fields and rejecting a
   broken body and a non-scalar `from`, `formatAuditValue` (`null`, booleans, `[redacted]`, role and
-  grade labels, unknown values), `formatAuditAction` by the action tail, and the error mapping for
-  `403`, `429` and `admin.audit.cursor.invalid`. `AuditEntry` (colocated with the component) covers
-  `<time>`, the short id with the full id in `title`, «Система» and «Удалённый пользователь», the
-  expandable `<dl>` diff «Роль: Клиент → Администратор», the empty-diff text and independent
-  expansion; `AuditScreen` is an MSW-backed screen test: the loaded rows and pager range, the
-  entity-type filter starting a new first page without a cursor, «Журнал пуст» and the `403` text.
+  grade labels, the five Russian booking statuses, the service categories, unknown values),
+  `formatAuditAction` by the action tail, the exact order of the eight entity types and their
+  labels (the new four are appended), and the error mapping for `403`, `429` and
+  `admin.audit.cursor.invalid`. `AuditEntry` (colocated with the component) covers `<time>`, the
+  short id with the full id in `title`, «Система» and «Удалённый пользователь», the expandable
+  `<dl>` diff «Роль: Клиент → Администратор», «Активность» for `isActive`, the booking diff
+  «Статус: Ждёт подтверждения → Отменена», the service «Название: … → …» diff, the empty-diff
+  text and independent expansion; `AuditScreen` is an MSW-backed screen test: the loaded rows and
+  pager range, the entity-type filter starting a new first page without a cursor, a switch to
+  «Салон» sending `entityType=salon`, «Журнал пуст» and the `403` text.
 - `admin-bookings` — the list URL (`status` always, `search` and `cursor` only when set, no
   `pageSize`), the detail read by id, the CSRF `POST`s for cancellation and no-show, the strict
   guards (a bad status, a string price or a missing salon time zone is a broken body; extra fields
@@ -974,10 +988,17 @@ never reaches the public search, cards or catalogue counters. For the admin cata
 specializations and the salon «E2E Studio Nord»: an active row would land in the public filters and
 cards and shift the counters of `search-login`, `a11y` and the barber cards, while hidden rows are
 invisible to public reads.
-For the admin journal it adds exactly **21 `audit_log` rows on 2026-09-10 UTC** (ids
-`9e700000-…`, the newest one without an actor): the fixed past date keeps the journal checks away
-from the rows that mutating specs write «today», and the section deletes only its own ids before
-inserting, so the seed stays idempotent. There are no other changes to `audit_log`.
+For the admin journal it adds exactly **25 `audit_log` rows on 2026-09-10 UTC** (ids
+`9e700000-…-01`…`-25`, the newest one without an actor): the original 21 rows cover users,
+barber profiles and reviews, and rows 22…25 are the four types added in #41 — `salon.updated`
+(`10:16:10`, a phone change), `hair_service.updated` (`10:16:20`, `isActive` true→false),
+`specialization.updated` (`10:16:30`, a rename) and `booking.updated` (`10:16:40`, `Confirmed` →
+`NoShow`). Their times are inside the same UTC day and before `10:17` on purpose: the freshest
+system row (21st, `10:21`) and the role-change row (20th, `10:20`) must stay first, while the
+second page becomes «21–25» and starts at row 05 (`…-0005`). The fixed past date keeps the
+journal checks away from the rows that mutating specs write «today», and the section deletes only
+its own ids before inserting, so the seed stays idempotent. There are no other changes to
+`audit_log`.
 For the admin bookings screen it adds one customer (`e2e-bookings@barbersearch.test`, id
 `9e000000-…-09`) and exactly **24 bookings on 2026-09-12** with fixed ids `9e900000-…-01`…`-24` at
 30-minute steps: 18 `Pending`, 3 `Confirmed`, one `Completed`, one `Cancelled` and one `NoShow`.
