@@ -62,6 +62,29 @@ test.describe('axe: публичные экраны', () => {
     await expectNoBlockingViolations(page, '/register', test.info())
   })
 
+  test('политика обработки данных /privacy и уведомление о cookie', async ({
+    page,
+  }) => {
+    await page.goto('/privacy')
+    await expect(
+      page.getByRole('heading', {
+        name: 'Политика в отношении обработки персональных данных',
+        level: 1,
+      })
+    ).toBeVisible()
+
+    const notice = page.getByRole('region', {
+      name: 'Уведомление об использовании cookie',
+    })
+    await expect(notice).toBeVisible()
+
+    // Уведомление информационное: одна кнопка, без стены согласия (раздел 6 Политики).
+    await page.getByRole('button', { name: 'Понятно' }).click()
+    await expect(notice).toBeHidden()
+
+    await expectNoBlockingViolations(page, '/privacy', test.info())
+  })
+
   test('открытый диалог входа', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: 'Войти' }).first().click()

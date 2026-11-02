@@ -1,10 +1,13 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import { LoginDialog } from '@/components/login-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Field,
+  FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -19,7 +22,8 @@ import {
   type RegistrationInput,
 } from '@/lib/auth'
 import { describeApiFailure } from '@/lib/errors'
-import { navigate } from '@/lib/router'
+import { PRIVACY_PATH } from '@/lib/legal'
+import { isPlainClick, navigate } from '@/lib/router'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -39,6 +43,8 @@ const PASSWORD_EQUALS_EMAIL_ERROR = 'Пароль не должен совпад
 const PASSWORD_EQUALS_NAME_ERROR =
   'Пароль не должен совпадать с именем или фамилией.'
 const PASSWORD_REPEAT_ERROR = 'Пароли не совпадают.'
+const CONSENT_REQUIRED_ERROR =
+  'Отметьте согласие на обработку персональных данных.'
 const EMAIL_TAKEN_ERROR =
   'Аккаунт с таким email уже есть. Войдите или укажите другой адрес.'
 const RATE_LIMIT_ERROR =
@@ -51,11 +57,15 @@ const FIELD_ORDER = [
   'email',
   'password',
   'passwordRepeat',
+  'consent',
 ] as const
 
 /** Поля формы в том же порядке, в котором они идут по Tab. */
 type RegisterField = (typeof FIELD_ORDER)[number]
 type RegisterErrors = Partial<Record<RegisterField, string>>
+
+/** Поля с текстовым вводом: у отметки согласия другой элемент и другой ref. */
+type RegisterInputField = Exclude<RegisterField, 'consent'>
 
 type RegisterValues = {
   firstName: string
@@ -63,6 +73,7 @@ type RegisterValues = {
   email: string
   password: string
   passwordRepeat: string
+  consent: boolean
 }
 
 // Словарь серверных паролей на клиенте не воспроизводится: проверка живёт на сервере,
@@ -121,6 +132,12 @@ function validate(values: RegisterValues): RegisterErrors {
 
   if (values.passwordRepeat !== password) {
     errors.passwordRepeat = PASSWORD_REPEAT_ERROR
+  }
+
+  // Согласие — отдельное основание обработки (ч. 1 ст. 9 152-ФЗ): без отметки
+  // регистрация не отправляется, чтобы аккаунт не появился без согласия.
+  if (!values.consent) {
+    errors.consent = CONSENT_REQUIRED_ERROR
   }
 
   return errors
@@ -197,6 +214,7 @@ export function RegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordRepeat, setPasswordRepeat] = useState('')
+  const [isConsentGiven, setIsConsentGiven] = useState(false)
   const [errors, setErrors] = useState<RegisterErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
@@ -207,8 +225,12 @@ export function RegisterForm() {
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const passwordRepeatRef = useRef<HTMLInputElement>(null)
+  const consentRef = useRef<HTMLButtonElement>(null)
 
-  const fieldRefs: Record<RegisterField, typeof firstNameRef> = {
+  const fieldRefs: Record<
+    RegisterInputField,
+    RefObject<HTMLInputElement | null>
+  > = {
     firstName: firstNameRef,
     lastName: lastNameRef,
     email: emailRef,
@@ -218,10 +240,17 @@ export function RegisterForm() {
 
   function focusFirstError(nextErrors: RegisterErrors) {
     for (const field of FIELD_ORDER) {
-      if (nextErrors[field]) {
-        fieldRefs[field].current?.focus()
+      if (!nextErrors[field]) {
+        continue
+      }
+
+      if (field === 'consent') {
+        consentRef.current?.focus()
         return
       }
+
+      fieldRefs[field].current?.focus()
+      return
     }
   }
 
@@ -239,6 +268,7 @@ export function RegisterForm() {
       email,
       password,
       passwordRepeat,
+      consent: isConsentGiven,
     }
     const trimmed: RegistrationInput = {
       email: email.trim(),
@@ -434,6 +464,52 @@ export function RegisterForm() {
           <FieldError id="register-password-repeat-error">
             {errors.passwordRepeat}
           </FieldError>
+        </Field>
+
+        <Field orientation="horizontal" data-invalid={Boolean(errors.consent)}>
+          <Checkbox
+            ref={consentRef}
+            id="register-consent"
+            name="consent"
+            checked={isConsentGiven}
+            disabled={isPending}
+            aria-invalid={Boolean(errors.consent)}
+            aria-describedby={
+              errors.consent
+                ? 'register-consent-hint register-consent-error'
+                : 'register-consent-hint'
+            }
+            onCheckedChange={(checked) => {
+              setIsConsentGiven(checked)
+              setErrors((current) => ({ ...current, consent: undefined }))
+              setFormError(null)
+            }}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor="register-consent" className="font-normal">
+              Я даю согласие на обработку персональных данных
+            </FieldLabel>
+            <FieldDescription id="register-consent-hint">
+              Для регистрации и использования аккаунта, оформления и сопровождения
+              записей. Условия — в{' '}
+              <a
+                href={PRIVACY_PATH}
+                onClick={(event) => {
+                  // Ctrl/Cmd-клик не перехватываем: Политика открывается в новой вкладке.
+                  if (!isPlainClick(event)) {
+                    return
+                  }
+
+                  event.preventDefault()
+                  navigate(PRIVACY_PATH)
+                }}
+              >
+                Политике обработки персональных данных
+              </a>
+              .
+            </FieldDescription>
+            <FieldError id="register-consent-error">{errors.consent}</FieldError>
+          </FieldContent>
         </Field>
       </FieldGroup>
 
