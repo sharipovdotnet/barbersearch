@@ -1,4 +1,6 @@
+using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Domain.Bookings;
@@ -90,6 +92,41 @@ public interface IBookingRepository
         DateTimeOffset now,
         BookingCursor? cursor,
         int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница всех броней для админского списка: фильтр статуса, поиск и keyset.
+    /// </summary>
+    /// <remarks>
+    /// Порядок — <c>start_at DESC, id ASC</c>: свежие сверху, а второй ключ не даёт страницам
+    /// терять и дублировать строки, когда у разных барберов визит начинается в одну минуту.
+    /// <paramref name="filters"/> уже разобраны обработчиком: пустой поиск — <c>null</c>,
+    /// отсутствие статуса — <c>null</c>.
+    /// <paramref name="limit"/> — это pageSize + 1, чтобы обработчик отличил последнюю
+    /// страницу от неполной.
+    /// </remarks>
+    /// <param name="filters">Разобранные фильтры статуса и поиска.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать (pageSize + 1).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminBookingResponse>, Failure>> GetAdminPageAsync(
+        AdminBookingFilters filters,
+        AdminBookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Бронь для админской карточки: тот же контекст, что и в списке, по идентификатору.
+    /// </summary>
+    /// <remarks>
+    /// Отсутствующая бронь — <c>Error.NotFound</c> с кодом <c>admin.bookings.notFound</c>.
+    /// Чтение проецируется в контракт, поэтому сущность <see cref="Booking"/> не покидает
+    /// инфраструктуру.
+    /// </remarks>
+    /// <param name="id">Идентификатор брони.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<AdminBookingResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>

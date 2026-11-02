@@ -3,6 +3,13 @@ import type {
   AdminBarberDetail,
   AdminBarberReadiness,
 } from '@/lib/admin-barbers'
+import type {
+  AdminBooking,
+  AdminBookingBarber,
+  AdminBookingCustomer,
+  AdminBookingSalon,
+  AdminBookingService,
+} from '@/lib/admin-bookings'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
   AdminAuditActor,
@@ -674,4 +681,66 @@ export function isAdminAuditEntry(value: unknown): value is AdminAuditEntry {
 }
 
 export const isAdminAuditPage = isPageOf(isAdminAuditEntry)
+
+function isAdminBookingCustomer(value: unknown): value is AdminBookingCustomer {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.firstName) &&
+    isString(value.lastName) &&
+    isString(value.email) &&
+    isNullableString(value.phoneNumber)
+  )
+}
+
+function isAdminBookingBarber(value: unknown): value is AdminBookingBarber {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.profileId) &&
+    isString(value.displayName)
+  )
+}
+
+function isAdminBookingService(value: unknown): value is AdminBookingService {
+  return isRecord(value) && isString(value.name)
+}
+
+function isAdminBookingSalon(value: unknown): value is AdminBookingSalon {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isString(value.address) &&
+    isString(value.city) &&
+    isString(value.timeZoneId)
+  )
+}
+
+/**
+ * Строка админских броней: полный контекст клиента, барбера, услуги и салона.
+ *
+ * Строгий guard: `status` — одно из пяти имён, `price` — число, обе заметки —
+ * строка или `null`, вложенные объекты обязательны. Лишние поля игнорируются,
+ * чтобы расширение контракта не ломало чтение. Email клиента — PII, но она
+ * приходит только в этом админском ответе (§4.6).
+ */
+export function isAdminBooking(value: unknown): value is AdminBooking {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isBookingStatus(value.status) &&
+    isString(value.startAt) &&
+    isString(value.endAt) &&
+    isNumber(value.price) &&
+    isNullableString(value.customerNote) &&
+    isNullableString(value.barberNote) &&
+    isString(value.createdAt) &&
+    isAdminBookingCustomer(value.customer) &&
+    isAdminBookingBarber(value.barber) &&
+    isAdminBookingService(value.service) &&
+    isAdminBookingSalon(value.salon)
+  )
+}
+
+export const isAdminBookingPage = isPageOf(isAdminBooking)
 

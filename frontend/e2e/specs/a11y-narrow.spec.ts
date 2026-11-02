@@ -3,6 +3,7 @@ import { expect, test } from '../fixtures/test'
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AdminAuditPage } from '../pages/admin-audit-page'
+import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
@@ -82,6 +83,31 @@ test.describe('axe: 320 px, админка без выбранной строк�
       '/admin/catalogue?tab=salons @320',
       test.info()
     )
+  })
+
+  test('брони: поиск по клиенту, карточки без горизонтального скролла', async ({
+    page,
+  }) => {
+    const adminBookings = new AdminBookingsPage(page)
+
+    await adminBookings.goto()
+    // На 320 таблица заменена карточками, а строки появляются поиском по клиенту
+    // фикстур: без него список состоит из чужих броней базы.
+    await adminBookings.searchFor(fixtures.adminBookings.email)
+    await adminBookings.waitForRows(fixtures.adminBookings.pageSize)
+    await expect(adminBookings.heading).toBeVisible()
+    await expect(adminBookings.rows.first()).toBeVisible()
+
+    // Длинный email и id брони переносятся, а не расширяют страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/admin/bookings @320', test.info())
   })
 
   test('журнал: строки с фильтром по дате, без горизонтального скролла', async ({

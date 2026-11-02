@@ -3,6 +3,7 @@ import { expect, test } from '../fixtures/test'
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AdminAuditPage } from '../pages/admin-audit-page'
+import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
@@ -198,6 +199,26 @@ test.describe('axe: админка', () => {
     await expectNoBlockingViolations(
       page,
       '/admin/catalogue?tab=salons + форма',
+      test.info()
+    )
+  })
+
+  test('/admin/bookings: поиск, список и карточка брони', async ({ page }) => {
+    const adminBookings = new AdminBookingsPage(page)
+
+    await adminBookings.goto()
+    // Поиск по клиенту фикстур: строки не зависят от чужих броней базы.
+    await adminBookings.searchFor(fixtures.adminBookings.email)
+    await adminBookings.waitForRows(fixtures.adminBookings.pageSize)
+    // NN 24 — самая поздняя бронь: выбранная карточка входит в тот же скан.
+    await adminBookings.openBooking(fixtures.adminBookings.latestId)
+
+    await expect(adminBookings.heading).toBeVisible()
+    await expect(adminBookings.detailHeading).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/bookings + карточка',
       test.info()
     )
   })

@@ -1,5 +1,7 @@
 using BarberSearch.Application.Bookings;
+using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
@@ -14,13 +16,38 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// </summary>
 /// <remarks>
 /// Страница и активные брони повторяют фильтры настоящего репозитория, поэтому на фейке
-/// проверяются keyset-пагинация и «отменённая бронь слот не занимает».
+/// проверяются keyset-пагинация и «отменённая бронь слот не занимает». Админская выборка
+/// запоминает переданные фильтры, курсор и лимит: тест видит, что обработчик разобрал
+/// параметры до обращения к репозиторию.
 /// </remarks>
 public sealed class FakeBookingRepository : IBookingRepository
 {
     private readonly Dictionary<Guid, Booking> _bookings = [];
 
+    private readonly List<AdminBookingResponse> _adminRows = [];
+
     public IReadOnlyCollection<Booking> Bookings => _bookings.Values;
+
+    /// <summary>
+    /// Фильтры последнего админского запроса.
+    /// </summary>
+    public AdminBookingFilters? LastAdminFilters { get; private set; }
+
+    /// <summary>
+    /// Курсор последнего админского запроса.
+    /// </summary>
+    public AdminBookingCursor? LastAdminCursor { get; private set; }
+
+    /// <summary>
+    /// Лимит последнего админского запроса: обработчик читает <c>pageSize + 1</c> строку.
+    /// </summary>
+    public int LastAdminLimit { get; private set; }
+
+    /// <summary>
+    /// Подмена результата админского чтения: тест проверяет, что ошибка репозитория
+    /// доходит до контроллера.
+    /// </summary>
+    public Failure? ForcedAdminFailure { get; set; }
 
     /// <summary>
     /// Подмена поведения вставки — для проверки гонки, которую в памяти не воспроизвести.
@@ -229,6 +256,83 @@ public sealed class FakeBookingRepository : IBookingRepository
 
         return Task.FromResult(
             Result.Success<IReadOnlyList<BarberBookingResponse>, Failure>(rows));
+    }
+
+    /// <summary>
+    /// Добавляет строку админского списка.
+    /// </summary>
+    public void AddAdminRow(AdminBookingResponse row) => _adminRows.Add(row);
+
+    public Task<Result<IReadOnlyList<AdminBookingResponse>, Failure>> GetAdminPageAsync(
+        AdminBookingFilters filters,
+        AdminBookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        LastAdminFilters = filters;
+        LastAdminCursor = cursor;
+        LastAdminLimit = limit;
+
+        if (ForcedAdminFailure is not null)
+        {
+            return Task.FromResult(
+                Result.Failure<IReadOnlyList<AdminBookingResponse>, Failure>(
+                    ForcedAdminFailure));
+        }
+
+        IEnumerable<AdminBookingResponse> query = _adminRows;
+
+        if (filters.Status is { } status)
+        {
+            query = query.Where(row => row.Status == status);
+        }
+
+        if (filters.Search is { } search)
+        {
+            // Повторяем правило репозитория: GUID — точный id, иначе подстрока email.
+            query = Guid.TryParse(search, out var searchedId)
+                ? query.Where(row => row.Id == searchedId)
+                : query.Where(row => row.Customer.Email.Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(row =>
+                row.StartAt < position.StartAt
+                || (row.StartAt == position.StartAt && row.Id.CompareTo(position.Id) > 0));
+        }
+
+        var page = query
+            .OrderByDescending(row => row.StartAt)
+            .ThenBy(row => row.Id)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminBookingResponse>, Failure>(page));
+    }
+
+    public Task<Result<AdminBookingResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (ForcedAdminFailure is not null)
+        {
+            return Task.FromResult(
+                Result.Failure<AdminBookingResponse, Failure>(ForcedAdminFailure));
+        }
+
+        var row = _adminRows.FirstOrDefault(candidate => candidate.Id == id);
+
+        return Task.FromResult(
+            row is null
+                ? Result.Failure<AdminBookingResponse, Failure>(new Failure(Error.NotFound(
+                    ApiErrorCodes.AdminBooking.NotFound,
+                    $"Booking '{id}' was not found.",
+                    id)))
+                : Result.Success<AdminBookingResponse, Failure>(row));
     }
 
     public Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(

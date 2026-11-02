@@ -245,6 +245,85 @@ internal sealed class TestData
     }
 
     /// <summary>
+    /// Создаёт бронь заданного клиента у заданного барбера на заданное время.
+    /// </summary>
+    /// <remarks>
+    /// Статус проставляется доменными переходами, а не SQL-записью: у брони есть правила
+    /// переходов и exclusion-ограничение, которые тест не должен обходить. Заметка барбера
+    /// пишется доменным методом <c>AddBarberNote</c>: она тримится и пустая становится
+    /// <c>null</c> — так же, как в рабочем сценарии.
+    /// </remarks>
+    /// <param name="barber">Забронированный барбер: профиль, услуга и салон.</param>
+    /// <param name="customerId">Клиент брони.</param>
+    /// <param name="startAt">Начало визита в UTC.</param>
+    /// <param name="status">Итоговый статус; по умолчанию <see cref="BookingStatus.Pending"/>.</param>
+    /// <param name="price">Снимок цены; по умолчанию совпадает с ценой услуги у <paramref name="barber"/>.</param>
+    /// <param name="customerNote">Заметка клиента или <c>null</c>.</param>
+    /// <param name="barberNote">Заметка барбера или <c>null</c>.</param>
+    /// <param name="durationMinutes">Длительность визита в минутах.</param>
+    public async Task<SeededBooking> CreateBookingAsync(
+        SeededBarber barber,
+        Guid customerId,
+        DateTimeOffset startAt,
+        BookingStatus status = BookingStatus.Pending,
+        decimal price = 45m,
+        string? customerNote = null,
+        string? barberNote = null,
+        int durationMinutes = 30)
+    {
+        ArgumentNullException.ThrowIfNull(barber);
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var booking = Require(Booking.Create(
+            customerId,
+            barber.Profile.Id,
+            barber.Service.Id,
+            barber.Salon.Id,
+            startAt,
+            startAt.AddMinutes(durationMinutes),
+            price,
+            $"test-booking-{Guid.NewGuid():N}",
+            customerNote));
+
+        switch (status)
+        {
+            case BookingStatus.Pending:
+                break;
+            case BookingStatus.Confirmed:
+                Require(booking.Confirm());
+                break;
+            case BookingStatus.Cancelled:
+                Require(booking.Cancel());
+                break;
+            case BookingStatus.Completed:
+                Require(booking.Confirm());
+                Require(booking.Complete());
+                break;
+            case BookingStatus.NoShow:
+                Require(booking.Confirm());
+                Require(booking.MarkNoShow());
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(status),
+                    status,
+                    "Unsupported seeded booking status.");
+        }
+
+        if (barberNote is not null)
+        {
+            Require(booking.AddBarberNote(barberNote));
+        }
+
+        db.Bookings.Add(booking);
+        await db.SaveChangesAsync();
+
+        return new SeededBooking(booking.Id, booking.StartAt, booking.Status);
+    }
+
+    /// <summary>
     /// Создаёт заблокированного пользователя — цель для <c>POST api/users/{id}/activation</c>.
     /// </summary>
     public async Task<User> CreateBlockedUserAsync(string email)

@@ -15,12 +15,14 @@ export type AdminRoute =
   | { kind: 'barbers'; barberId: string | null }
   | { kind: 'users'; userId: string | null }
   | { kind: 'catalogue'; tab: CatalogueTab }
+  | { kind: 'bookings'; bookingId: string | null }
   | { kind: 'audit' }
   | { kind: 'notFound' }
 
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
 const BARBER_PATH = /^\/admin\/barbers\/([^/]+)$/
 const USER_PATH = /^\/admin\/users\/([^/]+)$/
+const BOOKING_PATH = /^\/admin\/bookings\/([^/]+)$/
 
 const CATALOGUE_TABS: readonly CatalogueTab[] = [
   'services',
@@ -63,6 +65,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
     return { kind: 'catalogue', tab: parseCatalogueTab(search) }
   }
 
+  // Брони поддержки: список и карточка по id. Фильтры (email, статус) живут
+  // в состоянии экрана и в адрес не попадают — только id брони.
+  if (pathname === '/admin/bookings') {
+    return { kind: 'bookings', bookingId: null }
+  }
+
   // Журнал — точный адрес: карточки записи нет, вложенных путей у раздела тоже.
   // Builder'а нет намеренно: фильтры живут в состоянии и в ссылку не попадают.
   if (pathname === '/admin/audit') {
@@ -79,6 +87,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (userMatch?.[1]) {
     return { kind: 'users', userId: userMatch[1] }
+  }
+
+  const bookingMatch = BOOKING_PATH.exec(pathname)
+
+  if (bookingMatch?.[1]) {
+    return { kind: 'bookings', bookingId: bookingMatch[1] }
   }
 
   const match = REVIEW_PATH.exec(pathname)
@@ -111,6 +125,18 @@ export function usersPath(userId: string | null = null): string {
 
 /** Идентификатор пользователя должен быть GUID: иначе запрос заведомо не найдёт запись. */
 export function isUserId(value: string): boolean {
+  return GUID_PATTERN.test(value)
+}
+
+/** Адрес броней: выбранная карточка — в пути, фильтры остаются в состоянии. */
+export function bookingsPath(bookingId: string | null = null): string {
+  return bookingId
+    ? `/admin/bookings/${encodeURIComponent(bookingId)}`
+    : '/admin/bookings'
+}
+
+/** Идентификатор брони должен быть GUID: иначе запрос заведомо не найдёт запись. */
+export function isBookingId(value: string): boolean {
   return GUID_PATTERN.test(value)
 }
 
