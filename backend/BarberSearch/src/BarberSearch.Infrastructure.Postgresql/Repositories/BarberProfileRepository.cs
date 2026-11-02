@@ -458,6 +458,24 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return rows;
     }
 
+    /// <summary>
+    /// Сколько профилей ждёт подтверждения — ровно <see cref="AdminBarberStatus.Pending"/>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>is_verified = false</c> и <b>без</b> <c>is_active</c>: очередь «На проверке»
+    /// в <c>BuildAdminBarbersQuery</c> фильтрует так же, а <c>is_active</c> спрятал бы
+    /// неподтверждённый профиль, выключенный из поиска, и число разошлось бы с разделом.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.BarberProfiles
+            .AsNoTracking()
+            .CountAsync(profile => !profile.IsVerified, cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
     public async Task<Result<AdminBarberDetailResponse, Failure>> GetAdminByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)

@@ -124,6 +124,20 @@ public interface IReviewRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько отзывов ждёт публикации — ровно вкладка «На модерации» (<c>is_published = false</c>).
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с фильтром раздела: в очередь попадают и новые отзывы, и скрытые
+    /// администратором — в домене это один флаг, <c>Hide()</c> возвращает отзыв в ту же очередь.
+    /// Счётчик не делает join'ов: он отвечает «сколько строк ждёт решения», а контекст визита
+    /// нужен только странице очереди. Строка с оборванной ссылкой (сегодня это невозможно)
+    /// была бы посчитана, но не показана в списке — то же ограничение внутренних join'ов,
+    /// что у админских броней.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Один отзыв любого статуса для админской карточки.
     /// </summary>
     /// <param name="id">Идентификатор отзыва.</param>

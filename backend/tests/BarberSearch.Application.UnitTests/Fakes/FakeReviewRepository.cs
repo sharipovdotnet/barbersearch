@@ -23,6 +23,24 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
 
     public IReadOnlyCollection<Review> Reviews => _reviews.Values;
 
+    /// <summary>Ответ <see cref="CountPendingAsync"/>; тест задаёт число сценария сам.</summary>
+    public int PendingCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика очереди модерации.</summary>
+    public Failure? CountPendingFailure { get; set; }
+
+    /// <summary>Подмена ошибки админской страницы отзывов.</summary>
+    public Failure? AdminPageFailure { get; set; }
+
+    /// <summary>Фильтр последнего запроса админской страницы: сводка просит только <c>false</c>.</summary>
+    public bool? LastAdminIsPublished { get; private set; }
+
+    /// <summary>Курсор последнего запроса админской страницы: сводка просит только <c>null</c>.</summary>
+    public ReviewCursor? LastAdminCursor { get; private set; }
+
+    /// <summary>Лимит последнего запроса админской страницы: сводка просит ровно одну строку.</summary>
+    public int? LastAdminLimit { get; private set; }
+
     public void Add(Review review) => _reviews[review.Id] = review;
 
     public void AddAdminReview(AdminReviewResponse review) => _adminReviews.Add(review);
@@ -185,12 +203,27 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             Result.Success<IReadOnlyList<MyReviewResponse>, Failure>(rows));
     }
 
+    public Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(CountPendingFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingCount));
+
     public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
         bool isPublished,
         ReviewCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
     {
+        LastAdminIsPublished = isPublished;
+        LastAdminCursor = cursor;
+        LastAdminLimit = limit;
+
+        if (AdminPageFailure is { } failure)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminReviewResponse>, Failure>>(failure);
+        }
+
         if (limit <= 0)
         {
             return Task.FromResult<Result<IReadOnlyList<AdminReviewResponse>, Failure>>(
