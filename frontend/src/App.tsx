@@ -4,7 +4,11 @@ import { AppErrorBoundary } from '@/components/error-boundary'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { isAccountReviewsPath } from '@/lib/account-path'
+import {
+  isAccountProfilePath,
+  isAccountReviewsPath,
+  isAccountSecurityPath,
+} from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
@@ -28,6 +32,18 @@ const AccountPage = lazy(() =>
 const AccountReviewsPage = lazy(() =>
   import('@/pages/account-reviews-page').then((module) => ({
     default: module.AccountReviewsPage,
+  })),
+)
+
+const AccountProfilePage = lazy(() =>
+  import('@/pages/account-profile-page').then((module) => ({
+    default: module.AccountProfilePage,
+  })),
+)
+
+const AccountSecurityPage = lazy(() =>
+  import('@/pages/account-security-page').then((module) => ({
+    default: module.AccountSecurityPage,
   })),
 )
 
@@ -65,6 +81,8 @@ function App() {
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAccountReviews = isAccountReviewsPath(pathname)
+  const isAccountProfile = isAccountProfilePath(pathname)
+  const isAccountSecurity = isAccountSecurityPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const pageKey = isRegister
     ? 'register'
@@ -72,13 +90,17 @@ function App() {
       ? 'admin'
       : isAccountReviews
         ? 'account-reviews'
-        : isBarberCabinet
-          ? 'barber-cabinet'
-          : pathname === '/account'
-            ? 'account'
-            : barberId !== null
-              ? `barber:${barberId}`
-              : 'home'
+        : isAccountProfile
+          ? 'account-profile'
+          : isAccountSecurity
+            ? 'account-security'
+            : isBarberCabinet
+              ? 'barber-cabinet'
+              : pathname === '/account'
+                ? 'account'
+                : barberId !== null
+                  ? `barber:${barberId}`
+                  : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -108,6 +130,10 @@ function App() {
               <AdminPage />
             ) : isAccountReviews ? (
               <AccountReviewsPage />
+            ) : isAccountProfile ? (
+              <AccountProfilePage />
+            ) : isAccountSecurity ? (
+              <AccountSecurityPage />
             ) : isBarberCabinet ? (
               <BarberCabinetPage />
             ) : pathname === '/account' ? (

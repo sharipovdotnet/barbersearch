@@ -70,38 +70,38 @@ export function SiteHeader() {
             >
               Как это работает
             </a>
-            {isAuthenticated &&
-              (isBarberUser ? (
-                <a
-                  href={BARBER_CABINET_PATH}
-                  aria-current={isBarberCabinet ? 'page' : undefined}
-                  className={cn(
-                    'transition-colors hover:text-foreground',
-                    isBarberCabinet && 'font-medium text-foreground'
-                  )}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    navigate(BARBER_CABINET_PATH)
-                  }}
-                >
-                  Кабинет барбера
-                </a>
-              ) : (
-                <a
-                  href="/account"
-                  aria-current={isAccount ? 'page' : undefined}
-                  className={cn(
-                    'transition-colors hover:text-foreground',
-                    isAccount && 'font-medium text-foreground'
-                  )}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    navigate('/account')
-                  }}
-                >
-                  Мои записи
-                </a>
-              ))}
+            {isAuthenticated && (
+              <a
+                href="/account"
+                aria-current={isAccount ? 'page' : undefined}
+                className={cn(
+                  'transition-colors hover:text-foreground',
+                  isAccount && 'font-medium text-foreground'
+                )}
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate('/account')
+                }}
+              >
+                Мой кабинет
+              </a>
+            )}
+            {isBarberUser && (
+              <a
+                href={BARBER_CABINET_PATH}
+                aria-current={isBarberCabinet ? 'page' : undefined}
+                className={cn(
+                  'transition-colors hover:text-foreground',
+                  isBarberCabinet && 'font-medium text-foreground'
+                )}
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate(BARBER_CABINET_PATH)
+                }}
+              >
+                Кабинет барбера
+              </a>
+            )}
             {isAdminUser && (
               <a
                 href="/admin"

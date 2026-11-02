@@ -48,6 +48,7 @@ import type {
 } from '@/lib/catalog'
 import type { HairServiceOption } from '@/lib/hair-services'
 import type { MyReview } from '@/lib/my-reviews'
+import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import type { Review } from '@/lib/reviews'
 import type { SpecializationOption } from '@/lib/specializations'
@@ -200,6 +201,31 @@ export function isSessionUser(value: unknown): value is SessionUser {
     isString(value.role) &&
     (value.barberProfileId === null || isNonEmptyString(value.barberProfileId)) &&
     isBoolean(value.isEmailVerified)
+  )
+}
+
+/**
+ * Профиль кабинета: имя, телефон, роль и подтверждения.
+ *
+ * `phoneNumber`, `avatarUrl` и `lastLoginAt` контракт допускает `null`; остальные
+ * строки обязательны. Даты не разбираются — как и в других guard'ах, строка остаётся
+ * строкой.
+ */
+export function isMyProfile(value: unknown): value is MyProfile {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.email) &&
+    isString(value.firstName) &&
+    isString(value.lastName) &&
+    isNullableString(value.phoneNumber) &&
+    isNullableString(value.avatarUrl) &&
+    isUserRole(value.role) &&
+    (value.barberProfileId === null || isNonEmptyString(value.barberProfileId)) &&
+    isBoolean(value.isEmailVerified) &&
+    isBoolean(value.isPhoneVerified) &&
+    isString(value.createdAt) &&
+    isNullableString(value.lastLoginAt)
   )
 }
 

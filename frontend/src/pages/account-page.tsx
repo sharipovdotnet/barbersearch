@@ -1,75 +1,60 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MessageSquare, Scissors, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
-import { AccountSkeleton, BookingsErrorState, RoleGate, SignInGate } from '@/components/account/account-gates'
+import {
+  AccountAccess,
+  BookingsErrorState,
+  SignInGate,
+} from '@/components/account/account-gates'
+import { AccountShell } from '@/components/account/account-shell'
 import { BookingList, type BookingsTab } from '@/components/account/booking-list'
 import { buildBookingView, type BookingView } from '@/components/account/booking-view'
 import { CancelBookingDialog } from '@/components/account/cancel-booking-dialog'
-import { ChangePasswordDialog } from '@/components/account/change-password-dialog'
 import { NextBookingCard } from '@/components/account/next-booking-card'
-import { HowItWorksCard, ProfileCard } from '@/components/account/profile-card'
 import { ReviewDialog } from '@/components/account/review-dialog'
-import { SessionUnavailable } from '@/components/session-unavailable'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
 import { useCustomerBookings } from '@/hooks/use-bookings'
-import { useSession } from '@/hooks/use-session'
-import { ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
-import type { SessionUser } from '@/lib/auth'
+import { ACCOUNT_PATH } from '@/lib/account-path'
 import { formatDateTime } from '@/lib/format'
 import { formatPageRange } from '@/lib/paging'
-import { goToSection, isPlainClick, navigate } from '@/lib/router'
-import { cn } from '@/lib/utils'
 
 /**
- * Кабинет клиента.
+ * Кабинет: «Мои записи».
  *
  * Страница отвечает на один вопрос — «что у меня с визитами» — и не пытается быть
- * дашбордом: сверху ближайшая запись, ниже «Предстоящие» и «История», сбоку аккаунт.
- * Вкладки — два независимых серверных списка: скоуп (`upcoming`/`past`) определяет
- * сервер, клиент только переключает вкладку и листает страницы. Клиент, барбер и
- * администратор видят разные экраны: реализован только клиентский.
+ * дашбордом: сверху ближайшая запись, ниже «Предстоящие» и «История». Вкладки — два
+ * независимых серверных списка: скоуп (`upcoming`/`past`) определяет сервер, клиент
+ * только переключает вкладку и листает страницы.
+ *
+ * Кабинет один для всех ролей: барбер и администратор тоже могут записаться к мастеру,
+ * а их рабочие зоны открываются из каркаса отдельной ссылкой.
  */
 export function AccountPage() {
-  const { status, user } = useSession()
-
   useEffect(() => {
     document.title = 'Мои записи — BarberSearch'
   }, [])
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
-      {status === 'loading' && <AccountSkeleton />}
-
-      {status === 'unavailable' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <SessionUnavailable />
-        </div>
+    <AccountAccess
+      title="Войдите, чтобы увидеть записи"
+      description="Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю."
+    >
+      {(user) => (
+        <AccountShell
+          user={user}
+          section="bookings"
+          title="Мои записи"
+          description="Ближайший визит, история и отмена — без звонков в салон."
+        >
+          <BookingsCabinet />
+        </AccountShell>
       )}
-
-      {status === 'anonymous' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <SignInGate />
-        </div>
-      )}
-
-      {status === 'authenticated' && user && user.role !== 'Customer' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <RoleGate role={user.role} />
-        </div>
-      )}
-
-      {status === 'authenticated' && user && user.role === 'Customer' && (
-        <CustomerCabinet user={user} />
-      )}
-    </div>
+    </AccountAccess>
   )
 }
 
-function CustomerCabinet({ user }: { user: SessionUser }) {
-  const { signOut } = useSession()
+function BookingsCabinet() {
   const [tab, setTab] = useState<BookingsTab>('upcoming')
   // История ленивая: на входе в кабинет грузятся только «Предстоящие».
   const historyEnabled = tab === 'history'
@@ -94,9 +79,6 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
   const [reviewedIds, setReviewedIds] = useState<ReadonlySet<string>>(
     () => new Set()
   )
-  const [isPasswordOpen, setIsPasswordOpen] = useState(false)
-  // История уже показала хотя бы одну строку: пустым «Предстоящим» есть что предложить.
-  const [knownHistory, setKnownHistory] = useState(false)
 
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -106,13 +88,6 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(timer)
   }, [])
-
-  useEffect(() => {
-    if (history.status === 'ready' && history.items.length > 0) {
-      // oxlint-disable-next-line react/set-state-in-effect -- история открыта и непустая
-      setKnownHistory(true)
-    }
-  }, [history.status, history.items.length])
 
   // Своя карточка на каждой строке: имя и адрес приходят из профиля барбера,
   // а не из брони, поэтому вид собирается после профилей.
@@ -131,11 +106,6 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
       ),
     [list.items, profiles]
   )
-
-  async function handleSignOut() {
-    await signOut()
-    navigate('/')
-  }
 
   function handleCancelled(view: BookingView) {
     setAnnouncement(
@@ -161,36 +131,6 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Мои записи
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ближайший визит, история и отмена — без звонков в салон.
-          </p>
-        </div>
-
-        <div className="sm:pt-0.5">
-          <a
-            href={ACCOUNT_REVIEWS_PATH}
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'min-h-9 sm:min-h-0'
-            )}
-            onClick={(event) => {
-              if (isPlainClick(event)) {
-                event.preventDefault()
-                navigate(ACCOUNT_REVIEWS_PATH)
-              }
-            }}
-          >
-            <MessageSquare data-icon="inline-start" aria-hidden />
-            Мои отзывы
-          </a>
-        </div>
-      </header>
-
       {announcement && (
         <div
           role="status"
@@ -213,77 +153,64 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
           <SignInGate
             title="Сессия истекла"
             description="Войдите снова, чтобы увидеть свои записи: cookie-сессия закончилась, пока страница была открыта."
+            redirectTo={ACCOUNT_PATH}
             onSignedIn={handleSignedIn}
           />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
-          <div className="space-y-6">
-            {isHeroLoading && <Skeleton className="h-64 rounded-xl" />}
+        <div className="space-y-6">
+          {isHeroLoading && <Skeleton className="h-64 rounded-xl" />}
 
-            {upcoming.status === 'error' && (
-              <BookingsErrorState
-                message={upcoming.error ?? 'Не удалось загрузить записи.'}
-                onRetry={upcoming.reload}
-              />
-            )}
-
-            {upcoming.status === 'ready' &&
-              (hero ? (
-                <NextBookingCard
-                  view={hero}
-                  now={now}
-                  onRequestCancel={() => setCancelTarget(hero)}
-                />
-              ) : (
-                <NoUpcomingCard hasHistory={knownHistory} />
-              ))}
-
-            {isListLoading && <ListSkeleton />}
-
-            {list.status === 'error' && (
-              <BookingsErrorState
-                message={list.error ?? 'Не удалось загрузить записи.'}
-                onRetry={list.reload}
-              />
-            )}
-
-            {list.status === 'ready' && (
-              <BookingList
-                items={listViews}
-                tab={tab}
-                onTabChange={setTab}
-                reviewedIds={reviewedIds}
-                rangeLabel={formatPageRange(list.offset, list.items.length)}
-                hasPrev={list.hasPrev}
-                hasNext={list.hasNext}
-                isLoadingPage={list.isLoadingPage}
-                pageError={list.pageError}
-                onPrev={list.goPrev}
-                onNext={list.goNext}
-                pageIndex={list.pageIndex}
-                focusTargetRef={panelRef}
-                onRequestCancel={setCancelTarget}
-                onRequestReview={setReviewTarget}
-              />
-            )}
-
-            {profilesFailed && (
-              <p className="text-xs text-muted-foreground">
-                Часть карточек барберов не загрузилась — имена и адреса могут быть
-                неполными.
-              </p>
-            )}
-          </div>
-
-          <aside className="space-y-4 lg:sticky lg:top-20">
-            <ProfileCard
-              user={user}
-              onChangePassword={() => setIsPasswordOpen(true)}
-              onSignOut={() => void handleSignOut()}
+          {upcoming.status === 'error' && (
+            <BookingsErrorState
+              message={upcoming.error ?? 'Не удалось загрузить записи.'}
+              onRetry={upcoming.reload}
             />
-            <HowItWorksCard />
-          </aside>
+          )}
+
+          {upcoming.status === 'ready' && hero && (
+            <NextBookingCard
+              view={hero}
+              now={now}
+              onRequestCancel={() => setCancelTarget(hero)}
+            />
+          )}
+
+          {isListLoading && <ListSkeleton />}
+
+          {list.status === 'error' && (
+            <BookingsErrorState
+              message={list.error ?? 'Не удалось загрузить записи.'}
+              onRetry={list.reload}
+            />
+          )}
+
+          {list.status === 'ready' && (
+            <BookingList
+              items={listViews}
+              tab={tab}
+              onTabChange={setTab}
+              reviewedIds={reviewedIds}
+              rangeLabel={formatPageRange(list.offset, list.items.length)}
+              hasPrev={list.hasPrev}
+              hasNext={list.hasNext}
+              isLoadingPage={list.isLoadingPage}
+              pageError={list.pageError}
+              onPrev={list.goPrev}
+              onNext={list.goNext}
+              pageIndex={list.pageIndex}
+              focusTargetRef={panelRef}
+              onRequestCancel={setCancelTarget}
+              onRequestReview={setReviewTarget}
+            />
+          )}
+
+          {profilesFailed && (
+            <p className="text-xs text-muted-foreground">
+              Часть карточек барберов не загрузилась — имена и адреса могут быть
+              неполными.
+            </p>
+          )}
         </div>
       )}
 
@@ -299,66 +226,7 @@ function CustomerCabinet({ user }: { user: SessionUser }) {
         onClose={() => setReviewTarget(null)}
         onSubmitted={handleReviewed}
       />
-
-      <ChangePasswordDialog
-        open={isPasswordOpen}
-        onOpenChange={setIsPasswordOpen}
-        onSuccess={() =>
-          setAnnouncement(
-            'Пароль изменён. Остальные сессии входа завершены — здесь вы остались.'
-          )
-        }
-      />
     </div>
-  )
-}
-
-/** Пустой кабинет: не белая дыра, а приглашение к первой записи. */
-function NoUpcomingCard({ hasHistory }: { hasHistory: boolean }) {
-  if (hasHistory) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-8 text-center">
-        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-          <Scissors className="size-4 text-muted-foreground" aria-hidden />
-        </div>
-        <div className="space-y-1">
-          <p className="font-medium">Предстоящих визитов нет</p>
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Все прошлые записи — в истории ниже. Можно выбрать барбера и записаться
-            снова.
-          </p>
-        </div>
-        <Button size="sm" onClick={() => goToSection('barbers')}>
-          Найти барбера
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-          <Scissors className="size-5 text-muted-foreground" aria-hidden />
-        </div>
-        <div className="space-y-1">
-          <h2 className="font-heading text-lg font-semibold tracking-tight">
-            Пока ни одной записи
-          </h2>
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Выберите барбера, услугу и свободное время — запись появится здесь,
-            вместе со статусом и возможностью отмены.
-          </p>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Например: Fade, Beard, Classic cut
-        </p>
-        <Button onClick={() => goToSection('barbers')}>
-          <Scissors data-icon="inline-start" aria-hidden />
-          Найти барбера
-        </Button>
-      </CardContent>
-    </Card>
   )
 }
 

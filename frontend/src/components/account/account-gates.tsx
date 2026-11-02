@@ -1,6 +1,8 @@
-import { LogIn, ShieldAlert, TriangleAlert } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { LogIn, TriangleAlert } from 'lucide-react'
 
 import { LoginDialog } from '@/components/login-dialog'
+import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Card,
@@ -10,10 +12,61 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
+import { useSession } from '@/hooks/use-session'
+import type { SessionUser } from '@/lib/auth'
 import { REGISTER_PATH } from '@/lib/register-path'
-import { isPlainClick, navigate } from '@/lib/router'
+import { isPlainClick, navigate, usePathname } from '@/lib/router'
 import { cn } from '@/lib/utils'
+
+/**
+ * Вход в кабинет.
+ *
+ * Проверяет сессию один раз для всех разделов и монтирует экран только после
+ * `authenticated`. Роли не ограничивают кабинет: барбер и администратор тоже видят
+ * здесь свои данные, а рабочие зоны открываются из каркаса.
+ */
+export function AccountAccess({
+  title = 'Войдите в личный кабинет',
+  description = 'Записи, отзывы и настройки профиля доступны после входа. Вход по email и паролю.',
+  children,
+}: {
+  title?: string
+  description?: string
+  children: (user: SessionUser) => ReactNode
+}) {
+  const { status, user } = useSession()
+  const pathname = usePathname()
+
+  if (status === 'loading') {
+    return (
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
+        <AccountSkeleton />
+      </div>
+    )
+  }
+
+  if (status === 'unavailable') {
+    return (
+      <div className="mx-auto flex min-h-[55vh] w-full max-w-5xl items-center justify-center px-4 py-8 sm:py-10">
+        <SessionUnavailable />
+      </div>
+    )
+  }
+
+  if (status === 'anonymous' || !user) {
+    return (
+      <div className="mx-auto flex min-h-[55vh] w-full max-w-5xl items-center justify-center px-4 py-8 sm:py-10">
+        <SignInGate
+          title={title}
+          description={description}
+          redirectTo={pathname}
+        />
+      </div>
+    )
+  }
+
+  return <>{children(user)}</>
+}
 
 /** Экран до входа: объясняет, что даёт кабинет, и даёт единственное действие. */
 export function SignInGate({
@@ -75,97 +128,42 @@ export function SignInGate({
   )
 }
 
-/**
- * Кабинет клиента — единственная реализованная роль.
- *
- * Барберу и администратору честно говорим, что их кабинет ещё не готов, вместо
- * пустого экрана «нет записей», который читался бы как ошибка.
- */
-export function RoleGate({ role }: { role: string }) {
-  const isBarber = role === 'Barber'
-  const isAdmin = role === 'Admin'
-
-  return (
-    <div className="mx-auto w-full max-w-md">
-      <Card>
-        <CardHeader>
-          <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-            <ShieldAlert className="size-5 text-muted-foreground" aria-hidden />
-          </div>
-          <CardTitle>
-            {isBarber
-              ? 'Это кабинет клиента'
-              : isAdmin
-                ? 'Вы администратор'
-                : 'Кабинет администратора ещё не готов'}
-          </CardTitle>
-          <CardDescription>
-            {isBarber
-              ? 'Вы вошли как барбер. Это кабинет клиента: записи клиентов, подтверждение и заметки живут в кабинете барбера.'
-              : isAdmin
-                ? 'Модерация отзывов, барберы и справочники — в отдельном разделе администрирования.'
-                : 'Управление каталогом и модерацией отзывов появится отдельным разделом.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2">
-          {isBarber && (
-            <Button
-              size="sm"
-              className="h-11 sm:h-8"
-              onClick={() => {
-                navigate(BARBER_CABINET_PATH)
-              }}
-            >
-              Открыть кабинет барбера
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              size="sm"
-              onClick={() => {
-                navigate('/admin')
-              }}
-            >
-              Открыть администрирование
-            </Button>
-          )}
-          {!isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigate('/')
-              }}
-            >
-              На главную
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-/** Скелетон повторяет силуэт страницы, чтобы загрузка не прыгала версткой. */
+/** Скелетон каркаса: рейл и заголовок не прыгают после загрузки. */
 export function AccountSkeleton() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
-      <div className="space-y-6">
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-72" />
+    <>
+      <p role="status" className="sr-only">
+        Загружаем кабинет…
+      </p>
+      <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 border-b border-border pb-4">
+            <Skeleton className="size-10 rounded-full" aria-hidden />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" aria-hidden />
+              <Skeleton className="h-3 w-40" aria-hidden />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1 lg:grid-cols-1">
+            <Skeleton className="h-14 rounded-lg lg:h-9" aria-hidden />
+            <Skeleton className="h-14 rounded-lg lg:h-9" aria-hidden />
+            <Skeleton className="h-14 rounded-lg lg:h-9" aria-hidden />
+            <Skeleton className="h-14 rounded-lg lg:h-9" aria-hidden />
+          </div>
         </div>
-        <Skeleton className="h-64 rounded-xl" />
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-64 rounded-lg" />
-          <Skeleton className="h-52 rounded-xl" />
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-56" aria-hidden />
+            <Skeleton className="h-4 w-72" aria-hidden />
+          </div>
+          <Skeleton className="h-64 rounded-xl" aria-hidden />
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-64 rounded-lg" aria-hidden />
+            <Skeleton className="h-52 rounded-xl" aria-hidden />
+          </div>
         </div>
       </div>
-      <div className="space-y-4">
-        <Skeleton className="h-48 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
-      </div>
-    </div>
+    </>
   )
 }
 
