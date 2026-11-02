@@ -166,7 +166,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` — ✅ этап 3 |
 | Каталог | create/update/activation | ✅ этап 4: `GET /api/admin/catalogue/{hair-services\|specializations\|salons}` — полный справочник, включая выключенные строки, `status=all\|active\|hidden`, поиск, `isActive` и `usageCount`; мутации остаются на существующих эндпоинтах |
 | Брони | `GET /api/bookings` | Имена и контекст в ответе; поиск пользователя |
-| Журнал | таблица `audit_log` | `GET /api/admin/audit` (read-only) |
+| Журнал | таблица `audit_log` | ✅ этап 5: `GET /api/admin/audit` (read-only) — keyset-лента, фильтры `entityType=all\|user\|barber_profile\|review`, `actor`, `from`/`to` (UTC-сутки), разобранный `changes`; автор резолвится `LEFT JOIN` и может быть удалён, имя сущности не резолвится |
 | Сводка | — | `GET /api/admin/summary` (опционально, позже) |
 
 > Этап 1 (28.10.2026) закрыл админские чтения отзывов: `GET /api/admin/reviews`
@@ -187,6 +187,16 @@ Git-корень на уровень выше рабочей папки, поэ�
 > быть видна сразу. Публичные чтения и их DTO не изменились; у салонов это первое
 > чтение в API. Мутации остались на `api/hair-services`, `api/specializations`
 > и `api/salons`.
+>
+> Этап 5 (2.11.2026) закрыл чтение журнала: `GET /api/admin/audit` под `AdminOnly`
+> отдаёт `PagedResponse<AdminAuditEntryResponse>` — keyset `(occurred_at DESC, id)`,
+> `entityType` (`all` по умолчанию; имена `user`, `barber_profile`, `review`), `actor`
+> (подстрока email, `%`/`_`/`\` экранируются), `from`/`to` (включающие UTC-сутки),
+> `pageSize` 1..100 и непрозрачный курсор. `payload` разобран в `changes`, поля
+> отсортированы по имени, `[redacted]` не раскрывается, нечитаемая форма даёт `[]`.
+> Автор приходит через `LEFT JOIN users` и может быть `null`; `entity_id` есть,
+> а имени сущности нет — она могла быть переименована или удалена. Эндпоинт только
+> `GET`: `audit_log` пишет `AuditTrail`, ретенции и экспорта нет.
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -451,10 +461,16 @@ Read-only история: когда, кто, что изменил, у како
 `isPublished: false → true`. Фильтры по типу сущности, автору и дате.
 «Записи не редактируются» — часть доверия к журналу.
 
-Таблица `audit_log` уже пишется, но read-эндпоинта нет. Аудит покрывает
-только `User`, `BarberProfile`, `Review`, поэтому правки каталога
-в журнал не попадут. Либо расширяем allowlist, либо честно говорим,
-что каталог не аудируется.
+✅ Read-эндпоинт есть (этап 5, 2.11.2026): `GET /api/admin/audit` — keyset-лента
+`(occurred_at DESC, id)`, фильтры `entityType`/`actor`/`from`/`to`, разобранный
+`changes` с порядком полей по имени, автор через `LEFT JOIN` (может быть удалён или
+отсутствовать), `[redacted]` не раскрывается. Экран `/admin/audit` фильтры держит
+в состоянии, листает общим пейджером и раскрывает diff по-русски.
+
+Таблица `audit_log` пишется, аудит покрывает только `User`, `BarberProfile`,
+`Review`, поэтому правки каталога, салонов, услуг, специализаций и броней
+в журнал не попадают. Решение этапа 5 — честно сказать об этом в UI и документации,
+а не расширять allowlist: расширение (и ретенция, и экспорт) — отдельный срез.
 
 ### 3.10 «Сводка» — позже
 
@@ -561,7 +577,15 @@ Read-only история: когда, кто, что изменил, у како
    деактивация; переименования салона нет — название read-only. Правки каталога
    не пишутся в `audit_log` (allowlist `AuditTrail`), и экран этого не обещает.
 5. **«Журнал».** Read-only история и diff.
+   ✅ Реализовано 2.11.2026: `/admin/audit` — пятый пункт рейла, `GET /api/admin/audit`
+   с keyset-лентой и фильтрами по типу сущности, автору и UTC-датам, общий
+   пейджер (20 строк, «Назад» без запроса), раскрываемый diff с русскими
+   подписями полей, «Система»/«Удалённый пользователь», `401`/`403`, пустые
+   и ошибочные состояния. В URL фильтры не пишутся (email — PII), действий над
+   записями нет: журнал неизменяем. Известное ограничение — аудит только
+   `User`/`BarberProfile`/`Review`; каталог, салоны и брони в журнал не попадают.
 6. **«Брони» и «Сводка».** Поддержка и агрегаты, когда появятся контракты.
+   Порядок после #38: сначала «Брони», затем «Сводка» (опционально).
 
 Порядок продиктован риском: отзывы обратимы и ежедневны, барберы влияют
 на предложение, пользователи — самые чувствительные, каталог — редкий,
@@ -799,6 +823,43 @@ Read-only история: когда, кто, что изменил, у како
     сетку по `min-content` (`384 px` при ширине `320`) — оба столбца
     `AdminShell` получили `min-w-0`, и 320 теперь без горизонтального скролла.
 
+44. **Реализация этапа 5 — «Журнал» (2.11.2026).** Backend сначала получил
+    красные интеграционные тесты `AdminAuditReadTests`: `/api/admin/audit`
+    отвечал `404`, а `401`/`403` для несуществующего маршрута не выполнялись
+    (вывод — `frontend/verification/issue-38-before.txt`).
+45. Backend: `AdminAuditEntityType` + `AdminAuditFilters` + `AdminAuditCursor`,
+    три DTO (`AdminAuditEntryResponse`, `AdminAuditActorResponse`,
+    `AdminAuditFieldChangeResponse`), запрос и обработчик `GetAdminAuditLog`,
+    коды `admin.audit.entityType|actor|period|pageSize|cursor.invalid`.
+46. Backend: `IAuditLogRepository` и `AuditLogRepository` — один SQL с `LEFT JOIN
+    users` по `actor_user_id`, keyset `(occurred_at DESC, id)`, разбор `payload`
+    в памяти с сортировкой полей по имени; неизвестная форма не роняет список
+    (`changes: []`). Индекс `(occurred_at DESC, id)` добавлен миграцией
+    `AddAdminAuditKeysetIndex` после `EXPLAIN (ANALYZE, BUFFERS)` на 120 000 строк
+    (`AuditLogModelTests` обновлён).
+47. Frontend: `lib/admin-path.ts` (`audit`, точный `/admin/audit`, без builder'а),
+    пятый пункт рейла, заголовок документа, dispatch на `AuditScreen`;
+    `lib/admin-audit.ts` (типы, подписи, `formatAuditAction`, `formatAuditValue`,
+    чтение, разбор ошибок), `response-guards` — `isAdminAuditEntry`/
+    `isAdminAuditPage`, `hooks/use-admin-audit-list.ts` на `usePagedList`.
+48. Frontend: `components/admin/audit-screen.tsx` (заголовок, фильтры типа/автора/
+    дат, «Сбросить фильтры», скелетон, пусто/ошибка/`401`, общий пейджер) и
+    `audit-entry.tsx` (время, автор «Система»/«Удалённый пользователь», тип
+    сущности и 8-символьный id, действие, раскрываемый `<dl>` с diff'ом).
+49. E2E: в `seed.sql` секция 7 — 21 строка `audit_log` на 2026-09-10 UTC
+    (id `9e700000-…`, актор — админ фикстур, у строки 21 `actor_user_id = NULL`);
+    `fixtures.journal`, `pages/admin-audit-page.ts`,
+    `specs/admin-audit.spec.ts` (рейл, дата/тип/автор, порядок, вторая страница,
+    diff, read-only, внедрённый `401`) и `/admin/audit` в axe 1280/320.
+50. Проверено: backend build 0/0, backend-тесты — 187 domain + 338 application +
+    83 infrastructure + 93 integration, вывод —
+    `frontend/verification/issue-38-backend-tests.txt`; frontend `npm test` —
+    116 тестов в 12 файлах, `npm run lint` — 0/0 (201 файл), `npm run build` —
+    успешно (2298 модулей, entry 394.92 kB / 127.69 kB gzip, `admin-page`
+    163.45 / 36.20). Playwright на запущенном API и `barbersearch_e2e`:
+    123 passed, 2 skipped (было 105 + 2), включая `/admin/audit` в desktop,
+    mobile, axe 1280 и 320; логи — `frontend/verification/issue-38-e2e.txt`.
+
 ---
 
 ## 9. Карта файлов
@@ -820,6 +881,9 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: экран каталога | `frontend/src/components/admin/catalogue-screen.tsx`, `catalogue-tabs.tsx`, `catalogue-table.tsx` |
 | Админка: диалоги каталога | `frontend/src/components/admin/hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`, `catalogue-action-dialog.tsx` |
 | Админка: API каталога | `frontend/src/lib/admin-catalogue.ts`, `frontend/src/hooks/use-admin-catalogue.ts` |
+| Админка: экран журнала | `frontend/src/components/admin/audit-screen.tsx`, `audit-entry.tsx` |
+| Админка: API журнала | `frontend/src/lib/admin-audit.ts`, `frontend/src/hooks/use-admin-audit-list.ts` |
+| Аудит: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminAuditController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/AuditLogRepository.cs` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
 | Сессия | `frontend/src/components/session-provider.tsx`, `src/hooks/use-session.ts`, `src/lib/auth.ts` |

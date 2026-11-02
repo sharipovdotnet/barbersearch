@@ -7,6 +7,7 @@ import {
   AdminSignInGate,
 } from '@/components/admin/admin-gate'
 import { AdminRail } from '@/components/admin/admin-rail'
+import { AuditScreen } from '@/components/admin/audit-screen'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
@@ -26,6 +27,7 @@ const ADMIN_TITLES = {
   barbers: 'Барберы — администрирование BarberSearch',
   catalogue: 'Каталог — администрирование BarberSearch',
   users: 'Пользователи — администрирование BarberSearch',
+  audit: 'Журнал — администрирование BarberSearch',
 } as const
 
 /** Заголовок вкладки по маршруту: `notFound` показывается как отзывы. */
@@ -37,6 +39,8 @@ function titleFor(route: AdminRoute): string {
       return ADMIN_TITLES.users
     case 'catalogue':
       return ADMIN_TITLES.catalogue
+    case 'audit':
+      return ADMIN_TITLES.audit
     default:
       return ADMIN_TITLES.reviews
   }
@@ -143,6 +147,14 @@ export function AdminPage() {
     return (
       <AdminShell>
         <CatalogueScreen tab={route.tab} />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'audit') {
+    return (
+      <AdminShell>
+        <AuditScreen />
       </AdminShell>
     )
   }

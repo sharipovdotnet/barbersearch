@@ -6,6 +6,7 @@ const SECTIONS = [
   { href: '/admin/barbers', label: 'Барберы' },
   { href: '/admin/catalogue', label: 'Каталог' },
   { href: '/admin/users', label: 'Пользователи' },
+  { href: '/admin/audit', label: 'Журнал' },
 ] as const
 
 /**

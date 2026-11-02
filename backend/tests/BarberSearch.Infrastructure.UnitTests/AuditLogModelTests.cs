@@ -17,6 +17,10 @@ namespace BarberSearch.Infrastructure.UnitTests;
 /// </remarks>
 public class AuditLogModelTests
 {
+    /// <summary>
+    /// Направление сортировки keyset-индекса: <c>occurred_at DESC, id</c>.
+    /// </summary>
+    private static readonly bool[] KeysetDescending = [true, false];
     [Fact]
     public void AuditLog_MapsToTableWithPrimaryKey()
     {
@@ -71,15 +75,16 @@ public class AuditLogModelTests
 
         Assert.Equal(3, indexes.Count);
 
-        Assert.True(indexes.TryGetValue("ix_audit_log_occurred_at", out var occurredAt));
+        Assert.True(indexes.TryGetValue("ix_audit_log_occurred_at_id", out var occurredAt));
         Assert.NotNull(occurredAt);
-        var occurredAtProperty = Assert.Single(occurredAt.Properties);
 
-        Assert.Equal("OccurredAt", occurredAtProperty.Name);
-
-        // Пустой список IsDescending означает «все колонки по убыванию» — так EF хранит
-        // результат IsDescending(true); сгенерированный SQL содержит occurred_at DESC.
-        Assert.NotNull(occurredAt.IsDescending);
+        // Ключ админской ленты: occurred_at DESC, id. Второй столбец обязателен —
+        // строки одного SaveChanges делят occurred_at, и без id keyset теряет строки.
+        Assert.Collection(
+            occurredAt.Properties,
+            property => Assert.Equal("OccurredAt", property.Name),
+            property => Assert.Equal("Id", property.Name));
+        Assert.Equal(KeysetDescending, occurredAt.IsDescending);
 
         Assert.True(indexes.TryGetValue("ix_audit_log_entity_type_entity_id", out var byEntity));
         Assert.NotNull(byEntity);

@@ -1064,12 +1064,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasIndex("ActorUserId")
                         .HasDatabaseName("ix_audit_log_actor_user_id");
 
-                    b.HasIndex("OccurredAt")
-                        .IsDescending()
-                        .HasDatabaseName("ix_audit_log_occurred_at");
-
                     b.HasIndex("EntityType", "EntityId")
                         .HasDatabaseName("ix_audit_log_entity_type_entity_id");
+
+                    b.HasIndex("OccurredAt", "Id")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("ix_audit_log_occurred_at_id");
 
                     b.ToTable("audit_log", (string)null);
                 });

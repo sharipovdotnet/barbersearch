@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-02 (после среза issue-37): domain **187**, application **307**,
-infrastructure **83**, integration **79** — все зелёные. История прогонов по срезам и негативные
+Актуальный baseline на 2026-11-02 (после среза issue-38): domain **187**, application **338**,
+infrastructure **83**, integration **93** — все зелёные. История прогонов по срезам и негативные
 проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -648,20 +648,20 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 307 application + 83 infrastructure + 79 integration; unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 87 обработчиков (72 command + 15 query), 8 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 187 domain + 338 application + 83 infrastructure + 93 integration; unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 88 обработчиков (72 command + 16 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 16 конфигураций, 8 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
-| Web | ✅ 18 контроллеров / 95 endpoint (87 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34); `bookings.*` без FK сознательно |
+| Web | ✅ 19 контроллеров / 96 endpoint (88 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (17):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (18):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
-`AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`.
+`AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -1114,6 +1114,20 @@ cheaper than maintaining an index, and the order (`category, name, id` / `name, 
 `city, name, id`) is a sort over the same small set. Add an index only with
 `EXPLAIN (ANALYZE, BUFFERS)` evidence.
 
+**Admin audit keyset (2026-11-02, issue-38).** The administrator's journal reads `audit_log`
+ordered `occurred_at DESC, id` with keyset paging. `EXPLAIN (ANALYZE, BUFFERS)` on 120 000 rows
+and a 500-row `users` table showed `Incremental Sort` on `(occurred_at, id)` for all four
+measured queries — the first page, `entity_type = 'review'`, an actor email `ILIKE`, and a
+one-hour period: the single-column `ix_audit_log_occurred_at` gives order on `occurred_at` only,
+and the `id` tie-break costs an extra sort, because rows written by one `SaveChanges` share
+`occurred_at`. Migration `AddAdminAuditKeysetIndex` replaces that index with the composite
+`ix_audit_log_occurred_at_id` (`occurred_at DESC, id`); the re-measured first page is an
+`Index Scan` with no sort node (0.25 ms vs 1.33 ms), and the leading column still serves the
+period filter, so the separate index was redundant and was dropped. The entity-type and actor
+filters keep the same plan shape (61 rows scanned for 20 `review` matches, 906 for the actor
+substring); no `(entity_type, …)` index was added — with three types the filter discards at most
+two thirds of the rows, and no sort or full scan appeared.
+
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
 `User.NormalizeEmail` (`Trim().ToLowerInvariant()`), validates it through
@@ -1401,8 +1415,8 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   500 символов обрезаются с маркером. Чтение при инциденте: история сущности —
   `SELECT * FROM audit_log WHERE entity_type = 'user' AND entity_id = '…' ORDER BY occurred_at`
   (индекс `ix_audit_log_entity_type_entity_id`), действия пользователя — по `actor_user_id`,
-  последние события — по `occurred_at DESC` (`ix_audit_log_occurred_at`). Ретенции и
-  партиционирования пока нет — это отдельный срез.
+  последние события — по `occurred_at DESC, id` (`ix_audit_log_occurred_at_id`, с issue-38).
+  Ретенции и партиционирования пока нет — это отдельный срез.
 
 ### 15.9 Order of operations
 
@@ -1446,7 +1460,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**18 controllers, 95 endpoints: 87 domain + 8 auth** — one endpoint per Application handler, plus
+**19 controllers, 96 endpoints: 88 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1468,6 +1482,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
 | `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
 | `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
+| `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 
 Conventions:
 
@@ -1628,6 +1643,31 @@ Read endpoints (added 2026-10-19):
   `HairServicesController`, `SpecializationsController` and `SalonsController` — no admin mutation
   precedent was created. **Catalogue edits are not written to `audit_log`:** the `AuditTrail`
   allowlist covers only `User`, `BarberProfile` and `Review`; the admin UI promises no audit.
+- **Admin audit (2026-11-02, issue-38).** `GET api/admin/audit?entityType=all|user|barber_profile|review&actor=&from=&to=&cursor=&pageSize=`
+  is the first read of `audit_log` (R-34) and is closed by `AdminOnly`; there is no write action,
+  and none will be added — the journal is immutable. The response is
+  `PagedResponse<AdminAuditEntryResponse>`: id, `occurredAt`, `action` (`{entity}.{created|updated|deleted}`),
+  `entityType`, `entityId`, `actor: { id, email } | null`, and `changes`. `payload` is parsed in
+  the repository (Application never sees `AuditLogEntry`): `{"changes":{field:{from,to}}}` becomes
+  from/to pairs, `{"values":{field:value}}` becomes `from = null, to = value`; fields are sorted by
+  name (Ordinal) because `jsonb` keeps no key order; an unknown shape gives `changes: []` and the
+  row is still returned; secrets stay `"[redacted]"`. The actor is resolved with a `LEFT JOIN
+  users`, so a system row (`actor_user_id = null`) yields `actor: null` and a deleted actor yields
+  `actor.email = null` — neither row drops out of the unfiltered list, and a row whose author no
+  longer matches the email filter is simply absent from that filtered page. `entityType` is trimmed
+  and case-insensitive (`Review` = `review`); `actor` is a trimmed `ILIKE` substring over the email
+  with `%`, `_` and `\` escaped and at most 100 characters; `from`/`to` are `yyyy-MM-dd` and mean
+  whole UTC days, both inclusive (`occurred_at >= from 00:00Z AND occurred_at < (to + 1 day) 00:00Z`);
+  an unknown type, a long actor, a broken period, an out-of-range `pageSize` and a foreign/broken
+  cursor are `400` (`admin.audit.entityType|actor|period|pageSize|cursor.invalid`). Order is
+  `occurred_at DESC, id`, the cursor is the opaque `(occurred_at, id)` pair with the
+  `admin.audit` scope tag (a cursor from another list is rejected instead of paginating a foreign
+  order), and `pageSize` defaults to 20 and is capped at 100. The entity **name is deliberately
+  not resolved**: the record may be renamed or deleted, so the row carries `entity_id` only.
+  The journal covers only `User`, `BarberProfile` and `Review`; **catalogue, salon, service,
+  specialization and booking edits are not written to `audit_log`** — this is a known limitation,
+  not a bug, and the UI states it. Retention, export and full-text search over `payload` are not
+  part of this slice.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off

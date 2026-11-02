@@ -15,6 +15,7 @@ export type AdminRoute =
   | { kind: 'barbers'; barberId: string | null }
   | { kind: 'users'; userId: string | null }
   | { kind: 'catalogue'; tab: CatalogueTab }
+  | { kind: 'audit' }
   | { kind: 'notFound' }
 
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
@@ -60,6 +61,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (pathname === '/admin/catalogue') {
     return { kind: 'catalogue', tab: parseCatalogueTab(search) }
+  }
+
+  // Журнал — точный адрес: карточки записи нет, вложенных путей у раздела тоже.
+  // Builder'а нет намеренно: фильтры живут в состоянии и в ссылку не попадают.
+  if (pathname === '/admin/audit') {
+    return { kind: 'audit' }
   }
 
   const barberMatch = BARBER_PATH.exec(pathname)

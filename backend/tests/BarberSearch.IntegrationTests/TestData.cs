@@ -520,6 +520,59 @@ internal sealed class TestData
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Вставляет строку журнала аудита напрямую SQL-запросом.
+    /// </summary>
+    /// <remarks>
+    /// Строка аудита — инфраструктурная запись без доменных правил: <c>AuditTrail</c> пишет
+    /// только реальные изменения через репозитории, а тесту нужны точные <c>occurred_at</c>,
+    /// автор и <c>payload</c>. Вставка идёт через тот же <see cref="ApplicationDbContext"/>
+    /// и тот же тип параметров, что и у приложения; <c>jsonb</c> приводится явно.
+    /// </remarks>
+    /// <param name="occurredAt">Момент фиксации изменения.</param>
+    /// <param name="actorUserId">Автор; <c>null</c> — системная запись.</param>
+    /// <param name="action">Действие вида <c>{entity}.{created|updated|deleted}</c>.</param>
+    /// <param name="entityType">Стабильное имя типа сущности.</param>
+    /// <param name="entityId">Идентификатор изменённой сущности.</param>
+    /// <param name="payload">JSON с изменениями или значениями.</param>
+    /// <returns>Идентификатор вставленной строки.</returns>
+    public async Task<Guid> SeedAuditAsync(
+        DateTimeOffset occurredAt,
+        Guid? actorUserId,
+        string action,
+        string entityType,
+        Guid entityId,
+        string payload)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        ArgumentNullException.ThrowIfNull(entityType);
+        ArgumentNullException.ThrowIfNull(payload);
+
+        var id = Guid.CreateVersion7();
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO audit_log (id, occurred_at, actor_user_id, action, entity_type, entity_id, payload)
+            VALUES ({id}, {occurredAt}, {actorUserId}, {action}, {entityType}, {entityId}, {payload}::jsonb)
+            """);
+        Assert.Equal(1, inserted);
+
+        return id;
+    }
+
+    /// <summary>
+    /// Число строк журнала аудита: тест «правки каталога не аудируются» сравнивает его до и после.
+    /// </summary>
+    public async Task<int> CountAuditRowsAsync()
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await db.AuditLogs.CountAsync();
+    }
+
     private static T Require<T>(Result<T, Failure> result)
     {
         if (result.IsFailure)
