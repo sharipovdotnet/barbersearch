@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 
+import { CookieNotice } from '@/components/cookie-notice'
 import { AppErrorBoundary } from '@/components/error-boundary'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
@@ -12,13 +13,14 @@ import {
 import { isAdminPath } from '@/lib/admin-path'
 import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
+import { isPrivacyPath } from '@/lib/legal'
 import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
 
-// Админка, кабинет, отзывы автора, карточка барбера и регистрация — отдельные чанки:
-// витрине не нужен код экранов, закрытых ролью, а профиль и регистрация не должны
-// удорожать первую загрузку (§12.2).
+// Админка, кабинет, отзывы автора, карточка барбера, регистрация и Политика — отдельные
+// чанки: витрине не нужен код экранов, закрытых ролью, а профиль, регистрация и
+// юридический текст не должны удорожать первую загрузку (§12.2).
 const AdminPage = lazy(() =>
   import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
 )
@@ -65,11 +67,18 @@ const RegisterPage = lazy(() =>
   })),
 )
 
+const PrivacyPage = lazy(() =>
+  import('@/pages/privacy-page').then((module) => ({
+    default: module.PrivacyPage,
+  })),
+)
+
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
- * Маршрутов шесть, поэтому вместо роутера хватает `usePathname`. Неизвестный адрес
- * показывает витрину: отдельная страница 404 на шести маршрутах была бы шумом.
+ * Маршрутов меньше десятка, поэтому вместо роутера хватает `usePathname`. Неизвестный
+ * адрес показывает витрину: отдельная страница 404 на таком числе маршрутов была бы
+ * шумом.
  *
  * `key` на границе ошибок сбрасывает её состояние при смене страницы: после падения
  * админки ссылка на витрину снова показывает рабочий экран. Для профиля в ключ входит
@@ -78,6 +87,7 @@ const RegisterPage = lazy(() =>
 function App() {
   const pathname = usePathname()
   const isRegister = isRegisterPath(pathname)
+  const isPrivacy = isPrivacyPath(pathname)
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAccountReviews = isAccountReviewsPath(pathname)
@@ -86,21 +96,23 @@ function App() {
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const pageKey = isRegister
     ? 'register'
-    : isAdmin
-      ? 'admin'
-      : isAccountReviews
-        ? 'account-reviews'
-        : isAccountProfile
-          ? 'account-profile'
-          : isAccountSecurity
-            ? 'account-security'
-            : isBarberCabinet
-              ? 'barber-cabinet'
-              : pathname === '/account'
-                ? 'account'
-                : barberId !== null
-                  ? `barber:${barberId}`
-                  : 'home'
+    : isPrivacy
+      ? 'privacy'
+      : isAdmin
+        ? 'admin'
+        : isAccountReviews
+          ? 'account-reviews'
+          : isAccountProfile
+            ? 'account-profile'
+            : isAccountSecurity
+              ? 'account-security'
+              : isBarberCabinet
+                ? 'barber-cabinet'
+                : pathname === '/account'
+                  ? 'account'
+                  : barberId !== null
+                    ? `barber:${barberId}`
+                    : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -126,6 +138,8 @@ function App() {
           <Suspense fallback={<RouteFallback />}>
             {isRegister ? (
               <RegisterPage />
+            ) : isPrivacy ? (
+              <PrivacyPage />
             ) : isAdmin ? (
               <AdminPage />
             ) : isAccountReviews ? (
@@ -148,6 +162,10 @@ function App() {
       </main>
 
       {!isAdmin && <SiteFooter />}
+
+      {/* Уведомление живёт вне страницы: оно показывается на любом адресе, включая
+          админку, и не перемонтируется при переходах. */}
+      <CookieNotice />
     </div>
   )
 }
