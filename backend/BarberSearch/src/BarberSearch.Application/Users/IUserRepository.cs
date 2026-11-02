@@ -1,5 +1,6 @@
 using BarberSearch.Application.Users.Admin;
 using BarberSearch.Contracts.Users.Admin;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -91,6 +92,20 @@ public interface IUserRepository
     /// <param name="id">Идентификатор пользователя.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<AdminUserDetailResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Профиль текущего пользователя для кабинета: имя, телефон, роль и подтверждения.
+    /// </summary>
+    /// <remarks>
+    /// Узкая проекция без <c>Include(FavoriteBarbers)</c>, пароля и служебных полей:
+    /// кабинету не нужен весь агрегат, а запрос выполняется на каждом входе в раздел.
+    /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>user.notFound</c>.
+    /// </remarks>
+    /// <param name="id">Идентификатор пользователя.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<MyProfileResponse, Failure>> GetMyProfileAsync(
         Guid id,
         CancellationToken cancellationToken = default);
 

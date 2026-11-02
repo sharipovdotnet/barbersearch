@@ -7,6 +7,7 @@ import { SessionRetryButton } from '@/components/session-unavailable'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { navigate, useLocation } from '@/lib/router'
 
@@ -18,7 +19,11 @@ export function HeaderAuth() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   const location = useLocation()
   const pathname = location.split('?')[0] ?? ''
-  const redirectTo = isAdminPath(pathname) ? location : undefined
+  const redirectTo = isAdminPath(pathname)
+    ? location
+    : isAccountPath(pathname)
+      ? location
+      : undefined
 
   if (status === 'loading') {
     // Пока сессия проверяется, скринридер должен знать, что идёт загрузка,
@@ -56,8 +61,8 @@ export function HeaderAuth() {
     <>
       <a
         href="/account"
-        aria-label="Мои записи"
-        title="Мои записи"
+        aria-label="Мой кабинет"
+        title="Мой кабинет"
         className="rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={(event) => {
           event.preventDefault()

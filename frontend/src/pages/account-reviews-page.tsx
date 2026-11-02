@@ -1,73 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
-import {
-  AccountSkeleton,
-  RoleGate,
-  SignInGate,
-} from '@/components/account/account-gates'
+import { AccountAccess, SignInGate } from '@/components/account/account-gates'
+import { AccountShell } from '@/components/account/account-shell'
 import { DeleteReviewDialog } from '@/components/account/delete-review-dialog'
 import { EditReviewDialog } from '@/components/account/edit-review-dialog'
 import { MyReviewsList } from '@/components/account/my-reviews-list'
-import { SessionUnavailable } from '@/components/session-unavailable'
-import { buttonVariants } from '@/components/ui/button'
 import { useMyReviews } from '@/hooks/use-my-reviews'
-import { useSession } from '@/hooks/use-session'
-import { ACCOUNT_PATH, ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
+import { ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
 import type { MyReview, UpdateMyReviewInput } from '@/lib/my-reviews'
-import { isPlainClick, navigate } from '@/lib/router'
-import { cn } from '@/lib/utils'
 
 /**
- * «Мои отзывы» в кабинете клиента.
+ * «Мои отзывы» в личном кабинете.
  *
  * Отдельный адрес, а не вкладка: у экрана своя пагинация и диалоги, на него можно
  * дать ссылку. Список читает `GET api/reviews/mine` и только он: брони и профиль
  * барбера для строки не нужны — контекст визита уже в ответе.
  */
 export function AccountReviewsPage() {
-  const { status, user } = useSession()
-
   useEffect(() => {
     document.title = 'Мои отзывы — BarberSearch'
   }, [])
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
-      {status === 'loading' && <AccountSkeleton />}
-
-      {status === 'unavailable' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <SessionUnavailable />
-        </div>
+    <AccountAccess
+      title="Войдите, чтобы увидеть свои отзывы"
+      description="Здесь собраны отзывы, которые вы оставили после визитов: опубликованные и ожидающие проверки. Вход по email и паролю."
+    >
+      {(user) => (
+        <AccountShell
+          user={user}
+          section="reviews"
+          title="Мои отзывы"
+          description="Отзывы, которые вы оставили после визитов. Опубликованные и ожидающие проверки — в одном списке."
+        >
+          <MyReviewsScreen />
+        </AccountShell>
       )}
-
-      {status === 'anonymous' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <SignInGate
-            title="Войдите, чтобы увидеть свои отзывы"
-            description="Здесь собраны отзывы, которые вы оставили после визитов: опубликованные и ожидающие проверки. Вход по email и паролю."
-            redirectTo={ACCOUNT_REVIEWS_PATH}
-          />
-        </div>
-      )}
-
-      {status === 'authenticated' && user && user.role !== 'Customer' && (
-        <div className="flex min-h-[55vh] items-center justify-center py-6">
-          <RoleGate role={user.role} />
-        </div>
-      )}
-
-      {status === 'authenticated' && user && user.role === 'Customer' && (
-        <MyReviewsScreen />
-      )}
-    </div>
+    </AccountAccess>
   )
 }
 
 /**
- * Экран списка монтируется только после проверки сессии и роли: иначе анонимный
- * экран сходит за отзывами и получит `401` вместо гейта.
+ * Экран списка монтируется только после проверки сессии: иначе анонимный экран
+ * сходит за отзывами и получит `401` вместо гейта.
  */
 function MyReviewsScreen() {
   const reviews = useMyReviews()
@@ -143,37 +119,6 @@ function MyReviewsScreen() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Мои отзывы
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Отзывы, которые вы оставили после визитов. Опубликованные и ожидающие
-            проверки — в одном списке.
-          </p>
-        </div>
-
-        <div className="sm:pt-0.5">
-          <a
-            href={ACCOUNT_PATH}
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'min-h-9 sm:min-h-0'
-            )}
-            onClick={(event) => {
-              if (isPlainClick(event)) {
-                event.preventDefault()
-                navigate(ACCOUNT_PATH)
-              }
-            }}
-          >
-            <ArrowLeft data-icon="inline-start" aria-hidden />
-            Мои записи
-          </a>
-        </div>
-      </header>
-
       {announcement && (
         <div
           role="status"

@@ -33,7 +33,9 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 |---|---|
 | `/` | landing page: real barber search by city, date, language, specialization and service, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
-| `/account` | customer cabinet: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation, review, password |
+| `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation, review |
+| `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
+| `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
@@ -50,8 +52,10 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/bookings/{id}` | one booking: time in the salon zone, customer, barber, service, salon, notes; cancel or mark a no-show |
 | `/admin/audit` | read-only change journal: filters by entity type, author email and UTC dates, paged list with an expandable diff |
 
-The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
-enforces roles separately (`AdminOnly`, `BarberOnly`).
+The cabinet is one personal space for every authenticated user: a customer, a barber and an
+administrator see the same rail (Записи · Отзывы · Профиль · Безопасность), their own bookings and
+reviews, and a role-specific link to the work area. The barber cabinet and the admin section stay
+separate client-side gates; the API enforces their roles (`AdminOnly`, `BarberOnly`).
 
 ## List pagination
 
@@ -69,7 +73,7 @@ One list deliberately keeps «Показать ещё»:
 
 Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
 `/admin/barbers`, `/admin/users`, `/admin/bookings` and `/admin/audit` — pages with the same footer.
-The customer cabinet was the last one to move to the pager: it split one server list on the client,
+The cabinet's bookings list was the last one to move to the pager: it split one server list on the client,
 which the server-side `scope` fixed (#36). The bookings list was built on the shared pager from the
 start: the email search and the status filter are part of the request, so changing either starts a
 new first page and the catalogue stays the only admin read without one.
@@ -152,7 +156,7 @@ The range («1–10 из 32») lives in the shared pager footer, not in the sect
 «Назад»/«Дальше» focus moves to the list, the section heading is scrolled into view and the pager
 announces the new range through one `aria-live` region. The first and last pages disable the arrow
 instead of removing it. A profile with `reviewsCount: 0` shows «Пока нет отзывов.» and makes no
-request at all. Creating a review stays in the customer account
+request at all. Creating a review stays in the personal cabinet
 (`POST /api/reviews` on a completed booking, hidden until moderation); editing and deleting go
 through the author list at `/account/reviews`.
 
@@ -165,7 +169,8 @@ through the author list at `/account/reviews`.
 
 ## My reviews
 
-`/account/reviews` is a separate lazy screen (not a tab of `/account`). It calls
+`/account/reviews` is a separate lazy screen inside the cabinet shell (not a tab of
+`/account`). It calls
 `GET /api/reviews/mine?pageSize=10` and lists the author's reviews in both statuses, newest
 first: the rating is a badge and a text label («Опубликован» / «На модерации»), and each row
 shows the barber's name as a real link, the visit date and time in the salon time zone, the
@@ -196,11 +201,25 @@ press.
 - `src/pages/account-reviews-page.tsx` — gates, title, list composition and announcements.
 - `src/components/account/my-reviews-list.tsx`, `my-review-row.tsx`,
   `review-status-badge.tsx`, `edit-review-dialog.tsx`, `delete-review-dialog.tsx`.
-- `src/lib/account-path.ts` — `/account` and `/account/reviews` path helpers.
+- `src/lib/account-path.ts` — the four cabinet paths and the `accountSection()` parser.
 
-## Customer cabinet
+## Personal cabinet
 
-`/account` shows the customer's bookings. Both tabs are **server lists** from
+`/account`, `/account/profile`, `/account/security` and `/account/reviews` share one shell
+(`components/account/account-shell.tsx`): a sticky rail with the identity block (initials, name,
+email, role, unverified-email note), four section links and — for a `Barber` or `Admin` — a link to
+`/barber` or `/admin`. Below `lg` the rail becomes a 2×2 grid of labelled buttons, so all four
+sections stay visible at 320 px. The whole cabinet is open to every role; the old `RoleGate` that
+turned barbers and admins away is gone.
+
+The shell loads `GET /api/users/me` once per session (module cache keyed by user id) and provides
+the profile to the section screens through context, so the profile form does not issue its own
+read. The header shows «Мой кабинет» for everyone, «Кабинет барбера» for a barber and
+«Администрирование» for an admin; the avatar link points to `/account`.
+
+### Bookings
+
+`/account` shows the signed-in user's bookings. Both tabs are **server lists** from
 `GET /api/bookings?scope=…&pageSize=20`: `upcoming` is `Pending`/`Confirmed` with `EndAt > now`
 ordered by start ascending, `past` is everything else (a terminal status or `EndAt <= now`), newest
 first; `all` stays the default for other clients of the endpoint. The client sends the scope and
@@ -216,14 +235,34 @@ when the tab is opened for the first time. Cancelling waits for `204` and then r
 `GET /api/barbers/{id}` for the visible rows and the hero only, not for the hidden list.
 
 States: hero/list skeletons, a first-page error with «Повторить», a next-page error inside the
-pager (the rows stay), the sign-in gate on `401`, and per-tab empty states. A next-page error in
-one tab does not clear the other. The review and password dialogs are unchanged.
+pager (the rows stay), the sign-in gate on `401`, and per-tab empty states. An empty «Предстоящие»
+shows one invitation card with «Найти барбера» instead of the duplicated hero/empty-list pair. A
+next-page error in one tab does not clear the other.
 
-- `src/pages/account-page.tsx` — gates, hero, tabs and the dialogs.
+- `src/pages/account-page.tsx` — session gate, shell, hero, tabs and the dialogs.
 - `src/hooks/use-bookings.ts` — `useCustomerBookings`: two `usePagedList` controllers
   (`upcoming`/`past`), the lazy history switch and cancellation.
 - `src/components/account/booking-list.tsx` — tabs, month groups per page, rows and the shared pager.
 - `src/lib/bookings.ts` — `Booking`, `BookingScope`, `fetchBookings(scope, cursor, signal)`.
+
+### Profile
+
+`/account/profile` edits `firstName`, `lastName` and `phoneNumber` through the existing
+`PUT /api/users/{id}/profile` with `X-CSRF-TOKEN`; `avatarUrl` is returned unchanged because the
+endpoint replaces the whole profile, and avatar upload has no storage yet. Email is read-only: the
+API has no self-service email-change flow, and the copy says so instead of showing a dead button.
+The form enables «Сохранить» only when a field changed, trims values, maps
+`user.updateProfile.firstName|lastName` to the field and everything else to the form-level Russian
+error. `GET /api/users/me` supplies the initial values; the same response feeds the rail, so the
+name updates immediately after a save without a second read.
+
+### Security
+
+`/account/security` reuses the existing `ChangePasswordDialog` (password from 12 characters,
+`POST /api/auth/change-password`, all refresh tokens revoked) and adds sign-out. The copy explains
+that changing the password ends the other sessions. The page also shows the email verification
+status and the last login from `GET /api/users/me`; there is no active-device list because the API
+does not expose one, and the screen does not invent it.
 
 ## Barber cabinet
 
@@ -262,8 +301,9 @@ a `Barber` without `barberProfileId`, and none of them sends a list request. Ann
 errors use `role="status"`/`role="alert"`; focus returns to the row or the list heading after an
 action, and the pager moves it only after «Назад»/«Дальше».
 
-The header shows «Кабинет барбера» for a barber and «Мои записи» for everyone else. On
-`/account` a barber still sees the customer-cabinet gate, now with a button to the cabinet.
+The header shows «Мой кабинет» for every authenticated user, plus «Кабинет барбера» for a barber
+and «Администрирование» for an admin. The work area is also linked from the account rail; `/barber`
+keeps its own role gates and `/account` no longer turns a barber away.
 
 - `src/pages/barber-cabinet-page.tsx` — gates, title, list composition and announcements.
 - `src/components/barber/barber-cabinet-gates.tsx`, `cabinet-booking-list.tsx`,
@@ -319,7 +359,7 @@ antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
-Review creation on the public profile is not implemented: it lives in the customer account. The
+Review creation on the public profile is not implemented: it lives in the personal cabinet. The
 barber cabinet is at `/barber`. Services carry `barberServiceId` (sent to `POST /api/bookings`)
 and `hairServiceId` (sent to `/slots`).
 
@@ -348,6 +388,11 @@ The footer repeats the address, and only in development: the line is behind
 The header button signs in through the browser (cookie) branch of the API:
 `GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`.
 Tokens never reach JavaScript: the session cookie and the refresh cookie are both `HttpOnly`.
+The cabinet adds one authenticated read, `GET /api/users/me` (`[Authorize]`, self-only, id from the
+`sub` claim): unlike `/auth/me`, which is built from claims, it returns the current first name,
+last name, phone, avatar URL, role, both verification flags and the last-login time from the
+database. The profile form writes through the existing `PUT /api/users/{id}/profile`; the API
+replaces the whole profile, so the client sends `avatarUrl` back unchanged.
 Every state-changing request goes through `mutateWithCsrf` in `src/lib/csrf.ts`: it fetches a
 fresh `X-CSRF-TOKEN` immediately before the request and, on `400 auth.csrf.invalid`, repeats the
 same mutation **once** with a new token. The antiforgery filter rejects the request before the

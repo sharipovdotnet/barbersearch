@@ -77,11 +77,11 @@ describe('HeaderAuth', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('в authenticated показывает email, «Мои записи» и «Выйти»', () => {
+  it('в authenticated показывает email, «Мой кабинет» и «Выйти»', () => {
     renderHeader({ status: 'authenticated', user: sessionUser })
 
     expect(screen.getByText('session@barbersearch.test')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Мои записи' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Мой кабинет' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })

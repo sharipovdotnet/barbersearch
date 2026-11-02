@@ -8,6 +8,8 @@ import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
+import { AccountProfilePage } from '../pages/account-profile-page'
+import { AccountSecurityPage } from '../pages/account-security-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { LandingPage } from '../pages/landing-page'
 import { MyReviewsPage } from '../pages/my-reviews-page'
@@ -92,6 +94,24 @@ test.describe('axe: кабинет клиента', () => {
     await expect(myReviews.heading).toBeVisible()
 
     await expectNoBlockingViolations(page, '/account/reviews', test.info())
+  })
+
+  test('/account/profile: форма и данные аккаунта', async ({ page }) => {
+    const profile = new AccountProfilePage(page)
+
+    await profile.goto()
+    await profile.waitForReady()
+
+    await expectNoBlockingViolations(page, '/account/profile', test.info())
+  })
+
+  test('/account/security: пароль, выход и email', async ({ page }) => {
+    const security = new AccountSecurityPage(page)
+
+    await security.goto()
+    await security.waitForReady()
+
+    await expectNoBlockingViolations(page, '/account/security', test.info())
   })
 })
 

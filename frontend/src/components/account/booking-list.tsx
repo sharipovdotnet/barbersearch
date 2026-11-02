@@ -206,11 +206,11 @@ function TabEmptyState({ tab }: { tab: BookingsTab }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {tab === 'upcoming' ? 'Предстоящих записей нет' : 'История пока пуста'}
+          {tab === 'upcoming' ? 'Пока ни одной записи' : 'История пока пуста'}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {tab === 'upcoming'
-            ? 'Выберите барбера и свободное время — запись появится здесь.'
+            ? 'Выберите барбера, услугу и свободное время — запись появится здесь. Прошлые визиты останутся в истории.'
             : 'После визита здесь останется запись и можно будет оставить отзыв.'}
         </p>
       </div>

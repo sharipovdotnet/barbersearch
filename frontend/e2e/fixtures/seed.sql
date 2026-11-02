@@ -106,6 +106,10 @@ FROM (
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     password_hash = EXCLUDED.password_hash,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    phone_number = EXCLUDED.phone_number,
+    avatar_url = EXCLUDED.avatar_url,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,

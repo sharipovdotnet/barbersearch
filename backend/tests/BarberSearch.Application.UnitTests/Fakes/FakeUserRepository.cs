@@ -3,6 +3,7 @@ using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -297,6 +298,38 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             user.UpdatedAt);
 
         return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(detail);
+    }
+
+    /// <summary>
+    /// Та же узкая проекция, что в PostgreSQL-репозитории: без избранного и пароля.
+    /// </summary>
+    public Task<Result<MyProfileResponse, Failure>> GetMyProfileAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_users.TryGetValue(id, out var user))
+        {
+            return Task.FromResult<Result<MyProfileResponse, Failure>>(new Failure(
+                Error.NotFound(
+                    ApiErrorCodes.User.NotFound,
+                    $"User '{id}' was not found.",
+                    id)));
+        }
+
+        return Task.FromResult<Result<MyProfileResponse, Failure>>(
+            new MyProfileResponse(
+                user.Id,
+                user.Email,
+                user.FirstName,
+                user.LastName,
+                user.PhoneNumber,
+                user.AvatarUrl,
+                user.Role,
+                user.BarberProfileId,
+                user.IsEmailVerified,
+                user.IsPhoneVerified,
+                user.CreatedAt,
+                user.LastLoginAt));
     }
 
     public Task<Result<int, Failure>> CountActiveAdminsAsync(
