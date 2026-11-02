@@ -45,6 +45,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 | `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
+| `/admin/audit` | read-only change journal: filters by entity type, author email and UTC dates, paged list with an expandable diff |
 
 The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
 enforces roles separately (`AdminOnly`, `BarberOnly`).
@@ -64,8 +65,9 @@ One list deliberately keeps «Показать ещё»:
   hide barbers the visitor has already seen.
 
 Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
-`/admin/barbers` and `/admin/users` — pages with the same footer. The customer cabinet was the last
-exception: it split one server list on the client, which the server-side `scope` fixed (#36).
+`/admin/barbers`, `/admin/users` and `/admin/audit` — pages with the same footer. The customer
+cabinet was the last one to move to the pager: it split one server list on the client, which the
+server-side `scope` fixed (#36).
 
 The three admin catalogue dictionaries are the second, different exception: `/admin/catalogue` has
 **no pager at all**. A dictionary is dozens of rows, the public `GET /api/hair-services` and
@@ -75,6 +77,10 @@ screen has no «Показать ещё» and no row counters, and the number in
 `usageCount` from the API, not the length of the array. When a dictionary outgrows a screen, paging
 it becomes a separate decision (a text keyset, which the project does not have yet) — not a quiet
 change to this screen.
+
+The journal is **not** an exception even though it is also a log: `audit_log` grows monotonically,
+so `/admin/audit` pages through the same controller and footer. The catalogue remains the only
+admin read without a pager.
 
 ## Barber search
 
@@ -563,6 +569,58 @@ What it does:
   is **not** written to `audit_log` — the `AuditTrail` allowlist covers `User`, `BarberProfile` and
   `Review` only — so the screen does not promise an audit.
 
+## Admin audit
+
+`/admin/audit` is the read-only change journal: when, who, what and on which entity changed, with
+an expandable per-row diff. The rail gained the fifth item, the route is the exact `/admin/audit`
+(no card route and no builder — a row already carries its whole diff), and the page is `noindex`
+like the rest of the admin.
+
+- `src/lib/admin-audit.ts` — types, `ADMIN_AUDIT_ENTITY_LABELS`/`_ACTION_LABELS`/`_FIELD_LABELS`,
+  `formatAuditAction` (the label comes from the tail after the last dot of `user.updated`),
+  `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто», Russian role
+  and grade labels with the raw string as a fallback), `fetchAdminAuditEntries` and
+  `describeAdminAuditError`.
+- `src/lib/response-guards.ts` — `isAdminAuditEntry`/`isAdminAuditPage`: non-empty ids and action,
+  a nullable actor with a string id and nullable email, and changes whose `from`/`to` are JSON
+  scalars or `null`. Extra fields are ignored.
+- `src/hooks/use-admin-audit-list.ts` — `usePagedList` with `requiresAuth: true` and
+  `mapError: describeAdminAuditError`; filters are part of the request, so any change starts the
+  first page.
+- `src/components/admin/audit-screen.tsx` — header, filters, states, list and pager;
+  `audit-entry.tsx` — one row with the expandable diff.
+
+What it does:
+
+- Filters: a native `<select>` for the entity type («Все сущности», «Пользователь», «Барбер»,
+  «Отзыв»), a debounced (300 ms) author email search capped at 100 characters, and «С даты» /
+  «По дату». The two dates are **inclusive UTC days** — the visible hint says so — while a row's
+  time is shown in the browser's local time zone. «Сбросить фильтры» appears only when at least
+  one filter is off its default. The filters live in React state and are **not** written to `?…`:
+  the author email is PII and does not belong in browser history or proxy logs.
+- The list is paged: twenty rows per page, «Дальше» only by the server's opaque `nextCursor`,
+  «Назад» from the in-memory page cache, a next-page error that keeps the rows and turns the
+  button into «Повторить». The range is «1–20» / «21–21» without «из N» — the API returns no total.
+- A row shows `<time>` in local time, the actor (`actor.email`, «Система» when `actor` is `null`,
+  «Удалённый пользователь» when the account is gone and `email` is `null`), the entity type plus
+  the first 8 characters of `entity_id` (the full id is in `title`; the entity name is **not**
+  resolved — it may have been renamed or deleted), and the action label from the tail of
+  `action`. «Показать изменения» / «Скрыть изменения» is the only button in a row: it carries
+  `aria-expanded` and `aria-controls`, keeps the focus and expands a `<dl>` of `field: from → to`
+  with Russian field names («Роль: Клиент → Администратор»). An unreadable payload is honest:
+  «Изменения не записаны.» Rows expand independently.
+- States: skeleton with `aria-busy`, «Журнал пуст» without filters / «Ничего не найдено» with
+  them, a first-page error with its reason and «Повторить» (never the English `detail` or the
+  status code), a next-page error in the pager without clearing the rows, `401` → the sign-in gate
+  with `returnTo="/admin/audit"`, `403` → «Раздел доступен только администратору.».
+- The journal is **immutable**: there is no write endpoint, no «Изменить», «Выключить», «Удалить»
+  or «Очистить журнал», and no «Показать ещё». `AuditTrail` writes the table on every
+  `SaveChanges`; the screen only reads.
+- The honest limitation is part of the copy and the docs: the audit covers only `User`,
+  `BarberProfile` and `Review`, so catalogue, salon, service, specialization and booking edits are
+  **not** in the journal. Widening the `AuditTrail` allowlist, retention and export are separate
+  slices.
+
 ## Testing
 
 Two layers, both in CI: Vitest for the logic, Playwright for the browser.
@@ -584,6 +642,15 @@ needs no API and no database, and covers:
   `DELETE /activation` with `X-CSRF-TOKEN` and one retry on `auth.csrf.invalid`, the complete
   `POST /api/salons` body, and the error mapping for a concurrency conflict, an unknown time zone
   and an unknown failure.
+- `admin-audit` — the URL contract (`entityType` always, `actor`/`from`/`to` only when non-empty,
+  the cursor last and no `pageSize`), the strict page guard accepting extra fields and rejecting a
+  broken body and a non-scalar `from`, `formatAuditValue` (`null`, booleans, `[redacted]`, role and
+  grade labels, unknown values), `formatAuditAction` by the action tail, and the error mapping for
+  `403`, `429` and `admin.audit.cursor.invalid`. `AuditEntry` (colocated with the component) covers
+  `<time>`, the short id with the full id in `title`, «Система» and «Удалённый пользователь», the
+  expandable `<dl>` diff «Роль: Клиент → Администратор», the empty-diff text and independent
+  expansion; `AuditScreen` is an MSW-backed screen test: the loaded rows and pager range, the
+  entity-type filter starting a new first page without a cursor, «Журнал пуст» and the `403` text.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -594,8 +661,8 @@ needs the real API, router, cookies or focus — that is the E2E layer below.
 ## E2E
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
-stack and no mocked success responses. The suite covers the six paged lists from #31, sign-in,
-public reviews, the keyboard paths and an axe scan of every screen and role in two widths
+stack and no mocked success responses. The suite covers the paged lists, the admin journal,
+sign-in, public reviews, the keyboard paths and an axe scan of every screen and role in two widths
 (1280 and 320). `npm test` (Vitest) stays separate and fast; E2E never runs inside it.
 
 ### One-time setup
@@ -674,6 +741,10 @@ has two). For the admin catalogue it adds **hidden** rows only — the service �
 specializations and the salon «E2E Studio Nord»: an active row would land in the public filters and
 cards and shift the counters of `search-login`, `a11y` and the barber cards, while hidden rows are
 invisible to public reads.
+For the admin journal it adds exactly **21 `audit_log` rows on 2026-09-10 UTC** (ids
+`9e700000-…`, the newest one without an actor): the fixed past date keeps the journal checks away
+from the rows that mutating specs write «today», and the section deletes only its own ids before
+inserting, so the seed stays idempotent. There are no other changes to `audit_log`.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 
