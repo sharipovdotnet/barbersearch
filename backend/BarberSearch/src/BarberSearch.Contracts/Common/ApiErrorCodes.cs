@@ -417,6 +417,28 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Админское чтение каталога: услуги, специализации и салоны.
+    /// </summary>
+    /// <remarks>
+    /// Отдельные коды от публичных чтений справочников: это отдельный эндпоинт с фильтром
+    /// статуса и поиском. Ошибки операций над строкой приходят с кодами агрегатов
+    /// (<c>salon.timeZoneId.unknown</c>, <c>specialization.create.nameTaken</c> и так далее):
+    /// мутации остаются на существующих контроллерах.
+    /// </remarks>
+    public static class AdminCatalogue
+    {
+        /// <summary>
+        /// Фильтр статуса не <c>all</c>, не <c>active</c> и не <c>hidden</c>; <c>400</c>.
+        /// </summary>
+        public const string StatusInvalid = "admin.catalogue.status";
+
+        /// <summary>
+        /// Поисковая строка длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "admin.catalogue.search";
+    }
+
+    /// <summary>
     /// Салоны.
     /// </summary>
     public static class Salon

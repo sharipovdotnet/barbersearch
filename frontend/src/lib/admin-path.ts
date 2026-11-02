@@ -7,15 +7,25 @@
 
 export type AdminTab = 'pending' | 'published'
 
+/** Вкладка каталога: какой справочник показан. Живёт в `?tab=`, по умолчанию услуги. */
+export type CatalogueTab = 'services' | 'specializations' | 'salons'
+
 export type AdminRoute =
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
   | { kind: 'barbers'; barberId: string | null }
   | { kind: 'users'; userId: string | null }
+  | { kind: 'catalogue'; tab: CatalogueTab }
   | { kind: 'notFound' }
 
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
 const BARBER_PATH = /^\/admin\/barbers\/([^/]+)$/
 const USER_PATH = /^\/admin\/users\/([^/]+)$/
+
+const CATALOGUE_TABS: readonly CatalogueTab[] = [
+  'services',
+  'specializations',
+  'salons',
+]
 
 const GUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -46,6 +56,10 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (pathname === '/admin/users') {
     return { kind: 'users', userId: null }
+  }
+
+  if (pathname === '/admin/catalogue') {
+    return { kind: 'catalogue', tab: parseCatalogueTab(search) }
   }
 
   const barberMatch = BARBER_PATH.exec(pathname)
@@ -103,6 +117,29 @@ export function reviewsPath(
     : '/admin/reviews'
 
   return tab === 'published' ? `${base}?tab=published` : base
+}
+
+/**
+ * Разбирает `?tab=` каталога: неизвестная вкладка — услуги.
+ *
+ * Так же ведёт себя `?tab=` отзывов: ссылка с опечаткой не должна давать «Раздел не найден»,
+ * потому что раздел существует.
+ */
+export function parseCatalogueTab(search: string): CatalogueTab {
+  const value = new URLSearchParams(search).get('tab')
+
+  return CATALOGUE_TABS.find((tab) => tab === value) ?? 'services'
+}
+
+/**
+ * Адрес каталога: вкладка — в query, по умолчанию услуги.
+ *
+ * Карточки строки нет: список несёт все поля формы, отдельного чтения по id не существует.
+ */
+export function cataloguePath(tab: CatalogueTab = 'services'): string {
+  return tab === 'services'
+    ? '/admin/catalogue'
+    : `/admin/catalogue?tab=${tab}`
 }
 
 /** Идентификатор отзыва должен быть GUID: иначе запрос заведомо не найдёт запись. */

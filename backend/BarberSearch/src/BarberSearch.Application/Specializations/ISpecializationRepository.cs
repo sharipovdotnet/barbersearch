@@ -1,3 +1,5 @@
+using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Specializations.Admin;
 using BarberSearch.Domain.Specializations;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -9,6 +11,27 @@ namespace BarberSearch.Application.Specializations;
 /// </summary>
 public interface ISpecializationRepository
 {
+    /// <summary>
+    /// Админский справочник специализаций: полный список, включая выключенные строки,
+    /// с фильтром статуса и поиском по названию.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания; порядок — название, идентификатор. Поиск идёт через
+    /// <c>ILIKE</c> с экранированием служебных символов шаблона. Страниц нет: справочник
+    /// маленький и отдаётся целиком.
+    /// </remarks>
+    /// <param name="status">Фильтр статуса строки.</param>
+    /// <param name="search">Поиск по названию; <c>null</c> — без фильтра.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>
+    /// Строки справочника; <c>usageCount</c> — число активных подтверждённых профилей,
+    /// указавших специализацию.
+    /// </returns>
+    Task<Result<IReadOnlyList<AdminSpecializationResponse>, Failure>> GetAdminListAsync(
+        AdminCatalogueStatus status,
+        string? search,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Специализация по идентификатору.
     /// </summary>

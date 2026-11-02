@@ -5,6 +5,11 @@ import type {
 } from '@/lib/admin-barbers'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
+  AdminHairService,
+  AdminSalon,
+  AdminSpecialization,
+} from '@/lib/admin-catalogue'
+import type {
   AdminUserBarberProfile,
   AdminUserDetail,
   AdminUserRole,
@@ -556,3 +561,58 @@ export function isAdminUser(value: unknown): value is AdminUserDetail {
 }
 
 export const isAdminUserPage = isPageOf(isAdminUserRow)
+
+/** Строка админского справочника услуг: полный DTO формы и счётчик барберов. */
+export function isAdminHairServiceRow(value: unknown): value is AdminHairService {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isServiceCategory(value.category) &&
+    isNumber(value.defaultDurationMinutes) &&
+    isNullableString(value.description) &&
+    isBoolean(value.isActive) &&
+    isNumber(value.usageCount)
+  )
+}
+
+export const isAdminHairServiceList = isArrayOf(isAdminHairServiceRow)
+
+/** Строка админского справочника специализаций. */
+export function isAdminSpecializationRow(
+  value: unknown
+): value is AdminSpecialization {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isNullableString(value.description) &&
+    isBoolean(value.isActive) &&
+    isNumber(value.usageCount)
+  )
+}
+
+export const isAdminSpecializationList = isArrayOf(isAdminSpecializationRow)
+
+/** Строка админского справочника салонов: все поля формы правки и координаты. */
+export function isAdminSalonRow(value: unknown): value is AdminSalon {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isString(value.address) &&
+    isString(value.city) &&
+    isNullableString(value.postalCode) &&
+    isString(value.country) &&
+    isString(value.timeZoneId) &&
+    isNumber(value.latitude) &&
+    isNumber(value.longitude) &&
+    isNullableString(value.phoneNumber) &&
+    isNullableString(value.websiteUrl) &&
+    isBoolean(value.isActive) &&
+    isNumber(value.usageCount)
+  )
+}
+
+export const isAdminSalonList = isArrayOf(isAdminSalonRow)
+

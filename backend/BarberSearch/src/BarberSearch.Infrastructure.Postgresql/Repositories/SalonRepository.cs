@@ -1,5 +1,7 @@
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Salons.Admin;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -16,6 +18,60 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
     public SalonRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
         : base(context, auditTrail)
     {
+    }
+
+    public async Task<Result<IReadOnlyList<AdminSalonResponse>, Failure>> GetAdminListAsync(
+        AdminCatalogueStatus status,
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Context.Salons.AsNoTracking();
+
+        query = status switch
+        {
+            AdminCatalogueStatus.Active => query.Where(x => x.IsActive),
+            AdminCatalogueStatus.Hidden => query.Where(x => !x.IsActive),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = LikePattern.Contains(search);
+
+            // Салоны ищут и по городу: администратор знает салон по городу чаще, чем по имени.
+            query = query.Where(x =>
+                EF.Functions.ILike(x.Name, pattern, "\\")
+                || EF.Functions.ILike(x.City, pattern, "\\"));
+        }
+
+        // Связи с салоном не удаляются при выключении, поэтому счётчик показывает, сколько
+        // активных подтверждённых барберов останутся привязанными к выключенной строке.
+        var rows = await query
+            .OrderBy(x => x.City)
+            .ThenBy(x => x.Name)
+            .ThenBy(x => x.Id)
+            .Select(x => new AdminSalonResponse(
+                x.Id,
+                x.Name,
+                x.Address,
+                x.City,
+                x.PostalCode,
+                x.Country,
+                x.TimeZoneId,
+                x.Latitude,
+                x.Longitude,
+                x.PhoneNumber,
+                x.WebsiteUrl,
+                x.IsActive,
+                Context.BarberSalons.Count(link =>
+                    link.SalonId == x.Id
+                    && Context.BarberProfiles.Any(profile =>
+                        profile.Id == link.BarberProfileId
+                        && profile.IsActive
+                        && profile.IsVerified))))
+            .ToListAsync(cancellationToken);
+
+        return rows;
     }
 
     public async Task<Result<Salon, Failure>> GetByIdAsync(

@@ -1,5 +1,7 @@
+using BarberSearch.Application.Common;
 using BarberSearch.Application.HairServices;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.Admin;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Infrastructure.Postgresql.Audit;
@@ -17,6 +19,53 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
     public HairServiceRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
         : base(context, auditTrail)
     {
+    }
+
+    public async Task<Result<IReadOnlyList<AdminHairServiceResponse>, Failure>> GetAdminListAsync(
+        AdminCatalogueStatus status,
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Context.HairServices.AsNoTracking();
+
+        query = status switch
+        {
+            AdminCatalogueStatus.Active => query.Where(x => x.IsActive),
+            AdminCatalogueStatus.Hidden => query.Where(x => !x.IsActive),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = LikePattern.Contains(search);
+
+            query = query.Where(x => EF.Functions.ILike(x.Name, pattern, "\\"));
+        }
+
+        // usageCount — не «число связей», а число активных подтверждённых барберов: неактивный
+        // или неподтверждённый профиль, а также выключенная связь услуги не считаются,
+        // иначе подтверждение «N барберов» соврёт.
+        var rows = await query
+            .OrderBy(x => x.Category)
+            .ThenBy(x => x.Name)
+            .ThenBy(x => x.Id)
+            .Select(x => new AdminHairServiceResponse(
+                x.Id,
+                x.Name,
+                x.Category,
+                x.DefaultDurationMinutes,
+                x.Description,
+                x.IsActive,
+                Context.BarberServices.Count(link =>
+                    link.HairServiceId == x.Id
+                    && link.IsActive
+                    && Context.BarberProfiles.Any(profile =>
+                        profile.Id == link.BarberProfileId
+                        && profile.IsActive
+                        && profile.IsVerified))))
+            .ToListAsync(cancellationToken);
+
+        return rows;
     }
 
     public async Task<Result<HairService, Failure>> GetByIdAsync(

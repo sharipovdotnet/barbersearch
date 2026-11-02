@@ -164,7 +164,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Опубликованные отзывы | скрытие | `GET /api/admin/reviews?status=published`, `GET /api/admin/reviews/{id}` |
 | Барберы | verify/unverify, grade, rating, activation | `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}` — ✅ этап 2 |
 | Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` — ✅ этап 3 |
-| Каталог | create/update/activation | `GET` списков услуг, специализаций, салонов |
+| Каталог | create/update/activation | ✅ этап 4: `GET /api/admin/catalogue/{hair-services\|specializations\|salons}` — полный справочник, включая выключенные строки, `status=all\|active\|hidden`, поиск, `isActive` и `usageCount`; мутации остаются на существующих эндпоинтах |
 | Брони | `GET /api/bookings` | Имена и контекст в ответе; поиск пользователя |
 | Журнал | таблица `audit_log` | `GET /api/admin/audit` (read-only) |
 | Сводка | — | `GET /api/admin/summary` (опционально, позже) |
@@ -177,6 +177,16 @@ Git-корень на уровень выше рабочей папки, поэ�
 > (фильтр `all|pending|hidden`, поиск по имени и email, keyset-курсор) и
 > `GET /api/admin/barbers/{id}` (карточка с чек-листом готовности). Email владельца
 > есть только в админском контракте; публичный `BarberProfileResponse` не изменился.
+>
+> Этап 4 (2.11.2026) закрыл админские чтения каталога: три эндпоинта
+> `GET /api/admin/catalogue/{hair-services|specializations|salons}` отдают **полный**
+> справочник (включая выключенные строки — иначе строку не найти, чтобы включить
+> обратно), фильтр `status` (`all` по умолчанию), поиск с экранированием `%`/`_`,
+> `isActive` и `usageCount` (число активных подтверждённых барберов, использующих
+> строку). Пагинации нет намеренно: справочники маленькие, а созданная строка должна
+> быть видна сразу. Публичные чтения и их DTO не изменились; у салонов это первое
+> чтение в API. Мутации остались на `api/hair-services`, `api/specializations`
+> и `api/salons`.
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -543,6 +553,13 @@ Read-only история: когда, кто, что изменил, у како
    пользователя с одноразовым паролем. Защита администраторов —
    на бэкенде.
 4. **«Каталог».** Услуги, специализации, салоны; формы и выключение.
+   ✅ Реализовано 2.11.2026: `/admin/catalogue` с тремя вкладками в `?tab=`,
+   полные справочники (включая выключенные строки), фильтр статуса, поиск,
+   `usageCount`, диалоги создания и правки, выключение/включение с `alertdialog`
+   и объяснением последствий. Пагинации нет — это осознанное исключение
+   (`README.md`, «List pagination»); удаления нет, потому что в домене только
+   деактивация; переименования салона нет — название read-only. Правки каталога
+   не пишутся в `audit_log` (allowlist `AuditTrail`), и экран этого не обещает.
 5. **«Журнал».** Read-only история и diff.
 6. **«Брони» и «Сводка».** Поддержка и агрегаты, когда появятся контракты.
 
@@ -737,6 +754,51 @@ Read-only история: когда, кто, что изменил, у како
    сборки, его нужно перезапустить. Бандл впервые превысил цель
    ~150 kB gzip — следующий шаг — route splitting (`AGENT.md` §16 п. 7).
 
+36. **Реализация этапа 4 — «Каталог» (2.11.2026).** Backend сначала получил
+    красные интеграционные тесты (`AdminCatalogueReadTests`, `AdminCatalogueWriteTests`):
+    `/api/admin/catalogue/*` отвечал `404`, а `401`/`403` для несуществующего
+    маршрута не выполнялись.
+37. Backend: `AdminCatalogueStatus` + `AdminCatalogueFilters` (разбор `status`
+    и лимит поиска 100), три админских DTO с `isActive` и `usageCount`
+    (`Contracts/{HairServices,Specializations,Salons}/Admin`), три запроса
+    и обработчика (`Application/*/Admin/GetAdmin*`), коды
+    `admin.catalogue.status|search`.
+38. Backend: проекции в `HairServiceRepository`, `SpecializationRepository`
+    и `SalonRepository` — фильтр статуса, `ILIKE` с экранированием `%`, `_`, `\`
+    (общий `LikePattern`), `usageCount` по активным подтверждённым профилям
+    (`Context.BarberServices`/`BarberSpecializations`/`BarberSalons`), порядок
+    `category,name,id` / `name,id` / `city,name,id`. Новых индексов и миграций
+    не понадобилось.
+39. Backend: `AdminCatalogueController` — три `GET` под `AdminOnly`, XML-доки
+    объясняют «полный справочник, а не страница»; мутации не переносились.
+    Unit-тесты (`AdminCatalogueReadHandlerTests`) и фейки репозиториев получили
+    `GetAdminListAsync` с тем же фильтром и порядком.
+40. Frontend: `lib/admin-path.ts` (`catalogue`, `CatalogueTab`,
+    `cataloguePath`, `parseCatalogueTab`), четвёртый пункт рейла, заголовок
+    документа, dispatch на `CatalogueScreen`; `lib/admin-catalogue.ts`
+    (чтения, мутации, подписи, разбор ошибок и полевые коды салона);
+    `response-guards` — три строгих guard'а.
+41. Frontend: `hooks/use-admin-catalogue.ts` — без `usePagedList`, с поколением
+    против поздних ответов, тихим `refresh()` и дискриминированным союзом
+    по вкладке; `catalogue-screen.tsx`, `catalogue-tabs.tsx`,
+    `catalogue-table.tsx`, `hair-service-dialog.tsx`,
+    `specialization-dialog.tsx`, `salon-dialog.tsx` (два `PUT`, IANA-select),
+    `catalogue-action-dialog.tsx` (`alertdialog` с числом барберов).
+42. E2E: в `seed.sql` только **выключенные** строки трёх словарей (активные
+    поехали бы по публичным фильтрам и чужим спекам), `fixtures.catalogueLabels`,
+    `pages/admin-catalogue-page.ts`, `admin-catalogue.spec.ts` (вкладки,
+    `?tab=`, фильтр, поиск, `usageCount`, отсутствие пейджера),
+    `admin-catalogue-mutations.spec.ts` (выключение→включение, переименование,
+    контакты салона двумя `PUT`, пустая форма без запроса; всё возвращается
+    в `finally`) и axe 1280/320.
+43. Проверено: backend build 0/0, тесты 187 + 307 + 83 + 79 зелёные; frontend
+    `npm test` 85 в 9 файлах, `npm run lint` 0/0 (192 файла), `npm run build`
+    успешно (2294 модуля, entry 394.52 kB / 127.54 kB gzip, `admin-page`
+    151.83 / 33.79); E2E 107 сценариев, axe 1280/320 без блокирующих находок.
+    Попутно найдено и исправлено: горизонтальный рейл растягивал админскую
+    сетку по `min-content` (`384 px` при ширине `320`) — оба столбца
+    `AdminShell` получили `min-w-0`, и 320 теперь без горизонтального скролла.
+
 ---
 
 ## 9. Карта файлов
@@ -755,6 +817,9 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: список, карточка и создание пользователя | `frontend/src/components/admin/user-list.tsx`, `user-detail.tsx`, `create-user-dialog.tsx` |
 | Админка: API пользователей | `frontend/src/lib/admin-users.ts` |
 | Админка: хуки пользователей | `frontend/src/hooks/use-admin-user-list.ts`, `use-admin-user.ts` |
+| Админка: экран каталога | `frontend/src/components/admin/catalogue-screen.tsx`, `catalogue-tabs.tsx`, `catalogue-table.tsx` |
+| Админка: диалоги каталога | `frontend/src/components/admin/hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`, `catalogue-action-dialog.tsx` |
+| Админка: API каталога | `frontend/src/lib/admin-catalogue.ts`, `frontend/src/hooks/use-admin-catalogue.ts` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
 | Сессия | `frontend/src/components/session-provider.tsx`, `src/hooks/use-session.ts`, `src/lib/auth.ts` |

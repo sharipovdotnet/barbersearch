@@ -345,6 +345,112 @@ internal sealed class TestData
     }
 
     /// <summary>
+    /// Создаёт строку справочника салонов; <paramref name="isActive"/> = <c>false</c> нужен,
+    /// чтобы проверить фильтр статуса админского каталога.
+    /// </summary>
+    public async Task<Salon> CreateSalonAsync(
+        string name,
+        string city = "Berlin",
+        string address = "Teststrasse 1",
+        string country = "Germany",
+        string timeZoneId = "Europe/Berlin",
+        double latitude = 52.5200,
+        double longitude = 13.4050,
+        string? postalCode = null,
+        string? phoneNumber = null,
+        string? websiteUrl = null,
+        bool isActive = true)
+    {
+        var salon = Require(Salon.Create(
+            name: name,
+            address: address,
+            city: city,
+            country: country,
+            timeZoneId: timeZoneId,
+            latitude: latitude,
+            longitude: longitude,
+            postalCode: postalCode,
+            phoneNumber: phoneNumber,
+            websiteUrl: websiteUrl));
+
+        if (!isActive)
+        {
+            Require(salon.Deactivate());
+        }
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Salons.Add(salon);
+        await db.SaveChangesAsync();
+
+        return salon;
+    }
+
+    /// <summary>
+    /// Привязывает существующий салон к профилю через доменный метод.
+    /// </summary>
+    public async Task AttachSalonAsync(Guid barberProfileId, Guid salonId)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles
+            .Include(x => x.Salons)
+            .FirstAsync(x => x.Id == barberProfileId);
+
+        Require(profile.AddSalon(salonId));
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Переводит профиль в заданное состояние подтверждения и активности доменными методами.
+    /// </summary>
+    public async Task SetBarberProfileStateAsync(
+        Guid barberProfileId,
+        bool isVerified,
+        bool isActive)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles.FirstAsync(x => x.Id == barberProfileId);
+
+        Require(isVerified ? profile.Verify() : profile.Unverify());
+        Require(isActive ? profile.Activate() : profile.Deactivate());
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Выключает связь «барбер — услуга»: <c>usageCount</c> обязан её не учитывать.
+    /// </summary>
+    public async Task DeactivateServiceLinkAsync(Guid barberProfileId, Guid hairServiceId)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles
+            .Include(x => x.Services)
+            .FirstAsync(x => x.Id == barberProfileId);
+
+        var link = profile.Services.Single(x => x.HairServiceId == hairServiceId);
+
+        Require(link.Deactivate());
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Число связей «барбер — услуга» у строки справочника: после выключения строки они
+    /// остаются, и «Выключить» ничего не каскадит.
+    /// </summary>
+    public async Task<int> CountHairServiceLinksAsync(Guid hairServiceId)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await db.BarberServices.CountAsync(link => link.HairServiceId == hairServiceId);
+    }
+
+    /// <summary>
     /// Привязывает специализацию к профилю через доменный метод — так же, как это делает
     /// кабинет барбера.
     /// </summary>
