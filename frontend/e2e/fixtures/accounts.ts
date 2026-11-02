@@ -50,7 +50,12 @@ export const fixtures = {
   /** 12 опубликованных отзывов витрины и 21 предстоящая запись кабинета. */
   publicReviews: { first: 10, total: 12 },
   upcomingBookings: 21,
-  historyBookings: 52,
+  /**
+   * 52 записи истории витрины плюс 24 админских брони на 2026-09-12: они уже
+   * закончились, поэтому попадают в историю кабинета, хотя их статусы Pending
+   * и Confirmed (скоуп `past` смотрит на `end_at`, а не на статус).
+   */
+  historyBookings: 76,
   /** Две вкладки `/account`: по 21 строке, то есть по две страницы по 20. */
   customerUpcomingBookings: 21,
   customerHistoryBookings: 21,
@@ -84,6 +89,34 @@ export const fixtures = {
     total: 21,
     roleChangeRowId: '9e700000-0000-4000-8000-000000000020',
     systemRowId: '9e700000-0000-4000-8000-000000000021',
+  },
+  /**
+   * Брони `/admin/bookings`: отдельный клиент и 24 строки на 2026-09-12 UTC
+   * (`seed.sql`, секция 5.7). Поиск по `email` даёт ровно этот набор, поэтому
+   * счётчики не зависят от броней остальных фикстур.
+   *
+   * `total` = первая страница `pageSize` + вторая `secondPage` (20 + 4).
+   * `cancelId` (NN 01, Pending) и `noShowId` (NN 19, Confirmed с началом
+   * в прошлом) — строки мутирующего спека. `latestId` (NN 24, NoShow) — самая
+   * поздняя бронь, то есть первая строка списка: на ней проверяются порядок,
+   * пояс салона и выбранная карточка для axe. `untouchedId` (NN 20, Confirmed)
+   * нужен сцене «Оставить как есть»: тесты одного файла идут параллельно,
+   * поэтому она не делит бронь с отменой и неявкой.
+   */
+  adminBookings: {
+    email: 'e2e-bookings@barbersearch.test',
+    pageSize: 20,
+    total: 24,
+    secondPage: 4,
+    pending: 18,
+    confirmed: 3,
+    completed: 1,
+    cancelled: 1,
+    noShow: 1,
+    cancelId: '9e900000-0000-4000-8000-000000000001',
+    noShowId: '9e900000-0000-4000-8000-000000000019',
+    untouchedId: '9e900000-0000-4000-8000-000000000020',
+    latestId: '9e900000-0000-4000-8000-000000000024',
   },
 } as const
 

@@ -15,8 +15,9 @@
 --   psql -h localhost -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 -f e2e/fixtures/seed.sql
 --
 -- Что даёт разметка для тестов:
---   B1 (9e100000-…-0001)        12 опубликованных отзывов (2 страницы по 10), 52 записи
---                               в истории, 21 предстоящая запись (вторая страница — одна строка)
+--   B1 (9e100000-…-0001)        12 опубликованных отзывов (2 страницы по 10), 76 записей
+--                               в истории (52 прежних + 24 админских на 2026-09-12),
+--                               21 предстоящая запись (вторая страница — одна строка)
 --   e2e-customer                12 своих отзывов (вторая страница — 2 строки),
 --                               21 предстоящая запись и 21 запись истории — две вкладки
 --                               «/account» по две страницы (20 + одна строка)
@@ -27,6 +28,8 @@
 --   25 пользователей            страница админки «1–20» + «21–25»
 --   21 строка audit_log          журнал `/admin/audit` на 2026-09-10 UTC:
 --                               страница «1–20», вторая «21–21», фильтры по дате
+--   24 брони e2e-bookings       `/admin/bookings` на 2026-09-12 UTC: две страницы
+--                               (20 + 4) и все пять статусов
 
 \set ON_ERROR_STOP on
 SET TIME ZONE 'UTC';
@@ -585,6 +588,88 @@ SELECT
     timestamptz '2026-07-01 10:00+00' + (n || ' days')::interval,
     timestamptz '2026-07-01 10:00+00' + (n || ' days')::interval
 FROM generate_series(1, 2) AS n;
+
+-- 5.7 Клиент поддержки и 24 брони админского списка (`/admin/bookings`).
+--
+-- Клиент отдельный (`e2e-bookings@…`): поиск по его email даёт ровно этот набор.
+-- Брони `e2e-customer`/`e2e-mutations` меняют читающие и мутирующие спеки кабинетов,
+-- и общий счётчик админского списка поехал бы от чужой отмены.
+--
+-- Дата фиксированная и в прошлом (2026-09-12 UTC). Прошлое — не оплошность:
+--   * порядок строк и вторая страница не зависят от дня прогона;
+--   * неявку домен разрешает только для `Confirmed` с началом в прошлом, поэтому
+--     на «сегодняшних» данных кнопка «Отметить неявку» то появлялась бы, то нет.
+-- Шаг 30 минут: интервалы не пересекаются, и exclusion-ограничение
+-- `ex_bookings_no_overlap` (полуоткрытые `[start, end)`) не срабатывает.
+--
+-- 24 строки = две страницы общего пейджера (20 + 4) и все пять статусов сразу:
+-- 18 Pending (вторая страница и отмена, оставляющая 17), 3 Confirmed (неявка),
+-- 1 Completed, 1 Cancelled, 1 NoShow. Самая поздняя — NN 24: она первая в списке
+-- «свежие сверху», и читающая спека проверяет на ней пояс салона (20:30Z → 23:30).
+--
+-- Id фиксированные (`9e900000-…-0000000000NN`): читающая спека проверяет точный id
+-- первой строки, мутирующая открывает NN 01 и NN 19 поиском по id. md5() дал бы
+-- стабильные, но непредсказуемые id, и эти проверки стали бы невозможны.
+--
+-- Идемпотентность: удаляются только брони этой секции (`9e900000-%`). Остальные
+-- брони принадлежат `account-bookings*`, `barber-cabinet*` и мутирующим спекам —
+-- их трогать нельзя.
+INSERT INTO users
+    (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
+     is_email_verified, is_phone_verified, role, is_active, last_login_at,
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
+VALUES
+    ('9e000000-0000-4000-8000-000000000009', 'e2e-bookings@barbersearch.test',
+     'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
+     'Ирина', 'Волкова', '+70000000009', NULL,
+     true, false, 1, true, NULL, NULL,
+     timestamptz '2026-09-01 10:04+00', timestamptz '2026-09-01 10:04+00',
+     'e2e-stamp-bookings', 0)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    is_active = EXCLUDED.is_active,
+    is_email_verified = EXCLUDED.is_email_verified,
+    role = EXCLUDED.role,
+    failed_login_attempts = 0,
+    lockout_end = NULL,
+    updated_at = now();
+
+DELETE FROM bookings WHERE id::text LIKE '9e900000-%';
+
+WITH fixture AS (
+    SELECT
+        n,
+        timestamptz '2026-09-12 09:00+00' + ((n - 1) * 30 || ' minutes')::interval AS start_at,
+        timestamptz '2026-09-11 12:00+00' + ((n - 1) || ' minutes')::interval AS created_at
+    FROM generate_series(1, 24) AS n
+)
+INSERT INTO bookings
+    (id, user_id, barber_profile_id, barber_service_id, salon_id,
+     start_at, end_at, price, status, idempotency_key, customer_note, barber_note,
+     created_at, updated_at)
+SELECT
+    ('9e900000-0000-4000-8000-' || lpad(fixture.n::text, 12, '0'))::uuid,
+    '9e000000-0000-4000-8000-000000000009'::uuid,
+    '9e100000-0000-4000-8000-000000000001'::uuid,
+    '9e300000-0000-4000-8000-000000000001'::uuid,
+    '9e400000-0000-4000-8000-000000000001'::uuid,
+    fixture.start_at,
+    fixture.start_at + interval '30 minutes',
+    30.00,
+    CASE
+        WHEN fixture.n <= 18 THEN 1 -- Pending: 18 строк, отмена оставляет 17
+        WHEN fixture.n <= 21 THEN 2 -- Confirmed: неявка доступна, начало в прошлом
+        WHEN fixture.n = 22 THEN 4 -- Completed
+        WHEN fixture.n = 23 THEN 3 -- Cancelled
+        ELSE 5                     -- NoShow: самая поздняя строка, первая в списке
+    END,
+    'e2e-admin-bookings-' || fixture.n,
+    CASE WHEN fixture.n = 1 THEN 'Позвоните за час' END,
+    CASE WHEN fixture.n = 1 THEN 'Клиент предупреждён' END,
+    fixture.created_at,
+    fixture.created_at
+FROM fixture;
 
 -- 6. Отзывы.
 

@@ -45,6 +45,8 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 | `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
+| `/admin/bookings` | booking support list: customer email or exact booking id search, status filter, paged table/cards, split-view detail |
+| `/admin/bookings/{id}` | one booking: time in the salon zone, customer, barber, service, salon, notes; cancel or mark a no-show |
 | `/admin/audit` | read-only change journal: filters by entity type, author email and UTC dates, paged list with an expandable diff |
 
 The customer cabinet, the barber cabinet and the admin section are client-side gated; the API
@@ -65,9 +67,11 @@ One list deliberately keeps «Показать ещё»:
   hide barbers the visitor has already seen.
 
 Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
-`/admin/barbers`, `/admin/users` and `/admin/audit` — pages with the same footer. The customer
-cabinet was the last one to move to the pager: it split one server list on the client, which the
-server-side `scope` fixed (#36).
+`/admin/barbers`, `/admin/users`, `/admin/bookings` and `/admin/audit` — pages with the same footer.
+The customer cabinet was the last one to move to the pager: it split one server list on the client,
+which the server-side `scope` fixed (#36). The bookings list was built on the shared pager from the
+start: the email search and the status filter are part of the request, so changing either starts a
+new first page and the catalogue stays the only admin read without one.
 
 The three admin catalogue dictionaries are the second, different exception: `/admin/catalogue` has
 **no pager at all**. A dictionary is dozens of rows, the public `GET /api/hair-services` and
@@ -522,8 +526,9 @@ quiet re-sync. The screen never shows a total count, because the API does not re
 `/admin/catalogue` shows three dictionaries — services, specializations and salons — in three
 tabs. The tab lives in `?tab=services|specializations|salons` (`services` by default, so
 `/admin/catalogue` is the canonical address) and survives a reload and «Назад»; an unknown value
-falls back to services instead of «Раздел не найден». The rail gained the fourth item between
-«Барберы» and «Пользователи», and the page is `noindex` like the rest of the admin.
+falls back to services instead of «Раздел не найден». The catalogue is the fourth rail item, after
+«Пользователи» (the users/catalogue order was aligned with the handoff), and the page is `noindex`
+like the rest of the admin.
 
 - `src/lib/admin-catalogue.ts` — three admin reads, all mutations of the existing endpoints, the
   labels and `describeAdminCatalogueError`.
@@ -569,12 +574,84 @@ What it does:
   is **not** written to `audit_log` — the `AuditTrail` allowlist covers `User`, `BarberProfile` and
   `Review` only — so the screen does not promise an audit.
 
+## Admin bookings
+
+`/admin/bookings` is the support desk for every customer's visits: before this screen the admin saw
+bookings only as identifiers from `GET /api/bookings` and could not find a record by the email the
+customer quotes in a ticket. The rail gained the sixth item before «Журнал», the detail lives at
+`/admin/bookings/{id}`, and the page is `noindex` like the rest of the admin.
+
+- `src/lib/admin-bookings.ts` — types, `ADMIN_BOOKING_STATUS_FILTER_LABELS`, the list and detail
+  reads (`GET /api/admin/bookings`, `GET /api/admin/bookings/{id}`), the two action calls
+  (`POST /api/bookings/{id}/cancellation` and `/no-show` through `mutateWithCsrf`),
+  `formatAdminBookingTime` and both error mappings.
+- `src/lib/response-guards.ts` — `isAdminBooking` / `isAdminBookingPage`: a known status, string
+  dates, a numeric price, nullable notes, the customer/barber/service/salon nested shapes and a
+  non-empty salon `timeZoneId`; extra fields are ignored.
+- `src/hooks/use-admin-bookings-list.ts` — `usePagedList` with `requiresAuth: true`; the search and
+  status filter are part of the request, so changing either starts the first page.
+  `src/hooks/use-admin-booking.ts` — the detail by id with `loading/ready/notFound/error` and
+  `reload()`.
+- `src/components/admin/bookings-screen.tsx`, `booking-detail.tsx` — the list with its filters and
+  the split-view card; `src/lib/admin-path.ts` — the `bookings` route, `bookingsPath()`,
+  `isBookingId()`.
+
+What it shows:
+
+- The list is a `<table>` from `lg` («Время», «Клиент», «Барбер», «Услуга», «Статус», «Цена») and
+  cards below it, with a link from each row to the detail. The time is rendered in the **salon's**
+  `timeZoneId`, not the browser's. The page has no horizontal scroll at 320 px.
+- Filters: a `type="search"` field for the customer email or the exact booking id (debounced by
+  300 ms, capped at 100 characters), a native status select with six options («Все статусы»,
+  «Ждёт подтверждения», «Подтверждена», «Завершена», «Отменена», «Неявка»), and «Сбросить фильтры»
+  when at least one filter is off its default. Any change starts a new first page.
+- The detail is a split-view panel on desktop and a full-screen card on mobile: status badge, start
+  and end in the salon zone, price, the customer's name, email (plain text, not `mailto:`) and
+  phone, the barber, the service, the salon with its city, address and time zone, both notes,
+  `createdAt` and the booking id.
+- The list is paged by the shared pager (twenty rows, «Назад» without a request); there is **no**
+  total count, no «Показать ещё» and no row counters, because the API returns no `totalCount`.
+
+What it can do:
+
+- «Отменить бронь» is offered for `Pending` and `Confirmed`; «Отметить неявку» only for `Confirmed`
+  bookings whose `startAt` has already passed. Both open an `alertdialog` that names the
+  consequence, show a `role="status"` message after `204`, reload the card and the list, and map a
+  refusal (`booking.cancel.invalidStatus`, `booking.markNoShow.tooEarly`,
+  `booking.markNoShow.invalidStatus`) to Russian copy in `role="alert"`.
+- The two actions are the existing `POST` endpoints; the screen adds **no new mutation**. There is
+  no create for a customer, no reschedule, no edit of the price, service or barber note, no delete
+  and no refunds or payments — the domain has none of them, and the barber's note is read-only for
+  the admin. Terminal bookings show no actions, and rows have no action buttons at all.
+
+What it cannot do, on purpose:
+
+- The email search, the status filter and the text stay in React state and are **not** written to
+  `?…`: the email is PII and does not belong in browser history or proxy logs. Only the booking id
+  is in the address, because a direct link to a booking from a ticket is the point of the screen.
+- **Bookings are not audited.** `AuditTrail` writes only `User`, `BarberProfile` and `Review` to
+  `audit_log`, so an admin cancellation or no-show does not appear in `/admin/audit`. The screen
+  does not promise an audit; widening the allowlist is a separate slice.
+- Filters by date, barber and salon, bulk operations, a calendar/timeline and CSV export are not
+  part of this screen.
+
+The API contract behind it: `GET /api/admin/bookings?status=&search=&cursor=&pageSize=` returns
+`PagedResponse<AdminBookingResponse>` ordered `start_at DESC, id ASC` with an opaque `(start_at, id)`
+keyset cursor. `status` compares against the `BookingStatus` names without case (`all` is the
+default, numbers are rejected); `search` is a customer-email substring with `%`, `_` and `\` escaped
+**or** the exact booking id when the value parses as a GUID — not a name, a phone number or an id
+prefix. `GET /api/admin/bookings/{id}` answers `404 admin.bookings.notFound` for a missing row. The
+DTO carries the customer's email and phone: they exist only in this admin contract, and
+`BookingResponse` used by the customer and barber reads is unchanged. Rows whose historical booking
+points at a deleted user, profile, service or salon drop out of the list (the inner joins are the
+same documented behaviour as the barber cabinet).
+
 ## Admin audit
 
 `/admin/audit` is the read-only change journal: when, who, what and on which entity changed, with
-an expandable per-row diff. The rail gained the fifth item, the route is the exact `/admin/audit`
-(no card route and no builder — a row already carries its whole diff), and the page is `noindex`
-like the rest of the admin.
+an expandable per-row diff. The journal is the last rail item, the route is the exact
+`/admin/audit` (no card route and no builder — a row already carries its whole diff), and the page
+is `noindex` like the rest of the admin.
 
 - `src/lib/admin-audit.ts` — types, `ADMIN_AUDIT_ENTITY_LABELS`/`_ACTION_LABELS`/`_FIELD_LABELS`,
   `formatAuditAction` (the label comes from the tail after the last dot of `user.updated`),
@@ -651,19 +728,29 @@ needs no API and no database, and covers:
   expandable `<dl>` diff «Роль: Клиент → Администратор», the empty-diff text and independent
   expansion; `AuditScreen` is an MSW-backed screen test: the loaded rows and pager range, the
   entity-type filter starting a new first page without a cursor, «Журнал пуст» and the `403` text.
+- `admin-bookings` — the list URL (`status` always, `search` and `cursor` only when set, no
+  `pageSize`), the detail read by id, the CSRF `POST`s for cancellation and no-show, the strict
+  guards (a bad status, a string price or a missing salon time zone is a broken body; extra fields
+  are fine), `formatAdminBookingTime` in the salon zone, the filter labels and the server-matching
+  page size and search limit, and both error mappings. `BookingsScreen` covers the rows, a filter
+  change starting a new first page, the next-page error keeping the rows, the empty states and the
+  `403` text; `BookingDetail` covers the salon-zone time, the actions by status, both confirmation
+  texts, the `204` result and the Russian error.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
 
-Not covered by the unit layer: `HeaderAuth` states, the screens and hooks, and everything that
-needs the real API, router, cookies or focus — that is the E2E layer below.
+Not covered by the unit layer: most screens and hooks (only the audit and admin-bookings screens have
+direct tests), and everything that needs the real API, router, cookies or focus — that is the E2E
+layer below.
 
 ## E2E
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
-stack and no mocked success responses. The suite covers the paged lists, the admin journal,
-sign-in, public reviews, the keyboard paths and an axe scan of every screen and role in two widths
-(1280 and 320). `npm test` (Vitest) stays separate and fast; E2E never runs inside it.
+stack and no mocked success responses. The suite covers the paged lists, the admin journal and the
+admin bookings desk, sign-in, public reviews, the keyboard paths and an axe scan of every screen and
+role in two widths (1280 and 320). `npm test` (Vitest) stays separate and fast; E2E never runs inside
+it.
 
 ### One-time setup
 
@@ -745,6 +832,13 @@ For the admin journal it adds exactly **21 `audit_log` rows on 2026-09-10 UTC** 
 `9e700000-…`, the newest one without an actor): the fixed past date keeps the journal checks away
 from the rows that mutating specs write «today», and the section deletes only its own ids before
 inserting, so the seed stays idempotent. There are no other changes to `audit_log`.
+For the admin bookings screen it adds one customer (`e2e-bookings@barbersearch.test`, id
+`9e000000-…-09`) and exactly **24 bookings on 2026-09-12** with fixed ids `9e900000-…-01`…`-24` at
+30-minute steps: 18 `Pending`, 3 `Confirmed`, one `Completed`, one `Cancelled` and one `NoShow`.
+The fixed past date makes the order deterministic, keeps «Отметить неявку» available (the visit has
+started) and gives two pages of 20 + 4; booking 01 carries both notes. The section deletes only its
+own ids before inserting, so the seed stays idempotent, and the other fixture bookings stay
+untouched — `account-bookings*`, `barber-cabinet*` and the mutating specs depend on them.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

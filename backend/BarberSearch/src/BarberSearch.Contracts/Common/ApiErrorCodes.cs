@@ -477,6 +477,49 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Админское чтение броней: список поддержки и карточка визита.
+    /// </summary>
+    /// <remarks>
+    /// Отдельные коды от <see cref="Booking"/>: это отдельный эндпоинт, и клиент различает
+    /// ошибку фильтра админского списка и ошибку операции над бронью. Мутаций здесь нет —
+    /// отмена и неявка остаются на существующих действиях <c>BookingsController</c>
+    /// и отвечают кодами агрегата (<c>booking.cancel.invalidStatus</c> и другими).
+    /// Курсор броней держит собственный код <c>admin.bookings.cursor.invalid</c>
+    /// в <c>AdminBookingCursor</c>, как и остальные курсоры.
+    /// </remarks>
+    public static class AdminBooking
+    {
+        /// <summary>
+        /// Брони с указанным идентификатором нет; <c>404</c>.
+        /// </summary>
+        public const string NotFound = "admin.bookings.notFound";
+
+        /// <summary>
+        /// Фильтр статуса не <c>all</c> и не имя <c>BookingStatus</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Числа вроде <c>0</c> отвергаются: контракт принимает только имена статусов,
+        /// хотя <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/> принял бы и число.
+        /// </remarks>
+        public const string StatusInvalid = "admin.bookings.status";
+
+        /// <summary>
+        /// Поисковая строка длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "admin.bookings.search";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "admin.bookings.page.limit";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>admin.bookings.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "admin.bookings";
+    }
+
+    /// <summary>
     /// Салоны.
     /// </summary>
     public static class Salon

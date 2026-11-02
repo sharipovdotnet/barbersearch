@@ -1,5 +1,7 @@
 using BarberSearch.Application.Bookings;
+using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
@@ -323,6 +325,247 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return rows.Select(ToBarberResponse).ToList();
     }
 
+    public async Task<Result<IReadOnlyList<AdminBookingResponse>, Failure>> GetAdminPageAsync(
+        AdminBookingFilters filters,
+        AdminBookingCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.AdminBooking.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminBookingsQuery(Context, filters, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToAdminResponse).ToList();
+    }
+
+    public async Task<Result<AdminBookingResponse, Failure>> GetAdminByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var filters = new AdminBookingFilters(Status: null, Search: null);
+
+        var row = await BuildAdminBookingsQuery(
+                Context,
+                filters,
+                cursor: null,
+                limit: null,
+                bookingId: id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return new Failure(Error.NotFound(
+                ApiErrorCodes.AdminBooking.NotFound,
+                $"Booking '{id}' was not found.",
+                id));
+        }
+
+        return ToAdminResponse(row);
+    }
+
+    /// <summary>
+    /// Собирает SQL админского чтения броней: соединения, фильтры, keyset, порядок
+    /// и проекцию в плоскую строку.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Соединения внутренние, как в кабинете барбера: историческая строка с оборванной
+    /// ссылкой на клиента, барбера, услугу или салон выпадает из админского списка —
+    /// карточка без контекста визита бесполезна, а показать «бронь без клиента» нельзя.
+    /// </para>
+    /// <para>
+    /// Поиск: строка, разбирающаяся как <see cref="Guid"/>, — точный идентификатор брони;
+    /// иначе подстрока email клиента через <c>ILIKE</c> с экранированными <c>%</c>, <c>_</c>
+    /// и <c>\</c>. По имени и телефону клиента, email барбера и префиксу id поиск
+    /// не выполняется. Порядок — <c>start_at DESC, id ASC</c>; второй ключ обязателен,
+    /// потому что <c>start_at</c> не уникален.
+    /// </para>
+    /// </remarks>
+    internal static IQueryable<AdminBookingRow> BuildAdminBookingsQuery(
+        ApplicationDbContext context,
+        AdminBookingFilters filters,
+        AdminBookingCursor? cursor,
+        int? limit,
+        Guid? bookingId = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(filters);
+
+        var bookings = context.Bookings.AsNoTracking();
+
+        // Навигаций между агрегатами в домене нет, поэтому клиент, барбер, услуга и салон
+        // присоединяются явными join'ами по идентификаторам.
+        var customers = context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.Email,
+                user.PhoneNumber
+            });
+
+        var barberProfiles = context.BarberProfiles
+            .AsNoTracking()
+            .Select(profile => new
+            {
+                profile.Id,
+                DisplayName = profile.DisplayName.Value
+            });
+
+        var barberServices = context.BarberServices
+            .AsNoTracking()
+            .Select(service => new
+            {
+                service.Id,
+                service.HairServiceId
+            });
+
+        var hairServices = context.HairServices
+            .AsNoTracking()
+            .Select(hairService => new
+            {
+                hairService.Id,
+                hairService.Name
+            });
+
+        var salons = context.Salons
+            .AsNoTracking()
+            .Select(salon => new
+            {
+                salon.Id,
+                salon.Name,
+                salon.Address,
+                salon.City,
+                salon.TimeZoneId
+            });
+
+        var joined = from booking in bookings
+                     join customer in customers on booking.UserId equals customer.Id
+                     join barberProfile in barberProfiles
+                         on booking.BarberProfileId equals barberProfile.Id
+                     join service in barberServices on booking.BarberServiceId equals service.Id
+                     join hairService in hairServices
+                         on service.HairServiceId equals hairService.Id
+                     join salon in salons on booking.SalonId equals salon.Id
+                     select new
+                     {
+                         booking,
+                         customer,
+                         barberProfile,
+                         hairService,
+                         salon
+                     };
+
+        if (filters.Status is { } status)
+        {
+            joined = joined.Where(row => row.booking.Status == status);
+        }
+
+        if (bookingId is { } id)
+        {
+            joined = joined.Where(row => row.booking.Id == id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.Search))
+        {
+            var search = filters.Search;
+
+            if (Guid.TryParse(search, out var searchedId))
+            {
+                // GUID — это идентификатор брони, а не подстрока email: искать «%guid%»
+                // по адресу бессмысленно.
+                joined = joined.Where(row => row.booking.Id == searchedId);
+            }
+            else
+            {
+                var pattern = LikePattern.Contains(search);
+
+                joined = joined.Where(row =>
+                    EF.Functions.ILike(row.customer.Email, pattern, "\\"));
+            }
+        }
+
+        if (cursor is { } position)
+        {
+            joined = joined.Where(row =>
+                row.booking.StartAt < position.StartAt
+                || (row.booking.StartAt == position.StartAt
+                    && row.booking.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = joined
+            .OrderByDescending(row => row.booking.StartAt)
+            .ThenBy(row => row.booking.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(row => new AdminBookingRow(
+            row.booking.Id,
+            row.booking.Status,
+            row.booking.StartAt,
+            row.booking.EndAt,
+            row.booking.Price,
+            row.booking.CustomerNote,
+            row.booking.BarberNote,
+            row.booking.CreatedAt,
+            row.customer.Id,
+            row.customer.FirstName,
+            row.customer.LastName,
+            row.customer.Email,
+            row.customer.PhoneNumber,
+            row.barberProfile.Id,
+            row.barberProfile.DisplayName,
+            row.hairService.Name,
+            row.salon.Id,
+            row.salon.Name,
+            row.salon.Address,
+            row.salon.City,
+            row.salon.TimeZoneId));
+    }
+
+    /// <summary>
+    /// Собирает админский контракт из плоской строки.
+    /// </summary>
+    /// <remarks>
+    /// Вложенные записи конструируются в памяти, чтобы EF не собирал объектную модель в SQL,
+    /// — тот же приём, что в админском чтении отзывов и журнала.
+    /// </remarks>
+    private static AdminBookingResponse ToAdminResponse(AdminBookingRow row)
+        => new(
+            row.BookingId,
+            row.Status,
+            row.StartAt,
+            row.EndAt,
+            row.Price,
+            row.CustomerNote,
+            row.BarberNote,
+            row.CreatedAt,
+            new AdminBookingCustomerResponse(
+                row.CustomerId,
+                row.FirstName,
+                row.LastName,
+                row.Email,
+                row.PhoneNumber),
+            new AdminBookingBarberResponse(row.BarberProfileId, row.DisplayName),
+            new AdminBookingServiceResponse(row.ServiceName),
+            new AdminBookingSalonResponse(
+                row.SalonId,
+                row.SalonName,
+                row.SalonAddress,
+                row.SalonCity,
+                row.TimeZoneId));
+
     public async Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(
         Guid barberProfileId,
         DateTimeOffset from,
@@ -522,6 +765,36 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string CustomerLastName,
         string? CustomerPhoneNumber,
         string ServiceName,
+        string SalonName,
+        string SalonAddress,
+        string SalonCity,
+        string TimeZoneId);
+
+    /// <summary>
+    /// Плоская строка админского чтения броней до сборки вложенных response-записей.
+    /// </summary>
+    /// <remarks>
+    /// Сущность <see cref="Booking"/> не покидает репозиторий: наружу уходит контракт
+    /// <see cref="AdminBookingResponse"/>, собранный из этой строки в памяти.
+    /// </remarks>
+    internal sealed record AdminBookingRow(
+        Guid BookingId,
+        BookingStatus Status,
+        DateTimeOffset StartAt,
+        DateTimeOffset EndAt,
+        decimal Price,
+        string? CustomerNote,
+        string? BarberNote,
+        DateTimeOffset CreatedAt,
+        Guid CustomerId,
+        string FirstName,
+        string LastName,
+        string Email,
+        string? PhoneNumber,
+        Guid BarberProfileId,
+        string DisplayName,
+        string ServiceName,
+        Guid SalonId,
         string SalonName,
         string SalonAddress,
         string SalonCity,

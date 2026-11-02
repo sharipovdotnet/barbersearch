@@ -165,7 +165,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Барберы | verify/unverify, grade, rating, activation | `GET /api/admin/barbers`, `GET /api/admin/barbers/{id}` — ✅ этап 2 |
 | Пользователи | create/role/activation/verification/link | `GET /api/admin/users`, `GET /api/admin/users/{id}` — ✅ этап 3 |
 | Каталог | create/update/activation | ✅ этап 4: `GET /api/admin/catalogue/{hair-services\|specializations\|salons}` — полный справочник, включая выключенные строки, `status=all\|active\|hidden`, поиск, `isActive` и `usageCount`; мутации остаются на существующих эндпоинтах |
-| Брони | `GET /api/bookings` | Имена и контекст в ответе; поиск пользователя |
+| Брони | `GET /api/bookings` (идентификаторы без имён) и существующие мутации отмены/неявки | ✅ этап 6, первая половина (#39): `GET /api/admin/bookings` — keyset `(start_at DESC, id)`, фильтр `status=all\|Pending\|Confirmed\|Completed\|Cancelled\|NoShow` (имена без учёта регистра), поиск по email клиента (ILIKE с экранированием `%`, `_`, `\`) или по точному id брони, `AdminBookingResponse` с клиентом (имя, email, телефон), барбером, услугой и салоном с `timeZoneId`; `GET /api/admin/bookings/{id}` с тем же DTO и `404 admin.bookings.notFound`. Email и телефон есть только в этом админском DTO; новых мутаций нет |
 | Журнал | таблица `audit_log` | ✅ этап 5: `GET /api/admin/audit` (read-only) — keyset-лента, фильтры `entityType=all\|user\|barber_profile\|review`, `actor`, `from`/`to` (UTC-сутки), разобранный `changes`; автор резолвится `LEFT JOIN` и может быть удалён, имя сущности не резолвится |
 | Сводка | — | `GET /api/admin/summary` (опционально, позже) |
 
@@ -197,6 +197,18 @@ Git-корень на уровень выше рабочей папки, поэ�
 > Автор приходит через `LEFT JOIN users` и может быть `null`; `entity_id` есть,
 > а имени сущности нет — она могла быть переименована или удалена. Эндпоинт только
 > `GET`: `audit_log` пишет `AuditTrail`, ретенции и экспорта нет.
+>
+> Этап 6, первая половина (2.11.2026, #39) закрыл чтение броней:
+> `GET /api/admin/bookings` под `AdminOnly` отдаёт `PagedResponse<AdminBookingResponse>` —
+> keyset `(start_at DESC, id)`, `status` (`all` по умолчанию), `search` (подстрока email
+> клиента или точный id брони), `pageSize` 1..100, коды `admin.bookings.*`. DTO несёт
+> клиента (имя, email, телефон), барбера, услугу и салон с `timeZoneId` — email и телефон
+> только здесь, публичный `BookingResponse` не изменился. `GET /api/admin/bookings/{id}`
+> отдаёт тот же DTO и `404 admin.bookings.notFound`. Мутации остались на
+> `BookingsController`; брони по-прежнему не аудируются. Индекс
+> `(status, start_at DESC, id)` добавлен миграцией `AddAdminBookingsStatusIndex` после
+> `EXPLAIN (ANALYZE, BUFFERS)` на 1,2 млн строк: без него фильтр по `Cancelled` читал
+> почти всю таблицу (3,3 с против 3,4 мс после индекса).
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -454,6 +466,29 @@ Git-корень на уровень выше рабочей папки, поэ�
 с подтверждением. Ответ `GET /api/bookings` содержит только
 идентификаторы, поэтому имена без нового админского контракта не показать.
 
+✅ Реализовано 2.11.2026 (#39): `/admin/bookings` и `/admin/bookings/{id}`.
+Чтение, поиск и действия работают на новом админском контракте:
+`GET /api/admin/bookings` и `GET /api/admin/bookings/{id}` под `AdminOnly`,
+keyset `(start_at DESC, id)`, фильтр статуса, поиск по email клиента
+(300 мс debounce, не длиннее 100 символов) или по точному id. Экран:
+таблица на `lg` и карточки на узком, общий пейджер (20 строк, «Назад» без
+запроса), split-view карточка (на мобильном — на весь экран) с временем
+в поясе салона, клиентом (имя, email, телефон), барбером, услугой, салоном,
+ценой и обеими заметками. Кнопки «Отменить бронь» (`Pending`/`Confirmed`)
+и «Отметить неявку» (`Confirmed` и `startAt <= now`) открывают `alertdialog`,
+после успеха карточка и список перечитываются, `role="status"` сообщает
+результат, ошибки приходят по-русски в `role="alert"`.
+
+Этап **не добавил ни одной новой мутации**: обе кнопки вызывают существующие
+`POST api/bookings/{id}/cancellation` и `POST api/bookings/{id}/no-show`
+(они остаются на `BookingsController`). Создания брони «за клиента»,
+переноса, правки цены, услуги, салона или заметки барбера, удаления,
+возвратов и платежей нет — домен их не умеет. Фильтры живут в состоянии
+React, а не в URL: email — PII, в адресе остаётся только id брони.
+Брони **не аудируются**: allowlist `AuditTrail` покрывает только `User`,
+`BarberProfile` и `Review`, поэтому отмена и неявка админом в
+`/admin/audit` не появляются; экран этого и не обещает.
+
 ### 3.9 «Журнал»
 
 Read-only история: когда, кто, что изменил, у какой сущности, diff полей.
@@ -584,8 +619,15 @@ Read-only история: когда, кто, что изменил, у како
    и ошибочные состояния. В URL фильтры не пишутся (email — PII), действий над
    записями нет: журнал неизменяем. Известное ограничение — аудит только
    `User`/`BarberProfile`/`Review`; каталог, салоны и брони в журнал не попадают.
-6. **«Брони» и «Сводка».** Поддержка и агрегаты, когда появятся контракты.
-   Порядок после #38: сначала «Брони», затем «Сводка» (опционально).
+6. **«Брони» и «Сводка».** ✅ «Брони» реализованы 2.11.2026 (#39):
+   `/admin/bookings` и `/admin/bookings/{id}` — поиск по email клиента или точному id,
+   фильтр статуса, общий пейджер, split-view карточка со временем в поясе салона
+   и действиями «Отменить бронь»/«Отметить неявку» с подтверждением.
+   Новых мутаций нет — обе кнопки вызывают существующие `cancellation` и `no-show`.
+   Этап 6 закрыт наполовину: «Сводка» остаётся опциональной и требует агрегатов,
+   которых API пока не отдаёт; порядок после #38 соблюдён — сначала «Брони»,
+   затем «Сводка». Порядок пунктов рейла приведён к §3.2 (пользователи и каталог
+   поменялись местами), «Журнал» остался последним.
 
 Порядок продиктован риском: отзывы обратимы и ежедневны, барберы влияют
 на предложение, пользователи — самые чувствительные, каталог — редкий,
@@ -860,6 +902,64 @@ Read-only история: когда, кто, что изменил, у како
     123 passed, 2 skipped (было 105 + 2), включая `/admin/audit` в desktop,
     mobile, axe 1280 и 320; логи — `frontend/verification/issue-38-e2e.txt`.
 
+51. **Реализация этапа 6, первая половина — «Брони» (2.11.2026, #39).** Backend сначала
+    получил красные интеграционные тесты `AdminBookingReadTests`: `/api/admin/bookings`
+    и `/api/admin/bookings/{id}` отвечали `404`, а `401`/`403` для несуществующего
+    маршрута не выполнялись (вывод — `frontend/verification/issue-39-before.txt`).
+52. Backend: `AdminBookingResponse` и четыре вложенных DTO (`AdminBookingCustomerResponse`,
+    `AdminBookingBarberResponse`, `AdminBookingServiceResponse`, `AdminBookingSalonResponse`)
+    в `Contracts/Bookings/Admin`; `AdminBookingCursor` `(start_at, id)` с областью
+    `admin.bookings`, `AdminBookingFilters`, запросы и обработчики `GetAdminBookings`
+    и `GetAdminBooking`, коды `admin.bookings.notFound|status|search|page.limit`,
+    `admin.bookings.pageSize` и `admin.bookings.cursor.invalid`.
+53. Backend: `AdminBookingsController` — два `GET` под `AdminOnly`,
+    `IBookingRepository.GetAdminPageAsync`/`GetAdminByIdAsync` и проекция в
+    `BookingRepository` одним SQL: внутренние join'ы на users, barber_profiles,
+    barber_services → hair_services и salons, `ILIKE` с экранированием `%`, `_`, `\`,
+    keyset `OrderByDescending(StartAt).ThenBy(Id)`. `GET api/bookings` и
+    `GET api/barber/bookings` не менялись; мутации остались на `BookingsController`.
+54. Backend: `EXPLAIN (ANALYZE, BUFFERS)` на `barbersearch_load` (1 200 021 бронь,
+    14 002 пользователя, 12 000 профилей барберов, 400 салонов): без фильтров —
+    `Index Scan ix_bookings_start_at_id`, 21 строка, без `Sort`, ~1,2 мс; `status = 3`
+    (`Cancelled`) — 876 011 строк отброшено фильтром, ~3,3 с; `status = 1` (11 строк) —
+    bitmap + `Sort`, 117 мс; поиск по email — seq scan `users` + top-N `Sort`, 177 мс;
+    точный id — `pk_bookings`, 1,2 мс. Кандидат `(status, start_at DESC, id)` дал 3,4 мс
+    для `Cancelled` и 0,4 мс для `Pending`, `Index Scan` без `Sort`; миграция
+    `AddAdminBookingsStatusIndex` создаёт `ix_bookings_status_start_at_id`, старый
+    `ix_bookings_start_at_id` остаётся для страницы без фильтра. Логи —
+    `frontend/verification/issue-39-explain.txt` и `issue-39-explain-index.txt`.
+55. Frontend: `lib/admin-path.ts` (`bookings`, `bookingsPath`, `isBookingId`) —
+    шестой пункт рейла перед «Журналом» (порядок «Пользователи»/«Каталог» приведён
+    к §3.2), заголовок `ADMIN_TITLES.bookings`, dispatch на `BookingsScreen`;
+    `lib/admin-bookings.ts` (типы, подписи шести статусов, чтения, две мутации
+    с CSRF, `formatAdminBookingTime` в поясе салона, разбор ошибок),
+    `response-guards` — `isAdminBooking`/`isAdminBookingPage`,
+    `hooks/use-admin-bookings-list.ts` на `usePagedList`, `use-admin-booking.ts`.
+56. Frontend: `components/admin/bookings-screen.tsx` (заголовок, поиск с debounce
+    300 мс и `maxLength` 100, селект статуса, «Сбросить фильтры», таблица/карточки,
+    общий пейджер, состояния скелетон/пусто/«Ничего не найдено»/ошибка первой
+    и следующей страницы/`401`/`403`) и `booking-detail.tsx` (время в поясе салона,
+    клиент, барбер, услуга, салон, цена, обе заметки, `createdAt`, id, две кнопки
+    с `alertdialog`, `role="status"`/`role="alert"`, `404` карточки).
+57. E2E: в `seed.sql` клиент `9e000000-…-09` и 24 брони на 2026-09-12 (id `9e900000-…`,
+    статусы 18 `Pending` + 3 `Confirmed` + `Completed` + `Cancelled` + `NoShow`,
+    шаг 30 минут), `fixtures.adminBookings`, `pages/admin-bookings-page.ts`,
+    `specs/admin-bookings.spec.ts` (рейл, поиск, пейджер, карточка, фильтр статуса,
+    точный id, `%`, сброс, отсутствие счётчиков и действий у строк, внедрённый `401`),
+    `specs/admin-bookings-mutations.spec.ts` (отмена и неявка в `mutations-chromium`,
+    «Оставить как есть» без запроса) и `/admin/bookings` в axe 1280/320 без новых
+    исключений.
+58. Проверено: backend build 0/0 (Debug и Release), тесты — 187 domain + 368 application
+    + 83 infrastructure + 109 integration (всего 747; было 187 + 338 + 83 + 93), вывод —
+    `frontend/verification/issue-39-backend-tests.txt`; 20 контроллеров / 98 эндпоинтов
+    и 19 миграций. Frontend: `npm test` — 171 тест в 16 файлах (было 116 в 12),
+    `npm run lint` — 0/0 (213 файлов), `npm run build` — успешно (2303 модуля,
+    entry 395.74 kB / 127.84 kB gzip, `admin-page` 188.26 / 39.76, css 75.75 / 13.14),
+    вывод — `frontend/verification/issue-39-frontend-tests.txt`. Playwright на запущенном
+    API и `barbersearch_e2e`: 146 passed, 2 skipped (было 123 + 2), включая новый спек,
+    мутации последними и axe 1280/320; лог — `frontend/verification/issue-39-e2e.txt`.
+    Новых allow-list и исключений в axe нет; новых зависимостей и правок `ui/**` нет.
+
 ---
 
 ## 9. Карта файлов
@@ -883,6 +983,10 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: API каталога | `frontend/src/lib/admin-catalogue.ts`, `frontend/src/hooks/use-admin-catalogue.ts` |
 | Админка: экран журнала | `frontend/src/components/admin/audit-screen.tsx`, `audit-entry.tsx` |
 | Админка: API журнала | `frontend/src/lib/admin-audit.ts`, `frontend/src/hooks/use-admin-audit-list.ts` |
+| Админка: экран броней | `frontend/src/components/admin/bookings-screen.tsx`, `booking-detail.tsx` |
+| Админка: API и хуки броней | `frontend/src/lib/admin-bookings.ts`, `frontend/src/hooks/use-admin-bookings-list.ts`, `use-admin-booking.ts` |
+| Брони: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminBookingsController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/BookingRepository.cs` |
+| Брони: контракт и индекс | `backend/BarberSearch/src/BarberSearch.Contracts/Bookings/Admin/AdminBookingResponse.cs`, миграция `AddAdminBookingsStatusIndex` |
 | Аудит: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminAuditController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/AuditLogRepository.cs` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
