@@ -167,7 +167,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 | Каталог | create/update/activation | ✅ этап 4: `GET /api/admin/catalogue/{hair-services\|specializations\|salons}` — полный справочник, включая выключенные строки, `status=all\|active\|hidden`, поиск, `isActive` и `usageCount`; мутации остаются на существующих эндпоинтах |
 | Брони | `GET /api/bookings` (идентификаторы без имён) и существующие мутации отмены/неявки | ✅ этап 6, первая половина (#39): `GET /api/admin/bookings` — keyset `(start_at DESC, id)`, фильтр `status=all\|Pending\|Confirmed\|Completed\|Cancelled\|NoShow` (имена без учёта регистра), поиск по email клиента (ILIKE с экранированием `%`, `_`, `\`) или по точному id брони, `AdminBookingResponse` с клиентом (имя, email, телефон), барбером, услугой и салоном с `timeZoneId`; `GET /api/admin/bookings/{id}` с тем же DTO и `404 admin.bookings.notFound`. Email и телефон есть только в этом админском DTO; новых мутаций нет |
 | Журнал | таблица `audit_log` | ✅ этап 5: `GET /api/admin/audit` (read-only) — keyset-лента, фильтры `entityType=all\|user\|barber_profile\|review`, `actor`, `from`/`to` (UTC-сутки), разобранный `changes`; автор резолвится `LEFT JOIN` и может быть удалён, имя сущности не резолвится |
-| Сводка | — | `GET /api/admin/summary` (опционально, позже) |
+| Сводка | — | ✅ этап 6, вторая половина (#40): `GET /api/admin/summary` — единственное агрегатное чтение под `AdminOnly`, без параметров и пагинации: `reviews.pendingCount` + `reviews.oldest` (первая строка FIFO-очереди модерации), `barbers.unverifiedCount`, `salons.inactiveCount`. Счётчики используют ровно предикаты разделов (`is_published = false`, `is_verified = false` без `is_active`, `is_active = false`); `total` в существующие списки не добавлен. В ответе только имена, без email и телефона |
 
 > Этап 1 (28.10.2026) закрыл админские чтения отзывов: `GET /api/admin/reviews`
 > и `GET /api/admin/reviews/{id}`. Публичные `ReviewResponse` и `BookingResponse`
@@ -209,6 +209,22 @@ Git-корень на уровень выше рабочей папки, поэ�
 > `(status, start_at DESC, id)` добавлен миграцией `AddAdminBookingsStatusIndex` после
 > `EXPLAIN (ANALYZE, BUFFERS)` на 1,2 млн строк: без него фильтр по `Cancelled` читал
 > почти всю таблицу (3,3 с против 3,4 мс после индекса).
+>
+> Этап 6, вторая половина (2.11.2026, #40) закрыл «Сводку» и вместе с ней весь этап 6:
+> `GET /api/admin/summary` под `AdminOnly` отдаёт `AdminSummaryResponse` — три блока
+> (`reviews.pendingCount` + компактный `oldest`, `barbers.unverifiedCount`,
+> `salons.inactiveCount`) без параметров, пагинации и курсора. Числа считаются теми же
+> предикатами, что фильтры разделов: `is_published = false` (вкладка «На модерации»,
+> включая скрытые администратором отзывы), `is_verified = false` (ровно
+> `AdminBarberStatus.Pending`, **без** `is_active`) и `is_active = false` (ровно
+> `AdminCatalogueStatus.Hidden` для салонов). «Самый старый» — первая строка
+> существующей FIFO-страницы очереди, а не второй SQL; `oldest = null`, если очередь
+> пуста или опустела между двумя чтениями (гонка, а не ошибка). Email и телефон клиента
+> в сводку не входят — только имена; `total` в `PagedResponse` и в списках не появился.
+> Сводка только читает: мутаций и записи в `audit_log` у неё нет. `EXPLAIN (ANALYZE,
+> BUFFERS)` на мигрированной копии `barbersearch_load` показал, что миграция не нужна:
+> частичный `ix_reviews_moderation_created_at_id` отдаёт «самого старого» через
+> `Index Scan` без `Sort` (0,7 мс), три `COUNT(*)` — 0,03–3,9 мс.
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -234,7 +250,7 @@ Git-корень на уровень выше рабочей папки, поэ�
 ### 3.2 Вход и доступ
 
 - Один маршрут `/admin`, но у разделов свои адреса:
-  `/admin/reviews`, `/admin/barbers`, `/admin/users`, `/admin/catalogue`,
+  `/admin/summary`, `/admin/reviews`, `/admin/barbers`, `/admin/users`, `/admin/catalogue`,
   `/admin/bookings`, `/admin/audit`. Перезагрузка и «назад» возвращают
   в тот же раздел и к той же карточке.
 - Роль — из `GET /api/auth/me` (`role === 'Admin'`). Клиентская проверка
@@ -249,8 +265,9 @@ Git-корень на уровень выше рабочей папки, поэ�
   прямой URL.
 - На `/admin` маркетинговая шапка урезается: логотип, «На сайт», аккаунт.
   Футер витрины скрыт. Это не отдельное приложение, а режим того же SPA.
-- `<title>` — «Отзывы — администрирование BarberSearch». `noindex`
-  ставится динамически, но защитой не считается: данные закрыты API.
+- `<title>` — «Отзывы — администрирование BarberSearch» (у сводки — «Сводка —
+  администрирование BarberSearch»). `noindex` ставится динамически, но защитой
+  не считается: данные закрыты API.
 
 ### 3.3 Каркас
 
@@ -261,6 +278,9 @@ Git-корень на уровень выше рабочей папки, поэ�
 - На мобильном рейл — горизонтальная прокручиваемая лента под заголовком.
   Таблицы превращаются в карточки, деталь — на весь экран с «Назад».
 - В рейле только работающие разделы: мёртвых ссылок «скоро» нет.
+  ✅ «Сводка» реализована (#40) и стоит **первым** пунктом:
+  «Сводка, Отзывы, Барберы, Пользователи, Каталог, Брони, Журнал».
+  Стартовой страницей она не стала: `/admin` по-прежнему ведёт на очередь отзывов.
   Счётчики — только при достоверных данных; выдуманные числа запрещены.
 
 Схема главного экрана:
@@ -271,7 +291,8 @@ Git-корень на уровень выше рабочей папки, поэ�
 ├────────────────┬────────────────────────────────────────────────────────────┤
 │  Разделы       │  Отзывы                       Обновлено в 18:42  [Обновить] │
 │                │  Скрытые отзывы ждут решения. Пока отзыв скрыт, он не       │
-│  Отзывы     12 │  влияет на рейтинг барбера.                                 │
+│  Сводка        │  влияет на рейтинг барбера.                                 │
+│  Отзывы     12 │                                                             │
 │  Барберы     4 │                                                             │
 │  Пользователи  │  ┌───────────────────────┬────────────────────────────────┐ │
 │  Каталог       │  │ На модерации  Опубл.  │  4 из 5   ★★★★☆                │ │
@@ -507,12 +528,34 @@ Read-only история: когда, кто, что изменил, у како
 в журнал не попадают. Решение этапа 5 — честно сказать об этом в UI и документации,
 а не расширять allowlist: расширение (и ретенция, и экспорт) — отдельный срез.
 
-### 3.10 «Сводка» — позже
+### 3.10 «Сводка» — реализовано
 
-Не стартовая. Когда появятся агрегаты, это может быть скромный экран
-«Требует внимания»: отзывы на модерации и самый старый из них, барберы
-без подтверждения, выключенные салоны. Без KPI-карточек и графиков.
-Стартовая страница — всё равно очередь.
+✅ Реализовано 2.11.2026 (#40). `/admin/summary` — скромный экран «Требует внимания»
+из трёх блоков, первый пункт рейла. Не стартовая: `/admin` по-прежнему ведёт
+на `/admin/reviews`, рейл — карта разделов, а не стартовая страница.
+
+- Блоки: «Отзывы на модерации» (число + самый старый отзыв с ожиданием словами,
+  оценкой, именем клиента и барбера и ссылкой в карточку `/admin/reviews/{id}`,
+  плюс ссылка «К очереди отзывов»), «Барберы без подтверждения» (ссылка
+  `/admin/barbers`, экран открывается на очереди «На проверке») и «Выключенные
+  салоны» (ссылка `/admin/catalogue?tab=salons`). Нули названы честно.
+- Числа считает сервер: `GET /api/admin/summary`, единственное агрегатное чтение.
+  Предикаты — ровно фильтры разделов, поэтому число равно размеру очереди.
+  «Самый старый» — первая строка той же FIFO-очереди, а не отдельный запрос.
+- Честная оговорка, которая входит в текст блока: в домене нет отдельного
+  состояния «скрыт администратором»; `reviews.is_published` — один флаг,
+  и `Hide()` возвращает отзыв в ту же очередь. Поэтому блок называется
+  как вкладка — «Отзывы на модерации».
+- PII: только имена. Email клиента в сводку не входит (он есть в карточке
+  очереди, `GET api/admin/reviews`); при пустом имени `customerDisplayName`
+  равно email — это поведение существующего админского контракта.
+- Мутаций нет: единственная кнопка — «Обновить», действий и ссылок «в никуда»
+  нет. Без KPI-карточек, графиков, периодов и трендов: API не хранит историю
+  агрегатов, а выдуманные числа запрещены.
+- Состояния: скелетон трёх блоков, ошибка первой загрузки с «Повторить»,
+  ошибка обновления строкой `role="alert"` без стирания блоков, `401` — гейт
+  входа с `returnTo="/admin/summary"`, `403` — текст про роль. Ссылки —
+  настоящие `<a href>`; 320 px — один столбец без горизонтального скролла.
 
 ### 3.11 Визуальный язык
 
@@ -619,15 +662,19 @@ Read-only история: когда, кто, что изменил, у како
    и ошибочные состояния. В URL фильтры не пишутся (email — PII), действий над
    записями нет: журнал неизменяем. Известное ограничение — аудит только
    `User`/`BarberProfile`/`Review`; каталог, салоны и брони в журнал не попадают.
-6. **«Брони» и «Сводка».** ✅ «Брони» реализованы 2.11.2026 (#39):
-   `/admin/bookings` и `/admin/bookings/{id}` — поиск по email клиента или точному id,
+6. **«Брони» и «Сводка».** ✅ Этап закрыт полностью (#40). «Брони» реализованы 2.11.2026
+   (#39): `/admin/bookings` и `/admin/bookings/{id}` — поиск по email клиента или точному id,
    фильтр статуса, общий пейджер, split-view карточка со временем в поясе салона
    и действиями «Отменить бронь»/«Отметить неявку» с подтверждением.
    Новых мутаций нет — обе кнопки вызывают существующие `cancellation` и `no-show`.
-   Этап 6 закрыт наполовину: «Сводка» остаётся опциональной и требует агрегатов,
-   которых API пока не отдаёт; порядок после #38 соблюдён — сначала «Брони»,
-   затем «Сводка». Порядок пунктов рейла приведён к §3.2 (пользователи и каталог
-   поменялись местами), «Журнал» остался последним.
+   «Сводка» реализована 2.11.2026 (#40): `/admin/summary` — первый пункт рейла
+   и единственное агрегатное чтение `GET /api/admin/summary`; три блока очередей
+   со ссылками в свои разделы, «самый старый» отзыв, честные нули, «Обновить»
+   и никаких действий. Админка полная: все семь пунктов рейла работают.
+   Порядок пунктов рейла приведён к §3.2 (пользователи и каталог поменялись местами),
+   «Журнал» остался последним, «Сводка» встала первым пунктом.
+   Мутации и аудит остаются в своих разделах, расширение allowlist `AuditTrail` —
+   отдельное решение.
 
 Порядок продиктован риском: отзывы обратимы и ежедневны, барберы влияют
 на предложение, пользователи — самые чувствительные, каталог — редкий,
@@ -638,6 +685,8 @@ Read-only история: когда, кто, что изменил, у како
 ## 6. Открытые вопросы (решить до кода)
 
 1. **Стартовый экран:** очередь отзывов (рекомендация) или «Сводка»?
+   ✅ Решено: стартовая — очередь отзывов; «Сводка» реализована (#40) и стоит
+   первым пунктом рейла, но `/admin` по-прежнему ведёт на `/admin/reviews`.
 2. **PII:** показываем ли админу email клиента полностью?
    Рекомендация — да, без него модерация и поддержка слепые.
 3. **Статус «отклонён» с причиной:** добавляем в домен или обходимся
@@ -653,7 +702,8 @@ Read-only история: когда, кто, что изменил, у како
 
 **Решено по факту этапа 3 (28.10.2026):**
 
-- Стартовый экран остался прежним — очередь отзывов; «Сводка» отложена.
+- Стартовый экран остался прежним — очередь отзывов; «Сводка» реализована (#40)
+  и стоит первым пунктом рейла, но стартовой не стала.
 - Email клиента администратор видит полностью, но только в админских
   контрактах (`AdminUserResponse` / `AdminUserDetailResponse`). Телефон
   показывается в карточке, потому что без него поддержка не свяжется
@@ -960,6 +1010,47 @@ Read-only история: когда, кто, что изменил, у како
     мутации последними и axe 1280/320; лог — `frontend/verification/issue-39-e2e.txt`.
     Новых allow-list и исключений в axe нет; новых зависимостей и правок `ui/**` нет.
 
+64. **Реализация этапа 6, вторая половина — «Сводка» (2.11.2026, #40).** Backend сначала
+    получил красные интеграционные тесты `AdminSummaryReadTests`: `/api/admin/summary`
+    отвечал `404` (вывод — `frontend/verification/issue-40-before.txt`); frontend — красный
+    `admin-summary.test.ts` (`Failed to resolve import '@/lib/admin-summary'`, вывод —
+    `frontend/verification/issue-40-before-frontend.txt`).
+65. Backend: `AdminSummaryResponse` и четыре вложенных DTO в `Contracts/Admin`; запрос
+    `GetAdminSummaryQuery` и обработчик `GetAdminSummaryHandler` (последовательные вызовы,
+    переиспользование `GetAdminPageAsync(isPublished: false, cursor: null, limit: 1)`,
+    `Task.WhenAll` запрещён); `IReviewRepository.CountPendingAsync`,
+    `IBarberProfileRepository.CountPendingAsync`, `ISalonRepository.CountInactiveAsync`
+    с предикатами разделов; `AdminSummaryController` — один `GET` под `AdminOnly`, без новых
+    кодов ошибок. `total` в `PagedResponse` и в списках не появился.
+66. Backend: unit-тесты `AdminSummaryHandlerTests` (маппинг чисел и «самого старого», запрос
+    первой строки очереди, пустая очередь, гонка двух чтений, четыре проброса `Failure`,
+    отсутствие email в контракте) и расширенные фейки трёх репозиториев. Замер
+    `EXPLAIN (ANALYZE, BUFFERS)` на копии `barbersearch_load`, мигрированной до 19/19:
+    COUNT отзывов — `Index Only Scan` частичного `ix_reviews_moderation_created_at_id`
+    (3,9 мс), профилей — `Seq Scan` по 12 000 строк (3,4 мс), салонов — `Index Only Scan`
+    `ix_salons_city_is_active` (0,03 мс), «самый старый» — `Index Scan` без `Sort` (0,7 мс);
+    миграция не добавлена. Логи — `frontend/verification/issue-40-explain.txt`.
+67. Frontend: `lib/admin-path.ts` (`summary`, точный адрес, вложенные пути остаются `notFound`,
+    `/admin` → очередь отзывов не меняется), первый пункт рейла, `ADMIN_TITLES.summary`,
+    dispatch на `SummaryScreen`; `lib/admin-summary.ts` (типы, чтение без параметров, разбор
+    ошибок), `response-guards` — `isAdminSummary` и приватный `isNonNegativeInteger`,
+    `hooks/use-admin-summary.ts` (одно чтение с `AbortController`, `reload`/`refresh`,
+    `updatedAt`, `401` → `requiresSignIn`), `components/admin/summary-screen.tsx`,
+    `formatProfilesCount`/`formatSalonsCount` в `lib/format.ts`.
+68. E2E: в `seed.sql` пользователь `9e000000-…-113` и профиль без подтверждения
+    `9e100000-…-14` (без услуг и салона, чтобы не попасть в публичную выдачу и `usageCount`),
+    `fixtures.summary` (14/1/1), `pages/admin-summary-page.ts`, `specs/admin-summary.spec.ts`
+    (рейл, счётчики против разделов, самый старый отзыв и переход в карточку, «Обновить»,
+    read-only, внедрённый `401`) и `/admin/summary` в axe 1280/320 без новых исключений.
+69. Проверено: backend build 0/0 (Debug и Release), тесты — 187 domain + 377 application
+    + 83 infrastructure + 114 integration (всего 761; было 747), 21 контроллер / 99 эндпоинтов
+    и 19 миграций. Frontend: `npm test` — 200 тестов в 19 файлах (было 171 в 16),
+    `npm run lint` — 0/0 (221 файл), `npm run build` — успешно (2306 модулей,
+    entry 396.46 kB / 128.05 kB gzip, `admin-page` 198.24 / 41.83, css 76.05 / 13.18).
+    Playwright на запущенном API и `barbersearch_e2e`: 162 passed, 2 skipped (было 146 + 2),
+    включая новый спек в desktop и mobile и axe 1280/320. Новых зависимостей и правок
+    `ui/**` нет.
+
 ---
 
 ## 9. Карта файлов
@@ -983,10 +1074,14 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: API каталога | `frontend/src/lib/admin-catalogue.ts`, `frontend/src/hooks/use-admin-catalogue.ts` |
 | Админка: экран журнала | `frontend/src/components/admin/audit-screen.tsx`, `audit-entry.tsx` |
 | Админка: API журнала | `frontend/src/lib/admin-audit.ts`, `frontend/src/hooks/use-admin-audit-list.ts` |
+| Админка: экран сводки | `frontend/src/components/admin/summary-screen.tsx` |
+| Админка: API и хук сводки | `frontend/src/lib/admin-summary.ts`, `frontend/src/hooks/use-admin-summary.ts` |
 | Админка: экран броней | `frontend/src/components/admin/bookings-screen.tsx`, `booking-detail.tsx` |
 | Админка: API и хуки броней | `frontend/src/lib/admin-bookings.ts`, `frontend/src/hooks/use-admin-bookings-list.ts`, `use-admin-booking.ts` |
 | Брони: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminBookingsController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/BookingRepository.cs` |
 | Брони: контракт и индекс | `backend/BarberSearch/src/BarberSearch.Contracts/Bookings/Admin/AdminBookingResponse.cs`, миграция `AddAdminBookingsStatusIndex` |
+| Сводка: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminSummaryController.cs`, `backend/BarberSearch/src/BarberSearch.Application/Admin/GetAdminSummary/GetAdminSummaryHandler.cs` |
+| Сводка: контракт | `backend/BarberSearch/src/BarberSearch.Contracts/Admin/AdminSummaryResponse.cs` |
 | Аудит: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminAuditController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/AuditLogRepository.cs` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |

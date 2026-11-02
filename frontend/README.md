@@ -38,6 +38,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
+| `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden, search by name or email |
@@ -646,6 +647,52 @@ DTO carries the customer's email and phone: they exist only in this admin contra
 points at a deleted user, profile, service or salon drop out of the list (the inner joins are the
 same documented behaviour as the barber cabinet).
 
+## Admin summary
+
+`/admin/summary` is the «Что требует внимания» screen and the first rail item. It answers one
+question — is anything waiting for an administrator — from a single aggregate read,
+`GET /api/admin/summary`. The route is the exact `/admin/summary` (no card, no builder, no nested
+paths) and the page is `noindex` like the rest of the admin. `/admin` still redirects to the review
+queue: the rail is a map of sections, not a start page.
+
+- `src/lib/admin-summary.ts` — `AdminSummary`/`AdminSummaryOldestReview` types,
+  `fetchAdminSummary` (one parameterless `GET`, no `status`, `pageSize` or `cursor`) and
+  `describeAdminSummaryError` (`403` → the role text, `429` → the rate-limit text, otherwise the
+  shared Russian fallback; the English `detail` never reaches the DOM).
+- `src/lib/response-guards.ts` — `isAdminSummary`: three mandatory blocks, `pendingCount`,
+  `unverifiedCount` and `inactiveCount` must be non-negative safe integers, and `oldest` is either
+  `null` or `{ id, rating 1..5, createdAt, barberDisplayName, customerDisplayName }`. Extra fields
+  are ignored, so a wider contract keeps working.
+- `src/hooks/use-admin-summary.ts` — one read with an `AbortController` and a request token:
+  `reload` is the first load (skeleton), `refresh` is the quiet update that keeps the old numbers
+  on screen and turns a failure into a `role="alert"` line; `401` sets `requiresSignIn`;
+  `updatedAt` is the last success. StrictMode-safe, a stale response is dropped.
+- `src/components/admin/summary-screen.tsx` — the `h1`, the subtitle, «Обновлено в HH:MM», the
+  single «Обновить», and three `<section>`s separated by thin dividers.
+
+What it shows:
+
+- **«Отзывы на модерации»** — `pendingCount` («14 отзывов без публикации») and the oldest review:
+  «Самый старый ждёт 3 дня», the rating, the client and the barber names, and «Открыть отзыв» →
+  `/admin/reviews/{id}`; below, «К очереди отзывов» → `/admin/reviews`. The copy explains that both
+  new reviews and reviews hidden by an administrator wait here — `is_published` is one flag.
+- **«Барберы без подтверждения»** — `unverifiedCount` and «Открыть барберов» → `/admin/barbers`,
+  which opens on the «На проверке» queue.
+- **«Выключенные салоны»** — `inactiveCount` and «Открыть каталог салонов» →
+  `/admin/catalogue?tab=salons`.
+- Zeros are named honestly: «Очередь пуста — все отзывы проверены.», «Все профили подтверждены.»,
+  «Выключенных салонов нет.».
+
+The counters use the **same predicates** as the sections (`is_published = false`,
+`is_verified = false` without `is_active`, `is_active = false`), so a number is exactly the size of
+its queue; the oldest review is the first row of the same FIFO moderation page the queue uses.
+There is deliberately no `total` in `PagedResponse` or in the existing lists: one screen needs the
+number, and the shared pagination contract stays unchanged.
+
+What it does **not** do: no mutations, no charts, periods, trends or comparisons with the past, no
+KPI tiles, no «Показать ещё», no totals, no export and no audit writes. Customer email and phone
+are not in the contract — only names; the full context stays in `GET /api/admin/reviews`.
+
 ## Admin audit
 
 `/admin/audit` is the read-only change journal: when, who, what and on which entity changed, with
@@ -736,6 +783,13 @@ needs no API and no database, and covers:
   change starting a new first page, the next-page error keeping the rows, the empty states and the
   `403` text; `BookingDetail` covers the salon-zone time, the actions by status, both confirmation
   texts, the `204` result and the Russian error.
+- `admin-summary` — exactly one parameterless `GET /api/admin/summary`, the strict guard rejecting
+  a negative or fractional counter, a missing block and a malformed `oldest` while accepting
+  `oldest: null` and extra fields, and the `403`/`429`/fallback error mapping. `SummaryScreen`
+  covers the three blocks with their numbers, links and copy, the honest zeros, the `401` gate, the
+  first-page error with «Повторить», the refresh error that keeps the blocks, exactly one request
+  per «Обновить» and the «Обновлено в …» label; the `formatProfilesCount`/`formatSalonsCount`
+  plural forms are covered directly.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -747,10 +801,10 @@ layer below.
 ## E2E
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
-stack and no mocked success responses. The suite covers the paged lists, the admin journal and the
-admin bookings desk, sign-in, public reviews, the keyboard paths and an axe scan of every screen and
-role in two widths (1280 and 320). `npm test` (Vitest) stays separate and fast; E2E never runs inside
-it.
+stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
+admin bookings desk and the admin summary, sign-in, public reviews, the keyboard paths and an axe
+scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest) stays separate and
+fast; E2E never runs inside it.
 
 ### One-time setup
 
@@ -823,8 +877,12 @@ without a debt number is not allowed.
 `e2e/fixtures/seed.sql` creates fixed UUIDs: one showcase barber with 12 published reviews, 52
 history bookings and 21 upcoming ones, two customers with 12 reviews each (the `e2e-customer` also
 gets 21 upcoming and 21 history bookings, so both `/account` tabs have two pages), an admin, twelve
-extra barbers in one city (so search has a second page) and 25 users in total (so `/admin/users`
-has two). For the admin catalogue it adds **hidden** rows only — the service «E2E Борода», two
+extra barbers in one city (so search has a second page) and 26 users in total (so `/admin/users`
+has two). One of them is the profile **without confirmation** «E2E Барбер Без Подтверждения»
+(no services and no salon, id `9e100000-…-14`): it is the single positive row of the summary's
+«Барберы без подтверждения» block and of the «На проверке» queue, and because it is unverified it
+never reaches the public search, cards or catalogue counters. For the admin catalogue it adds
+**hidden** rows only — the service «E2E Борода», two
 specializations and the salon «E2E Studio Nord»: an active row would land in the public filters and
 cards and shift the counters of `search-login`, `a11y` and the barber cards, while hidden rows are
 invisible to public reads.
