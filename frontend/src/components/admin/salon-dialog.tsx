@@ -201,14 +201,14 @@ export function SalonDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:w-[48rem] sm:max-w-[calc(100%_-_2rem)]">
         <form
-          className="flex max-h-[80vh] flex-col gap-4 overflow-y-auto"
+          className="flex min-h-0 flex-col gap-4"
           noValidate
           aria-busy={isPending}
           onSubmit={handleSubmit}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {mode === 'create' ? 'Новый салон' : 'Правка салона'}
             </DialogTitle>
@@ -218,8 +218,8 @@ export function SalonDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <FieldGroup>
-            <Field>
+          <FieldGroup className="grid min-h-0 gap-4 overflow-y-auto sm:grid-cols-6">
+            <Field className="sm:col-span-6">
               <FieldLabel htmlFor="catalogue-salon-name">Название</FieldLabel>
               <Input
                 id="catalogue-salon-name"
@@ -239,7 +239,10 @@ export function SalonDialog({
               )}
             </Field>
 
-            <Field data-invalid={Boolean(errors.address)}>
+            <Field
+              className="sm:col-span-4"
+              data-invalid={Boolean(errors.address)}
+            >
               <FieldLabel htmlFor="catalogue-salon-address">Адрес</FieldLabel>
               <Input
                 id="catalogue-salon-address"
@@ -257,186 +260,196 @@ export function SalonDialog({
               </FieldError>
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={Boolean(errors.city)}>
-                <FieldLabel htmlFor="catalogue-salon-city">Город</FieldLabel>
-                <Input
-                  id="catalogue-salon-city"
-                  name="city"
-                  value={form.city}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.city)}
-                  aria-describedby={
-                    errors.city ? 'catalogue-salon-city-error' : undefined
-                  }
-                  onChange={(event) => update('city', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-city-error">
-                  {errors.city}
-                </FieldError>
-              </Field>
+            <Field className="sm:col-span-2" data-invalid={Boolean(errors.city)}>
+              <FieldLabel htmlFor="catalogue-salon-city">Город</FieldLabel>
+              <Input
+                id="catalogue-salon-city"
+                name="city"
+                value={form.city}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.city)}
+                aria-describedby={
+                  errors.city ? 'catalogue-salon-city-error' : undefined
+                }
+                onChange={(event) => update('city', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-city-error">
+                {errors.city}
+              </FieldError>
+            </Field>
 
-              <Field data-invalid={Boolean(errors.country)}>
-                <FieldLabel htmlFor="catalogue-salon-country">Страна</FieldLabel>
-                <Input
-                  id="catalogue-salon-country"
-                  name="country"
-                  value={form.country}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.country)}
-                  aria-describedby={
-                    errors.country ? 'catalogue-salon-country-error' : undefined
-                  }
-                  onChange={(event) => update('country', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-country-error">
-                  {errors.country}
-                </FieldError>
-              </Field>
-            </div>
+            <Field
+              className="sm:col-span-2"
+              data-invalid={Boolean(errors.country)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-country">Страна</FieldLabel>
+              <Input
+                id="catalogue-salon-country"
+                name="country"
+                value={form.country}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.country)}
+                aria-describedby={
+                  errors.country ? 'catalogue-salon-country-error' : undefined
+                }
+                onChange={(event) => update('country', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-country-error">
+                {errors.country}
+              </FieldError>
+            </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="catalogue-salon-postal-code">
-                  Почтовый индекс
-                </FieldLabel>
-                <Input
-                  id="catalogue-salon-postal-code"
-                  name="postalCode"
-                  value={form.postalCode}
-                  disabled={isPending}
-                  onChange={(event) => update('postalCode', event.target.value)}
-                />
-              </Field>
+            <Field className="sm:col-span-2">
+              <FieldLabel htmlFor="catalogue-salon-postal-code">
+                Почтовый индекс
+              </FieldLabel>
+              <Input
+                id="catalogue-salon-postal-code"
+                name="postalCode"
+                value={form.postalCode}
+                disabled={isPending}
+                onChange={(event) => update('postalCode', event.target.value)}
+              />
+            </Field>
 
-              <Field data-invalid={Boolean(errors.timeZoneId)}>
-                <FieldLabel htmlFor="catalogue-salon-time-zone">
-                  Часовой пояс
-                </FieldLabel>
-                <select
-                  id="catalogue-salon-time-zone"
-                  name="timeZoneId"
-                  value={form.timeZoneId}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.timeZoneId)}
-                  aria-describedby={
-                    errors.timeZoneId
-                      ? 'catalogue-salon-time-zone-error'
-                      : undefined
-                  }
-                  onChange={(event) => update('timeZoneId', event.target.value)}
-                  className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
-                >
-                  {timeZones.map((zone) => (
-                    <option key={zone} value={zone}>
-                      {zone}
-                    </option>
-                  ))}
-                </select>
-                <FieldError id="catalogue-salon-time-zone-error">
-                  {errors.timeZoneId}
-                </FieldError>
-              </Field>
-            </div>
+            <Field
+              className="sm:col-span-2"
+              data-invalid={Boolean(errors.timeZoneId)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-time-zone">
+                Часовой пояс
+              </FieldLabel>
+              <select
+                id="catalogue-salon-time-zone"
+                name="timeZoneId"
+                value={form.timeZoneId}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.timeZoneId)}
+                aria-describedby={
+                  errors.timeZoneId
+                    ? 'catalogue-salon-time-zone-error'
+                    : undefined
+                }
+                onChange={(event) => update('timeZoneId', event.target.value)}
+                className="h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
+              >
+                {timeZones.map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </select>
+              <FieldError id="catalogue-salon-time-zone-error">
+                {errors.timeZoneId}
+              </FieldError>
+            </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={Boolean(errors.latitude)}>
-                <FieldLabel htmlFor="catalogue-salon-latitude">
-                  Широта
-                </FieldLabel>
-                <Input
-                  id="catalogue-salon-latitude"
-                  name="latitude"
-                  inputMode="decimal"
-                  value={form.latitude}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.latitude)}
-                  aria-describedby={
-                    errors.latitude ? 'catalogue-salon-latitude-error' : undefined
-                  }
-                  onChange={(event) => update('latitude', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-latitude-error">
-                  {errors.latitude}
-                </FieldError>
-              </Field>
+            <Field
+              className="sm:col-span-3"
+              data-invalid={Boolean(errors.latitude)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-latitude">
+                Широта
+              </FieldLabel>
+              <Input
+                id="catalogue-salon-latitude"
+                name="latitude"
+                inputMode="decimal"
+                value={form.latitude}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.latitude)}
+                aria-describedby={
+                  errors.latitude ? 'catalogue-salon-latitude-error' : undefined
+                }
+                onChange={(event) => update('latitude', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-latitude-error">
+                {errors.latitude}
+              </FieldError>
+            </Field>
 
-              <Field data-invalid={Boolean(errors.longitude)}>
-                <FieldLabel htmlFor="catalogue-salon-longitude">
-                  Долгота
-                </FieldLabel>
-                <Input
-                  id="catalogue-salon-longitude"
-                  name="longitude"
-                  inputMode="decimal"
-                  value={form.longitude}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.longitude)}
-                  aria-describedby={
-                    errors.longitude ? 'catalogue-salon-longitude-error' : undefined
-                  }
-                  onChange={(event) => update('longitude', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-longitude-error">
-                  {errors.longitude}
-                </FieldError>
-              </Field>
-            </div>
+            <Field
+              className="sm:col-span-3"
+              data-invalid={Boolean(errors.longitude)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-longitude">
+                Долгота
+              </FieldLabel>
+              <Input
+                id="catalogue-salon-longitude"
+                name="longitude"
+                inputMode="decimal"
+                value={form.longitude}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.longitude)}
+                aria-describedby={
+                  errors.longitude ? 'catalogue-salon-longitude-error' : undefined
+                }
+                onChange={(event) => update('longitude', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-longitude-error">
+                {errors.longitude}
+              </FieldError>
+            </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={Boolean(errors.phoneNumber)}>
-                <FieldLabel htmlFor="catalogue-salon-phone">Телефон</FieldLabel>
-                <Input
-                  id="catalogue-salon-phone"
-                  name="phoneNumber"
-                  inputMode="tel"
-                  value={form.phoneNumber}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.phoneNumber)}
-                  aria-describedby={
-                    errors.phoneNumber
-                      ? 'catalogue-salon-phone-error'
-                      : undefined
-                  }
-                  onChange={(event) => update('phoneNumber', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-phone-error">
-                  {errors.phoneNumber}
-                </FieldError>
-              </Field>
+            <Field
+              className="sm:col-span-3"
+              data-invalid={Boolean(errors.phoneNumber)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-phone">Телефон</FieldLabel>
+              <Input
+                id="catalogue-salon-phone"
+                name="phoneNumber"
+                inputMode="tel"
+                value={form.phoneNumber}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.phoneNumber)}
+                aria-describedby={
+                  errors.phoneNumber
+                    ? 'catalogue-salon-phone-error'
+                    : undefined
+                }
+                onChange={(event) => update('phoneNumber', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-phone-error">
+                {errors.phoneNumber}
+              </FieldError>
+            </Field>
 
-              <Field data-invalid={Boolean(errors.websiteUrl)}>
-                <FieldLabel htmlFor="catalogue-salon-website">Сайт</FieldLabel>
-                <Input
-                  id="catalogue-salon-website"
-                  name="websiteUrl"
-                  inputMode="url"
-                  placeholder="https://example.com"
-                  spellCheck={false}
-                  value={form.websiteUrl}
-                  disabled={isPending}
-                  aria-invalid={Boolean(errors.websiteUrl)}
-                  aria-describedby={
-                    errors.websiteUrl
-                      ? 'catalogue-salon-website-error'
-                      : undefined
-                  }
-                  onChange={(event) => update('websiteUrl', event.target.value)}
-                />
-                <FieldError id="catalogue-salon-website-error">
-                  {errors.websiteUrl}
-                </FieldError>
-              </Field>
-            </div>
+            <Field
+              className="sm:col-span-3"
+              data-invalid={Boolean(errors.websiteUrl)}
+            >
+              <FieldLabel htmlFor="catalogue-salon-website">Сайт</FieldLabel>
+              <Input
+                id="catalogue-salon-website"
+                name="websiteUrl"
+                inputMode="url"
+                placeholder="https://example.com"
+                spellCheck={false}
+                value={form.websiteUrl}
+                disabled={isPending}
+                aria-invalid={Boolean(errors.websiteUrl)}
+                aria-describedby={
+                  errors.websiteUrl
+                    ? 'catalogue-salon-website-error'
+                    : undefined
+                }
+                onChange={(event) => update('websiteUrl', event.target.value)}
+              />
+              <FieldError id="catalogue-salon-website-error">
+                {errors.websiteUrl}
+              </FieldError>
+            </Field>
           </FieldGroup>
 
           {formError && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="shrink-0 text-sm text-destructive">
               {formError}
             </p>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button
               type="button"
               variant="outline"

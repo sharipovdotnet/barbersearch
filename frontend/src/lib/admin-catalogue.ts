@@ -41,10 +41,13 @@ export const ADMIN_CATALOGUE_STATUS_LABELS: Record<AdminCatalogueStatus, string>
   hidden: 'Выключенные',
 }
 
-/** Название строки в единственном числе: заголовки диалогов и объявления. */
+/**
+ * Название строки в винительном падеже: кнопка «Создать услугу» и вопрос
+ * «Выключить услугу?» подставляют его внутрь фразы, а не в начало.
+ */
 export const ADMIN_CATALOGUE_ENTITY_LABELS: Record<CatalogueTab, string> = {
-  services: 'Услуга',
-  specializations: 'Специализация',
+  services: 'Услугу',
+  specializations: 'Специализацию',
   salons: 'Салон',
 }
 
