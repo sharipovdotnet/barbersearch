@@ -39,6 +39,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
+| `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
@@ -457,8 +458,10 @@ itself remains the only authoritative “not signed in”.
 The access cookie lives 8 hours (sliding), the refresh cookie 14 days. JavaScript cannot see
 either once the access cookie is gone, so the client sets its own **non-credential** hint
 `barbersearch.remember=1`: `Path=/`, `SameSite=Lax`, `Max-Age` 14 days, `Secure` on https, and
-deliberately not `HttpOnly`. It is the only cookie JavaScript reads, and it carries nothing but
-`'1'` — forging it only causes one failed refresh, and no `localStorage`/`sessionStorage` is
+deliberately not `HttpOnly`. It is the only JavaScript-readable cookie that takes part in
+authentication — the cookie notice adds a second client cookie, `barbersearch.cookie-notice`,
+which only remembers that the strip was closed. The hint carries nothing but `'1'`: forging it
+only causes one failed refresh, and no `localStorage`/`sessionStorage` is
 used. The hint is set on a successful sign-in with «Запомнить меня», cleared on sign-out, on a
 sign-in without it and on a terminal refresh, and re-written after a successful refresh.
 
@@ -499,9 +502,12 @@ The form sends one `POST /api/auth/register` with `{ email, password, firstName,
 **no** `X-CSRF-TOKEN` (the action has no antiforgery filter, like booking creation). The email
 and names are trimmed; the password is not. Client checks before the request: names are not
 empty, email matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at most 254 characters, the password is
-12–128 characters and differs from the email, its local part and both names, and the repeat
-matches. The top-10k password dictionary is a server check only — its public code is mapped to
-Russian copy, the dictionary is not reproduced on the client.
+12–128 characters and differs from the email, its local part and both names, the repeat
+matches, and the **consent to personal-data processing** is given. The consent is a separate
+required checkbox (not pre-checked, with a link to `/privacy`): without it the form shows
+«Отметьте согласие на обработку персональных данных.» and sends nothing. The top-10k password
+dictionary is a server check only — its public code is mapped to Russian copy, the dictionary is
+not reproduced on the client.
 
 On `201 { id }` the form signs in with the same credentials through the usual CSRF path
 (`GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`) and navigates to
@@ -517,10 +523,43 @@ the auth rate limiter (10 requests per minute per IP), so a registration with it
 spends two of them. The new account is active immediately; email confirmation is out of scope.
 
 - `src/pages/register-page.tsx` — title, loading skeleton, anonymous card and the signed-in gate.
-- `src/components/register-form.tsx` — fields, client/server errors, submit guard and the
-  «Аккаунт создан» card.
+- `src/components/register-form.tsx` — fields, client/server errors, the consent checkbox, submit
+  guard and the «Аккаунт создан» card.
 - `src/lib/auth.ts` — `RegistrationInput` and `register()`; `src/lib/register-path.ts` —
   `REGISTER_PATH` / `isRegisterPath`.
+
+## Legal information and cookies
+
+The service publishes its personal-data policy at `/privacy` and tells the visitor about cookies
+on the first visit. Both are interface features, not API calls: the page renders statically,
+needs no session and no request, and opens by a direct link.
+
+- **The policy** (`src/pages/privacy-page.tsx`) is the operator's document under part 2 of
+  article 18.1 of 152-ФЗ: eleven sections — general provisions, legal grounds, data categories,
+  purposes and retention, processing order, cookie, transfers, security measures, the subject's
+  rights, changes and the operator's details. It is a lazy chunk; `#cookies` is a public anchor
+  used by the notice, the footer and the registration form.
+- **One source of truth for cookies.** `COOKIE_REGISTRY` in `src/lib/legal.ts` lists every cookie
+  the service sets — session, refresh, antiforgery, the «Запомнить меня» hint and the notice's own
+  acknowledgement — with purpose, lifetime and attributes. The policy renders that array, so a new
+  cookie cannot appear in code without appearing in the document.
+- **The notice** (`src/components/cookie-notice.tsx`) is informational, not a consent banner: the
+  service sets only strictly necessary first-party cookies, so there is no «Отказаться» button and
+  no cookie wall. It is a fixed bottom strip with one «Понятно» action and a link to
+  `/privacy#cookies`; the acknowledgement lives in `barbersearch.cookie-notice` for a year, so the
+  strip is not shown again. It renders outside the page in `App.tsx` — including on `/admin`,
+  where the footer is hidden.
+- **The footer** carries «Политика обработки данных» and «Cookie» on every page that shows it.
+- **Registration** requires the consent checkbox before the request (see above).
+
+The operator's details are placeholders in `LEGAL_ENTITY` (`src/lib/legal.ts`): the full name,
+ИНН, ОГРН/ОГРНИП, address, contact email and phone must be filled before the domain goes
+public — the client cannot invent them. `PRIVACY_POLICY_DATE` changes with any edit to the text.
+
+Files: `src/lib/legal.ts` (paths, cookie registry, operator details),
+`src/lib/cookies.ts` (client cookie read/write, shared with the «Запомнить меня» hint),
+`src/lib/cookie-notice.ts` (notice acknowledgement), `src/components/cookie-notice.tsx`,
+`src/components/site-footer.tsx`, `src/pages/privacy-page.tsx`.
 
 ## Admin reviews
 
