@@ -14,7 +14,8 @@ export type PagedListOptions<T> = {
    * Запрос одной страницы. `cursor: null` — первая страница.
    *
    * Функцию нужно мемоизировать (`useCallback`): её смена — это смена вкладки,
-   * фильтра или поиска, и хук сам грузит первую страницу заново.
+   * фильтра или поиска. Хук сразу выбрасывает строки прошлого источника и грузит
+   * первую страницу нового, поэтому экран не успевает показать чужие строки.
    */
   fetchPage: (cursor: string | null, signal: AbortSignal) => Promise<Page<T>>
   /** Ошибка первой страницы. */
@@ -103,6 +104,16 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
   const [state, setState] = useState<PagesState<T>>(() =>
     createState<T>(enabled)
   )
+
+  // Смена источника (вкладка, фильтр, поиск) — это другой список, а не обновление
+  // текущего. Старые строки отбрасываем прямо в рендере: эффект загрузки ниже
+  // срабатывает уже после того, как экран успевает отрисоваться со строками
+  // прошлого списка, а автовыбор первой карточки уводит в чужой отзыв/профиль.
+  const [source, setSource] = useState(() => fetchPage)
+  if (source !== fetchPage) {
+    setSource(() => fetchPage)
+    setState(createState<T>(enabled))
+  }
 
   // Ссылка на актуальное состояние для действий, вызванных после `await`.
   const stateRef = useRef(state)
