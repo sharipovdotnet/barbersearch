@@ -1497,12 +1497,12 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**20 controllers, 98 endpoints: 90 domain + 8 auth** — one endpoint per Application handler, plus
+**20 controllers, 99 endpoints: 91 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
-| `UsersController` | `api/users` | 11 |
+| `UsersController` | `api/users` | 12 |
 | `BarberProfilesController` | `api/barber-profiles` | 21 |
 | `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 3 |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
@@ -1552,11 +1552,21 @@ Conventions:
 - Create endpoints answer **201** with `CreatedResourceResponse` and deliberately **no `Location`**
   header (2026-10-25, R-42): none of the eight create endpoints has a self-URI readable right after
   creation. `GET api/bookings` and `GET api/reviews` are lists (the new review is hidden until
-  publication, R-35), `salons`/`users` have no GET at all, `hair-services`/`specializations` have
+  publication, R-35), `salons` have no GET at all, `users` has only the self-read
+  `GET api/users/me` (not a resource-by-id for the admin-created user), `hair-services`/`specializations` have
   only the two public list GETs (no read by id), `GET api/auth/me` is not a resource-by-id, and
   `GET api/barbers/{id}` is 404 until the profile is
   active and verified (`GetCardByIdAsync`). A dead link is worse than none. Revisit when a GET by
   id exists for a created resource — then `CreatedAtAction`/`Created(uri, value)`.
+- **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
+  `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
+  anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,
+  `lastName`, `phoneNumber`, `avatarUrl`, `role`, `barberProfileId`, `isEmailVerified`,
+  `isPhoneVerified`, `createdAt`, `lastLoginAt` — from the database, not from the token. This is
+  deliberately separate from `GET api/auth/me`, which stays claims-only and is used by the session
+  bootstrap; the cabinet needs the current name and phone after `PUT api/users/{id}/profile`.
+  `GetMyProfileHandler` uses the narrow `IUserRepository.GetMyProfileAsync` projection (no
+  favorites, no password, `AsNoTracking`) and `ICurrentUser.RequireUserId`; no migration.
 - **`POST api/bookings` (2026-10-19).** The client comes from `sub`; the request carries no price
   (the field was removed from the contract in R-33, 2026-10-24), so `Booking.Price` is always
   copied from the barber service. The service must belong to

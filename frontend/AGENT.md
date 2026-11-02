@@ -12,13 +12,16 @@
 > the «Отзывы» section lists the barber's published reviews from `GET /api/reviews` (stars,
 > numeric rating, salon-local date, text; ten per page with «Назад»/«Дальше», opaque `nextCursor`),
 > while review
-> creation stays in the customer account and editing/author-facing status are absent. The
-> customer account, all seven admin sections (summary, reviews, barbers, users, catalogue,
+> creation stays in the personal cabinet and editing/author-facing status are absent. The
+> personal cabinet now serves **every role** (`/account`, `/account/profile`, `/account/security`,
+> `/account/reviews`) with one shell, its own bookings/reviews and a link to the role's work area;
+> all seven admin sections (summary, reviews, barbers, users, catalogue,
 > bookings, journal)
 > and the barber cabinet are implemented: a barber sees the bookings of their own profile at
 > `/barber` and confirms, completes, marks no-show, cancels and annotates them. A visitor without
 > an account can register at `/register` (`POST /api/auth/register`, no CSRF token): the form signs
-> the new customer in and lands in `/account`. The admin journal at `/admin/audit` reads
+> the new customer in and lands in `/account`. The cabinet profile is read through the self-only
+> `GET api/users/me` and edited through the existing `PUT api/users/{id}/profile`. The admin journal at `/admin/audit` reads
 > `audit_log` (read-only, filters by entity type, author and UTC dates, expandable diff, shared
 > pager). The admin bookings desk at `/admin/bookings` reads `GET /api/admin/bookings` and
 > `GET /api/admin/bookings/{id}`: search by customer email or exact booking id, a status filter,
@@ -27,13 +30,17 @@
 > answers «what needs attention» from one aggregate read, `GET api/admin/summary`: reviews on
 > moderation with the oldest one, barbers without confirmation and disabled salons, each number
 > counted with its section's predicate, names only and no mutation.
-> Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (221 files, 116 rules);
-> `npm run build` — success, 2306 modules, entry `index-*.js` 396.46 kB (gzip 128.05 kB);
-> lazy `admin-page` 198.24 kB (gzip 41.83 kB), `account-page` 34.58 kB (gzip 10.12 kB),
-> `barber-page` 35.76 kB (gzip 9.46 kB), `barber-cabinet-page` 24.28 kB (gzip 6.95 kB),
+> Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (238 files, 116 rules);
+> `npm test` — 231 tests in 25 files; `npm run build` — success, 2311 modules, entry
+> `index-*.js` 397.91 kB (gzip 128.38 kB); lazy `admin-page` 198.17 kB (gzip 41.77 kB),
+> `account-page` 24.29 kB (gzip 7.85 kB), `account-reviews-page` 16.92 kB (gzip 5.47 kB),
+> `account-profile-page` 7.82 kB (gzip 2.90 kB), `account-security-page` 8.86 kB (gzip 3.12 kB),
+> `barber-page` 35.76 kB (gzip 9.46 kB), `barber-cabinet-page` 24.24 kB (gzip 6.95 kB),
 > `register-page` 9.80 kB (gzip 3.37 kB) and the shared `paging-*.js`
-> 7.53 kB (gzip 2.77 kB);
-> CSS 76.05 kB (gzip 13.18 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> 7.58 kB (gzip 2.79 kB);
+> CSS 76.36 kB (gzip 13.23 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> The cabinet E2E specs (role access, profile save, security, axe at 1280 and 320) passed against
+> the seeded `barbersearch_e2e` database.
 
 ---
 
@@ -788,6 +795,8 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/login/cookie` | anonymous, rate-limited, antiforgery | `{ email, password, rememberMe }` → `204` + HttpOnly cookies |
 | `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName }` → `201 { id }`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName` |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
+| `GET` | `/api/users/me` | authenticated, self-only | cabinet profile from the database: `id`, `email`, `firstName`, `lastName`, `phoneNumber`, `avatarUrl`, `role`, `barberProfileId`, `isEmailVerified`, `isPhoneVerified`, `createdAt`, `lastLoginAt`; `401` for anonymous; the id comes from the `sub` claim, the route has no `userId` |
+| `PUT` | `/api/users/{userId}/profile` | the user themself or an admin | `{ firstName, lastName, phoneNumber, avatarUrl }` → `204` (no body); replaces the whole profile, so `avatarUrl` must be sent back unchanged; `400 user.updateProfile.firstName` / `user.updateProfile.lastName` / `user.updateProfile.avatarUrl`; cookie mutation, sends `X-CSRF-TOKEN` |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; the browser branch sends `{ rememberMe }` (no token in the body) → `204` + new cookies, and `rememberMe: true` makes the access cookie persistent; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
 | `GET` | `/api/barbers?city=&specializationId=&hairServiceId=&date=&language=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, one language as an enum name (`Ru`, `ru`; an unknown value is `400 barberSearch.language.invalid`), one specialization and one hair service (both `''` = no filter); opaque keyset `nextCursor`; each item carries `languages` for the result card; the UI sends `pageSize=12` |
@@ -1292,7 +1301,7 @@ change to `ui/**`.
 | Session unavailable / retry | ✅ fourth status; `SessionUnavailable` card on `/account`, `/account/reviews`, `/barber`, `/admin`, `/register`, a compact retry block in the booking panel and `SessionRetryButton` in the header; `retrySession` is single-flight (StrictMode and a double click give one request), `200` → authenticated, `401` → anonymous, another failure → `unavailable` again |
 | Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
-| Customer cabinet | ✅ `/account`: «Предстоящие»/«История» are two server lists from `GET /api/bookings?scope=upcoming\|past` (the server filters, orders and paginates; twenty rows, shared pager with cached pages and «Назад» without a request), hero «Ближайшая запись» is the first `upcoming` row, history is lazy (requested on its first open), cancellation leaves the row in history and follows the shared empty-page policy, tab switch starts the first page of its own scope, states cover loading/empty/first-page error/next-page error/`401`; no tab counters and no «Показать ещё»; review dialog, password change, role gates |
+| Personal cabinet | ✅ `/account` for **every role** (customer, barber, admin): one shell with the identity block and the rail «Записи · Отзывы · Профиль · Безопасность» (a 2×2 labelled grid below `lg`), a role link to `/barber` or `/admin`, and no `RoleGate`. `GET api/users/me` is a self-only read (`[Authorize]`, id from the `sub` claim) with first/last name, phone, avatar URL, role, both verification flags and `lastLoginAt`; it feeds the shell through context and a module cache keyed by user id. `/account` keeps the two server lists from `GET /api/bookings?scope=upcoming\|past` (twenty rows, shared pager, lazy history, cancellation, review dialog); an empty «Предстоящие» is one invitation card, not the old hero/empty-list duplicate. `/account/profile` edits first name, last name and phone through `PUT api/users/{id}/profile` with CSRF (email read-only, `avatarUrl` sent back unchanged, dirty-only save, server codes mapped to fields, `role="status"` on success). `/account/security` reuses `ChangePasswordDialog`, adds sign-out and shows the email-verification and last-login state; no active-device list is invented. `/account/reviews` is unchanged apart from living in the shell |
 | Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
@@ -1307,8 +1316,8 @@ change to `ui/**`.
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
-| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the customer account on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/reviews`, `/barber`, `/register`, `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
+| Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the personal cabinet on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/register`, `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage` and `RegisterPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
@@ -1732,6 +1741,23 @@ both catalogues; unit tests grew to 200 in 19 files, E2E to 162 passed / 2 skipp
 spec on desktop and mobile plus axe at 1280 and 320), and no new dependency, `ui/**` change or
 `page.route` for a success body was added.
 
+**Completed 2026-11-02:** personal cabinet for all roles — `/account` stopped being a customer-only
+screen: the shared `AccountShell` renders the identity block (initials, name, email, role, unverified
+email), the «Записи · Отзывы · Профиль · Безопасность» rail (2×2 labelled grid below `lg`) and a
+role link to `/barber` or `/admin`; `RoleGate` was removed from `/account` and `/account/reviews`, and
+the header shows «Мой кабинет» for every authenticated user. Two new lazy screens: `/account/profile`
+(editable first name, last name and phone; email read-only with its verification status; dirty-only
+save; `user.updateProfile.*` codes mapped to fields) and `/account/security` (the existing password
+dialog, sign-out, email-verification and last-login status; no invented device list). The backend
+added the self-only `GET api/users/me` (`[Authorize]`, id from the `sub` claim, `MyProfileResponse`
+with name, phone, avatar URL, role, confirmations, `createdAt` and `lastLoginAt`) so the profile is
+read from the database, not from the claims-only `/auth/me`; the form writes through the existing
+`PUT api/users/{id}/profile`. The booking tab empty state no longer duplicates the hero empty card.
+Unit tests grew to 231 in 25 files (profile form validation/save/error mapping, profile guard, cabinet
+paths, the updated header test); new E2E specs cover role access, profile save, the security page and
+axe at 1280/320; the E2E seed now resets fixture names/phones on conflict so a profile mutation is
+repeatable. No new dependencies, `ui/**` changes or migrations.
+
 Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
@@ -1790,6 +1816,9 @@ do not shift.
 11. **Node pinning:** `.nvmrc`, `engines`, or Volta?
 12. **shadcn updates:** track upstream (`npx shadcn@latest add --overwrite`) or freeze the
     vendored set? Freezing is safer for diffs; tracking gets fixes.
+13. **Cabinet profile completeness:** avatar upload needs storage and an upload endpoint, and email
+    change needs a confirmation flow. Both were deliberately left out of the 2026-11-02 cabinet
+    slice; the profile page says so and keeps email read-only instead of showing a dead action.
 
 ---
 
