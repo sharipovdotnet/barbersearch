@@ -1303,7 +1303,7 @@ change to `ui/**`.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 203 tests in 21 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, error mapping, actor labels, the expandable diff, the entity-type filter and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, and `usePagedList`'s immediate reset when its source changes) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 200 tests in 19 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, error mapping, actor labels, the expandable diff, the entity-type filter and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», and the `formatProfilesCount`/`formatSalonsCount` plural forms) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1454,15 +1454,15 @@ route, its GUID detail and `bookingsPath()`, and the `summary` route, its nested
 and the unchanged `/admin` → reviews redirect. Tests are colocated (`*.test.ts(x)`) and compare
 Russian copy as a whole string, saying in the test title that it is copy.
 
-**What is not covered yet:** most screens and the hooks (the admin queues, the cabinets) — the
-audit, admin-bookings and reviews screens, `AuditEntry` / `BookingDetail` and `usePagedList`
-itself are the exceptions with direct tests — in-screen copy E2E does not reach, axe
+**What is not covered yet:** most screens and the hooks (`use-paged-list` itself, the admin queues,
+the cabinets) — the audit and admin-bookings screens are the exceptions with direct tests, and
+`AuditEntry` / `BookingDetail` the row and card components — in-screen copy E2E does not reach, axe
 `moderate`/`minor` findings (annotated in the report, not gated), the dark theme and visual
 regressions. Coverage is not a gate.
 
-**Next in the unit layer:** the hooks behind the paged lists (the admin queues, the cabinets);
-`AuditScreen` and `BookingsScreen` show the MSW-backed screen pattern — one promised behaviour
-at a time.
+**Next in the unit layer:** the hooks behind the paged lists (`use-paged-list` itself, the admin
+queues, the cabinets); `AuditScreen` and `BookingsScreen` show the MSW-backed screen pattern — one
+promised behaviour at a time.
 
 **Rules:** no real user data or secrets in tests — fixtures use `*@barbersearch.test` and the
 `e2e-password` test password; each test gets its own data or restores what it changes; mock the
