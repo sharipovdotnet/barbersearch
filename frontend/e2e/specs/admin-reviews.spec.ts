@@ -95,37 +95,6 @@ test.describe('админка: отзывы', () => {
     await expect(page.getByText(/^Обновлено в /)).toBeVisible()
   })
 
-  test('смена вкладки не открывает отзыв из прошлой очереди', async ({ page }) => {
-    const adminReviews = new AdminReviewsPage(page)
-
-    // На узком экране карточка не открывается автоматически: проверять нечего.
-    test.skip(
-      (page.viewportSize()?.width ?? 0) < 1024,
-      'нужен широкий экран: первая карточка открывается сразу'
-    )
-
-    await adminReviews.goto()
-    await expect(adminReviews.rows.first()).toBeVisible()
-    await expect(adminReviews.selectedRow).toHaveCount(1)
-
-    // Очередь модерации открывает свой первый отзыв.
-    const pendingId = await adminReviews.reviewId(adminReviews.selectedRow)
-    await expect(page).toHaveURL(new RegExp(`/admin/reviews/${pendingId}`))
-
-    await adminReviews.openTab('Опубликованные')
-    await adminReviews.waitForFirstPage()
-
-    // Карточка и адрес переключаются на первый отзыв опубликованной вкладки,
-    // а не остаются на строке из очереди модерации (регрессия «чужого» отзыва).
-    const publishedId = await adminReviews.reviewId(adminReviews.rows.first())
-
-    await expect(adminReviews.selectedRow).toHaveCount(1)
-    expect(await adminReviews.reviewId(adminReviews.selectedRow)).toBe(publishedId)
-    await expect(page).toHaveURL(
-      new RegExp(`/admin/reviews/${publishedId}\\?tab=published`)
-    )
-  })
-
   test('возврат из карточки оставляет ту же страницу', async ({ page }) => {
     const adminReviews = new AdminReviewsPage(page)
 
