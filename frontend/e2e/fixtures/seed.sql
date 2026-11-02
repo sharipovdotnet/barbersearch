@@ -25,6 +25,8 @@
 --   B2…B13                      12 барберов, по 2 опубликованных отзыва; 13 профилей в «Москве»
 --   2 отзыва на модерации       вкладка «На модерации» админки
 --   25 пользователей            страница админки «1–20» + «21–25»
+--   21 строка audit_log          журнал `/admin/audit` на 2026-09-10 UTC:
+--                               страница «1–20», вторая «21–21», фильтры по дате
 
 \set ON_ERROR_STOP on
 SET TIME ZONE 'UTC';
@@ -666,6 +668,62 @@ FROM generate_series(1, 2) AS n;
 UPDATE users
 SET barber_profile_id = '9e100000-0000-4000-8000-000000000001', updated_at = now()
 WHERE id = '9e000000-0000-4000-8000-000000000002';
+
+-- 7. Админский журнал: 21 строка `audit_log` на фиксированный день.
+--
+-- Вставка напрямую, а не через API: журнал пишет сервер на каждом `SaveChanges`,
+-- отдельного write-эндпоинта у него нет и не будет — админский этап только читает
+-- уже записанное. Строка аудита — инфраструктурная запись без доменных правил,
+-- поэтому фикстура вставляет её SQL-ом.
+--
+-- Дата в прошлом (2026-09-10 UTC) намеренна: мутирующие спеки пишут свои строки
+-- «сегодня», а проверки журнала идут под фильтром по этой дате. Так порядок,
+-- вторая страница и фильтры не зависят от того, что успели записать другие спеки,
+-- и их строки остаются нетронутыми.
+--
+-- 21 строка = страница 20 + одна строка на второй странице. Самая свежая запись —
+-- 21-я (10:21), у неё `actor_user_id = NULL`: в UI это «Система». 20-я меняет роль
+-- и служит раскрытием diff'а «Роль: Клиент → Администратор». Строки 15…01 — ещё
+-- пятнадцать правок доступа, чтобы вторая страница существовала.
+--
+-- Идемпотентность: удаляются только строки фикстур (`9e700000-%`), остальные записи
+-- `audit_log` принадлежат мутирующим спекам и не трогаются.
+DELETE FROM audit_log WHERE id::text LIKE '9e700000-%';
+
+WITH fixture(n, action, entity_type, entity_id, payload) AS (
+    VALUES
+        (16, 'user.created', 'user', '9e000000-0000-4000-8000-000000000002',
+         '{"values":{"email":"e2e-journal-created@barbersearch.test","role":"Customer","isActive":true}}'),
+        (17, 'review.updated', 'review', '9e800000-0000-4000-8000-000000000001',
+         '{"changes":{"rating":{"from":4,"to":5}}}'),
+        (18, 'review.updated', 'review', '9e800000-0000-4000-8000-000000000001',
+         '{"changes":{"isPublished":{"from":false,"to":true}}}'),
+        (19, 'barber_profile.updated', 'barber_profile', '9e100000-0000-4000-8000-000000000001',
+         '{"changes":{"isVerified":{"from":false,"to":true}}}'),
+        (20, 'user.updated', 'user', '9e000000-0000-4000-8000-000000000002',
+         '{"changes":{"role":{"from":"Customer","to":"Admin"}}}'),
+        (21, 'user.updated', 'user', '9e000000-0000-4000-8000-000000000002',
+         '{"changes":{"isActive":{"from":true,"to":false}}}')
+    UNION ALL
+    -- 15…01: пятнадцать правок доступа — вторая страница журнала.
+    SELECT n, 'user.updated', 'user', '9e000000-0000-4000-8000-000000000002',
+           '{"changes":{"isActive":{"from":true,"to":false}}}'
+    FROM generate_series(1, 15) AS n
+)
+INSERT INTO audit_log
+    (id, occurred_at, actor_user_id, action, entity_type, entity_id, payload)
+SELECT
+    ('9e700000-0000-4000-8000-' || lpad(fixture.n::text, 12, '0'))::uuid,
+    timestamptz '2026-09-10 10:00+00' + (fixture.n || ' minutes')::interval,
+    CASE
+        WHEN fixture.n = 21 THEN NULL
+        ELSE '9e000000-0000-4000-8000-000000000001'::uuid
+    END,
+    fixture.action,
+    fixture.entity_type,
+    fixture.entity_id::uuid,
+    fixture.payload::jsonb
+FROM fixture;
 
 COMMIT;
 

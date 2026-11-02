@@ -5,6 +5,12 @@ import type {
 } from '@/lib/admin-barbers'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
+  AdminAuditActor,
+  AdminAuditChange,
+  AdminAuditEntry,
+  AdminAuditScalar,
+} from '@/lib/admin-audit'
+import type {
   AdminHairService,
   AdminSalon,
   AdminSpecialization,
@@ -615,4 +621,57 @@ export function isAdminSalonRow(value: unknown): value is AdminSalon {
 }
 
 export const isAdminSalonList = isArrayOf(isAdminSalonRow)
+
+/**
+ * Скаляр diff'а: `string | number | boolean`.
+ *
+ * Объект или массив здесь — битый ответ, а не «почти скаляр»: `changes` обещает
+ * ровно JSON-скаляры, и молчаливое приведение скрыло бы нарушение контракта.
+ */
+function isAdminAuditScalar(value: unknown): value is AdminAuditScalar {
+  return (
+    typeof value === 'string'
+    || typeof value === 'boolean'
+    || isNumber(value)
+  )
+}
+
+/** Автор записи: email может быть `null` (аккаунт удалён), id — нет. */
+function isAdminAuditActor(value: unknown): value is AdminAuditActor {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isNullableString(value.email)
+  )
+}
+
+/** Изменение одного поля: `from`/`to` — скаляр либо `null`, оба поля обязательны. */
+function isAdminAuditChange(value: unknown): value is AdminAuditChange {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.field) &&
+    isNullable(isAdminAuditScalar)(value.from) &&
+    isNullable(isAdminAuditScalar)(value.to)
+  )
+}
+
+/**
+ * Строка журнала: `actor: null` — системная запись, `changes` — массив изменений.
+ *
+ * Лишние поля игнорируются, чтобы расширение контракта не ломало чтение.
+ */
+export function isAdminAuditEntry(value: unknown): value is AdminAuditEntry {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.occurredAt) &&
+    isNonEmptyString(value.action) &&
+    isNonEmptyString(value.entityType) &&
+    isNonEmptyString(value.entityId) &&
+    (value.actor === null || isAdminAuditActor(value.actor)) &&
+    isArrayOf(isAdminAuditChange)(value.changes)
+  )
+}
+
+export const isAdminAuditPage = isPageOf(isAdminAuditEntry)
 

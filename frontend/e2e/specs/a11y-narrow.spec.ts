@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
@@ -81,5 +82,29 @@ test.describe('axe: 320 px, админка без выбранной строк�
       '/admin/catalogue?tab=salons @320',
       test.info()
     )
+  })
+
+  test('журнал: строки с фильтром по дате, без горизонтального скролла', async ({
+    page,
+  }) => {
+    const audit = new AdminAuditPage(page)
+
+    await audit.goto()
+    // Без фильтра журнал может быть пуст до мутирующих спек — фильтруем фикстуры.
+    await audit.filterByDate(fixtures.journal.day)
+    await audit.waitForFirstPage()
+    await expect(audit.heading).toBeVisible()
+    await expect(audit.rows.first()).toBeVisible()
+
+    // Длинный email автора и diff «from → to» не должны расширять страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/admin/audit @320', test.info())
   })
 })

@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
@@ -199,6 +200,21 @@ test.describe('axe: админка', () => {
       '/admin/catalogue?tab=salons + форма',
       test.info()
     )
+  })
+
+  test('/admin/audit: журнал с раскрытым diff', async ({ page }) => {
+    const audit = new AdminAuditPage(page)
+
+    await audit.goto()
+    // Фильтр по фиксированной дате: строки фикстур не зависят от мутирующих спек.
+    await audit.filterByDate(fixtures.journal.day)
+    await audit.waitForFirstPage()
+    await expect(audit.heading).toBeVisible()
+
+    await audit.expandButton(fixtures.journal.roleChangeRowId).click()
+    await expect(audit.diff(fixtures.journal.roleChangeRowId)).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/admin/audit + diff', test.info())
   })
 })
 
