@@ -12,6 +12,7 @@ import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { BookingsScreen } from '@/components/admin/bookings-screen'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
+import { SummaryScreen } from '@/components/admin/summary-screen'
 import { UsersScreen } from '@/components/admin/users-screen'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { useSession } from '@/hooks/use-session'
@@ -24,6 +25,7 @@ import {
 import { navigate, useLocation } from '@/lib/router'
 
 const ADMIN_TITLES = {
+  summary: 'Сводка — администрирование BarberSearch',
   reviews: 'Отзывы — администрирование BarberSearch',
   barbers: 'Барберы — администрирование BarberSearch',
   catalogue: 'Каталог — администрирование BarberSearch',
@@ -35,6 +37,8 @@ const ADMIN_TITLES = {
 /** Заголовок вкладки по маршруту: `notFound` показывается как отзывы. */
 function titleFor(route: AdminRoute): string {
   switch (route.kind) {
+    case 'summary':
+      return ADMIN_TITLES.summary
     case 'barbers':
       return ADMIN_TITLES.barbers
     case 'users':
@@ -127,6 +131,15 @@ export function AdminPage() {
     return (
       <AdminShell>
         <AdminNotFound />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'summary') {
+    // Полноэкранной карточки у сводки нет, поэтому рейл остаётся и на мобильном.
+    return (
+      <AdminShell>
+        <SummaryScreen />
       </AdminShell>
     )
   }

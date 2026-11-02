@@ -11,6 +11,7 @@ export type AdminTab = 'pending' | 'published'
 export type CatalogueTab = 'services' | 'specializations' | 'salons'
 
 export type AdminRoute =
+  | { kind: 'summary' }
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
   | { kind: 'barbers'; barberId: string | null }
   | { kind: 'users'; userId: string | null }
@@ -51,6 +52,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (pathname === '/admin' || pathname === '/admin/reviews') {
     return { kind: 'reviews', tab, reviewId: null }
+  }
+
+  // Сводка — точный адрес: карточки и фильтров у раздела нет, поэтому нет
+  // builder'а и вложенных путей. `/admin` по-прежнему ведёт на очередь отзывов.
+  if (pathname === '/admin/summary') {
+    return { kind: 'summary' }
   }
 
   if (pathname === '/admin/barbers') {

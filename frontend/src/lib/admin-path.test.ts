@@ -62,3 +62,25 @@ describe('isBookingId', () => {
     expect(isBookingId('')).toBe(false)
   })
 })
+
+describe('parseAdminPath: сводка', () => {
+  it('/admin/summary больше не notFound', () => {
+    expect(parseAdminPath('/admin/summary', '')).toStrictEqual({
+      kind: 'summary',
+    })
+  })
+
+  it('вложенный путь сводки остаётся notFound', () => {
+    expect(parseAdminPath('/admin/summary/extra', '')).toStrictEqual({
+      kind: 'notFound',
+    })
+  })
+
+  it('/admin по-прежнему открывает очередь отзывов, а не сводку', () => {
+    expect(parseAdminPath('/admin', '')).toStrictEqual({
+      kind: 'reviews',
+      tab: 'pending',
+      reviewId: null,
+    })
+  })
+})

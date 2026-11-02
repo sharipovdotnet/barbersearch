@@ -6,6 +6,7 @@ import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
+import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { LandingPage } from '../pages/landing-page'
@@ -148,8 +149,8 @@ test.describe('axe: админка', () => {
       page.getByRole('heading', { name: 'Барберы', level: 1 })
     ).toBeVisible()
 
-    // По умолчанию открыта очередь «На проверке», а в фикстурах все профили
-    // подтверждены: список берём фильтром «Все».
+    // По умолчанию открыта очередь «На проверке», а в фикстурах подтверждены
+    // все профили, кроме одного (B14, секция 4.1 сида): список берём фильтром «Все».
     await page
       .getByRole('group', { name: 'Каких барберов показать' })
       .getByRole('button', { name: 'Все', exact: true })
@@ -221,6 +222,18 @@ test.describe('axe: админка', () => {
       '/admin/bookings + карточка',
       test.info()
     )
+  })
+
+  test('/admin/summary: три блока со счётчиками и ссылками', async ({ page }) => {
+    const summary = new AdminSummaryPage(page)
+
+    await summary.goto()
+    await expect(summary.heading).toBeVisible()
+    await expect(summary.reviewsBlock).toBeVisible()
+    await expect(summary.barbersBlock).toBeVisible()
+    await expect(summary.salonsBlock).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/admin/summary', test.info())
   })
 
   test('/admin/audit: журнал с раскрытым diff', async ({ page }) => {

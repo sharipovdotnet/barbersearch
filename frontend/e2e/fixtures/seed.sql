@@ -24,8 +24,11 @@
 --   e2e-mutations               12 своих отзывов (вторая страница — 2 строки) + 2 свободные
 --                               записи под восстановление после удаления отзыва
 --   B2…B13                      12 барберов, по 2 опубликованных отзыва; 13 профилей в «Москве»
+--   B14 (9e100000-…-0014)        профиль БЕЗ подтверждения, без услуг и салона: единственная
+--                               строка блока «Барберы без подтверждения» в `/admin/summary`
 --   2 отзыва на модерации       вкладка «На модерации» админки
---   25 пользователей            страница админки «1–20» + «21–25»
+--   26 пользователей            две страницы админки: «1–20» и вторая; в CI к ним
+--                               добавляется `ci-owner` из `backend/load/seed/minimal.sql`
 --   21 строка audit_log          журнал `/admin/audit` на 2026-09-10 UTC:
 --                               страница «1–20», вторая «21–21», фильтры по дате
 --   24 брони e2e-bookings       `/admin/bookings` на 2026-09-12 UTC: две страницы
@@ -92,7 +95,12 @@ FROM (
          '2026-09-01 10:02+00'),
         ('9e000000-0000-4000-8000-000000000004', 'e2e-mutations@barbersearch.test',
          'Марк', 'Правкин', '+70000000004', true, true, 1, true,
-         '2026-09-01 10:03+00')
+         '2026-09-01 10:03+00'),
+        -- Владелец единственного профиля БЕЗ подтверждения (секция 4.1). Профиль
+        -- не попадает в публичную выдачу, поэтому остальные спеки он не двигает.
+        ('9e000000-0000-4000-8000-000000000113', 'e2e-pending-barber@barbersearch.test',
+         'Егор', 'Неподтверждённый', NULL, true, true, 2, true,
+         '2026-09-01 10:04+00')
 ) AS fixture(id, email, first_name, last_name, phone_number, email_verified, is_active,
              role, _unused, created_at)
 ON CONFLICT (id) DO UPDATE SET
@@ -316,6 +324,52 @@ ON CONFLICT (id) DO UPDATE SET
     is_active = EXCLUDED.is_active,
     is_verified = EXCLUDED.is_verified,
     updated_at = now();
+
+-- 4.1 Профиль без подтверждения — единственная положительная строка блока
+-- «Барберы без подтверждения» (`/admin/summary`) и очереди «На проверке».
+--
+-- Зачем нужен: до этого этапа все профили фикстур были подтверждены, и число
+-- `unverifiedCount` всегда равнялось нулю — положительный путь сводки проверить
+-- было нечем.
+-- Почему без услуг и салона: `is_verified = false` и так не пускает профиль
+-- в публичную выдачу, а без `barber_services` он не попадает и в `usageCount`
+-- админского каталога. Ни одна чужая спека не двигается.
+-- Почему id и даты фиксированы: сводка и очередь «На проверке» показывают
+-- профиль по имени, а FIFO-порядок очереди не должен зависеть от дня прогона.
+INSERT INTO barber_profiles
+    (id, user_id, display_name, grade, bio, languages, years_of_experience,
+     certificates_and_training, rating, reviews_count, achievements,
+     payment_methods, communication_format, goodies, late_policy,
+     is_active, is_verified, created_at, updated_at)
+VALUES
+    ('9e100000-0000-4000-8000-000000000014',
+     '9e000000-0000-4000-8000-000000000113',
+     'E2E Барбер Без Подтверждения',
+     5,
+     NULL,
+     ARRAY[1],
+     3,
+     ARRAY[]::text[],
+     NULL,
+     0,
+     ARRAY[]::text[],
+     ARRAY[]::integer[],
+     ARRAY[]::text[],
+     ARRAY[]::text[],
+     '10 minutes',
+     true,
+     false,
+     '2026-08-01 10:00+00',
+     '2026-08-01 10:00+00')
+ON CONFLICT (id) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    display_name = EXCLUDED.display_name,
+    is_active = EXCLUDED.is_active,
+    is_verified = EXCLUDED.is_verified,
+    rating = EXCLUDED.rating,
+    reviews_count = EXCLUDED.reviews_count,
+    created_at = EXCLUDED.created_at,
+    updated_at = EXCLUDED.updated_at;
 
 -- Салон у каждого профиля (карточка поиска показывает «салон · город»).
 INSERT INTO barber_salons

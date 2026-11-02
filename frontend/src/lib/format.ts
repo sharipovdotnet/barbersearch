@@ -300,6 +300,16 @@ export function formatReviewsCount(count: number): string {
   return `${count} ${plural(count, ['отзыв', 'отзыва', 'отзывов'])}`
 }
 
+/** «2 профиля», «1 профиль», «5 профилей» — очередь «Барберы без подтверждения». */
+export function formatProfilesCount(count: number): string {
+  return `${count} ${plural(count, ['профиль', 'профиля', 'профилей'])}`
+}
+
+/** «2 салона», «1 салон», «5 салонов» — блок «Выключенные салоны» сводки. */
+export function formatSalonsCount(count: number): string {
+  return `${count} ${plural(count, ['салон', 'салона', 'салонов'])}`
+}
+
 /** «20 записей», «1 запись», «3 записи». */
 export function formatBookingsCount(count: number): string {
   return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
