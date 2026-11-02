@@ -13,8 +13,11 @@ import { isPlainClick } from '@/lib/router'
  *
  * Это не запрос согласия: Сервис ставит только строго необходимые cookie, отказаться от
  * которых нельзя, — поэтому кнопка одна («Понятно»), а не пара «Принять / Отказаться».
- * Уведомление не блокирует страницу, не перехватывает фокус и не мешает читать: оно
- * занимает нижнюю полосу и закрывается один раз, отметка живёт в собственной cookie.
+ *
+ * Уведомление стоит в потоке под шапкой, а не поверх страницы: фиксированная полоса
+ * перекрывала бы нижние кнопки (пагинатор, действия в карточках) и перехватывала бы
+ * клики по ним. Полоса в потоке сдвигает контент на свою высоту один раз, не мешает
+ * читать и закрывается навсегда — отметка живёт в собственной cookie.
  */
 export function CookieNotice() {
   const [isVisible, setIsVisible] = useState(shouldShowCookieNotice)
@@ -24,11 +27,11 @@ export function CookieNotice() {
   }
 
   return (
-    <aside
+    <section
       aria-label="Уведомление об использовании cookie"
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 motion-safe:duration-200"
+      className="border-b bg-muted/40 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-200"
     >
-      <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <p className="text-sm text-muted-foreground">
           Используем только необходимые cookie для входа в аккаунт и защиты форм.{' '}
           <span className="hidden sm:inline">
@@ -63,6 +66,6 @@ export function CookieNotice() {
           Понятно
         </Button>
       </div>
-    </aside>
+    </section>
   )
 }

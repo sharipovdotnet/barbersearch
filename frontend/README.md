@@ -545,10 +545,11 @@ needs no session and no request, and opens by a direct link.
   cookie cannot appear in code without appearing in the document.
 - **The notice** (`src/components/cookie-notice.tsx`) is informational, not a consent banner: the
   service sets only strictly necessary first-party cookies, so there is no «Отказаться» button and
-  no cookie wall. It is a fixed bottom strip with one «Понятно» action and a link to
+  no cookie wall. It is a bar under the header with one «Понятно» action and a link to
   `/privacy#cookies`; the acknowledgement lives in `barbersearch.cookie-notice` for a year, so the
-  strip is not shown again. It renders outside the page in `App.tsx` — including on `/admin`,
-  where the footer is hidden.
+  bar is not shown again. It renders in `App.tsx` above `<main>`, so it appears on every route —
+  including `/admin`, where the footer is hidden — and, being in flow, it never covers the bottom
+  controls of a page.
 - **The footer** carries «Политика обработки данных» and «Cookie» on every page that shows it.
 - **Registration** requires the consent checkbox before the request (see above).
 

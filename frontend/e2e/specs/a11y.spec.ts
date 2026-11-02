@@ -73,7 +73,7 @@ test.describe('axe: публичные экраны', () => {
       })
     ).toBeVisible()
 
-    const notice = page.getByRole('complementary', {
+    const notice = page.getByRole('region', {
       name: 'Уведомление об использовании cookie',
     })
     await expect(notice).toBeVisible()

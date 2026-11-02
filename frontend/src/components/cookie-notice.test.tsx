@@ -5,13 +5,13 @@ import { describe, expect, it } from 'vitest'
 import { CookieNotice } from '@/components/cookie-notice'
 import { acknowledgeCookieNotice } from '@/lib/cookie-notice'
 
-/** Плашка живёт вне страницы, поэтому тесту достаточно её одной. */
+/** Уведомление живёт вне страницы, поэтому тесту достаточно его одного. */
 describe('CookieNotice', () => {
   it('сообщает, что cookie только необходимые, и ссылается на раздел Политики', () => {
     render(<CookieNotice />)
 
     expect(
-      screen.getByRole('complementary', {
+      screen.getByRole('region', {
         name: 'Уведомление об использовании cookie',
       })
     ).toBeInTheDocument()
@@ -30,7 +30,7 @@ describe('CookieNotice', () => {
     await user.click(screen.getByRole('button', { name: 'Понятно' }))
 
     expect(
-      screen.queryByRole('complementary', {
+      screen.queryByRole('region', {
         name: 'Уведомление об использовании cookie',
       })
     ).not.toBeInTheDocument()

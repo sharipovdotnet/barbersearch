@@ -35,13 +35,13 @@
 > checkbox.
 > Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (250 files, 116 rules);
 > `npm test` — 246 tests in 31 files; `npm run build` — success, 2317 modules, entry
-> `index-*.js` 394.44 kB (gzip 127.47 kB); lazy `admin-page` 198.22 kB (gzip 41.66 kB),
-> `account-page` 24.32 kB (gzip 7.87 kB), `account-reviews-page` 16.95 kB (gzip 5.48 kB),
+> `index-*.js` 393.27 kB (gzip 127.19 kB); lazy `admin-page` 198.21 kB (gzip 41.64 kB),
+> `account-page` 24.33 kB (gzip 7.87 kB), `account-reviews-page` 16.95 kB (gzip 5.48 kB),
 > `account-profile-page` 7.82 kB (gzip 2.91 kB), `account-security-page` 8.89 kB (gzip 3.13 kB),
-> `barber-page` 35.80 kB (gzip 9.47 kB), `barber-cabinet-page` 24.28 kB (gzip 6.97 kB),
+> `barber-page` 35.81 kB (gzip 9.47 kB), `barber-cabinet-page` 24.28 kB (gzip 6.97 kB),
 > `privacy-page` 28.77 kB (gzip 7.45 kB), `register-page` 11.11 kB (gzip 3.77 kB) and the shared
 > `paging-*.js` 7.62 kB (gzip 2.81 kB);
-> CSS 76.98 kB (gzip 13.34 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> CSS 76.96 kB (gzip 13.34 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 > The cabinet E2E specs (role access, profile save, security, axe at 1280 and 320) passed against
 > the seeded `barbersearch_e2e` database. The legal slice was checked against the built `dist/`
 > with a Playwright pass (notice shown/dismissed/remembered, `/privacy` at 1280 and 320, zero
@@ -212,7 +212,7 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── barber-section.tsx      shared section heading (h2) for the cards
     │   │   └── barber-state.tsx        skeleton, error and not-found states
     │   ├── booking-status-badge.tsx    ← shared booking status badge (account, profile, cabinet)
-    │   ├── cookie-notice.tsx           ← informational cookie strip: one «Понятно», no consent wall
+    │   ├── cookie-notice.tsx           ← informational cookie bar under the header: one «Понятно», no consent wall
     │   ├── error-boundary.tsx          ← route-level render guard, Russian fallback
     │   ├── header-auth.tsx            ← «Войти» / avatar + «Выйти»
     │   ├── home/                      ← landing sections; the page only composes them
@@ -273,7 +273,7 @@ frontend/                              ← workspace root, NOT the git root
         ├── bookings.ts                ← booking creation/reads/cancel and review writes
         ├── calendar.ts                ← date helpers for the account calendar
         ├── catalog.ts                 ← public profile DTO, shared module cache, fetch/load
-        ├── cookie-notice.ts           ← acknowledgement of the cookie strip (own cookie)
+        ├── cookie-notice.ts           ← acknowledgement of the cookie bar (own cookie)
         ├── cookies.ts                 ← client cookie read/write shared by hint and notice
         ├── csrf.ts                    ← one antiforgery-token helper for mutations
         ├── errors.ts                  ← ProblemDetails → Russian copy
@@ -365,14 +365,14 @@ npm run test:e2e:ui        # UI mode
 ```text
 npm run lint  → 0 warnings, 0 errors, 250 files, 116 rules
 npm run build → tsc -b + vite build OK, 2317 modules,
-                dist/assets/index-*.js          394.44 kB (gzip 127.47 kB)
-                dist/assets/admin-page-*.js     198.22 kB (gzip  41.66 kB)  lazy
-                dist/assets/barber-page-*.js     35.80 kB (gzip   9.47 kB)  lazy
+                dist/assets/index-*.js          393.27 kB (gzip 127.19 kB)
+                dist/assets/admin-page-*.js     198.21 kB (gzip  41.64 kB)  lazy
+                dist/assets/barber-page-*.js     35.81 kB (gzip   9.47 kB)  lazy
                 dist/assets/privacy-page-*.js    28.77 kB (gzip   7.45 kB)  lazy
-                dist/assets/account-page-*.js    24.32 kB (gzip   7.87 kB)  lazy
+                dist/assets/account-page-*.js    24.33 kB (gzip   7.87 kB)  lazy
                 dist/assets/register-page-*.js   11.11 kB (gzip   3.77 kB)  lazy
-                dist/assets/paging-*.js           7.62 kB (gzip   2.81 kB)  shared
-                dist/assets/index-*.css          76.98 kB (gzip  13.34 kB)
+                dist/assets/paging-*.js           7.61 kB (gzip   2.81 kB)  shared
+                dist/assets/index-*.css          76.96 kB (gzip  13.34 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -572,9 +572,12 @@ stays in React state, like the email search of the bookings and audit screens.
 Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`,
 `BarberCabinetPage`, `RegisterPage` and `PrivacyPage` are `React.lazy` imports in `App.tsx`,
 behind one `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the
-landing ships only the shell and itself. The cookie notice is rendered once outside the page
-(inside `App`, after the footer), so it survives navigation and also appears on `/admin`, where
-the footer is hidden.
+landing ships only the shell and itself. The cookie notice is rendered once, in `App.tsx` above
+`<main>`, so it survives navigation and also appears on `/admin`, where the footer is hidden.
+It is a `<section>` in normal flow, not a fixed strip and not an `<aside>`: a fixed bar covers
+the bottom controls (the list pager, row actions) and swallows clicks on them — the E2E suite
+caught exactly that — while `<aside>` is already the account rail, and a second one makes
+`locator('aside')` ambiguous.
 `AppErrorBoundary` wraps the page inside `<main>`:
 a render exception replaces the screen with a Russian message and «Обновить страницу» /
 «На главную» actions, while the header, footer and navigation stay usable. The boundary is
@@ -1336,7 +1339,7 @@ change to `ui/**`.
 | Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить»; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
 | Other admin sections | ✅ all built: reviews, barbers, users, the catalogue, the bookings and the journal (§13) |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with a link to `/privacy`), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
-| Legal information | ✅ `/privacy` publishes the personal-data policy (152-ФЗ) with eleven sections, a table of contents and the `COOKIE_REGISTRY` list (session, refresh, antiforgery, hint, notice); the footer links the policy and its `#cookies` anchor; the first visit shows an informational cookie strip with one «Понятно» (no consent wall, because only strictly necessary cookies are set) and remembers the dismissal in `barbersearch.cookie-notice` for a year. Operator details are placeholders in `LEGAL_ENTITY` until the domain is registered (§14 #23) |
+| Legal information | ✅ `/privacy` publishes the personal-data policy (152-ФЗ) with eleven sections, a table of contents and the `COOKIE_REGISTRY` list (session, refresh, antiforgery, hint, notice); the footer links the policy and its `#cookies` anchor; the first visit shows an informational cookie bar under the header with one «Понятно» (no consent wall, because only strictly necessary cookies are set) and remembers the dismissal in `barbersearch.cookie-notice` for a year. Operator details are placeholders in `LEGAL_ENTITY` until the domain is registered (§14 #23) |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |

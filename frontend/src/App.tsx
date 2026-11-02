@@ -133,6 +133,11 @@ function App() {
 
       <SiteHeader />
 
+      {/* Уведомление живёт вне страницы — в потоке под шапкой: оно показывается на любом
+          адресе, включая админку, не перемонтируется при переходах и не перекрывает
+          содержимое. */}
+      <CookieNotice />
+
       <main id="main" className="flex-1">
         <AppErrorBoundary key={pageKey}>
           <Suspense fallback={<RouteFallback />}>
@@ -162,10 +167,6 @@ function App() {
       </main>
 
       {!isAdmin && <SiteFooter />}
-
-      {/* Уведомление живёт вне страницы: оно показывается на любом адресе, включая
-          админку, и не перемонтируется при переходах. */}
-      <CookieNotice />
     </div>
   )
 }
