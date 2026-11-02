@@ -439,6 +439,44 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Админское чтение журнала изменений.
+    /// </summary>
+    /// <remarks>
+    /// Журнал только читается, поэтому кодов мутаций здесь нет. Ошибки фильтров отделены
+    /// от <see cref="AdminUser"/> и <see cref="AdminCatalogue"/>: клиент различает ошибку
+    /// фильтра журнала и ошибку другого административного списка.
+    /// Курсор журнала держит собственный код <c>admin.audit.cursor.invalid</c>
+    /// в <c>AdminAuditCursor</c>, как и остальные курсоры.
+    /// </remarks>
+    public static class AdminAudit
+    {
+        /// <summary>
+        /// Фильтр типа не <c>all</c>, <c>user</c>, <c>barber_profile</c> или <c>review</c>; <c>400</c>.
+        /// </summary>
+        public const string EntityTypeInvalid = "admin.audit.entityType";
+
+        /// <summary>
+        /// Подстрока email автора длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string ActorTooLong = "admin.audit.actor";
+
+        /// <summary>
+        /// Дата периода не в формате <c>yyyy-MM-dd</c> или начало позже конца; <c>400</c>.
+        /// </summary>
+        public const string PeriodInvalid = "admin.audit.period";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "admin.audit.page.limit";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>admin.audit.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "admin.audit";
+    }
+
+    /// <summary>
     /// Салоны.
     /// </summary>
     public static class Salon
