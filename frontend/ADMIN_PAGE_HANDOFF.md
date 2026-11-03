@@ -462,6 +462,12 @@ Git-корень на уровень выше рабочей папки, поэ�
   (12–128, кнопка «Сгенерировать»). После создания — панель
   «Пользователь создан. Передайте пароль безопасным каналом —
   больше он не покажется»: отправки писем в системе нет.
+- Согласие на обработку ПД — только чтение (#42, 3.11.2026): в карточке
+  строка «Согласие на обработку ПД» — «Редакция 2026-11-03 · 03.11.2026, 14:05
+  UTC» либо «Записи нет — аккаунт создан до 03.11.2026». Записи нет у
+  аккаунтов, созданных до этапа, и у пользователей, созданных
+  администратором; IP согласия API не отдаёт и карточка его не показывает.
+  Выдать, изменить или отозвать согласие из админки нельзя.
 
 **Как реализовано (28.10.2026), с двумя отступлениями:**
 
@@ -1149,6 +1155,7 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: экран пользователей | `frontend/src/components/admin/users-screen.tsx` |
 | Админка: список, карточка и создание пользователя | `frontend/src/components/admin/user-list.tsx`, `user-detail.tsx`, `create-user-dialog.tsx` |
 | Админка: API пользователей | `frontend/src/lib/admin-users.ts` |
+| Админка: согласие на обработку ПД в карточке (#42) | `frontend/src/components/admin/user-detail.tsx` (строка «Согласие на обработку ПД»), `frontend/src/lib/response-guards.ts` (`isAdminUser`), сервер — `AdminUserDetailResponse`/`UserRepository` (IP не отдаётся) |
 | Админка: хуки пользователей | `frontend/src/hooks/use-admin-user-list.ts`, `use-admin-user.ts` |
 | Админка: экран каталога | `frontend/src/components/admin/catalogue-screen.tsx`, `catalogue-tabs.tsx`, `catalogue-table.tsx` |
 | Админка: диалоги каталога | `frontend/src/components/admin/hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`, `catalogue-action-dialog.tsx` |

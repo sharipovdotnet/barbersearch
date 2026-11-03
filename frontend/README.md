@@ -498,14 +498,19 @@ and `/barber`), and a direct address. The page reads the session only and mounts
 anonymous visitor; a signed-in user gets «Вы уже вошли» with a button to `/account`, `/barber` or
 `/admin` by role, and the page makes no data request.
 
-The form sends one `POST /api/auth/register` with `{ email, password, firstName, lastName }` and
+The form sends one `POST /api/auth/register` with `{ email, password, firstName, lastName, consentVersion }` and
 **no** `X-CSRF-TOKEN` (the action has no antiforgery filter, like booking creation). The email
-and names are trimmed; the password is not. Client checks before the request: names are not
-empty, email matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at most 254 characters, the password is
-12–128 characters and differs from the email, its local part and both names, the repeat
-matches, and the **consent to personal-data processing** is given. The consent is a separate
-required checkbox (not pre-checked, with a link to `/privacy`): without it the form shows
-«Отметьте согласие на обработку персональных данных.» and sends nothing. The top-10k password
+and names are trimmed; the password is not. `consentVersion` is `PRIVACY_POLICY_VERSION`
+(`src/lib/legal.ts`, `2026-11-03`) — the policy edition the checkbox names. Client checks before
+the request: names are not empty, email matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at most 254
+characters, the password is 12–128 characters and differs from the email, its local part and both
+names, the repeat matches, and the **consent to personal-data processing** is given. The consent
+is a separate required checkbox (not pre-checked, with the edition and a link to `/privacy`):
+without it the form shows «Отметьте согласие на обработку персональных данных.» and sends
+nothing. The server is authoritative: it stamps the UTC time and the client IP and stores the
+record in `users`, so no account is created without consent (`400 auth.register.consentRequired`)
+or with an outdated edition (`400 auth.register.consentVersion`, shown as «Политика обработки
+данных обновилась. Обновите страницу и подтвердите согласие снова.»). The top-10k password
 dictionary is a server check only — its public code is mapped to Russian copy, the dictionary is
 not reproduced on the client.
 
@@ -516,11 +521,15 @@ fails, registration is **not** repeated (a second attempt would be `409`): the f
 by the «Аккаунт создан» card with a `LoginDialog` (`redirectTo="/account"`).
 
 Public codes are mapped at the field or the form: `user.create.emailTaken` (409),
-`auth.password.required` / `tooShort` / `tooLong` / `common` / `equalsEmail` / `equalsName`,
-`user.email`, `user.firstName`, `user.lastName`; `429`, offline, `5xx` and anything else have
-their own Russian text. The English `detail` is never shown. Both registration and sign-in use
-the auth rate limiter (10 requests per minute per IP), so a registration with its auto sign-in
-spends two of them. The new account is active immediately; email confirmation is out of scope.
+`auth.register.consentRequired` (the checkbox error), `auth.register.consentVersion` (the
+form-level «Политика обновилась» alert), `auth.password.required` / `tooShort` / `tooLong` /
+`common` / `equalsEmail` / `equalsName`, `user.email`, `user.firstName`, `user.lastName`; `429`,
+offline, `5xx` and anything else have their own Russian text. The English `detail` is never
+shown. Both registration and sign-in use the auth rate limiter (10 requests per minute per IP),
+so a registration with its auto sign-in spends two of them. The new account is active
+immediately; email confirmation is out of scope. Accounts created before the consent record
+existed and the ones an administrator creates have no record — that is expected and the admin
+card says «Записи нет».
 
 - `src/pages/register-page.tsx` — title, loading skeleton, anonymous card and the signed-in gate.
 - `src/components/register-form.tsx` — fields, client/server errors, the consent checkbox, submit
@@ -543,6 +552,11 @@ needs no session and no request, and opens by a direct link.
   the service sets — session, refresh, antiforgery, the «Запомнить меня» hint and the notice's own
   acknowledgement — with purpose, lifetime and attributes. The policy renders that array, so a new
   cookie cannot appear in code without appearing in the document.
+- **The consent record.** `PRIVACY_POLICY_VERSION` equals `PRIVACY_POLICY_DATE` (`2026-11-03`) and
+  the backend's `PrivacyPolicy.Version`; the registration form sends it and the server stores it
+  with the UTC time and the IP. §2.2 of the policy states what is recorded, §4.1 that the record is
+  stored with the account. Editing the policy text bumps both constants and the server constant —
+  otherwise registrations would start failing with `auth.register.consentVersion`.
 - **The notice** (`src/components/cookie-notice.tsx`) is informational, not a consent banner: the
   service sets only strictly necessary first-party cookies, so there is no «Отказаться» button and
   no cookie wall. It is a bar under the header with one «Понятно» action and a link to
@@ -609,6 +623,11 @@ start from the first page; the selected user lives in the URL so paging does not
 and the mobile split keeps the list on its page. Role change, block/unblock and email/phone
 confirmation update the row locally (or remove it when it leaves the active filter) before the
 quiet re-sync. The screen never shows a total count, because the API does not return one.
+
+The card has a read-only «Согласие на обработку ПД» row: «Редакция 2026-11-03 · 03.11.2026, 14:05
+UTC» for a self-registered account, or «Записи нет — аккаунт создан до 03.11.2026» for accounts
+that predate the record and for users created by an administrator. The IP of the consent is not
+returned by the API and is never displayed.
 
 ## Admin catalogue
 

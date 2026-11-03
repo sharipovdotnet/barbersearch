@@ -32,6 +32,11 @@ export type RegistrationInput = {
   password: string
   firstName: string
   lastName: string
+  /**
+   * Редакция Политики, которую подтвердил человек. Время и IP сервер ставит сам:
+   * клиентское время не принимается, а без согласия сервер аккаунт не создаёт.
+   */
+  consentVersion: string
 }
 
 /** Текущий пользователь или `null`, если cookie-сессии нет. */

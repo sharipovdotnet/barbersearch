@@ -34,21 +34,20 @@
 > counted with its section's predicate, names only and no mutation. The service publishes its
 > personal-data policy at `/privacy` (152-ФЗ, the cookie list, the operator's details) and shows
 > an informational cookie notice on the first visit; registration requires a separate consent
-> checkbox.
-> Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (256 files, 116 rules);
-> `npm test` — 260 tests in 31 files; `npm run build` — success, 2445 modules, entry
-> `index-*.js` 337.77 kB (gzip 109.58 kB); lazy `admin-page` 198.86 kB (gzip 41.89 kB),
+> checkbox, and the consent is now provable: the backend stores the policy edition, the server UTC
+> time and the IP, the admin card shows the record, and the policy describes it.
+> Verified on 2026-11-03: `npm run lint` — 0 warnings / 0 errors (259 files, 116 rules);
+> `npm test` — 275 tests in 33 files, green twice; `npm run build` — success, 2445 modules, entry
+> `index-*.js` 337.79 kB (gzip 109.57 kB); lazy `admin-page` 199.53 kB (gzip 42.20 kB),
 > `account-page` 24.35 kB (gzip 7.86 kB), `account-reviews-page` 16.98 kB (gzip 5.48 kB),
-> `account-profile-page` 7.84 kB (gzip 2.91 kB), `account-security-page` 8.91 kB (gzip 3.14 kB),
+> `account-profile-page` 7.84 kB (gzip 2.92 kB), `account-security-page` 8.91 kB (gzip 3.15 kB),
 > `barber-page` 35.83 kB (gzip 9.47 kB), `barber-cabinet-page` 24.30 kB (gzip 6.96 kB),
-> `privacy-page` 28.77 kB (gzip 7.45 kB), `register-page` 11.12 kB (gzip 3.77 kB) and the shared
-> `paging-*.js` 7.65 kB (gzip 2.82 kB);
-> CSS 81.38 kB (gzip 14.03 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
-> The cabinet E2E specs (role access, profile save, security, axe at 1280 and 320) passed against
-> the seeded `barbersearch_e2e` database. The legal slice was checked against the built `dist/`
-> with a Playwright pass (notice shown/dismissed/remembered, `/privacy` at 1280 and 320, zero
-> axe violations, no horizontal scroll, the `#cookies` anchor at 72 px, the consent checkbox);
-> the new E2E cases for `/privacy` were not run — the suite needs the API and PostgreSQL.
+> `privacy-page` 29.43 kB (gzip 7.57 kB), `register-page` 11.56 kB (gzip 3.97 kB) and the shared
+> `paging-*.js` 7.65 kB (gzip 2.83 kB);
+> CSS 81.39 kB (gzip 14.04 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> The full E2E suite (desktop, mobile, 320 px and mutations) passed against the seeded
+> `barbersearch_e2e` database: 188 passed, 3 skipped, including the new registration-consent spec
+> and the axe scans of `/register` and `/privacy`.
 
 ---
 
@@ -363,19 +362,21 @@ npm run test:e2e:ui        # UI mode
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-11-02:**
+**Verification snapshot, 2026-11-03:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 256 files, 116 rules
+npm run lint  → 0 warnings, 0 errors, 259 files, 116 rules
+npm test      → 275 tests in 33 files, green twice
 npm run build → tsc -b + vite build OK, 2445 modules,
-                dist/assets/index-*.js          337.77 kB (gzip 109.58 kB)
-                dist/assets/admin-page-*.js     198.86 kB (gzip  41.89 kB)  lazy
+                dist/assets/index-*.js          337.79 kB (gzip 109.57 kB)
+                dist/assets/admin-page-*.js     199.53 kB (gzip  42.20 kB)  lazy
                 dist/assets/barber-page-*.js     35.83 kB (gzip   9.47 kB)  lazy
-                dist/assets/privacy-page-*.js    28.77 kB (gzip   7.45 kB)  lazy
+                dist/assets/privacy-page-*.js    29.43 kB (gzip   7.57 kB)  lazy
                 dist/assets/account-page-*.js    24.35 kB (gzip   7.86 kB)  lazy
-                dist/assets/register-page-*.js   11.12 kB (gzip   3.77 kB)  lazy
-                dist/assets/paging-*.js           7.65 kB (gzip   2.82 kB)  shared
-                dist/assets/index-*.css          81.38 kB (gzip  14.03 kB)
+                dist/assets/register-page-*.js   11.56 kB (gzip   3.97 kB)  lazy
+                dist/assets/paging-*.js           7.65 kB (gzip   2.83 kB)  shared
+                dist/assets/index-*.css          81.39 kB (gzip  14.04 kB)
+npm run test:e2e → 188 passed, 3 skipped
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -822,7 +823,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 |---|---|---|---|
 | `GET` | `/api/auth/csrf` | anonymous | `{ token }` for `X-CSRF-TOKEN` |
 | `POST` | `/api/auth/login/cookie` | anonymous, rate-limited, antiforgery | `{ email, password, rememberMe }` → `204` + HttpOnly cookies |
-| `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName }` → `201 { id }`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName` |
+| `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName, consentVersion }` → `201 { id }`; `consentVersion` is `PRIVACY_POLICY_VERSION` (`lib/legal.ts`), the server compares it with `PrivacyPolicy.Version` and stamps the UTC time and the client IP in `users`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; `409 user.create.emailTaken`, `400 auth.register.consentRequired` (consent not sent), `400 auth.register.consentVersion` (the policy was edited — reload and confirm again), `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName`; no account is created on either `auth.register.*` failure |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
 | `GET` | `/api/users/me` | authenticated, self-only | cabinet profile from the database: `id`, `email`, `firstName`, `lastName`, `phoneNumber`, `avatarUrl`, `role`, `barberProfileId`, `isEmailVerified`, `isPhoneVerified`, `createdAt`, `lastLoginAt`; `401` for anonymous; the id comes from the `sub` claim, the route has no `userId` |
 | `PUT` | `/api/users/{userId}/profile` | the user themself or an admin | `{ firstName, lastName, phoneNumber, avatarUrl }` → `204` (no body); replaces the whole profile, so `avatarUrl` must be sent back unchanged; `400 user.updateProfile.firstName` / `user.updateProfile.lastName` / `user.updateProfile.avatarUrl`; cookie mutation, sends `X-CSRF-TOKEN` |
@@ -850,7 +851,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade |
 | `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist |
 | `GET` | `/api/admin/users?status=all\|active\|blocked\|unverified&role=&search=` | admin | user list with role, access state and verifications |
-| `GET` | `/api/admin/users/{id}` | admin | user card with contacts and the linked barber profile |
+| `GET` | `/api/admin/users/{id}` | admin | user card with contacts, the linked barber profile and the consent record (`consentPolicyVersion`, `consentedAt`; both `null` for pre-#42 and admin-created accounts, the IP is never returned) |
 | `GET` | `/api/admin/catalogue/hair-services?status=&search=` | admin | the **full** catalogue including hidden rows: a bare array, no pagination; `status` is `all` (default), `active` or `hidden`; every row carries `isActive` and `usageCount` (active verified barbers with an active link); order category, name, id; `400 admin.catalogue.status` / `admin.catalogue.search` |
 | `GET` | `/api/admin/catalogue/specializations?status=&search=` | admin | the same contract for specializations: `name`, `description`, `isActive`, `usageCount`; order name, id |
 | `GET` | `/api/admin/catalogue/salons?status=&search=` | admin | the same contract for salons, with every edit field (`address`, `city`, `postalCode`, `country`, `timeZoneId`, coordinates, contacts), `isActive` and `usageCount`; search matches name **and** city; order city, name, id |
@@ -1252,35 +1253,36 @@ contrast on screens outside the axe matrix.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-11-02)
+### 12.1 Current build (2026-11-03)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 337.77 kB | 109.58 kB |
-| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 150.20 kB total | 52.65 kB |
-| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit) | 198.86 kB | 41.89 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 337.79 kB | 109.57 kB |
+| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 150.24 kB total | 52.67 kB |
+| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit) | 199.53 kB | 42.20 kB |
 | `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.83 kB | 9.47 kB |
+| `privacy-page-*.js` — lazy `/privacy` with the policy sections and the cookie registry | 29.43 kB | 7.57 kB |
 | `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 24.35 kB | 7.86 kB |
 | `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.30 kB | 6.96 kB |
 | `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.98 kB | 5.48 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 11.12 kB | 3.77 kB |
-| `paging-*.js` — shared cursor pager used by the row lists | 7.65 kB | 2.82 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 11.56 kB | 3.97 kB |
+| `paging-*.js` — shared cursor pager used by the row lists | 7.65 kB | 2.83 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.23 kB | 1.46 kB |
 | `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.64 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile, the cabinet and the admin booking card | 1.04 kB | 0.56 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.45 kB | 0.35 kB |
 | `arrow-left-*.js`, `circle-check-*.js` — icons shared by two lazy chunks | 0.42 kB total | 0.37 kB |
 | `use-now-*.js` — minute ticker shared by both cabinets | 0.62 kB | 0.42 kB |
-| `index-*.css` | 81.38 kB | 14.03 kB |
+| `index-*.css` | 81.39 kB | 14.04 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.82 kB | — |
 
-2445 modules. The issue-41 build added the four entity types and their Russian labels to the
-journal that already lives in the lazy admin chunk: `admin-page` moved from 198.24 / 41.83 to
-198.86 / 41.89 kB (the extra labels and the `status`/`category` value mapping), while the entry is
-337.77 / 109.58 kB and `index-*.css` 81.38 / 14.03 kB in the recorded build (the same build also
-contains the all-roles cabinet and legal slices, which is why the entry and some lazy chunks moved
-from the issue-40 numbers). The issue-38 build added the audit journal to the lazy admin chunk:
+2445 modules. The issue-42 build added the consent row to the admin card and the policy edition to
+the registration form: `admin-page` moved from 198.86 / 41.89 to 199.53 / 42.20 kB,
+`register-page` from 11.12 / 3.77 to 11.56 / 3.97 kB, `privacy-page` is 29.43 / 7.57 kB, while the
+entry is 337.79 / 109.57 kB and `index-*.css` 81.39 / 14.04 kB. The issue-41 build added the four
+entity types and their Russian labels to the journal that already lives in the lazy admin chunk
+(`admin-page` 198.86 / 41.89 kB in that build). The issue-38 build added the audit journal:
 `admin-page` grew by 11.62 kB raw / 2.41 kB gzip (the screen, the entry row, the filter bar and the
 shared pager), the entry by 0.40 kB / 0.16 kB (the `audit` route in `admin-path` and the audit
 guards), and `index-*.css` grew by 0.69 kB / 0.12 kB. Every other lazy screen is within 0.02 kB of
@@ -1357,8 +1359,8 @@ change to `ui/**`.
 | Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить»; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. The journal covers seven entity types — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking` (booking rows carry only `Status`/`BarberNote` changes; booking creation is deliberately not audited) — and offers the four new filters with Russian labels «Салон», «Услуга», «Специализация», «Бронь», Russian values for `status`/`category` and «Активность» for `isActive`; retention, export and partitioning remain separate |
 | Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить»; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
 | Other admin sections | ✅ all built: reviews, barbers, users, the catalogue, the bookings and the journal (§13) |
-| Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with a link to `/privacy`), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
-| Legal information | ✅ `/privacy` publishes the personal-data policy (152-ФЗ) with eleven sections, a table of contents and the `COOKIE_REGISTRY` list (session, refresh, antiforgery, hint, notice); the footer links the policy and its `#cookies` anchor; the first visit shows an informational cookie bar under the header with one «Понятно» (no consent wall, because only strictly necessary cookies are set) and remembers the dismissal in `barbersearch.cookie-notice` for a year. Operator details are placeholders in `LEGAL_ENTITY` until the domain is registered (§14 #23) |
+| Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with the policy edition and a link to `/privacy`), one `POST /api/auth/register` without CSRF that carries `consentVersion` from `PRIVACY_POLICY_VERSION`, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates; `auth.register.consentRequired` maps to the existing checkbox error, `auth.register.consentVersion` to a form-level «Политика обновилась» alert |
+| Legal information | ✅ `/privacy` publishes the personal-data policy (152-ФЗ) with eleven sections, a table of contents and the `COOKIE_REGISTRY` list (session, refresh, antiforgery, hint, notice); §2.2 states that the operator records the policy edition, the UTC time of consent and the IP, §4.1 that the record is stored with the account; the edition is dated 2026-11-03 and rendered from `PRIVACY_POLICY_DATE`; the footer links the policy and its `#cookies` anchor; the first visit shows an informational cookie bar under the header with one «Понятно» (no consent wall, because only strictly necessary cookies are set) and remembers the dismissal in `barbersearch.cookie-notice` for a year. Operator details are placeholders in `LEGAL_ENTITY` until the domain is registered (§14 #23) |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
@@ -1367,7 +1369,7 @@ change to `ui/**`.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 260 tests in 31 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details) and the registration consent gate (no request without it)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 275 tests in 33 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1392,7 +1394,7 @@ the feature grows; **P3** cosmetic/structural.
 | 20 | P3 | No «Забыли пароль?» link in the login dialog | Registration is linked from the dialog and `/register`; a reset flow needs backend work |
 | 21 | P3 | `LoginForm` does not reset `isPending` on success (the dialog unmounts, so it is harmless today) | Reset in `finally` if the dialog ever stays mounted |
 | 22 | P3 | The HTTPS dev proxy path is untested for self-signed certificates | Verify with the `https` profile or set `secure: false` deliberately |
-| 23 | P2 | The registration consent is enforced on the client only: the checkbox gates the request, but the backend does not receive or store the consent (version, timestamp, IP), so the operator cannot prove when and to which policy revision a user agreed — part 1 of article 9 of 152-ФЗ expects a provable consent. The operator details in `LEGAL_ENTITY` are placeholders too | Add `consentVersion`/`consentedAt` to `POST /api/auth/register` (backend first), store them, and show the current revision from `PRIVACY_POLICY_DATE`; fill `LEGAL_ENTITY` before the domain is published |
+| 23 | P2 | The consent record exists for new self-registered accounts only. `POST /api/auth/register` stores the policy edition, the server UTC time and the IP in `users`, the admin card shows the record, and `/privacy` describes it (§2.2, §4.1); the IP never leaves the database (not in the API, the audit log or the logs). Accounts created before the slice and the ones created by an administrator deliberately have no record — a consent that never happened cannot be backfilled — and repeated consent/withdrawal has no flow or history table yet. The operator details in `LEGAL_ENTITY` are still placeholders | Add re-consent (first sign-in, one-time-password accounts) and a withdrawal/history slice; fill `LEGAL_ENTITY` before the domain is published |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
@@ -1419,7 +1421,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32), 260 tests in 31 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 275 tests in 33 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -1471,7 +1473,11 @@ and the catalogue «Выключенные» filter), the oldest review being th
 opening `#review-detail` with browser «Назад» returning, exactly one `/api/admin/summary` request
 per «Обновить» with no skeleton flash, the read-only guarantees (no «Показать ещё», create,
 delete or edit, no `canvas`, one button) and an injected `401` (`page.route` plus a `204`
-refresh). Full suite: 184 passed,
+refresh). The registration-consent spec (desktop and mobile) checks the real request on a taken
+seeded email — the body carries `consentVersion`, the server answers `409 user.create.emailTaken`
+(not `400 auth.register.consentVersion`) and no user is created — and the injected outdated-edition
+`400`, which shows the Russian «Политика обработки данных обновилась…» alert, keeps the form
+enabled and does not navigate to `/account`. Full suite: 188 passed,
 3 skipped. The keyboard layer
 covers the pager (Tab/Enter/Space), the login dialog (Escape and focus return) and the review queue
 (Tab, arrows, Home/End, Enter/Space, `:focus-visible`, and focus that stays in the queue after
@@ -1536,9 +1542,14 @@ its nested-path `notFound` and the unchanged `/admin` → reviews redirect. Test
 (`*.test.ts(x)`) and compare Russian copy as a whole string, saying in the test title that it is
 copy. The legal slice adds `CookieNotice` (the informational copy, the `/privacy#cookies` link,
 one-click dismissal and the remembered acknowledgement), `PrivacyPage` (heading, revision date,
-every cookie of the registry, the operator details) and `RegisterForm` (the consent gate keeps the
-request from being sent, the policy link, the error cleared by the checkbox, and the successful
-registration that signs the new account in).
+every cookie of the registry, the operator details, and the recorded-consent paragraphs of §2.2 and
+§4.1) and `RegisterForm` (the consent gate keeps the request from being sent, the policy link, the
+policy edition in the checkbox copy, `consentVersion` in the request body, the outdated-edition
+form alert, the `auth.register.consentRequired` field error and the successful registration that
+signs the new account in). The consent record also adds `UserDetail` (the «Редакция … · … UTC»
+row, «Записи нет — аккаунт создан до 03.11.2026» and no consent actions), `legal` (version equals
+the policy date and the `2026-11-03` literal) and `isAdminUser` (nullable consent fields accepted,
+numbers and objects rejected).
 
 **What is not covered yet:** most screens and the hooks (the admin queues, the cabinets) — the
 audit, admin-bookings, reviews and barbers screens, `AuditEntry` / `BookingDetail` and
@@ -1827,6 +1838,21 @@ booking and service diffs, the «Салон» filter URL); E2E fixtures now hold
 («1–20» + «21–25», the four new rows inside the same 2026-09-10 UTC day) and the two new specs
 cover «Салон» with the Russian phone diff and «Бронь» with the Russian status diff. Retention,
 export, partitioning and `BarberProfile` children remain separate slices.
+
+**Completed 2026-11-03:** provable consent (#42) — the registration checkbox stopped being a
+client-only gate. `POST /api/auth/register` takes `consentVersion` (= `PRIVACY_POLICY_VERSION`),
+the server compares it with `PrivacyPolicy.Version`, stamps `consentedAt` from its own clock and
+the client IP, and stores all three in `users` with the user in one `SaveChanges`. A missing
+consent (`auth.register.consentRequired`) or another edition (`auth.register.consentVersion`)
+creates no account. The admin card shows «Редакция … · дата UTC» or «Записи нет», the checkbox
+names the policy edition, and both codes are mapped to Russian copy (an outdated edition is a
+form-level alert). `/privacy` §2.2 describes what is recorded and §4.1 that the record is stored
+with the account; the edition is dated 2026-11-03. Accounts created before the slice and the ones
+created by an administrator deliberately have no record — a consent that never happened cannot be
+backfilled — and re-consent, withdrawal/history, retention/export and `LEGAL_ENTITY` stay
+separate slices (§14 #23). Unit tests grew to 275 in 33 files; E2E added
+`registration-consent.spec.ts` (the real request on a taken email proves the server accepted the
+edition without creating a user, plus an injected outdated-edition `400`).
 
 **Completed 2026-11-02:** personal cabinet for all roles — `/account` stopped being a customer-only
 screen: the shared `AccountShell` renders the identity block (initials, name, email, role, unverified

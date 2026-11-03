@@ -79,6 +79,11 @@ public sealed class AuditTrail
     private static readonly Dictionary<Type, AuditedEntity> AUDITED_ENTITIES =
         new()
         {
+            // Поля согласия (#42) в allowlist не входят намеренно: журнал — история изменений,
+            // а не реестр согласий. Добавление consentIp протащило бы IP (персональные данные)
+            // в payload, который читают в админском журнале и экспорте. Запись согласия живёт
+            // в users и отдаётся в карточке пользователя; отзыв и повторное согласие — отдельный
+            // срез с собственной таблицей истории.
             [typeof(User)] = new(
                 "user",
                 [

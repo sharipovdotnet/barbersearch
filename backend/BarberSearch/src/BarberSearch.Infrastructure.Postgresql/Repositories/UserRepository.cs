@@ -368,7 +368,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                    user.LockoutEnd,
                    user.FailedLoginAttempts,
                    user.CreatedAt,
-                   user.UpdatedAt);
+                   user.UpdatedAt,
+                   user.ConsentPolicyVersion,
+                   user.ConsentedAt);
     }
 
     private static AdminUserDetailResponse ToAdminDetailResponse(AdminUserDetailRow row)
@@ -395,7 +397,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             row.LockoutEnd,
             row.FailedLoginAttempts,
             row.CreatedAt,
-            row.UpdatedAt);
+            row.UpdatedAt,
+            row.ConsentPolicyVersion,
+            row.ConsentedAt);
 
     /// <summary>
     /// Шаблон <c>ILIKE</c> для поиска по имени, фамилии и email.
@@ -498,5 +502,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         DateTimeOffset? LockoutEnd,
         int FailedLoginAttempts,
         DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        string? ConsentPolicyVersion,
+        DateTimeOffset? ConsentedAt);
 }

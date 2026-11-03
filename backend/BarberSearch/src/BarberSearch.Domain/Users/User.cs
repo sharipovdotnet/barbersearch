@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Mail;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.FavoriteBarbers;
@@ -88,6 +89,28 @@ public class User : AggregateRoot
     /// </summary>
     public Guid? BarberProfileId { get; private set; }
 
+    /// <summary>
+    /// Редакция Политики, на которую дано согласие при регистрации; <c>null</c> — записи нет.
+    /// </summary>
+    /// <remarks>
+    /// Записи нет у аккаунтов, созданных до этапа #42 и администратором: согласие нельзя
+    /// доказать задним числом, поэтому backfill не делается, а UI честно говорит «Записи нет».
+    /// </remarks>
+    public string? ConsentPolicyVersion { get; private set; }
+
+    /// <summary>
+    /// Момент согласия в UTC; <c>null</c> — записи нет.
+    /// </summary>
+    public DateTimeOffset? ConsentedAt { get; private set; }
+
+    /// <summary>
+    /// IP-адрес, с которого дано согласие; <c>null</c> — записи нет либо адрес неизвестен.
+    /// </summary>
+    /// <remarks>
+    /// Это персональные данные: поле не входит в API-ответы, в allowlist аудита и в логи.
+    /// </remarks>
+    public IPAddress? ConsentIp { get; private set; }
+
     public IReadOnlyCollection<FavoriteBarber> FavoriteBarbers
         => _favoriteBarbers.AsReadOnly();
 
@@ -100,7 +123,8 @@ public class User : AggregateRoot
         string passwordHash,
         string firstName,
         string lastName,
-        UserRole role = UserRole.Customer)
+        UserRole role = UserRole.Customer,
+        UserConsent? consent = null)
     {
         var errors = DomainErrors.Collect();
         var normalizedEmail = NormalizeEmail(email);
@@ -120,7 +144,10 @@ public class User : AggregateRoot
             LastName = lastName,
             Role = role,
             IsActive = true,
-            SecurityStamp = NewSecurityStamp()
+            SecurityStamp = NewSecurityStamp(),
+            ConsentPolicyVersion = consent?.PolicyVersion,
+            ConsentedAt = consent?.ConsentedAt,
+            ConsentIp = consent?.IpAddress
         };
     }
 

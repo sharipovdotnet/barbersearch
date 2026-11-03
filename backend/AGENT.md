@@ -364,8 +364,8 @@ session's attempts with `Finished`, `WaitForCompletion` and `TestsPassed` do not
 
 If even that fails, the fallback is a throwaway runner that loads the test assembly and invokes
 every `[Fact]` by reflection. This is faithful here because the three unit-test assemblies are
-**Domain — 187, Application — 368, Infrastructure — 83 `[Fact]` methods, no `[Theory]`, no
-fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
+**Domain — 197 (one `[Theory]` with three cases), Application — 399, Infrastructure — 94 methods;
+no fixtures, no `IAsyncLifetime`** — re-check that before reusing it:
 
 ```powershell
 # 1. build the test assemblies (needs danger-full-access for obj/bin)
@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-02 (после среза issue-39): domain **187**, application **368**,
-infrastructure **83**, integration **109** — всего 747, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-03 (после среза issue-42): domain **197**, application **399**,
+infrastructure **94**, integration **135** — всего **825**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -642,13 +642,13 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-02; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-03; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 187 domain + 395 application + 94 infrastructure + 127 integration (803 total); unit-проекты зелёные локально (2026-11-02), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 197 domain + 399 application + 94 infrastructure + 135 integration (825 total); unit-проекты зелёные локально (2026-11-03), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 91 обработчик (72 command + 19 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`, создание не пишется); `bookings.*` без FK сознательно |
@@ -656,13 +656,13 @@ The rules below were pushed to the application layer because the aggregate canno
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (19):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (20):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
-`AddAdminBookingsStatusIndex`.
+`AddAdminBookingsStatusIndex`, `AddUserConsent`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -1616,6 +1616,21 @@ Conventions:
   rejects a `StartAt` outside `[now − 5 minutes; now + 90 days]` (`400
   booking.create.startAt.inPast` / `.tooFar`) and `Booking.Create` caps the interval at 1440
   minutes (`booking.create.period.tooLong`, R-04).
+- **Registration consent (2026-11-03, #42).** `POST api/auth/register` takes `consentVersion`,
+  compares it with `PrivacyPolicy.Version` (`Application/Privacy`, `2026-11-03`), stamps
+  `consentedAt` from `TimeProvider` and the client IP, and stores all three in `users`
+  (`consent_policy_version`, `consented_at`, `consent_ip inet`, check `ck_users_consent`) in the
+  same `SaveChanges` as the user. Missing consent is `400 auth.register.consentRequired`; another
+  edition is `400 auth.register.consentVersion`; in both cases no user row is created. The
+  `RequireConsent` flag separates public registration from admin creation (`UsersController`
+  keeps the defaults), so admin-created accounts have no record, and accounts created before the
+  slice are not backfilled either (`NULL`/`NULL`). The IP is read by the Web controller from
+  `HttpContext.Connection.RemoteIpAddress` after `UseForwardedHeaders` (IPv4-mapped goes through
+  `MapToIPv4`) and passed in the command — Application knows nothing about `HttpContext` and no
+  new abstraction was added. The IP never leaves the database: the admin card returns only
+  `consentPolicyVersion`/`consentedAt`, the consent fields are deliberately outside the `User`
+  audit allowlist (the journal is a change log, not a consent registry), and no log line carries
+  the registration body or the IP.
 - The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
@@ -2009,18 +2024,25 @@ activity of the barber service and takes the price from it.
 | Слой | Файлы |
 |---|---|
 | `Shared` | `ErrorType.UNAUTHORIZED` / `FORBIDDEN`, фабрики `Error.Unauthorized/Forbidden` |
-| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by` |
-| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
+| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `Users/UserConsent` — запись согласия (#42); `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by` |
+| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `Privacy/PrivacyPolicy` — текущая редакция Политики (#42); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers |
 | `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword` |
-| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens` |
+| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens`, `Migrations/*_AddUserConsent` |
 | `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Controllers/AuthController` |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
+
+**IP согласия (#42) читает Web, а не Application.** `AuthController.GetClientIpAddress` берёт
+`HttpContext.Connection.RemoteIpAddress` после `UseForwardedHeaders` (адрес доверенного прокси уже
+подставлен) и приводит IPv4-mapped форму через `MapToIPv4`, чтобы один клиент не дал два разных
+значения. Ручной разбор `X-Forwarded-For` не добавляется: без настроенного прокси заголовку
+доверять нельзя. Application получает `IPAddress?` в `CreateUserCommand` и про `HttpContext` не
+знает; новой абстракции (`IClientIp`) не появлялось — читатель адреса один, и он в Web.
 
 ### 17.2 Эндпоинты
 
 | Метод | Маршрут | Доступ | Что делает |
 |---|---|---|---|
-| POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается |
+| POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается; обязателен `consentVersion` (`auth.register.consentRequired` / `auth.register.consentVersion`), сервер сам ставит UTC-время и IP |
 | POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
 | POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly access-cookie (8 часов) + HttpOnly refresh-cookie |
 | POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie (`rememberMe` — постоянная или сессионная access-cookie), тело — 200 + новые access/refresh без cookie |

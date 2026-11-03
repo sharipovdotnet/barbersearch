@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
@@ -75,14 +76,35 @@ public class AuthController : ApiController
         }
 
         // Роль берётся из кода, а не из тела: иначе первый же клиент зарегистрирует себе Admin.
+        // Согласие обязательно: без редакции Политики сервер не создаёт аккаунт. Время ставит
+        // Application, а IP читается здесь — после UseForwardedHeaders это доверенный адрес.
         var command = new CreateUserCommand(
             request.Email,
             passwordHasher.HashPassword(null!, request.Password),
             request.FirstName,
             request.LastName,
-            UserRole.Customer);
+            UserRole.Customer,
+            request.ConsentVersion,
+            GetClientIpAddress(),
+            RequireConsent: true);
 
         return ToCreatedResult(await handler.Handle(command, cancellationToken));
+    }
+
+    /// <summary>
+    /// Адрес клиента для записи согласия.
+    /// </summary>
+    /// <remarks>
+    /// <c>RemoteIpAddress</c> уже учитывает <c>UseForwardedHeaders</c>: доверенный прокси
+    /// подставляет настоящий адрес. Ручной разбор <c>X-Forwarded-For</c> не делается — иначе
+    /// любой клиент подменил бы IP. IPv4-mapped форма (<c>::ffff:a.b.c.d</c>) приводится
+    /// к IPv4, иначе один клиент дал бы два разных значения.
+    /// </remarks>
+    private IPAddress? GetClientIpAddress()
+    {
+        var address = HttpContext.Connection.RemoteIpAddress;
+
+        return address is { IsIPv4MappedToIPv6: true } ? address.MapToIPv4() : address;
     }
 
     /// <summary>

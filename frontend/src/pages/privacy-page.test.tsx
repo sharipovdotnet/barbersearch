@@ -42,4 +42,32 @@ describe('PrivacyPage', () => {
     expect(within(operator).getByText(LEGAL_ENTITY.inn)).toBeInTheDocument()
     expect(within(operator).getByText(LEGAL_ENTITY.email)).toBeInTheDocument()
   })
+
+  it('описывает запись согласия: редакция, дата и время UTC, IP-адрес', () => {
+    render(<PrivacyPage />)
+
+    const grounds = screen.getByRole('region', {
+      name: /Правовые основания обработки/,
+    })
+
+    expect(
+      within(grounds).getByText(/фиксирует редакцию Политики/)
+    ).toBeInTheDocument()
+    expect(
+      within(grounds).getByText(/дату и время согласия \(UTC\)/)
+    ).toBeInTheDocument()
+    expect(within(grounds).getByText(/IP-адрес/)).toBeInTheDocument()
+  })
+
+  it('говорит, что запись согласия хранится вместе с учётной записью', () => {
+    render(<PrivacyPage />)
+
+    const purposes = screen.getByRole('region', {
+      name: /Цели и сроки обработки/,
+    })
+
+    expect(
+      within(purposes).getByText(/хранится вместе с учётной записью/)
+    ).toBeInTheDocument()
+  })
 })

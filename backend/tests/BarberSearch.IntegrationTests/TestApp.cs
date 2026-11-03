@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using BarberSearch.Application.Privacy;
 using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Register;
@@ -141,11 +142,16 @@ public sealed class TestApp : IAsyncDisposable
     /// <summary>
     /// Регистрирует пользователя через публичный эндпоинт.
     /// </summary>
+    /// <remarks>
+    /// Согласие передаётся действующей редакцией Политики: без него публичная регистрация
+    /// отвечает <c>400 auth.register.consentRequired</c>. Сам контракт согласия проверяет
+    /// <c>RegistrationConsentTests</c>, где литерал редакции зафиксирован отдельно.
+    /// </remarks>
     public async Task<Guid> RegisterAsync(string email, string password = Password)
     {
         using var response = await Client.PostAsJsonAsync(
             "api/auth/register",
-            new RegisterRequest(email, password, "Integration", "Test"));
+            new RegisterRequest(email, password, "Integration", "Test", PrivacyPolicy.Version));
 
         Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);
 

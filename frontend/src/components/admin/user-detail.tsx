@@ -34,8 +34,42 @@ import {
 } from '@/lib/admin-users'
 import { barbersPath } from '@/lib/admin-path'
 import { formatDateTime, getInitials } from '@/lib/format'
+import { PRIVACY_POLICY_VERSION } from '@/lib/legal'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
+
+/**
+ * «03.11.2026, 14:05» в UTC: согласие датируется серверным временем, поэтому пояс
+ * не зависит от машины администратора. Собирается из частей — формат не плывёт
+ * от версии ICU.
+ */
+const CONSENT_MOMENT_FORMATTER = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'UTC',
+})
+
+function formatConsentMoment(iso: string): string {
+  const parts = new Map(
+    CONSENT_MOMENT_FORMATTER.formatToParts(new Date(iso)).map((part) => [
+      part.type,
+      part.value,
+    ])
+  )
+
+  return `${parts.get('day')}.${parts.get('month')}.${parts.get('year')}, ${parts.get('hour')}:${parts.get('minute')}`
+}
+
+/** «2026-11-03» → «03.11.2026»: дата редакции, до которой записи согласия не было. */
+function formatPolicyDate(version: string): string {
+  const [year, month, day] = version.split('-')
+
+  return `${day}.${month}.${year}`
+}
 
 /**
  * Карточка пользователя: контакты, подтверждения, метаданные входа и действия.
@@ -132,6 +166,13 @@ export function UserDetail({
 
           <ContextItem label="Обновлён">
             {formatDateTime(user.updatedAt)}
+          </ContextItem>
+
+          {/* Только чтение: согласие нельзя выдать или отозвать из админки. */}
+          <ContextItem label="Согласие на обработку ПД">
+            {user.consentPolicyVersion === null || user.consentedAt === null
+              ? `Записи нет — аккаунт создан до ${formatPolicyDate(PRIVACY_POLICY_VERSION)}`
+              : `Редакция ${user.consentPolicyVersion} · ${formatConsentMoment(user.consentedAt)} UTC`}
           </ContextItem>
 
           <ContextItem label="Неудачные попытки входа">
