@@ -612,6 +612,8 @@ export function isAdminUser(value: unknown): value is AdminUserDetail {
     isNullableString(value.lastLoginAt) &&
     isNullableString(value.lockoutEnd) &&
     isNumber(value.failedLoginAttempts) &&
+    isNullableString(value.consentPolicyVersion) &&
+    isNullableString(value.consentedAt) &&
     isString(value.createdAt) &&
     isString(value.updatedAt)
   )

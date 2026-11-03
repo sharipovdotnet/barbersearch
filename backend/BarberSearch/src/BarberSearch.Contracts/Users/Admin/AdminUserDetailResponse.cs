@@ -9,6 +9,10 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// Читается по прямому URL <c>GET api/admin/users/{id}</c> и не пересекается с публичными
 /// контрактами. Телефон и аватар показываются администратору, потому что без них
 /// поддержка не может связаться с человеком.
+/// <para>
+/// Запись согласия (#42) отдаётся редакцией и временем; IP-адрес не покидает базу —
+/// это персональные данные, и администратору для карточки он не нужен.
+/// </para>
 /// </remarks>
 /// <param name="Id">Идентификатор пользователя.</param>
 /// <param name="Email">Адрес электронной почты.</param>
@@ -27,6 +31,8 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="FailedLoginAttempts">Сколько неудачных попыток входа подряд записано.</param>
 /// <param name="CreatedAt">Когда пользователь создан.</param>
 /// <param name="UpdatedAt">Когда пользователь последний раз менялся.</param>
+/// <param name="ConsentPolicyVersion">Редакция Политики, на которую дано согласие, либо <c>null</c>.</param>
+/// <param name="ConsentedAt">Когда дано согласие (UTC) либо <c>null</c>.</param>
 public record AdminUserDetailResponse(
     Guid Id,
     string Email,
@@ -44,4 +50,6 @@ public record AdminUserDetailResponse(
     DateTimeOffset? LockoutEnd,
     int FailedLoginAttempts,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? ConsentPolicyVersion,
+    DateTimeOffset? ConsentedAt);

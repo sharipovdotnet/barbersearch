@@ -1,3 +1,4 @@
+using System.Net;
 using BarberSearch.Domain.Users;
 using Xunit;
 
@@ -7,6 +8,40 @@ public class UserTests
 {
     private static User CreateValidUser(string email = "barber@example.com")
         => User.Create(email, "hash", "Ivan", "Petrov").Value;
+
+    [Fact]
+    public void Create_WithConsent_StoresAllThreeFields()
+    {
+        var consentedAt = new DateTimeOffset(2026, 11, 3, 14, 5, 0, TimeSpan.Zero);
+        var consent = UserConsent.Create(
+            "2026-11-03",
+            consentedAt,
+            IPAddress.Parse("203.0.113.7")).Value;
+
+        var result = User.Create(
+            "consent@example.com",
+            "hash",
+            "Ivan",
+            "Petrov",
+            UserRole.Customer,
+            consent);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("2026-11-03", result.Value.ConsentPolicyVersion);
+        Assert.Equal(consentedAt, result.Value.ConsentedAt);
+        Assert.Equal("203.0.113.7", result.Value.ConsentIp?.ToString());
+    }
+
+    [Fact]
+    public void Create_WithoutConsent_LeavesAllThreeFieldsNull()
+    {
+        var result = User.Create("no-consent@example.com", "hash", "Ivan", "Petrov");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.ConsentPolicyVersion);
+        Assert.Null(result.Value.ConsentedAt);
+        Assert.Null(result.Value.ConsentIp);
+    }
 
     [Fact]
     public void Create_WithValidData_StartsAsActiveCustomer()

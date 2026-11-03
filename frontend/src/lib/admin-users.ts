@@ -98,6 +98,10 @@ export type AdminUserDetail = {
   /** Конец временной блокировки после неудачных попыток входа. */
   lockoutEnd: string | null
   failedLoginAttempts: number
+  /** Редакция Политики, на которую дано согласие; `null` — записи нет. */
+  consentPolicyVersion: string | null
+  /** Момент согласия в UTC; `null` — записи нет. */
+  consentedAt: string | null
   createdAt: string
   updatedAt: string
 }

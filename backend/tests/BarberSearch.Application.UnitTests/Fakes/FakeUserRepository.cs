@@ -295,7 +295,9 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             user.LockoutEnd,
             user.FailedLoginAttempts,
             user.CreatedAt,
-            user.UpdatedAt);
+            user.UpdatedAt,
+            user.ConsentPolicyVersion,
+            user.ConsentedAt);
 
         return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(detail);
     }

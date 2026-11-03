@@ -32,6 +32,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             table.HasCheckConstraint(
                 "ck_users_failed_login_attempts",
                 "failed_login_attempts >= 0");
+            // Согласие (#42): редакция и время появляются вместе либо остаются NULL у обоих.
+            // Старые и админ-созданные аккаунты — второй случай, и backfill для них
+            // невозможен: согласие, которого не было, доказать нельзя.
+            table.HasCheckConstraint(
+                "ck_users_consent",
+                "(consent_policy_version IS NULL) = (consented_at IS NULL) " +
+                "AND (consent_policy_version IS NULL OR char_length(consent_policy_version) > 0)");
         });
 
         builder.HasKey(x => x.Id).HasName("pk_users");
@@ -79,6 +86,18 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         // Это граница другого агрегата: навигации на BarberProfile нет, только идентификатор.
         builder.Property(x => x.BarberProfileId).HasColumnName("barber_profile_id");
+
+        // Подтверждаемое согласие (#42): редакция Политики, серверное время и IP.
+        // IP — персональные данные: колонка существует только здесь и никуда дальше не
+        // проецируется (ни в API, ни в audit_log, ни в логи).
+        builder.Property(x => x.ConsentPolicyVersion)
+            .HasColumnName("consent_policy_version")
+            .HasColumnType("text")
+            .HasMaxLength(UserConsent.MAX_POLICY_VERSION_LENGTH);
+        builder.Property(x => x.ConsentedAt).HasColumnName("consented_at");
+        builder.Property(x => x.ConsentIp)
+            .HasColumnName("consent_ip")
+            .HasColumnType("inet");
 
         // FK без навигации: привязка пользователя к профилю не может ссылаться на
         // несуществующий профиль (LinkUserBarberProfileHandler полагается на БД).

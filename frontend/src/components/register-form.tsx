@@ -22,10 +22,21 @@ import {
   type RegistrationInput,
 } from '@/lib/auth'
 import { describeApiFailure } from '@/lib/errors'
-import { PRIVACY_PATH } from '@/lib/legal'
+import {
+  PRIVACY_PATH,
+  PRIVACY_POLICY_DATE,
+  PRIVACY_POLICY_VERSION,
+} from '@/lib/legal'
 import { isPlainClick, navigate } from '@/lib/router'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Подпись редакции для отметки согласия: та же дата, что в Политике. */
+const POLICY_DATE_LABEL = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+}).format(new Date(`${PRIVACY_POLICY_DATE}T00:00:00Z`))
 
 // Верхняя граница адреса — из серверного валидатора (3..254).
 const MAX_EMAIL_LENGTH = 254
@@ -45,6 +56,8 @@ const PASSWORD_EQUALS_NAME_ERROR =
 const PASSWORD_REPEAT_ERROR = 'Пароли не совпадают.'
 const CONSENT_REQUIRED_ERROR =
   'Отметьте согласие на обработку персональных данных.'
+const CONSENT_VERSION_ERROR =
+  'Политика обработки данных обновилась. Обновите страницу и подтвердите согласие снова.'
 const EMAIL_TAKEN_ERROR =
   'Аккаунт с таким email уже есть. Войдите или укажите другой адрес.'
 const RATE_LIMIT_ERROR =
@@ -174,6 +187,7 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
 
   const fields: RegisterErrors = {}
   let hasUnknownCode = false
+  let isPolicyOutdated = false
 
   for (const code of error.codes) {
     const passwordMessage = PASSWORD_CODE_MESSAGES[code]
@@ -186,6 +200,11 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
       fields.firstName = FIRST_NAME_ERROR
     } else if (code === 'user.lastName') {
       fields.lastName = LAST_NAME_ERROR
+    } else if (code === 'auth.register.consentRequired') {
+      fields.consent = CONSENT_REQUIRED_ERROR
+    } else if (code === 'auth.register.consentVersion') {
+      // Сервер авторитетен: старая открытая форма подписала другую редакцию Политики.
+      isPolicyOutdated = true
     } else {
       hasUnknownCode = true
     }
@@ -195,7 +214,11 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
 
   return {
     fields,
-    form: hasUnknownCode || !hasFieldErrors ? FALLBACK_ERROR : null,
+    form: isPolicyOutdated
+      ? CONSENT_VERSION_ERROR
+      : hasUnknownCode || !hasFieldErrors
+        ? FALLBACK_ERROR
+        : null,
   }
 }
 
@@ -275,6 +298,7 @@ export function RegisterForm() {
       password,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      consentVersion: PRIVACY_POLICY_VERSION,
     }
 
     const nextErrors = validate(values)
@@ -487,7 +511,7 @@ export function RegisterForm() {
           />
           <FieldContent>
             <FieldLabel htmlFor="register-consent" className="font-normal">
-              Я даю согласие на обработку персональных данных
+              Я согласен на обработку персональных данных
             </FieldLabel>
             <FieldDescription id="register-consent-hint">
               Для регистрации и использования аккаунта, оформления и сопровождения
@@ -505,8 +529,8 @@ export function RegisterForm() {
                 }}
               >
                 Политике обработки персональных данных
-              </a>
-              .
+              </a>{' '}
+              (редакция от {POLICY_DATE_LABEL}).
             </FieldDescription>
             <FieldError id="register-consent-error">{errors.consent}</FieldError>
           </FieldContent>
