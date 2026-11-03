@@ -1,7 +1,7 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-40` (default `main`). The landing page searches real
+> Code state: branch `features/issue-41` (default `main`). The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
@@ -23,7 +23,9 @@
 > the new customer in and lands in `/account`. The cabinet profile is read through the self-only
 > `GET api/users/me` and edited through the existing `PUT api/users/{id}/profile`. The admin journal at `/admin/audit` reads
 > `audit_log` (read-only, filters by entity type, author and UTC dates, expandable diff, shared
-> pager). The admin bookings desk at `/admin/bookings` reads `GET /api/admin/bookings` and
+> pager); its allowlist covers seven entity types — users, barbers, reviews, salons, services,
+> specializations and booking status/barber-note changes (booking creation is deliberately not
+> audited). The admin bookings desk at `/admin/bookings` reads `GET /api/admin/bookings` and
 > `GET /api/admin/bookings/{id}`: search by customer email or exact booking id, a status filter,
 > the shared pager and a split-view detail with the time in the salon zone, reusing the existing
 > cancellation and no-show actions (no new mutation). The admin summary at `/admin/summary`
@@ -33,15 +35,15 @@
 > personal-data policy at `/privacy` (152-ФЗ, the cookie list, the operator's details) and shows
 > an informational cookie notice on the first visit; registration requires a separate consent
 > checkbox.
-> Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (250 files, 116 rules);
-> `npm test` — 246 tests in 31 files; `npm run build` — success, 2317 modules, entry
-> `index-*.js` 393.27 kB (gzip 127.19 kB); lazy `admin-page` 198.21 kB (gzip 41.64 kB),
-> `account-page` 24.33 kB (gzip 7.87 kB), `account-reviews-page` 16.95 kB (gzip 5.48 kB),
-> `account-profile-page` 7.82 kB (gzip 2.91 kB), `account-security-page` 8.89 kB (gzip 3.13 kB),
-> `barber-page` 35.81 kB (gzip 9.47 kB), `barber-cabinet-page` 24.28 kB (gzip 6.97 kB),
-> `privacy-page` 28.77 kB (gzip 7.45 kB), `register-page` 11.11 kB (gzip 3.77 kB) and the shared
-> `paging-*.js` 7.62 kB (gzip 2.81 kB);
-> CSS 76.96 kB (gzip 13.34 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Verified on 2026-11-02: `npm run lint` — 0 warnings / 0 errors (256 files, 116 rules);
+> `npm test` — 260 tests in 31 files; `npm run build` — success, 2445 modules, entry
+> `index-*.js` 337.77 kB (gzip 109.58 kB); lazy `admin-page` 198.86 kB (gzip 41.89 kB),
+> `account-page` 24.35 kB (gzip 7.86 kB), `account-reviews-page` 16.98 kB (gzip 5.48 kB),
+> `account-profile-page` 7.84 kB (gzip 2.91 kB), `account-security-page` 8.91 kB (gzip 3.14 kB),
+> `barber-page` 35.83 kB (gzip 9.47 kB), `barber-cabinet-page` 24.30 kB (gzip 6.96 kB),
+> `privacy-page` 28.77 kB (gzip 7.45 kB), `register-page` 11.12 kB (gzip 3.77 kB) and the shared
+> `paging-*.js` 7.65 kB (gzip 2.82 kB);
+> CSS 81.38 kB (gzip 14.03 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
 > The cabinet E2E specs (role access, profile save, security, axe at 1280 and 320) passed against
 > the seeded `barbersearch_e2e` database. The legal slice was checked against the built `dist/`
 > with a Playwright pass (notice shown/dismissed/remembered, `/privacy` at 1280 and 320, zero
@@ -364,16 +366,16 @@ npm run test:e2e:ui        # UI mode
 **Verification snapshot, 2026-11-02:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 250 files, 116 rules
-npm run build → tsc -b + vite build OK, 2317 modules,
-                dist/assets/index-*.js          393.27 kB (gzip 127.19 kB)
-                dist/assets/admin-page-*.js     198.21 kB (gzip  41.64 kB)  lazy
-                dist/assets/barber-page-*.js     35.81 kB (gzip   9.47 kB)  lazy
+npm run lint  → 0 warnings, 0 errors, 256 files, 116 rules
+npm run build → tsc -b + vite build OK, 2445 modules,
+                dist/assets/index-*.js          337.77 kB (gzip 109.58 kB)
+                dist/assets/admin-page-*.js     198.86 kB (gzip  41.89 kB)  lazy
+                dist/assets/barber-page-*.js     35.83 kB (gzip   9.47 kB)  lazy
                 dist/assets/privacy-page-*.js    28.77 kB (gzip   7.45 kB)  lazy
-                dist/assets/account-page-*.js    24.33 kB (gzip   7.87 kB)  lazy
-                dist/assets/register-page-*.js   11.11 kB (gzip   3.77 kB)  lazy
-                dist/assets/paging-*.js           7.61 kB (gzip   2.81 kB)  shared
-                dist/assets/index-*.css          76.96 kB (gzip  13.34 kB)
+                dist/assets/account-page-*.js    24.35 kB (gzip   7.86 kB)  lazy
+                dist/assets/register-page-*.js   11.12 kB (gzip   3.77 kB)  lazy
+                dist/assets/paging-*.js           7.65 kB (gzip   2.82 kB)  shared
+                dist/assets/index-*.css          81.38 kB (gzip  14.03 kB)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -854,7 +856,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/admin/catalogue/salons?status=&search=` | admin | the same contract for salons, with every edit field (`address`, `city`, `postalCode`, `country`, `timeZoneId`, coordinates, contacts), `isActive` and `usageCount`; search matches name **and** city; order city, name, id |
 | `GET` | `/api/admin/bookings?status=&search=&cursor=&pageSize=` | admin | support list across all customers, newest first with keyset `(start_at DESC, id ASC)`: `status` is `all` (default) or a `BookingStatus` name (`Pending`, `Confirmed`, `Completed`, `Cancelled`, `NoShow`, case-insensitive; numbers rejected), `search` is a customer-email substring (trimmed, at most 100 characters, `%`, `_` and `\` escaped) **or** an exact booking id when the value parses as a GUID — not a name, phone or id prefix; `pageSize` 1..100 defaults to 20; `PagedResponse<AdminBookingResponse>` has **no total**; inner joins to users / barber_profiles / barber_services → hair_services / salons, so a historical row with a dangling link drops out (the cabinet's documented behaviour); `400 admin.bookings.status`, `admin.bookings.search`, `admin.bookings.page.limit`, `admin.bookings.pageSize` and `admin.bookings.cursor.invalid`; the screen's filters stay in React state, not in the URL |
 | `GET` | `/api/admin/bookings/{id}` | admin | one booking with the same `AdminBookingResponse` (customer name/email/phone, barber, service, salon with `timeZoneId`, price snapshot, both notes, `createdAt`); `404 admin.bookings.notFound`; email and phone are PII and exist **only** in this admin contract — the public `BookingResponse` is unchanged |
-| `GET` | `/api/admin/audit?entityType=all\|user\|barber_profile\|review&actor=&from=&to=&cursor=&pageSize=` | admin | read-only change journal, newest first with keyset `(occurred_at DESC, id)`: `entityType` defaults to `all` (comparison after `Trim`, case-insensitive), `actor` is a trimmed email substring of at most 100 characters with `%`, `_` and `\` escaped, `from`/`to` are inclusive **UTC days**; every entry is `{ id, occurredAt, action, entityType, entityId, actor: { id, email } \| null, changes: [{ field, from, to }] }`; `action` is `{entity}.{created\|updated\|deleted}`, `changes` is the parsed payload with fields sorted by name (creation and deletion: `from = null`), secrets stay `[redacted]`, an unreadable payload is `changes: []`; the author comes from `LEFT JOIN users` and may be `null` (deleted account or a system write); the entity name is **not** resolved; `400 admin.audit.entityType/actor/period/pageSize/cursor.invalid` |
+| `GET` | `/api/admin/audit?entityType=all\|user\|barber_profile\|review\|salon\|hair_service\|specialization\|booking&actor=&from=&to=&cursor=&pageSize=` | admin | read-only change journal, newest first with keyset `(occurred_at DESC, id)`: `entityType` defaults to `all` (comparison after `Trim`, case-insensitive), `actor` is a trimmed email substring of at most 100 characters with `%`, `_` and `\` escaped, `from`/`to` are inclusive **UTC days**; every entry is `{ id, occurredAt, action, entityType, entityId, actor: { id, email } \| null, changes: [{ field, from, to }] }`; `action` is `{entity}.{created\|updated\|deleted}`, `changes` is the parsed payload with fields sorted by name (creation and deletion: `from = null`), secrets stay `[redacted]`, an unreadable payload is `changes: []`; the author comes from `LEFT JOIN users` and may be `null` (deleted account or a system write); the entity name is **not** resolved; the journal covers seven types — `user`, `barber_profile`, `review`, `salon`, `hair_service`, `specialization` and `booking` (booking rows contain only `Status`/`BarberNote` changes; booking creation is deliberately not audited, and `BarberProfile` children are not covered) — retention and export remain separate; `400 admin.audit.entityType/actor/period/pageSize/cursor.invalid` |
 | `GET` | `/api/admin/summary` | admin | the «what needs attention» aggregate: `{ reviews: { pendingCount, oldest }, barbers: { unverifiedCount }, salons: { inactiveCount } }`; no parameters, no pagination, no `total`; numbers use exactly the section predicates (`is_published = false`, `is_verified = false`, `is_active = false`) and `oldest` is the first FIFO row of the moderation queue (`null` when empty); names only — no customer email or phone; read-only |
 | `PUT` | `/api/users/{id}/role` | admin | change a role; `409 user.role.self` / `user.admin.last` |
 | `POST` / `DELETE` | `/api/users/{id}/activation` | admin | unblock / block; `409 user.deactivation.self` / `user.admin.last` |
@@ -1254,29 +1256,35 @@ contrast on screens outside the axe matrix.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 396.46 kB | 128.05 kB |
-| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit) | 198.24 kB | 41.83 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.76 kB | 9.45 kB |
-| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 34.58 kB | 10.13 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.28 kB | 6.97 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 18.12 kB | 5.70 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 9.80 kB | 3.37 kB |
-| `paging-*.js` — shared cursor pager used by the row lists | 7.53 kB | 2.77 kB |
-| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.07 kB | 1.49 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 337.77 kB | 109.58 kB |
+| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 150.20 kB total | 52.65 kB |
+| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit) | 198.86 kB | 41.89 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 35.83 kB | 9.47 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 24.35 kB | 7.86 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows and dialogs | 24.30 kB | 6.96 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.98 kB | 5.48 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 11.12 kB | 3.77 kB |
+| `paging-*.js` — shared cursor pager used by the row lists | 7.65 kB | 2.82 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.23 kB | 1.46 kB |
 | `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.64 kB |
-| `booking-status-badge-*.js` — status badge shared by the account, the profile, the cabinet and the admin booking card | 0.97 kB | 0.53 kB |
-| `review-stars-*.js` — shared stars for the public and the author list | 0.41 kB | 0.33 kB |
-| `shield-alert-*.js`, `circle-check-*.js`, `arrow-left-*.js` — icons shared by two lazy chunks | 0.81 kB total | 0.64 kB |
-| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 76.05 kB | 13.18 kB |
+| `booking-status-badge-*.js` — status badge shared by the account, the profile, the cabinet and the admin booking card | 1.04 kB | 0.56 kB |
+| `review-stars-*.js` — shared stars for the public and the author list | 0.45 kB | 0.35 kB |
+| `arrow-left-*.js`, `circle-check-*.js` — icons shared by two lazy chunks | 0.42 kB total | 0.37 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.62 kB | 0.42 kB |
+| `index-*.css` | 81.38 kB | 14.03 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
-| `index.html` | 0.67 kB | — |
+| `index.html` | 0.82 kB | — |
 
-2306 modules. The issue-38 build added the audit journal to the lazy admin chunk: `admin-page`
-grew by 11.62 kB raw / 2.41 kB gzip (the screen, the entry row, the filter bar and the shared
-pager), the entry by 0.40 kB / 0.16 kB (the `audit` route in `admin-path` and the audit guards),
-and `index-*.css` grew by 0.69 kB / 0.12 kB. Every other lazy screen is within 0.02 kB of the
-previous build. The issue-37 numbers were: `admin-page` 151.83 / 33.79, entry 394.52 / 127.54,
+2445 modules. The issue-41 build added the four entity types and their Russian labels to the
+journal that already lives in the lazy admin chunk: `admin-page` moved from 198.24 / 41.83 to
+198.86 / 41.89 kB (the extra labels and the `status`/`category` value mapping), while the entry is
+337.77 / 109.58 kB and `index-*.css` 81.38 / 14.03 kB in the recorded build (the same build also
+contains the all-roles cabinet and legal slices, which is why the entry and some lazy chunks moved
+from the issue-40 numbers). The issue-38 build added the audit journal to the lazy admin chunk:
+`admin-page` grew by 11.62 kB raw / 2.41 kB gzip (the screen, the entry row, the filter bar and the
+shared pager), the entry by 0.40 kB / 0.16 kB (the `audit` route in `admin-path` and the audit
+guards), and `index-*.css` grew by 0.69 kB / 0.12 kB. Every other lazy screen is within 0.02 kB of
+the previous build. The issue-37 numbers were: `admin-page` 151.83 / 33.79, entry 394.52 / 127.54,
 2294 modules, `index-*.css` 74.66 / 12.96.
 
 The issue-39 build added the admin bookings list, the detail card, the two action dialogs and
@@ -1298,8 +1306,10 @@ change to `ui/**`.
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
-   working target, not a stakeholder-approved SLA. The landing currently uses 128.05 kB of it;
-   role-gated and secondary screens belong behind a lazy boundary instead of widening the budget.
+   working target, not a stakeholder-approved SLA. The landing's initial JS is `index-*.js` plus
+   the two entry-preloaded shared chunks — 109.58 + 52.65 kB gzip ≈ **162.2 kB**, above the
+   target; bringing it back under is a separate decision. Role-gated and secondary screens belong
+   behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
    `/account`, `/account/reviews` and `/barbers/{id}` are split; do not statically import either
    from the shell, and do not preload the booking flow on the landing page.
@@ -1342,9 +1352,9 @@ change to `ui/**`.
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin barbers | ✅ pending/all/hidden filter in `?status=` (the card is in the path, the filter is in the query, so a reload keeps both and the card never belongs to another filter), name/email search (React state, reset with the filter; an applied search drops the previous selection), URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить» |
 | Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить» |
-| Admin catalogue | ✅ `/admin/catalogue`: three tabs in `?tab=` (services/specializations/salons), full dictionary including hidden rows, status filter and debounced search, `usageCount` per row, create/edit dialogs on the existing endpoints, hide/return with an `alertdialog` that explains the consequence and the barber count, status as text, adaptive tables (no horizontal scroll at 320), quiet «Обновить»; **no pagination** (dictionaries are small, see §9.3) and no delete — the domain only deactivates. Catalogue edits are **not written to `audit_log`** (the `AuditTrail` allowlist covers `User`, `BarberProfile`, `Review`); the screen does not promise an audit |
-| Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone), barber, service, salon, price, both notes, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are not written to `audit_log`** (the `AuditTrail` allowlist covers `User`, `BarberProfile`, `Review`), so the screen does not promise an audit |
-| Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить»; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. Audit covers only `User`, `BarberProfile` and `Review`: catalogue, salon, service, specialization and booking edits are **not** in `audit_log` |
+| Admin catalogue | ✅ `/admin/catalogue`: three tabs in `?tab=` (services/specializations/salons), full dictionary including hidden rows, status filter and debounced search, `usageCount` per row, create/edit dialogs on the existing endpoints, hide/return with an `alertdialog` that explains the consequence and the barber count, status as text, adaptive tables (no horizontal scroll at 320), quiet «Обновить»; **no pagination** (dictionaries are small, see §9.3) and no delete — the domain only deactivates. Catalogue edits **are written to `audit_log`** as `salon.*`/`hair_service.*`/`specialization.*` (see «Admin audit»); retention and export remain separate decisions |
+| Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone), barber, service, salon, price, both notes, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are written to `audit_log`** as `booking.updated` (the `Booking` allowlist records `Status`/`BarberNote`; booking creation is deliberately not audited) |
+| Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить»; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. The journal covers seven entity types — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking` (booking rows carry only `Status`/`BarberNote` changes; booking creation is deliberately not audited) — and offers the four new filters with Russian labels «Салон», «Услуга», «Специализация», «Бронь», Russian values for `status`/`category` and «Активность» for `isActive`; retention, export and partitioning remain separate |
 | Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить»; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
 | Other admin sections | ✅ all built: reviews, barbers, users, the catalogue, the bookings and the journal (§13) |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with a link to `/privacy`), one `POST /api/auth/register` without CSRF, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates |
@@ -1357,7 +1367,7 @@ change to `ui/**`.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 246 tests in 31 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, error mapping, actor labels, the expandable diff, the entity-type filter and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details) and the registration consent gate (no request without it)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 260 tests in 31 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details) and the registration consent gate (no request without it)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1409,7 +1419,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32).** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 260 tests in 31 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -1429,10 +1439,13 @@ pager), the catalogue mutations (hide an active service with the barber count in
 `alertdialog`, rename a hidden specialization, edit salon contacts through both `PUT`s, and an
 empty create form that shows client errors without a request — every scenario restores its row in
 `finally`), `/admin/audit` (rail entry and `aria-current`, the date filter giving «1–20» then
-«21–21» with «Назад» making no request, the freshest row as «Система», the role-change row's
+«21–25» with «Назад» making no request, the freshest row as «Система», the role-change row's
 expandable diff «Роль: Клиент → Администратор» with focus kept on the button, the «Отзыв» filter
-leaving two rows, the author filter leaving twenty and `%` finding nothing, «Сбросить фильтры»,
-and the read-only guarantees — no «Показать ещё», «Изменить» or «Выключить», one button per row),
+leaving two rows, the new «Салон» filter leaving one row with the Russian «Телефон:
++70000000009 → +70000000010» diff, the new «Бронь» filter leaving one row with «Статус:
+Подтверждена → Неявка», the author filter leaving twenty and `%` finding nothing, «Сбросить
+фильтры», and the read-only guarantees — no «Показать ещё», «Изменить» or «Выключить», one button
+per row),
 `/admin/bookings` (rail entry and `aria-current`, the email search giving «1–20» then «21–24» with
 «Назад» making no request, the first row as the latest `NoShow` booking with its time in the salon
 zone, a row opening `/admin/bookings/{id}` with the customer, barber, service and salon, browser
@@ -1458,8 +1471,8 @@ and the catalogue «Выключенные» filter), the oldest review being th
 opening `#review-detail` with browser «Назад» returning, exactly one `/api/admin/summary` request
 per «Обновить» with no skeleton flash, the read-only guarantees (no «Показать ещё», create,
 delete or edit, no `canvas`, one button) and an injected `401` (`page.route` plus a `204`
-refresh). Full suite: 162 passed,
-2 skipped. The keyboard layer
+refresh). Full suite: 184 passed,
+3 skipped. The keyboard layer
 covers the pager (Tab/Enter/Space), the login dialog (Escape and focus return) and the review queue
 (Tab, arrows, Home/End, Enter/Space, `:focus-visible`, and focus that stays in the queue after
 publishing).
@@ -1485,13 +1498,21 @@ only, `all` by default — the strict list guards accepting extra fields and rej
 `entityType` always, `actor`/`from`/`to` only when non-empty, `cursor` appended last, no `pageSize`
 because the server default is 20 — the strict page guard accepting extra fields, rejecting an empty
 id and a non-scalar `from`, `formatAuditValue` for `null`/boolean/`[redacted]`/role/grade/numbers
-and unknown fields, `formatAuditAction` by the tail after the last dot, and the error mapping for
-`403`, `429` and `admin.audit.cursor.invalid`); `AuditEntry` (the `time` element, short id with the
-full id in `title`, «Система» and «Удалённый пользователь», the expandable `<dl>` with Russian
-field labels and «Клиент → Администратор», the empty-diff text and independent expansion); and
+and unknown fields, the exact order of the eight `ADMIN_AUDIT_ENTITY_TYPES` (the four new values are
+appended, so existing options do not shift), the eight entity labels («Салон», «Услуга»,
+«Специализация», «Бронь» plus the original four), `status` as all five Russian booking statuses
+(`Ждёт подтверждения`, `Подтверждена`, `Отменена`, `Завершена`, `Неявка`) with an unknown value
+kept as is, `category` as «Стрижка»/«Борода» with an unknown value kept as is, `phoneNumber`/
+`websiteUrl` kept as is, `formatAuditAction` by the tail after the last dot, and the error
+mapping for `403`, `429` and `admin.audit.cursor.invalid`); `AuditEntry` (the `time` element,
+short id with the full id in `title`, «Система» and «Удалённый пользователь», the expandable `<dl>`
+with Russian field labels and «Клиент → Администратор», «Активность» for `isActive`, the booking
+diff «Статус: Ждёт подтверждения → Отменена», the service diff «Название: … → …», the unknown
+field kept as the server string, the empty-diff text and independent expansion); and
 `AuditScreen` (the loaded rows with the pager range, the entity-type filter making a new first-page
-request without a cursor, the «Журнал пуст» state and the `403` text instead of the English
-`detail`); `admin-bookings` (the list URL — `status` always, `search` and `cursor` only when set,
+request without a cursor, a switch to «Салон» sending `entityType=salon` with no cursor, the
+«Журнал пуст» state and the `403` text instead of the English `detail`); `admin-bookings` (the
+list URL — `status` always, `search` and `cursor` only when set,
 no `pageSize` — `fetchAdminBooking` by id, the CSRF `POST`s for `cancellation` and `no-show`, the
 strict guards rejecting a bad status, a string price or a missing salon time zone while accepting
 extra fields, `formatAdminBookingTime` in the salon zone rather than the browser's, the filter
@@ -1784,6 +1805,29 @@ both catalogues; unit tests grew to 200 in 19 files, E2E to 162 passed / 2 skipp
 spec on desktop and mobile plus axe at 1280 and 320), and no new dependency, `ui/**` change or
 `page.route` for a success body was added.
 
+**Completed 2026-11-02:** audit coverage (#41) — the journal now sees the changes it was read
+for. The backend added `Salon`, `HairService`, `Specialization` and `Booking` to the `AuditTrail`
+allowlist with explicit property lists; `Booking` records only `Status` and `BarberNote` changes
+and sets `AuditsCreation: false`, so creating a booking writes no `booking.created` row on
+purpose (the row already holds the customer, the time and the price, and a line per booking would
+grow the journal without new information). `entityType` accepts
+`all|user|barber_profile|review|salon|hair_service|specialization|booking` — trimmed,
+case-insensitive, numbers and unknown names still `400 admin.audit.entityType`; no other contract
+changed, and no endpoint or mutation was added. `EXPLAIN (ANALYZE, BUFFERS)` on a migrated copy of
+the load database with 1,000,000 synthetic rows (booking 25 %, salon/hair_service/specialization
+≈1.67 % each) kept the existing `ix_audit_log_occurred_at_id`: no filter 0.090 ms, `booking`
+12.985 ms (50 000 rows removed by the filter), `salon` 7.728 ms (33 333 removed) and the
+rare-type second page 15.203 ms — no `Sort`, no `Seq Scan`, far below the ~100 ms criterion, so
+**no migration** was added (19 stay). The frontend appended the four entity types and the labels
+«Салон», «Услуга», «Специализация», «Бронь», added the Russian field labels, renders
+`status`/`category` in Russian through `bookingStatusLabel`/`SERVICE_CATEGORY_LABELS` and renamed
+`isActive` to «Активность»; the diff, filters and pager are otherwise unchanged. Unit tests grew
+to 260 in 31 files (the eight labels in appended order, the Russian statuses/categories, the
+booking and service diffs, the «Салон» filter URL); E2E fixtures now hold 25 journal rows
+(«1–20» + «21–25», the four new rows inside the same 2026-09-10 UTC day) and the two new specs
+cover «Салон» with the Russian phone diff and «Бронь» with the Russian status diff. Retention,
+export, partitioning and `BarberProfile` children remain separate slices.
+
 **Completed 2026-11-02:** personal cabinet for all roles — `/account` stopped being a customer-only
 screen: the shared `AccountShell` renders the identity block (initials, name, email, role, unverified
 email), the «Записи · Отзывы · Профиль · Безопасность» rail (2×2 labelled grid below `lg`) and a
@@ -1823,14 +1867,14 @@ do not shift.
     test runner (§14 #2, §15) is done, the a11y pass (#34, §11) is done; touch targets and the dark
     theme are still unaudited (§14 #11).
 12. **Admin continuation** — done: the catalogue (#37), the audit journal (#38), admin bookings
-    (#39) and the summary (#40) are built (§13), so all seven rail sections work and the admin area
-    has no unimplemented screen. The bookings screen is the admin-wide view, not the barber's own
-    list: the cabinet at `/barber` is already done (§13). Admin cancellation and no-show reuse the
-    existing `BookingsController` mutations and are **not** written to `audit_log`; the journal
-    cannot be extended with catalogue/salon/booking entities without a separate decision to widen
-    the `AuditTrail` allowlist. Catalogue/salon/booking audit, retention and export are separate
-    decisions, and the summary deliberately has no charts, periods or trends: the API stores no
-    aggregate history.
+    (#39), the summary (#40) and audit coverage (#41) are built (§13), so all seven rail sections
+    work and the admin area has no unimplemented screen. The bookings screen is the admin-wide
+    view, not the barber's own list: the cabinet at `/barber` is already done (§13). Admin
+    cancellation and no-show reuse the existing `BookingsController` mutations and **are** written
+    to `audit_log` as `booking.updated` (status/barber note); creating a booking deliberately is
+    not audited, and `BarberProfile` children are out of the allowlist. Retention, export and
+    partitioning remain separate decisions, and the summary deliberately has no charts, periods
+    or trends: the API stores no aggregate history.
 
 ---
 

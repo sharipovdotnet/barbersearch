@@ -4,9 +4,10 @@ namespace BarberSearch.Application.Audit.Admin;
 /// Тип сущности в фильтре журнала изменений.
 /// </summary>
 /// <remarks>
-/// Значения ровно три — это allowlist <c>AuditTrail</c>: <c>User</c>, <c>BarberProfile</c>
-/// и <c>Review</c>. Каталог, салоны, услуги, специализации и брони в журнал не попадают,
-/// поэтому и фильтра для них нет. <see cref="All"/> — отсутствие фильтра.
+/// Значения повторяют allowlist <c>AuditTrail</c>: <c>User</c>, <c>BarberProfile</c>,
+/// <c>Review</c>, <c>Salon</c>, <c>HairService</c>, <c>Specialization</c> и <c>Booking</c>.
+/// У брони аудируются только изменения статуса и заметки барбера — создание брони строки
+/// не пишет. <see cref="All"/> — отсутствие фильтра.
 /// </remarks>
 public enum AdminAuditEntityType
 {
@@ -28,5 +29,26 @@ public enum AdminAuditEntityType
     /// <summary>
     /// Отзыв: публикация, рейтинг, текст.
     /// </summary>
-    Review = 3
+    Review = 3,
+
+    /// <summary>
+    /// Салон: имя, адрес, город, индекс, страна, часовой пояс, координаты, контакты,
+    /// активность.
+    /// </summary>
+    Salon = 4,
+
+    /// <summary>
+    /// Услуга каталога: имя, описание, категория, длительность по умолчанию, активность.
+    /// </summary>
+    HairService = 5,
+
+    /// <summary>
+    /// Специализация: имя, описание, активность.
+    /// </summary>
+    Specialization = 6,
+
+    /// <summary>
+    /// Бронь: только изменения статуса и заметки барбера. Создание брони не аудируется.
+    /// </summary>
+    Booking = 7
 }

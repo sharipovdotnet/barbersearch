@@ -451,7 +451,8 @@ public static class ApiErrorCodes
     public static class AdminAudit
     {
         /// <summary>
-        /// Фильтр типа не <c>all</c>, <c>user</c>, <c>barber_profile</c> или <c>review</c>; <c>400</c>.
+        /// Фильтр типа не <c>all</c>, <c>user</c>, <c>barber_profile</c>, <c>review</c>,
+        /// <c>salon</c>, <c>hair_service</c>, <c>specialization</c> или <c>booking</c>; <c>400</c>.
         /// </summary>
         public const string EntityTypeInvalid = "admin.audit.entityType";
 

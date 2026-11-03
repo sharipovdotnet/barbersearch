@@ -7,7 +7,8 @@ namespace BarberSearch.Contracts.Audit.Admin;
 /// <para>
 /// <see cref="Action"/> — <c>{entity}.{created|updated|deleted}</c>, например
 /// <c>user.updated</c>. <see cref="EntityType"/> — стабильное имя из allowlist аудита
-/// (<c>user</c>, <c>barber_profile</c>, <c>review</c>), а не имя CLR-типа.
+/// (<c>user</c>, <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
+/// <c>specialization</c>, <c>booking</c>), а не имя CLR-типа.
 /// </para>
 /// <para>
 /// Имя сущности намеренно не резолвится: <see cref="EntityId"/> — идентификатор изменённой
@@ -23,7 +24,7 @@ namespace BarberSearch.Contracts.Audit.Admin;
 /// <param name="Id">Идентификатор строки журнала.</param>
 /// <param name="OccurredAt">Момент изменения в UTC.</param>
 /// <param name="Action">Действие вида <c>{entity}.{created|updated|deleted}</c>.</param>
-/// <param name="EntityType">Стабильное имя типа сущности: <c>user</c>, <c>barber_profile</c>, <c>review</c>.</param>
+/// <param name="EntityType">Стабильное имя типа сущности из allowlist аудита.</param>
 /// <param name="EntityId">Идентификатор изменённой сущности.</param>
 /// <param name="Actor">Автор изменения; <c>null</c> для системной записи.</param>
 /// <param name="Changes">Изменённые поля в детерминированном порядке.</param>

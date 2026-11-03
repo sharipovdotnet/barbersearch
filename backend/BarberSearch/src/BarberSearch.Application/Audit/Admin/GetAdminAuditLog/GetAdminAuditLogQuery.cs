@@ -12,7 +12,9 @@ namespace BarberSearch.Application.Audit.Admin.GetAdminAuditLog;
 /// model binding с общим <c>ValidationProblemDetails</c>, а обработчик — с публичным кодом
 /// <c>admin.audit.period</c>, на который клиент может опираться.
 /// </remarks>
-/// <param name="EntityType">Тип сущности: <c>all</c> (по умолчанию), <c>user</c>, <c>barber_profile</c> или <c>review</c>.</param>
+/// <param name="EntityType">Тип сущности: <c>all</c> (по умолчанию), <c>user</c>,
+/// <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
+/// <c>specialization</c> или <c>booking</c>.</param>
 /// <param name="Actor">Подстрока email автора; пустая — без фильтра.</param>
 /// <param name="From">Начальная дата UTC-суток в формате <c>yyyy-MM-dd</c> включительно.</param>
 /// <param name="To">Последняя дата UTC-суток в формате <c>yyyy-MM-dd</c> включительно.</param>

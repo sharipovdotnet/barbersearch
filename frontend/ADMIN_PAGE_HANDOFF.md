@@ -138,10 +138,16 @@ Git-корень на уровень выше рабочей папки, поэ�
 
 - Таблица `audit_log` пишется в той же транзакции, что и изменение
   (`AuditTrail`), с `actorUserId`, действием, типом сущности, id и JSON-payload.
-- Аудируются только `User`, `BarberProfile`, `Review` и только свойства
-  из allowlist. Логины и «неадминистративные» правки не пишутся.
-- **Read-эндпоинта нет.** Правки салонов, услуг и специализаций в журнал
-  не попадают — это надо либо принять, либо расширить allowlist.
+- Allowlist покрывает **семь** типов: `User`, `BarberProfile`, `Review`, `Salon`,
+  `HairService`, `Specialization` и `Booking` — и только свойства из allowlist.
+  У брони пишутся только `Status` и `BarberNote`; **создание брони не
+  аудируется** сознательно (`AuditsCreation: false`), потому что бронь уже
+  хранит клиента, время и цену. Дети `BarberProfile` в allowlist не входят.
+  Логины и служебные поля не пишутся.
+- **Read-эндпоинт есть:** `GET /api/admin/audit` (issue-38) — read-only,
+  фильтр `entityType=all|user|barber_profile|review|salon|hair_service|specialization|booking`.
+  Правки салонов, услуг, специализаций и изменения броней теперь попадают в журнал
+  (issue-41); создание брони — нет. Ретенции, партиционирования и экспорта нет.
 
 **Прочее:**
 
@@ -205,7 +211,8 @@ Git-корень на уровень выше рабочей папки, поэ�
 > клиента (имя, email, телефон), барбера, услугу и салон с `timeZoneId` — email и телефон
 > только здесь, публичный `BookingResponse` не изменился. `GET /api/admin/bookings/{id}`
 > отдаёт тот же DTO и `404 admin.bookings.notFound`. Мутации остались на
-> `BookingsController`; брони по-прежнему не аудируются. Индекс
+> `BookingsController`; брони на тот момент не аудировались (с #41 изменения статуса и заметки
+> пишутся в журнал — см. абзац про покрытие аудита ниже). Индекс
 > `(status, start_at DESC, id)` добавлен миграцией `AddAdminBookingsStatusIndex` после
 > `EXPLAIN (ANALYZE, BUFFERS)` на 1,2 млн строк: без него фильтр по `Cancelled` читал
 > почти всю таблицу (3,3 с против 3,4 мс после индекса).
@@ -225,6 +232,15 @@ Git-корень на уровень выше рабочей папки, поэ�
 > BUFFERS)` на мигрированной копии `barbersearch_load` показал, что миграция не нужна:
 > частичный `ix_reviews_moderation_created_at_id` отдаёт «самого старого» через
 > `Index Scan` без `Sort` (0,7 мс), три `COUNT(*)` — 0,03–3,9 мс.
+>
+> Этап «Покрытие аудита» (2.11.2026, #41) расширил allowlist `AuditTrail` до семи типов:
+> `Salon`, `HairService`, `Specialization` и `Booking` (только `Status`/`BarberNote`;
+> создание брони — `AuditsCreation: false`). `entityType` принимает четыре новых имени,
+> контракт чтения не изменился. Замер `EXPLAIN (ANALYZE, BUFFERS)` на копии
+> `barbersearch_load` с 1 млн синтетических строк показал ≤15,2 мс на всех четырёх
+> запросах при существующем `ix_audit_log_occurred_at_id`, без `Sort` и `Seq Scan`,
+> поэтому миграция не добавлялась (19 миграций остаются). Документация, UI и фикстуры
+> обновлены; ретенция и экспорт по-прежнему отдельные срезы.
 
 **Ключевое правило:** не добавлять PII в общие контракты
 (`ReviewResponse`, `BookingResponse`). Для админки — отдельные DTO,
@@ -506,9 +522,12 @@ keyset `(start_at DESC, id)`, фильтр статуса, поиск по email
 переноса, правки цены, услуги, салона или заметки барбера, удаления,
 возвратов и платежей нет — домен их не умеет. Фильтры живут в состоянии
 React, а не в URL: email — PII, в адресе остаётся только id брони.
-Брони **не аудируются**: allowlist `AuditTrail` покрывает только `User`,
-`BarberProfile` и `Review`, поэтому отмена и неявка админом в
-`/admin/audit` не появляются; экран этого и не обещает.
+Изменения броней **аудируются**: смена статуса и заметка барбера пишутся
+`AuditTrail` как `booking.updated` (allowlist `Booking` — только `Status` и
+`BarberNote`), поэтому отмена и неявка админом появляются в `/admin/audit`
+под фильтром «Бронь». **Создание брони не аудируется** сознательно
+(`AuditsCreation: false`): бронь уже хранит клиента, время и цену. Ретенция
+и экспорт остаются отдельными срезами.
 
 ### 3.9 «Журнал»
 
@@ -523,10 +542,14 @@ Read-only история: когда, кто, что изменил, у како
 отсутствовать), `[redacted]` не раскрывается. Экран `/admin/audit` фильтры держит
 в состоянии, листает общим пейджером и раскрывает diff по-русски.
 
-Таблица `audit_log` пишется, аудит покрывает только `User`, `BarberProfile`,
-`Review`, поэтому правки каталога, салонов, услуг, специализаций и броней
-в журнал не попадают. Решение этапа 5 — честно сказать об этом в UI и документации,
-а не расширять allowlist: расширение (и ретенция, и экспорт) — отдельный срез.
+Таблица `audit_log` пишется, аудит покрывает **семь** типов: `User`,
+`BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` и
+`Booking`, поэтому правки каталога, салонов и услуг, а также смена статуса
+и заметка барбера в брони видны в журнале (фильтры «Салон», «Услуга»,
+«Специализация», «Бронь»); создание брони не аудируется. Решение этапа 5 —
+«честно сказать об ограничении, а не расширять allowlist» — **выполнено в
+#41**: allowlist расширен, а ретенция, партиционирование и экспорт остаются
+отдельными срезами.
 
 ### 3.10 «Сводка» — реализовано
 
@@ -615,8 +638,10 @@ Read-only история: когда, кто, что изменил, у како
    нельзя вовсе (`user.role.self`, `user.deactivation.self`).
 2. **Смена роли и блокировка** меняют `SecurityStamp` и завершают все
    сессии пользователя. Об этом надо писать в подтверждении.
-3. **Аудит каталога** не ведётся. Если каталог редактируется в админке,
-   стоит расширить allowlist `AuditTrail`.
+3. **Аудит каталога** ведётся: правки услуг, специализаций и салонов пишутся
+   в `audit_log` (`hair_service.*`, `specialization.*`, `salon.*`) и видны
+   в `/admin/audit`. Удалений в домене по-прежнему нет; ретенция и экспорт —
+   отдельные срезы.
 4. **Лимит записи 30/мин.** Массовых операций нет; кнопки блокируются
    на время запроса. Это причина не делать bulk-публикацию.
 5. **PII.** Email клиента виден админу, но не попадает в URL,
@@ -652,16 +677,18 @@ Read-only история: когда, кто, что изменил, у како
    `usageCount`, диалоги создания и правки, выключение/включение с `alertdialog`
    и объяснением последствий. Пагинации нет — это осознанное исключение
    (`README.md`, «List pagination»); удаления нет, потому что в домене только
-   деактивация; переименования салона нет — название read-only. Правки каталога
-   не пишутся в `audit_log` (allowlist `AuditTrail`), и экран этого не обещает.
+   деактивация; переименования салона нет — название read-only. С #41 правки каталога
+   пишутся в `audit_log` (`hair_service.*`/`specialization.*`/`salon.*`) и видны
+   в журнале; экран каталога своего UI журнала не добавляет.
 5. **«Журнал».** Read-only история и diff.
    ✅ Реализовано 2.11.2026: `/admin/audit` — пятый пункт рейла, `GET /api/admin/audit`
    с keyset-лентой и фильтрами по типу сущности, автору и UTC-датам, общий
    пейджер (20 строк, «Назад» без запроса), раскрываемый diff с русскими
    подписями полей, «Система»/«Удалённый пользователь», `401`/`403`, пустые
    и ошибочные состояния. В URL фильтры не пишутся (email — PII), действий над
-   записями нет: журнал неизменяем. Известное ограничение — аудит только
-   `User`/`BarberProfile`/`Review`; каталог, салоны и брони в журнал не попадают.
+   записями нет: журнал неизменяем. С #41 покрытие — семь типов (`User`, `BarberProfile`,
+   `Review`, `Salon`, `HairService`, `Specialization`, `Booking`): каталог, салоны
+   и изменения броней в журнал попадают, создание брони — нет.
 6. **«Брони» и «Сводка».** ✅ Этап закрыт полностью (#40). «Брони» реализованы 2.11.2026
    (#39): `/admin/bookings` и `/admin/bookings/{id}` — поиск по email клиента или точному id,
    фильтр статуса, общий пейджер, split-view карточка со временем в поясе салона
@@ -673,8 +700,17 @@ Read-only история: когда, кто, что изменил, у како
    и никаких действий. Админка полная: все семь пунктов рейла работают.
    Порядок пунктов рейла приведён к §3.2 (пользователи и каталог поменялись местами),
    «Журнал» остался последним, «Сводка» встала первым пунктом.
-   Мутации и аудит остаются в своих разделах, расширение allowlist `AuditTrail` —
-   отдельное решение.
+   Мутации и аудит остаются в своих разделах; расширение allowlist `AuditTrail`
+   выполнено в #41 (см. абзац ниже).
+
+**Наблюдаемость после #41 (2.11.2026).** У покрытия аудита нет отдельного номера этапа:
+это cross-cutting доработка поверх готовых разделов. `AuditTrail` теперь пишет `salon`,
+`hair_service`, `specialization` и `booking` (у брони — только `Status` и `BarberNote`,
+создание не аудируется), `GET api/admin/audit` принимает четыре новых значения
+`entityType`, а экран журнала показывает русские подписи типов («Салон», «Услуга»,
+«Специализация», «Бронь») и русские значения статуса брони и категории услуги.
+`EXPLAIN (ANALYZE, BUFFERS)` на 1 млн синтетических строк не потребовал миграции
+(19 остаются); ретенция, партиционирование и экспорт — следующие срезы.
 
 Порядок продиктован риском: отзывы обратимы и ежедневны, барберы влияют
 на предложение, пользователи — самые чувствительные, каталог — редкий,
@@ -1051,6 +1087,51 @@ Read-only история: когда, кто, что изменил, у како
     включая новый спек в desktop и mobile и axe 1280/320. Новых зависимостей и правок
     `ui/**` нет.
 
+70. **Реализация #41 — покрытие аудита (2.11.2026).** Backend сначала получил красные
+    интеграционные тесты `AdminAuditCoverageTests` (и `AuditRowSnapshot`): правки салона,
+    услуги, специализации и брони не оставляли строк, `entityType=salon` отвечал `400`,
+    создание брони было неотличимо от «аудита нет вовсе» (вывод —
+    `frontend/verification/issue-41-before.txt`); frontend — красные `admin-audit.test.ts`
+    и `audit-entry.test.tsx` (подписей нет, значения английские; вывод —
+    `frontend/verification/issue-41-before-frontend.txt`).
+71. Backend: `AuditTrail` — четыре записи в `AUDITED_ENTITIES` (явные списки свойств),
+    `AuditsCreation: false` у `Booking`, `AuditedEntity` с флагом, `EntityTypeNames` как
+    единый источник для guard-теста; `AdminAuditEntityType` — `Salon = 4`, `HairService = 5`,
+    `Specialization = 6`, `Booking = 7`; `AdminAuditEntityTypes` — константы и
+    `TryParse`/`ToStorageName` для семи имён (trim + без регистра, числа по-прежнему `400`);
+    `AdminAuditController`/`AdminAuditReadHandler`/`AuditLogRepository` не менялись.
+72. Backend: тесты `AuditTrailTests` (создание салона, контакты, выключение, услуга,
+    переименование, отмена брони, заметка, отсутствие строки при создании брони и правке
+    детей `BarberProfile`, отсутствие `IdempotencyKey` в payload), `AdminAuditReadHandlerTests`
+    (новые имена, регистр/trim, отказ `services`/`bookings`/`0`/`8`, `ToStorageName`,
+    совпадение реестров), `AdminAuditCoverageTests` вместо удалённого
+    `Catalogue_and_salon_edits_are_not_audited`.
+73. Backend: `EXPLAIN (ANALYZE, BUFFERS)` на мигрированной копии `barbersearch_load` с
+    1 000 000 синтетических строк (`user` 40 %, `barber_profile` 15 %, `review` 15 %,
+    `booking` 25 %, `salon`/`hair_service`/`specialization` ≈1,67 %): без фильтра 0,090 мс,
+    `booking` 12,985 мс (50 000 строк отброшено фильтром), `salon` 7,728 мс (33 333),
+    вторая страница редкого типа 15,203 мс; `Sort` и `Seq Scan` нет — миграция не добавлена,
+    индекс `(entity_type, occurred_at DESC, id)` не создавался, а `(entity_type, entity_id)`
+    порядок ленты не обслуживает. Логи — `issue-41-explain.txt` и `issue-41-explain.sql`.
+74. Frontend: `lib/admin-audit.ts` — четыре новых значения и подписи («Салон», «Услуга»,
+    «Специализация», «Бронь»), русские подписи полей, `status` → `bookingStatusLabel`,
+    `category` → `SERVICE_CATEGORY_LABELS`, `isActive` → «Активность», module-doc; разметка
+    `AuditEntry` не менялась. Тесты — `admin-audit.test.ts`, `audit-entry.test.tsx`,
+    `audit-screen.test.tsx`.
+75. E2E: `seed.sql` — 25 строк журнала на 2026-09-10 UTC (четыре новых типа в
+    10:16:10…10:16:40, «1–20» + «21–25»), `fixtures.journal` (`total: 25` и четыре новых
+    `*RowId`), `specs/admin-audit.spec.ts` — два новых теста («Салон» с русским diff телефона,
+    «Бронь» с «Подтверждена → Неявка»), счёты второй страницы и автора обновлены точно, без
+    ослабления; `pages/admin-audit-page.ts` не менялся.
+76. Проверено: backend build 0/0 (Debug и Release), тесты — 187 domain + 395 application +
+    94 infrastructure + 127 integration (803; было 761), 21 контроллер / 99 эндпоинтов и
+    19 миграций; вывод — `frontend/verification/issue-41-backend-tests.txt`. Frontend:
+    `npm test` — 260 тестов в 31 файле (два прогона зелёные), `npm run lint` — 0/0 (256 файлов),
+    `npm run build` — успешно (2445 модулей, entry 337,77 / 109,58 kB gzip, `admin-page`
+    198,86 / 41,89, css 81,38 / 14,03); логи — `issue-41-frontend-tests.txt`,
+    `issue-41-lint.txt`, `issue-41-build.txt`. E2E на запущенном API и `barbersearch_e2e`
+    прогоняется отдельно; новых зависимостей и правок `ui/**` нет.
+
 ---
 
 ## 9. Карта файлов
@@ -1083,6 +1164,9 @@ Read-only история: когда, кто, что изменил, у како
 | Сводка: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminSummaryController.cs`, `backend/BarberSearch/src/BarberSearch.Application/Admin/GetAdminSummary/GetAdminSummaryHandler.cs` |
 | Сводка: контракт | `backend/BarberSearch/src/BarberSearch.Contracts/Admin/AdminSummaryResponse.cs` |
 | Аудит: чтение (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/AdminAuditController.cs`, `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Repositories/AuditLogRepository.cs` |
+| Аудит: allowlist и типы | `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Audit/AuditTrail.cs`, `backend/BarberSearch/src/BarberSearch.Application/Audit/Admin/AdminAuditEntityTypes.cs` |
+| Аудит: экран и подписи | `frontend/src/components/admin/audit-screen.tsx`, `audit-entry.tsx`, `frontend/src/lib/admin-audit.ts`, `frontend/src/hooks/use-admin-audit-list.ts` |
+| Аудит: тесты и спеки | `backend/tests/BarberSearch.Infrastructure.UnitTests/AuditTrailTests.cs`, `backend/tests/BarberSearch.Application.UnitTests/AdminAuditReadHandlerTests.cs`, `backend/tests/BarberSearch.IntegrationTests/AdminAuditCoverageTests.cs`, `frontend/src/lib/admin-audit.test.ts`, `frontend/src/components/admin/audit-entry.test.tsx`, `audit-screen.test.tsx`, `frontend/e2e/specs/admin-audit.spec.ts` |
 | Точка входа | `frontend/src/App.tsx` |
 | Самодельный роутер | `frontend/src/lib/router.ts` |
 | Сессия | `frontend/src/components/session-provider.tsx`, `src/hooks/use-session.ts`, `src/lib/auth.ts` |
@@ -1093,7 +1177,7 @@ Read-only история: когда, кто, что изменил, у како
 | Отзывы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/ReviewsController.cs` |
 | Барберы (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/BarberProfilesController.cs`, `AdminBarbersController.cs` |
 | Пользователи (API) | `backend/BarberSearch/src/BarberSearch.Web/Controllers/UsersController.cs`, `AdminUsersController.cs` |
-| Аудит | `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Audit/AuditTrail.cs` |
+| Аудит | `backend/BarberSearch/src/BarberSearch.Infrastructure.Postgresql/Audit/AuditTrail.cs`, `AuditLogEntry.cs` |
 | Контракт отзыва | `backend/BarberSearch/src/BarberSearch.Contracts/Reviews/GetReviews/ReviewResponse.cs` |
 | Контракт брони | `backend/BarberSearch/src/BarberSearch.Contracts/Bookings/GetBookings/BookingResponse.cs` |
 | Backend-контекст | `backend/AGENT.md` §16 |

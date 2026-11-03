@@ -1,12 +1,5 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using BarberSearch.Contracts.Common;
-using BarberSearch.Contracts.HairServices.CreateHairService;
-using BarberSearch.Contracts.Salons.CreateSalon;
-using BarberSearch.Contracts.Salons.UpdateSalonLocation;
-using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Users;
 using Xunit;
 
@@ -14,13 +7,14 @@ namespace BarberSearch.IntegrationTests;
 
 /// <summary>
 /// Админское чтение журнала изменений (<c>GET api/admin/audit</c>) на реальной PostgreSQL:
-/// keyset-порядок, фильтры типа, автора и периода, разбор <c>payload</c>, коды ошибок
-/// и честная граница «каталог и салоны не аудируются».
+/// keyset-порядок, фильтры типа, автора и периода, разбор <c>payload</c> и коды ошибок.
 /// </summary>
 /// <remarks>
 /// Строки аудита — инфраструктурная запись без доменных правил, поэтому они засеваются
 /// SQL-вставкой (см. <see cref="TestData.SeedAuditAsync"/>). Доменные сущности и акторы
-/// по-прежнему создаются через <see cref="TestApp"/>.
+/// по-прежнему создаются через <see cref="TestApp"/>. Покрытие новых типов (салоны,
+/// каталог, брони) проверяет <see cref="AdminAuditCoverageTests"/> на записях, которые
+/// пишет <c>AuditTrail</c>, — здесь остаётся чтение журнала.
 /// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed class AdminAuditReadTests
@@ -32,15 +26,6 @@ public sealed class AdminAuditReadTests
         """;
 
     private readonly PostgresFixture _database;
-
-    /// <summary>
-    /// API читает перечисления строками: без конвертера <c>category</c> ушёл бы числом
-    /// и model binding вернул бы <c>400</c> до обработчика.
-    /// </summary>
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
 
     public AdminAuditReadTests(PostgresFixture database)
     {
@@ -528,93 +513,6 @@ public sealed class AdminAuditReadTests
         using var foreign = await app.Client.GetAsync(
             $"{ENDPOINT}?cursor={Uri.EscapeDataString(foreignCursor!)}");
         await AssertBadRequestAsync(foreign, "admin.audit.cursor.invalid");
-    }
-
-    [Fact(Timeout = 180_000)]
-    public async Task Catalogue_and_salon_edits_are_not_audited()
-    {
-        await using var app = await TestApp.StartAsync(_database);
-        var data = new TestData(app);
-        var admin = await app.CreateUserAsync(
-            $"audit-not-audited-{Guid.NewGuid():N}@barbersearch.test",
-            UserRole.Admin);
-
-        // Одна настоящая строка аудита, чтобы «ничего не изменилось» было видно на числе > 0.
-        await data.SeedAuditAsync(
-            new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero),
-            admin.Id,
-            "user.updated",
-            "user",
-            Guid.NewGuid(),
-            IS_ACTIVE_CHANGE);
-
-        var before = await data.CountAuditRowsAsync();
-
-        await app.AuthenticateAsync(admin.Email);
-
-        Guid hairServiceId;
-
-        using (var created = await app.Client.PostAsync(
-                   "api/hair-services",
-                   JsonContent.Create(
-                       new CreateHairServiceRequest(
-                           $"Not Audited {Guid.NewGuid():N}",
-                           ServiceCategory.Beard,
-                           30,
-                           null),
-                       options: JsonOptions)))
-        {
-            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-            var body = await created.Content.ReadFromJsonAsync<CreatedResourceResponse>();
-            Assert.NotNull(body);
-            hairServiceId = body.Id;
-        }
-
-        using (var deactivated = await app.Client.DeleteAsync(
-                   $"api/hair-services/{hairServiceId}/activation"))
-        {
-            Assert.Equal(HttpStatusCode.NoContent, deactivated.StatusCode);
-        }
-
-        Guid salonId;
-
-        using (var created = await app.Client.PostAsync(
-                   "api/salons",
-                   JsonContent.Create(
-                       new CreateSalonRequest(
-                           $"Not Audited Salon {Guid.NewGuid():N}",
-                           "ul. Testovaya, 1",
-                           "Kazan",
-                           "Russia",
-                           "Europe/Moscow",
-                           55.7963,
-                           49.1088,
-                           null,
-                           null,
-                           null),
-                       options: JsonOptions)))
-        {
-            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-            var body = await created.Content.ReadFromJsonAsync<CreatedResourceResponse>();
-            Assert.NotNull(body);
-            salonId = body.Id;
-        }
-
-        using (var moved = await app.Client.PutAsJsonAsync(
-                   $"api/salons/{salonId}/location",
-                   new UpdateSalonLocationRequest(
-                       "ul. Novaya, 2",
-                       "Kazan",
-                       "Russia",
-                       "Europe/Moscow",
-                       55.7900,
-                       49.1200,
-                       null)))
-        {
-            Assert.Equal(HttpStatusCode.NoContent, moved.StatusCode);
-        }
-
-        Assert.Equal(before, await data.CountAuditRowsAsync());
     }
 
     private static async Task<AuditPage> ReadPageAsync(HttpResponseMessage response)

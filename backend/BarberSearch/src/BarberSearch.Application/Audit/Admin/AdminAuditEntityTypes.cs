@@ -5,9 +5,11 @@ namespace BarberSearch.Application.Audit.Admin;
 /// </summary>
 /// <remarks>
 /// Наружу и в <c>audit_log</c> типы ходят стабильными строками (<c>user</c>,
-/// <c>barber_profile</c>, <c>review</c>), а не именами CLR-типов и не числами: переименование
-/// класса не должно менять историю. Разбор нечувствителен к регистру, но числа
-/// (<c>0</c>, <c>2</c>) отвергаются — иначе клиент мог бы прислать «тип» числом.
+/// <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
+/// <c>specialization</c>, <c>booking</c>), а не именами CLR-типов и не числами: переименование
+/// класса не должно менять историю. Разбор нечувствителен к регистру и обрезает пробелы
+/// по краям, но числа (<c>0</c>, <c>8</c>) отвергаются — иначе клиент мог бы прислать
+/// «тип» числом.
 /// </remarks>
 public static class AdminAuditEntityTypes
 {
@@ -27,9 +29,33 @@ public static class AdminAuditEntityTypes
     public const string REVIEW = "review";
 
     /// <summary>
-    /// Разбирает параметр <c>entityType</c>: <c>null</c>, пустая строка и <c>all</c> —
-    /// отсутствие фильтра; имена принимаются в любом регистре.
+    /// Стабильное имя салона в журнале.
     /// </summary>
+    public const string SALON = "salon";
+
+    /// <summary>
+    /// Стабильное имя услуги каталога в журнале.
+    /// </summary>
+    public const string HAIR_SERVICE = "hair_service";
+
+    /// <summary>
+    /// Стабильное имя специализации в журнале.
+    /// </summary>
+    public const string SPECIALIZATION = "specialization";
+
+    /// <summary>
+    /// Стабильное имя брони в журнале.
+    /// </summary>
+    public const string BOOKING = "booking";
+
+    /// <summary>
+    /// Разбирает параметр <c>entityType</c>: <c>null</c>, пустая строка и <c>all</c> —
+    /// отсутствие фильтра; имена принимаются в любом регистре после <c>Trim</c>.
+    /// </summary>
+    /// <remarks>
+    /// Разбор строковый, а не <c>Enum.TryParse</c>: последний принял бы <c>"4"</c> за
+    /// <see cref="AdminAuditEntityType.Salon"/>, и число в query string стало бы фильтром.
+    /// </remarks>
     /// <param name="value">Значение из query string.</param>
     /// <param name="entityType">Разобранный тип.</param>
     public static bool TryParse(string? value, out AdminAuditEntityType entityType)
@@ -66,6 +92,30 @@ public static class AdminAuditEntityTypes
             return true;
         }
 
+        if (trimmed.Equals(SALON, StringComparison.OrdinalIgnoreCase))
+        {
+            entityType = AdminAuditEntityType.Salon;
+            return true;
+        }
+
+        if (trimmed.Equals(HAIR_SERVICE, StringComparison.OrdinalIgnoreCase))
+        {
+            entityType = AdminAuditEntityType.HairService;
+            return true;
+        }
+
+        if (trimmed.Equals(SPECIALIZATION, StringComparison.OrdinalIgnoreCase))
+        {
+            entityType = AdminAuditEntityType.Specialization;
+            return true;
+        }
+
+        if (trimmed.Equals(BOOKING, StringComparison.OrdinalIgnoreCase))
+        {
+            entityType = AdminAuditEntityType.Booking;
+            return true;
+        }
+
         return false;
     }
 
@@ -79,6 +129,10 @@ public static class AdminAuditEntityTypes
             AdminAuditEntityType.User => USER,
             AdminAuditEntityType.BarberProfile => BARBER_PROFILE,
             AdminAuditEntityType.Review => REVIEW,
+            AdminAuditEntityType.Salon => SALON,
+            AdminAuditEntityType.HairService => HAIR_SERVICE,
+            AdminAuditEntityType.Specialization => SPECIALIZATION,
+            AdminAuditEntityType.Booking => BOOKING,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(entityType),
                 entityType,

@@ -7,8 +7,9 @@ import { AdminAuditPage } from '../pages/admin-audit-page'
  * `/admin/audit` — чтение журнала: рейл, фильтры по дате/типу/автору, порядок,
  * вторая страница и раскрываемый diff.
  *
- * Фикстуры (`seed.sql`, секция 7): 21 строка `audit_log` на 2026-09-10 UTC, свежая —
- * запись 21 без автора («Система»), запись 20 меняет роль. Даты в прошлом и фильтр
+ * Фикстуры (`seed.sql`, секция 7): 25 строк `audit_log` на 2026-09-10 UTC, свежая —
+ * запись 21 без автора («Система»), запись 20 меняет роль; строки 22…25 — новые
+ * типы #41 (салон, услуга, специализация, бронь). Даты в прошлом и фильтр
  * по ним отделяют фикстуры от строк, которые пишут мутирующие спеки «сегодня».
  * Экраны только читают, поэтому восстанавливать после них нечего.
  */
@@ -18,6 +19,7 @@ const DAY = fixtures.journal.day
 const ROLE_CHANGE = fixtures.journal.roleChangeRowId
 const SYSTEM_ROW = fixtures.journal.systemRowId
 const OLDEST_ROW = '9e700000-0000-4000-8000-000000000001'
+const SECOND_PAGE_FIRST = '9e700000-0000-4000-8000-000000000005'
 
 test.describe('админка: журнал', () => {
   test('рейл ведёт в журнал и отмечает пункт текущим', async ({ page }) => {
@@ -39,7 +41,7 @@ test.describe('админка: журнал', () => {
     await expect(page).toHaveURL(/\/admin\/audit$/)
   })
 
-  test('фильтр по дате: «1–20», «Дальше» → «21–21», «Назад» без запроса', async ({
+  test('фильтр по дате: «1–20», «Дальше» → «21–25», «Назад» без запроса', async ({
     page,
   }) => {
     const audit = new AdminAuditPage(page)
@@ -57,9 +59,12 @@ test.describe('админка: журнал', () => {
     await audit.pager.expectRange('1–20')
 
     await audit.pager.clickNext()
-    await audit.pager.expectRange('21–21')
+    await audit.pager.expectRange('21–25')
     await expect(audit.rows).toHaveCount(fixtures.journal.total - fixtures.journal.pageSize)
-    await expect(audit.rows.first()).toHaveAttribute('data-entry-id', OLDEST_ROW)
+    // Вторая страница начинается со строки 5: строки 22…25 легли между 16-й и 17-й,
+    // поэтому позиции 21…25 заняли строки 05…01.
+    await expect(audit.rows.first()).toHaveAttribute('data-entry-id', SECOND_PAGE_FIRST)
+    await expect(audit.rows.last()).toHaveAttribute('data-entry-id', OLDEST_ROW)
 
     const beforeBack = requests.length
 
@@ -124,6 +129,50 @@ test.describe('админка: журнал', () => {
     await expect(audit.list.getByText('Барбер', { exact: true })).toHaveCount(0)
   })
 
+  test('фильтр «Салон»: одна запись и русский diff телефона', async ({ page }) => {
+    const audit = new AdminAuditPage(page)
+
+    await audit.goto()
+    await audit.filterByDate(DAY)
+    await audit.waitForFirstPage()
+
+    await audit.selectEntityType('Салон')
+
+    await expect(audit.rows).toHaveCount(1)
+    await expect(audit.rows.first()).toContainText('Салон')
+    await expect(audit.rows.first()).toContainText('Изменено')
+
+    await audit.expandButton(fixtures.journal.salonRowId).click()
+
+    await expect(audit.diff(fixtures.journal.salonRowId)).toBeVisible()
+    await expect(audit.diff(fixtures.journal.salonRowId)).toContainText('Телефон')
+    await expect(audit.diff(fixtures.journal.salonRowId)).toContainText(
+      '+70000000009 → +70000000010'
+    )
+  })
+
+  test('фильтр «Бронь»: одна запись и русский статус в diff', async ({ page }) => {
+    const audit = new AdminAuditPage(page)
+
+    await audit.goto()
+    await audit.filterByDate(DAY)
+    await audit.waitForFirstPage()
+
+    await audit.selectEntityType('Бронь')
+
+    await expect(audit.rows).toHaveCount(1)
+    await expect(audit.rows.first()).toContainText('Бронь')
+    await expect(audit.rows.first()).toContainText('Изменено')
+
+    await audit.expandButton(fixtures.journal.bookingRowId).click()
+
+    await expect(audit.diff(fixtures.journal.bookingRowId)).toBeVisible()
+    await expect(audit.diff(fixtures.journal.bookingRowId)).toContainText('Статус')
+    await expect(audit.diff(fixtures.journal.bookingRowId)).toContainText(
+      'Подтверждена → Неявка'
+    )
+  })
+
   test('фильтр автора: системная запись не находится, «%» — литерал', async ({
     page,
   }) => {
@@ -135,13 +184,23 @@ test.describe('админка: журнал', () => {
 
     await audit.actorInput.fill('e2e-admin')
 
-    // 21 строка фикстур, но у системной записи `actor_user_id = NULL`:
+    // 25 строк фикстур, но у системной записи `actor_user_id = NULL`:
     // под фильтром по email она не находится — это ожидаемое следствие.
     // Сначала ждём исчезновения системной строки: до применения фильтра
     // на первой странице тоже двадцать строк, и счётчик сам по себе ничего не докажет.
     await expect(audit.row(SYSTEM_ROW)).toHaveCount(0)
-    await expect(audit.rows).toHaveCount(fixtures.journal.total - 1)
+    await expect(audit.rows).toHaveCount(fixtures.journal.pageSize)
+    await audit.pager.expectRange('1–20')
 
+    await audit.pager.clickNext()
+    await audit.pager.expectRange('21–24')
+    await expect(audit.rows).toHaveCount(
+      fixtures.journal.total - 1 - fixtures.journal.pageSize
+    )
+    await expect(audit.row(SYSTEM_ROW)).toHaveCount(0)
+
+    await audit.pager.clickPrevious()
+    await expect(audit.rows).toHaveCount(fixtures.journal.pageSize)
     await audit.actorInput.fill('')
 
     // Без фильтра по автору системная запись снова первая.
