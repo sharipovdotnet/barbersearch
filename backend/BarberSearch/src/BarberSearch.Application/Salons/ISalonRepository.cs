@@ -49,6 +49,17 @@ public interface ISalonRepository
     Task<Result<Salon, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Салоны по списку идентификаторов, без гарантии порядка. Пустой список — пустой результат.
+    /// </summary>
+    /// <remarks>
+    /// Одно чтение вместо N+1 для экрана расписания: барбер работает в одном-двух салонах,
+    /// но названия и часовые пояса нужны всем сразу.
+    /// </remarks>
+    Task<Result<IReadOnlyList<Salon>, Failure>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Страница салонов города (фильтр поиска по городу). Читается без отслеживания.
     /// </summary>
     /// <param name="city">

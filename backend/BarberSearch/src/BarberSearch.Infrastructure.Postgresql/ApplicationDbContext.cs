@@ -56,6 +56,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<FavoriteBarber> FavoriteBarbers => Set<FavoriteBarber>();
     public DbSet<BarberSalon> BarberSalons => Set<BarberSalon>();
     public DbSet<WorkingSchedule> WorkingSchedules => Set<WorkingSchedule>();
+    public DbSet<ScheduleOverride> ScheduleOverrides => Set<ScheduleOverride>();
     public DbSet<BarberService> BarberServices => Set<BarberService>();
     public DbSet<BarberSpecialization> BarberSpecializations => Set<BarberSpecialization>();
 

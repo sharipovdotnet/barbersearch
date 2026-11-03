@@ -103,6 +103,19 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Корень профиля с салонами, недельным расписанием, исключениями на даты и отпусками.
+    /// Сущность отслеживается контекстом.
+    /// </summary>
+    /// <remarks>
+    /// Чтение для экрана расписания и для команд, которые меняют исключения: нужны
+    /// и недельный шаблон, и исключения, и отпуска, но услуги, фото и специализации — нет.
+    /// Три коллекции загружаются split-запросами, чтобы не получить декартово произведение.
+    /// </remarks>
+    Task<Result<BarberProfile, Failure>> GetWithScheduleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Идентификатор владельца профиля, без загрузки агрегата. Читается без отслеживания.
     /// </summary>
     /// <remarks>

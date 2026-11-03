@@ -57,6 +57,8 @@ public class WorkingSchedule : Entity
     public UnitResult<Failure> SetDayOff()
     {
         IsDayOff = true;
+        StartTime = TimeOnly.MinValue;
+        EndTime = TimeOnly.MinValue;
         MarkUpdated();
 
         return DomainErrors.Ok();

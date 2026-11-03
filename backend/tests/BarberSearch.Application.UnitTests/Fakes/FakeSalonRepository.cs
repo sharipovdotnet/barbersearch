@@ -1,5 +1,6 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Salons.Admin;
 using BarberSearch.Domain.Salons;
 using CSharpFunctionalExtensions;
@@ -20,6 +21,7 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 public sealed class FakeSalonRepository : ISalonRepository
 {
     private readonly HashSet<Guid> _existingIds = [];
+    private readonly Dictionary<Guid, Salon> _salons = [];
     private readonly List<AdminSalonResponse> _adminRows = [];
 
     /// <summary>Сбой админского чтения: обработчик обязан пробросить его как <c>Result</c>.</summary>
@@ -38,6 +40,12 @@ public sealed class FakeSalonRepository : ISalonRepository
     public Failure? CountInactiveFailure { get; set; }
 
     public void AddExisting(Guid id) => _existingIds.Add(id);
+
+    public void AddSalon(Salon salon)
+    {
+        _salons[salon.Id] = salon;
+        _existingIds.Add(salon.Id);
+    }
 
     public void AddAdminRow(AdminSalonResponse row) => _adminRows.Add(row);
 
@@ -95,7 +103,23 @@ public sealed class FakeSalonRepository : ISalonRepository
     public Task<Result<Salon, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+        => Task.FromResult<Result<Salon, Failure>>(
+            _salons.TryGetValue(id, out var salon)
+                ? salon
+                : new Failure(Error.NotFound(
+                    ApiErrorCodes.Salon.NotFound,
+                    $"Salon '{id}' was not found.",
+                    id)));
+
+    public Task<Result<IReadOnlyList<Salon>, Failure>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<IReadOnlyList<Salon>, Failure>>(
+            ids
+                .Distinct()
+                .Where(_salons.ContainsKey)
+                .Select(id => _salons[id])
+                .ToList());
 
     public Task<Result<IReadOnlyList<Salon>, Failure>> GetByCityAsync(
         string city,

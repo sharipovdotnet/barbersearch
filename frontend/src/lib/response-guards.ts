@@ -36,6 +36,13 @@ import type { SessionUser } from '@/lib/auth'
 import type { BarberBooking } from '@/lib/barber-bookings'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { DayOfWeek, Language, PaymentMethod, ServiceCategory } from '@/lib/barber-profile-labels'
+import type {
+  BarberSchedule,
+  BarberScheduleDay,
+  BarberScheduleException,
+  BarberScheduleSalon,
+  BarberScheduleTimeOff,
+} from '@/lib/barber-schedule'
 import type { BarberSearchItem } from '@/lib/barber-search'
 import type { BarberSlot, BarberSlots } from '@/lib/barber-slots'
 import type { Booking, BookingStatus } from '@/lib/bookings'
@@ -436,6 +443,72 @@ export function isBarberProfile(value: unknown): value is BarberProfile {
     isArrayOf(isProfileService)(value.services) &&
     isArrayOf(isProfileSalon)(value.salons) &&
     isArrayOf(isSpecialization)(value.specializations)
+  )
+}
+
+function isScheduleDay(value: unknown): value is BarberScheduleDay {
+  return (
+    isRecord(value) &&
+    isDayOfWeek(value.dayOfWeek) &&
+    isBoolean(value.isDayOff) &&
+    isString(value.startTime) &&
+    isString(value.endTime)
+  )
+}
+
+function isScheduleWeek(value: unknown): value is BarberScheduleDay[] {
+  return (
+    Array.isArray(value) &&
+    value.length === 7 &&
+    value.every(isScheduleDay)
+  )
+}
+
+function isScheduleException(
+  value: unknown
+): value is BarberScheduleException {
+  return (
+    isRecord(value) &&
+    isString(value.date) &&
+    isBoolean(value.isDayOff) &&
+    isString(value.startTime) &&
+    isString(value.endTime) &&
+    isNullableString(value.reason)
+  )
+}
+
+function isScheduleSalon(value: unknown): value is BarberScheduleSalon {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.salonId) &&
+    isString(value.name) &&
+    isString(value.city) &&
+    isString(value.timeZoneId) &&
+    isBoolean(value.isPrimary) &&
+    isScheduleWeek(value.weekly) &&
+    isArrayOf(isScheduleException)(value.exceptions)
+  )
+}
+
+function isScheduleTimeOff(
+  value: unknown
+): value is BarberScheduleTimeOff {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.startAt) &&
+    isString(value.endAt) &&
+    isNullableString(value.reason)
+  )
+}
+
+/** Ответ `GET api/barber-profiles/{id}/schedule`. */
+export function isBarberSchedule(value: unknown): value is BarberSchedule {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.barberProfileId) &&
+    isArrayOf(isScheduleSalon)(value.salons) &&
+    isArrayOf(isScheduleTimeOff)(value.timeOffs)
   )
 }
 

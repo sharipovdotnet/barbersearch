@@ -47,8 +47,15 @@ The one Barber Salon that represents the Barber by default. A Barber has at most
 A Barber's weekly availability at one Barber Salon: one weekday with opening hours, or a day off.
 _Avoid_: Opening hours, timetable
 
+**Schedule Exception**:
+One date on which a Barber Salon's weekly schedule does not apply: a day off or custom hours.
+It belongs to one Barber Salon, unlike a Time Off. The code calls it `ScheduleOverride` because
+CA1711 reserves the `Exception` suffix for error types.
+_Avoid_: Override, special day, date override
+
 **Time Off**:
-A dated period during which a Barber does not work at all. Independent of the weekly schedule.
+A dated period during which a Barber does not work at all. It applies to the whole Barber Profile,
+independent of the weekly schedule and of any Schedule Exception.
 _Avoid_: Vacation, holiday, day off
 
 ## Catalogue

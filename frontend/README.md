@@ -38,6 +38,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
+| `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
@@ -312,7 +313,36 @@ keeps its own role gates and `/account` no longer turns a barber away.
 - `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, five local mutations,
   `401`, click guard.
 - `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
-  `src/lib/barber-cabinet-path.ts` — the `/barber` path helper.
+  `src/lib/barber-cabinet-path.ts` — the `/barber` and `/barber/schedule` path helpers.
+
+## Barber schedule
+
+`/barber/schedule` is the second section of the barber cabinet; `BarberCabinetNav` links it with
+`/barber` and both screens share the same session, role and linked-profile gates. It reads
+`GET /api/barber-profiles/{id}/schedule` (owner or admin, also for an **unverified** profile) and
+shows the salons of the barber with a seven-day weekly template, upcoming date exceptions and
+future time offs.
+
+- **Week.** Seven rows, «рабочий/выходной» and two native time inputs per row; «Заполнить будни»
+  applies Mon–Fri 10:00–20:00. «Сохранить расписание» sends one `PUT
+  /api/barber-profiles/{id}/salons/{salonId}/working-schedules` with all seven days (no partial
+  save), waits for `204` and re-reads the schedule. The button is dirty-only; a day whose end is
+  not after its start is blocked with an inline message.
+- **Date exceptions.** A native date input (today … +90 days), «Выходной» or «Свои часы», an
+  optional 500-character note; one `PUT .../schedule-exceptions/{date}` per row and one `DELETE`
+  to remove. An exception overrides the weekly template only in the selected salon.
+- **Time offs.** A profile-wide period with an inclusive local «с … по …»; the client converts it
+  to the exclusive UTC range the API expects (`startAt` = local midnight, `endAt` = midnight after
+  the last day) in the primary salon zone, then `POST`/`DELETE .../time-offs`. The UI says that
+  the period applies to every salon.
+- **States.** Skeletons, a page-level first-read error with «Повторить», a refresh error that
+  keeps the cards, `403`/`404` copy, `role="status"` announcements after each write and
+  `role="alert"` for validation/server errors. Existing bookings are **not** cancelled by a
+  schedule change; the week card says so explicitly.
+
+Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabinet-nav.tsx`,
+`barber-week-schedule.tsx`, `barber-schedule-exceptions.tsx`, `barber-time-offs.tsx`,
+`src/hooks/use-barber-schedule.ts`, `src/lib/barber-schedule.ts`.
 
 ## Booking
 

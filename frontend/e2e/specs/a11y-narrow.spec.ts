@@ -57,6 +57,35 @@ test.describe('axe: 320 px, публичный профиль', () => {
   })
 })
 
+test.describe('axe: 320 px, расписание барбера', () => {
+  test.use({ storageState: storageStatePath('barber') })
+
+  test('неделя, исключения и отпуска не расширяют страницу', async ({ page }) => {
+    await page.goto('/barber/schedule')
+    await expect(
+      page.getByRole('heading', { name: 'Расписание', level: 1 })
+    ).toBeVisible()
+    await expect(
+      page.getByText('Недельное расписание', { exact: true })
+    ).toBeVisible()
+
+    // Два времени в строке дня и две даты отпуска переносятся, а не дают scroll.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/schedule @320',
+      test.info()
+    )
+  })
+})
+
 test.describe('axe: 320 px, админка без выбранной строки', () => {
   test.use({ storageState: storageStatePath('admin') })
 

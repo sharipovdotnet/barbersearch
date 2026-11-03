@@ -18,6 +18,7 @@ namespace BarberSearch.Domain.BarberSalons;
 public class BarberSalon : Entity
 {
     private readonly List<WorkingSchedule> _workingSchedules = [];
+    private readonly List<ScheduleOverride> _scheduleExceptions = [];
 
     public Guid BarberProfileId { get; private set; }
     public Guid SalonId { get; private set; }
@@ -30,6 +31,12 @@ public class BarberSalon : Entity
 
     public IReadOnlyCollection<WorkingSchedule> WorkingSchedules
         => _workingSchedules.AsReadOnly();
+
+    /// <summary>
+    /// Исключения на конкретные даты: выходные и особые часы.
+    /// </summary>
+    public IReadOnlyCollection<ScheduleOverride> ScheduleExceptions
+        => _scheduleExceptions.AsReadOnly();
 
     private BarberSalon()
     {
@@ -115,6 +122,158 @@ public class BarberSalon : Entity
 
         _workingSchedules.Add(
             WorkingSchedule.Create(Id, dayOfWeek, TimeOnly.MinValue, TimeOnly.MinValue, isDayOff: true));
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Заменяет недельный шаблон целиком: семь дней, у каждого — рабочие часы или выходной.
+    /// </summary>
+    /// <remarks>
+    /// Существующие строки обновляются по дню недели, а не удаляются и создаются заново:
+    /// идентификаторы расписания остаются стабильными, а EF Core не пытается вставить
+    /// новую строку раньше, чем удалить старую с тем же уникальным днём.
+    /// </remarks>
+    public UnitResult<Failure> ReplaceWorkingSchedules(
+        IReadOnlyCollection<WorkingDaySchedule> days)
+    {
+        ArgumentNullException.ThrowIfNull(days);
+
+        var errors = DomainErrors.Collect();
+
+        if (days.Count != Constants.DAYS_IN_WEEK)
+        {
+            errors.Add(Error.Validation(
+                "barberSalon.replaceSchedule.days",
+                $"A weekly schedule must contain exactly {Constants.DAYS_IN_WEEK} days.",
+                nameof(days)));
+        }
+
+        if (days
+            .GroupBy(day => day.DayOfWeek)
+            .Any(group => group.Count() > 1))
+        {
+            errors.Add(Error.Validation(
+                "barberSalon.replaceSchedule.duplicateDay",
+                "A weekly schedule cannot contain the same day of week twice.",
+                nameof(days)));
+        }
+
+        foreach (var day in days.Where(day => !day.IsDayOff))
+        {
+            if (day.EndTime <= day.StartTime)
+            {
+                errors.Add(Error.Validation(
+                    "barberSalon.replaceSchedule.timeRange",
+                    DomainMessages.WORKING_SCHEDULE_END_TIME_NOT_AFTER_START,
+                    nameof(day.EndTime)));
+            }
+        }
+
+        if (errors.Count != 0)
+        {
+            return new Failure(errors);
+        }
+
+        foreach (var day in days)
+        {
+            var existing = _workingSchedules
+                .FirstOrDefault(schedule => schedule.DayOfWeek == day.DayOfWeek);
+
+            if (existing is null)
+            {
+                _workingSchedules.Add(WorkingSchedule.Create(
+                    Id,
+                    day.DayOfWeek,
+                    day.IsDayOff ? TimeOnly.MinValue : day.StartTime,
+                    day.IsDayOff ? TimeOnly.MinValue : day.EndTime,
+                    day.IsDayOff));
+            }
+            else if (day.IsDayOff)
+            {
+                existing.SetDayOff();
+            }
+            else
+            {
+                existing.SetWorkingHours(day.StartTime, day.EndTime);
+            }
+        }
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Ставит исключение на дату: выходной или свои часы. Повторный вызов переписывает его.
+    /// </summary>
+    public UnitResult<Failure> SetScheduleException(
+        DateOnly date,
+        bool isDayOff,
+        TimeOnly startTime,
+        TimeOnly endTime,
+        string? reason = null)
+    {
+        if (!isDayOff && endTime <= startTime)
+        {
+            return new Failure(Error.Validation(
+                "barberSalon.setScheduleException.timeRange",
+                DomainMessages.WORKING_SCHEDULE_END_TIME_NOT_AFTER_START,
+                nameof(endTime)));
+        }
+
+        var normalizedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
+        if (normalizedReason is not null
+            && normalizedReason.Length > Constants.MAX_SCHEDULE_REASON_LENGTH)
+        {
+            return new Failure(Error.Validation(
+                "barberSalon.setScheduleException.reasonTooLong",
+                $"A schedule exception reason cannot be longer than {Constants.MAX_SCHEDULE_REASON_LENGTH} characters.",
+                nameof(reason)));
+        }
+
+        var existing = _scheduleExceptions.FirstOrDefault(exception => exception.Date == date);
+
+        if (existing is null)
+        {
+            _scheduleExceptions.Add(ScheduleOverride.Create(
+                Id,
+                date,
+                isDayOff,
+                isDayOff ? TimeOnly.MinValue : startTime,
+                isDayOff ? TimeOnly.MinValue : endTime,
+                normalizedReason));
+        }
+        else
+        {
+            existing.Update(
+                isDayOff,
+                isDayOff ? TimeOnly.MinValue : startTime,
+                isDayOff ? TimeOnly.MinValue : endTime,
+                normalizedReason);
+        }
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Снимает исключение с даты. Отсутствующее исключение — <c>404</c>.
+    /// </summary>
+    public UnitResult<Failure> RemoveScheduleException(DateOnly date)
+    {
+        var removed = _scheduleExceptions.RemoveAll(exception => exception.Date == date);
+
+        if (removed == 0)
+        {
+            return new Failure(Error.NotFound(
+                "barberSalon.removeScheduleException.notFound",
+                $"The schedule exception was not found on date '{date}'."));
+        }
 
         MarkUpdated();
 
