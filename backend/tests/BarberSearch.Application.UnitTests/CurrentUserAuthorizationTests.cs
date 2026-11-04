@@ -92,6 +92,7 @@ public class CurrentUserAuthorizationTests
             bookings,
             profiles,
             new FakeSalonRepository(),
+            new FakeUserRepository(),
             new FakeUnitOfWork(),
             FakeCurrentUser.Anonymous(),
             TimeProvider.System,

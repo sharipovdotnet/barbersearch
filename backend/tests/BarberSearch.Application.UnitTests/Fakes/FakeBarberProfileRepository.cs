@@ -3,6 +3,7 @@ using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.Admin;
+using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
@@ -325,6 +326,39 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             $"Slot context for barber profile '{barberProfileId}' was not found.",
             barberProfileId)));
     }
+
+    /// <summary>
+    /// Собственные слоты в фейке совпадают с публичными: тесты обработчика проверяют
+    /// выбор метода по флагу, а не разницу расчёта.
+    /// </summary>
+    public Task<Result<BarberSlotContext, Failure>> GetOwnSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? hairServiceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+        => GetSlotContextAsync(
+            barberProfileId,
+            salonId,
+            hairServiceId,
+            date,
+            cancellationToken);
+
+    /// <summary>
+    /// Данные формы ручной записи; тест задаёт их явно, чтобы не собирать карточку.
+    /// </summary>
+    public BarberBookingOptionsResponse? BookingOptions { get; set; }
+
+    public Task<Result<BarberBookingOptionsResponse, Failure>> GetBookingOptionsAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<BarberBookingOptionsResponse, Failure>>(
+            BookingOptions is { } options
+                ? options
+                : new Failure(Error.NotFound(
+                    ApiErrorCodes.BarberProfile.NotFound,
+                    $"Barber profile '{barberProfileId}' was not found.",
+                    barberProfileId)));
 
     public Task<Result<int, Failure>> CountPendingAsync(
         CancellationToken cancellationToken = default)

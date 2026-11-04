@@ -88,3 +88,78 @@ export function describeBarberBookingFailure(
 
   return { message: describeApiFailure(error, fallback), canReload: false }
 }
+
+export type BarberBookingCreateFailure = {
+  message: string
+  /** Перезапросить слоты: время заняли, услуга/салон исчезли или старт вне окна. */
+  reloadSlots: boolean
+}
+
+/**
+ * Ошибки `POST api/barber/bookings`.
+ *
+ * Барбер записывает зарегистрированного клиента; `404 booking.create.customerNotFound`
+ * означает, что клиент исчез или заблокирован, а не что «страница не найдена».
+ * `409 booking.add.overlap` и `400 booking.create.startAt.*` лечатся только новым
+ * свободным временем, поэтому просим форму перезапросить слоты. `detail` не
+ * показываем никогда, он английский.
+ */
+export function describeBarberBookingCreateFailure(
+  error: unknown,
+  fallback: string
+): BarberBookingCreateFailure {
+  if (!(error instanceof ApiError)) {
+    return { message: fallback, reloadSlots: false }
+  }
+
+  if (error.status === 401) {
+    return { message: 'Сессия истекла — войдите снова.', reloadSlots: false }
+  }
+
+  if (error.status === 403) {
+    return {
+      message: 'Нет доступа к записи клиентов. Войдите под аккаунтом барбера.',
+      reloadSlots: false,
+    }
+  }
+
+  if (error.hasCode('booking.create.customerNotFound')) {
+    return {
+      message: 'Клиент не найден — возможно, аккаунт заблокирован. Повторите поиск.',
+      reloadSlots: false,
+    }
+  }
+
+  if (error.hasCode('booking.add.overlap')) {
+    return {
+      message: 'Это время только что заняли. Выберите другое.',
+      reloadSlots: true,
+    }
+  }
+
+  if (
+    error.hasCode('booking.create.startAt.inPast')
+    || error.hasCode('booking.create.startAt.tooFar')
+  ) {
+    return {
+      message: 'Это время уже недоступно. Обновите свободное время.',
+      reloadSlots: true,
+    }
+  }
+
+  if (error.status === 404) {
+    return {
+      message: 'Услуга или салон больше недоступны. Выберите другой вариант.',
+      reloadSlots: true,
+    }
+  }
+
+  if (error.hasCode('booking.add.lockTimeout')) {
+    return {
+      message: 'Не удалось занять время, попробуйте ещё раз.',
+      reloadSlots: false,
+    }
+  }
+
+  return { message: describeApiFailure(error, fallback), reloadSlots: false }
+}

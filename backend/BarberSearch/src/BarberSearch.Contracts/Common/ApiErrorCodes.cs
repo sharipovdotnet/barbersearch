@@ -197,6 +197,40 @@ public static class ApiErrorCodes
         /// Причина отмены длиннее <c>500</c> символов; <c>400</c>.
         /// </summary>
         public const string CancelReasonTooLong = "booking.cancel.reasonTooLong";
+
+        /// <summary>
+        /// Клиент для ручной записи не найден, неактивен или не является клиентом; <c>404</c>.
+        /// </summary>
+        /// <remarks>
+        /// Ответ намеренно не различает «нет такого пользователя» и «пользователь не
+        /// подходит по роли/активности»: барберу не нужно знать причину, а лишнее
+        /// различие превратило бы форму в проверку существования аккаунтов.
+        /// </remarks>
+        public const string CreateCustomerNotFound = "booking.create.customerNotFound";
+    }
+
+    /// <summary>
+    /// Поиск клиентов барбером для ручной записи.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный префикс от <see cref="Booking"/>: это чтение подсказки в форме,
+    /// а не операция над бронью, и клиент различает ошибку поиска и ошибку создания.
+    /// </remarks>
+    public static class BarberClient
+    {
+        /// <summary>
+        /// Поисковая строка короче трёх символов; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Минимум защищает от запроса «все клиенты»: без него пустая строка вернула бы
+        /// первые десять аккаунтов с контактами.
+        /// </remarks>
+        public const string SearchTooShort = "barberClient.search.tooShort";
+
+        /// <summary>
+        /// Поисковая строка длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "barberClient.search.tooLong";
     }
 
     /// <summary>

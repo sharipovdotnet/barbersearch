@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { SignInGate } from '@/components/account/account-gates'
+import { BarberBookingDialog } from '@/components/barber/barber-booking-dialog'
 import { BarberCabinetNav } from '@/components/barber/barber-cabinet-nav'
 import { CabinetBookingList } from '@/components/barber/cabinet-booking-list'
 import type { RowHandle } from '@/components/barber/cabinet-booking-row'
@@ -80,7 +81,7 @@ export function BarberCabinetPage() {
             <BarberProfileMissingGate />
           </div>
         ) : (
-          <BarberBookingsScreen />
+          <BarberBookingsScreen barberProfileId={user.barberProfileId} />
         )
       )}
     </div>
@@ -97,7 +98,11 @@ type PendingFocus = {
  * Экран списка монтируется только после проверок: аноним не должен сходить за
  * записями и получить `401` вместо гейта.
  */
-function BarberBookingsScreen() {
+function BarberBookingsScreen({
+  barberProfileId,
+}: {
+  barberProfileId: string
+}) {
   const [scope, setScope] = useState<BarberBookingScope>('upcoming')
   const bookings = useBarberBookings(scope)
   const now = useNow()
@@ -221,6 +226,20 @@ function BarberBookingsScreen() {
     setAnnouncement('Заметка сохранена.')
   }
 
+  /**
+   * Новая запись всегда попадает в «Ближайшие»: если барбер смотрел историю,
+   * переключаем вкладку, иначе просто перечитываем первую страницу.
+   */
+  function handleClientCreated(clientName: string) {
+    setAnnouncement(`Клиент записан: ${clientName}.`)
+
+    if (scope === 'upcoming') {
+      bookings.reload()
+    } else {
+      setScope('upcoming')
+    }
+  }
+
   const hasPastItems =
     scope === 'past' ? bookings.items.length > 0 : (knownPastCount ?? 0) > 0
 
@@ -228,6 +247,17 @@ function BarberBookingsScreen() {
     <div className="space-y-5">
       <BarberCabinetHeading />
       <BarberCabinetNav active="bookings" />
+
+      <div className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Клиент звонит или приходит в салон? Запишите его сами — запись сразу
+          подтверждена.
+        </p>
+        <BarberBookingDialog
+          barberProfileId={barberProfileId}
+          onCreated={handleClientCreated}
+        />
+      </div>
 
       {announcement && (
         <div
