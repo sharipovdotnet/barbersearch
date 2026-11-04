@@ -220,6 +220,67 @@ public class BookingTests
     }
 
     [Fact]
+    public void Cancel_WithReason_TrimsAndStoresReason()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.Cancel("  Барбер заболел  ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Equal("Барбер заболел", booking.CancellationReason);
+    }
+
+    [Fact]
+    public void Cancel_WithoutReason_LeavesReasonNull()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.Cancel();
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(booking.CancellationReason);
+    }
+
+    [Fact]
+    public void Cancel_WithBlankReason_StoresNull()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.Cancel("   ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(booking.CancellationReason);
+    }
+
+    [Fact]
+    public void Cancel_WithMaxLengthReason_Succeeds()
+    {
+        var booking = CreateValidBooking();
+        var reason = new string('a', Constants.MAX_CANCELLATION_REASON_LENGTH);
+
+        var result = booking.Cancel(reason);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(reason, booking.CancellationReason);
+    }
+
+    [Fact]
+    public void Cancel_WithTooLongReason_ReturnsValidationAndKeepsPending()
+    {
+        var booking = CreateValidBooking();
+        var reason = new string('a', Constants.MAX_CANCELLATION_REASON_LENGTH + 1);
+
+        var result = booking.Cancel(reason);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.cancel.reasonTooLong", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+        Assert.Null(booking.CancellationReason);
+    }
+
+    [Fact]
     public void MarkNoShow_FromConfirmed_Succeeds()
     {
         var booking = CreateValidBooking();

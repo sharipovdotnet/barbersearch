@@ -18,6 +18,7 @@ namespace BarberSearch.Contracts.Bookings.Barber;
 /// <param name="Price">Цена, зафиксированная в брони.</param>
 /// <param name="CustomerNote">Заметка клиента при создании брони.</param>
 /// <param name="BarberNote">Заметка барбера.</param>
+/// <param name="CancellationReason">Причина отмены, которую оставил барбер.</param>
 /// <param name="Customer">Клиент: имя и телефон.</param>
 /// <param name="Service">Услуга визита.</param>
 /// <param name="Salon">Салон визита, включая часовой пояс для форматирования времени.</param>
@@ -29,6 +30,7 @@ public record BarberBookingResponse(
     decimal Price,
     string? CustomerNote,
     string? BarberNote,
+    string? CancellationReason,
     BarberBookingCustomerResponse Customer,
     BarberBookingServiceResponse Service,
     BarberBookingSalonResponse Salon);

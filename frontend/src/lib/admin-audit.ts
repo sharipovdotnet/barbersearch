@@ -114,6 +114,7 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   websiteUrl: 'Сайт',
   status: 'Статус',
   barberNote: 'Заметка барбера',
+  cancellationReason: 'Причина отмены',
 }
 
 /**

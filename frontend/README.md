@@ -33,11 +33,11 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 |---|---|
 | `/` | landing page: real barber search by city, date, language, specialization and service, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
-| `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation, review |
+| `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
-| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel / note |
+| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -233,7 +233,8 @@ The hero card «Ближайшая запись» is the first row of «Пред
 stable on the first page and moves after a cancellation. «История» is lazy: it is requested only
 when the tab is opened for the first time. Cancelling waits for `204` and then removes the row from
 «Предстоящие» under the shared empty-page policy; the cancelled visit appears at the top of
-«История» the next time that tab loads. Barber names and salon addresses still come from
+«История» the next time that tab loads, with the barber's `cancellationReason` when it was the
+barber who cancelled (a customer cancellation or an older row says «Причина отмены не указана»). Barber names and salon addresses still come from
 `GET /api/barbers/{id}` for the visible rows and the hero only, not for the hidden list.
 
 States: hero/list skeletons, a first-page error with «Повторить», a next-page error inside the
@@ -282,13 +283,16 @@ name and, when present, a `tel:` phone link, the service, the salon name/city/ad
 and the status badge. Actions depend on status and time, not on the tab: `Pending` offers
 «Подтвердить», «Отменить» and «Заметка»; `Confirmed` offers «Завершить» and «Неявка» only once
 `startAt <= now` (the ticker updates every minute), «Отменить» in the upcoming tab and «Заметка»
-always; terminal bookings are read-only. The customer's comment and the barber's note render as
-text.
+always; terminal bookings are read-only. The customer's comment, the barber's note and the
+`cancellationReason` of a cancelled booking render as text. Cancelling opens an `alertdialog`
+with a required «Причина отмены» textarea (up to 500 characters): the client will see it in the
+visit history, so an empty reason keeps the dialog open and sends nothing; the server repeats the
+rule (`booking.cancel.reasonRequired`/`reasonTooLong`).
 
 Mutations wait for the server and update the row locally — there is no second `GET`: confirm
 changes the status to «Подтверждена»; complete, no-show and cancel remove the row from
-«Ближайшие» and keep it in «История» with the new status; the note dialog (1000 characters, an
-empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOKEN`; the list
+«Ближайшие» and keep it in «История» with the new status and, for a barber cancellation, the
+reason; the note dialog (1000 characters, an empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOKEN`; the list
 read does not. Double clicks are ignored while a request is in flight.
 
 States: skeleton while the first page loads (StrictMode may send a second, aborted request),
@@ -725,8 +729,8 @@ customer quotes in a ticket. The rail gained the sixth item before «Журна�
   (`POST /api/bookings/{id}/cancellation` and `/no-show` through `mutateWithCsrf`),
   `formatAdminBookingTime` and both error mappings.
 - `src/lib/response-guards.ts` — `isAdminBooking` / `isAdminBookingPage`: a known status, string
-  dates, a numeric price, nullable notes, the customer/barber/service/salon nested shapes and a
-  non-empty salon `timeZoneId`; extra fields are ignored.
+  dates, a numeric price, nullable notes and `cancellationReason`, the customer/barber/service/salon
+  nested shapes and a non-empty salon `timeZoneId`; extra fields are ignored.
 - `src/hooks/use-admin-bookings-list.ts` — `usePagedList` with `requiresAuth: true`; the search and
   status filter are part of the request, so changing either starts the first page.
   `src/hooks/use-admin-booking.ts` — the detail by id with `loading/ready/notFound/error` and

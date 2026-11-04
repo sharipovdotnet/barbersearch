@@ -251,6 +251,7 @@ export function isBooking(value: unknown): value is Booking {
     isString(value.idempotencyKey) &&
     isNullableString(value.customerNote) &&
     isNullableString(value.barberNote) &&
+    isNullableString(value.cancellationReason) &&
     isString(value.createdAt)
   )
 }
@@ -291,6 +292,7 @@ export function isBarberBooking(value: unknown): value is BarberBooking {
     isNumber(value.price) &&
     isNullableString(value.customerNote) &&
     isNullableString(value.barberNote) &&
+    isNullableString(value.cancellationReason) &&
     isRecord(value.customer) &&
     isString(value.customer.displayName) &&
     isNullableString(value.customer.phoneNumber) &&
@@ -838,8 +840,8 @@ function isAdminBookingSalon(value: unknown): value is AdminBookingSalon {
 /**
  * Строка админских броней: полный контекст клиента, барбера, услуги и салона.
  *
- * Строгий guard: `status` — одно из пяти имён, `price` — число, обе заметки —
- * строка или `null`, вложенные объекты обязательны. Лишние поля игнорируются,
+ * Строгий guard: `status` — одно из пяти имён, `price` — число, обе заметки и
+ * причина отмены — строка или `null`, вложенные объекты обязательны. Лишние поля игнорируются,
  * чтобы расширение контракта не ломало чтение. Email клиента — PII, но она
  * приходит только в этом админском ответе (§4.6).
  */
@@ -853,6 +855,7 @@ export function isAdminBooking(value: unknown): value is AdminBooking {
     isNumber(value.price) &&
     isNullableString(value.customerNote) &&
     isNullableString(value.barberNote) &&
+    isNullableString(value.cancellationReason) &&
     isString(value.createdAt) &&
     isAdminBookingCustomer(value.customer) &&
     isAdminBookingBarber(value.barber) &&

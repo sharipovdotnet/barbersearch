@@ -21,6 +21,10 @@ namespace BarberSearch.Contracts.Bookings.GetBookings;
 /// <param name="IdempotencyKey">Ключ идемпотентности создания.</param>
 /// <param name="CustomerNote">Заметка клиента.</param>
 /// <param name="BarberNote">Заметка барбера.</param>
+/// <param name="CancellationReason">
+/// Причина отмены, оставленная барбером; <c>null</c> — причина не указана
+/// (отмена клиентом или запись старше среза).
+/// </param>
 /// <param name="CreatedAt">Когда бронь создана.</param>
 public record BookingResponse(
     Guid Id,
@@ -35,4 +39,5 @@ public record BookingResponse(
     string IdempotencyKey,
     string? CustomerNote,
     string? BarberNote,
+    string? CancellationReason,
     DateTimeOffset CreatedAt);

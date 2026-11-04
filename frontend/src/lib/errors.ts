@@ -60,6 +60,17 @@ export function describeBarberBookingFailure(
     }
   }
 
+  if (error.hasCode('booking.cancel.reasonRequired')) {
+    return { message: 'Укажите причину отмены.', canReload: false }
+  }
+
+  if (error.hasCode('booking.cancel.reasonTooLong')) {
+    return {
+      message: 'Слишком длинная причина — максимум 500 символов.',
+      canReload: false,
+    }
+  }
+
   if (error.status === 404 || error.hasCode('booking.notFound')) {
     return { message: 'Запись не найдена.', canReload: false }
   }

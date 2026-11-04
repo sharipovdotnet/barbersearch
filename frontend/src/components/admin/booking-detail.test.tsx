@@ -25,6 +25,7 @@ const BASE_BOOKING: AdminBooking = {
   price: 30,
   customerNote: 'Позвоните за час',
   barberNote: 'Клиент предупреждён',
+  cancellationReason: null,
   createdAt: '2026-09-11T12:00:00+00:00',
   customer: {
     id: '9e000000-0000-4000-8000-000000000009',

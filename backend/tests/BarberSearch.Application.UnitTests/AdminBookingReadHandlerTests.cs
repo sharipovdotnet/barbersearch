@@ -284,6 +284,7 @@ public class AdminBookingReadHandlerTests
             45m,
             "Позвоните за час",
             null,
+            null,
             startAt.AddDays(-1),
             new AdminBookingCustomerResponse(
                 Guid.CreateVersion7(),

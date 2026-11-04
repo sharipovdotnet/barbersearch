@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -51,8 +52,10 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         }
 
         var booking = bookingResult.Value;
+        var isClientOwner = booking.UserId == currentUserId;
+        var isBarberCancellation = false;
 
-        if (booking.UserId != currentUserId)
+        if (!isClientOwner)
         {
             var allowed = await _currentUser.EnsureIsBarberOfAsync(
                 _barberProfiles,
@@ -62,9 +65,21 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
             {
                 return allowed.Error;
             }
+
+            // Администратор отменяет со своего стола поддержки и причину не пишет:
+            // обязательность относится именно к барберу, который отменяет свою запись.
+            isBarberCancellation = !_currentUser.IsAdmin;
         }
 
-        var cancelled = booking.Cancel();
+        if (isBarberCancellation && string.IsNullOrWhiteSpace(command.CancellationReason))
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Booking.CancelReasonRequired,
+                "A barber must provide a cancellation reason.",
+                nameof(command.CancellationReason)));
+        }
+
+        var cancelled = booking.Cancel(command.CancellationReason);
         if (cancelled.IsFailure)
         {
             return cancelled.Error;
@@ -76,7 +91,10 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
             return saved.Error;
         }
 
-        _logger.LogInformation("Booking {BookingId} has been cancelled.", booking.Id);
+        _logger.LogInformation(
+            "Booking {BookingId} has been cancelled by barber: {IsBarberCancellation}.",
+            booking.Id,
+            isBarberCancellation);
 
         return UnitResult.Success<Failure>();
     }

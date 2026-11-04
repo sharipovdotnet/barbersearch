@@ -160,12 +160,13 @@ public sealed class AuditTrail
                     nameof(Specialization.IsActive)
                 ]),
 
-            // Бронь: только Status и BarberNote — единственные поля, которые сегодня могут
-            // измениться (Confirm/Cancel/Complete/MarkNoShow/AddBarberNote). StartAt/EndAt/
-            // Price/UserId/BarberProfileId/SalonId/BarberServiceId не меняются ни одной
-            // операцией, а перенос и правка цены — отдельный срез, который расширит allowlist
-            // вместе с форматом дат в UI. IdempotencyKey не аудируется никогда: это
-            // технический ключ клиента, а не история изменения.
+            // Бронь: только Status, BarberNote и CancellationReason — единственные поля,
+            // которые сегодня могут измениться (Confirm/Cancel/Complete/MarkNoShow/
+            // AddBarberNote). StartAt/EndAt/Price/UserId/BarberProfileId/SalonId/
+            // BarberServiceId не меняются ни одной операцией, а перенос и правка цены —
+            // отдельный срез, который расширит allowlist вместе с форматом дат в UI.
+            // IdempotencyKey не аудируется никогда: это технический ключ клиента,
+            // а не история изменения.
             // AuditsCreation: false — создание брони не пишется сознательно: бронь уже хранит
             // владельца, время и цену, а строка на каждую бронь (1,2 млн в load-базе) раздувает
             // audit_log без новой информации. Журнал отвечает на «кто отменил/подтвердил/
@@ -174,7 +175,8 @@ public sealed class AuditTrail
                 "booking",
                 [
                     nameof(Booking.Status),
-                    nameof(Booking.BarberNote)
+                    nameof(Booking.BarberNote),
+                    nameof(Booking.CancellationReason)
                 ],
                 AuditsCreation: false)
         };

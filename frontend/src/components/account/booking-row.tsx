@@ -105,6 +105,21 @@ export function BookingRow({
           )}
         </div>
       </div>
+
+      {booking.status === 'Cancelled' && (
+        <p className="col-span-full break-words text-xs text-muted-foreground">
+          {booking.cancellationReason ? (
+            <>
+              <span>Причина отмены: </span>
+              <span className="text-foreground">
+                {booking.cancellationReason}
+              </span>
+            </>
+          ) : (
+            'Причина отмены не указана'
+          )}
+        </p>
+      )}
     </li>
   )
 }

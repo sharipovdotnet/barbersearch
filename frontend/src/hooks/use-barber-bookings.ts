@@ -35,7 +35,7 @@ export type BarberBookingsController = {
   confirm: (id: string) => Promise<void>
   complete: (id: string) => Promise<void>
   markNoShow: (id: string) => Promise<void>
-  cancel: (id: string) => Promise<void>
+  cancel: (id: string, reason: string) => Promise<void>
   saveNote: (id: string, note: string) => Promise<void>
 }
 
@@ -187,9 +187,17 @@ export function useBarberBookings(
   )
 
   const cancel = useCallback(
-    (id: string) =>
-      mutate(id, cancelBookingRequest, (booking) =>
-        applyStatus(booking, 'Cancelled', scope)
+    (id: string, reason: string) =>
+      mutate(
+        id,
+        (bookingId) => cancelBookingRequest(bookingId, reason),
+        (booking) => {
+          const next = applyStatus(booking, 'Cancelled', scope)
+
+          return next === null
+            ? null
+            : { ...next, cancellationReason: reason.trim() || null }
+        }
       ),
     [mutate, scope]
   )

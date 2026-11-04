@@ -189,6 +189,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 booking.IdempotencyKey,
                 booking.CustomerNote,
                 booking.BarberNote,
+                booking.CancellationReason,
                 booking.CreatedAt))
             .ToListAsync(cancellationToken);
 
@@ -312,6 +313,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 row.booking.Price,
                 row.booking.CustomerNote,
                 row.booking.BarberNote,
+                row.booking.CancellationReason,
                 row.customer.FirstName,
                 row.customer.LastName,
                 row.customer.PhoneNumber,
@@ -518,6 +520,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.booking.Price,
             row.booking.CustomerNote,
             row.booking.BarberNote,
+            row.booking.CancellationReason,
             row.booking.CreatedAt,
             row.customer.Id,
             row.customer.FirstName,
@@ -550,6 +553,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.Price,
             row.CustomerNote,
             row.BarberNote,
+            row.CancellationReason,
             row.CreatedAt,
             new AdminBookingCustomerResponse(
                 row.CustomerId,
@@ -718,6 +722,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.Price,
             row.CustomerNote,
             row.BarberNote,
+            row.CancellationReason,
             new BarberBookingCustomerResponse(
                 BuildCustomerName(row.CustomerFirstName, row.CustomerLastName),
                 string.IsNullOrWhiteSpace(row.CustomerPhoneNumber)
@@ -761,6 +766,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         decimal Price,
         string? CustomerNote,
         string? BarberNote,
+        string? CancellationReason,
         string CustomerFirstName,
         string CustomerLastName,
         string? CustomerPhoneNumber,
@@ -785,6 +791,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         decimal Price,
         string? CustomerNote,
         string? BarberNote,
+        string? CancellationReason,
         DateTimeOffset CreatedAt,
         Guid CustomerId,
         string FirstName,

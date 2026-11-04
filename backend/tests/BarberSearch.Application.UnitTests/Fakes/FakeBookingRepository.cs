@@ -427,6 +427,7 @@ public sealed class FakeBookingRepository : IBookingRepository
             booking.IdempotencyKey,
             booking.CustomerNote,
             booking.BarberNote,
+            booking.CancellationReason,
             booking.CreatedAt);
 
     /// <summary>
@@ -442,6 +443,7 @@ public sealed class FakeBookingRepository : IBookingRepository
             booking.Price,
             booking.CustomerNote,
             booking.BarberNote,
+            booking.CancellationReason,
             new BarberBookingCustomerResponse($"Customer {booking.UserId:N}", null),
             new BarberBookingServiceResponse($"Service {booking.BarberServiceId:N}"),
             new BarberBookingSalonResponse("Fake salon", "Fake address", "Fake city", "Europe/Moscow"));

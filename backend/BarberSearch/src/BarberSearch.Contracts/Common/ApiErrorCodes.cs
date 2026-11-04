@@ -187,6 +187,16 @@ public static class ApiErrorCodes
         /// Заметка барбера длиннее <c>1000</c> символов; <c>400</c>.
         /// </summary>
         public const string BarberNoteTooLong = "booking.barberNote.tooLong";
+
+        /// <summary>
+        /// Барбер отменяет запись без причины; <c>400</c>.
+        /// </summary>
+        public const string CancelReasonRequired = "booking.cancel.reasonRequired";
+
+        /// <summary>
+        /// Причина отмены длиннее <c>500</c> символов; <c>400</c>.
+        /// </summary>
+        public const string CancelReasonTooLong = "booking.cancel.reasonTooLong";
     }
 
     /// <summary>

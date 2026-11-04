@@ -175,6 +175,21 @@ export function CabinetBookingRow({
         </p>
       )}
 
+      {booking.status === 'Cancelled' && (
+        <p className="break-words text-sm">
+          {booking.cancellationReason ? (
+            <>
+              <span className="text-muted-foreground">Причина отмены: </span>
+              {booking.cancellationReason}
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              Причина отмены не указана
+            </span>
+          )}
+        </p>
+      )}
+
       {(isPendingStatus || isConfirmed) && (
         <div className="flex flex-wrap items-center gap-2">
           {isPendingStatus && (
