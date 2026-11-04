@@ -984,6 +984,64 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.ScheduleOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BarberSalonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("barber_salon_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("end_time");
+
+                    b.Property<bool>("IsDayOff")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_day_off");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_schedule_overrides");
+
+                    b.HasIndex("BarberSalonId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ux_schedule_overrides_barber_salon_id_date");
+
+                    b.ToTable("schedule_overrides", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_overrides_time_range", "is_day_off OR end_time > start_time");
+                        });
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.WorkingSchedule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1259,6 +1317,18 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_users_barber_profiles_barber_profile_id");
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.ScheduleOverride", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.BarberSalons.BarberSalon", "BarberSalon")
+                        .WithMany("ScheduleExceptions")
+                        .HasForeignKey("BarberSalonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedule_overrides_barber_salons_barber_salon_id");
+
+                    b.Navigation("BarberSalon");
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.WorkingSchedule", b =>
                 {
                     b.HasOne("BarberSearch.Domain.BarberSalons.BarberSalon", "BarberSalon")
@@ -1286,6 +1356,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
             modelBuilder.Entity("BarberSearch.Domain.BarberSalons.BarberSalon", b =>
                 {
+                    b.Navigation("ScheduleExceptions");
+
                     b.Navigation("WorkingSchedules");
                 });
 

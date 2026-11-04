@@ -4,7 +4,7 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **187 domain + 395 application + 94 infrastructure + 127 integration (803 total)**,
+> Tests: **208 domain + 404 application + 94 infrastructure + 138 integration (844 total)**,
 > all green in both Debug and Release.
 
 ---
@@ -43,10 +43,10 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-6` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 184 xunit tests) |
-| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 212 xunit tests, fakes instead of a database) |
-| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 71 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 12 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 208 xunit tests) |
+| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 404 xunit tests, fakes instead of a database) |
+| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 94 xunit tests, no database) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 138 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-03 (после среза issue-42): domain **197**, application **399**,
-infrastructure **94**, integration **135** — всего **825**, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-04 (после среза issue-43): domain **208**, application **404**,
+infrastructure **94**, integration **138** — всего **844**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -462,7 +462,8 @@ BarberProfile (AR)   ← owns everything below
  ├─ * PortfolioPhoto                    (child; capped at Constants.MAX_PHOTOS_COUNT = 10)
  ├─ * TimeOff                           (child; StartAt/EndAt, intervals must not overlap)
  ├─ * BarberSalon ──► SalonId           (child; IsPrimary, at most one primary)
- │    └─ * WorkingSchedule              (child; DayOfWeek + TimeOnly, or IsDayOff)
+ │    ├─ * WorkingSchedule              (child; DayOfWeek + TimeOnly, or IsDayOff)
+ │    └─ * ScheduleOverride             (child; Date + custom hours, or IsDayOff)
  ├─ * BarberService ──► HairServiceId   (child; Price, DurationMinutes, IsActive)
  └─ * BarberSpecialization ─► SpecializationId
 
@@ -476,7 +477,7 @@ AR = `AggregateRoot`, which derives from `Entity`.
 **Cross-aggregate navigation properties: zero.** A child entity carries a navigation only to
 its own aggregate root (`PortfolioPhoto.BarberProfile`, `TimeOff.BarberProfile`,
 `FavoriteBarber.User`, `BarberSalon.BarberProfile`, `WorkingSchedule.BarberSalon`,
-`BarberService.BarberProfile`, `BarberSpecialization.BarberProfile`). Every other relation is a
+`ScheduleOverride.BarberSalon`, `BarberService.BarberProfile`, `BarberSpecialization.BarberProfile`). Every other relation is a
 bare `Guid` — `SalonId`, `HairServiceId`, `SpecializationId`, `UserId`, `BarberProfileId`,
 `BarberServiceId`, `BookingId`. Nothing outside an aggregate can mutate its children.
 
@@ -489,7 +490,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 |---|---|
 | `BarberProfile` | `AddPhoto(url, thumbnailUrl, description)`, `AddTimeOff(startAt, endAt, reason)`, `AddSalon(salonId, isPrimary)`, `AddService(hairServiceId, price, durationMinutes)`, `AddSpecialization(specializationId)` |
 | `User` | `AddFavorite(barberProfileId)` |
-| `BarberSalon` | `AddWorkingSchedule(dayOfWeek, start, end)`, `AddDayOff(dayOfWeek)` |
+| `BarberSalon` | `AddWorkingSchedule(dayOfWeek, start, end)`, `AddDayOff(dayOfWeek)`, `ReplaceWorkingSchedules(days)`, `SetScheduleException(date, isDayOff, start, end, reason)`, `RemoveScheduleException(date)` |
 
 ### 7.2 `Entity` / `AggregateRoot` (`Common/`)
 
@@ -524,7 +525,8 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `HairService` | non-empty name, known category, duration `1..1440` |
 | `Specialization` | non-empty name |
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
-| `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon |
+| `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
+| `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
 | `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 
@@ -647,22 +649,22 @@ The rules below were pushed to the application layer because the aggregate canno
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 16 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 197 domain + 399 application + 94 infrastructure + 135 integration (825 total); unit-проекты зелёные локально (2026-11-03), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 91 обработчик (72 command + 19 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 28 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 16 конфигураций, 9 репозиториев, `IUnitOfWork`, 16 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 14 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`, создание не пишется); `bookings.*` без FK сознательно |
-| Web | ✅ 21 контроллер / 99 endpoint (91 доменный + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Domain | ✅ 17 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 208 domain + 404 application + 94 infrastructure + 138 integration (844 total); unit-проекты зелёные локально (2026-11-04), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 95 обработчиков (75 command + 20 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 31 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 17 конфигураций, 9 репозиториев, `IUnitOfWork`, 17 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 15 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`, создание не пишется); `bookings.*` без FK сознательно |
+| Web | ✅ 22 контроллера / 103 endpoint (95 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (20):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (21):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
-`AddAdminBookingsStatusIndex`, `AddUserConsent`.
+`AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -709,6 +711,14 @@ without a constructor call.
   ("Failed to determine the https port for redirect" warning).
 - `Review` has no "one review per booking" invariant — that needs a unique index (or a check in
   the application layer).
+- Schedule writes (week and date overrides) check no active bookings: shortening a day or marking
+  a date off leaves an existing booking in force and only removes the slots. A conflict preview or
+  a `409` with the affected bookings is still open; the frontend says so explicitly.
+- `GET api/barbers?date=` still filters by `DayOfWeek` only and ignores `ScheduleOverride` /
+  `TimeOff`, so a barber on a date exception can still appear in search. The exact free time is
+  `/slots`, which does honour both.
+- One `WorkingSchedule` row per weekday is still the rule: a lunch break or a split shift cannot
+  be expressed. Multiple intervals would change the unique index and the slot loop.
 - Test coverage follows the reworked invariants; the aggregate boundaries are partly asserted by
   reflection (`BarberSalonTests.Schedule_IsNotExposedOnTheBarberProfile`). There is no test yet
   that walks every entity and asserts "private parameterless ctor + no public ctor".
@@ -1074,6 +1084,7 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `bookings` | `(status, start_at DESC, id)` — `ix_bookings_status_start_at_id` (issue-39) | The admin bookings list with a status filter: the filter column first, then the exact keyset order, so a rare status is an `Index Scan` without `Sort` instead of a bitmap scan plus a sort over the whole table |
 | `bookings` | `(user_id, start_at)` | The customer's list (`GET api/bookings`) in every scope and both cursor directions (issue-36): filter by `user_id`, then an ordered scan of `start_at` in either direction. No new migration was needed |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
+| `schedule_overrides` | `UNIQUE (barber_salon_id, date)` | One date exception per (barber, salon); the slot lookup reads it by this index |
 | `time_offs` | `(barber_profile_id, start_at)` | Vacation lookup during slot computation |
 | `barber_salons` | `EXCLUDE USING btree (barber_profile_id WITH =) WHERE (is_primary) DEFERRABLE INITIALLY DEFERRED` | Enforces the "one primary salon" invariant at the DB level too, without rejecting the transient state inside one `SaveChanges` (R-06) |
 | `barber_specializations` | `(specialization_id, barber_profile_id)` | Filter column first: search starts from the filter, not the barber |
@@ -1530,7 +1541,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**20 controllers, 99 endpoints: 91 domain + 8 auth** — one endpoint per Application handler, plus
+**21 controllers, 103 endpoints: 95 domain + 8 auth** — one endpoint per Application handler, plus
 `AuthController` (§17). The route always names the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1541,6 +1552,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
+| `BarberScheduleController` | `api/barber-profiles/{id}` | 4 (read, replace week, set/remove date exception) |
 | `SalonsController` | `api/salons` | 5 |
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
@@ -1566,7 +1578,7 @@ Conventions:
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
 - Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
   string (read endpoints), so the shape of an operation is visible in its signature. A body is used
-  only when the payload is more than a single identifier — 28 request records cover all write
+  only when the payload is more than a single identifier — 31 request records cover all write
   operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
@@ -1869,6 +1881,22 @@ Read endpoints (added 2026-10-19):
   `Salon.TimeZoneId` (historical data only — writes now validate it in `Salon.Create` /
   `UpdateLocation`) is `409` (`barberSlots.timeZone.missing` / `.unknown`) and an error-level log,
   never a `500`; R-01.
+- **Barber schedule (2026-11-04, issue-43).** Four endpoints on
+  `BarberScheduleController` (`[Authorize]`, owner or admin via `EnsureCanManage`):
+  `GET api/barber-profiles/{id}/schedule?from=&to=` returns the profile's salons with a **seven-day**
+  weekly template (missing rows are day offs), upcoming `ScheduleOverride` rows in the window
+  (default today … +90 days) and future `TimeOff` rows. The read works for an **unverified**
+  profile — that is the onboarding case; it never calls the public card, which hides unverified
+  profiles. `PUT api/barber-profiles/{id}/salons/{salonId}/working-schedules` replaces the whole
+  week atomically: exactly seven unique days, `end > start` for working days; existing rows are
+  updated by `DayOfWeek`, not deleted and recreated. `PUT`/`DELETE
+  api/barber-profiles/{id}/salons/{salonId}/schedule-exceptions/{date}` upserts or removes one
+  `ScheduleOverride` (a day off or custom hours; `barberSalon.removeScheduleException.notFound`
+  for a missing date). The slot context resolves the effective day as **override → weekly
+  template**: an override day off makes `isWorkingDay = false`, custom hours replace the weekly
+  bounds. `TimeOff` stays profile-wide and is subtracted after that. The schedule writes are
+  **not** in `audit_log`, do not check existing bookings, and `GET api/barbers?date=` still filters
+  only by weekday — those are open gaps from §9.13, not hidden behaviour.
 - **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`
   (issue-36 added the scopes). `scope=all|upcoming|past`: `all` is the default and keeps the old
   behaviour exactly (`start_at DESC, id ASC`, every status, `all` without the parameter) so the

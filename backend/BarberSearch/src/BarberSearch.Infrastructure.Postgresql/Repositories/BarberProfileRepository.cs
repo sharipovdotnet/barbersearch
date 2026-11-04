@@ -86,6 +86,20 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             id,
             cancellationToken);
 
+    public Task<Result<BarberProfile, Failure>> GetWithScheduleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => GetProfileAsync(
+            Context.BarberProfiles
+                .Include(x => x.Salons)
+                    .ThenInclude(salon => salon.WorkingSchedules)
+                .Include(x => x.Salons)
+                    .ThenInclude(salon => salon.ScheduleExceptions)
+                .Include(x => x.TimeOffs)
+                .AsSplitQuery(),
+            id,
+            cancellationToken);
+
     public async Task<Result<Guid, Failure>> GetOwnerIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -738,6 +752,19 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 salonId ?? barberProfileId));
         }
 
+        // Исключение на дату важнее недельного шаблона: выходной отменяет обычный день,
+        // а свои часы заменяют его границы.
+        var dateOverride = await Context.ScheduleOverrides
+            .AsNoTracking()
+            .Where(entry => entry.BarberSalonId == salonLink.Id && entry.Date == date)
+            .Select(entry => new
+            {
+                entry.IsDayOff,
+                entry.StartTime,
+                entry.EndTime
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
         var schedule = await Context.WorkingSchedules
             .AsNoTracking()
             .Where(entry => entry.BarberSalonId == salonLink.Id
@@ -749,6 +776,12 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 entry.EndTime
             })
             .FirstOrDefaultAsync(cancellationToken);
+
+        var isWorkingDay = dateOverride is not null
+            ? !dateOverride.IsDayOff
+            : schedule is not null;
+        var startTime = dateOverride?.StartTime ?? schedule?.StartTime ?? default;
+        var endTime = dateOverride?.EndTime ?? schedule?.EndTime ?? default;
 
         var durationMinutes = Constants.DEFAULT_SLOT_DURATION_MINUTES;
         Guid? barberServiceId = null;
@@ -797,9 +830,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             salonLink.SalonId,
             salonLink.TimeZoneId,
             date,
-            schedule is not null,
-            schedule?.StartTime ?? default,
-            schedule?.EndTime ?? default,
+            isWorkingDay,
+            startTime,
+            endTime,
             durationMinutes,
             barberServiceId,
             requestedHairServiceId,

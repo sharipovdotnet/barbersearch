@@ -154,6 +154,11 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         CancellationToken cancellationToken = default)
         => LoadProfile("timeOffs", id);
 
+    public Task<Result<BarberProfile, Failure>> GetWithScheduleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => LoadProfile("schedule", id);
+
     public Task<Result<Guid, Failure>> GetOwnerIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)

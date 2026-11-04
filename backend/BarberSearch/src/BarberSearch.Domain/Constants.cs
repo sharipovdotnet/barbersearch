@@ -59,6 +59,9 @@ public static class Constants
     // Расписание
     public const int DAYS_IN_WEEK = 7;
 
+    // Причина исключения на дату — короткая пометка, а не описание.
+    public const int MAX_SCHEDULE_REASON_LENGTH = 500;
+
     // Бронирование
     public const int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 

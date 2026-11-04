@@ -107,6 +107,27 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         return salon;
     }
 
+    public async Task<Result<IReadOnlyList<Salon>, Failure>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        var idList = ids.Distinct().ToArray();
+
+        if (idList.Length == 0)
+        {
+            return Result.Success<IReadOnlyList<Salon>, Failure>([]);
+        }
+
+        var salons = await Context.Salons
+            .AsNoTracking()
+            .Where(salon => idList.Contains(salon.Id))
+            .ToListAsync(cancellationToken);
+
+        return Result.Success<IReadOnlyList<Salon>, Failure>(salons);
+    }
+
     public async Task<Result<IReadOnlyList<Salon>, Failure>> GetByCityAsync(
         string city,
         int page,

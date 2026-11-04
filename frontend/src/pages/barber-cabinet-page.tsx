@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
 import { SignInGate } from '@/components/account/account-gates'
+import { BarberCabinetNav } from '@/components/barber/barber-cabinet-nav'
 import { CabinetBookingList } from '@/components/barber/cabinet-booking-list'
 import type { RowHandle } from '@/components/barber/cabinet-booking-row'
 import {
@@ -225,6 +226,7 @@ function BarberBookingsScreen() {
   return (
     <div className="space-y-5">
       <BarberCabinetHeading />
+      <BarberCabinetNav active="bookings" />
 
       {announcement && (
         <div

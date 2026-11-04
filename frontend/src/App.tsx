@@ -11,7 +11,10 @@ import {
   isAccountSecurityPath,
 } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
-import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
+import {
+  isBarberCabinetPath,
+  isBarberSchedulePath,
+} from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
 import { isPrivacyPath } from '@/lib/legal'
 import { isRegisterPath } from '@/lib/register-path'
@@ -61,6 +64,12 @@ const BarberCabinetPage = lazy(() =>
   })),
 )
 
+const BarberSchedulePage = lazy(() =>
+  import('@/pages/barber-schedule-page').then((module) => ({
+    default: module.BarberSchedulePage,
+  })),
+)
+
 const RegisterPage = lazy(() =>
   import('@/pages/register-page').then((module) => ({
     default: module.RegisterPage,
@@ -94,6 +103,7 @@ function App() {
   const isAccountProfile = isAccountProfilePath(pathname)
   const isAccountSecurity = isAccountSecurityPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
+  const isBarberSchedule = isBarberSchedulePath(pathname)
   const pageKey = isRegister
     ? 'register'
     : isPrivacy
@@ -106,9 +116,11 @@ function App() {
             ? 'account-profile'
             : isAccountSecurity
               ? 'account-security'
-              : isBarberCabinet
-                ? 'barber-cabinet'
-                : pathname === '/account'
+              : isBarberSchedule
+                ? 'barber-schedule'
+                : isBarberCabinet
+                  ? 'barber-cabinet'
+                  : pathname === '/account'
                   ? 'account'
                   : barberId !== null
                     ? `barber:${barberId}`
@@ -153,6 +165,8 @@ function App() {
               <AccountProfilePage />
             ) : isAccountSecurity ? (
               <AccountSecurityPage />
+            ) : isBarberSchedule ? (
+              <BarberSchedulePage />
             ) : isBarberCabinet ? (
               <BarberCabinetPage />
             ) : pathname === '/account' ? (
