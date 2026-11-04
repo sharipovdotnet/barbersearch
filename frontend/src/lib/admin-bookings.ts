@@ -87,6 +87,8 @@ export type AdminBooking = {
   customerNote: string | null
   /** Заметка барбера: админ её только читает. */
   barberNote: string | null
+  /** Причина отмены, оставленная барбером: админ её только читает. */
+  cancellationReason: string | null
   createdAt: string
   customer: AdminBookingCustomer
   barber: AdminBookingBarber

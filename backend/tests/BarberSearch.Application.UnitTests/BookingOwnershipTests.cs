@@ -169,11 +169,86 @@ public class BookingOwnershipTests
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id, "  Барбер заболел  "),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Equal("Барбер заболел", booking.CancellationReason);
+    }
+
+    [Fact]
+    public async Task Cancel_ByBarberWithoutReason_ReturnsValidationAndKeepsPending()
+    {
+        var barberId = Guid.CreateVersion7();
+        var profile = CreateProfile(barberId);
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = new CancelBookingHandler(
+            bookings,
+            profiles,
+            new FakeCurrentUser(barberId),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.cancel.reasonRequired", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+        Assert.Null(booking.CancellationReason);
+        Assert.Equal(0, bookings.UpdateCalls);
+    }
+
+    [Fact]
+    public async Task Cancel_ByBarberWithBlankReason_ReturnsValidationAndKeepsPending()
+    {
+        var barberId = Guid.CreateVersion7();
+        var profile = CreateProfile(barberId);
+        var booking = CreateBooking(Guid.CreateVersion7(), profile.Id);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = new CancelBookingHandler(
+            bookings,
+            profiles,
+            new FakeCurrentUser(barberId),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id, "   "),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.cancel.reasonRequired", result.Error.Errors[0].Code);
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+    }
+
+    [Fact]
+    public async Task Cancel_ByAdminWithoutReason_Succeeds()
+    {
+        var booking = CreateBooking(Guid.CreateVersion7(), Guid.CreateVersion7());
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var handler = new CancelBookingHandler(
+            bookings,
+            new FakeBarberProfileRepository(),
+            new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
             new CancelBookingCommand(booking.Id),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Null(booking.CancellationReason);
     }
 
     [Fact]

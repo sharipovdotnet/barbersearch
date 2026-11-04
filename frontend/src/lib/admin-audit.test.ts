@@ -290,6 +290,7 @@ describe('подписи и константы контракта', () => {
       websiteUrl: 'Сайт',
       status: 'Статус',
       barberNote: 'Заметка барбера',
+      cancellationReason: 'Причина отмены',
       isActive: 'Активность',
     })
   })

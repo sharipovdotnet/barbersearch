@@ -28,6 +28,7 @@ export type BarberBooking = {
   price: number
   customerNote: string | null
   barberNote: string | null
+  cancellationReason: string | null
   customer: BarberBookingCustomer
   service: { name: string }
   salon: { name: string; address: string; city: string; timeZoneId: string }
@@ -79,10 +80,16 @@ export async function markBookingNoShow(id: string): Promise<void> {
   })
 }
 
-/** `Pending|Confirmed → Cancelled`; отмена освобождает слот. */
-export async function cancelBooking(id: string): Promise<void> {
+/**
+ * `Pending|Confirmed → Cancelled`; отмена освобождает слот.
+ *
+ * Барбер обязан указать причину: сервер отвечает `400 booking.cancel.reasonRequired`
+ * без неё. Пробелы по краям срезаются здесь и на сервере одинаково.
+ */
+export async function cancelBooking(id: string, reason: string): Promise<void> {
   await mutateWithCsrf<void>(`/bookings/${encodeURIComponent(id)}/cancellation`, {
     method: 'POST',
+    body: JSON.stringify({ reason: reason.trim() }),
   })
 }
 

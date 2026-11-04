@@ -561,10 +561,12 @@ FROM generate_series(1, 21) AS n;
 --       Вместе с 12 завершёнными из 5.4 они дают ровно 21 строку истории — тоже две
 --       страницы (20 + одна). Статус не Completed намеренно: завершённый визит
 --       предлагал бы отзыв, а эти строки нужны только пагинатору и порядку.
+--       Нечётные строки — отмены барбера с причиной: account-bookings.spec.ts
+--       проверяет, что клиент видит её в истории. Чётные — неявки без причины.
 INSERT INTO bookings
     (id, user_id, barber_profile_id, barber_service_id, salon_id,
      start_at, end_at, price, status, idempotency_key, customer_note, barber_note,
-     created_at, updated_at)
+     cancellation_reason, created_at, updated_at)
 SELECT
     md5('e2e-customer-history:' || n)::uuid,
     '9e000000-0000-4000-8000-000000000003'::uuid,
@@ -578,6 +580,7 @@ SELECT
     'e2e-customer-history-' || n,
     NULL,
     NULL,
+    CASE WHEN n % 2 = 0 THEN NULL ELSE 'Барбер заболел' END,
     now(),
     now()
 FROM generate_series(1, 9) AS n;

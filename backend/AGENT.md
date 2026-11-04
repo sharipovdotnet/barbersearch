@@ -4,7 +4,7 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **208 domain + 404 application + 94 infrastructure + 138 integration (844 total)**,
+> Tests: **213 domain + 407 application + 94 infrastructure + 139 integration (853 total)**,
 > all green in both Debug and Release.
 
 ---
@@ -389,8 +389,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-04 (после среза issue-43): domain **208**, application **404**,
-infrastructure **94**, integration **138** — всего **844**, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-04 (после среза issue-44): domain **213**, application **407**,
+infrastructure **94**, integration **139** — всего **853**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -644,27 +644,28 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-03; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-04; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 17 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 208 domain + 404 application + 94 infrastructure + 138 integration (844 total); unit-проекты зелёные локально (2026-11-04), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 213 domain + 407 application + 94 infrastructure + 139 integration (853 total); unit-проекты зелёные локально (2026-11-04), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 95 обработчиков (75 command + 20 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 31 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 17 конфигураций, 9 репозиториев, `IUnitOfWork`, 17 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 15 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`, создание не пишется); `bookings.*` без FK сознательно |
+| Contracts | ✅ 32 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 17 конфигураций, 9 репозиториев, `IUnitOfWork`, 17 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 15 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется); `bookings.*` без FK сознательно |
 | Web | ✅ 22 контроллера / 103 endpoint (95 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (21):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (22):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
-`AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`.
+`AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
+`AddBookingCancellationReason`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -1479,8 +1480,8 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   привязка профиля, грейд/верификация/рейтинг; `review` — публикация, рейтинг и текст; `salon` —
   имя (только в `values` создания: переименования салона в API нет), адрес, город, пояс,
   координаты, контакты и `isActive`; `hair_service` — имя, описание, категория, длительность и
-  `isActive`; `specialization` — имя, описание и `isActive`; `booking` — **только** `Status` и
-  `BarberNote`
+  `isActive`; `specialization` — имя, описание и `isActive`; `booking` — **только** `Status`,
+  `BarberNote` и `CancellationReason`
   (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`), потому что других изменяемых
   полей у брони сегодня нет. **Создание брони не аудируется сознательно**
   (`AuditsCreation: false`): бронь уже хранит клиента, время и цену, а строка на каждую бронь
@@ -1578,7 +1579,7 @@ Conventions:
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
 - Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
   string (read endpoints), so the shape of an operation is visible in its signature. A body is used
-  only when the payload is more than a single identifier — 31 request records cover all write
+  only when the payload is more than a single identifier — 32 request records cover all write
   operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
@@ -1802,7 +1803,7 @@ Read endpoints (added 2026-10-19):
   `barber_profiles` (display name), `barber_services → hair_services` (service name) and `salons`
   (name, address, city, `time_zone_id`); a historical row with a dangling link drops out, the same
   documented behaviour as `GET api/barber/bookings`, because a card without context is useless.
-  The DTO carries the price snapshot, both notes and `createdAt`, plus the customer's first/last
+  The DTO carries the price snapshot, both notes, `cancellationReason` and `createdAt`, plus the customer's first/last
   name, **email** and phone, the barber, the service and the salon with `timeZoneId`. Email and
   phone are PII and exist **only** in this admin contract: `BookingResponse` is unchanged, and so
   are `GetPageAsync`/`GetBarberPageAsync` and the two customer/barber list contracts — `GET
@@ -1811,8 +1812,8 @@ Read endpoints (added 2026-10-19):
   `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
   and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation,
   reschedule, price/note edit, delete or refund anywhere in the API. **Admin cancellation and
-  no-show are written to `audit_log`** since issue-41: the `Booking` allowlist records `Status`
-  and `BarberNote` changes as `booking.updated`, with the acting administrator as the actor, so
+  no-show are written to `audit_log`** since issue-41: the `Booking` allowlist records `Status`,
+  `BarberNote` and `CancellationReason` changes as `booking.updated`, with the acting administrator as the actor, so
   the journal shows them under `entityType=booking`. Creating a booking is deliberately **not**
   audited (`AuditsCreation: false`) — the row already holds the customer, the time and the price,
   and a line per booking would grow the journal without new information. Retention and export
@@ -1897,6 +1898,18 @@ Read endpoints (added 2026-10-19):
   bounds. `TimeOff` stays profile-wide and is subtracted after that. The schedule writes are
   **not** in `audit_log`, do not check existing bookings, and `GET api/barbers?date=` still filters
   only by weekday — those are open gaps from §9.13, not hidden behaviour.
+- **Cancellation reason (2026-11-04, issue-44).** `POST api/bookings/{id}/cancellation` now takes
+  an optional `{ reason }` body (`[FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]`), so the
+  customer and admin calls without a body keep working. `CancelBookingCommand` carries
+  `CancellationReason`; `Booking` stores it in `cancellation_reason`
+  (`varchar(500)`, `ck_bookings_cancellation_reason`: `NULL` or 1..500 characters, migration
+  `AddBookingCancellationReason`). The domain trims the value, stores a blank one as `null` and
+  answers `400 booking.cancel.reasonTooLong` above 500. The Application handler distinguishes the
+  caller: the customer owner and an administrator may cancel without a reason, while the owner
+  barber gets `400 booking.cancel.reasonRequired` for a missing/blank one before any write. The
+  field is returned as `cancellationReason` by `GET api/bookings`, `GET api/barber/bookings` and the
+  admin booking contracts; it is in the `Booking` audit allowlist, so a barber cancellation writes
+  `booking.updated` with both `status` and `cancellationReason`.
 - **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`
   (issue-36 added the scopes). `scope=all|upcoming|past`: `all` is the default and keeps the old
   behaviour exactly (`start_at DESC, id ASC`, every status, `all` without the parameter) so the
@@ -1923,7 +1936,8 @@ Read endpoints (added 2026-10-19):
   the page and `null` on the last page. `pageSize` defaults to 20 and is capped at 100; an unknown
   scope is `400 booking.getBarberBookings.scope`, an out-of-range page size `400
   booking.getBarberBookings.pageSize`, a broken cursor `400 booking.cursor.invalid`. The response
-  is `PagedResponse<BarberBookingResponse>`: id, status, start/end, price, both notes, customer
+  is `PagedResponse<BarberBookingResponse>`: id, status, start/end, price, both notes and
+  `cancellationReason`, customer
   display name (first + last, trimmed, double spaces collapsed) and phone when filled, service name
   and salon name/address/city/`timeZoneId`. Email, `userId`, `barberProfileId`, `idempotencyKey`
   and `createdAt` are deliberately absent. One `AsNoTracking` join over
@@ -2348,7 +2362,7 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 | `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
 | `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
 | Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
-| `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент или барбер | — (admin обходит) |
+| `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент, барбер или admin (барбер обязан передать причину) | — (admin обходит) |
 | `Review` | клиент по своей завершённой брони | автор; удаление — только автор, без admin-обхода | `Publish`/`Hide` |
 | `User` | `register` публично / admin | сам | роль, активация, верификация |
 

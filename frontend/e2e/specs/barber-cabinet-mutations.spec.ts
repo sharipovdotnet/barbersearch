@@ -43,6 +43,16 @@ test.describe('кабинет барбера: пустая страница по
       await row.getByRole('button', { name: 'Отменить' }).click()
 
       await expect(cabinet.actionDialog).toBeVisible()
+      await cabinet.actionDialog
+        .getByRole('button', { name: 'Отменить запись' })
+        .click()
+      await expect(
+        cabinet.actionDialog.getByText('Укажите причину отмены.')
+      ).toBeVisible()
+
+      await cabinet.actionDialog
+        .getByLabel('Причина отмены')
+        .fill('Барбер заболел')
       await cabinet.actionDialog.getByRole('button', { name: 'Отменить запись' }).click()
       await expect(cabinet.actionDialog).toBeHidden()
 

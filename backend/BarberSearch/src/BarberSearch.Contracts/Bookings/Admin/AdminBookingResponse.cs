@@ -33,6 +33,7 @@ namespace BarberSearch.Contracts.Bookings.Admin;
 /// <param name="Price">Цена, зафиксированная в брони при создании.</param>
 /// <param name="CustomerNote">Заметка клиента при создании брони; <c>null</c> — заметки нет.</param>
 /// <param name="BarberNote">Заметка барбера; администратор её только читает.</param>
+/// <param name="CancellationReason">Причина отмены, оставленная барбером; только чтение.</param>
 /// <param name="CreatedAt">Когда бронь создана, в UTC.</param>
 /// <param name="Customer">Клиент визита: имя, email и телефон.</param>
 /// <param name="Barber">Барбер визита: профиль и отображаемое имя.</param>
@@ -46,6 +47,7 @@ public record AdminBookingResponse(
     decimal Price,
     string? CustomerNote,
     string? BarberNote,
+    string? CancellationReason,
     DateTimeOffset CreatedAt,
     AdminBookingCustomerResponse Customer,
     AdminBookingBarberResponse Barber,

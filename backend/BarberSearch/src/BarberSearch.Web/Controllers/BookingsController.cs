@@ -7,11 +7,13 @@ using BarberSearch.Application.Bookings.CreateBooking;
 using BarberSearch.Application.Bookings.GetBookings;
 using BarberSearch.Application.Bookings.MarkBookingNoShow;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
+using BarberSearch.Contracts.Bookings.CancelBooking;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace BarberSearch.Web.Controllers;
 
@@ -86,14 +88,21 @@ public class BookingsController : ApiController
         => ToActionResult(await handler.Handle(new CompleteBookingCommand(bookingId), cancellationToken));
 
     /// <summary>
-    /// Отменяет бронь.
+    /// Отменяет бронь. Барбер обязан передать причину; клиент и администратор — нет.
     /// </summary>
+    /// <remarks>
+    /// Тело необязательно, чтобы существующие вызовы без него продолжали работать:
+    /// причина нужна только ветке барбера, и её отсутствие обрабатывает Application.
+    /// </remarks>
     [HttpPost("{bookingId:guid}/cancellation")]
     public async Task<ActionResult> Cancel(
         Guid bookingId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CancelBookingRequest? request,
         [FromServices] ICommandHandler<CancelBookingCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(new CancelBookingCommand(bookingId), cancellationToken));
+        => ToActionResult(await handler.Handle(
+            new CancelBookingCommand(bookingId, request?.Reason),
+            cancellationToken));
 
     /// <summary>
     /// Помечает бронь как неявку. Слишком ранняя неявка — 400: правило Application.

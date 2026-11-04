@@ -236,7 +236,9 @@ export function BookingDetail({
           </ContextItem>
         </dl>
 
-        {(booking.customerNote || booking.barberNote) && (
+        {(booking.customerNote ||
+          booking.barberNote ||
+          booking.cancellationReason) && (
           <section
             aria-labelledby="booking-notes-title"
             className="space-y-3 border-t pt-4"
@@ -250,6 +252,12 @@ export function BookingDetail({
             )}
             {booking.barberNote && (
               <Note label="Барбер" text={booking.barberNote} />
+            )}
+            {booking.cancellationReason && (
+              <Note
+                label="Причина отмены"
+                text={booking.cancellationReason}
+              />
             )}
           </section>
         )}

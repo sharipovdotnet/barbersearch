@@ -36,6 +36,8 @@ export type Booking = {
   idempotencyKey: string
   customerNote: string | null
   barberNote: string | null
+  /** Причина отмены барбера; у отмены клиентом и у старых записей — `null`. */
+  cancellationReason: string | null
   createdAt: string
 }
 

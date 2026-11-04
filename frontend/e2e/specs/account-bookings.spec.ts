@@ -62,6 +62,9 @@ test.describe('мои записи: предстоящие и история', (
     await expect(account.tab('История')).toHaveAttribute('aria-selected', 'true')
     await expect(account.rows).toHaveCount(pageSize.account)
     await account.historyPager.expectRange('1–20')
+    await expect(account.rows.first()).toContainText(
+      'Причина отмены: Барбер заболел'
+    )
 
     await account.historyPager.clickNext()
     const bounds = await account.historyPager.expectRangeFrom(21)

@@ -19,6 +19,11 @@ public class Booking : AggregateRoot
     /// </remarks>
     private const string BARBER_NOTE_TOO_LONG_CODE = "booking.barberNote.tooLong";
 
+    /// <summary>
+    /// Публичный код ошибки «причина отмены длиннее предела»; <c>400</c>.
+    /// </summary>
+    private const string CANCELLATION_REASON_TOO_LONG_CODE = "booking.cancel.reasonTooLong";
+
     public Guid UserId { get; private set; }
     public Guid BarberProfileId { get; private set; }
     public Guid BarberServiceId { get; private set; }
@@ -44,6 +49,12 @@ public class Booking : AggregateRoot
 
     public string? CustomerNote { get; private set; }
     public string? BarberNote { get; private set; }
+
+    /// <summary>
+    /// Причина отмены, оставленная барбером. Клиент видит её в истории посещений;
+    /// отмена самим клиентом причины не требует.
+    /// </summary>
+    public string? CancellationReason { get; private set; }
 
     private Booking()
     {
@@ -172,13 +183,31 @@ public class Booking : AggregateRoot
     /// <summary>
     /// Отмена. Недоступна для уже завершённой и уже отменённой брони.
     /// </summary>
-    public UnitResult<Failure> Cancel()
+    /// <param name="cancellationReason">
+    /// Причина отмены, если её указал барбер. Пробелы по краям срезаются, пустая строка
+    /// сохраняется как <c>null</c>. Обязательность причины для барбера проверяет Application:
+    /// отмена клиентом причины не требует.
+    /// </param>
+    public UnitResult<Failure> Cancel(string? cancellationReason = null)
     {
         if (Status is BookingStatus.Completed or BookingStatus.Cancelled)
         {
             return InvalidStatus("booking.cancel.invalidStatus", BookingStatus.Cancelled);
         }
 
+        var normalizedReason = string.IsNullOrWhiteSpace(cancellationReason)
+            ? null
+            : cancellationReason.Trim();
+
+        if (normalizedReason is { Length: > Constants.MAX_CANCELLATION_REASON_LENGTH })
+        {
+            return DomainErrors.Fail(Error.Validation(
+                CANCELLATION_REASON_TOO_LONG_CODE,
+                $"Cancellation reason cannot be longer than {Constants.MAX_CANCELLATION_REASON_LENGTH} characters.",
+                nameof(cancellationReason)));
+        }
+
+        CancellationReason = normalizedReason;
         Status = BookingStatus.Cancelled;
         MarkUpdated();
 

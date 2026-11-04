@@ -87,6 +87,11 @@ One Customer's reservation of one Barber Service at one Salon for one time slot.
 is Pending → Confirmed → Completed | Cancelled | No-Show.
 _Avoid_: Appointment, order, reservation
 
+**Cancellation Reason**:
+The short explanation a Barber must give when cancelling a Booking. It is stored on the Booking,
+shown to the Customer in the visit history, and is not the Barber's private note.
+_Avoid_: Comment, excuse, barber note
+
 **No-Show**:
 A confirmed Booking where the Customer never arrived.
 _Avoid_: Missed appointment

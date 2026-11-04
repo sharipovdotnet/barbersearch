@@ -192,10 +192,11 @@ function BarberBookingsScreen() {
 
   async function handleActionConfirm(
     kind: BarberActionKind,
-    id: string
+    id: string,
+    reason?: string
   ): Promise<void> {
     if (kind === 'cancel') {
-      await bookings.cancel(id)
+      await bookings.cancel(id, reason ?? '')
       return
     }
 

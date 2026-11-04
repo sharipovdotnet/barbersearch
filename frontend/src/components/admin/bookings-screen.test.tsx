@@ -25,6 +25,7 @@ const BOOKING: AdminBooking = {
   price: 30,
   customerNote: null,
   barberNote: null,
+  cancellationReason: null,
   createdAt: '2026-09-11T12:00:00+00:00',
   customer: {
     id: '9e000000-0000-4000-8000-000000000009',

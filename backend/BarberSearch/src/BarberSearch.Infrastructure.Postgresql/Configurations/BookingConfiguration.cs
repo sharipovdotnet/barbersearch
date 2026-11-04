@@ -31,6 +31,10 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
                 "ck_bookings_idempotency_key",
                 FormattableString.Invariant(
                     $"char_length(idempotency_key) BETWEEN 1 AND {Constants.MAX_IDEMPOTENCY_KEY_LENGTH}"));
+            table.HasCheckConstraint(
+                "ck_bookings_cancellation_reason",
+                FormattableString.Invariant(
+                    $"cancellation_reason IS NULL OR char_length(cancellation_reason) BETWEEN 1 AND {Constants.MAX_CANCELLATION_REASON_LENGTH}"));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_bookings");
@@ -55,6 +59,8 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key").IsRequired();
         builder.Property(x => x.CustomerNote).HasColumnName("customer_note");
         builder.Property(x => x.BarberNote).HasColumnName("barber_note");
+        builder.Property(x => x.CancellationReason).HasColumnName("cancellation_reason")
+            .HasMaxLength(Constants.MAX_CANCELLATION_REASON_LENGTH);
 
         // Ключ идемпотентности защищает от повторной брони при обрыве сети у клиента.
         // Область уникальности — пара (пользователь, ключ): разные клиенты могут

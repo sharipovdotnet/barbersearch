@@ -298,6 +298,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("barber_service_id");
 
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_reason");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -365,6 +370,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.ToTable("bookings", null, t =>
                         {
+                            t.HasCheckConstraint("ck_bookings_cancellation_reason", "cancellation_reason IS NULL OR char_length(cancellation_reason) BETWEEN 1 AND 500");
+
                             t.HasCheckConstraint("ck_bookings_idempotency_key", "char_length(idempotency_key) BETWEEN 1 AND 128");
 
                             t.HasCheckConstraint("ck_bookings_period", "end_at > start_at");
