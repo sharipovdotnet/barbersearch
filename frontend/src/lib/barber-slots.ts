@@ -42,6 +42,11 @@ export type BarberSlotsParams = {
   date: string
   hairServiceId: string | null
   salonId: string
+  /**
+   * `true` — слоты собственного профиля (`GET api/barber/slots`): кабинет работает
+   * и до публикации, поэтому сервер не требует активного и подтверждённого профиля.
+   */
+  own?: boolean
 }
 
 const SALON_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -106,8 +111,12 @@ export async function fetchBarberSlots(
     query.set('salonId', params.salonId)
   }
 
+  const path = params.own
+    ? `/barber/slots?${query.toString()}`
+    : `/barbers/${params.barberProfileId}/slots?${query.toString()}`
+
   return apiRequest<BarberSlots>(
-    `/barbers/${params.barberProfileId}/slots?${query.toString()}`,
+    path,
     signal ? { signal } : {},
     { validate: isBarberSlots }
   )

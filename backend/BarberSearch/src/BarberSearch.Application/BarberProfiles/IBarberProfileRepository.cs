@@ -2,6 +2,7 @@ using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.Admin;
+using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
@@ -208,6 +209,21 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Услуги и салоны собственного профиля для формы ручной записи клиента.
+    /// </summary>
+    /// <remarks>
+    /// Публичная карточка <see cref="GetCardByIdAsync"/> отдаёт только активный и
+    /// подтверждённый профиль. Кабинету нужны те же коллекции у профиля любого статуса:
+    /// барбер может записать клиента до публикации. Фильтрация активных услуг и салонов
+    /// остаётся той же; отсутствие профиля — <c>Error.NotFound</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор собственного профиля из claim'а.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberBookingOptionsResponse, Failure>> GetBookingOptionsAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Данные для расчёта слотов: выбранный активный салон, его таймзона, расписание,
     /// длительность услуги и отпуска.
     /// </summary>
@@ -229,6 +245,27 @@ public interface IBarberProfileRepository
     /// <param name="date">Локальная дата салона.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? hairServiceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Данные для слотов собственного профиля барбера — без проверки публичной видимости.
+    /// </summary>
+    /// <remarks>
+    /// Публичное чтение слотов отдаёт только активный и подтверждённый профиль. Кабинет
+    /// позволяет записать клиента и до публикации, поэтому здесь проверка
+    /// <c>IsActive &amp;&amp; IsVerified</c> пропускается: профиль уже подтверждён claim'ом
+    /// сессии. Активность салона и услуги по-прежнему обязательна.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор собственного профиля из claim'а.</param>
+    /// <param name="salonId">Салон или <c>null</c> для основного.</param>
+    /// <param name="hairServiceId">Услуга справочника или <c>null</c> для шага 30 минут.</param>
+    /// <param name="date">Локальная дата салона.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberSlotContext, Failure>> GetOwnSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
         Guid? hairServiceId,

@@ -2,8 +2,11 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
+using BarberSearch.Application.Users;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -47,6 +50,16 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// пишет warning и возвращает <c>409 booking.add.lockTimeout</c>, а не <c>500</c> (R-18).
 /// </para>
 /// <para>
+/// Барбер может записать клиента сам: <see cref="CreateBookingCommand.CustomerId"/>
+/// задаёт клиента, а <see cref="CreateBookingCommand.ConfirmImmediately"/> сразу переводит
+/// бронь в <c>Confirmed</c>. Такой вызов разрешён только владельцу профиля из
+/// <see cref="CreateBookingCommand.Request"/> — профиль обязан совпадать с claim'ом
+/// <c>barber_profile_id</c>; клиент должен существовать, быть активным и иметь роль
+/// <c>Customer</c>, иначе <c>404 booking.create.customerNotFound</c>. Клиентский путь
+/// (<c>CustomerId = null</c>) по-прежнему берёт пользователя из токена и создаёт
+/// <c>Pending</c>, поэтому передать чужого клиента через публичный контракт нельзя.
+/// </para>
+/// <para>
 /// Временное окно проверяется здесь, а не в домене: сравнение с «сейчас» — забота
 /// Application (AGENT.md §7.6), а домен знает только верхнюю границу длительности.
 /// <c>StartAt</c> обязан попасть в <c>[now − допуск; now + горизонт]</c>: клиент не может
@@ -61,6 +74,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
     private readonly IBookingRepository _repository;
     private readonly IBarberProfileRepository _profiles;
     private readonly ISalonRepository _salons;
+    private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _timeProvider;
@@ -70,6 +84,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         IBookingRepository repository,
         IBarberProfileRepository profiles,
         ISalonRepository salons,
+        IUserRepository users,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         TimeProvider timeProvider,
@@ -78,6 +93,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         _repository = repository;
         _profiles = profiles;
         _salons = salons;
+        _users = users;
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _timeProvider = timeProvider;
@@ -102,7 +118,29 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             return userIdResult.Error;
         }
 
-        var userId = userIdResult.Value;
+        var actorId = userIdResult.Value;
+
+        // Барбер записывает клиента сам: клиент приходит в команде, а профиль — из claim'а.
+        // Публичный путь (CustomerId = null) по-прежнему работает только со своим id,
+        // поэтому через POST api/bookings чужого клиента передать нельзя.
+        Guid customerId;
+
+        if (command.CustomerId is { } requestedCustomerId)
+        {
+            if (!_currentUser.TryGetBarberProfileId(out var actorProfileId)
+                || actorProfileId != request.BarberProfileId)
+            {
+                return new Failure(Error.Forbidden(
+                    ApiErrorCodes.Auth.Forbidden,
+                    "A barber can create a booking only for their own profile."));
+            }
+
+            customerId = requestedCustomerId;
+        }
+        else
+        {
+            customerId = actorId;
+        }
 
         // Ключ сравнивается и сохраняется в одном виде: иначе " key " и "key" были бы
         // разными ключами для unique-индекса, хотя клиент считает их одним запросом.
@@ -116,11 +154,24 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         }
 
         var existing = await _repository.GetByIdempotencyKeyAsync(
-            userId,
+            customerId,
             idempotencyKey,
             cancellationToken);
         if (existing.IsSuccess)
         {
+            // Ключ уникален в рамках клиента: барбер не должен получить по нему бронь
+            // другого мастера, даже если клиент случайно использовал тот же ключ.
+            if (command.CustomerId is not null
+                && existing.Value.BarberProfileId != request.BarberProfileId)
+            {
+                return new Failure(Error.Conflict(
+                    "booking.create.idempotencyKeyConflict",
+                    $"""
+                     A booking with idempotency key '{idempotencyKey}' already exists
+                     for this customer at another barber.
+                     """));
+            }
+
             _logger.LogInformation(
                 "Booking {BookingId} has been returned by idempotency key.",
                 existing.Value.Id);
@@ -132,6 +183,23 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         if (!missing)
         {
             return existing.Error;
+        }
+
+        // Клиента проверяем после ключа идемпотентности: повтор уже созданной брони
+        // обязан вернуть её id, даже если клиента успели заблокировать.
+        if (command.CustomerId is not null)
+        {
+            var customer = await _users.GetByIdAsync(customerId, cancellationToken);
+
+            if (customer.IsFailure
+                || customer.Value.Role != UserRole.Customer
+                || !customer.Value.IsActive)
+            {
+                return new Failure(Error.NotFound(
+                    ApiErrorCodes.Booking.CreateCustomerNotFound,
+                    $"Customer '{customerId}' was not found or cannot be booked.",
+                    customerId));
+            }
         }
 
         // Окно допустимости — после ключа идемпотентности: повтор запроса по ключу обязан
@@ -239,7 +307,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             }
 
             var booking = Booking.Create(
-                userId,
+                customerId,
                 request.BarberProfileId,
                 request.BarberServiceId,
                 request.SalonId,
@@ -251,6 +319,17 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             if (booking.IsFailure)
             {
                 return booking.Error;
+            }
+
+            // Запись, которую барбер вносит сам, не ждёт подтверждения: он и есть
+            // подтверждающая сторона. Клиентский путь остаётся Pending.
+            if (command.ConfirmImmediately)
+            {
+                var confirmed = booking.Value.Confirm();
+                if (confirmed.IsFailure)
+                {
+                    return confirmed.Error;
+                }
             }
 
             var added = await _repository.AddAsync(booking.Value, ct);
@@ -277,7 +356,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             && addFailure.Errors.Any(error => error.Type == ErrorType.CONFLICT))
         {
             var raced = await _repository.GetByIdempotencyKeyAsync(
-                userId,
+                customerId,
                 idempotencyKey,
                 cancellationToken);
             if (raced.IsSuccess)

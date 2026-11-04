@@ -46,6 +46,21 @@ export class CabinetPage {
     return this.page.getByRole('alertdialog')
   }
 
+  /** Кнопка «Записать клиента» над списком ближайших записей. */
+  get bookClientButton(): Locator {
+    return this.page.getByRole('button', { name: 'Записать клиента' })
+  }
+
+  /** Диалог ручной записи: клиент, услуга, салон, дата, слоты и комментарий. */
+  get bookingDialog(): Locator {
+    return this.page.getByRole('dialog')
+  }
+
+  async openBookingDialog(): Promise<void> {
+    await this.bookClientButton.click()
+    await expect(this.bookingDialog).toBeVisible()
+  }
+
   async openTab(name: 'Ближайшие' | 'История'): Promise<void> {
     await this.tab(name).click()
   }

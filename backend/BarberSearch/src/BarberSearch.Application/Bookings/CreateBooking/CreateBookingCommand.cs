@@ -13,5 +13,15 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// обязателен: при обрыве сети мобильный клиент повторяет запрос, и повтор с тем же ключом
 /// должен вернуть уже созданную бронь, а не создать вторую
 /// (см. <c>IBookingRepository.GetByIdempotencyKeyAsync</c> и AGENT.md §15.5).
+/// <para>
+/// <see cref="CustomerId"/> заполняет только сценарий «барбер записывает клиента»: при
+/// <c>null</c> клиент берётся из токена (публичная запись клиента), при значении —
+/// заказчик проверяется как активный пользователь с ролью <c>Customer</c>.
+/// <see cref="ConfirmImmediately"/> переводит бронь в <c>Confirmed</c> сразу: барбер
+/// не подтверждает запись, которую внёс сам.
+/// </para>
 /// </remarks>
-public record CreateBookingCommand(CreateBookingRequest Request) : ICommand;
+public record CreateBookingCommand(
+    CreateBookingRequest Request,
+    Guid? CustomerId = null,
+    bool ConfirmImmediately = false) : ICommand;

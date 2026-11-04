@@ -5,6 +5,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
@@ -693,27 +694,63 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Replace("_", "\\_", StringComparison.Ordinal)
         + "%";
 
-    public async Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
+    public Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,
         Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default)
-    {
-        var isVisible = await Context.BarberProfiles
-            .AsNoTracking()
-            .AnyAsync(
-                profile => profile.Id == barberProfileId
-                           && profile.IsActive
-                           && profile.IsVerified,
-                cancellationToken);
+        => GetSlotContextCoreAsync(
+            barberProfileId,
+            salonId,
+            hairServiceId,
+            date,
+            requireVisibleProfile: true,
+            cancellationToken);
 
-        if (!isVisible)
+    public Task<Result<BarberSlotContext, Failure>> GetOwnSlotContextAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? hairServiceId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+        => GetSlotContextCoreAsync(
+            barberProfileId,
+            salonId,
+            hairServiceId,
+            date,
+            requireVisibleProfile: false,
+            cancellationToken);
+
+    /// <summary>
+    /// Общий расчёт контекста слотов; <paramref name="requireVisibleProfile"/> отделяет
+    /// публичное чтение от кабинета барбера.
+    /// </summary>
+    private async Task<Result<BarberSlotContext, Failure>> GetSlotContextCoreAsync(
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? hairServiceId,
+        DateOnly date,
+        bool requireVisibleProfile,
+        CancellationToken cancellationToken)
+    {
+        if (requireVisibleProfile)
         {
-            return NotFound(
-                ApiErrorCodes.BarberProfile.SlotsNotFound,
-                nameof(BarberProfile),
-                barberProfileId);
+            var isVisible = await Context.BarberProfiles
+                .AsNoTracking()
+                .AnyAsync(
+                    profile => profile.Id == barberProfileId
+                               && profile.IsActive
+                               && profile.IsVerified,
+                    cancellationToken);
+
+            if (!isVisible)
+            {
+                return NotFound(
+                    ApiErrorCodes.BarberProfile.SlotsNotFound,
+                    nameof(BarberProfile),
+                    barberProfileId);
+            }
         }
 
         // Салон выбирается среди активных: неактивный салон не должен давать слоты.
@@ -898,20 +935,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
         }
 
-        var salonIds = profile.Salons.Select(salon => salon.SalonId).Distinct().ToArray();
-        var salonsById = await Context.Salons
-            .AsNoTracking()
-            .Where(salon => salonIds.Contains(salon.Id) && salon.IsActive)
-            .ToDictionaryAsync(salon => salon.Id, cancellationToken);
-
-        var hairServiceIds = profile.Services
-            .Select(service => service.HairServiceId)
-            .Distinct()
-            .ToArray();
-        var hairServicesById = await Context.HairServices
-            .AsNoTracking()
-            .Where(service => hairServiceIds.Contains(service.Id))
-            .ToDictionaryAsync(service => service.Id, cancellationToken);
+        var services = await LoadServicesAsync(profile, cancellationToken);
+        var salons = await LoadSalonsAsync(profile, cancellationToken);
 
         var specializationIds = profile.BarberSpecializations
             .Select(link => link.SpecializationId)
@@ -921,53 +946,6 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .AsNoTracking()
             .Where(specialization => specializationIds.Contains(specialization.Id))
             .ToDictionaryAsync(specialization => specialization.Id, cancellationToken);
-
-        var services = profile.Services
-            .Where(service => service.IsActive && hairServicesById.ContainsKey(service.HairServiceId))
-            .OrderBy(service => hairServicesById[service.HairServiceId].Name)
-            .Select(service =>
-            {
-                var hairService = hairServicesById[service.HairServiceId];
-
-                return new BarberProfileServiceResponse(
-                    service.Id,
-                    service.HairServiceId,
-                    hairService.Name,
-                    hairService.Category,
-                    hairService.DefaultDurationMinutes,
-                    service.Price,
-                    service.DurationMinutes,
-                    service.IsActive);
-            })
-            .ToList();
-
-        var salons = profile.Salons
-            .Where(link => salonsById.ContainsKey(link.SalonId))
-            .OrderByDescending(link => link.IsPrimary)
-            .ThenBy(link => salonsById[link.SalonId].Name)
-            .Select(link =>
-            {
-                var salon = salonsById[link.SalonId];
-
-                return new BarberProfileSalonResponse(
-                    link.Id,
-                    link.SalonId,
-                    salon.Name,
-                    salon.Address,
-                    salon.City,
-                    salon.Country,
-                    salon.TimeZoneId,
-                    link.IsPrimary,
-                    [.. link.WorkingSchedules
-                        .OrderBy(schedule => schedule.DayOfWeek)
-                        .Select(schedule => new WorkingScheduleResponse(
-                            schedule.Id,
-                            schedule.DayOfWeek,
-                            schedule.StartTime,
-                            schedule.EndTime,
-                            schedule.IsDayOff))]);
-            })
-            .ToList();
 
         var specializations = profile.BarberSpecializations
             .Where(link => specializationsById.ContainsKey(link.SpecializationId))
@@ -1005,6 +983,127 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             services,
             salons,
             specializations);
+    }
+
+    /// <summary>
+    /// Услуги и салоны собственного профиля для формы ручной записи.
+    /// </summary>
+    /// <remarks>
+    /// В отличие от публичной карточки, профиль не обязан быть активным и подтверждённым:
+    /// кабинет доступен и до публикации. Активность самих услуг и салонов сохраняется —
+    /// записать клиента на скрытую услугу нельзя. Недельное расписание салона нужно форме,
+    /// чтобы показать выходной день; слоты считает отдельный эндпоинт.
+    /// </remarks>
+    public async Task<Result<BarberBookingOptionsResponse, Failure>> GetBookingOptionsAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = await Context.BarberProfiles
+            .AsNoTracking()
+            .Include(x => x.Salons)
+                .ThenInclude(salon => salon.WorkingSchedules)
+            .Include(x => x.Services)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == barberProfileId, cancellationToken);
+
+        if (profile is null)
+        {
+            return NotFound(
+                ApiErrorCodes.BarberProfile.NotFound,
+                nameof(BarberProfile),
+                barberProfileId);
+        }
+
+        var services = await LoadServicesAsync(profile, cancellationToken);
+        var salons = await LoadSalonsAsync(profile, cancellationToken);
+
+        return new BarberBookingOptionsResponse(services, salons);
+    }
+
+    /// <summary>
+    /// Активные услуги профиля с названием и категорией из справочника.
+    /// </summary>
+    /// <remarks>
+    /// Читает только <c>hair_services</c>: услуги и их цены уже загружены в агрегат.
+    /// Услуга, у которой справочник удалён, не показывается — как и в публичной карточке.
+    /// </remarks>
+    private async Task<List<BarberProfileServiceResponse>> LoadServicesAsync(
+        BarberProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var hairServiceIds = profile.Services
+            .Select(service => service.HairServiceId)
+            .Distinct()
+            .ToArray();
+        var hairServicesById = await Context.HairServices
+            .AsNoTracking()
+            .Where(service => hairServiceIds.Contains(service.Id))
+            .ToDictionaryAsync(service => service.Id, cancellationToken);
+
+        return profile.Services
+            .Where(service => service.IsActive && hairServicesById.ContainsKey(service.HairServiceId))
+            .OrderBy(service => hairServicesById[service.HairServiceId].Name)
+            .Select(service =>
+            {
+                var hairService = hairServicesById[service.HairServiceId];
+
+                return new BarberProfileServiceResponse(
+                    service.Id,
+                    service.HairServiceId,
+                    hairService.Name,
+                    hairService.Category,
+                    hairService.DefaultDurationMinutes,
+                    service.Price,
+                    service.DurationMinutes,
+                    service.IsActive);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Активные салоны профиля с недельным расписанием пары (барбер, салон).
+    /// </summary>
+    /// <remarks>
+    /// Порядок — основной салон, затем по названию: форма открывается на основном салоне.
+    /// Неактивный салон скрыт, даже если связь с барбером осталась.
+    /// </remarks>
+    private async Task<List<BarberProfileSalonResponse>> LoadSalonsAsync(
+        BarberProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var salonIds = profile.Salons.Select(salon => salon.SalonId).Distinct().ToArray();
+        var salonsById = await Context.Salons
+            .AsNoTracking()
+            .Where(salon => salonIds.Contains(salon.Id) && salon.IsActive)
+            .ToDictionaryAsync(salon => salon.Id, cancellationToken);
+
+        return profile.Salons
+            .Where(link => salonsById.ContainsKey(link.SalonId))
+            .OrderByDescending(link => link.IsPrimary)
+            .ThenBy(link => salonsById[link.SalonId].Name)
+            .Select(link =>
+            {
+                var salon = salonsById[link.SalonId];
+
+                return new BarberProfileSalonResponse(
+                    link.Id,
+                    link.SalonId,
+                    salon.Name,
+                    salon.Address,
+                    salon.City,
+                    salon.Country,
+                    salon.TimeZoneId,
+                    link.IsPrimary,
+                    [.. link.WorkingSchedules
+                        .OrderBy(schedule => schedule.DayOfWeek)
+                        .Select(schedule => new WorkingScheduleResponse(
+                            schedule.Id,
+                            schedule.DayOfWeek,
+                            schedule.StartTime,
+                            schedule.EndTime,
+                            schedule.IsDayOff))]);
+            })
+            .ToList();
     }
 
     public async Task<Result<bool, Failure>> IsOwnedByAsync(

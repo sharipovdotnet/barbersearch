@@ -21,8 +21,14 @@ namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
 /// <c>Constants.DEFAULT_SLOT_DURATION_MINUTES</c> (30 минут).
 /// </param>
 /// <param name="SalonId">Идентификатор салона; <c>null</c> — основной салон.</param>
+/// <param name="RequireVisibleProfile">
+/// <c>true</c> — публичное чтение: профиль обязан быть активным и подтверждённым.
+/// <c>false</c> — кабинет барбера: профиль приходит из claim'а и может быть ещё не
+/// опубликован. Активность салона и услуги проверяется в обоих случаях.
+/// </param>
 public record GetBarberSlotsQuery(
     Guid BarberProfileId,
     DateOnly? Date,
     Guid? HairServiceId,
-    Guid? SalonId) : IQuery<BarberSlotsResponse>;
+    Guid? SalonId,
+    bool RequireVisibleProfile = true) : IQuery<BarberSlotsResponse>;

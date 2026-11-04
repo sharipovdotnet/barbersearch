@@ -37,7 +37,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
-| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note |
+| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered client |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -295,6 +295,18 @@ changes the status to «Подтверждена»; complete, no-show and cancel
 reason; the note dialog (1000 characters, an empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOKEN`; the list
 read does not. Double clicks are ignored while a request is in flight.
 
+«Записать клиента» opens a dialog on the same screen. The barber types at least three
+characters of the client's email or phone (`GET /api/barber/clients`, debounced 300 ms,
+only active `Customer` rows, ten results), picks a service and salon from his own profile
+(`GET /api/barber/booking-options` — works before the profile is verified), chooses a
+salon-local date and a free slot (`GET /api/barber/slots`), optionally adds a comment and
+submits. `POST /api/barber/bookings` always creates a `Confirmed` booking with an
+idempotency key and CSRF; the client sees it in their cabinet immediately. The dialog cannot
+be closed while the request is pending; a `409` overlap, `400` start window or `404`
+service/salon clears the chosen slot and reloads the grid, `404
+booking.create.customerNotFound` asks to repeat the search. On success the list reloads (or
+switches from «История» to «Ближайшие») and the screen announces «Клиент записан: …».
+
 States: skeleton while the first page loads (StrictMode may send a second, aborted request),
 first-page error with «Повторить», a next-page error that keeps the rows and turns «Дальше» into
 «Повторить», «Ближайших записей нет.» and «История пуста.». An action that empties the visible
@@ -311,13 +323,19 @@ The header shows «Мой кабинет» for every authenticated user, plus «
 and «Администрирование» for an admin. The work area is also linked from the account rail; `/barber`
 keeps its own role gates and `/account` no longer turns a barber away.
 
-- `src/pages/barber-cabinet-page.tsx` — gates, title, list composition and announcements.
+- `src/pages/barber-cabinet-page.tsx` — gates, title, list composition, announcements and the
+  «Записать клиента» trigger.
 - `src/components/barber/barber-cabinet-gates.tsx`, `cabinet-booking-list.tsx`,
-  `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`, `barber-booking-action-dialog.tsx`.
+  `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`, `barber-booking-action-dialog.tsx`,
+  `barber-booking-dialog.tsx` (manual booking) and `barber-slot-options.tsx` (shared slot
+  chips/radios).
 - `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, five local mutations,
-  `401`, click guard.
+  `401`, click guard; `use-barber-clients.ts` — debounced client search; and
+  `use-barber-booking-options.ts` — own services and salons.
 - `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
-  `src/lib/barber-cabinet-path.ts` — the `/barber` and `/barber/schedule` path helpers.
+  `barber-booking-create.ts`/`barber-booking-options.ts`/`barber-clients.ts` — the manual
+  booking transport; `src/lib/barber-cabinet-path.ts` — the `/barber` and `/barber/schedule`
+  path helpers.
 
 ## Barber schedule
 

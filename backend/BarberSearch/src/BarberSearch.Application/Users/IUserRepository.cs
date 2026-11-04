@@ -1,4 +1,5 @@
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
@@ -79,6 +80,25 @@ public interface IUserRepository
         UserRole? role,
         string? search,
         AdminUserCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Активные клиенты, подходящие под email или телефон, для ручной записи барбером.
+    /// </summary>
+    /// <remarks>
+    /// Ищутся только пользователи с ролью <c>Customer</c> и <c>IsActive = true</c>:
+    /// администратора или другого барбера записать нельзя. Поиск — подстрока без учёта
+    /// регистра, шаблонные символы экранируются. Результат ограничен
+    /// <paramref name="limit"/> и упорядочен по имени, поэтому форма не тянет весь
+    /// список аккаунтов. Email и телефон — персональные данные, и наружу они уходят
+    /// только через отдельный BarberOnly-эндпоинт.
+    /// </remarks>
+    /// <param name="search">Поисковая строка (email или телефон).</param>
+    /// <param name="limit">Максимальное число строк.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> SearchClientsAsync(
+        string search,
         int limit,
         CancellationToken cancellationToken = default);
 

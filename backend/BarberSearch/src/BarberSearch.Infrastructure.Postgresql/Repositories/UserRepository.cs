@@ -1,6 +1,7 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
@@ -162,6 +163,49 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         }
 
         var rows = await BuildAdminUsersQuery(Context, status, role, search, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Поиск активных клиентов по email или телефону для формы ручной записи.
+    /// </summary>
+    /// <remarks>
+    /// Условие по роли и активности стоит до поиска: барбер не должен находить
+    /// администратора или коллегу. Шаблон строится тем же экранированием, что и в
+    /// админском списке, поэтому «%» и «_» остаются литералами. Телефона может не быть —
+    /// тогда строка совпадает только по email.
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> SearchClientsAsync(
+        string search,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new List<BarberClientResponse>();
+        }
+
+        var pattern = BuildSearchPattern(search);
+
+        var rows = await Context.Users
+            .AsNoTracking()
+            .Where(user => user.Role == UserRole.Customer && user.IsActive)
+            .Where(user =>
+                EF.Functions.ILike(user.Email, pattern, "\\")
+                || (user.PhoneNumber != null
+                    && EF.Functions.ILike(user.PhoneNumber, pattern, "\\")))
+            .OrderBy(user => user.FirstName)
+            .ThenBy(user => user.LastName)
+            .ThenBy(user => user.Id)
+            .Take(limit)
+            .Select(user => new BarberClientResponse(
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.Email,
+                user.PhoneNumber))
             .ToListAsync(cancellationToken);
 
         return rows;

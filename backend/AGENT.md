@@ -1559,7 +1559,8 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
-| `BarberBookingsController` | `api/barber/bookings` | 1 (list of the barber's own bookings) |
+| `BarberBookingsController` | `api/barber/bookings` | 2 (list + manual client booking) |
+| `BarberBookingSetupController` | `api/barber` | 3 (client search, booking options, own slots) |
 | `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
@@ -1948,6 +1949,23 @@ Read endpoints (added 2026-10-19):
   note, stores a blank note as `null` and rejects more than
   `Constants.MAX_BARBER_NOTE_LENGTH` (1000) characters with `400 booking.barberNote.tooLong`;
   the rule lives in `Booking.AddBarberNote`.
+- **Manual client booking (2026-11-05).** The barber cabinet can create a booking for a
+  registered client. Three `BarberOnly` reads feed the dialog: `GET api/barber/clients?search=`
+  returns at most ten active `Customer` rows matched by email or phone substring (trimmed,
+  3–100 characters; `400 barberClient.search.tooShort`/`.tooLong`); `GET
+  api/barber/booking-options` returns the own profile's active services and salons in the
+  same nested shapes as the public card and does **not** require `IsVerified`; `GET
+  api/barber/slots?date=&hairServiceId=&salonId=` reuses `GetBarberSlotsQuery` with
+  `RequireVisibleProfile = false` — the profile comes from the claim, while active
+  salon/service, date overrides, time offs and occupied intervals still apply.
+  `POST api/barber/bookings` takes
+  `{ customerId, barberServiceId, salonId, startAt, endAt, idempotencyKey, customerNote }`,
+  takes the profile from the `barber_profile_id` claim (no profile in the body), validates the
+  customer as an existing active `Customer` (`404 booking.create.customerNotFound`), and
+  reuses the create pipeline: idempotency key scoped to the customer, start window, advisory
+  lock, service/salon/ownership and overlap checks. `Booking.Confirm()` runs before the insert,
+  so the row is **`Confirmed`**, not `Pending`; the response is `201 { id }`. The call is a
+  cookie mutation and needs `X-CSRF-TOKEN`. Booking creation is still deliberately not audited.
 - **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.

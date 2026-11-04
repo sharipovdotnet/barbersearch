@@ -34,6 +34,8 @@ import type {
 } from '@/lib/admin-users'
 import type { SessionUser } from '@/lib/auth'
 import type { BarberBooking } from '@/lib/barber-bookings'
+import type { BarberBookingOptions } from '@/lib/barber-booking-options'
+import type { BarberClient } from '@/lib/barber-clients'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { DayOfWeek, Language, PaymentMethod, ServiceCategory } from '@/lib/barber-profile-labels'
 import type {
@@ -308,6 +310,20 @@ export function isBarberBooking(value: unknown): value is BarberBooking {
 
 export const isBarberBookingPage = isPageOf(isBarberBooking)
 
+/** Строка подсказки клиента: телефон может быть не заполнен, email — нет. */
+export function isBarberClient(value: unknown): value is BarberClient {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.firstName) &&
+    isString(value.lastName) &&
+    isString(value.email) &&
+    isNullableString(value.phoneNumber)
+  )
+}
+
+export const isBarberClientList = isArrayOf(isBarberClient)
+
 export function isReview(value: unknown): value is Review {
   return (
     isRecord(value) &&
@@ -445,6 +461,22 @@ export function isBarberProfile(value: unknown): value is BarberProfile {
     isArrayOf(isProfileService)(value.services) &&
     isArrayOf(isProfileSalon)(value.salons) &&
     isArrayOf(isSpecialization)(value.specializations)
+  )
+}
+
+/**
+ * Данные формы ручной записи: активные услуги и салоны собственного профиля.
+ *
+ * Формы вложенных объектов те же, что у публичной карточки; лишние поля
+ * игнорируются, чтобы расширение контракта не ломало форму.
+ */
+export function isBarberBookingOptions(
+  value: unknown
+): value is BarberBookingOptions {
+  return (
+    isRecord(value) &&
+    isArrayOf(isProfileService)(value.services) &&
+    isArrayOf(isProfileSalon)(value.salons)
   )
 }
 

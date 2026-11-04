@@ -1,6 +1,7 @@
 using System.Reflection;
 using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
@@ -338,6 +339,40 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<int, Failure>>(
             _users.Values.Count(user => user.Role == UserRole.Admin && user.IsActive));
+
+    /// <summary>
+    /// Поиск клиентов в памяти с той же семантикой, что у PostgreSQL-репозитория:
+    /// только активные <c>Customer</c>, подстрока без учёта регистра по email и телефону,
+    /// порядок по имени и ограничение выдачи.
+    /// </summary>
+    public Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> SearchClientsAsync(
+        string search,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var needle = search.Trim();
+
+        var rows = _users.Values
+            .Where(user => user.Role == UserRole.Customer && user.IsActive)
+            .Where(user =>
+                user.Email.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || (user.PhoneNumber?.Contains(
+                        needle,
+                        StringComparison.OrdinalIgnoreCase) ?? false))
+            .OrderBy(user => user.FirstName)
+            .ThenBy(user => user.LastName)
+            .ThenBy(user => user.Id)
+            .Take(limit)
+            .Select(user => new BarberClientResponse(
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.Email,
+                user.PhoneNumber))
+            .ToList();
+
+        return Task.FromResult<Result<IReadOnlyList<BarberClientResponse>, Failure>>(rows);
+    }
 
     /// <summary>
     /// Блокировка администраторов в памяти не нужна: тесты выполняются последовательно,

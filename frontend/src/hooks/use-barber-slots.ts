@@ -31,6 +31,8 @@ type SlotsParams = {
   date: string
   hairServiceId: string | null
   salonId: string
+  /** Кабинет барбера: `GET api/barber/slots` без проверки публичной видимости. */
+  own?: boolean
 }
 
 type SlotsState = {
@@ -43,6 +45,7 @@ type SlotsState = {
 
 function slotsKey(params: SlotsParams): string {
   return [
+    params.own === true ? 'own' : 'public',
     params.barberProfileId,
     params.date,
     params.hairServiceId ?? '',
@@ -72,7 +75,7 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
   // Смена параметров ещё до эффекта: иначе на долю кадра видны слоты прошлой даты.
   const current = state.key === key ? state : initialState(key)
 
-  const { barberProfileId, date, hairServiceId, salonId } = params
+  const { barberProfileId, date, hairServiceId, salonId, own = false } = params
 
   useEffect(() => {
     // Пустую и битую дату не отправляем: сервер ответит framework-400 без errorCodes.
@@ -85,7 +88,7 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
     const controller = new AbortController()
 
     fetchBarberSlots(
-      { barberProfileId, date, hairServiceId, salonId },
+      { barberProfileId, date, hairServiceId, salonId, own },
       controller.signal
     )
       .then((slots) => {
@@ -130,7 +133,7 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
       versionRef.current += 1
       controller.abort()
     }
-  }, [barberProfileId, date, hairServiceId, salonId, key, attempt])
+  }, [barberProfileId, date, hairServiceId, salonId, own, key, attempt])
 
   // Попытка в том же поколении: дата, услуга и салон не меняются, скелетон — да.
   const reload = useCallback(() => {

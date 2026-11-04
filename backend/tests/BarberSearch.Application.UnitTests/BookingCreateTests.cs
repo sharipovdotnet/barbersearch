@@ -6,6 +6,7 @@ using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
@@ -613,17 +614,200 @@ public class BookingCreateTests
         Assert.Equal(0, context.Bookings.AddCalls);
     }
 
+    [Fact]
+    public async Task CreateByBarber_ForCustomer_CreatesConfirmedBookingForCustomer()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("client@example.com");
+        context.Users.Add(customer);
+        var actorId = Guid.CreateVersion7();
+        var handler = CreateHandler(context, actorId, context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "barber-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, customer.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(customer.Id, booking.UserId);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+        Assert.NotEqual(actorId, booking.UserId);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_ForForeignProfile_ReturnsForbiddenAndWritesNothing()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("client@example.com");
+        context.Users.Add(customer);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: Guid.CreateVersion7());
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "foreign-profile-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, customer.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Equal("auth.forbidden", result.Error.Errors[0].Code);
+        Assert.Empty(context.Bookings.Bookings);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_WithoutProfileClaim_ReturnsForbidden()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("client@example.com");
+        context.Users.Add(customer);
+        var handler = CreateHandler(context, userId: Guid.CreateVersion7());
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "no-profile-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, customer.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Empty(context.Bookings.Bookings);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_UnknownCustomer_ReturnsNotFound()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "unknown-customer-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                Guid.CreateVersion7(),
+                ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.NOT_FOUND, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.customerNotFound", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_InactiveCustomer_ReturnsNotFound()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("inactive@example.com");
+        Assert.True(customer.Deactivate().IsSuccess);
+        context.Users.Add(customer);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "inactive-customer-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, customer.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.create.customerNotFound", result.Error.Errors[0].Code);
+        Assert.Empty(context.Bookings.Bookings);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_ForAdmin_ReturnsNotFound()
+    {
+        var context = CreateContext();
+        var admin = User.Create(
+            "admin@example.com",
+            "hash",
+            "Admin",
+            "User",
+            UserRole.Admin).Value;
+        context.Users.Add(admin);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "admin-customer-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, admin.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.create.customerNotFound", result.Error.Errors[0].Code);
+        Assert.Empty(context.Bookings.Bookings);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_RepeatedKey_ReturnsSameBooking()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("repeat-client@example.com");
+        context.Users.Add(customer);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "barber-repeat-key");
+        var command = new CreateBookingCommand(
+            request,
+            customer.Id,
+            ConfirmImmediately: true);
+
+        var first = await handler.Handle(command, CancellationToken.None);
+        var second = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value, second.Value);
+        Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(1, context.Bookings.AddCalls);
+    }
+
+    private static User CreateCustomer(string email)
+        => User.Create(email, "hash", "Ivan", "Petrov").Value;
+
     private static CreateBookingHandler CreateHandler(
         TestContext context,
         Guid? userId = null,
+        Guid? barberProfileId = null,
         DateTimeOffset? now = null,
         FakeUnitOfWork? unitOfWork = null)
         => new(
             context.Bookings,
             context.Profiles,
             context.Salons,
+            context.Users,
             unitOfWork ?? new FakeUnitOfWork(),
-            new FakeCurrentUser(userId ?? context.UserId),
+            new FakeCurrentUser(
+                userId ?? context.UserId,
+                barberProfileId: barberProfileId),
             new FakeTimeProvider(now ?? Now),
             NullLogger<CreateBookingHandler>.Instance);
 
@@ -668,6 +852,7 @@ public class BookingCreateTests
 
         return new TestContext(
             Guid.CreateVersion7(),
+            new FakeUserRepository(),
             profiles,
             new FakeBookingRepository(),
             salons,
@@ -706,6 +891,7 @@ public class BookingCreateTests
 
     private sealed record TestContext(
         Guid UserId,
+        FakeUserRepository Users,
         FakeBarberProfileRepository Profiles,
         FakeBookingRepository Bookings,
         FakeSalonRepository Salons,

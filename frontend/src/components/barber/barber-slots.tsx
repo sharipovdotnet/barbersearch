@@ -1,11 +1,12 @@
-import { Check, TriangleAlert } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   BarberBooking,
   type BookingSlotSnapshot,
 } from '@/components/barber/barber-booking'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
+import { BarberSlotOptions } from '@/components/barber/barber-slot-options'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -23,7 +24,7 @@ import {
   type BarberSlot,
   type BarberSlots as BarberSlotsData,
 } from '@/lib/barber-slots'
-import { formatSalonDate, formatTime } from '@/lib/format'
+import { formatSalonDate } from '@/lib/format'
 
 const SELECT_CLASSES =
   'h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 md:text-sm'
@@ -277,7 +278,7 @@ function BarberSlotsSection({
                 {status === 'loading' && <SlotsSkeleton />}
 
                 {status === 'ready' && slots !== null && (
-                  <SlotsList
+                  <BarberSlotOptions
                     slots={slots}
                     selectable={isSelectable}
                     selectedStartAt={selection?.slot.startAt ?? null}
@@ -326,87 +327,6 @@ function BarberSlotsSection({
         </CardContent>
       </Card>
     </section>
-  )
-}
-
-function SlotsList({
-  slots,
-  selectable,
-  selectedStartAt,
-  onSelect,
-}: {
-  slots: BarberSlotsData
-  selectable: boolean
-  selectedStartAt: string | null
-  onSelect: (slot: BarberSlot) => void
-}) {
-  const groupId = useId().replace(/:/g, '')
-
-  if (!slots.isWorkingDay) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        В этот день барбер не работает.
-      </p>
-    )
-  }
-
-  if (slots.slots.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Свободного времени на этот день нет.
-      </p>
-    )
-  }
-
-  if (!selectable) {
-    return (
-      <ul className="flex flex-wrap gap-2">
-        {slots.slots.map((slot) => (
-          <li key={slot.startAt}>
-            <span className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-sm text-foreground tabular-nums">
-              <time dateTime={slot.startAt}>
-                {formatTime(slot.startAt, slots.timeZoneId)}
-              </time>
-            </span>
-          </li>
-        ))}
-      </ul>
-    )
-  }
-
-  return (
-    <fieldset>
-      <legend className="sr-only">Время приёма</legend>
-      <div className="flex flex-wrap gap-2">
-        {slots.slots.map((slot, index) => {
-          const inputId = `${groupId}-slot-${index}`
-          const isSelected = selectedStartAt === slot.startAt
-
-          return (
-            <div key={slot.startAt} className="relative">
-              <input
-                id={inputId}
-                type="radio"
-                name="barber-slot"
-                value={slot.startAt}
-                checked={isSelected}
-                className="peer sr-only"
-                onChange={() => onSelect(slot)}
-              />
-              <label
-                htmlFor={inputId}
-                className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent bg-muted px-3 text-sm text-foreground tabular-nums transition-colors select-none hover:bg-muted/70 peer-checked:border-primary peer-checked:bg-primary peer-checked:font-medium peer-checked:text-primary-foreground peer-checked:hover:bg-primary peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 sm:h-9"
-              >
-                <time dateTime={slot.startAt}>
-                  {formatTime(slot.startAt, slots.timeZoneId)}
-                </time>
-                {isSelected && <Check className="size-3.5" aria-hidden />}
-              </label>
-            </div>
-          )
-        })}
-      </div>
-    </fieldset>
   )
 }
 

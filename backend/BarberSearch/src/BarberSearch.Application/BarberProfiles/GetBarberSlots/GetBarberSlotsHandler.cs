@@ -74,12 +74,19 @@ public sealed class GetBarberSlotsHandler
         var salonId = query.SalonId == Guid.Empty ? null : query.SalonId;
         var hairServiceId = query.HairServiceId == Guid.Empty ? null : query.HairServiceId;
 
-        var contextResult = await _profileRepository.GetSlotContextAsync(
-            query.BarberProfileId,
-            salonId,
-            hairServiceId,
-            date,
-            cancellationToken);
+        var contextResult = query.RequireVisibleProfile
+            ? await _profileRepository.GetSlotContextAsync(
+                query.BarberProfileId,
+                salonId,
+                hairServiceId,
+                date,
+                cancellationToken)
+            : await _profileRepository.GetOwnSlotContextAsync(
+                query.BarberProfileId,
+                salonId,
+                hairServiceId,
+                date,
+                cancellationToken);
         if (contextResult.IsFailure)
         {
             return contextResult.Error;

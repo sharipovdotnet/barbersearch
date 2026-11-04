@@ -151,6 +151,17 @@ test.describe('axe: кабинет барбера', () => {
 
     await expectNoBlockingViolations(page, '/barber', test.info())
   })
+
+  test('/barber: диалог записи клиента', async ({ page }) => {
+    const cabinet = new CabinetPage(page)
+
+    await cabinet.goto()
+    await cabinet.waitForUpcoming()
+    await cabinet.openBookingDialog()
+    await expect(cabinet.bookingDialog).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/barber (запись клиента)', test.info())
+  })
 })
 
 test.describe('axe: админка', () => {

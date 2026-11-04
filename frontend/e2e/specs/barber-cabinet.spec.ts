@@ -103,4 +103,33 @@ test.describe('кабинет барбера', () => {
     await expect(cabinet.rows, 'история не пропала').toHaveCount(20)
     await expect(cabinet.pager.retry).toBeEnabled()
   })
+
+  test('диалог «Записать клиента»: находит клиента и показывает услуги', async ({
+    page,
+  }) => {
+    const cabinet = new CabinetPage(page)
+
+    await cabinet.goto()
+    await cabinet.waitForUpcoming()
+    await cabinet.openBookingDialog()
+
+    const dialog = cabinet.bookingDialog
+
+    await expect(
+      dialog.getByRole('heading', { name: 'Записать клиента' })
+    ).toBeVisible()
+
+    await dialog
+      .getByRole('searchbox', { name: 'Клиент' })
+      .fill('e2e-customer@barbersearch.test')
+
+    await expect(
+      dialog.getByRole('button', {
+        name: /e2e-customer@barbersearch\.test/,
+      })
+    ).toBeVisible()
+    await expect(
+      dialog.getByRole('combobox', { name: 'Услуга' })
+    ).toBeVisible()
+  })
 })
