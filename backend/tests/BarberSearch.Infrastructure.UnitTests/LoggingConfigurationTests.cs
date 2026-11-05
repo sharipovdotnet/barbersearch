@@ -40,6 +40,25 @@ public class LoggingConfigurationTests
         Assert.Equal("Information", GetLevel(levels, "Default"));
     }
 
+    [Fact]
+    public void ProductionLogging_WritesToFileWithBoundedRolling()
+    {
+        var file = ReadFileSection("appsettings.json");
+
+        // Запись в файл включена в поставляемых настройках: журнал должен оставаться после
+        // перезапуска контейнера. Ротация ограничена по числу файлов и размеру, иначе
+        // всплеск ошибок занял бы диск целиком.
+        Assert.True(file.GetProperty("Enabled").GetBoolean());
+
+        var path = file.GetProperty("Path").GetString();
+
+        Assert.NotNull(path);
+        Assert.EndsWith(".log", path, StringComparison.Ordinal);
+        Assert.Equal("Day", file.GetProperty("RollingInterval").GetString());
+        Assert.True(file.GetProperty("RetainedFileCountLimit").GetInt32() > 0);
+        Assert.True(file.GetProperty("FileSizeLimitMegabytes").GetInt32() > 0);
+    }
+
     /// <summary>
     /// Читает секцию <c>Logging:LogLevel</c> из файла настроек рядом с тестовой сборкой.
     /// </summary>
@@ -53,6 +72,22 @@ public class LoggingConfigurationTests
         return document.RootElement
             .GetProperty("Logging")
             .GetProperty("LogLevel")
+            .Clone();
+    }
+
+    /// <summary>
+    /// Читает секцию <c>Logging:File</c> из файла настроек рядом с тестовой сборкой.
+    /// </summary>
+    /// <param name="fileName">Имя файла настроек, скопированного в выходной каталог.</param>
+    /// <returns>Элемент <c>File</c>, не зависящий от жизни <see cref="JsonDocument"/>.</returns>
+    private static JsonElement ReadFileSection(string fileName)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, fileName);
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+
+        return document.RootElement
+            .GetProperty("Logging")
+            .GetProperty("File")
             .Clone();
     }
 
