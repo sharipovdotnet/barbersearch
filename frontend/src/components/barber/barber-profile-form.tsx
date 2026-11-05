@@ -1,0 +1,560 @@
+import { useState, type FormEvent } from 'react'
+import { Loader2 } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { ApiError } from '@/lib/api'
+import {
+  BARBER_PROFILE_BIO_MAX,
+  BARBER_PROFILE_DISPLAY_NAME_MAX,
+  BARBER_PROFILE_EXPERIENCE_MAX,
+  BARBER_PROFILE_EXPERIENCE_MIN,
+  BARBER_PROFILE_LATE_POLICY_MAX,
+  createBarberProfile,
+  describeBarberProfileCreateError,
+  type BarberProfileDraft,
+  type BarberProfileField,
+} from '@/lib/barber-profile-create'
+import {
+  LANGUAGE_LABELS,
+  LANGUAGE_ORDER,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_METHOD_ORDER,
+  type Language,
+  type PaymentMethod,
+} from '@/lib/barber-profile-labels'
+
+/**
+ * Форма профиля барбера.
+ *
+ * Компонент без побочных эффектов: он только собирает и проверяет значения и отдаёт
+ * готовый профиль наверх. Ни сессии, ни навигации здесь нет — после `201` claim
+ * `barber_profile_id` ещё старый, и продлением сессии занимается экран, который знает,
+ * куда вернуться. Такую же форму переиспользует редактирование профиля.
+ *
+ * Клиентские правила совпадают с доменными: имя 1..120, опыт 1..70, минимум один язык.
+ * `languages` пустым не отправляется, хотя сервер подставил бы `Ru`: человек должен
+ * понимать, что именно попадёт в карточку.
+ */
+
+type FormValues = {
+  displayName: string
+  yearsOfExperience: string
+  bio: string
+  languages: Language[]
+  paymentMethods: PaymentMethod[]
+  certificates: string
+  achievements: string
+  communicationFormat: string
+  goodies: string
+  latePolicy: string
+}
+
+type ProfileErrors = Partial<Record<BarberProfileField, string>>
+
+const INITIAL_VALUES: FormValues = {
+  displayName: '',
+  yearsOfExperience: '',
+  bio: '',
+  languages: [],
+  paymentMethods: [],
+  certificates: '',
+  achievements: '',
+  communicationFormat: '',
+  goodies: '',
+  latePolicy: '',
+}
+
+// Клиентские тексты совпадают с серверными кодами: одно правило — одна формулировка.
+const DISPLAY_NAME_REQUIRED_ERROR = 'Укажите, как вас представить.'
+const DISPLAY_NAME_TOO_LONG_ERROR = 'Не длиннее 120 символов.'
+const EXPERIENCE_REQUIRED_ERROR = 'Укажите опыт работы в годах.'
+const EXPERIENCE_RANGE_ERROR = 'Опыт — от 1 до 70 лет.'
+const LANGUAGES_REQUIRED_ERROR = 'Выберите хотя бы один язык.'
+
+const IDS = {
+  displayName: 'barber-profile-display-name',
+  displayNameError: 'barber-profile-display-name-error',
+  yearsOfExperience: 'barber-profile-experience',
+  yearsOfExperienceError: 'barber-profile-experience-error',
+  bio: 'barber-profile-bio',
+  languagesError: 'barber-profile-languages-error',
+  paymentMethodsError: 'barber-profile-payment-methods-error',
+  certificates: 'barber-profile-certificates',
+  achievements: 'barber-profile-achievements',
+  communicationFormat: 'barber-profile-communication',
+  goodies: 'barber-profile-goodies',
+  latePolicy: 'barber-profile-late-policy',
+} as const
+
+export type BarberProfileFormProps = {
+  /** Профиль создан сервером: экран продлевает сессию и уходит в кабинет. */
+  onCreated: (id: string) => void
+  /** `409`: профиль уже есть (например, вкладку открыли дважды) — это тоже успех. */
+  onAlreadyExists: () => void
+}
+
+/** `''` — не заполнено, иначе целое число из поля ввода. */
+function parseExperience(value: string): number | null {
+  const trimmed = value.trim()
+
+  if (!/^\d+$/.test(trimmed)) {
+    return null
+  }
+
+  const years = Number(trimmed)
+
+  return Number.isInteger(years) ? years : null
+}
+
+function validate(values: FormValues, years: number | null): ProfileErrors {
+  const errors: ProfileErrors = {}
+  const displayName = values.displayName.trim()
+
+  if (!displayName) {
+    errors.displayName = DISPLAY_NAME_REQUIRED_ERROR
+  } else if (displayName.length > BARBER_PROFILE_DISPLAY_NAME_MAX) {
+    errors.displayName = DISPLAY_NAME_TOO_LONG_ERROR
+  }
+
+  if (years === null) {
+    errors.yearsOfExperience = EXPERIENCE_REQUIRED_ERROR
+  } else if (
+    years < BARBER_PROFILE_EXPERIENCE_MIN ||
+    years > BARBER_PROFILE_EXPERIENCE_MAX
+  ) {
+    errors.yearsOfExperience = EXPERIENCE_RANGE_ERROR
+  }
+
+  if (values.languages.length === 0) {
+    errors.languages = LANGUAGES_REQUIRED_ERROR
+  }
+
+  return errors
+}
+
+/** «По одному пункту в строке»: обрезаем и выбрасываем пустые строки. */
+function toLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+function toNullable(value: string): string | null {
+  const trimmed = value.trim()
+
+  return trimmed === '' ? null : trimmed
+}
+
+function toDraft(values: FormValues, years: number): BarberProfileDraft {
+  return {
+    displayName: values.displayName.trim(),
+    yearsOfExperience: years,
+    bio: toNullable(values.bio),
+    languages: values.languages,
+    certificatesAndTraining: toLines(values.certificates),
+    achievements: toLines(values.achievements),
+    paymentMethods: values.paymentMethods,
+    communicationFormat: toLines(values.communicationFormat),
+    goodies: toLines(values.goodies),
+    latePolicy: toNullable(values.latePolicy),
+  }
+}
+
+function toggle<T>(list: readonly T[], value: T): T[] {
+  return list.includes(value)
+    ? list.filter((item) => item !== value)
+    : [...list, value]
+}
+
+export function BarberProfileForm({
+  onCreated,
+  onAlreadyExists,
+}: BarberProfileFormProps) {
+  const [values, setValues] = useState<FormValues>(INITIAL_VALUES)
+  const [errors, setErrors] = useState<ProfileErrors>({})
+  const [formError, setFormError] = useState<{
+    message: string
+    canRetry: boolean
+  } | null>(null)
+  const [isPending, setIsPending] = useState(false)
+
+  function setValue<K extends keyof FormValues>(
+    key: K,
+    value: FormValues[K]
+  ): void {
+    setValues((current) => ({ ...current, [key]: value }))
+    setFormError(null)
+
+    if (
+      key === 'displayName' ||
+      key === 'yearsOfExperience' ||
+      key === 'languages' ||
+      key === 'paymentMethods'
+    ) {
+      setErrors((current) => ({ ...current, [key]: undefined }))
+    }
+  }
+
+  async function submit(): Promise<void> {
+    // Двойной клик и Enter после ответа не должны отправить второй профиль.
+    if (isPending) {
+      return
+    }
+
+    const years = parseExperience(values.yearsOfExperience)
+    const nextErrors = validate(values, years)
+
+    setErrors(nextErrors)
+    setFormError(null)
+
+    if (Object.keys(nextErrors).length > 0 || years === null) {
+      return
+    }
+
+    setIsPending(true)
+
+    try {
+      const created = await createBarberProfile(toDraft(values, years))
+      onCreated(created.id)
+    } catch (error) {
+      // Профиль уже создан: это не ошибка, а гонка двух вкладок.
+      if (
+        error instanceof ApiError &&
+        error.hasCode('barberProfile.create.alreadyExists')
+      ) {
+        onAlreadyExists()
+        return
+      }
+
+      const failure = describeBarberProfileCreateError(error)
+      const field = failure.field
+
+      if (field) {
+        setErrors((current) => ({ ...current, [field]: failure.message }))
+      } else {
+        setFormError({
+          message: failure.message,
+          canRetry: failure.canRetry,
+        })
+      }
+
+      setIsPending(false)
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    await submit()
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-5"
+      noValidate
+      aria-busy={isPending}
+      onSubmit={(event) => {
+        void handleSubmit(event)
+      }}
+    >
+      <FieldGroup>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field data-invalid={Boolean(errors.displayName)}>
+            <FieldLabel htmlFor={IDS.displayName}>
+              Как вас представить
+            </FieldLabel>
+            <Input
+              id={IDS.displayName}
+              name="displayName"
+              type="text"
+              autoComplete="nickname"
+              maxLength={BARBER_PROFILE_DISPLAY_NAME_MAX}
+              value={values.displayName}
+              disabled={isPending}
+              aria-invalid={Boolean(errors.displayName)}
+              aria-describedby={
+                errors.displayName ? IDS.displayNameError : undefined
+              }
+              onChange={(event) => {
+                setValue('displayName', event.target.value)
+              }}
+            />
+            <FieldError id={IDS.displayNameError}>
+              {errors.displayName}
+            </FieldError>
+          </Field>
+
+          <Field data-invalid={Boolean(errors.yearsOfExperience)}>
+            <FieldLabel htmlFor={IDS.yearsOfExperience}>Опыт, лет</FieldLabel>
+            <Input
+              id={IDS.yearsOfExperience}
+              name="yearsOfExperience"
+              type="number"
+              inputMode="numeric"
+              min={BARBER_PROFILE_EXPERIENCE_MIN}
+              max={BARBER_PROFILE_EXPERIENCE_MAX}
+              value={values.yearsOfExperience}
+              disabled={isPending}
+              aria-invalid={Boolean(errors.yearsOfExperience)}
+              aria-describedby={
+                errors.yearsOfExperience
+                  ? IDS.yearsOfExperienceError
+                  : undefined
+              }
+              onChange={(event) => {
+                setValue('yearsOfExperience', event.target.value)
+              }}
+            />
+            <FieldError id={IDS.yearsOfExperienceError}>
+              {errors.yearsOfExperience}
+            </FieldError>
+          </Field>
+        </div>
+
+        <Field>
+          <FieldLabel htmlFor={IDS.bio}>О себе</FieldLabel>
+          <Textarea
+            id={IDS.bio}
+            name="bio"
+            rows={4}
+            maxLength={BARBER_PROFILE_BIO_MAX}
+            value={values.bio}
+            disabled={isPending}
+            onChange={(event) => {
+              setValue('bio', event.target.value)
+            }}
+          />
+          <FieldDescription>
+            Пара предложений о себе: опыт, подход к работе, фирменная деталь.
+          </FieldDescription>
+        </Field>
+
+        <FieldSet
+          aria-describedby={errors.languages ? IDS.languagesError : undefined}
+        >
+          <FieldLegend>Языки общения</FieldLegend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LANGUAGE_ORDER.map((language) => (
+              <Field key={language} orientation="horizontal">
+                <Checkbox
+                  id={`barber-profile-language-${language}`}
+                  checked={values.languages.includes(language)}
+                  disabled={isPending}
+                  aria-invalid={Boolean(errors.languages)}
+                  aria-describedby={
+                    errors.languages ? IDS.languagesError : undefined
+                  }
+                  onCheckedChange={() => {
+                    setValue(
+                      'languages',
+                      toggle(values.languages, language)
+                    )
+                  }}
+                />
+                <FieldLabel
+                  htmlFor={`barber-profile-language-${language}`}
+                  className="font-normal"
+                >
+                  {LANGUAGE_LABELS[language]}
+                </FieldLabel>
+              </Field>
+            ))}
+          </div>
+          <FieldDescription>
+            Клиент увидит языки в карточке. Выберите хотя бы один.
+          </FieldDescription>
+          <FieldError id={IDS.languagesError}>{errors.languages}</FieldError>
+        </FieldSet>
+
+        <FieldSet
+          aria-describedby={
+            errors.paymentMethods ? IDS.paymentMethodsError : undefined
+          }
+        >
+          <FieldLegend>Способы оплаты</FieldLegend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {PAYMENT_METHOD_ORDER.map((method) => (
+              <Field key={method} orientation="horizontal">
+                <Checkbox
+                  id={`barber-profile-payment-${method}`}
+                  checked={values.paymentMethods.includes(method)}
+                  disabled={isPending}
+                  aria-invalid={Boolean(errors.paymentMethods)}
+                  aria-describedby={
+                    errors.paymentMethods
+                      ? IDS.paymentMethodsError
+                      : undefined
+                  }
+                  onCheckedChange={() => {
+                    setValue(
+                      'paymentMethods',
+                      toggle(values.paymentMethods, method)
+                    )
+                  }}
+                />
+                <FieldLabel
+                  htmlFor={`barber-profile-payment-${method}`}
+                  className="font-normal"
+                >
+                  {PAYMENT_METHOD_LABELS[method]}
+                </FieldLabel>
+              </Field>
+            ))}
+          </div>
+          <FieldDescription>
+            Необязательно: можно оставить пустым и указать позже.
+          </FieldDescription>
+          <FieldError id={IDS.paymentMethodsError}>
+            {errors.paymentMethods}
+          </FieldError>
+        </FieldSet>
+
+        <ListField
+          id={IDS.certificates}
+          label="Сертификаты и обучение"
+          description="По одному пункту в строке: курсы, школы, дипломы."
+          value={values.certificates}
+          disabled={isPending}
+          onChange={(value) => {
+            setValue('certificates', value)
+          }}
+        />
+
+        <ListField
+          id={IDS.achievements}
+          label="Достижения"
+          description="По одному пункту в строке: конкурсы, стаж, публикации."
+          value={values.achievements}
+          disabled={isPending}
+          onChange={(value) => {
+            setValue('achievements', value)
+          }}
+        />
+
+        <ListField
+          id={IDS.communicationFormat}
+          label="Формат общения"
+          description="По одному пункту в строке: «Люблю поболтать», «Могу помолчать»."
+          value={values.communicationFormat}
+          disabled={isPending}
+          onChange={(value) => {
+            setValue('communicationFormat', value)
+          }}
+        />
+
+        <ListField
+          id={IDS.goodies}
+          label="Комфорт в кресле"
+          description="По одному пункту в строке: кофе, музыка, журналы."
+          value={values.goodies}
+          disabled={isPending}
+          onChange={(value) => {
+            setValue('goodies', value)
+          }}
+        />
+
+        <Field>
+          <FieldLabel htmlFor={IDS.latePolicy}>Опоздания</FieldLabel>
+          <Textarea
+            id={IDS.latePolicy}
+            name="latePolicy"
+            rows={2}
+            maxLength={BARBER_PROFILE_LATE_POLICY_MAX}
+            value={values.latePolicy}
+            disabled={isPending}
+            onChange={(event) => {
+              setValue('latePolicy', event.target.value)
+            }}
+          />
+          <FieldDescription>
+            Например, «Жду максимум 10 минут». Необязательно.
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
+
+      {formError && (
+        <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
+          <p role="alert" className="text-sm text-destructive">
+            {formError.message}
+          </p>
+          {formError.canRetry && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 w-fit sm:h-8"
+              disabled={isPending}
+              onClick={() => {
+                void submit()
+              }}
+            >
+              Повторить
+            </Button>
+          )}
+        </div>
+      )}
+
+      <Button
+        type="submit"
+        className="h-11 w-full sm:h-8 sm:w-auto"
+        disabled={isPending}
+        aria-busy={isPending}
+      >
+        {isPending && (
+          <Loader2
+            data-icon="inline-start"
+            aria-hidden
+            className="animate-spin"
+          />
+        )}
+        {isPending ? 'Создаём профиль…' : 'Создать профиль'}
+      </Button>
+    </form>
+  )
+}
+
+/** Необязательное поле-список: одна строка — один пункт, пустые строки отбрасываются. */
+function ListField({
+  id,
+  label,
+  description,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  label: string
+  description: string
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Textarea
+        id={id}
+        name={id}
+        rows={3}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => {
+          onChange(event.target.value)
+        }}
+      />
+      <FieldDescription>{description}</FieldDescription>
+    </Field>
+  )
+}

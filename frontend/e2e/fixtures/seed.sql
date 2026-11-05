@@ -118,6 +118,51 @@ ON CONFLICT (id) DO UPDATE SET
     lockout_end = NULL,
     updated_at = now();
 
+-- 2.1 Барбер без профиля для онбординга (#45).
+--
+-- Роль `Barber` выдана, `barber_profile_id` — NULL: таким аккаунт видит кабинет
+-- только через `BarberProfileMissingGate`, а профиль создаёт сценарий
+-- `barber-onboarding-mutations.spec.ts`.
+--
+-- Идемпотентность: созданный прошлым прогоном профиль удаляется первым. Порядок
+-- обязателен — `users.barber_profile_id` ссылается на `barber_profiles`
+-- (ON DELETE RESTRICT), поэтому сначала обнуляем ссылку, потом удаляем профиль.
+-- Без этого второй прогон без пересева падал бы на `409
+-- barberProfile.create.alreadyExists`. Счётчики админки этот аккаунт не двигает:
+-- без профиля он не попадает ни в очередь барберов, ни в `usageCount`.
+UPDATE users
+SET barber_profile_id = NULL, updated_at = now()
+WHERE id = '9e000000-0000-4000-8000-000000000005';
+
+DELETE FROM barber_profiles
+WHERE user_id = '9e000000-0000-4000-8000-000000000005';
+
+INSERT INTO users
+    (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
+     is_email_verified, is_phone_verified, role, is_active, last_login_at,
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
+VALUES
+    ('9e000000-0000-4000-8000-000000000005', 'e2e-new-barber@barbersearch.test',
+     'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
+     'Илья', 'Новиков', '+70000000005', NULL,
+     true, false, 2, true, NULL,
+     NULL,
+     timestamptz '2026-09-01 10:05+00', timestamptz '2026-09-01 10:05+00',
+     'e2e-stamp-new-barber', 0)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    phone_number = EXCLUDED.phone_number,
+    is_active = EXCLUDED.is_active,
+    is_email_verified = EXCLUDED.is_email_verified,
+    role = EXCLUDED.role,
+    barber_profile_id = NULL,
+    failed_login_attempts = 0,
+    lockout_end = NULL,
+    updated_at = now();
+
 -- 12 дополнительных барберов: из них 13 профилей в одном городе — этого хватает,
 -- чтобы у поиска появился nextCursor и «Показать ещё».
 INSERT INTO users

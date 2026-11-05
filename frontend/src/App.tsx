@@ -13,6 +13,7 @@ import {
 import { isAdminPath } from '@/lib/admin-path'
 import {
   isBarberCabinetPath,
+  isBarberOnboardingPath,
   isBarberSchedulePath,
 } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
@@ -70,6 +71,12 @@ const BarberSchedulePage = lazy(() =>
   })),
 )
 
+const BarberOnboardingPage = lazy(() =>
+  import('@/pages/barber-onboarding-page').then((module) => ({
+    default: module.BarberOnboardingPage,
+  })),
+)
+
 const RegisterPage = lazy(() =>
   import('@/pages/register-page').then((module) => ({
     default: module.RegisterPage,
@@ -104,6 +111,7 @@ function App() {
   const isAccountSecurity = isAccountSecurityPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const isBarberSchedule = isBarberSchedulePath(pathname)
+  const isBarberOnboarding = isBarberOnboardingPath(pathname)
   const pageKey = isRegister
     ? 'register'
     : isPrivacy
@@ -116,15 +124,17 @@ function App() {
             ? 'account-profile'
             : isAccountSecurity
               ? 'account-security'
-              : isBarberSchedule
-                ? 'barber-schedule'
-                : isBarberCabinet
-                  ? 'barber-cabinet'
-                  : pathname === '/account'
-                  ? 'account'
-                  : barberId !== null
-                    ? `barber:${barberId}`
-                    : 'home'
+              : isBarberOnboarding
+                ? 'barber-onboarding'
+                : isBarberSchedule
+                  ? 'barber-schedule'
+                  : isBarberCabinet
+                    ? 'barber-cabinet'
+                    : pathname === '/account'
+                    ? 'account'
+                    : barberId !== null
+                      ? `barber:${barberId}`
+                      : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -165,6 +175,8 @@ function App() {
               <AccountProfilePage />
             ) : isAccountSecurity ? (
               <AccountSecurityPage />
+            ) : isBarberOnboarding ? (
+              <BarberOnboardingPage />
             ) : isBarberSchedule ? (
               <BarberSchedulePage />
             ) : isBarberCabinet ? (
