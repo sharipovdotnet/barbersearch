@@ -4,7 +4,7 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **213 domain + 419 application + 114 infrastructure + 139 integration (885 total)**,
+> Tests: **231 domain + 440 application + 116 infrastructure + 148 integration (935 total)**,
 > all green in both Debug and Release.
 
 ---
@@ -44,10 +44,10 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-6` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 208 xunit tests) |
-| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 404 xunit tests, fakes instead of a database) |
-| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 94 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 138 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 231 xunit tests) |
+| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 440 xunit tests, fakes instead of a database) |
+| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 116 xunit tests, no database) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 148 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -98,6 +98,7 @@ backend/                                  ← workspace root
         │   │   ├── AggregateRoot.cs      ← empty marker : Entity
         │   │   └── DomainErrors.cs       ← Collect() / Ok() / Fail() helpers
         │   ├── Users/{User.cs, UserRole.cs}                      (AR)
+        │   ├── BarberRequests/{BarberRequest.cs, BarberRequestStatus.cs}  (AR)
         │   ├── BarberProfiles/                                   (AR)
         │   │   ├── BarberProfile.cs
         │   │   ├── Enums/{Grade,Language,PaymentMethod}.cs
@@ -126,15 +127,15 @@ backend/                                  ← workspace root
         │   ├── Abstractions/             ← ICommand / ICommandHandler<> / IQuery / IQueryHandler<,>
         │   ├── DependencyInjection.cs    ← AddApplication (Scrutor assembly scan)
         │   └── {Entity}/                 ← one folder per domain entity (Users/, BarberProfiles/, …)
-        │       ├── I{Entity}Repository.cs  ← repository abstraction of that entity (8 in total;
+        │       ├── I{Entity}Repository.cs  ← repository abstraction of that entity (10 in total;
         │       │                             Reviews/ also holds ReviewRatingSummary)
-        │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (79)
+        │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (110)
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
-        │   ├── Configurations/           ← 16 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 15 migrations + ApplicationDbContextModelSnapshot
-        │   ├── Repositories/             ← RepositoryBase<T> + 8 repository implementations
-        │   ├── ApplicationDbContext.cs   ← 16 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── Configurations/           ← 18 × IEntityTypeConfiguration<T>
+        │   ├── Migrations/               ← 23 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Repositories/             ← RepositoryBase<T> + 10 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 18 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
         │
@@ -144,7 +145,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 14 controllers: 13 доменных (75 endpoints) + AuthController (8 actions)
+            ├── Controllers/              ← 25 controllers: 24 доменных (106 endpoints) + AuthController (8 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -285,9 +286,8 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 
 **`BarberSearch.Infrastructure.UnitTests` добавлен 2026-10-22 вручную** тем же способом:
 `Project(…)` + `EndProject`, четыре строки `ProjectConfigurationPlatforms`, GUID проекта —
-`{A5487549-6B9C-462E-992A-DA0F87B69383}`; вложен в папку `tests`. Три `[Fact]`-теста
-проверяют модель `xmin` у 14 сущностей агрегатов и маппинг `DbUpdateConcurrencyException`
-в `409`; базы данных не требуют.
+`{A5487549-6B9C-462E-992A-DA0F87B69383}`; вложен в папку `tests`. Тесты проверяют модель
+`xmin` у 16 сущностей и маппинг `DbUpdateConcurrencyException` в `409`; базы данных не требуют.
 
 Since 2026-10-25 (R-54) all ten `Project(…)` entries use the SDK-style project type GUID
 `{9A19103F-16F7-4668-BE54-9A1E7A4F7556}`; the legacy C# project-type GUID is gone. The solution
@@ -394,8 +394,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-05 (срез issue-44 + Serilog, §18): domain **213**, application **419**,
-infrastructure **114**, integration **139** — всего **885**, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-06 (срез issue-46): domain **231**, application **440**,
+infrastructure **116**, integration **148** — всего **935**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -418,7 +418,7 @@ the exception chain:
 * `NpgsqlException: Failed to connect to …` — the SQL was built, the query translates;
 * `InvalidOperationException: … could not be translated …` — the query is broken.
 
-At the time of writing every repository query reached the connect step: 16 entity types, 16 tables,
+At the time of writing every repository query reached the connect step: 18 entity types, 18 tables,
 and the read queries added in stage 2 have additionally been exercised against the local PostgreSQL
 by the smoke tests. The dead-connection check remains the quick way to tell a translation failure
 (`InvalidOperationException: … could not be translated …`) from a connection failure.
@@ -436,7 +436,7 @@ BarberSearch.Application    → commands/queries, handlers, Abstractions, DI    
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
 BarberSearch.Contracts      → record-контракты входных данных и ответов операций      [DONE]
-                              28 request-записей покрывают write-операции; для пяти
+                              34 request-записи покрывают write-операции; для пяти
                               read-эндпоинтов — response-DTO + PagedResponse<T> (§16)
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
@@ -649,28 +649,28 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-04; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-06; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 17 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 213 domain + 419 application + 114 infrastructure + 139 integration (885 total); unit-проекты зелёные локально (2026-11-05), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 95 обработчиков (75 command + 20 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 32 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 17 конфигураций, 9 репозиториев, `IUnitOfWork`, 17 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 15 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется); `bookings.*` без FK сознательно |
-| Web | ✅ 22 контроллера / 103 endpoint (95 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Domain | ✅ 18 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 231 domain + 440 application + 116 infrastructure + 148 integration (935 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 110 обработчиков (78 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 34 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
+| Web | ✅ 25 контроллеров / 114 endpoints (106 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (22):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (23):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
-`AddBookingCancellationReason`.
+`AddBookingCancellationReason`, `AddBarberRequests`.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -827,9 +827,9 @@ Suggested order:
 4. **Application:** `BarberSearch.Application` project — commands/queries, handlers, DTOs,
    validators; `IApplicationDbContext` / repository abstractions are declared here. This is
    where review→rating recalculation and the two rules in §7.6 belong.
-   **Partly done:** the project exists (→ `Domain`, `Shared`), declares seven repository
+   **Partly done:** the project exists (→ `Domain`, `Shared`), declares ten repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries **82 handlers (72 command + 10 query)** in per-entity
+   `Reviews/IReviewRepository.cs` — and carries **110 handlers (78 command + 32 query)** in per-entity
    folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
    `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
@@ -848,7 +848,7 @@ Suggested order:
    one `IEntityTypeConfiguration<T>` per entity, migrations, repository implementations.
    **Partly done:** the project is called `BarberSearch.Infrastructure.Postgresql`; it references
    `Domain` + `Application` + `Npgsql.EntityFrameworkCore.PostgreSQL`, carries one configuration
-   per entity, the `ApplicationDbContext`, eight repository implementations and the DI
+   per entity, the `ApplicationDbContext`, ten repository implementations and the DI
    registration (see §8). The `dotnet ef` wiring is in place (global tool 10.0.10, design-time
    host = Web); migrations `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp` and
    `AddReadIndexes` produce 16 tables, every index, the exclusion constraint
@@ -861,7 +861,7 @@ Suggested order:
    Swagger UI, JWT auth for `User`.
    **Done:** the `ProjectReference`s and the DI composition root
    (`DependencyInjection.cs` + `Program.cs`, `ConnectionStrings:Postgres`) are in place, and so are
-   17 controllers with 92 endpoints (84 domain + 8 auth), the `ErrorType` → HTTP status mapping
+   25 controllers with 114 endpoints (106 domain + 8 auth), the `ErrorType` → HTTP status mapping
    (`VALIDATION→400`, `NOT_FOUND→404`, `CONFLICT→409`, `FAILURE→500`) over `ProblemDetails`, and
    Swagger UI over the `AddOpenApi` document (see §8 and §16).
    Auth (§17) is implemented: cookie + JWT, регистрация/вход/выход, `POST api/auth/refresh`
@@ -1099,6 +1099,9 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `reviews` | `(barber_profile_id, created_at DESC, id) WHERE is_published` — partial | Published reviews of one barber, keyset order; hidden reviews never enter the public list |
 | `reviews` | `(created_at, id) WHERE is_published = false` — partial, `ix_reviews_moderation_created_at_id` (R-35) | Admin moderation queue, oldest first (FIFO): the same keyset pair as the public list, but ASC, so it has its own partial index |
 | `reviews` | `(user_id, created_at DESC, id)` — full, `ix_reviews_user_id_created_at_id` (issue-20) | Author's own list (`GET api/reviews/mine`): filter by author and keyset `created_at DESC, id`. Both statuses are returned, so the index is full, not partial |
+| `barber_requests` | `UNIQUE (user_id) WHERE status = 1` — `ux_barber_requests_pending_user` | One active request per user (issue-46): the precheck covers the common case, the index closes the race; both surface as `409 barberRequest.create.alreadyPending`, never `500` |
+| `barber_requests` | `(created_at, id)` — `ix_barber_requests_created_at_id` | Admin queue in both directions: `created_at ASC, id` (pending, FIFO) and `created_at DESC, id` (all) — one btree scanned forward or backward |
+| `barber_requests` | `(user_id, created_at DESC, id DESC)` — `ix_barber_requests_user_id_created_at` | `GET api/barber-requests/mine`: filter by applicant and read the latest row; the leading `user_id` also serves the FK cascade on account deletion |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -1192,7 +1195,7 @@ split evenly). Four `EXPLAIN (ANALYZE, BUFFERS)` plans, all using the existing
 and **12.985 ms**; `entity_type = 'salon'` (the rarest type) removes **33 333 rows** and takes
 **7.728 ms**; the rare-type keyset second page (the `(occurred_at, id)` cursor condition plus the
 type filter) takes **15.203 ms**. No plan contains a `Sort` or a `Seq Scan`, and every number is
-far below the ~100 ms criterion, so **no index migration was added** — 19 migrations stay, and
+far below the ~100 ms criterion, so **no index migration was added** — 23 migrations stay, and
 `AddAuditEntityTypeKeysetIndex` was not created. The filter is cheap because rows arrive in time
 order and a rare type is still ≈1.67 % of the table: 20 matches cost a few tens of thousands of
 index entries, not a full scan. The existing `ix_audit_log_entity_type_entity_id`
@@ -1549,8 +1552,9 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**21 controllers, 103 endpoints: 95 domain + 8 auth** — one endpoint per Application handler, plus
-`AuthController` (§17). The route always names the aggregate that owns the child entity:
+**25 controllers, 114 endpoints: 106 domain + 8 auth** — one endpoint per Application operation,
+plus the eight `AuthController` actions (§17). The route always names the aggregate that owns the
+child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
@@ -1576,6 +1580,8 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 | `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
 | `AdminSummaryController` | `api/admin/summary` | 1 (aggregate read, admin only, no parameters) |
+| `BarberRequestsController` | `api/barber-requests` | 2 (create + mine) |
+| `AdminBarberRequestsController` | `api/admin/barber-requests` | 4 (list + by id + approve + reject, admin only) |
 
 Conventions:
 
@@ -1587,7 +1593,7 @@ Conventions:
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
 - Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
   string (read endpoints), so the shape of an operation is visible in its signature. A body is used
-  only when the payload is more than a single identifier — 32 request records cover all write
+  only when the payload is more than a single identifier — 34 request records cover all write
   operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
@@ -1846,6 +1852,36 @@ Read endpoints (added 2026-10-19):
   unchanged — `PagedResponse<T>` still has no `total`, because the number is needed by one screen
   and not by the shared pagination contract. No new `ApiErrorCodes` group: a failed read is the
   common `500 internal.database`, and empty queues are `0`/`null`, not an error.
+- **Barber requests (2026-11-06, issue-46).** `POST api/barber-requests` (cookie mutation, CSRF;
+  any authenticated role but only `Customer`, otherwise `403 barberRequest.create.forbidden`)
+  creates a `Pending` request from the current user and answers `201` with
+  `BarberRequestResponse` (no `Location`: there is no self-URI, R-42). One active request per
+  user — precheck plus the partial unique index `ux_barber_requests_pending_user`; both give
+  `409 barberRequest.create.alreadyPending`, so the race never becomes `500`.
+  `GET api/barber-requests/mine` (`[Authorize]`, any role) answers `{ request: … | null }` with
+  the latest request, so after a rejection the customer can submit again and see the new one.
+  `GET api/admin/barber-requests?status=pending|all&cursor=&pageSize=` and
+  `GET api/admin/barber-requests/{id}` are `AdminOnly` and answer
+  `PagedResponse<AdminBarberRequestResponse>` / `AdminBarberRequestResponse`; the **same admin
+  type serves list and card** (identical field set, one mapping; `applicant` adds name and email,
+  the only PII, and exists only under `AdminOnly`). `pending` (default) is `created_at ASC, id`
+  (FIFO), `all` is `created_at DESC, id`; the cursor is `(created_at, id)`, `pageSize` defaults
+  to 20 and is capped at 100; an unknown status, a bad cursor or an out-of-range size is `400`.
+  `POST …/{id}/approval` and `POST …/{id}/rejection { reason }` (CSRF for cookie clients) answer
+  `200` with the updated card. Approval is one transaction: `Pending` check
+  (`409 barberRequest.review.invalidStatus`), the applicant must still be `Customer`
+  (`409 barberRequest.review.invalidApplicant`), then `user.ChangeRole(Barber)`,
+  `RevokeAllForUserAsync`, `request.Approve(adminId, now)`. `ChangeRole` rotates
+  `security_stamp`, so the applicant's access token and cookie die on the next request —
+  expected, and the UI says so. The request does **not** create a `BarberProfile`:
+  `barberProfileId` stays `null` until the #45 onboarding. Rejection keeps the role and stores
+  the trimmed reason (`400 barberRequest.rejection.reasonRequired` / `.reasonTooLong` for a
+  blank or over-500 reason). Unknown id is `404 barberRequest.notFound` in the card and in both
+  decisions. Approval and rejection are **two handlers**, not one with a flag: they differ in
+  the role mutation and token revocation, and a flag would put a security-relevant write behind
+  an `if`. **Deliberately not in `audit_log`:** the allowlist is unchanged, because the role
+  change already writes `user.updated` with `role`, while `city` and `about` are personal data;
+  the request itself keeps `reviewedAt`, `reviewedByUserId` and `rejectionReason`.
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
@@ -2043,7 +2079,7 @@ Deliberately absent:
 
 Health checks are **not** controllers: `/health/live` and `/health/ready` are mapped in
 `Program.cs` via `MapHealthChecks` / `Deployment/HealthCheckExtensions` (see §15.8 and
-`DEPLOY.md`). They do not change the 98-endpoint controller surface.
+`DEPLOY.md`). They do not change the 114-endpoint controller surface.
 
 Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
 `hairServiceId`/`date` (the parameter was then named `serviceId`; renamed by R-20), two pages
@@ -2389,6 +2425,7 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 | Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
 | `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент, барбер или admin (барбер обязан передать причину) | — (admin обходит) |
 | `Review` | клиент по своей завершённой брони | автор; удаление — только автор, без admin-обхода | `Publish`/`Hide` |
+| `BarberRequest` | клиент (`Customer`), сам; одна активная `Pending` на пользователя | — (решение принимает только admin) | список, карточка, `Approve`/`Reject` |
 | `User` | `register` публично / admin | сам | роль, активация, верификация |
 
 Правила: `404` — ресурса нет; `403` — ресурс есть, но чужой. `admin` обходит проверку через
@@ -2400,6 +2437,15 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 нового отзыва, и отдать это право админу значило бы дать ему менять историю автора.
 `Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
 проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
+
+Заявка в барберы (`POST api/barber-requests`, 2026-11-06) — публичное действие, которое создаёт
+ресурс от имени клиента, но **не даёт прав**: роль `Barber` появляется только после одобрения
+администратором (`POST api/admin/barber-requests/{id}/approval`). Подать заявку может только
+`Customer`; барбер и администратор получают `403 barberRequest.create.forbidden`, а роль в теле
+не принимается. **Заявка сознательно не входит в allowlist `audit_log`:** смена роли при
+одобрении уже пишется как `user.updated` с полем `role`, а `city` и «о себе» — персональные
+данные, которым не место в журнале. История решения не теряется: сама заявка хранит
+`reviewedAt`, `reviewedByUserId` и `rejectionReason`, а отказ роль не меняет и сессии не трогает.
 
 Чтение броней барбером (`GET api/barber/bookings`, 2026-10-30) — исключение из схемы «сначала
 ресурс, потом владение»: список не загружает ни одной брони до проверки, поэтому профиль берётся
