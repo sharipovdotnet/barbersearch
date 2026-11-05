@@ -4,6 +4,7 @@ import { Scissors } from 'lucide-react'
 import { BookingRow } from '@/components/account/booking-row'
 import type { BookingView } from '@/components/account/booking-view'
 import { ListPager } from '@/components/list-pager'
+import { RefreshStatus } from '@/components/refresh-status'
 import { Button } from '@/components/ui/button'
 import { formatMonth } from '@/lib/format'
 import { goToSection } from '@/lib/router'
@@ -70,6 +71,10 @@ export function BookingList({
   onNext,
   pageIndex,
   focusTargetRef,
+  updatedAt,
+  isRefreshing,
+  refreshError,
+  onRefresh,
   onRequestCancel,
   onRequestReview,
 }: {
@@ -87,6 +92,12 @@ export function BookingList({
   pageIndex: number
   /** Цель фокуса и прокрутки после смены страницы — сама панель вкладки. */
   focusTargetRef: RefObject<HTMLDivElement | null>
+  /** Когда активный список последний раз пришёл с сервера. */
+  updatedAt: number | null
+  isRefreshing: boolean
+  /** Ошибка тихого обновления: строки остаются на экране. */
+  refreshError: string | null
+  onRefresh: () => void
   onRequestCancel: (view: BookingView) => void
   onRequestReview: (view: BookingView) => void
 }) {
@@ -145,7 +156,19 @@ export function BookingList({
             )
           })}
         </div>
+
+        <RefreshStatus
+          updatedAt={updatedAt}
+          isRefreshing={isRefreshing}
+          onRefresh={onRefresh}
+        />
       </div>
+
+      {refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          {refreshError}
+        </p>
+      )}
 
       <div
         role="tabpanel"
