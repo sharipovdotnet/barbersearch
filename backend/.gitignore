@@ -3,3 +3,6 @@
 
 # Local docker compose environment (contains POSTGRES_PASSWORD; never commit it).
 .env
+
+# Serilog files (BarberSearch.Web/logs at startup, see Logging:File:Path).
+logs/

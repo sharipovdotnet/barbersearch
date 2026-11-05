@@ -4,7 +4,7 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **213 domain + 407 application + 94 infrastructure + 139 integration (853 total)**,
+> Tests: **213 domain + 419 application + 114 infrastructure + 139 integration (885 total)**,
 > all green in both Debug and Release.
 
 ---
@@ -19,7 +19,8 @@
 [§13. Working rules](#13-working-rules-for-this-repo) ·
 [§14. Tooling / skills](#14-tooling--skills) · [§15. High-load checklist](#15-high-load-checklist) ·
 [§16. Web / API layer](#16-web--api-layer-added-2026-10-16) ·
-[§17. Auth: cookie + JWT](#17-auth-cookie--jwt-added-2026-10-19)
+[§17. Auth: cookie + JWT](#17-auth-cookie--jwt-added-2026-10-19) ·
+[§18. Logging: Serilog](#18-logging-serilog-file-sink-added-2026-11-05)
 
 ---
 
@@ -67,12 +68,13 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | Microsoft.EntityFrameworkCore.Design | `10.0.11` (Design only, on Web; the provider now lives in Infrastructure) |
 | Npgsql.EntityFrameworkCore.PostgreSQL | `10.0.3` (`BarberSearch.Infrastructure.Postgresql` only) |
 | Swashbuckle.AspNetCore.SwaggerUI | `10.2.3` (wired up in `Program.cs`: the UI reads the `AddOpenApi` document) |
+| Serilog | `3.1.1` (+ `Serilog.AspNetCore` `8.0.3`, `Serilog.Sinks.Console` `5.0.0`, `Serilog.Sinks.File` `5.0.0`) — Web only; единственный провайдер логирования, журнал в файл (§18) |
 | xunit | `2.9.2` (+ `Microsoft.NET.Test.Sdk` 17.12.0, `xunit.runner.visualstudio` 2.8.2) |
 | IDE | JetBrains Rider (`.idea/` is gitignored) |
 
-Package versions are inline in `.csproj`. There is still **no** `global.json`,
-`.editorconfig`, `nuget.config` or CI config, and no `Directory.Build.props` — artifacts land in
-the default `src\<project>\obj` and `bin` (see §5.2 for the one shell that cannot do this).
+Package versions are inline in `.csproj`. `global.json`, `Directory.Build.props` и `.editorconfig`
+лежат в `backend/` и действуют на все проекты ниже него (R-37, §5); артефакты попадают в
+штатные `src\<project>\obj` и `bin` (единственное исключение — оболочка, см. §5.2).
 
 ---
 
@@ -143,7 +145,11 @@ backend/                                  ← workspace root
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             ├── Controllers/              ← 14 controllers: 13 доменных (75 endpoints) + AuthController (8 actions)
-            ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) + Logging + AllowedHosts
+            ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
+            │                               rate limit, health checks + Serilog wiring (§18):
+            │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
+            ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
+            │                               Logging:LogLevel / Logging:File (§18) + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← requests for the main flows
@@ -314,13 +320,12 @@ If the session is ever confined again, the symptom is
 `Access to the path '…\obj\…' is denied` and the workaround is to compile with `csc` straight
 into a writable folder and pass `-p:BaseIntermediateOutputPath=<writable>\obj\`.
 
-**Running the API from the agent shell needs one extra setting.** The host adds the Windows
-EventLog logging provider on Windows with a `Warning` minimum level, and the confined process
-cannot write the `.NET Runtime` source: the log write throws `Win32Exception (5)`, which surfaces as
-a **500 on the first request** that logs a warning (the usual trigger is
-`HttpsRedirectionMiddleware`: no HTTPS port is configured in the `http` profile). Start the app
-with the provider muted — `$env:Logging__EventLog__LogLevel__Default='None'` — or configure an
-HTTPS port. Running it as a normal developer does not have this problem.
+**Running the API from the agent shell.** Since 2026-11-05 Serilog replaced the built-in
+providers (§18), so the Windows EventLog provider is no longer registered: the old
+`Win32Exception (5)` on the first request that logged a warning (usually
+`HttpsRedirectionMiddleware` without an HTTPS port in the `http` profile) no longer turns that
+request into a **500**. `Logging__EventLog__LogLevel__Default='None'` in `deploy/smoke.ps1` and
+`load/*.ps1` is now redundant but harmless.
 
 **`dotnet test` needs its build output outside the workspace in this harness.** With the default
 output (`bin/` inside the workspace), VSTest's `testhost` dies on start-up:
@@ -389,8 +394,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-04 (после среза issue-44): domain **213**, application **407**,
-infrastructure **94**, integration **139** — всего **853**, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-05 (срез issue-44 + Serilog, §18): domain **213**, application **419**,
+infrastructure **114**, integration **139** — всего **885**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -650,11 +655,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 17 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 213 domain + 407 application + 94 infrastructure + 139 integration (853 total); unit-проекты зелёные локально (2026-11-04), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 213 domain + 419 application + 114 infrastructure + 139 integration (885 total); unit-проекты зелёные локально (2026-11-05), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 95 обработчиков (75 command + 20 query), 9 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 32 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 17 конфигураций, 9 репозиториев, `IUnitOfWork`, 17 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 15 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется); `bookings.*` без FK сознательно |
-| Web | ✅ 22 контроллера / 103 endpoint (95 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) |
+| Web | ✅ 22 контроллера / 103 endpoint (95 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -1464,7 +1469,9 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   5-second timeout before the command timeout can fire.
 - Graceful shutdown: Kestrel drains in-flight requests up to
   `Deployment:ShutdownTimeoutSeconds`; the orchestrator's termination grace period must be larger.
-- Structured logging from day one. `appsettings.json` keeps its own app logs at `Information`
+- Structured logging: Serilog is the only provider since 2026-11-05 (§18) — console plus a rolling
+  file (`Logging:File`, default `logs/barbersearch-.log`), one line per HTTP request. Levels still
+  live in `Logging:LogLevel`: `appsettings.json` keeps its own app logs at `Information`
   and silences `Microsoft.AspNetCore` and both EF categories
   (`Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Database.Command`) at
   `Warning`, so production does not log SQL text or parameters; `appsettings.Development.json`
@@ -2563,3 +2570,65 @@ reuse-detection. `ExecuteDelete` идёт мимо change tracker, поэтом�
 **Тесты.** `tests/BarberSearch.Domain.UnitTests/UserTests.cs` — 9 новых `[Fact]` (stamp непустой
 и уникален, ротация, смена пароля/роли/деактивации, отсутствие ротации при ошибке и повторной
 деактивации); всего 142. Смоук на локальной PostgreSQL — §17.6.
+
+---
+
+## 18. Logging: Serilog, file sink (added 2026-11-05)
+
+Serilog — **единственный** провайдер логирования приложения (`builder.Host.UseSerilog` заменяет
+`ILoggerFactory`), поэтому встроенные Console/EventLog и их фильтры больше не участвуют.
+Точка входа — `Program.cs`; настройка — три типа в `Web/Deployment/`:
+
+| Тип | Зачем |
+|---|---|
+| `SerilogExtensions` | `UseAppSerilog`, `ConfigureLogger`, `UseAppRequestLogging`: sink'и, шаблон строки, request logging |
+| `LoggingLevels` | читает `Logging:LogLevel` и переводит имена в `Serilog.Events.LogEventLevel` |
+| `FileLoggingSettings` | секция `Logging:File`: путь, ротация, размер; каталог проверяется на запись до старта |
+
+**Уровни — там же, где раньше.** Источник истины остался `Logging:LogLevel` (R-13), а не
+`Serilog:MinimumLevel`: `LoggingConfigurationTests` проверяет боевые значения, а переменные
+`Logging__LogLevel__*` продолжают работать в `deploy/smoke.ps1` и `load/*.ps1`. Имена
+переводятся программно: `Trace → Verbose`, `Debug → Debug`, `Information → Information`,
+`Warning → Warning`, `Error → Error`, `Critical → Fatal`. `None` **отклоняется на старте**:
+у Serilog нет уровня «выключено», и тихая подмена была бы хуже ошибки (см. `LoggingLevelsTests`).
+`Microsoft.EntityFrameworkCore*` в Production остаются `Warning`, поэтому SQL с параметрами в
+журнал не попадает (§15.8).
+
+**Файл.** Секция `Logging:File` в `appsettings.json`:
+
+| Ключ | По умолчанию | Смысл |
+|---|---|---|
+| `Enabled` | `true` | выключает только файл, консоль остаётся |
+| `Path` | `logs/barbersearch-.log` | абсолютный или от content root; в образе — `/app/logs/barbersearch-.log` |
+| `RollingInterval` | `Day` | `Infinite` отклоняется: хранится ограниченное число файлов |
+| `RetainedFileCountLimit` | `14` | 1..365 |
+| `FileSizeLimitMegabytes` | `50` | 1..1024; после предела Serilog открывает следующий файл |
+| `Shared` | `false` | включить, если несколько инстансов пишут в один каталог |
+
+`FileLoggingSettings.FromConfiguration` разрешает относительный путь от content root и делает
+пробную запись в каталог — так же, как `DataProtectionSettings` для key ring: иначе недоступный
+путь всплыл бы только при первой записи и молча (Serilog не сообщает об ошибках sink'а).
+Каталог `logs/` в `.gitignore`; в образе `/app/logs` создаётся заранее и передаётся `$APP_UID`
+(см. `Dockerfile`), том для журналов подключается снаружи. Шаблон строки — один для консоли и
+файла: `[время +зона УРОВЕНЬ] SourceContext: сообщение` и исключение на следующих строках.
+Bootstrap-логгер в начале `Program.cs` пишет в консоль, пока хост не собран, — падение проверки
+конфигурации оставляет след в выводе; `Log.CloseAndFlush()` в `finally` сбрасывает файл.
+
+**Журнал запросов.** `UseSerilogRequestLogging` ставится **до** `UseExceptionHandler`: обработчик
+исключений повторно выполняет конвейер, и middleware ниже него записал бы один запрос дважды.
+Одна строка на запрос (`HTTP GET /api/salons responded 401 in 44.2 ms`); `5xx` и исключения —
+`Error`, health-пробы — `Verbose`, поэтому при штатном `Information` их в журнале нет.
+
+**Тестовый хост.** При `ASPNETCORE_ENVIRONMENT=Testing` Serilog не регистрируется: интеграционные
+тесты очищают провайдеры (§5.2) и не должны писать файлы. Проверено 2026-11-05:
+`ILoggerFactory` в `WebApplicationFactory` — стандартный
+`Microsoft.Extensions.Logging.LoggerFactory`, а окружение в `Program.cs` уже `Testing`.
+
+**Тесты.** `LoggingConfigurationTests` (секция `Logging:File` в поставляемых настройках),
+`LoggingLevelsTests` (маппинг уровней, `None`, неизвестное имя) и `FileLoggingSettingsTests`
+(разрешение пути, пробная запись, диапазоны, `Infinite`) — в
+`BarberSearch.Infrastructure.UnitTests`: у `BarberSearch.Web` нет своего unit-проекта, а этот
+уже ссылается на Web и на его `appsettings.json` (R-13).
+
+**Открыто:** структурный (JSON) формат для сборщика логов, ретенция по времени и OpenTelemetry —
+отдельные срезы (§15.8).

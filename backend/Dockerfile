@@ -44,6 +44,12 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 COPY --from=build /app/publish .
 
+# Каталог журналов: приложение пишет сюда по Logging:File:Path (logs/barbersearch-.log).
+# Каталог создаётся заранее и принадлежит непривилегированному пользователю, иначе запись
+# в него невозможна. Подключите том (-v barbersearch-logs:/app/logs), чтобы журнал пережил
+# контейнер, и при нескольких инстансах на одном томе включите Logging__File__Shared=true.
+RUN mkdir -p /app/logs && chown $APP_UID /app/logs
+
 # Непривилегированный пользователь, предопределённый в официальном aspnet-образе.
 USER $APP_UID
 
