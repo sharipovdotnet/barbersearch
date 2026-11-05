@@ -8,7 +8,13 @@ import { fileURLToPath } from 'node:url'
  */
 export const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173'
 
-export const roles = ['admin', 'barber', 'customer', 'mutations'] as const
+export const roles = [
+  'admin',
+  'barber',
+  'newBarber',
+  'customer',
+  'mutations',
+] as const
 
 export type Role = (typeof roles)[number]
 
@@ -25,6 +31,12 @@ export const accounts: Record<Role, Account> = {
   barber: {
     email: process.env.E2E_BARBER_EMAIL ?? 'e2e-barber@barbersearch.test',
     password: process.env.E2E_BARBER_PASSWORD ?? 'e2e-password',
+  },
+  // Барбер с ролью, но без профиля: онбординг `/barber/onboarding` создаёт его
+  // впервые. Сид каждый раз удаляет профиль, созданный прошлым прогоном.
+  newBarber: {
+    email: process.env.E2E_NEW_BARBER_EMAIL ?? 'e2e-new-barber@barbersearch.test',
+    password: process.env.E2E_NEW_BARBER_PASSWORD ?? 'e2e-password',
   },
   customer: {
     email: process.env.E2E_CUSTOMER_EMAIL ?? 'e2e-customer@barbersearch.test',

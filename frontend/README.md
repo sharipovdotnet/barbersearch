@@ -38,6 +38,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered client |
+| `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -336,6 +337,40 @@ keeps its own role gates and `/account` no longer turns a barber away.
   `barber-booking-create.ts`/`barber-booking-options.ts`/`barber-clients.ts` — the manual
   booking transport; `src/lib/barber-cabinet-path.ts` — the `/barber` and `/barber/schedule`
   path helpers.
+
+### Creating the barber profile
+
+Registration always creates a `Customer`; only an administrator grants the `Barber` role
+(`PUT /api/users/{id}/role`). The grant used to be a dead end: `/barber` and `/barber/schedule`
+said «Профиль барбера не привязан к аккаунту. Обратитесь к администратору», and the existing
+`POST /api/barber-profiles` was reachable only by a `Barber` — exactly the person who could not
+get to it. The missing-profile gate now leads to `/barber/onboarding`, a lazy screen with one form
+for every field of `BarberProfileCreateRequest`: the display name (1–120), experience (1–70),
+«О себе» (2000), at least one language, optional payment methods, and four optional one-per-line
+lists (certificates, achievements, communication format, goodies) plus «Опоздания» (500). Empty
+lines are trimmed away, an empty optional field is sent as `null`, and empty lists as `[]`;
+`userId`, grade, rating and verification are never sent — the profile always belongs to the
+current user. Client rules repeat the domain ones, and server codes
+(`barberProfile.displayName.tooLong`, `barberProfile.yearsOfExperience`,
+`barberProfile.languages.unknown`, …) are mapped to Russian field errors; `429`, a network
+failure and `5xx` show a form error with «Повторить» (the form is not re-submitted automatically).
+`409 barberProfile.create.alreadyExists` is not an error: the profile exists, so the screen
+continues as if the `201` had just happened.
+
+After `201` the client must **refresh the session**: `barber_profile_id` is a claim inside the
+access token, and the token issued before the request still carries `null`. `retrySession()` alone
+would read the same cookie and still see no profile, so the screen calls `refreshSession()` (a new
+access token from the database), then `retrySession()` and only then `navigate('/barber')`. If the
+refresh is `terminal`, the profile is already created and the form must not return: the card says
+«Профиль создан, войдите снова» and opens the login dialog with `/barber` as the destination. A
+`transient` failure shows «Профиль создан, но сессия не обновилась» with «Повторить» (refresh
+only) and «Войти». The form itself only validates and sends; the session work lives in the page.
+
+- `src/pages/barber-onboarding-page.tsx` — gates, the finishing/terminal/transient cards.
+- `src/components/barber/barber-profile-form.tsx` — the reusable form (no effects, no navigation).
+- `src/lib/barber-profile-create.ts` — `createBarberProfile` over `mutateWithCsrf`, domain limits
+  and the Russian error mapping.
+- `src/lib/barber-cabinet-path.ts` — `BARBER_ONBOARDING_PATH` / `isBarberOnboardingPath`.
 
 ## Barber schedule
 
@@ -1031,7 +1066,7 @@ instead of silently skipping.
 
 | Project | Viewport | What runs there |
 |---|---|---|
-| `auth` | — | signs the four fixture accounts in through the API and writes `e2e/.auth/*.json` |
+| `auth` | — | signs the five fixture accounts in through the API and writes `e2e/.auth/*.json` |
 | `desktop-chromium` | 1280×900 | every spec except the 320 px, `a11y-narrow` and mutation ones |
 | `mobile-chromium` | 375×812 | the same on a phone, without the axe specs (the gate runs 1280 and 320) |
 | `narrow-320` | 320×800 | `pager-320.spec.ts` and `a11y-narrow.spec.ts` |
@@ -1077,11 +1112,21 @@ The fixed past date makes the order deterministic, keeps «Отметить не
 started) and gives two pages of 20 + 4; booking 01 carries both notes. The section deletes only its
 own ids before inserting, so the seed stays idempotent, and the other fixture bookings stay
 untouched — `account-bookings*`, `barber-cabinet*` and the mutating specs depend on them.
+For the barber onboarding it adds `e2e-new-barber@barbersearch.test` (id `9e000000-…-05`) with the
+role `Barber` and **no profile** — the only account that sees the missing-profile gate and
+`/barber/onboarding`. Its block is idempotent in a second, stronger sense: the seed first clears
+`users.barber_profile_id` and then deletes the profile created by the previous run (the FK is
+`ON DELETE RESTRICT`), otherwise a run without a reseed would get `409
+barberProfile.create.alreadyExists` instead of the form. Because the barber has no profile it
+changes none of the admin counters. The onboarding spec signs in through the dialog rather than
+reusing `storageState`: creating the profile rotates the refresh token, and a stored state would
+carry an already rotated one.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 
 Credentials and the API URL can be overridden with `E2E_CUSTOMER_EMAIL`, `E2E_CUSTOMER_PASSWORD`,
-`E2E_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_BASE_URL`, `E2E_API_URL`.
+`E2E_BARBER_*`, `E2E_NEW_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_BASE_URL`,
+`E2E_API_URL`.
 
 ### Artifacts
 

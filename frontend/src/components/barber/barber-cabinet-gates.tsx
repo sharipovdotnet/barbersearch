@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BARBER_ONBOARDING_PATH } from '@/lib/barber-cabinet-path'
 import { navigate } from '@/lib/router'
 
 /**
@@ -77,7 +78,10 @@ export function BarberRoleGate({ role }: { role: string }) {
   )
 }
 
-/** Барбер без привязанного профиля: сервер закрыл бы его `403`, объясняем заранее. */
+/**
+ * Барбер без привязанного профиля: сервер закрыл бы его `403`, но это не тупик —
+ * профиль создаётся здесь же, на `/barber/onboarding`.
+ */
 export function BarberProfileMissingGate() {
   return (
     <div className="mx-auto w-full max-w-md">
@@ -86,13 +90,22 @@ export function BarberProfileMissingGate() {
           <div className="flex size-10 items-center justify-center rounded-full bg-muted">
             <UserX className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <CardTitle>Профиль барбера не привязан к аккаунту</CardTitle>
+          <CardTitle>Профиль ещё не создан</CardTitle>
           <CardDescription>
             Записи клиентов приходят только для профиля, связанного с вашим
-            аккаунтом. Обратитесь к администратору.
+            аккаунтом. Заполните его сами — это займёт пару минут.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            className="h-11 sm:h-8"
+            onClick={() => {
+              navigate(BARBER_ONBOARDING_PATH)
+            }}
+          >
+            Создать профиль барбера
+          </Button>
           <Button
             variant="outline"
             size="sm"

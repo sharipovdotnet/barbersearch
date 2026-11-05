@@ -36,6 +36,16 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
   Uz: 'Oʻzbekcha',
 }
 
+/** Порядок вариантов в форме профиля: как в словаре, а не как пришло из `Object.keys`. */
+export const LANGUAGE_ORDER: readonly Language[] = [
+  'Ru',
+  'En',
+  'De',
+  'Kg',
+  'Tj',
+  'Uz',
+]
+
 export type PaymentMethod = 'Cash' | 'Card' | 'DigitalWallet' | 'Sbp' | 'BankTransfer'
 
 /** Способ оплаты: `Sbp` → «СБП». */
@@ -46,6 +56,14 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   Sbp: 'СБП',
   BankTransfer: 'Перевод',
 }
+
+export const PAYMENT_METHOD_ORDER: readonly PaymentMethod[] = [
+  'Cash',
+  'Card',
+  'DigitalWallet',
+  'Sbp',
+  'BankTransfer',
+]
 
 export type DayOfWeek =
   | 'Sunday'
