@@ -12,6 +12,10 @@ import type {
 } from '@/lib/admin-bookings'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
+  AdminBarberRequest,
+  AdminBarberRequestApplicant,
+} from '@/lib/admin-barber-requests'
+import type {
   AdminSummary,
   AdminSummaryOldestReview,
 } from '@/lib/admin-summary'
@@ -33,6 +37,11 @@ import type {
   AdminUserRow,
 } from '@/lib/admin-users'
 import type { SessionUser } from '@/lib/auth'
+import type {
+  BarberRequest,
+  BarberRequestStatus,
+  MyBarberRequestResponse,
+} from '@/lib/barber-requests'
 import type { BarberBooking } from '@/lib/barber-bookings'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
 import type { BarberClient } from '@/lib/barber-clients'
@@ -184,6 +193,12 @@ const DAYS_OF_WEEK: readonly DayOfWeek[] = [
 
 const USER_ROLES: readonly AdminUserRole[] = ['Customer', 'Barber', 'Admin']
 
+const BARBER_REQUEST_STATUSES: readonly BarberRequestStatus[] = [
+  'Pending',
+  'Approved',
+  'Rejected',
+]
+
 const isBookingStatus = isOneOf(BOOKING_STATUSES)
 const isBarberGrade = isOneOf(BARBER_GRADES)
 const isLanguage = isOneOf(LANGUAGES)
@@ -191,6 +206,7 @@ const isPaymentMethod = isOneOf(PAYMENT_METHODS)
 const isServiceCategory = isOneOf(SERVICE_CATEGORIES)
 const isDayOfWeek = isOneOf(DAYS_OF_WEEK)
 const isUserRole = isOneOf(USER_ROLES)
+const isBarberRequestStatus = isOneOf(BARBER_REQUEST_STATUSES)
 
 /** `{ id }` после регистрации, создания брони, отзыва и пользователя. */
 export function isCreatedId(value: unknown): value is { id: string } {
@@ -945,4 +961,79 @@ export function isAdminSummary(value: unknown): value is AdminSummary {
     isNonNegativeInteger(salons.inactiveCount)
   )
 }
+
+/**
+ * Поля заявки «Стать барбером» без проверки контейнера.
+ *
+ * Общие для своего и админского контракта: админская строка — та же заявка плюс
+ * автор решения и заявитель, поэтому поля не дублируются, а дополняются.
+ */
+function hasBarberRequestFields(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value.id) &&
+    isBarberRequestStatus(value.status) &&
+    isString(value.displayName) &&
+    isNumber(value.yearsOfExperience) &&
+    isString(value.city) &&
+    isNullableString(value.about) &&
+    isBoolean(value.hasSalon) &&
+    isString(value.createdAt) &&
+    isNullableString(value.reviewedAt) &&
+    isNullableString(value.rejectionReason)
+  )
+}
+
+/**
+ * Заявка «Стать барбером» в своём контракте (`BarberRequestResponse`).
+ *
+ * `about` и `rejectionReason` контракт допускает `null`; `status` — одно из трёх
+ * известных значений, поэтому новый статус сервера станет ошибкой экрана, а не
+ * сломанной строкой. Даты остаются строками: формат разбирает `Intl` на краю.
+ */
+export function isBarberRequest(value: unknown): value is BarberRequest {
+  return isRecord(value) && hasBarberRequestFields(value)
+}
+
+/** `GET api/barber-requests/mine`: заявка или `null`, когда её ещё нет. */
+export function isMyBarberRequest(
+  value: unknown
+): value is MyBarberRequestResponse {
+  return (
+    isRecord(value) &&
+    (value.request === null || isBarberRequest(value.request))
+  )
+}
+
+/** Заявитель в админской строке: имя и email, id — как у любого DTO. */
+function isAdminBarberRequestApplicant(
+  value: unknown
+): value is AdminBarberRequestApplicant {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.fullName) &&
+    isString(value.email)
+  )
+}
+
+/**
+ * Админская строка заявки: те же поля плюс автор решения и заявитель.
+ *
+ * `reviewedByUserId` — `null` до решения; `applicant` обязателен, потому что
+ * очередь показывает, кто подал заявку, а не только её содержимое.
+ */
+export function isAdminBarberRequest(
+  value: unknown
+): value is AdminBarberRequest {
+  return (
+    isRecord(value) &&
+    hasBarberRequestFields(value) &&
+    isNullableString(value.reviewedByUserId) &&
+    isAdminBarberRequestApplicant(value.applicant)
+  )
+}
+
+export const isAdminBarberRequestPage = isPageOf(isAdminBarberRequest)
+
+
 

@@ -8,6 +8,7 @@ import {
 } from '@/components/admin/admin-gate'
 import { AdminRail } from '@/components/admin/admin-rail'
 import { AuditScreen } from '@/components/admin/audit-screen'
+import { BarberRequestsScreen } from '@/components/admin/barber-requests-screen'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { BookingsScreen } from '@/components/admin/bookings-screen'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
@@ -30,6 +31,7 @@ const ADMIN_TITLES = {
   barbers: 'Барберы — администрирование BarberSearch',
   catalogue: 'Каталог — администрирование BarberSearch',
   users: 'Пользователи — администрирование BarberSearch',
+  barberRequests: 'Заявки — администрирование BarberSearch',
   bookings: 'Брони — администрирование BarberSearch',
   audit: 'Журнал — администрирование BarberSearch',
 } as const
@@ -43,6 +45,8 @@ function titleFor(route: AdminRoute): string {
       return ADMIN_TITLES.barbers
     case 'users':
       return ADMIN_TITLES.users
+    case 'barberRequests':
+      return ADMIN_TITLES.barberRequests
     case 'catalogue':
       return ADMIN_TITLES.catalogue
     case 'bookings':
@@ -156,6 +160,17 @@ export function AdminPage() {
     return (
       <AdminShell hideRailOnMobile={route.userId !== null}>
         <UsersScreen userId={route.userId} />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'barberRequests') {
+    return (
+      <AdminShell hideRailOnMobile={route.requestId !== null}>
+        <BarberRequestsScreen
+          requestId={route.requestId}
+          status={route.status}
+        />
       </AdminShell>
     )
   }

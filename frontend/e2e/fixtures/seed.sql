@@ -27,8 +27,12 @@
 --   B14 (9e100000-…-0014)        профиль БЕЗ подтверждения, без услуг и салона: единственная
 --                               строка блока «Барберы без подтверждения» в `/admin/summary`
 --   2 отзыва на модерации       вкладка «На модерации» админки
---   26 пользователей            две страницы админки: «1–20» и вторая; в CI к ним
+--   e2e-applicant               клиент без заявки «Стать барбером» (#46): спек подаёт
+--                               заявку с нуля, админ отклоняет её с причиной; секция 1
+--                               удаляет заявки фикстур, поэтому повторный прогон не 409
+--   28 пользователей            две страницы админки: «1–20» и вторая; в CI к ним
 --                               добавляется `ci-owner` из `backend/load/seed/minimal.sql`
+--                               (29 всего)
 --   25 строк audit_log           журнал `/admin/audit` на 2026-09-10 UTC:
 --                               страница «1–20», вторая «21–25», фильтры по дате,
 --                               типу и автору (+ salon/hair_service/specialization/booking)
@@ -55,6 +59,14 @@ DELETE FROM reviews
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
 
 DELETE FROM bookings
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
+
+-- Заявки «Стать барбером» (#46): мутирующий спек подаёт заявку клиенту
+-- `e2e-applicant`, а админ её отклоняет. Без этого удаления второй прогон получил бы
+-- `409 barberRequest.create.alreadyPending` (одна активная заявка на пользователя)
+-- либо увидел бы в очереди заявку прошлого прогона. Удаляем только заявки фикстур:
+-- частичный уникальный индекс и FK на `users` делают это безопасным.
+DELETE FROM barber_requests
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
 
 DELETE FROM refresh_tokens
@@ -101,7 +113,13 @@ FROM (
         -- не попадает в публичную выдачу, поэтому остальные спеки он не двигает.
         ('9e000000-0000-4000-8000-000000000113', 'e2e-pending-barber@barbersearch.test',
          'Егор', 'Неподтверждённый', NULL, true, true, 2, true,
-         '2026-09-01 10:04+00')
+         '2026-09-01 10:04+00'),
+        -- Клиент без заявки «Стать барбером» (#46). Роль всегда сбрасывается на
+        -- Customer: если прошлый прогон дошёл до одобрения, аккаунт стал Barber, и
+        -- спек снова не смог бы подать заявку. Заявки этого аккаунта удалены в секции 1.
+        ('9e000000-0000-4000-8000-000000000006', 'e2e-applicant@barbersearch.test',
+         'Анна', 'Заявителева', '+70000000006', true, true, 1, true,
+         '2026-09-01 10:06+00')
 ) AS fixture(id, email, first_name, last_name, phone_number, email_verified, is_active,
              role, _unused, created_at)
 ON CONFLICT (id) DO UPDATE SET

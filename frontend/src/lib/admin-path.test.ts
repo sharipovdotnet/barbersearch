@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  barberRequestsPath,
   barbersPath,
   bookingsPath,
+  isBarberRequestId,
   isBookingId,
   parseAdminPath,
 } from '@/lib/admin-path'
@@ -137,5 +139,81 @@ describe('parseAdminPath: сводка', () => {
       tab: 'pending',
       reviewId: null,
     })
+  })
+})
+
+describe('parseAdminPath: заявки', () => {
+  const REQUEST_ID = '9ea00000-0000-4000-8000-000000000001'
+
+  it('по умолчанию открывает очередь неразобранных заявок', () => {
+    expect(parseAdminPath('/admin/barber-requests', '')).toStrictEqual({
+      kind: 'barberRequests',
+      requestId: null,
+      status: 'pending',
+    })
+  })
+
+  it('читает фильтр из ?status=', () => {
+    expect(
+      parseAdminPath('/admin/barber-requests', '?status=all')
+    ).toStrictEqual({
+      kind: 'barberRequests',
+      requestId: null,
+      status: 'all',
+    })
+  })
+
+  it('неизвестный фильтр возвращает очередь', () => {
+    expect(
+      parseAdminPath('/admin/barber-requests', '?status=rejected')
+    ).toStrictEqual({
+      kind: 'barberRequests',
+      requestId: null,
+      status: 'pending',
+    })
+  })
+
+  it('карточка сохраняет фильтр из адреса', () => {
+    expect(
+      parseAdminPath(`/admin/barber-requests/${REQUEST_ID}`, '?status=all')
+    ).toStrictEqual({
+      kind: 'barberRequests',
+      requestId: REQUEST_ID,
+      status: 'all',
+    })
+  })
+
+  it('лишний вложенный путь остаётся notFound', () => {
+    expect(
+      parseAdminPath('/admin/barber-requests/a/b', '')
+    ).toStrictEqual({ kind: 'notFound' })
+  })
+})
+
+describe('barberRequestsPath', () => {
+  const REQUEST_ID = '9ea00000-0000-4000-8000-000000000001'
+
+  it('без id и фильтра ведёт в очередь', () => {
+    expect(barberRequestsPath()).toBe('/admin/barber-requests')
+  })
+
+  it('«Все» попадает в query', () => {
+    expect(barberRequestsPath(null, 'all')).toBe(
+      '/admin/barber-requests?status=all'
+    )
+  })
+
+  it('фильтр едет вместе с выбранной заявкой', () => {
+    expect(barberRequestsPath(REQUEST_ID, 'all')).toBe(
+      `/admin/barber-requests/${REQUEST_ID}?status=all`
+    )
+  })
+})
+
+describe('isBarberRequestId', () => {
+  it('принимает GUID и отвергает свободные строки', () => {
+    expect(isBarberRequestId('9ea00000-0000-4000-8000-000000000001')).toBe(true)
+    expect(isBarberRequestId('e2e-applicant')).toBe(false)
+    expect(isBarberRequestId('')).toBe(false)
   })
 })

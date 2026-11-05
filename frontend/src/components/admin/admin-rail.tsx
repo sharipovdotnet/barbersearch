@@ -6,6 +6,7 @@ const SECTIONS = [
   { href: '/admin/reviews', label: 'Отзывы' },
   { href: '/admin/barbers', label: 'Барберы' },
   { href: '/admin/users', label: 'Пользователи' },
+  { href: '/admin/barber-requests', label: 'Заявки' },
   { href: '/admin/catalogue', label: 'Каталог' },
   { href: '/admin/bookings', label: 'Брони' },
   { href: '/admin/audit', label: 'Журнал' },

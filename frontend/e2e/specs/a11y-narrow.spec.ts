@@ -55,6 +55,57 @@ test.describe('axe: 320 px, публичный профиль', () => {
 
     await expectNoBlockingViolations(page, '/privacy @320', test.info())
   })
+
+  test('«Стать барбером»: анонимный экран на 320', async ({ page }) => {
+    await page.goto('/become-a-barber')
+    await expect(
+      page.getByRole('heading', { name: 'Стать барбером', level: 1 })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Что даёт статус барбера' })
+    ).toBeVisible()
+
+    // Две кнопки столбцом и длинный текст не должны расширять страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/become-a-barber @320',
+      test.info()
+    )
+  })
+})
+
+test.describe('axe: 320 px, заявка на роль барбера', () => {
+  test.use({ storageState: storageStatePath('applicant') })
+
+  test('форма клиента без заявки на 320', async ({ page }) => {
+    await page.goto('/become-a-barber')
+    await expect(
+      page.getByRole('heading', { name: 'Заявка на роль барбера' })
+    ).toBeVisible()
+    await expect(page.getByLabel('Как вас представить')).toBeVisible()
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/become-a-barber (форма) @320',
+      test.info()
+    )
+  })
 })
 
 test.describe('axe: 320 px, расписание барбера', () => {
@@ -205,6 +256,28 @@ test.describe('axe: 320 px, админка без выбранной строк�
     expect(overflow).toBeLessThanOrEqual(0)
 
     await expectNoBlockingViolations(page, '/admin/audit @320', test.info())
+  })
+
+  test('заявки: пустая очередь на 320', async ({ page }) => {
+    await page.goto('/admin/barber-requests')
+    await expect(
+      page.getByRole('heading', { name: 'Заявки', level: 1 })
+    ).toBeVisible()
+    await expect(page.getByText('Заявок нет')).toBeVisible()
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/barber-requests @320',
+      test.info()
+    )
   })
 })
 

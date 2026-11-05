@@ -14,6 +14,7 @@ export const roles = [
   'newBarber',
   'customer',
   'mutations',
+  'applicant',
 ] as const
 
 export type Role = (typeof roles)[number]
@@ -47,6 +48,12 @@ export const accounts: Record<Role, Account> = {
   mutations: {
     email: process.env.E2E_MUTATIONS_EMAIL ?? 'e2e-mutations@barbersearch.test',
     password: process.env.E2E_MUTATIONS_PASSWORD ?? 'e2e-password',
+  },
+  // Клиент без заявки «Стать барбером»: мутирующий спек подаёт её с нуля, поэтому
+  // сид удаляет заявки аккаунта и возвращает ему роль Customer.
+  applicant: {
+    email: process.env.E2E_APPLICANT_EMAIL ?? 'e2e-applicant@barbersearch.test',
+    password: process.env.E2E_APPLICANT_PASSWORD ?? 'e2e-password',
   },
 }
 
@@ -147,6 +154,18 @@ export const fixtures = {
     noShowId: '9e900000-0000-4000-8000-000000000019',
     untouchedId: '9e900000-0000-4000-8000-000000000020',
     latestId: '9e900000-0000-4000-8000-000000000024',
+  },
+  /**
+   * Заявки «Стать барбером» (#46). Аккаунт `e2e-applicant@…` приходит из сида без
+   * заявки и с ролью `Customer`; спек подаёт заявку, админ отклоняет её с этой
+   * причиной, а заявитель читает её в своём статусе.
+   */
+  barberRequest: {
+    applicantEmail: 'e2e-applicant@barbersearch.test',
+    displayName: 'E2E Заявитель',
+    yearsOfExperience: 6,
+    city: 'Москва',
+    rejectionReason: 'E2E: не хватает подтверждённого опыта',
   },
 } as const
 

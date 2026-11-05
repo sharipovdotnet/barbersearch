@@ -16,6 +16,12 @@ export type CatalogueTab = 'services' | 'specializations' | 'salons'
  */
 export type AdminBarberStatusFilter = 'all' | 'pending' | 'hidden'
 
+/**
+ * Фильтр очереди заявок «Стать барбером». Живёт в `?status=`, по умолчанию
+ * очередь неразобранных заявок: так же ведёт себя фильтр барберов.
+ */
+export type AdminBarberRequestFilter = 'pending' | 'all'
+
 export type AdminRoute =
   | { kind: 'summary' }
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
@@ -25,6 +31,11 @@ export type AdminRoute =
       status: AdminBarberStatusFilter
     }
   | { kind: 'users'; userId: string | null }
+  | {
+      kind: 'barberRequests'
+      requestId: string | null
+      status: AdminBarberRequestFilter
+    }
   | { kind: 'catalogue'; tab: CatalogueTab }
   | { kind: 'bookings'; bookingId: string | null }
   | { kind: 'audit' }
@@ -33,6 +44,7 @@ export type AdminRoute =
 const REVIEW_PATH = /^\/admin\/reviews\/([^/]+)$/
 const BARBER_PATH = /^\/admin\/barbers\/([^/]+)$/
 const USER_PATH = /^\/admin\/users\/([^/]+)$/
+const BARBER_REQUEST_PATH = /^\/admin\/barber-requests\/([^/]+)$/
 const BOOKING_PATH = /^\/admin\/bookings\/([^/]+)$/
 
 const CATALOGUE_TABS: readonly CatalogueTab[] = [
@@ -45,6 +57,11 @@ const BARBER_STATUSES: readonly AdminBarberStatusFilter[] = [
   'all',
   'pending',
   'hidden',
+]
+
+const BARBER_REQUEST_STATUSES: readonly AdminBarberRequestFilter[] = [
+  'pending',
+  'all',
 ]
 
 const GUID_PATTERN =
@@ -84,6 +101,16 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
     return { kind: 'users', userId: null }
   }
 
+  // Заявки «Стать барбером»: очередь и все заявки. Фильтр — в `?status=`,
+  // карточка — в пути, как у барберов: перезагрузка не теряет ни то, ни другое.
+  if (pathname === '/admin/barber-requests') {
+    return {
+      kind: 'barberRequests',
+      requestId: null,
+      status: parseBarberRequestStatus(search),
+    }
+  }
+
   if (pathname === '/admin/catalogue') {
     return { kind: 'catalogue', tab: parseCatalogueTab(search) }
   }
@@ -114,6 +141,16 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (userMatch?.[1]) {
     return { kind: 'users', userId: userMatch[1] }
+  }
+
+  const barberRequestMatch = BARBER_REQUEST_PATH.exec(pathname)
+
+  if (barberRequestMatch?.[1]) {
+    return {
+      kind: 'barberRequests',
+      requestId: barberRequestMatch[1],
+      status: parseBarberRequestStatus(search),
+    }
   }
 
   const bookingMatch = BOOKING_PATH.exec(pathname)
@@ -163,6 +200,42 @@ export function barbersPath(
 
 /** Идентификатор барбера должен быть GUID: иначе запрос заведомо не найдёт запись. */
 export function isBarberId(value: string): boolean {
+  return GUID_PATTERN.test(value)
+}
+
+/**
+ * Разбирает `?status=` заявок: неизвестное значение — очередь неразобранных.
+ *
+ * Так же ведут себя `?tab=` и `?status=` барберов: ссылка с опечаткой не должна
+ * давать «Раздел не найден», потому что раздел существует.
+ */
+export function parseBarberRequestStatus(
+  search: string
+): AdminBarberRequestFilter {
+  const value = new URLSearchParams(search).get('status')
+
+  return BARBER_REQUEST_STATUSES.find((status) => status === value) ?? 'pending'
+}
+
+/**
+ * Адрес раздела заявок: выбранная заявка — в пути, фильтр — в `?status=`.
+ *
+ * Значение по умолчанию (очередь) в ссылку не попадает: `/admin/barber-requests`
+ * остаётся коротким адресом очереди.
+ */
+export function barberRequestsPath(
+  requestId: string | null = null,
+  status: AdminBarberRequestFilter = 'pending'
+): string {
+  const base = requestId
+    ? `/admin/barber-requests/${encodeURIComponent(requestId)}`
+    : '/admin/barber-requests'
+
+  return status === 'pending' ? base : `${base}?status=${status}`
+}
+
+/** Идентификатор заявки должен быть GUID: иначе запрос заведомо не найдёт запись. */
+export function isBarberRequestId(value: string): boolean {
   return GUID_PATTERN.test(value)
 }
 

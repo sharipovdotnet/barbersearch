@@ -11,6 +11,7 @@ import {
   isAccountSecurityPath,
 } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
+import { isBecomeABarberPath } from '@/lib/barber-request-path'
 import {
   isBarberCabinetPath,
   isBarberOnboardingPath,
@@ -22,9 +23,9 @@ import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
 
-// Админка, кабинет, отзывы автора, карточка барбера, регистрация и Политика — отдельные
-// чанки: витрине не нужен код экранов, закрытых ролью, а профиль, регистрация и
-// юридический текст не должны удорожать первую загрузку (§12.2).
+// Админка, кабинет, отзывы автора, карточка барбера, регистрация, «Стать барбером» и
+// Политика — отдельные чанки: витрине не нужен код экранов, закрытых ролью, а профиль,
+// регистрация и юридический текст не должны удорожать первую загрузку (§12.2).
 const AdminPage = lazy(() =>
   import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
 )
@@ -89,6 +90,12 @@ const PrivacyPage = lazy(() =>
   })),
 )
 
+const BecomeABarberPage = lazy(() =>
+  import('@/pages/become-a-barber-page').then((module) => ({
+    default: module.BecomeABarberPage,
+  })),
+)
+
 /**
  * Оболочка приложения: общая шапка и подвал, между ними — страница по адресу.
  *
@@ -104,6 +111,7 @@ function App() {
   const pathname = usePathname()
   const isRegister = isRegisterPath(pathname)
   const isPrivacy = isPrivacyPath(pathname)
+  const isBecomeABarber = isBecomeABarberPath(pathname)
   const barberId = matchBarberPath(pathname)
   const isAdmin = isAdminPath(pathname)
   const isAccountReviews = isAccountReviewsPath(pathname)
@@ -116,25 +124,27 @@ function App() {
     ? 'register'
     : isPrivacy
       ? 'privacy'
-      : isAdmin
-        ? 'admin'
-        : isAccountReviews
-          ? 'account-reviews'
-          : isAccountProfile
-            ? 'account-profile'
-            : isAccountSecurity
-              ? 'account-security'
-              : isBarberOnboarding
-                ? 'barber-onboarding'
-                : isBarberSchedule
-                  ? 'barber-schedule'
-                  : isBarberCabinet
-                    ? 'barber-cabinet'
-                    : pathname === '/account'
-                    ? 'account'
-                    : barberId !== null
-                      ? `barber:${barberId}`
-                      : 'home'
+      : isBecomeABarber
+        ? 'become-a-barber'
+        : isAdmin
+          ? 'admin'
+          : isAccountReviews
+            ? 'account-reviews'
+            : isAccountProfile
+              ? 'account-profile'
+              : isAccountSecurity
+                ? 'account-security'
+                : isBarberOnboarding
+                  ? 'barber-onboarding'
+                  : isBarberSchedule
+                    ? 'barber-schedule'
+                    : isBarberCabinet
+                      ? 'barber-cabinet'
+                      : pathname === '/account'
+                        ? 'account'
+                        : barberId !== null
+                          ? `barber:${barberId}`
+                          : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -167,6 +177,8 @@ function App() {
               <RegisterPage />
             ) : isPrivacy ? (
               <PrivacyPage />
+            ) : isBecomeABarber ? (
+              <BecomeABarberPage />
             ) : isAdmin ? (
               <AdminPage />
             ) : isAccountReviews ? (
