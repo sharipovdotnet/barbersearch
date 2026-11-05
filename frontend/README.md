@@ -40,6 +40,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered client |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
+| `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
@@ -50,6 +51,8 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide; the current filter stays in `?status=` |
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
+| `/admin/barber-requests` | «Стать барбером» queue: pending requests oldest first, `?status=all` for every request newest first |
+| `/admin/barber-requests/{id}` | one request: applicant, answers, submission/review dates and the rejection reason; approve (with the session warning) or reject with a required reason |
 | `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
 | `/admin/bookings` | booking support list: customer email or exact booking id search, status filter, paged table/cards, split-view detail |
 | `/admin/bookings/{id}` | one booking: time in the salon zone, customer, barber, service, salon, notes; cancel or mark a no-show |
@@ -624,6 +627,62 @@ card says «Записи нет».
 - `src/lib/auth.ts` — `RegistrationInput` and `register()`; `src/lib/register-path.ts` —
   `REGISTER_PATH` / `isRegisterPath`.
 
+## Become a barber
+
+`/become-a-barber` is the legal path from `Customer` to `Barber`: a request, an admin decision and
+a new role. Until #46 the role could only be changed from the admin panel, so a customer had to
+ask an administrator outside the product. The page is public and has four states, and only one of
+them reads the server:
+
+- **anonymous** — «что даёт статус барбера» (a public profile in search, client bookings, an own
+  schedule), a `LoginDialog` with `redirectTo="/become-a-barber"` and «Зарегистрироваться»;
+  **no request** is made, so the page works for a visitor and on a broken API.
+- **loading / unavailable** — the usual skeleton and the `SessionUnavailable` card; nothing is
+  mounted until the session is known.
+- **`Customer`** — one `GET /api/barber-requests/mine`. `request: null` mounts the form; a request
+  mounts the status card; «Подать заявку снова» reveals the form again after a rejection (the
+  domain allows one new `Pending`).
+- **`Barber`** — «Вы уже барбер» with `/barber`, or `/barber/onboarding` while
+  `barberProfileId === null`; **`Admin`** — a link to `/admin/barber-requests`.
+
+The form sends one `POST /api/barber-requests` with CSRF and `{ displayName, yearsOfExperience,
+city, about: string | null, hasSalon }`. The body carries **no role**: `Barber` is granted only by
+an approval. Client limits mirror the domain (name 1..120, experience 1..70, city 1..100, «о себе»
+≤ 2000, an empty textarea becomes `null`). `201` returns the request itself, so the form is
+replaced by the same status card under «Заявка отправлена» — no second read. `409
+barberRequest.create.alreadyPending` (one active request per user) says «Заявка уже на
+рассмотрении», `403` «Заявку может подать только клиент», `429` and a network failure offer
+«Повторить». The status card shows «На рассмотрении», «Одобрена» or «Отклонена» plus the reason,
+the submission date and, while the session still says `Customer`, «Войти снова»: approval rotates
+the security stamp, so the old session is dead and cannot be repaired.
+
+`/account` mounts a compact card for `Customer` only. It reads the same endpoint once, never
+blocks the booking lists, shows a quiet «Не удалось проверить заявку.» with «Повторить» for `429`
+or a network failure, and renders nothing on `401` (the cabinet gate is already above it).
+
+The admin side is `/admin/barber-requests`: the `pending` queue (oldest first, the default) and
+the `all` history (newest first) share one cursor list with no `total`, so the range comes from
+`ListPager` and there are no counters. The filter lives in `?status=all` and the card in the path,
+like `/admin/barbers`, so a reload keeps both. Approval opens an `alertdialog` that says the role
+change ends **all** of the applicant's sessions and that the profile is created after signing in
+again; rejection opens an `alertdialog` with a **required** reason (≤ 500) — an empty one is never
+sent. After a decision the row is updated locally (and leaves the queue), then the list and the
+card are silently re-read; success is announced in `role="status"`, errors in `role="alert"`. Empty
+states are «Заявок нет» and «Заявок с таким статусом нет». Requests are **not** written to
+`audit_log`: the row keeps the personal data and the decision, and the journal only sees the
+`user.updated` role change.
+
+- `src/lib/barber-request-path.ts` — `BECOME_A_BARBER_PATH` / `isBecomeABarberPath`.
+- `src/lib/barber-requests.ts`, `src/lib/barber-request-form.ts` — DTOs, the read/create transport,
+  error mapping and the client-side form bounds.
+- `src/components/barber/barber-request-form.tsx`,
+  `src/components/barber/barber-request-status.tsx`, `src/components/account/barber-request-card.tsx`.
+- `src/lib/admin-barber-requests.ts`, `src/hooks/use-admin-barber-request-list.ts`,
+  `src/hooks/use-admin-barber-request.ts` — the admin queue and the two decisions.
+- `src/components/admin/barber-requests-screen.tsx` plus `barber-request-list.tsx`,
+  `barber-request-detail.tsx`, `barber-request-action-dialog.tsx`; `src/lib/admin-path.ts` —
+  `barberRequestsPath()` and `?status=pending|all`.
+
 ## Legal information and cookies
 
 The service publishes its personal-data policy at `/privacy` and tells the visitor about cookies
@@ -1066,7 +1125,7 @@ instead of silently skipping.
 
 | Project | Viewport | What runs there |
 |---|---|---|
-| `auth` | — | signs the five fixture accounts in through the API and writes `e2e/.auth/*.json` |
+| `auth` | — | signs the six fixture accounts in through the API and writes `e2e/.auth/*.json` |
 | `desktop-chromium` | 1280×900 | every spec except the 320 px, `a11y-narrow` and mutation ones |
 | `mobile-chromium` | 375×812 | the same on a phone, without the axe specs (the gate runs 1280 and 320) |
 | `narrow-320` | 320×800 | `pager-320.spec.ts` and `a11y-narrow.spec.ts` |
@@ -1085,8 +1144,11 @@ without a debt number is not allowed.
 `e2e/fixtures/seed.sql` creates fixed UUIDs: one showcase barber with 12 published reviews, 52
 history bookings and 21 upcoming ones, two customers with 12 reviews each (the `e2e-customer` also
 gets 21 upcoming and 21 history bookings, so both `/account` tabs have two pages), an admin, twelve
-extra barbers in one city (so search has a second page) and 26 users in total (so `/admin/users`
-has two). One of them is the profile **without confirmation** «E2E Барбер Без Подтверждения»
+extra barbers in one city (so search has a second page), an applicant without a request for the
+`/become-a-barber` flow, a barber without a profile for onboarding, a support customer for the
+admin bookings and **28 users in total** (so `/admin/users` has two pages; the CI
+`minimal.sql` adds `ci-owner`, making 29). One of them is the profile **without confirmation**
+«E2E Барбер Без Подтверждения»
 (no services and no salon, id `9e100000-…-14`): it is the single positive row of the summary's
 «Барберы без подтверждения» block and of the «На проверке» queue, and because it is unverified it
 never reaches the public search, cards or catalogue counters. For the admin catalogue it adds
@@ -1125,8 +1187,8 @@ All accounts use the password `e2e-password` — a test constant, not a secret, 
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 
 Credentials and the API URL can be overridden with `E2E_CUSTOMER_EMAIL`, `E2E_CUSTOMER_PASSWORD`,
-`E2E_BARBER_*`, `E2E_NEW_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_BASE_URL`,
-`E2E_API_URL`.
+`E2E_BARBER_*`, `E2E_NEW_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_APPLICANT_*`,
+`E2E_BASE_URL`, `E2E_API_URL`.
 
 ### Artifacts
 

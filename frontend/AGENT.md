@@ -15,7 +15,7 @@
 > creation stays in the personal cabinet and editing/author-facing status are absent. The
 > personal cabinet now serves **every role** (`/account`, `/account/profile`, `/account/security`,
 > `/account/reviews`) with one shell, its own bookings/reviews and a link to the role's work area;
-> all seven admin sections (summary, reviews, barbers, users, catalogue,
+> all eight admin sections (summary, reviews, barbers, users, barber requests, catalogue,
 > bookings, journal)
 > and the barber cabinet are implemented: a barber sees the bookings of their own profile at
 > `/barber`, confirms, completes, marks no-show, cancels (with a required reason the client
@@ -41,18 +41,19 @@
 > an informational cookie notice on the first visit; registration requires a separate consent
 > checkbox, and the consent is now provable: the backend stores the policy edition, the server UTC
 > time and the IP, the admin card shows the record, and the policy describes it.
-> Verified on 2026-11-06: `npm run lint` — 0 warnings / 0 errors (299 files, 116 rules);
-> `npm test` — 363 tests in 49 files, green; `npm run build` — success, 2466 modules, entry
-> `index-*.js` 339.01 kB (gzip 109.98 kB); lazy `admin-page` 199.64 kB (gzip 42.25 kB),
-> `barber-cabinet-page` 38.82 kB (gzip 10.56 kB), `barber-page` 31.97 kB (gzip 8.52 kB),
-> `privacy-page` 29.43 kB (gzip 7.57 kB), `account-page` 25.47 kB (gzip 8.25 kB),
-> `barber-schedule-page` 22.59 kB (gzip 6.35 kB), `account-reviews-page` 16.74 kB (gzip 5.38 kB),
-> `barber-onboarding-page` 13.87 kB (gzip 4.51 kB), `account-profile-page` 7.84 kB (gzip 2.91 kB),
-> `account-security-page` 8.91 kB (gzip 3.14 kB), `register-page` 11.57 kB (gzip 3.97 kB),
-> the shared `paging-*.js` 7.12 kB (gzip 2.64 kB) and `barber-slots-*.js` 0.83 kB (gzip 0.48 kB);
-> CSS 82.79 kB (gzip 14.20 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
-> Targeted E2E after reseeding `barbersearch_e2e`: `/barber` 8/8 and the open
-> «Записать клиента» dialog axe check 5/5 passed; the full suite was not rerun.
+> Verified on 2026-11-06: `npm run lint` — 0 warnings / 0 errors (321 files, 116 rules);
+> `npm test` — 420 tests in 54 files, green; `npm run build` — success, 2481 modules, entry
+> `index-*.js` 340.03 kB (gzip 110.26 kB); lazy `admin-page` 222.93 kB (gzip 45.58 kB),
+> `barber-cabinet-page` 38.82 kB (gzip 10.58 kB), `barber-page` 32.01 kB (gzip 8.53 kB),
+> `privacy-page` 29.43 kB (gzip 7.57 kB), `account-page` 28.23 kB (gzip 8.79 kB),
+> `barber-schedule-page` 22.59 kB (gzip 6.35 kB), `become-a-barber-page` 17.83 kB (gzip 5.34 kB),
+> `account-reviews-page` 16.74 kB (gzip 5.39 kB), `barber-onboarding-page` 13.88 kB (gzip 4.51 kB),
+> `account-profile-page` 7.84 kB (gzip 2.92 kB), `account-security-page` 8.91 kB (gzip 3.14 kB),
+> `register-page` 11.57 kB (gzip 3.96 kB), the shared `paging-*.js` 7.12 kB (gzip 2.64 kB),
+> `use-my-barber-request-*.js` 2.50 kB (gzip 1.18 kB) and `barber-slots-*.js` 0.83 kB (gzip 0.47 kB);
+> CSS 83.18 kB (gzip 14.30 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> Targeted E2E after reseeding `barbersearch_e2e`: a11y at 1280 and 320 44/44 and the
+> barber-request mutations spec 1/1 passed; the full suite was not rerun.
 > A full run on 2026-11-04 was not green in one pass:
 > 174 passed, 3 mobile admin catalogue/summary checks failed and 14 dependent mutation tests did
 > not run. All three failures pass individually, and both mutation specs (`account-bookings`,
@@ -199,13 +200,18 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── review-detail.tsx       rating, context, sticky actions, hide dialog
     │   │   ├── review-queue.tsx        roving-tabindex rows and cursor pagination
     │   │   ├── review-tabs.tsx         manual tabs (no counts: API has no total)
-    │   │   └── reviews-screen.tsx      list/detail state, actions, announcements
+    │   │   ├── reviews-screen.tsx      list/detail state, actions, announcements
+    │   │   ├── barber-requests-screen.tsx  /admin/barber-requests: queue, filter, split view
+    │   │   ├── barber-request-list.tsx    request rows and the shared pager
+    │   │   ├── barber-request-detail.tsx  applicant answers, dates, approve/reject actions
+    │   │   └── barber-request-action-dialog.tsx  alertdialogs: session warning, required reason
     │   ├── account/                   ← customer cabinet: bookings, own reviews, gates, dialogs
     │   │   ├── my-reviews-list.tsx     author list: states, pagination, live region
     │   │   ├── my-review-row.tsx       rating, status, barber link, visit context, actions
     │   │   ├── edit-review-dialog.tsx  rating and text form for one review
     │   │   ├── delete-review-dialog.tsx alertdialog with a destructive confirm
-    │   │   └── review-status-badge.tsx «Опубликован» / «На модерации»
+    │   │   ├── review-status-badge.tsx «Опубликован» / «На модерации»
+    │   │   └── barber-request-card.tsx  «Стать барбером»: status or CTA, own loading/error
     │   ├── barber/                    ← public /barbers/{id}; the page only composes them
     │   │   ├── barber-slots.tsx        date/service/salon controls, slot radios, booking panel host
     │   │   ├── barber-slot-options.tsx shared slot chips/radios for the profile and the cabinet
@@ -216,6 +222,8 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── barber-services.tsx     price list with category and duration, no booking
     │   │   ├── barber-reviews.tsx      published reviews, summary, stars, cursor pagination
     │   │   ├── barber-cabinet-gates.tsx  /barber gates: wrong role, unlinked profile, skeleton
+    │   │   ├── barber-request-form.tsx    «Стать барбером» form: bounds, CSRF POST, 201 card
+    │   │   ├── barber-request-status.tsx  own request: status, date, rejection reason, re-login
     │   │   ├── barber-cabinet-nav.tsx    «Записи» / «Расписание» links for both cabinet sections
     │   │   ├── barber-week-schedule.tsx  seven-day template editor and one bulk PUT
     │   │   ├── barber-schedule-exceptions.tsx  date exception form and upcoming list
@@ -253,6 +261,9 @@ frontend/                              ← workspace root, NOT the git root
     │       └── dropdown-menu.tsx
     ├── hooks/
     │   ├── use-admin-review-list.ts   ← admin queue: pages, refresh, cursor, 401
+    │   ├── use-admin-barber-request-list.ts  request queue: filter, cursor, silent refresh
+    │   ├── use-admin-barber-request.ts ← one request by URL for a direct link
+    │   ├── use-my-barber-request.ts    ← own request: one read, quiet retry, 401
     │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
     │   ├── use-auto-refresh.ts        ← 30-second quiet polling: visibility pause, no overlap
     │   ├── use-barber-search.ts       ← landing search: filters, cursor, abort, retry
@@ -279,10 +290,15 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── barber-page.tsx            ← /barbers/{id}: title, back link, states, sections
     │   ├── home-page.tsx              ← landing composition: title, hash scroll, sections
     │   ├── privacy-page.tsx           ← /privacy: personal-data policy (152-ФЗ) and cookie list
+    │   ├── become-a-barber-page.tsx    ← /become-a-barber: copy, form/status, role links
     │   └── register-page.tsx          ← /register: title, session gates, card and links
     ├── lib/
         ├── account-path.ts            ← /account and /account/reviews path helpers
         ├── admin-path.ts              ← /admin path parsing/building, AdminTab
+        ├── admin-barber-requests.ts    ← admin request queue: DTOs, reads, approve/reject, errors
+        ├── barber-request-form.ts      ← request form bounds and client-side validation
+        ├── barber-request-path.ts      ← /become-a-barber path helper
+        ├── barber-requests.ts          ← own request: DTO, read, create, error mapping
         ├── admin-reviews.ts           ← admin review DTO, reads, publish/hide, errors
         ├── api.ts                     ← fetch wrapper, ApiError, ProblemDetails
         ├── auth.ts                    ← CSRF, signIn, signOut, fetchSession
@@ -393,25 +409,34 @@ npm run test:e2e:ui        # UI mode
 **Verification snapshot, 2026-11-06:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 299 files, 116 rules
-npm test      → 363 tests in 49 files, green
-npm run build → tsc -b + vite build OK, 2466 modules,
-                dist/assets/index-*.js            339.01 kB (gzip 109.98 kB)
-                dist/assets/admin-page-*.js       199.64 kB (gzip  42.25 kB)  lazy
-                dist/assets/barber-cabinet-page-*.js 38.82 kB (gzip 10.56 kB) lazy
-                dist/assets/barber-page-*.js       31.97 kB (gzip   8.52 kB)  lazy
+npm run lint  → 0 warnings, 0 errors, 321 files, 116 rules
+npm test      → 420 tests in 54 files, green
+npm run build → tsc -b + vite build OK, 2481 modules,
+                dist/assets/index-*.js            340.03 kB (gzip 110.26 kB)
+                dist/assets/csrf-*.js             143.53 kB (gzip  49.62 kB)  shared
+                dist/assets/router-*.js             9.97 kB (gzip   3.79 kB)  shared
+                dist/assets/admin-page-*.js       222.93 kB (gzip  45.58 kB)  lazy
+                dist/assets/barber-cabinet-page-*.js 38.82 kB (gzip 10.58 kB) lazy
+                dist/assets/barber-page-*.js       32.01 kB (gzip   8.53 kB)  lazy
                 dist/assets/privacy-page-*.js      29.43 kB (gzip   7.57 kB)  lazy
-                dist/assets/account-page-*.js      25.47 kB (gzip   8.25 kB)  lazy
+                dist/assets/account-page-*.js      28.23 kB (gzip   8.79 kB)  lazy
                 dist/assets/barber-schedule-page-*.js 22.59 kB (gzip 6.35 kB) lazy
-                dist/assets/account-reviews-page-*.js 16.74 kB (gzip 5.38 kB) lazy
-                dist/assets/barber-onboarding-page-*.js 13.87 kB (gzip 4.51 kB) lazy
-                dist/assets/register-page-*.js     11.57 kB (gzip   3.97 kB)  lazy
+                dist/assets/become-a-barber-page-*.js 17.83 kB (gzip 5.34 kB) lazy
+                dist/assets/account-reviews-page-*.js 16.74 kB (gzip 5.39 kB) lazy
+                dist/assets/barber-onboarding-page-*.js 13.88 kB (gzip 4.51 kB) lazy
+                dist/assets/register-page-*.js     11.57 kB (gzip   3.96 kB)  lazy
+                dist/assets/account-security-page-*.js 8.91 kB (gzip 3.14 kB) lazy
+                dist/assets/account-profile-page-*.js 7.84 kB (gzip 2.92 kB) lazy
                 dist/assets/paging-*.js             7.12 kB (gzip   2.64 kB)  shared
-                dist/assets/barber-slots-*.js       0.83 kB (gzip   0.48 kB)  shared
-                dist/assets/index-*.css            82.79 kB (gzip  14.20 kB)
+                dist/assets/account-shell-*.js      6.35 kB (gzip   2.67 kB)  shared
+                dist/assets/barber-cabinet-gates-*.js 4.27 kB (gzip 1.53 kB) shared
+                dist/assets/account-gates-*.js      4.23 kB (gzip   1.46 kB)  shared
+                dist/assets/use-my-barber-request-*.js 2.50 kB (gzip 1.18 kB) shared
+                dist/assets/barber-slots-*.js       0.83 kB (gzip   0.47 kB)  shared
+                dist/assets/index-*.css            83.18 kB (gzip  14.30 kB)
 npm run test:e2e → targeted after reseed, second API on the e2e database:
-                   the onboarding spec 1/1, `a11y.spec.ts` + `barber-cabinet.spec.ts`
-                   26/26 at 1280, `a11y-narrow.spec.ts` 10/10 at 320; full suite not rerun
+                   a11y at 1280 and 320 44/44 (4 workers), the
+                   barber-request mutations spec 1/1; full suite not rerun
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -592,12 +617,13 @@ current path, `useLocation()` additionally returns the query string, and `naviga
 replaces history and notifies subscribers. Links stay real `<a href>`s, so middle-click and
 open-in-new-tab work.
 
-Nine top-level areas:
+Ten top-level areas:
 
 | Path | Page | Notes |
 |---|---|---|
 | `/` | `HomePage` | landing; unknown non-admin paths fall back here, including `/barbers` and `/barbers/a/b` |
 | `/barbers/{id}` | `BarberPage` | public profile; a non-GUID id renders not-found without a request; `404` from the API is not a redirect |
+| `/become-a-barber` | `BecomeABarberPage` | request for the barber role: marketing copy for an anonymous visitor, form or status for a `Customer`, links for a `Barber`/`Admin`; lazy chunk `become-a-barber-page` |
 | `/account` | `AccountPage` | customer cabinet; role gates for barber/admin |
 | `/account/reviews` | `AccountReviewsPage` | author's own reviews: both statuses, edit and delete; lazy chunk `account-reviews-page` |
 | `/barber` | `BarberCabinetPage` | barber cabinet: own profile's bookings, confirm/complete/no-show/cancel (a required reason)/note; lazy chunk `barber-cabinet-page` |
@@ -612,6 +638,12 @@ Admin sub-routes: `/admin/reviews`, `/admin/reviews/{id}` and
 Back keep the same card. On desktop the first review is selected with `replace`; on mobile the
 list stays open until a row is chosen.
 
+The barber-request queue is `/admin/barber-requests`, `/admin/barber-requests/{id}` and
+`/admin/barber-requests?status=all`. The filter lives in the URL together with the card
+(`pending` is omitted, the queue is the default), exactly like `/admin/barbers`: a reload keeps
+both and a card can never belong to another filter. Switching the filter navigates to the list
+without an id, and the first row of the new filter opens with `replace` on desktop.
+
 The barbers list is a third address with a query: `/admin/barbers`, `/admin/barbers/{id}` and
 `/admin/barbers?status=all|hidden`. The filter lives in the URL together with the card, so a
 reload keeps both and a card can never belong to another filter. Switching the filter navigates
@@ -622,7 +654,8 @@ status of the card it builds (`pending` is omitted, the queue is the default). T
 stays in React state, like the email search of the bookings and audit screens.
 
 Route code is split. `AdminPage`, `AccountPage`, `AccountReviewsPage`, `BarberPage`,
-`BarberCabinetPage`, `BarberSchedulePage`, `RegisterPage` and `PrivacyPage` are `React.lazy` imports in `App.tsx`,
+`BarberCabinetPage`, `BarberSchedulePage`, `BecomeABarberPage`, `RegisterPage` and `PrivacyPage`
+are `React.lazy` imports in `App.tsx`,
 behind one `Suspense` with a skeleton fallback (`role="status"`, «Загрузка страницы»); the
 landing ships only the shell and itself. The cookie notice is rendered once, in `App.tsx` above
 `<main>`, so it survives navigation and also appears on `/admin`, where the footer is hidden.
@@ -683,6 +716,17 @@ falls back to the landing like any other unknown path; `App.tsx` checks it befor
 `matchBarberPath`. The page mounts the form only for an anonymous visitor: a signed-in user gets
 the «Вы уже вошли» gate with a role-appropriate button and no data request, and the form itself
 is the only caller of `POST /api/auth/register`.
+
+`/become-a-barber` is a public flow with four states and one data read. Anonymous gets the
+«what the role gives» copy plus `LoginDialog` (`redirectTo` this page) and «Зарегистрироваться»
+and makes **no** request; `loading` shows a skeleton, `unavailable` the `SessionUnavailable`
+card; a `Customer` is the only branch that calls `GET /api/barber-requests/mine` and gets either
+the form or its status; a `Barber` gets «Вы уже барбер» with `/barber` (or `/barber/onboarding`
+when `barberProfileId === null`); an `Admin` gets a link to `/admin/barber-requests`.
+`isBecomeABarberPath` matches exactly that address, so unknown `/become-a-barber/*` falls back
+to the landing, and `App.tsx` checks it before `matchBarberPath`. A `201` replaces the form with
+the same status card under the heading «Заявка отправлена», so the success state needs no second
+read; the account card (§13) mounts the status read for `Customer` only.
 
 ---
 
@@ -915,6 +959,12 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `DELETE` | `/api/barber-profiles/{id}/salons/{salonId}/schedule-exceptions/{date}` | owner or admin | removes the exception → `204`; `404 barberSalon.removeScheduleException.notFound`; a cookie mutation with `X-CSRF-TOKEN` |
 | `POST` | `/api/barber-profiles/{id}/time-offs` | owner or admin | `{ startAt, endAt, reason }` (UTC instants) → `204`; the upper bound is exclusive; `409 barberProfile.addTimeOff.overlap`, `400 barberProfile.addTimeOff.period`; a cookie mutation with `X-CSRF-TOKEN` |
 | `DELETE` | `/api/barber-profiles/{id}/time-offs/{timeOffId}` | owner or admin | `204`; `404` when the period is already gone; a cookie mutation with `X-CSRF-TOKEN` |
+| `POST` | `/api/barber-requests` | role `Customer`, cookie mutation | the «Стать барбером» request: `{ displayName, yearsOfExperience, city, about: string\|null, hasSalon }` → `201 BarberRequestResponse`; the body carries **no role** — `Barber` is granted only by an admin approval; one active `Pending` per user (partial unique index), so a duplicate is `409 barberRequest.create.alreadyPending` and a non-customer is `403 barberRequest.create.forbidden`; the standard `400` validation shape covers the field bounds (display name 1..120, experience 1..70, city 1..100, `about` ≤ 2000); `X-CSRF-TOKEN` required |
+| `GET` | `/api/barber-requests/mine` | any authenticated role | `200 { request: BarberRequestResponse \| null }` — the caller's latest request; available to every role so an approved barber still sees the decision; `request` is `null` when there is none; no parameters, no pagination |
+| `GET` | `/api/admin/barber-requests?status=pending\|all&cursor=&pageSize=` | admin | the request queue and all requests in one cursor list: `pending` (default) is the **oldest-first** queue, `all` returns **every request** (pending and reviewed), newest first; `PagedResponse<AdminBarberRequest>` has **no total**; each row is the request plus `reviewedByUserId` and `applicant: { id, fullName, email }`; the UI sends `pageSize=20`; `status` is the only filter and it lives in the URL |
+| `GET` | `/api/admin/barber-requests/{id}` | admin | one request for a direct link: the same `AdminBarberRequest`; `404 barberRequest.notFound` |
+| `POST` | `/api/admin/barber-requests/{id}/approval` | admin, cookie mutation | `200 AdminBarberRequest`; changes the applicant's role to `Barber` and revokes all of their refresh tokens **in one transaction** — `ChangeRole` rotates the security stamp, so the applicant's current session dies immediately and they sign in again (the UI says so before confirming); `409 barberRequest.review.invalidStatus` when the request is no longer `Pending`, `404 barberRequest.notFound`; `X-CSRF-TOKEN` required |
+| `POST` | `/api/admin/barber-requests/{id}/rejection` | admin, cookie mutation | `{ reason }` → `200 AdminBarberRequest`; the reason is required and visible to the applicant (≤ 500 characters): `400 barberRequest.rejection.reasonRequired` / `barberRequest.rejection.reasonTooLong`; `409 barberRequest.review.invalidStatus`, `404`; the role is **not** changed, and the applicant may submit a new request; `X-CSRF-TOKEN` required |
 | `POST` | `/api/bookings/{id}/confirmation` | owner barber | `Pending → Confirmed`, `204`; `403 auth.forbidden`, `404 booking.notFound`, `409 booking.confirm.invalidStatus` |
 | `POST` | `/api/bookings/{id}/completion` | owner barber | `Confirmed → Completed`, `204`; `409 booking.complete.invalidStatus` |
 | `POST` | `/api/bookings/{id}/no-show` | owner barber | `Confirmed → NoShow`, `204`; before `start_at` — `400 booking.markNoShow.tooEarly`; `409 booking.markNoShow.invalidStatus` |
@@ -952,6 +1002,20 @@ need, and they go by the `id` from that row. `GET /api/bookings` stays the **cus
 its `scope` is exactly the «Предстоящие»/«История» pair at `/account` — and is not reused by the
 cabinet: there the barber is the client, not the owner, and `/api/barber/bookings` has its own
 scopes.
+
+The «Стать барбером» request is the **only** way a `Customer` can become a `Barber` themselves
+(`PUT /api/users/{id}/role` stays admin-only). Three deliberate asymmetries: the `POST` body
+carries no role, so a crafted request can never grant `Barber`/`Admin`; `GET
+/api/barber-requests/mine` is open to every role, because after approval the person is a
+`Barber` and must still see the decision; and one user has at most one `Pending` request
+(partial unique index), so the second `POST` is `409` rather than a second queue row. The
+applicant's `about`/`city` are personal data: they are **not** written to `audit_log` — the
+request row keeps them, and the journal only sees the `user.updated` role change. Approval
+ends the applicant's sessions (§6.2): `ChangeRole` rotates the security stamp, the access
+cookie dies and the refresh tokens are revoked, so the UI warns about it and offers «Войти
+снова» instead of trying to repair the session. Neither list has a `total`, so the admin
+screen shows the `ListPager` range and never a count; the `pending`/`all` filter is part of the
+address (`?status=`) for the same reason the barbers filter is (§6.4).
 
 The frontend uses the **cookie branch** of `POST /api/auth/refresh` for silent session renewal
 (§9.4); the body-token branch belongs to non-browser clients and is not implemented here.
@@ -1331,32 +1395,36 @@ contrast on screens outside the axe matrix.
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 339.01 kB | 109.98 kB |
-| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 152.99 kB total | 53.28 kB |
-| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit) | 199.64 kB | 42.25 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 38.82 kB | 10.56 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 31.97 kB | 8.52 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 340.03 kB | 110.26 kB |
+| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 153.50 kB total | 53.41 kB |
+| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit) | 222.93 kB | 45.58 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 38.82 kB | 10.58 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 32.01 kB | 8.53 kB |
 | `privacy-page-*.js` — lazy `/privacy` with the policy sections and the cookie registry | 29.43 kB | 7.57 kB |
-| `account-page-*.js` — lazy `/account` with the hero, two server tabs and the dialogs | 25.47 kB | 8.25 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs, the request card and the dialogs | 28.23 kB | 8.79 kB |
 | `barber-schedule-page-*.js` — lazy `/barber/schedule` with the week, exceptions and time offs | 22.59 kB | 6.35 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.74 kB | 5.38 kB |
-| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 13.87 kB | 4.51 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 11.57 kB | 3.97 kB |
+| `become-a-barber-page-*.js` — lazy `/become-a-barber` with the marketing copy, the request form and the status card | 17.83 kB | 5.34 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.74 kB | 5.39 kB |
+| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 13.88 kB | 4.51 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 11.57 kB | 3.96 kB |
+| `account-security-page-*.js` — lazy `/account/security` with the password and sign-out cards | 8.91 kB | 3.14 kB |
+| `account-profile-page-*.js` — lazy `/account/profile` with the profile form | 7.84 kB | 2.92 kB |
 | `paging-*.js` — shared cursor pager used by the row lists | 7.12 kB | 2.64 kB |
-| `barber-slots-*.js` — shared slot DTO/fetch used by the profile and the cabinet | 0.83 kB | 0.48 kB |
-| `account-shell-*.js` — cabinet shell shared by the four account screens | 6.76 kB | 2.80 kB |
+| `account-shell-*.js` — cabinet shell shared by the four account screens | 6.35 kB | 2.67 kB |
 | `barber-cabinet-gates-*.js` — shared barber gates and skeleton | 4.27 kB | 1.53 kB |
 | `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.23 kB | 1.46 kB |
-| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.25 kB | 0.64 kB |
+| `use-my-barber-request-*.js` — the one `GET /barber-requests/mine` read shared by the page and the account card | 2.50 kB | 1.18 kB |
+| `barber-slots-*.js` — shared slot DTO/fetch used by the profile and the cabinet | 0.83 kB | 0.47 kB |
+| `bookings-*.js` — booking DTO/HTTP shared by the profile and the account | 1.10 kB | 0.54 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile, the cabinet and the admin booking card | 1.04 kB | 0.56 kB |
 | `review-stars-*.js` — shared stars for the public and the author list | 0.45 kB | 0.35 kB |
 | `arrow-left-*.js`, `circle-check-*.js` — icons shared by two lazy chunks | 0.42 kB total | 0.37 kB |
-| `use-now-*.js` — minute ticker shared by both cabinets | 0.25 kB | 0.19 kB |
-| `index-*.css` | 82.79 kB | 14.20 kB |
+| `use-now-*.js` — minute ticker shared by both cabinets | 0.42 kB | 0.30 kB |
+| `index-*.css` | 83.18 kB | 14.30 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.82 kB | — |
 
-2466 modules. The onboarding build added the lazy `barber-onboarding-page` chunk (13.87 / 4.51 kB:
+2481 modules. The onboarding build added the lazy `barber-onboarding-page` chunk (13.87 / 4.51 kB:
 the form, its limits and the transport); the gate CTA moved the shared `barber-cabinet-gates`
 chunk by less than 0.1 kB and the entry grew by 0.65 kB (the route helper and one lazy import).
 The manual-client-booking build added the dialog and its reads to the lazy
@@ -1391,13 +1459,24 @@ guard, the one-read hook and the two plural helpers), the entry by 0.72 kB / 0.2
 0.04 kB. The other lazy chunks moved by at most 0.01 kB (rounding); no new dependency and no
 change to `ui/**`.
 
+The issue-46 build added the barber-request flow: the lazy `become-a-barber-page` chunk
+(17.83 / 5.34 kB: the page branches, the form, the status card, the route guard and the sign-in
+fallback for a dead session), the shared
+`use-my-barber-request` chunk (2.50 / 1.18 kB: one `GET /barber-requests/mine` used by the page
+and the account card), the admin queue in the lazy admin chunk (`admin-page` 222.93 / 45.58 kB:
+four components, the transport, two hooks and the route with its builder) and the account card
+inside `account-page` (28.23 / 8.79 kB). The entry grew by 1.02 kB / 0.28 kB against the
+pre-#46 339.01 / 109.98 kB (the route helper, the lazy import and the guards), `index-*.css` by
+0.39 kB / 0.10 kB, and every other lazy chunk moved by at most 0.02 kB. No new dependency and no
+change to `ui/**`.
+
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
    the PR. Do not add a bundle analyzer or a cache library without a decision (§17).
 2. **Keep the initial JS budget under ~150 kB gzip** unless a feature justifies more. This is a
    working target, not a stakeholder-approved SLA. The landing's initial JS is `index-*.js` plus
-   the two entry-preloaded shared chunks — 109.58 + 52.65 kB gzip ≈ **162.2 kB**, above the
+   the two entry-preloaded shared chunks — 110.26 + 53.41 kB gzip ≈ **163.7 kB**, above the
    target; bringing it back under is a separate decision. Role-gated and secondary screens belong
    behind a lazy boundary instead of widening the budget.
 3. **Lazy-load below-the-fold and route-level code** (`React.lazy` + `Suspense`). `/admin/**`,
@@ -1453,18 +1532,20 @@ change to `ui/**`.
 | Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone), barber, service, salon, price, both notes, `cancellationReason`, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are written to `audit_log`** as `booking.updated` (the `Booking` allowlist records `Status`/`BarberNote`/`CancellationReason`; booking creation is deliberately not audited) |
 | Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить»; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. The journal covers seven entity types — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking` (booking rows carry only `Status`/`BarberNote`/`CancellationReason` changes; booking creation is deliberately not audited) — and offers the four new filters with Russian labels «Салон», «Услуга», «Специализация», «Бронь», Russian values for `status`/`category` and «Активность» for `isActive`; retention, export and partitioning remain separate |
 | Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить»; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
-| Other admin sections | ✅ all built: reviews, barbers, users, the catalogue, the bookings and the journal (§13) |
+| Other admin sections | ✅ all built: summary, reviews, barbers, users, barber requests, the catalogue, the bookings and the journal (§13) |
+| Admin barber requests | ✅ `/admin/barber-requests`: queue (`?status=pending`, oldest first) and all requests (`?status=all`, every request newest first) in one screen, filter in the URL and the card in the path, split-view detail (full screen on mobile) with the applicant (name/email), answers, submission/review dates and the rejection reason; «Одобрить» behind an `alertdialog` that says the role change ends **all** of the applicant's sessions and that the profile is created after signing in again, «Отклонить» behind an `alertdialog` with a **required** reason (≤ 500, empty never sent); after a decision the row is updated locally (queue: removed) and both list and card are silently re-read, with `role="status"`/`role="alert"` feedback, and a `404` on the action removes the row silently; empty states «Заявок нет» / «Заявок с таким статусом нет», no counts — `ListPager` shows the range; `401` gate and `403` text. **Requests are deliberately not audited**: the row keeps `about`/`city` and the decision, and the journal only sees the `user.updated` role change (§9.3) |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with the policy edition and a link to `/privacy`), one `POST /api/auth/register` without CSRF that carries `consentVersion` from `PRIVACY_POLICY_VERSION`, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates; `auth.register.consentRequired` maps to the existing checkbox error, `auth.register.consentVersion` to a form-level «Политика обновилась» alert |
+| Стать барбером | ✅ `/become-a-barber`: anonymous marketing copy (what the role gives) with `LoginDialog` and «Зарегистрироваться» and **no request**; loading skeleton and `SessionUnavailable`; `Customer` reads `GET /api/barber-requests/mine` once and gets the form (name 1..120, experience 1..70, city 1..100, «о себе» ≤ 2000, «уже работаю в салоне») or the status card («На рассмотрении» / «Одобрена» with «Войти снова» while the session is still `Customer` / «Отклонена» with the reason and «Подать заявку снова»); `Barber` gets «Вы уже барбер» with `/barber` or `/barber/onboarding`, `Admin` a link to `/admin/barber-requests`; one `POST` with CSRF, `201` replaces the form with «Заявка отправлена», `409 alreadyPending`/`403`/`429`/network mapped to Russian copy with «Повторить» where it helps. The `/account` card reads the same endpoint, is mounted for `Customer` only and never blocks the booking lists (own loading, quiet retry, no `401` UI) |
 | Legal information | ✅ `/privacy` publishes the personal-data policy (152-ФЗ) with eleven sections, a table of contents and the `COOKIE_REGISTRY` list (session, refresh, antiforgery, hint, notice); §2.2 states that the operator records the policy edition, the UTC time of consent and the IP, §4.1 that the record is stored with the account; the edition is dated 2026-11-03 and rendered from `PRIVACY_POLICY_DATE`; the footer links the policy and its `#cookies` anchor; the first visit shows an informational cookie bar under the header with one «Понятно» (no consent wall, because only strictly necessary cookies are set) and remembers the dismissal in `barbersearch.cookie-notice` for a year. Operator details are placeholders in `LEGAL_ENTITY` until the domain is registered (§14 #23) |
 | Password reset | ❌ no UI and no backend flow; password change exists in the account |
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization and service, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail); `/barbers/{id}` shows the public card (hero, about, services with prices, specializations, salons with the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and salon controls; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states) |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the personal cabinet on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager) |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/register`, `/privacy`, `/admin/**` (summary, reviews, barbers, users, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `RegisterPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/become-a-barber`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/register`, `/privacy`, `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `BecomeABarberPage`, `RegisterPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 363 tests in 49 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 420 tests in 54 files: `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1518,7 +1599,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32), 363 tests in 49 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 420 tests in 54 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -1676,6 +1757,35 @@ body), `createBarberBooking` (CSRF header, body, one retry on `auth.csrf.invalid
 `409`) and `describeBarberBookingCreateFailure` (customer-not-found, overlap, past start, `403`,
 lock timeout). E2E opens the dialog on `/barber`, finds `e2e-customer@…` and asserts the service
 select; the axe matrix covers the open dialog at 1280.
+
+**The barber-request flow adds** `BarberRequestForm` (the domain bounds 1..120 / 1..70 / 1..100 /
+≤ 2000 rejected client-side with no request — including the 121st name character, the 101st city
+character and the 2001st `about` character — the exact contract body with **no role** and
+`about: null` for an empty textarea, the `X-CSRF-TOKEN` header, `201` → the request handed to the
+page, `409 alreadyPending` without a retry, `403`, `429` and a network failure each
+with the Russian copy, «Повторить» sending exactly one more request); `BecomeABarberPage` (the
+anonymous copy with zero requests and a `/register` link, `loading`, `unavailable`, a `Customer`
+with a request sees the status and no form, a `Customer` without one sees the form, `201` replaces
+the whole section with one «Заявка отправлена» card and drops the form heading, a `401` on
+`/mine` shows the sign-in gate instead of a permanent skeleton, a `Rejected`
+request shows the reason and reveals the form again, `Barber` → `/barber` / `/barber/onboarding`
+and `Admin` → `/admin/barber-requests` — both without a `GET /barber-requests/mine`, `429` with
+«Повторить»); `BarberRequestCard` (the CTA and its navigation, the status row and «Подробнее»,
+the reason, a quiet `429` retry, and a `401` that renders nothing); `admin-barber-requests` (the
+list URL — `status` always, `cursor` last, no extra parameters — the page guard accepting extra
+fields and rejecting an unknown status or a missing `applicant`, `fetchAdminBarberRequest` by id,
+the CSRF `POST`s for `approval` (no body) and `rejection` (the reason in the body) with one retry
+on a stale token, and the Russian mapping of `barberRequest.notFound`, `review.invalidStatus`,
+`review.invalidApplicant` (before the generic `409`), `rejection.reasonRequired`,
+`rejection.reasonTooLong`, `429` and the two action fallbacks); and
+`BarberRequestsScreen` (the queue with the first row opened on desktop, the filter switch starting
+a new first page and dropping the previous card, the approval `alertdialog` naming the session
+loss and the profile step, the rejection `alertdialog` that sends nothing while the reason is
+empty and the reason in the body afterwards, the row removed from the queue with a silent refresh
+and a `role="status"` announcement, a `404` on the action that removes the row silently and never
+shows an error alert, the `403` text and the `401` gate, both empty states, and
+«Дальше» by cursor with «Назад» making no request). `admin-path` also covers the `barberRequests`
+route, `?status=all`, the GUID check and `barberRequestsPath()`.
 
 **Автообновление кабинетов добавляет** `useAutoRefresh` (период, пауза на скрытой
 вкладке, немедленный тик при возврате, отсутствие наложений), `diffPageItems`,
@@ -2007,6 +2117,26 @@ labels show it. Unit tests grew to 309 in 38 files; backend 853 (domain 213, app
 infrastructure 94, integration 139) with the new `BarberCancellationReasonTests`; E2E fixtures
 give the cancelled history rows a reason and `barber-cabinet-mutations.spec.ts` fills it before
 confirming. No new dependencies and no `ui/**` changes.
+
+**Completed 2026-11-06:** barber requests (#46) — a `Customer` can now ask for the barber role
+instead of messaging an administrator. The backend added `BarberRequest` (one active `Pending`
+per user via a partial unique index) and six endpoints; approval changes the role, revokes every
+refresh token and rotates the security stamp in one transaction, so the applicant's session ends
+and the profile is created after signing in again. The frontend added `/become-a-barber` (a lazy
+chunk: marketing copy and `LoginDialog` for an anonymous visitor with **no** request, the form or
+the status card for a `Customer`, a `/barber`/`/barber/onboarding` link for a `Barber`, a link to
+the queue for an `Admin`), the one-read `GET /api/barber-requests/mine` shared by the page and a
+`/account` card for `Customer` only, and `/admin/barber-requests` with the queue
+(`?status=pending`, oldest first), all requests (`?status=all`, newest first), a
+split-view card, approval behind an `alertdialog` that names the session loss, rejection behind an
+`alertdialog` with a required reason (≤ 500) and local row updates followed by a silent refresh.
+Empty states name the filter («Заявок нет» / «Заявок с таким статусом нет»), there are no counts
+(the API has no `total`), and no role ever comes from the request body. Requests are **not**
+written to `audit_log`: the row keeps the personal data and the decision, the journal only sees
+the `user.updated` role change. Unit tests grew to 420 in 54 files; E2E added
+`barber-request-mutations.spec.ts` (applicant submits, admin rejects with a reason, applicant
+reads it) and the `e2e-applicant` account; the seed deletes the fixture requests and resets that
+account to `Customer`, so a rerun cannot hit `409 alreadyPending`.
 
 **Completed 2026-11-03:** provable consent (#42) — the registration checkbox stopped being a
 client-only gate. `POST /api/auth/register` takes `consentVersion` (= `PRIVACY_POLICY_VERSION`),
