@@ -135,6 +135,96 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.BarberRequests.BarberRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("About")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("about");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("city");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("HasSalon")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_salon");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_barber_requests");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_barber_requests_reviewed_by_user_id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_barber_requests_pending_user")
+                        .HasFilter("status = 1");
+
+                    b.HasIndex("CreatedAt", "Id")
+                        .HasDatabaseName("ix_barber_requests_created_at_id");
+
+                    b.HasIndex("UserId", "CreatedAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_barber_requests_user_id_created_at");
+
+                    b.ToTable("barber_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_barber_requests_about", "about IS NULL OR char_length(about) BETWEEN 1 AND 2000");
+
+                            t.HasCheckConstraint("ck_barber_requests_city", "char_length(city) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("ck_barber_requests_display_name", "char_length(display_name) BETWEEN 1 AND 120");
+
+                            t.HasCheckConstraint("ck_barber_requests_rejection_reason", "rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND 500");
+
+                            t.HasCheckConstraint("ck_barber_requests_status", "status IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_barber_requests_years_of_experience", "years_of_experience BETWEEN 1 AND 70");
+                        });
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.BarberSalons.BarberSalon", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1190,6 +1280,64 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("BarberProfileId");
+                        });
+
+                    b.Navigation("DisplayName")
+                        .IsRequired();
+
+                    b.Navigation("YearsOfExperience")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.BarberRequests.BarberRequest", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_barber_requests_users_reviewed_by_user_id");
+
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_barber_requests_users_user_id");
+
+                    b.OwnsOne("BarberSearch.Domain.BarberProfiles.ValueObjects.DisplayName", "DisplayName", b1 =>
+                        {
+                            b1.Property<Guid>("BarberRequestId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Value")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("display_name");
+
+                            b1.HasKey("BarberRequestId");
+
+                            b1.ToTable("barber_requests");
+
+                            b1.WithOwner()
+                                .HasForeignKey("BarberRequestId");
+                        });
+
+                    b.OwnsOne("BarberSearch.Domain.BarberProfiles.ValueObjects.YearsOfExperience", "YearsOfExperience", b1 =>
+                        {
+                            b1.Property<Guid>("BarberRequestId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Value")
+                                .HasColumnType("integer")
+                                .HasColumnName("years_of_experience");
+
+                            b1.HasKey("BarberRequestId");
+
+                            b1.ToTable("barber_requests");
+
+                            b1.WithOwner()
+                                .HasForeignKey("BarberRequestId");
                         });
 
                     b.Navigation("DisplayName")
