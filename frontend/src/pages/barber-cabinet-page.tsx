@@ -19,6 +19,7 @@ import {
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberNoteDialog } from '@/components/barber/barber-note-dialog'
 import { SessionUnavailable } from '@/components/session-unavailable'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useBarberBookings } from '@/hooks/use-barber-bookings'
 import { useNow } from '@/hooks/use-now'
 import { useSession } from '@/hooks/use-session'
@@ -27,6 +28,7 @@ import type {
   BarberBooking,
   BarberBookingScope,
 } from '@/lib/barber-bookings'
+import { describeBarberBookingsChange } from '@/lib/booking-changes'
 
 /**
  * Кабинет барбера.
@@ -118,6 +120,40 @@ function BarberBookingsScreen({
   const rowHandles = useRef(new Map<string, RowHandle>())
   // Куда вернуть фокус после мутации: id строки и её кнопка.
   const pendingFocus = useRef<PendingFocus | null>(null)
+
+  const refreshBookings = bookings.refresh
+  const isRefreshing = bookings.isRefreshing
+  const refreshError = bookings.refreshError
+  const updatedAt = bookings.updatedAt
+
+  // Тихое обновление страницы. Баннер — только в «Ближайших»: в истории
+  // появившаяся строка не «новая запись», а завершённый визит.
+  const handleRefresh = useCallback(async () => {
+    const change = await refreshBookings()
+
+    if (change === null || scope !== 'upcoming') {
+      return
+    }
+
+    const message = describeBarberBookingsChange(change, Date.now())
+
+    if (message !== null) {
+      setAnnouncement(message)
+    }
+  }, [refreshBookings, scope])
+
+  // Пока открыт диалог действия или идёт мутация, список не трогаем: строка
+  // под руками не должна менять статус из-за ответа, прочитанного до коммита.
+  useAutoRefresh({
+    enabled:
+      scope === 'upcoming' &&
+      bookings.status === 'ready' &&
+      !bookings.requiresSignIn &&
+      noteTarget === null &&
+      actionTarget === null &&
+      !bookings.isMutating,
+    onRefresh: handleRefresh,
+  })
 
   const registerRow = useCallback((id: string, handle: RowHandle | null) => {
     if (handle) {
@@ -300,6 +336,10 @@ function BarberBookingsScreen({
           now={now}
           hasPastItems={hasPastItems}
           headingRef={headingRef}
+          updatedAt={updatedAt}
+          isRefreshing={isRefreshing}
+          refreshError={refreshError}
+          onRefresh={handleRefresh}
           onScopeChange={(next) => {
             setScope(next)
             setAnnouncement(null)

@@ -6,6 +6,7 @@ import {
   type RowHandle,
 } from '@/components/barber/cabinet-booking-row'
 import { ListPager } from '@/components/list-pager'
+import { RefreshStatus } from '@/components/refresh-status'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PagedListStatus } from '@/hooks/use-paged-list'
@@ -43,6 +44,10 @@ export function CabinetBookingList({
   now,
   hasPastItems,
   headingRef,
+  updatedAt,
+  isRefreshing,
+  refreshError,
+  onRefresh,
   onScopeChange,
   onRetry,
   onPrev,
@@ -69,6 +74,12 @@ export function CabinetBookingList({
   /** История уже показала хотя бы одну строку — можно предложить её открыть. */
   hasPastItems: boolean
   headingRef: RefObject<HTMLHeadingElement | null>
+  /** Когда список последний раз пришёл с сервера. */
+  updatedAt: number | null
+  isRefreshing: boolean
+  /** Ошибка тихого обновления: строки остаются, баннер закрывается сам. */
+  refreshError: string | null
+  onRefresh: () => void
   onScopeChange: (scope: BarberBookingScope) => void
   onRetry: () => void
   onPrev: () => void
@@ -125,40 +136,54 @@ export function CabinetBookingList({
         {scope === 'upcoming' ? 'Ближайшие записи' : 'История записей'}
       </h2>
 
-      <div
-        role="tablist"
-        aria-label="Какие записи показать"
-        className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
-      >
-        {TABS.map((item) => {
-          const isSelected = item.id === scope
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          role="tablist"
+          aria-label="Какие записи показать"
+          className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
+        >
+          {TABS.map((item) => {
+            const isSelected = item.id === scope
 
-          return (
-            <button
-              key={item.id}
-              ref={(element) => {
-                tabRefs.current[item.id] = element
-              }}
-              type="button"
-              role="tab"
-              id={`barber-tab-${item.id}`}
-              aria-selected={isSelected}
-              aria-controls="barber-bookings-panel"
-              tabIndex={isSelected ? 0 : -1}
-              onClick={() => onScopeChange(item.id)}
-              onKeyDown={handleTabKeyDown}
-              className={cn(
-                'inline-flex h-11 items-center rounded-md px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-7',
-                isSelected
-                  ? 'bg-background font-medium text-foreground shadow-sm ring-1 ring-foreground/10'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {item.label}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={item.id}
+                ref={(element) => {
+                  tabRefs.current[item.id] = element
+                }}
+                type="button"
+                role="tab"
+                id={`barber-tab-${item.id}`}
+                aria-selected={isSelected}
+                aria-controls="barber-bookings-panel"
+                tabIndex={isSelected ? 0 : -1}
+                onClick={() => onScopeChange(item.id)}
+                onKeyDown={handleTabKeyDown}
+                className={cn(
+                  'inline-flex h-11 items-center rounded-md px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-7',
+                  isSelected
+                    ? 'bg-background font-medium text-foreground shadow-sm ring-1 ring-foreground/10'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <RefreshStatus
+          updatedAt={updatedAt}
+          isRefreshing={isRefreshing}
+          onRefresh={onRefresh}
+        />
       </div>
+
+      {refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          {refreshError}
+        </p>
+      )}
 
       <div
         id="barber-bookings-panel"

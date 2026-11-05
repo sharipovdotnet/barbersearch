@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { usePagedList, type PagedListStatus } from '@/hooks/use-paged-list'
 import {
@@ -11,6 +11,7 @@ import {
   type BarberBooking,
   type BarberBookingScope,
 } from '@/lib/barber-bookings'
+import { diffPageItems, type PageChange } from '@/lib/page-changes'
 
 export type BarberBookingsController = {
   items: BarberBooking[]
@@ -30,6 +31,18 @@ export type BarberBookingsController = {
   /** Ошибка следующей страницы: показанные строки не стираются. */
   pageError: string | null
   reload: () => void
+  /**
+   * Тихое обновление текущей страницы с разбором изменений: экран показывает
+   * баннер только на новую или исчезнувшую запись. `null` — запрос не удался.
+   */
+  refresh: () => Promise<PageChange<BarberBooking> | null>
+  isRefreshing: boolean
+  /** Ошибка тихого обновления: строки остаются на экране. */
+  refreshError: string | null
+  /** Когда страница последний раз пришла с сервера. */
+  updatedAt: number | null
+  /** Одна из пяти мутаций в полёте: экран на это время останавливает опрос. */
+  isMutating: boolean
   goPrev: () => void
   goNext: () => void
   confirm: (id: string) => Promise<void>
@@ -43,6 +56,10 @@ const LIST_FALLBACK = 'Не удалось загрузить записи.'
 const PAGE_FALLBACK = 'Не удалось загрузить ещё записи.'
 
 const getBookingId = (booking: BarberBooking): string => booking.id
+
+/** Для баннера важно только изменение статуса: остальные поля сервер не меняет. */
+const statusChanged = (before: BarberBooking, after: BarberBooking): boolean =>
+  before.status !== after.status
 
 /** Терминальный статус уводит строку из «Ближайших»: история живёт в другом скоупе. */
 function isTerminal(status: BarberBooking['status']): boolean {
@@ -74,6 +91,10 @@ function applyStatus(
  * После мутации меняется только своя строка, без повторного `GET`: новый запрос
  * сдвинул бы курсор и вернул бы уже виденные строки. `409`/`404` пробрасываются в
  * строку или диалог — остальные строки при этом не трогаются.
+ *
+ * `refresh` — обратная операция для опроса: тихо перечитывает текущую страницу и
+ * возвращает разницу, чтобы экран объявил новую или отменённую запись. Мутации при
+ * этом не пересекаются с опросом: `isMutating` закрывает таймер на время запроса.
  */
 export function useBarberBookings(
   scope: BarberBookingScope
@@ -96,6 +117,10 @@ export function useBarberBookings(
     isLoadingPage,
     pageError,
     reload,
+    refreshPage,
+    isRefreshing,
+    refreshError,
+    updatedAt,
     goPrev,
     goNext,
     replaceItem,
@@ -110,15 +135,51 @@ export function useBarberBookings(
 
   // id с запросом в полёте: второй клик по той же строке молча игнорируется.
   const pendingMutationsRef = useRef(new Set<string>())
+  // Число мутаций в полёте: пока оно больше нуля, опрос не трогает список, иначе
+  // ответ, прочитанный до коммита мутации, вернул бы строке прошлый статус.
+  const [pendingMutations, setPendingMutations] = useState(0)
   // Последняя показанная версия строки по id. Ответ приходит, когда страница могла
   // уже смениться, а правка обязана примениться ко всем закэшированным страницам.
   const knownBookingsRef = useRef(new Map<string, BarberBooking>())
+  // Строки текущей страницы до тихого обновления — база для «исчезла»/«изменилась».
+  const currentPageRef = useRef<BarberBooking[]>([])
 
   useEffect(() => {
+    currentPageRef.current = items
+
     for (const booking of items) {
       knownBookingsRef.current.set(booking.id, booking)
     }
   }, [items])
+
+  /**
+   * Тихое обновление для опроса и кнопки «Обновить».
+   *
+   * «Новая» — только строка, которой барбер ещё не видел: запись, приехавшая с
+   * соседней страницы после сдвига, не должна объявляться новой.
+   */
+  const refresh = useCallback(async (): Promise<PageChange<BarberBooking> | null> => {
+    const previousPage = currentPageRef.current
+    const page = await refreshPage()
+
+    if (page === null) {
+      return null
+    }
+
+    const change = diffPageItems(
+      previousPage,
+      page.items,
+      getBookingId,
+      statusChanged
+    )
+
+    return {
+      ...change,
+      added: change.added.filter(
+        (booking) => !knownBookingsRef.current.has(booking.id)
+      ),
+    }
+  }, [refreshPage])
 
   /**
    * Одна мутация с общим гардом: пока запрос в полёте, строка заперта.
@@ -137,6 +198,7 @@ export function useBarberBookings(
       }
 
       pendingMutationsRef.current.add(id)
+      setPendingMutations(pendingMutationsRef.current.size)
 
       try {
         await request(id)
@@ -157,6 +219,7 @@ export function useBarberBookings(
         replaceItem(id, next)
       } finally {
         pendingMutationsRef.current.delete(id)
+        setPendingMutations(pendingMutationsRef.current.size)
       }
     },
     [removeItem, replaceItem]
@@ -229,6 +292,11 @@ export function useBarberBookings(
     isLoadingPage,
     pageError,
     reload,
+    refresh,
+    isRefreshing,
+    refreshError,
+    updatedAt,
+    isMutating: pendingMutations > 0,
     goPrev,
     goNext,
     confirm,

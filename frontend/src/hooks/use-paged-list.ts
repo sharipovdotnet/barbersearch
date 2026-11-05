@@ -53,6 +53,12 @@ export type PagedList<T> = {
    * карточка остаются на экране. Нужно экранам с кнопкой «Обновить».
    */
   refresh: () => void
+  /**
+   * То же тихое обновление, но с результатом: кабинет сравнивает новую страницу
+   * с прошлой и показывает баннер только на настоящих изменениях. `null` — запрос
+   * не удался, устарел или страница успела смениться.
+   */
+  refreshPage: () => Promise<Page<T> | null>
   isRefreshing: boolean
   refreshError: string | null
   /** Когда первая страница последний раз пришла с сервера. */
@@ -409,9 +415,16 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     [getId, loadFirst]
   )
 
-  const refresh = useCallback(() => {
+  /**
+   * Тихое обновление текущей страницы.
+   *
+   * Возвращает страницу для тех, кому важен результат (опрос кабинетов), и `null`,
+   * когда обновление не применилось: ошибка, устаревший ответ или смена страницы.
+   * Строки при ошибке не стираются — экран показывает `refreshError`.
+   */
+  const refreshPage = useCallback(async (): Promise<Page<T> | null> => {
     if (!enabled) {
-      return
+      return null
     }
 
     const targetIndex = stateRef.current.pageIndex
@@ -424,7 +437,7 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     // кэша) — честнее начать с первой, чем показать чужие строки.
     if (targetIndex > 0 && targetCursor === null) {
       loadFirst()
-      return
+      return null
     }
 
     const version = versionRef.current + 1
@@ -443,62 +456,68 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
       requiresSignIn: false,
     }))
 
-    void (async () => {
-      try {
-        const page = await fetchPage(targetCursor, controller.signal)
+    try {
+      const page = await fetchPage(targetCursor, controller.signal)
 
-        if (versionRef.current !== version) {
-          return
+      if (versionRef.current !== version) {
+        return null
+      }
+
+      // Пока запрос летел, страницу могли перевернуть: ответ для прошлой
+      // страницы уже не актуален, но и флаг обновления не должен зависнуть.
+      if (stateRef.current.pageIndex !== targetIndex) {
+        setState((previous) => ({ ...previous, isRefreshing: false }))
+        return null
+      }
+
+      setState((previous) => {
+        const pages = [...previous.pages]
+        const cursors = [...previous.cursors]
+        pages[targetIndex] = page.items
+        cursors[targetIndex] = page.nextCursor
+
+        return {
+          ...previous,
+          pages,
+          cursors,
+          status: 'ready',
+          error: null,
+          pageError: null,
+          requiresSignIn: false,
+          isLoadingPage: false,
+          isRefreshing: false,
+          refreshError: null,
+          updatedAt: Date.now(),
         }
+      })
 
-        // Пока запрос летел, страницу могли перевернуть: ответ для прошлой
-        // страницы уже не актуален, но и флаг обновления не должен зависнуть.
-        setState((previous) => {
-          if (previous.pageIndex !== targetIndex) {
-            return { ...previous, isRefreshing: false }
-          }
+      return page
+    } catch (cause) {
+      if (versionRef.current !== version || controller.signal.aborted) {
+        return null
+      }
 
-          const pages = [...previous.pages]
-          const cursors = [...previous.cursors]
-          pages[targetIndex] = page.items
-          cursors[targetIndex] = page.nextCursor
-
-          return {
-            ...previous,
-            pages,
-            cursors,
-            status: 'ready',
-            error: null,
-            pageError: null,
-            requiresSignIn: false,
-            isLoadingPage: false,
-            isRefreshing: false,
-            refreshError: null,
-            updatedAt: Date.now(),
-          }
-        })
-      } catch (cause) {
-        if (versionRef.current !== version || controller.signal.aborted) {
-          return
-        }
-
-        if (requiresAuth && isUnauthorized(cause)) {
-          setState((previous) => ({
-            ...previous,
-            isRefreshing: false,
-            requiresSignIn: true,
-          }))
-          return
-        }
-
+      if (requiresAuth && isUnauthorized(cause)) {
         setState((previous) => ({
           ...previous,
           isRefreshing: false,
-          refreshError: mapFailure(cause, fallback, mapError),
+          requiresSignIn: true,
         }))
+        return null
       }
-    })()
+
+      setState((previous) => ({
+        ...previous,
+        isRefreshing: false,
+        refreshError: mapFailure(cause, fallback, mapError),
+      }))
+      return null
+    }
   }, [enabled, fetchPage, fallback, loadFirst, mapError, requiresAuth])
+
+  const refresh = useCallback(() => {
+    void refreshPage()
+  }, [refreshPage])
 
   const currentItems = state.pages[state.pageIndex] ?? []
   let offset = 0
@@ -519,6 +538,7 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     pageError: enabled ? state.pageError : null,
     reload,
     refresh,
+    refreshPage,
     isRefreshing: enabled && state.isRefreshing,
     refreshError: enabled ? state.refreshError : null,
     updatedAt: state.updatedAt,

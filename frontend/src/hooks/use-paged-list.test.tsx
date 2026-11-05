@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { usePagedList, type PagedList } from '@/hooks/use-paged-list'
@@ -70,5 +70,32 @@ describe('usePagedList', () => {
     await waitFor(() => {
       expect(result.current.items).toEqual(['опубликованный отзыв'])
     })
+  })
+
+  it('refreshPage возвращает новую страницу, не сбрасывая список в скелетон', async () => {
+    let call = 0
+    const fetchPage = async () =>
+      page(call++ === 0 ? ['первая'] : ['первая', 'новая'])
+
+    const { result } = renderHook(() =>
+      usePagedList<string>({
+        getId: (item) => item,
+        fetchPage,
+        fallback: 'Не удалось загрузить список.',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.items).toEqual(['первая'])
+    })
+
+    let refreshed: Page<string> | null = null
+    await act(async () => {
+      refreshed = await result.current.refreshPage()
+    })
+
+    expect(refreshed).toEqual(page(['первая', 'новая']))
+    expect(result.current.items).toEqual(['первая', 'новая'])
+    expect(result.current.status, 'строки не уходят в загрузку').toBe('ready')
   })
 })

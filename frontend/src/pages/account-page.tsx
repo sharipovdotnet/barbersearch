@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
 import {
@@ -13,9 +13,12 @@ import { CancelBookingDialog } from '@/components/account/cancel-booking-dialog'
 import { NextBookingCard } from '@/components/account/next-booking-card'
 import { ReviewDialog } from '@/components/account/review-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
 import { useCustomerBookings } from '@/hooks/use-bookings'
 import { ACCOUNT_PATH } from '@/lib/account-path'
+import { describeCustomerBookingsChange } from '@/lib/booking-changes'
+import type { Booking } from '@/lib/bookings'
 import { formatDateTime } from '@/lib/format'
 import { formatPageRange } from '@/lib/paging'
 
@@ -58,9 +61,10 @@ function BookingsCabinet() {
   const [tab, setTab] = useState<BookingsTab>('upcoming')
   // История ленивая: на входе в кабинет грузятся только «Предстоящие».
   const historyEnabled = tab === 'history'
-  const { upcoming, history, cancelBooking } = useCustomerBookings({
-    historyEnabled,
-  })
+  const { upcoming, history, cancelBooking, refreshUpcoming, isCancelling } =
+    useCustomerBookings({
+      historyEnabled,
+    })
 
   // Активный список задаёт и строки, и пагинатор: у вкладок разные курсоры.
   const list = tab === 'history' ? history : upcoming
@@ -106,6 +110,52 @@ function BookingsCabinet() {
       ),
     [list.items, profiles]
   )
+
+  // Пояс салона живёт в карточке барбера, а не в брони: для баннера его собираем
+  // тем же способом, что и строку списка.
+  const timeZoneOf = useCallback(
+    (booking: Booking) =>
+      buildBookingView(booking, profiles[booking.barberProfileId]).timeZoneId,
+    [profiles]
+  )
+
+  const handleUpcomingRefresh = useCallback(async () => {
+    const change = await refreshUpcoming()
+
+    if (change === null) {
+      return
+    }
+
+    const message = describeCustomerBookingsChange(change, Date.now(), timeZoneOf)
+
+    if (message !== null) {
+      setAnnouncement(message)
+    }
+  }, [refreshUpcoming, timeZoneOf])
+
+  const refreshHistory = history.refresh
+
+  // «Обновить» перечитывает показанный список; опрос — только «Предстоящие»:
+  // история — лог прошедших визитов, ему хватает загрузки при открытии вкладки.
+  const handleManualRefresh = useCallback(() => {
+    if (tab === 'upcoming') {
+      void handleUpcomingRefresh()
+      return
+    }
+
+    refreshHistory()
+  }, [tab, handleUpcomingRefresh, refreshHistory])
+
+  // Пока открыт диалог отмены или идёт мутация, список не трогаем: ответ,
+  // прочитанный до коммита отмены, вернул бы строку обратно.
+  useAutoRefresh({
+    enabled:
+      upcoming.status === 'ready' &&
+      !upcoming.requiresSignIn &&
+      cancelTarget === null &&
+      !isCancelling,
+    onRefresh: handleUpcomingRefresh,
+  })
 
   function handleCancelled(view: BookingView) {
     setAnnouncement(
@@ -200,6 +250,10 @@ function BookingsCabinet() {
               onNext={list.goNext}
               pageIndex={list.pageIndex}
               focusTargetRef={panelRef}
+              updatedAt={list.updatedAt}
+              isRefreshing={list.isRefreshing}
+              refreshError={list.refreshError}
+              onRefresh={handleManualRefresh}
               onRequestCancel={setCancelTarget}
               onRequestReview={setReviewTarget}
             />
