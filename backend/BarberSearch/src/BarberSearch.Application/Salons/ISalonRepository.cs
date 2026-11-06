@@ -1,5 +1,6 @@
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Salons.Admin;
+using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Domain.Salons;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -57,6 +58,22 @@ public interface ISalonRepository
     /// </remarks>
     Task<Result<IReadOnlyList<Salon>, Failure>> GetByIdsAsync(
         IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Публичный каталог активных салонов: фильтр по городу и поиск по названию и адресу.
+    /// </summary>
+    /// <remarks>
+    /// Без пагинации: это справочник для выбора, как <c>GET api/specializations</c>.
+    /// Читается без отслеживания; порядок — город, название, идентификатор. Поиск идёт
+    /// через <c>ILIKE</c> с экранированием служебных символов шаблона.
+    /// </remarks>
+    /// <param name="city">Точный город после обрезки пробелов; <c>null</c> — без фильтра.</param>
+    /// <param name="search">Поиск по названию или адресу; <c>null</c> — без фильтра.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<SalonDirectoryItemResponse>, Failure>> GetDirectoryAsync(
+        string? city,
+        string? search,
         CancellationToken cancellationToken = default);
 
     /// <summary>

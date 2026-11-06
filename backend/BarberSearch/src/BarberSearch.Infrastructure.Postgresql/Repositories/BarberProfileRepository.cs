@@ -7,6 +7,7 @@ using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
@@ -142,6 +143,30 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         }
 
         return salon;
+    }
+
+    public async Task<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>> GetSalonSummariesAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        // Привязки не фильтруются по is_active: «Мои салоны» — список работы барбера,
+        // а не витрина. #48 добавит сюда статус «на проверке», и прятать такие салоны
+        // клиент не должен.
+        var rows = await (
+                from link in Context.BarberSalons.AsNoTracking()
+                join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
+                where link.BarberProfileId == barberProfileId
+                orderby link.IsPrimary descending, salon.Name, salon.Id
+                select new BarberSalonSummaryResponse(
+                    salon.Id,
+                    salon.Name,
+                    salon.City,
+                    salon.Address,
+                    salon.TimeZoneId,
+                    link.IsPrimary))
+            .ToListAsync(cancellationToken);
+
+        return rows;
     }
 
     public async Task<Result<BarberProfile, Failure>> GetForRatingUpdateAsync(

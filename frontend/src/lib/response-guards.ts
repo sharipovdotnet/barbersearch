@@ -55,6 +55,7 @@ import type {
   BarberScheduleTimeOff,
 } from '@/lib/barber-schedule'
 import type { BarberSearchItem } from '@/lib/barber-search'
+import type { BarberSalonSummary } from '@/lib/barber-salons'
 import type { BarberSlot, BarberSlots } from '@/lib/barber-slots'
 import type { Booking, BookingStatus } from '@/lib/bookings'
 import type {
@@ -69,6 +70,7 @@ import type { MyReview } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import type { Review } from '@/lib/reviews'
+import type { SalonDirectoryItem } from '@/lib/salons'
 import type { SpecializationOption } from '@/lib/specializations'
 
 /**
@@ -389,6 +391,39 @@ export function isSpecializationOption(
 }
 
 export const isSpecializationList = isArrayOf(isSpecializationOption)
+
+/** Строка публичного каталога салонов для выбора. */
+export function isSalonDirectoryItem(
+  value: unknown
+): value is SalonDirectoryItem {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.name) &&
+    isString(value.city) &&
+    isString(value.address) &&
+    isString(value.timeZoneId)
+  )
+}
+
+export const isSalonDirectoryList = isArrayOf(isSalonDirectoryItem)
+
+/** Привязанный салон в списке «Мои салоны». */
+export function isBarberSalonSummary(
+  value: unknown
+): value is BarberSalonSummary {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.salonId) &&
+    isString(value.name) &&
+    isString(value.city) &&
+    isString(value.address) &&
+    isString(value.timeZoneId) &&
+    isBoolean(value.isPrimary)
+  )
+}
+
+export const isBarberSalonSummaryList = isArrayOf(isBarberSalonSummary)
 
 /** Строка публичного справочника услуг; длительность и описание UI не читает. */
 export function isHairServiceOption(value: unknown): value is HairServiceOption {

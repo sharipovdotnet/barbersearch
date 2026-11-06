@@ -695,6 +695,16 @@ public static class ApiErrorCodes
         public const string CityInvalid = "salon.city.invalid";
 
         /// <summary>
+        /// Фильтр каталога по городу длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string DirectoryCityInvalid = "salon.directory.city";
+
+        /// <summary>
+        /// Поисковая строка каталога длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string DirectorySearchInvalid = "salon.directory.search";
+
+        /// <summary>
         /// Номер страницы меньше единицы; <c>400</c>.
         /// </summary>
         public const string PagingPageInvalid = "salon.paging.page";

@@ -13,7 +13,8 @@ import { LoginDialog } from '../pages/login-dialog'
  * refresh-токен должен быть выдан этим прогоном — переиспользованный storageState нёс
  * бы уже ротированный токен и получил бы терминальный отказ вместо кабинета.
  *
- * Ширины 1280 и 320 проверяются до отправки формы: после `201` экран уходит в кабинет.
+ * Ширины 1280 и 320 проверяются до отправки формы: после `201` экран показывает шаг
+ * «Добавьте салон», а «Пропустить» ведёт в кабинет (#47).
  */
 test.describe('онбординг барбера', () => {
   test('барбер без профиля создаёт его и попадает в кабинет', async ({
@@ -70,7 +71,13 @@ test.describe('онбординг барбера', () => {
 
     await page.getByRole('button', { name: 'Создать профиль' }).click()
 
-    // `201` → refresh (новый claim `barber_profile_id`) → `/auth/me` → кабинет.
+    // `201` → refresh (новый claim `barber_profile_id`) → шаг салона; он не блокирует
+    // кабинет, поэтому «Пропустить» сразу ведёт на `/barber`.
+    await expect(
+      page.getByText('Добавьте салон', { exact: true })
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Пропустить' }).click()
+
     await expect(page).toHaveURL(/\/barber$/)
     await expect(cabinet.heading).toBeVisible()
     // Профиль создан, салонов и услуг ещё нет: записи придут позже.

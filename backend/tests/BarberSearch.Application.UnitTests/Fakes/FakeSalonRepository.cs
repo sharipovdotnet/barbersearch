@@ -2,6 +2,7 @@ using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Salons.Admin;
+using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Domain.Salons;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -32,6 +33,12 @@ public sealed class FakeSalonRepository : ISalonRepository
 
     /// <summary>Поиск после разбора обработчиком: <c>null</c>, если фильтра нет.</summary>
     public string? LastSearch { get; private set; }
+
+    /// <summary>Город каталога после разбора обработчиком.</summary>
+    public string? LastDirectoryCity { get; private set; }
+
+    /// <summary>Поиск каталога после разбора обработчиком.</summary>
+    public string? LastDirectorySearch { get; private set; }
 
     /// <summary>Ответ <see cref="CountInactiveAsync"/>: выключенных салонов в сценарии.</summary>
     public int InactiveCount { get; set; }
@@ -98,6 +105,44 @@ public sealed class FakeSalonRepository : ISalonRepository
             .ToList();
 
         return Task.FromResult<Result<IReadOnlyList<AdminSalonResponse>, Failure>>(ordered);
+    }
+
+    public Task<Result<IReadOnlyList<SalonDirectoryItemResponse>, Failure>> GetDirectoryAsync(
+        string? city,
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        LastDirectoryCity = city;
+        LastDirectorySearch = search;
+
+        IEnumerable<Salon> rows = _salons.Values.Where(salon => salon.IsActive);
+
+        if (city is not null)
+        {
+            rows = rows.Where(salon => salon.City == city);
+        }
+
+        if (search is not null)
+        {
+            rows = rows.Where(salon =>
+                salon.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || salon.Address.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var projected = rows
+            .OrderBy(salon => salon.City, StringComparer.Ordinal)
+            .ThenBy(salon => salon.Name, StringComparer.Ordinal)
+            .ThenBy(salon => salon.Id)
+            .Select(salon => new SalonDirectoryItemResponse(
+                salon.Id,
+                salon.Name,
+                salon.City,
+                salon.Address,
+                salon.TimeZoneId))
+            .ToList();
+
+        return Task.FromResult<Result<IReadOnlyList<SalonDirectoryItemResponse>, Failure>>(
+            projected);
     }
 
     public Task<Result<Salon, Failure>> GetByIdAsync(

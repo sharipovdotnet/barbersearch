@@ -273,7 +273,9 @@ does not expose one, and the screen does not invent it.
 
 ## Barber cabinet
 
-`/barber` is a separate lazy screen for a signed-in `Barber` with a linked profile. It calls
+`/barber` is a separate lazy screen for a signed-in `Barber` with a linked profile. The cabinet
+has three sections — записи (`/barber`), расписание (`/barber/schedule`) and salons
+(`/barber/salons`) — linked by `BarberCabinetNav` and sharing the same gates. It calls
 `GET /api/barber/bookings?scope=upcoming&pageSize=20` (the profile comes from the
 `barber_profile_id` claim, there is no profile query parameter) and switches to `scope=past`
 for «История». The server orders both scopes (`start_at ASC` for upcoming, `DESC` for history),
@@ -338,8 +340,33 @@ keeps its own role gates and `/account` no longer turns a barber away.
   `use-barber-booking-options.ts` — own services and salons.
 - `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
   `barber-booking-create.ts`/`barber-booking-options.ts`/`barber-clients.ts` — the manual
-  booking transport; `src/lib/barber-cabinet-path.ts` — the `/barber` and `/barber/schedule`
-  path helpers.
+  booking transport; `src/lib/barber-cabinet-path.ts` — the `/barber`, `/barber/schedule` and
+  `/barber/salons` path helpers.
+
+### My salons
+
+`/barber/salons` is the third cabinet section. It reads
+`GET /api/barber-profiles/{id}/salons` (owner or admin; includes every linked salon, primary
+first) and shows a card per salon with the name, city, address, «Основной» badge and time zone.
+An empty profile explains the consequence — «Салон не добавлен. Без салона расписание и запись
+не работают.» — and offers «Добавить салон».
+
+«Добавить салон» opens a dialog over the public catalogue (`GET /api/salons?city=&search=`,
+anonymous, only active rows, no pagination): the search is debounced 300 ms and starts at two
+characters, the city is optional, results are a native radio list in a `fieldset`, and every new
+input or closing the dialog aborts the previous request. The first salon of an empty profile is
+forced primary (`isPrimary: true`, the checkbox is checked and disabled); with existing salons
+«Сделать основным» is the user's choice. `POST /api/barber-profiles/{id}/salons` is a cookie
+mutation; after `204` the screen re-reads the list, announces «Салон добавлен.» and closes the
+dialog. A `409` duplicate or `404` vanished salon keeps the dialog open with Russian copy and
+re-reads the list; `403`, `401`, `429` and a network failure have their own messages. The route
+does not change and «Настроить расписание» links to `/barber/schedule`.
+
+- `src/pages/barber-salons-page.tsx` — gates, list, empty state, announcements.
+- `src/components/barber/barber-salon-picker-dialog.tsx` — the shared catalogue picker (also the
+  onboarding step).
+- `src/lib/salons.ts` / `src/lib/barber-salons.ts` — directory read, linked-salon read and attach
+  transport; `src/hooks/use-barber-salons.ts` — re-read after a write.
 
 ### Creating the barber profile
 
@@ -363,11 +390,15 @@ continues as if the `201` had just happened.
 After `201` the client must **refresh the session**: `barber_profile_id` is a claim inside the
 access token, and the token issued before the request still carries `null`. `retrySession()` alone
 would read the same cookie and still see no profile, so the screen calls `refreshSession()` (a new
-access token from the database), then `retrySession()` and only then `navigate('/barber')`. If the
+access token from the database), then `retrySession()`. The profile id comes from the `201` body,
+so the screen then shows the «Добавьте салон» step: «Выбрать салон» opens the same
+`SalonPickerDialog` as `/barber/salons`, and «Пропустить» (or «Перейти в кабинет») leads to
+`/barber` — the step never blocks the cabinet, but without a salon the schedule is empty. If the
 refresh is `terminal`, the profile is already created and the form must not return: the card says
 «Профиль создан, войдите снова» and opens the login dialog with `/barber` as the destination. A
 `transient` failure shows «Профиль создан, но сессия не обновилась» with «Повторить» (refresh
-only) and «Войти». The form itself only validates and sends; the session work lives in the page.
+only) and «Войти»; after a successful retry the salon step appears. The form itself only validates
+and sends; the session work lives in the page.
 
 - `src/pages/barber-onboarding-page.tsx` — gates, the finishing/terminal/transient cards.
 - `src/components/barber/barber-profile-form.tsx` — the reusable form (no effects, no navigation).

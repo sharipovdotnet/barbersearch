@@ -9,6 +9,7 @@ using BarberSearch.Application.BarberProfiles.ChangeBarberProfileGrade;
 using BarberSearch.Application.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Application.BarberProfiles.DeactivateBarberProfile;
 using BarberSearch.Application.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Application.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfilePhoto;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileSalon;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileService;
@@ -27,6 +28,7 @@ using BarberSearch.Contracts.BarberProfiles.AddBarberProfileTimeOff;
 using BarberSearch.Contracts.BarberProfiles.ChangeBarberProfileGrade;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhoto;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
@@ -236,6 +238,26 @@ public class BarberProfilesController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new SetBarberProfilePrimarySalonCommand(barberProfileId, salonId),
+            cancellationToken));
+
+    /// <summary>
+    /// Возвращает салоны, привязанные к профилю барбера.
+    /// </summary>
+    /// <remarks>
+    /// Доступ — владелец профиля или администратор, как у <c>GET .../schedule</c>.
+    /// Работает и для неподтверждённого профиля: салоны выбирают до верификации.
+    /// Ответ — все привязки, основной салон первым; без пагинации.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet("{barberProfileId:guid}/salons")]
+    public async Task<ActionResult<IReadOnlyList<BarberSalonSummaryResponse>>> GetSalons(
+        Guid barberProfileId,
+        [FromServices] IQueryHandler<IReadOnlyList<BarberSalonSummaryResponse>, GetBarberProfileSalonsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetBarberProfileSalonsQuery(barberProfileId),
             cancellationToken));
 
     /// <summary>

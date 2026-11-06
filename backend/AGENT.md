@@ -1552,20 +1552,20 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**25 controllers, 114 endpoints: 106 domain + 8 auth** — one endpoint per Application operation,
+**25 controllers, 116 endpoints: 108 domain + 8 auth** — one endpoint per Application operation,
 plus the eight `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
 | `UsersController` | `api/users` | 12 |
-| `BarberProfilesController` | `api/barber-profiles` | 21 |
+| `BarberProfilesController` | `api/barber-profiles` | 22 |
 | `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 3 |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
 | `BarberScheduleController` | `api/barber-profiles/{id}` | 4 (read, replace week, set/remove date exception) |
-| `SalonsController` | `api/salons` | 5 |
+| `SalonsController` | `api/salons` | 6 (1 public directory + 5 admin writes) |
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
@@ -1608,11 +1608,12 @@ Conventions:
   атрибутов `[EnableRateLimiting]` нет. `GET`/`HEAD`/`OPTIONS`/`TRACE` не ограничиваются, а `429`
   приходит как `ProblemDetails` с `Retry-After` и `errorCodes: ["rateLimit.exceeded"]`. Явные
   политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48) и `reads` (120/мин на IP)
-  на шести публичных read-действиях (R-25, §17.5).
+  на семи публичных read-действиях (R-25, §17.5).
 - Create endpoints answer **201** with `CreatedResourceResponse` and deliberately **no `Location`**
   header (2026-10-25, R-42): none of the eight create endpoints has a self-URI readable right after
   creation. `GET api/bookings` and `GET api/reviews` are lists (the new review is hidden until
-  publication, R-35), `salons` have no GET at all, `users` has only the self-read
+  publication, R-35), `salons` now have a public directory `GET api/salons` but still no read by
+  id, `users` has only the self-read
   `GET api/users/me` (not a resource-by-id for the admin-created user), `hair-services`/`specializations` have
   only the two public list GETs (no read by id), `GET api/auth/me` is not a resource-by-id, and
   `GET api/barbers/{id}` is 404 until the profile is
@@ -1907,6 +1908,24 @@ Read endpoints (added 2026-10-19):
   read through `GetActiveAsync` and map, no repository filtering in the controller. The admin
   write actions keep the class-level `[Authorize(AdminOnly)]`; `[AllowAnonymous]` on the action
   overrides it. There is still no read by id.
+- **Salon directory and «My salons» (2026-11-06, issue-47).** `GET api/salons?city=&search=` is the
+  anonymous `reads`-limited selection catalogue for the barber cabinet: a bare
+  `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`) without
+  pagination — the same «dictionary, not a pager» exception as the two public catalogues above.
+  Only `IsActive` rows; `city` is an exact trimmed match, `search` is `ILIKE` over name **and**
+  address with `%`, `_` and `\` escaped; both filters are trimmed, empty means no filter, and
+  more than 100 characters is `400 salon.directory.city` / `salon.directory.search`. Order is
+  city, name, id. A `TODO(#48)` sits on the `IsActive` predicate: moderation must add
+  `ModerationStatus == Approved` to both the directory and the invariant behind it.
+  Because the class-level `[Authorize(AdminOnly)]` was removed, every one of the five salon
+  mutations (`POST`, `PUT location`, `PUT contact-info`, `POST`/`DELETE activation`) now carries
+  the attribute itself; `Anonymous` → `401`, `Customer`/`Barber` → `403`, `Admin` unchanged.
+  `GET api/barber-profiles/{id}/salons` is the owner/admin read behind «Мои салоны»: all links,
+  no `is_active` filter (future `Pending` salons must appear after #48), ordered primary first
+  then by name, returning `BarberSalonSummaryResponse` (`salonId`, `name`, `city`, `address`,
+  `timeZoneId`, `isPrimary`). It works for an unverified profile, like the schedule read; ownership
+  is `ICurrentUser.EnsureCanManage(profile.UserId)`, so a foreign barber gets `403` and an unknown
+  profile `404`. The existing `POST .../salons` and `primary` contract did not change.
 - **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
   rating; `404` for a missing/inactive/unverified profile. Response is `BarberProfileResponse` and
   nested records; no domain entity is serialized. Each service carries
@@ -2423,6 +2442,8 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 | `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
 | `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
 | Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
+| `Salons` (каталог) | admin | admin | create / location / contacts / activation; **чтение** `GET api/salons` — анонимно |
+| `BarberProfile.Salons` (список) | владелец профиля | владелец профиля | — (чтение владельцем или admin) |
 | `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент, барбер или admin (барбер обязан передать причину) | — (admin обходит) |
 | `Review` | клиент по своей завершённой брони | автор; удаление — только автор, без admin-обхода | `Publish`/`Hide` |
 | `BarberRequest` | клиент (`Customer`), сам; одна активная `Pending` на пользователя | — (решение принимает только admin) | список, карточка, `Approve`/`Reject` |
@@ -2464,8 +2485,10 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 и `409 barberProfile.create.alreadyExists` защищает от второго профиля, даже если клиент
 опирается на устаревший claim.
 
-Охват: 29 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
-3 обработчика пользователей. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
+Охват: 30 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
+3 обработчика пользователей, плюс публичный каталог салонов (`GetSalonDirectoryHandler`) и
+`GetBarberProfileSalonsHandler` — тот же `EnsureCanManage`, что у расписания, и работает для
+неподтверждённого профиля. Четыре admin-действия профиля и `Publish`/`Hide` — атрибуты.
 Тесты: `tests/BarberSearch.Application.UnitTests` — 122 `[Fact]`: 41 прежний (29 на владение на
 фейковых репозиториях и `ICurrentUser` + 12 на refresh-токены), 56 на read-эндпоинты
 (курсоры/пагинация, поиск, карточка, слоты, брони, отзывы, записи барбера), 11 на создание брони

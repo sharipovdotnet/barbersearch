@@ -4,6 +4,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberSalons;
@@ -136,6 +137,20 @@ public interface IBarberProfileRepository
     Task<Result<BarberSalon, Failure>> GetSalonAsync(
         Guid barberProfileId,
         Guid salonId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Список привязанных салонов для экрана «Мои салоны». Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Возвращаются все привязки профиля, включая салоны, которые #48 добавит со статусом
+    /// «на проверке»: фильтра по <c>is_active</c> здесь нет намеренно. Порядок — основной
+    /// салон первым, затем по названию.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>> GetSalonSummariesAsync(
+        Guid barberProfileId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
