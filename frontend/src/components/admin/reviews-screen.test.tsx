@@ -1,10 +1,11 @@
 import { StrictMode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import { parseAdminPath } from '@/lib/admin-path'
 import type { AdminReview } from '@/lib/admin-reviews'
 import { useLocation } from '@/lib/router'
@@ -135,6 +136,10 @@ describe('ReviewsScreen', () => {
     mockAdminReviews()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('при смене вкладки «На модерации» → «Опубликованные» открывает опубликованный отзыв', async () => {
     const user = userEvent.setup()
 
@@ -183,5 +188,32 @@ describe('ReviewsScreen', () => {
     })
     expect(await screen.findByText(PENDING_TEXT)).toBeInTheDocument()
     expect(screen.queryByText(PUBLISHED_TEXT)).not.toBeInTheDocument()
+  })
+
+  it('через период опроса перечитывает очередь', async () => {
+    vi.useFakeTimers()
+    const requests = mockAdminReviews()
+
+    openAt('/admin/reviews')
+    render(
+      <StrictMode>
+        <AdminReviewsRoute />
+      </StrictMode>
+    )
+
+    // Первая загрузка и автовыбор первой карточки; StrictMode может дать
+    // два запроса, поэтому сравниваем с исходным числом, а не с единицей.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = requests.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+
+    expect(requests).toHaveLength(initial + 1)
   })
 })

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminBarberRequest } from '@/hooks/use-admin-barber-request'
 import { useAdminBarberRequestList } from '@/hooks/use-admin-barber-request-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   ADMIN_BARBER_REQUEST_FILTER_LABELS,
@@ -57,6 +58,26 @@ export function BarberRequestsScreen({
 
   const [requiresSignIn, setRequiresSignIn] = useState(false)
   const [announcement, setAnnouncement] = useState<string | null>(null)
+  const [isActing, setIsActing] = useState(false)
+
+  // Новая заявка от клиента и решение второго администратора должны появляться
+  // без ручного обновления. На время решения опрос стоит: ответ, прочитанный
+  // до коммита, вернул бы заявке прошлый статус.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !list.isLoadingPage &&
+      !requiresSignIn &&
+      !isActing,
+    onRefresh: () => {
+      list.refresh()
+
+      if (requestId !== null && detail.status !== 'notFound') {
+        detail.reload()
+      }
+    },
+  })
 
   // На телефоне карточка заменяет список — переход должен начинаться сверху.
   useEffect(() => {
@@ -129,6 +150,8 @@ export function BarberRequestsScreen({
     request: AdminBarberRequest,
     reason: string | null
   ): Promise<string | null> {
+    setIsActing(true)
+
     try {
       const updated =
         kind === 'approve'
@@ -169,6 +192,8 @@ export function BarberRequestsScreen({
       }
 
       return describeAdminBarberRequestActionError(cause, kind)
+    } finally {
+      setIsActing(false)
     }
   }
 

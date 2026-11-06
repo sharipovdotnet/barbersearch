@@ -51,6 +51,7 @@ export function BookingDetail({
   onReload,
   onBack,
   onRequiresSignIn,
+  onActingChange,
 }: {
   booking: AdminBooking
   headingRef: RefObject<HTMLHeadingElement | null>
@@ -58,6 +59,8 @@ export function BookingDetail({
   onReload: () => void
   onBack: () => void
   onRequiresSignIn: () => void
+  /** Экран останавливает опрос, пока идёт отмена или неявка. */
+  onActingChange?: (isActing: boolean) => void
 }) {
   const [target, setTarget] = useState<BookingActionKind | null>(null)
   const [pending, setPending] = useState<BookingActionKind | null>(null)
@@ -97,6 +100,7 @@ export function BookingDetail({
 
     setPending(kind)
     setActionError(null)
+    onActingChange?.(true)
 
     try {
       if (kind === 'cancel') {
@@ -130,6 +134,7 @@ export function BookingDetail({
       )
     } finally {
       setPending(null)
+      onActingChange?.(false)
     }
   }
 

@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type JsonBodyType } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SummaryScreen } from '@/components/admin/summary-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
@@ -54,6 +55,10 @@ function mockSummary(body: JsonBodyType): string[] {
 }
 
 describe('SummaryScreen', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('показывает три блока с числами и ссылками из контракта', async () => {
     mockSummary(SUMMARY)
 
@@ -218,5 +223,27 @@ describe('SummaryScreen', () => {
       screen.queryByRole('button', { name: 'Обновляем…' })
     ).not.toBeInTheDocument()
     expect(screen.getByText(/Обновлено в \d{2}:\d{2}/)).toBeInTheDocument()
+  })
+
+  it('через период опроса сама перечитывает сводку', async () => {
+    vi.useFakeTimers()
+    const requests = mockSummary(SUMMARY)
+
+    render(<SummaryScreen />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(requests).toHaveLength(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS - 1)
+    })
+    expect(requests).toHaveLength(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(requests).toHaveLength(2)
   })
 })

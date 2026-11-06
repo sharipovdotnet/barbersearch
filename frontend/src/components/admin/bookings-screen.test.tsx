@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { BookingsScreen } from '@/components/admin/bookings-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminBooking } from '@/lib/admin-bookings'
 import { problemDetails, unauthorized } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
@@ -67,6 +68,9 @@ function mockList(
 }
 
 describe('BookingsScreen', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('показывает заголовок, подпись, строки и ссылку на карточку', async () => {
     mockList([BOOKING])
 
@@ -333,5 +337,55 @@ describe('BookingsScreen', () => {
     ]) {
       expect(screen.queryByText(text)).not.toBeInTheDocument()
     }
+  })
+
+  it('через период опроса перечитывает список сам', async () => {
+    vi.useFakeTimers()
+    const requests = mockList([BOOKING])
+
+    render(<BookingsScreen bookingId={null} />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = requests.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+
+    expect(requests).toHaveLength(initial + 1)
+  })
+
+  it('через период опроса перечитывает открытую карточку', async () => {
+    vi.useFakeTimers()
+    mockList([BOOKING])
+
+    let detailRequests = 0
+
+    server.use(
+      http.get(`/api/admin/bookings/${BOOKING.id}`, () => {
+        detailRequests += 1
+
+        return HttpResponse.json(BOOKING)
+      })
+    )
+
+    render(<BookingsScreen bookingId={BOOKING.id} />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = detailRequests
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+
+    expect(detailRequests).toBe(initial + 1)
   })
 })

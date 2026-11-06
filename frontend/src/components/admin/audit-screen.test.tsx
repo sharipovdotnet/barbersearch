@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AuditScreen } from '@/components/admin/audit-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
@@ -88,7 +89,20 @@ function mockAuditPage(entries: Entry[]): URLSearchParams[] {
   return requests
 }
 
+function setVisibility(state: 'visible' | 'hidden'): void {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  })
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+
 describe('AuditScreen', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    Reflect.deleteProperty(document, 'visibilityState')
+  })
+
   it('загружает строки, заголовок, подпись и диапазон пейджера', async () => {
     mockAuditPage(ENTRIES.all)
 
@@ -232,5 +246,33 @@ describe('AuditScreen', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Не удалось загрузить журнал')).toBeInTheDocument()
     expect(screen.queryByText('Forbidden.')).not.toBeInTheDocument()
+  })
+
+  it('не опрашивает журнал по таймеру, но перечитывает при возврате на вкладку', async () => {
+    vi.useFakeTimers()
+    const requests = mockAuditPage(ENTRIES.all)
+
+    render(<AuditScreen />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = requests.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+    expect(requests).toHaveLength(initial)
+
+    await act(async () => {
+      setVisibility('hidden')
+    })
+    await act(async () => {
+      setVisibility('visible')
+    })
+
+    expect(requests).toHaveLength(initial + 1)
   })
 })

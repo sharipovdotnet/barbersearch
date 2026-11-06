@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminAuditList } from '@/hooks/use-admin-audit-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import {
   ADMIN_AUDIT_ACTOR_MAX_LENGTH,
   ADMIN_AUDIT_ENTITY_LABELS,
@@ -48,6 +49,17 @@ export function AuditScreen() {
 
   const list = useAdminAuditList({ entityType, actor, from, to })
   const headingRef = useRef<HTMLHeadingElement | null>(null)
+
+  // Журнал только дописывается и меняется редко: по таймеру его не опрашиваем,
+  // но при возврате на вкладку перечитываем, чтобы не показывать старую ленту.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !list.isLoadingPage,
+    poll: false,
+    onRefresh: list.refresh,
+  })
 
   const isFiltered =
     entityType !== 'all' || actorInput !== '' || from !== '' || to !== ''

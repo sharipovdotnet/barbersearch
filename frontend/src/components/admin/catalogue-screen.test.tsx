@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminSalon } from '@/lib/admin-catalogue'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
@@ -74,8 +75,7 @@ function mockList(rows: AdminSalon[]): ListMock {
   return state
 }
 
-function tableRow(name: string): HTMLElement {
-  const row = screen
+function tableRow(name: string): HTMLElement {  const row = screen
     .getAllByRole('row')
     .find((candidate) => within(candidate).queryByText(name) !== null)
 
@@ -95,7 +95,20 @@ async function openPendingFilter(): Promise<void> {
     .click(screen.getByRole('button', { name: 'На проверке' }))
 }
 
+function setVisibility(state: 'visible' | 'hidden'): void {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  })
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+
 describe('CatalogueScreen: салоны на проверке', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    Reflect.deleteProperty(document, 'visibilityState')
+  })
+
   it('фильтр «На проверке» запрашивает status=pending и показывает владельца', async () => {
     const list = mockList([PENDING_SALON])
 
@@ -385,5 +398,33 @@ describe('CatalogueScreen: салоны на проверке', () => {
     expect(
       await within(dialog).findByText('Раздел доступен только администратору.')
     ).toBeInTheDocument()
+  })
+
+  it('не опрашивает справочник по таймеру, но перечитывает при возврате на вкладку', async () => {
+    vi.useFakeTimers()
+    const state = mockList([PENDING_SALON])
+
+    render(<CatalogueScreen tab="salons" />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = state.statuses.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+    expect(state.statuses).toHaveLength(initial)
+
+    await act(async () => {
+      setVisibility('hidden')
+    })
+    await act(async () => {
+      setVisibility('visible')
+    })
+
+    expect(state.statuses).toHaveLength(initial + 1)
   })
 })
