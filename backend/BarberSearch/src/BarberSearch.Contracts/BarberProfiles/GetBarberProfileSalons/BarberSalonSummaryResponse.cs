@@ -14,6 +14,10 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 /// а не витрина, и владелец должен видеть, что салон ещё не в поиске и почему.
 /// </para>
 /// <para>
+/// <c>kind</c> и <c>isListed</c> добавлены в #54: кабинет подписывает тип места и заменяет
+/// «На проверке» на «Не в каталоге» для скрытого места.
+/// </para>
+/// <para>
 /// Полные поля формы (страна, индекс, координаты, контакты) нужны владельцу для правки:
 /// адрес и контакты — два независимых <c>PUT</c>, и форма должна быть предзаполнена текущими
 /// значениями, иначе сохранение затрёт координаты, которые владелец не вводил. <c>ownerUserId</c>
@@ -36,6 +40,11 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 /// <param name="OwnerUserId">Владелец салона; <c>null</c> у салона, созданного администратором.</param>
 /// <param name="ModerationStatus">Состояние проверки салона администратором.</param>
 /// <param name="RejectionReason">Причина отказа; <c>null</c>, если салон не отклонён.</param>
+/// <param name="Kind">Вид места приёма: карточка кабинета показывает тип рядом с названием.</param>
+/// <param name="IsListed">
+/// Показывается ли место в каталоге. Скрытое место активно и не ждёт проверки, поэтому
+/// без флага кабинет не отличил бы «не в каталоге» от «на проверке».
+/// </param>
 public record BarberSalonSummaryResponse(
     Guid SalonId,
     string Name,
@@ -51,4 +60,6 @@ public record BarberSalonSummaryResponse(
     string? WebsiteUrl,
     Guid? OwnerUserId,
     SalonModerationStatus ModerationStatus,
-    string? RejectionReason);
+    string? RejectionReason,
+    PlaceKind Kind,
+    bool IsListed);

@@ -71,6 +71,8 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
                 salon.PhoneNumber,
                 salon.WebsiteUrl,
                 salon.IsActive,
+                salon.Kind,
+                salon.IsListed,
                 salon.ModerationStatus,
                 salon.RejectionReason,
                 salon.ReviewedAt,
@@ -91,10 +93,14 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         string? search,
         CancellationToken cancellationToken = default)
     {
+        // Каталог для выбора — только перечисленные места: скрытое место (is_listed = false)
+        // активно и доступно для записи, но в пикер «куда примкнуть» не попадает.
         var query = Context.Salons
             .AsNoTracking()
             .Where(salon =>
-                salon.IsActive && salon.ModerationStatus == SalonModerationStatus.Active);
+                salon.IsActive
+                && salon.IsListed
+                && salon.ModerationStatus == SalonModerationStatus.Active);
 
         if (city is not null)
         {
@@ -119,7 +125,8 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
                 salon.Name,
                 salon.City,
                 salon.Address,
-                salon.TimeZoneId))
+                salon.TimeZoneId,
+                salon.Kind))
             .ToListAsync(cancellationToken);
 
         return rows;

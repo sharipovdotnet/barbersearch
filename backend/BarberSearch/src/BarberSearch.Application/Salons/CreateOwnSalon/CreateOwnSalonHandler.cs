@@ -18,6 +18,12 @@ namespace BarberSearch.Application.Salons.CreateOwnSalon;
 /// <c>barber_profile_id</c>, а не из тела запроса: иначе барбер мог бы привязать салон
 /// к чужому профилю.
 /// <para>
+/// Вид места и флаг каталога обработчик передаёт в домен как есть: скрытое место
+/// (<c>isListed = false</c>) домен создаёт сразу активным и без модерации, публичное —
+/// <see cref="SalonModerationStatus.Pending"/>. Правила совместимости типа и видимости
+/// проверяет домен (<c>salon.kind.unknown</c> / <c>salon.isListed.kind</c>).
+/// </para>
+/// <para>
 /// Доступ проверяет контроллер политикой <c>BarberOnly</c>. Отдельно проверяется наличие
 /// профиля: барбер без профиля получает <c>403 barberProfile.notFound</c>, а не 500 на
 /// отсутствующем claim'е.
@@ -98,7 +104,9 @@ public class CreateOwnSalonHandler : ICommandHandler<Guid, CreateOwnSalonCommand
                 request.Longitude,
                 request.PostalCode,
                 request.PhoneNumber,
-                request.WebsiteUrl);
+                request.WebsiteUrl,
+                kind: request.Kind,
+                isListed: request.IsListed);
             if (salonResult.IsFailure)
             {
                 return salonResult.Error;
@@ -133,10 +141,20 @@ public class CreateOwnSalonHandler : ICommandHandler<Guid, CreateOwnSalonCommand
             return result.Error;
         }
 
-        _logger.LogInformation(
-            "Salon {SalonId} has been submitted by barber {BarberProfileId} for moderation.",
-            result.Value,
-            barberProfileId);
+        if (request.IsListed)
+        {
+            _logger.LogInformation(
+                "Salon {SalonId} has been submitted by barber {BarberProfileId} for moderation.",
+                result.Value,
+                barberProfileId);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Unlisted place {SalonId} has been created by barber {BarberProfileId}.",
+                result.Value,
+                barberProfileId);
+        }
 
         return result.Value;
     }

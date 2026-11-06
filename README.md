@@ -42,6 +42,16 @@ npm run lint     # oxlint
 In development Vite proxies `/api` to `http://localhost:5243`. Point it elsewhere with
 `VITE_API_PROXY_TARGET`. Details: `frontend/README.md`.
 
+## Places
+
+A Barber receives Customers at a place (`Salon`) of one of five kinds: a barbershop, a
+chair-rental studio, a solo cabinet, a home or a mobile visit. A barbershop is always listed in
+the catalogue and goes through moderation; a cabinet can be listed by the Barber's choice, while
+a home or a mobile place is never listed. An unlisted place skips moderation and is reachable
+only from the Barber's profile, but it still has an address and a time zone, so the weekly
+schedule, slots and online booking work exactly as in a barbershop. The barber cabinet calls this
+«место приёма»: the barber picks the kind and whether the place is shown in the catalogue.
+
 ## CI
 
 - `.github/workflows/backend-ci.yml` — solution build plus unit and integration tests; runs on

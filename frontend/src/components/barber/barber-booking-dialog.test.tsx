@@ -36,6 +36,7 @@ const SALON = {
   city: 'Москва',
   country: 'Россия',
   timeZoneId: 'Europe/Moscow',
+  kind: 'Salon',
   isPrimary: true,
   workingSchedules: [],
 }

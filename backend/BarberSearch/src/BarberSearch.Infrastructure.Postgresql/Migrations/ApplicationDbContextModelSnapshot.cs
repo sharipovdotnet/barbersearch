@@ -827,6 +827,18 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsListed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_listed");
+
+                    b.Property<short>("Kind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("kind");
+
                     b.Property<double>("Latitude")
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
@@ -911,7 +923,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_salons_country", "char_length(btrim(country)) > 0");
 
+                            t.HasCheckConstraint("ck_salons_kind", "kind IN (1, 2, 3, 4, 5)");
+
                             t.HasCheckConstraint("ck_salons_latitude", "latitude BETWEEN -90 AND 90");
+
+                            t.HasCheckConstraint("ck_salons_listed_kind", "NOT is_listed OR kind IN (1, 2, 3)");
 
                             t.HasCheckConstraint("ck_salons_longitude", "longitude BETWEEN -180 AND 180");
 

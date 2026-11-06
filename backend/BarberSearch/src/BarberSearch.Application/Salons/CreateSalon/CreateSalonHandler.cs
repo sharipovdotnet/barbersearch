@@ -39,7 +39,9 @@ public class CreateSalonHandler : ICommandHandler<Guid, CreateSalonCommand>
             request.Longitude,
             request.PostalCode,
             request.PhoneNumber,
-            request.WebsiteUrl);
+            request.WebsiteUrl,
+            kind: request.Kind,
+            isListed: request.IsListed);
         if (salon.IsFailure)
         {
             return salon.Error;

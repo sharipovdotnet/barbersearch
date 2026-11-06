@@ -2,6 +2,7 @@ import { apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { Language } from '@/lib/barber-profile-labels'
 import type { Page } from '@/lib/paging'
+import type { PlaceKind } from '@/lib/place-kind'
 import { isBarberSearchPage } from '@/lib/response-guards'
 
 /**
@@ -76,6 +77,8 @@ export type BarberSearchItem = {
   isVerified: boolean
   primarySalonId: string | null
   primarySalonName: string | null
+  /** Тип основного места; `null` — барбер ещё не указал место приёма. */
+  primaryPlaceKind: PlaceKind | null
   city: string | null
   /** Дополнительные услуги: карточка показывает, чем ещё занимается барбер. */
   additionalServices: string[]

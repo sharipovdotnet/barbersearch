@@ -27,6 +27,8 @@ const SALON = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
+  isListed: true,
   isPrimary: true,
   country: 'Russia',
   postalCode: '620000',
@@ -45,6 +47,8 @@ const PENDING_SALON = {
   city: 'Москва',
   address: 'ул. Проверочная, 5',
   timeZoneId: 'Europe/Moscow',
+  kind: 'Salon',
+  isListed: true,
   isPrimary: false,
   country: 'Russia',
   postalCode: null,
@@ -75,6 +79,7 @@ const CATALOG_ITEM = {
   city: 'Екатеринбург',
   address: 'ул. Мира, 2',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
 }
 
 const SALON_BARBER = {
@@ -290,7 +295,7 @@ describe('BarberSalonsPage', () => {
   })
 
   it('создание своего салона: POST /api/salons/own и карточка «На проверке»', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     let listCalls = 0
     let body: Record<string, unknown> | null = null
 

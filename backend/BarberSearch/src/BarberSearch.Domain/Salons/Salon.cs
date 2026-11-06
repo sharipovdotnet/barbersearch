@@ -37,6 +37,28 @@ public class Salon : AggregateRoot
     public bool IsActive { get; private set; }
 
     /// <summary>
+    /// Вид места приёма. Задаётся при создании и в этом срезе не меняется.
+    /// </summary>
+    /// <remarks>
+    /// Тип не выводится из <see cref="IsListed"/>: кабинет одного мастера бывает и публичным,
+    /// и скрытым. Для <see cref="PlaceKind.Home"/> и <see cref="PlaceKind.Mobile"/> адрес
+    /// остаётся обязательным: у первого это адрес приёма, у второго — зона обслуживания.
+    /// </remarks>
+    public PlaceKind Kind { get; private set; }
+
+    /// <summary>
+    /// Показывается ли место в публичном каталоге салонов.
+    /// </summary>
+    /// <remarks>
+    /// <c>false</c> — место не попадает в каталог и не требует модерации: оно видно только
+    /// с карточки барбера, качество закрывает верификация профиля. Скрывать можно только
+    /// <see cref="PlaceKind.SoloStudio"/>, <see cref="PlaceKind.Home"/> и
+    /// <see cref="PlaceKind.Mobile"/>; барбершоп и студия аренды кресел обязаны быть в каталоге.
+    /// Флаг задаётся только при создании, переходов в этом срезе нет.
+    /// </remarks>
+    public bool IsListed { get; private set; }
+
+    /// <summary>
     /// Владелец салона — пользователь, создавший его сам как барбер; <c>null</c> — салон
     /// создан администратором. Это связь, а не роль: отдельной роли владельца нет.
     /// </summary>
@@ -77,6 +99,8 @@ public class Salon : AggregateRoot
     private const string REJECTION_REASON_TOO_LONG_CODE = "salon.reject.reasonTooLong";
     private const string REVIEW_INVALID_STATUS_CODE = "salon.review.invalidStatus";
     private const string ACTIVATION_NOT_APPROVED_CODE = "salon.activation.notApproved";
+    private const string KIND_UNKNOWN_CODE = "salon.kind.unknown";
+    private const string LISTED_KIND_CODE = "salon.isListed.kind";
 
     private Salon()
     {
@@ -89,7 +113,14 @@ public class Salon : AggregateRoot
     /// <remarks>
     /// Путь барбера — <see cref="SubmitByOwner"/>: его салон ждёт проверки. Обе фабрики
     /// валидируют поля одинаково, поэтому правила адреса и координат не расходятся.
+    /// <para>
+    /// <see cref="IsListed"/> по умолчанию <c>true</c>: админский салон ведёт себя как раньше.
+    /// Скрытое место (<c>isListed: false</c>) создаётся сразу активным, но в каталог не попадает:
+    /// очередь модерации нужна только тому, что публикуется.
+    /// </para>
     /// </remarks>
+    /// <param name="kind">Вид места приёма; по умолчанию обычный барбершоп.</param>
+    /// <param name="isListed">Показывать ли место в каталоге; по умолчанию <c>true</c>.</param>
     public static Result<Salon, Failure> Create(
         string name,
         string address,
@@ -100,7 +131,9 @@ public class Salon : AggregateRoot
         double longitude,
         string? postalCode = null,
         string? phoneNumber = null,
-        string? websiteUrl = null)
+        string? websiteUrl = null,
+        PlaceKind kind = PlaceKind.Salon,
+        bool isListed = true)
     {
         var salon = BuildValidated(
             name,
@@ -112,7 +145,9 @@ public class Salon : AggregateRoot
             longitude,
             postalCode,
             phoneNumber,
-            websiteUrl);
+            websiteUrl,
+            kind,
+            isListed);
         if (salon.IsFailure)
         {
             return salon.Error;
@@ -131,8 +166,16 @@ public class Salon : AggregateRoot
     /// <remarks>
     /// Проверка «у пользователя есть профиль барбера» живёт в Application: домен салона
     /// не знает про профиль. Владелец фиксируется здесь и дальше не меняется.
+    /// <para>
+    /// Скрытое место (<paramref name="isListed"/> = <c>false</c>) не публикуется, поэтому
+    /// модерация ему не нужна: оно сразу <see cref="SalonModerationStatus.Active"/> и
+    /// <see cref="IsActive"/> = <c>true</c>, без решения администратора. Видно оно только
+    /// с карточки барбера — контроль качества закрывает верификация профиля.
+    /// </para>
     /// </remarks>
     /// <param name="ownerUserId">Пользователь-владелец (барбер с профилем).</param>
+    /// <param name="kind">Вид места приёма; по умолчанию обычный барбершоп.</param>
+    /// <param name="isListed">Показывать ли место в каталоге; по умолчанию <c>true</c>.</param>
     public static Result<Salon, Failure> SubmitByOwner(
         Guid ownerUserId,
         string name,
@@ -144,7 +187,9 @@ public class Salon : AggregateRoot
         double longitude,
         string? postalCode = null,
         string? phoneNumber = null,
-        string? websiteUrl = null)
+        string? websiteUrl = null,
+        PlaceKind kind = PlaceKind.Salon,
+        bool isListed = true)
     {
         var salon = BuildValidated(
             name,
@@ -156,15 +201,28 @@ public class Salon : AggregateRoot
             longitude,
             postalCode,
             phoneNumber,
-            websiteUrl);
+            websiteUrl,
+            kind,
+            isListed);
         if (salon.IsFailure)
         {
             return salon.Error;
         }
 
         salon.Value.OwnerUserId = ownerUserId;
-        salon.Value.ModerationStatus = SalonModerationStatus.Pending;
-        salon.Value.IsActive = false;
+
+        if (isListed)
+        {
+            salon.Value.ModerationStatus = SalonModerationStatus.Pending;
+            salon.Value.IsActive = false;
+        }
+        else
+        {
+            // Скрытое место не проходит модерацию: оно не попадает в каталог, значит
+            // очередь проверки для него не нужна. ReviewedAt/ReviewedByUserId остаются null.
+            salon.Value.ModerationStatus = SalonModerationStatus.Active;
+            salon.Value.IsActive = true;
+        }
 
         return salon;
     }
@@ -179,7 +237,9 @@ public class Salon : AggregateRoot
         double longitude,
         string? postalCode,
         string? phoneNumber,
-        string? websiteUrl)
+        string? websiteUrl,
+        PlaceKind kind,
+        bool isListed)
     {
         var errors = DomainErrors.Collect();
 
@@ -190,6 +250,7 @@ public class Salon : AggregateRoot
         ValidateRequired(timeZoneId, nameof(timeZoneId), TIME_ZONE_ID_ERROR_CODE, errors);
         var normalizedTimeZoneId = ValidateTimeZone(timeZoneId, errors);
         ValidateCoordinates(latitude, longitude, errors);
+        ValidatePlaceKind(kind, isListed, errors);
 
         var websiteUrlError = UrlValidator.Validate(
             websiteUrl,
@@ -218,7 +279,9 @@ public class Salon : AggregateRoot
             Longitude = longitude,
             PostalCode = postalCode,
             PhoneNumber = phoneNumber,
-            WebsiteUrl = normalizedWebsiteUrl
+            WebsiteUrl = normalizedWebsiteUrl,
+            Kind = kind,
+            IsListed = isListed
         };
     }
 
@@ -456,6 +519,47 @@ public class Salon : AggregateRoot
             nameof(timeZoneId)));
 
         return null;
+    }
+
+    /// <summary>
+    /// Проверяет тип места и совместимость с видимостью в каталоге.
+    /// </summary>
+    /// <remarks>
+    /// Неизвестное число в перечислении — <c>salon.kind.unknown</c> даже тогда, когда оно
+    /// пришло в обход JSON (числа в JSON для enum'ов запрещены, R-23). Скрывать можно только
+    /// кабинет, дом и выезд; барбершоп и студия аренды кресел публичны по своей природе.
+    /// При неизвестном типе правило видимости не проверяется: одна ошибка на поле, а не две.
+    /// </remarks>
+    private static void ValidatePlaceKind(
+        PlaceKind kind,
+        bool isListed,
+        List<Error> errors)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            errors.Add(Error.Validation(
+                KIND_UNKNOWN_CODE,
+                $"Unknown place kind value {(int)kind}.",
+                nameof(kind)));
+
+            return;
+        }
+
+        if (isListed && kind is PlaceKind.Home or PlaceKind.Mobile)
+        {
+            errors.Add(Error.Validation(
+                LISTED_KIND_CODE,
+                "A home or mobile place cannot be listed in the catalogue.",
+                nameof(isListed)));
+        }
+
+        if (!isListed && kind is PlaceKind.Salon or PlaceKind.RentalStudio)
+        {
+            errors.Add(Error.Validation(
+                LISTED_KIND_CODE,
+                "A salon or rental studio must be listed in the catalogue.",
+                nameof(isListed)));
+        }
     }
 
     private static void ValidateCoordinates(

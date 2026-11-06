@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 
 import { setUnauthorizedHandler } from '@/lib/api'
@@ -14,6 +14,11 @@ import { server } from '@/test/msw/server'
  * cookie-подсказка «Запомнить меня») живёт дольше одного теста, поэтому сбрасывается
  * здесь, а не по договорённости внутри отдельных файлов (§8).
  */
+
+// 70 файлов со своими jsdom-окружениями делят CPU: первый ответ MSW под нагрузкой
+// иногда приходит позже стандартной секунды, и `findBy*`/`waitFor` падают ложно.
+// Успешные тесты от этого лимита не замедляются — он только продлевает ожидание.
+configure({ asyncUtilTimeout: 3000 })
 
 // jsdom не реализует ни один из этих API, а Base UI и приложение их зовут.
 window.matchMedia = (query: string): MediaQueryList => ({

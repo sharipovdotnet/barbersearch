@@ -62,7 +62,8 @@ public sealed class SalonMutationsAuthorizationTests
             UserRole.Admin);
         await app.AuthenticateAsync(admin.Email);
 
-        using (var created = await app.Client.PostAsJsonAsync(
+        using (var created = await TestApp.PostJsonAsync(
+                   app.Client,
                    "api/salons",
                    NewSalonRequest("Admin Created Salon")))
         {
@@ -146,7 +147,10 @@ public sealed class SalonMutationsAuthorizationTests
         HttpClient client,
         Guid salonId)
         => [
-            await client.PostAsJsonAsync("api/salons", NewSalonRequest("Forbidden Salon")),
+            await TestApp.PostJsonAsync(
+                client,
+                "api/salons",
+                NewSalonRequest("Forbidden Salon")),
             await client.PutAsJsonAsync(
                 $"api/salons/{salonId}/location",
                 new UpdateSalonLocationRequest(

@@ -70,6 +70,7 @@ import type { HairServiceOption } from '@/lib/hair-services'
 import type { MyReview } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
+import { isPlaceKind } from '@/lib/place-kind'
 import type { Review } from '@/lib/reviews'
 import { isSalonModerationStatus } from '@/lib/salon-moderation'
 import type { SalonDirectoryItem } from '@/lib/salons'
@@ -374,6 +375,7 @@ export function isBarberSearchItem(value: unknown): value is BarberSearchItem {
     isBoolean(value.isVerified) &&
     isNullable(isNonEmptyString)(value.primarySalonId) &&
     isNullableString(value.primarySalonName) &&
+    isNullable(isPlaceKind)(value.primaryPlaceKind) &&
     isNullableString(value.city) &&
     isArrayOf(isString)(value.additionalServices)
   )
@@ -413,7 +415,8 @@ export function isSalonDirectoryItem(
     isString(value.name) &&
     isString(value.city) &&
     isString(value.address) &&
-    isString(value.timeZoneId)
+    isString(value.timeZoneId) &&
+    isPlaceKind(value.kind)
   )
 }
 
@@ -430,6 +433,8 @@ export function isBarberSalonSummary(
     isString(value.city) &&
     isString(value.address) &&
     isString(value.timeZoneId) &&
+    isPlaceKind(value.kind) &&
+    isBoolean(value.isListed) &&
     isBoolean(value.isPrimary) &&
     isString(value.country) &&
     isNullableString(value.postalCode) &&
@@ -507,6 +512,7 @@ function isProfileSalon(value: unknown): value is BarberProfileSalon {
     isString(value.city) &&
     isString(value.country) &&
     isString(value.timeZoneId) &&
+    isPlaceKind(value.kind) &&
     isBoolean(value.isPrimary) &&
     isArrayOf(isWorkingSchedule)(value.workingSchedules)
   )
@@ -864,6 +870,8 @@ export function isAdminSalonRow(value: unknown): value is AdminSalon {
     isNullableString(value.websiteUrl) &&
     isBoolean(value.isActive) &&
     isSalonModerationStatus(value.moderationStatus) &&
+    isPlaceKind(value.kind) &&
+    isBoolean(value.isListed) &&
     isNullableString(value.rejectionReason) &&
     isNullableString(value.reviewedAt) &&
     isNullableString(value.ownerEmail) &&

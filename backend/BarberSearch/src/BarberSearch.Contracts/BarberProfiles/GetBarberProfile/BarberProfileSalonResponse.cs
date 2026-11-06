@@ -1,4 +1,5 @@
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Domain.Salons;
 
 namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 
@@ -12,6 +13,9 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// <param name="City">Город салона.</param>
 /// <param name="Country">Страна салона.</param>
 /// <param name="TimeZoneId">IANA-идентификатор часового пояса салона.</param>
+/// <param name="Kind">
+/// Вид места приёма: карточка показывает, барбершоп это, кабинет, приём на дому или выезд.
+/// </param>
 /// <param name="IsPrimary">Основной ли это салон барбера.</param>
 /// <param name="WorkingSchedules">Недельное расписание барбера в этом салоне.</param>
 public record BarberProfileSalonResponse(
@@ -22,5 +26,6 @@ public record BarberProfileSalonResponse(
     string City,
     string Country,
     string TimeZoneId,
+    PlaceKind Kind,
     bool IsPrimary,
     IReadOnlyList<WorkingScheduleResponse> WorkingSchedules);

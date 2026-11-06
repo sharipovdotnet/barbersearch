@@ -121,6 +121,8 @@ public sealed class AuditTrail
             // контакты и координаты администратор правит существующими ручками, выключение
             // пишет isActive. ModerationStatus добавлен в #48: без него решение администратора
             // (одобрение/отказ) не видно в журнале, хотя пишется как salon.updated.
+            // Kind/IsListed добавлены в #54: тип места и видимость в каталоге задаются только
+            // при создании, поэтому попадают в values строки salon.created — там же, где имя.
             // RejectionReason сознательно не в allowlist: это текст администратора, а не
             // история изменения строки; OwnerUserId тоже не нужен — владелец не PII, но
             // и diff по нему бесполезен. Дети салона (BarberSalon, WorkingSchedule) —
@@ -139,6 +141,8 @@ public sealed class AuditTrail
                     nameof(Salon.PhoneNumber),
                     nameof(Salon.WebsiteUrl),
                     nameof(Salon.IsActive),
+                    nameof(Salon.Kind),
+                    nameof(Salon.IsListed),
                     nameof(Salon.ModerationStatus)
                 ]),
 

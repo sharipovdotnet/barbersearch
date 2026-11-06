@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
+import { PLACE_KIND_LABELS } from '@/lib/place-kind'
 import {
   SALON_MODERATION_LABELS,
   type SalonModerationStatus,
@@ -34,10 +35,15 @@ export function BarberSalonCard({
       <CardContent className="space-y-2 pt-6">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-medium break-words">{salon.name}</h2>
+          <Badge variant="outline">{PLACE_KIND_LABELS[salon.kind]}</Badge>
           {salon.isPrimary && <Badge variant="secondary">Основной</Badge>}
-          <Badge variant={moderationVariant(salon.moderationStatus)}>
-            {SALON_MODERATION_LABELS[salon.moderationStatus]}
-          </Badge>
+          {salon.isListed ? (
+            <Badge variant={moderationVariant(salon.moderationStatus)}>
+              {SALON_MODERATION_LABELS[salon.moderationStatus]}
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Не в каталоге</Badge>
+          )}
         </div>
 
         <p className="text-sm break-words text-muted-foreground">
@@ -50,7 +56,7 @@ export function BarberSalonCard({
           <span className="text-foreground">{salon.timeZoneId}</span>
         </p>
 
-        {salon.moderationStatus === 'Pending' && (
+        {salon.isListed && salon.moderationStatus === 'Pending' && (
           <p className="text-sm text-muted-foreground">
             Салон появится в поиске после проверки администратором.
           </p>

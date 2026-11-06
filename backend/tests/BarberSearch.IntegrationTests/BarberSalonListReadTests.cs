@@ -36,7 +36,9 @@ public sealed class BarberSalonListReadTests
         "websiteUrl",
         "ownerUserId",
         "moderationStatus",
-        "rejectionReason"
+        "rejectionReason",
+        "kind",
+        "isListed"
     ];
 
     private static readonly string[] OTHER_SALON_NAMES =
@@ -94,6 +96,8 @@ public sealed class BarberSalonListReadTests
         Assert.Equal(seeded.Primary.City, primary.GetProperty("city").GetString());
         Assert.Equal(seeded.Primary.Address, primary.GetProperty("address").GetString());
         Assert.Equal(seeded.Primary.TimeZoneId, primary.GetProperty("timeZoneId").GetString());
+        Assert.Equal("Salon", primary.GetProperty("kind").GetString());
+        Assert.True(primary.GetProperty("isListed").GetBoolean());
         Assert.Equal(
             SUMMARY_FIELDS,
             primary.EnumerateObject().Select(property => property.Name));

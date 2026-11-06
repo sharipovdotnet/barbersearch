@@ -21,6 +21,7 @@ const ITEM: BarberSearchItem = {
   isVerified: true,
   primarySalonId: null,
   primarySalonName: null,
+  primaryPlaceKind: null,
   city: null,
   additionalServices: ['Бритьё головы', 'Уход за бородой'],
 }

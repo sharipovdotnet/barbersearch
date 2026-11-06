@@ -13,6 +13,7 @@ import {
   formatReviewsCount,
   getInitials,
 } from '@/lib/format'
+import { placeKindCaption } from '@/lib/place-kind'
 import { isPlainClick, navigate } from '@/lib/router'
 
 /**
@@ -24,9 +25,16 @@ import { isPlainClick, navigate } from '@/lib/router'
  * клиент видит их до перехода в профиль.
  */
 export function BarberCard({ barber }: { barber: BarberSearchItem }) {
-  const location = [barber.primarySalonName, barber.city]
-    .filter(Boolean)
-    .join(' · ')
+  // `primaryPlaceKind` есть только у места из нового контракта: у барбера без
+  // места он `null`, и тогда остаётся прежняя подпись «название · город».
+  const location =
+    barber.primaryPlaceKind === null
+      ? [barber.primarySalonName, barber.city].filter(Boolean).join(' · ')
+      : placeKindCaption(
+          barber.primaryPlaceKind,
+          barber.primarySalonName,
+          barber.city
+        )
   const languages = barber.languages
     .map((language) => LANGUAGE_LABELS[language])
     .join(', ')
