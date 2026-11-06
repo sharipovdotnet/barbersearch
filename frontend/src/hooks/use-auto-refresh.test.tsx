@@ -112,6 +112,37 @@ describe('useAutoRefresh', () => {
     expect(onRefresh).toHaveBeenCalledTimes(2)
   })
 
+  it('без периода не тикает, но обновляет при возврате на вкладку', async () => {
+    vi.useFakeTimers()
+    const onRefresh = vi.fn()
+
+    renderHook(() =>
+      useAutoRefresh({ enabled: true, poll: false, onRefresh })
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(AUTO_REFRESH_INTERVAL_MS * 3)
+    })
+    expect(onRefresh).not.toHaveBeenCalled()
+
+    act(() => {
+      setVisibility('hidden')
+    })
+    act(() => {
+      setVisibility('visible')
+    })
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(AUTO_REFRESH_INTERVAL_MS * 2)
+    })
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+
   it('с выключенным опросом не тикает и снимает таймер при размонтировании', () => {
     vi.useFakeTimers()
     const onRefresh = vi.fn()

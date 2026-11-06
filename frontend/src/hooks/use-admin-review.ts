@@ -107,6 +107,11 @@ export function useAdminReview(
 
   const isCurrent = requestKey !== null && state.key === requestKey
 
+  // Перечитывание той же карточки (тихое обновление очереди) не должно мигать
+  // скелетоном: пока приходит свежий ответ, на экране остаются прежние данные.
+  const isSameReview =
+    reviewId !== null && state.key?.startsWith(`${reviewId}:`) === true
+
   let status: AdminReviewDetailStatus = 'idle'
 
   if (reviewId) {
@@ -122,7 +127,7 @@ export function useAdminReview(
   }, [])
 
   return {
-    review: isCurrent ? state.review : null,
+    review: isCurrent ? state.review : isSameReview ? state.review : null,
     status,
     error: isCurrent ? state.error : null,
     reload,

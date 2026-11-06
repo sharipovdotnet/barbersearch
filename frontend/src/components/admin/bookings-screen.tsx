@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminBooking } from '@/hooks/use-admin-booking'
 import { useAdminBookingsList } from '@/hooks/use-admin-bookings-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   ADMIN_BOOKING_STATUS_FILTERS,
@@ -57,6 +58,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [requiresSignIn, setRequiresSignIn] = useState(false)
+  const [isActing, setIsActing] = useState(false)
 
   // Задержка перед запросом: 300 мс хватает, чтобы не искать на каждую букву.
   useEffect(() => {
@@ -73,6 +75,24 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 
   const list = useAdminBookingsList({ status: statusFilter, search })
   const detail = useAdminBooking(bookingId)
+
+  // Новые и отменённые клиентами брони должны появляться без ручного обновления.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !list.isLoadingPage &&
+      !requiresSignIn &&
+      !isActing,
+    onRefresh: () => {
+      list.refresh()
+
+      if (bookingId !== null && detail.status !== 'notFound') {
+        detail.reload()
+      }
+    },
+  })
+
   const isWide = useMediaQuery('(min-width: 1024px)')
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null)
@@ -329,6 +349,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
                   onReload={handleActionReload}
                   onBack={handleBack}
                   onRequiresSignIn={() => setRequiresSignIn(true)}
+                  onActingChange={setIsActing}
                 />
               ) : bookingId ? (
                 <BookingDetailState

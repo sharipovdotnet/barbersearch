@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BarberRequestsScreen } from '@/components/admin/barber-requests-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminBarberRequest } from '@/lib/admin-barber-requests'
 import { parseAdminPath } from '@/lib/admin-path'
 import { useLocation } from '@/lib/router'
@@ -200,6 +201,10 @@ function renderScreen() {
 describe('BarberRequestsScreen', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('показывает очередь, открывает первую заявку и не шлёт курсор первой страницы', async () => {
@@ -482,5 +487,26 @@ describe('BarberRequestsScreen', () => {
     expect(await screen.findByRole('link', { name: /Иван Петров/ })).toBeInTheDocument()
     // Кэш страниц: «Назад» не ходит в сеть.
     expect(requestsBefore()).toBe(0)
+  })
+
+  it('через период опроса перечитывает очередь без ручного обновления', async () => {
+    vi.useFakeTimers()
+    const state = mockAdminRequests([PENDING])
+
+    openAt('/admin/barber-requests')
+    renderScreen()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = state.listRequests.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+
+    expect(state.listRequests).toHaveLength(initial + 1)
   })
 })

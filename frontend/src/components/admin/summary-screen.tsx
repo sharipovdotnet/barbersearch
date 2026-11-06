@@ -5,6 +5,7 @@ import { AdminSignInGate } from '@/components/admin/admin-gate'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminSummary } from '@/hooks/use-admin-summary'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useNow } from '@/hooks/use-now'
 import type { AdminSummaryOldestReview } from '@/lib/admin-summary'
 import { cataloguePath, reviewsPath } from '@/lib/admin-path'
@@ -34,6 +35,13 @@ export function SummaryScreen() {
   const summary = useAdminSummary()
   const now = useNow()
   const headingRef = useRef<HTMLHeadingElement | null>(null)
+
+  // Сводка — очередь: пока она открыта, числа должны совпадать с разделами.
+  // Ошибка первой загрузки не опрашивается: у неё есть «Повторить».
+  useAutoRefresh({
+    enabled: summary.status === 'ready' && !summary.requiresSignIn,
+    onRefresh: summary.refresh,
+  })
 
   if (summary.requiresSignIn) {
     return (

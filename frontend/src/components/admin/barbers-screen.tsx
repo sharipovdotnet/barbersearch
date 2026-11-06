@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminBarber } from '@/hooks/use-admin-barber'
 import { useAdminBarberList } from '@/hooks/use-admin-barber-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   ADMIN_BARBER_SEARCH_MAX_LENGTH,
@@ -117,6 +118,24 @@ export function BarbersScreen({
       : null
   const currentPendingAction =
     barber && pendingAction?.barberId === barber.id ? pendingAction.kind : null
+
+  // Очередь проверки меняют и барберы, и второй администратор. Пока идёт
+  // действие или догружается страница, список не трогаем.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !list.isLoadingPage &&
+      !requiresSignIn &&
+      pendingAction === null,
+    onRefresh: () => {
+      list.refresh()
+
+      if (barberId !== null && detail.status !== 'notFound') {
+        detail.reload()
+      }
+    },
+  })
 
   // Применённый поиск меняет выборку, но адреса не касается: карточку прошлого
   // запроса снимаем сами. Смена фильтра уходит в адрес и сбрасывает выбор там.

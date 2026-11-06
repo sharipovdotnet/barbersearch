@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminCatalogueList } from '@/hooks/use-admin-catalogue'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import {
   ADMIN_CATALOGUE_EMPTY,
   ADMIN_CATALOGUE_ENTITY_LABELS,
@@ -100,6 +101,22 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
   const list = useAdminCatalogueList(tab, {
     status: statusFilter,
     search,
+  })
+
+  // Справочник не опрашиваем по таймеру: он меняется редко. Но при возврате
+  // на вкладку перечитываем — новый салон на проверке мог появиться, пока
+  // администратор смотрел другую страницу.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !createOpen &&
+      editId === null &&
+      toggleId === null &&
+      moderation === null &&
+      pendingRowId === null,
+    poll: false,
+    onRefresh: list.refresh,
   })
 
   const headingRef = useRef<HTMLHeadingElement | null>(null)
