@@ -4,8 +4,9 @@
 > Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **231 domain + 440 application + 116 infrastructure + 148 integration (935 total)**,
-> all green in both Debug and Release.
+> Tests: **257 domain + 472 application + 119 infrastructure + 158 integration (1006 total)**;
+> the three unit projects are green locally (2026-11-06), integration runs on PostgreSQL
+> (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
 
@@ -458,8 +459,11 @@ Infrastructure must not leak into Domain. `Contracts` — исключение �
 User (AR)
  ├─ 1..0..1 BarberProfile (AR)          User.BarberProfileId (Id only, no navigation)
  ├─ 1..* FavoriteBarber                 (child; BarberProfileId is a plain Id)
- ├─ 1..* Booking (AR)                   Booking stores UserId / BarberProfileId /
- │                                     BarberServiceId / SalonId as Ids only
+ ├─ 1..* Booking (AR)                   Booking stores UserId (nullable) /
+ │                                     BarberProfileId / BarberServiceId / SalonId
+ │                                     as Ids only; a guest booking has UserId = null
+ │                                     and a contact snapshot in GuestFirstName /
+ │                                     GuestLastName / GuestPhone
  └─ 1..* Review (AR)                    Review stores UserId / BookingId /
                                         BarberProfileId (derived from the booking)
 
@@ -532,7 +536,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
 | `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
 | `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
-| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions |
+| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions; **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 
 ### 7.4 Statuses and enums
@@ -660,7 +664,7 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 19 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 248 domain + 461 application + 116 infrastructure + 158 integration (983 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 257 domain + 472 application + 119 infrastructure + 158 integration (1006 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 113 обработчиков (81 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 35 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишется `ModerationStatus`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
@@ -668,14 +672,27 @@ The rules below were pushed to the application layer because the aggregate canno
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (24):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
-`AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
+**Миграции (25):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+`AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
-`AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`.
+`AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`.
+
+**`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
+guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
+`guest_phone` (`varchar(32)`), all nullable — registered bookings keep them `NULL`. Check
+`ck_bookings_customer` encodes the either/or rule (`user_id` set ⟺ guest fields `NULL`;
+`user_id NULL` ⟹ first name and phone set), and `ck_bookings_guest_first_name` /
+`ck_bookings_guest_last_name` / `ck_bookings_guest_phone` reject blank or over-long values.
+The partial unique index `ux_bookings_barber_profile_id_idempotency_key_guest`
+(`(barber_profile_id, idempotency_key) WHERE user_id IS NULL`) scopes the guest retry key.
+`ux_bookings_user_id_idempotency_key` and `ix_bookings_user_id_start_at` are unchanged;
+no data backfill is needed because existing rows all have `user_id` set and guest columns `NULL`.
+`Down` restores `user_id NOT NULL` (with the default empty `Guid`) and drops the guest columns,
+so it requires that no guest rows exist.
 
 **`AddSalonOwnership` (2026-11-06, issue-48).** Adds `salons.owner_user_id` (FK `users`,
 `ON DELETE SET NULL`, index), `moderation_status` (`NOT NULL DEFAULT 2`, check `IN (1,2,3)`),
@@ -1105,7 +1122,8 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 |---|---|---|
 | `bookings` | `(barber_profile_id, start_at) WHERE status IN (1,2)` — partial | The slot query is a range scan `start_at >= day AND start_at < day+1`. Cancelled(3)/Completed(4)/NoShow(5) never block a slot, so excluding them keeps the index small and hot |
 | `bookings` | `EXCLUDE USING gist (barber_profile_id WITH =, tstzrange(start_at, end_at) WITH &&) WHERE (status IN (1,2))` | Makes double-booking **impossible at the database level**, not merely unlikely. Needs the `btree_gist` extension |
-| `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global |
+| `bookings` | `UNIQUE (user_id, idempotency_key)` — `ux_bookings_user_id_idempotency_key` | Mobile clients retry; a retry must not create a second booking. Scoped to the user, not global. `user_id` is nullable, and PostgreSQL treats `NULL`s as distinct, so a guest row never conflicts here |
+| `bookings` | `UNIQUE (barber_profile_id, idempotency_key) WHERE user_id IS NULL` — `ux_bookings_barber_profile_id_idempotency_key_guest`, migration `AddGuestBookings` | The guest (walk-in) retry key: a guest has no `user_id`, so the pair `(barber, key)` is the scope. A guest booking and a registered client's booking may share the same key |
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
 | `bookings` | `(start_at DESC, id)` | Administrator's bookings in the unfiltered page: `GET api/bookings` scope `all` without a `userId` filter and the first page of `GET api/admin/bookings` when no status is chosen. The status-filtered admin page is served by the next row |
 | `bookings` | `(status, start_at DESC, id)` — `ix_bookings_status_start_at_id` (issue-39) | The admin bookings list with a status filter: the filter column first, then the exact keyset order, so a rare status is an `Index Scan` without `Sort` instead of a bitmap scan plus a sort over the whole table |
@@ -1319,16 +1337,25 @@ The mechanism is settled: **the exclusion constraint**, not an application pre-c
   after the 2-second wait and rolled back; after A released the lock, B acquired it successfully.
 
 **Idempotency.** The unique index `ux_bookings_user_id_idempotency_key` (also from
-`InitialCreate`) makes the key scoped to `(user_id, idempotency_key)`, not global.
+`InitialCreate`) makes the key scoped to `(user_id, idempotency_key)`, not global. A guest
+booking (walk-in) has `user_id = NULL`, and PostgreSQL treats `NULL`s as distinct, so the guest
+key lives in its own scope `(barber_profile_id, idempotency_key)`, enforced by the partial
+unique index `ux_bookings_barber_profile_id_idempotency_key_guest`
+(migration `AddGuestBookings`). A guest booking and a registered client's booking may
+therefore share the same key, and two barbers' guest bookings with the same key do not conflict.
 
 1. `CreateBookingHandler` normalizes the key with `Booking.NormalizeIdempotencyKey` and validates
    it with `Booking.ValidateIdempotencyKey` **before** any repository call: blank/whitespace is
    `400 booking.create.idempotencyKey`, longer than 128 characters is
    `400 booking.create.idempotencyKey.tooLong` (R-09). It then reads the existing booking by
-   `(current user, key)`; a hit returns its id without touching the service or inserting.
-2. A miss proceeds to insert. If the insert loses a race, the same handler re-reads by key:
-   `23505` and `23P01` both enter this branch, so a duplicate-key loser gets the winner's id
-   (idempotent `201`) instead of an error.
+   `(current user, key)` (`GetByIdempotencyKeyAsync`) or, for a guest, by
+   `(barber profile, key)` (`GetByGuestIdempotencyKeyAsync`); a hit returns its id without
+   touching the service or inserting. The registered path keeps the cross-barber conflict
+   (`409 booking.create.idempotencyKeyConflict`) when the same client's key already belongs to
+   another barber.
+2. A miss proceeds to insert. If the insert loses a race, the same handler re-reads by key **in
+   the same scope**: `23505` and `23P01` both enter this branch, so a duplicate-key loser gets
+   the winner's id (idempotent `201`) instead of an error.
 3. If the re-read still does not find the row, a unique violation becomes
    `409 booking.create.idempotencyKeyConflict`; an overlap stays `409 booking.add.overlap`.
 4. `RepositoryBase.SaveChangesAsync` clears the change tracker before returning a mapped
@@ -1835,15 +1862,21 @@ Read endpoints (added 2026-10-19):
   trimmed and capped at 100 characters: a value that parses as a GUID matches `booking.Id`
   **exactly**, anything else is a customer-email substring through `ILIKE` with `%`, `_` and `\`
   escaped (`LikePattern`) — not a customer name, a phone, the barber's email or an id prefix.
-  One `AsNoTracking` projection with **inner** joins `bookings → users` (customer),
-  `barber_profiles` (display name), `barber_services → hair_services` (service name) and `salons`
-  (name, address, city, `time_zone_id`); a historical row with a dangling link drops out, the same
-  documented behaviour as `GET api/barber/bookings`, because a card without context is useless.
-  The DTO carries the price snapshot, both notes, `cancellationReason` and `createdAt`, plus the customer's first/last
-  name, **email** and phone, the barber, the service and the salon with `timeZoneId`. Email and
-  phone are PII and exist **only** in this admin contract: `BookingResponse` is unchanged, and so
-  are `GetPageAsync`/`GetBarberPageAsync` and the two customer/barber list contracts — `GET
-  api/bookings` keeps its `scope` and `userId` behaviour exactly. `GET api/admin/bookings/{id}`
+  One `AsNoTracking` projection with **`LEFT JOIN users`** for the customer (a guest booking has
+  `user_id = NULL` and must stay visible) and **inner** joins for `barber_profiles` (display
+  name), `barber_services → hair_services` (service name) and `salons`
+  (name, address, city, `time_zone_id`); a historical row with a dangling barber/service/salon
+  link drops out, the same documented behaviour as `GET api/barber/bookings`, because a card
+  without visit context is useless. The DTO carries the price snapshot, both notes,
+  `cancellationReason` and `createdAt`, plus the customer's first/last name, **email** and phone,
+  the barber, the service and the salon with `timeZoneId`. `AdminBookingCustomerResponse`
+  describes both kinds: `id` and `email` are `null` for a guest, while first/last name and phone
+  come from the guest snapshot; email search therefore matches registered customers only, but
+  guest rows remain in the unfiltered list. Email and phone are PII and exist **only** in this
+  admin contract: `BookingResponse` carries no email and its `UserId` is now nullable for a guest
+  row (the unfiltered admin `GET api/bookings` view can include one); the customer list still
+  filters by `user_id`, so a guest row never appears there, and `GetPageAsync` /
+  `GetBarberPageAsync` keep their contracts and `scope` behaviour. `GET api/admin/bookings/{id}`
   uses the same projection and answers `404 admin.bookings.notFound`. Mutations stay on
   `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
   and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation,
@@ -2055,16 +2088,20 @@ Read endpoints (added 2026-10-19):
   `cancellationReason`, customer
   display name (first + last, trimmed, double spaces collapsed) and phone when filled, service name
   and salon name/address/city/`timeZoneId`. Email, `userId`, `barberProfileId`, `idempotencyKey`
-  and `createdAt` are deliberately absent. One `AsNoTracking` join over
-  `bookings → users`, `barber_services → hair_services` and `salons`; price is the booking snapshot,
-  not the current service price. There is no `GET api/barber/bookings/{id}`: the row carries
-  everything the cabinet needs, and the write actions take the id from the list.
+  and `createdAt` are deliberately absent. One `AsNoTracking` query with a **`LEFT JOIN`** over
+  `bookings → users` (a guest booking has `user_id = NULL`, so an inner join would drop it),
+  `barber_services → hair_services` and `salons`; for a guest the customer name and phone come
+  from `guest_first_name` / `guest_last_name` / `guest_phone`, so guest rows stay in the barber
+  cabinet. Price is the booking snapshot, not the current service price. There is no
+  `GET api/barber/bookings/{id}`: the row carries everything the cabinet needs, and the write
+  actions take the id from the list.
   The only write-contract change in the slice: `PUT api/bookings/{id}/barber-note` now trims the
   note, stores a blank note as `null` and rejects more than
   `Constants.MAX_BARBER_NOTE_LENGTH` (1000) characters with `400 booking.barberNote.tooLong`;
   the rule lives in `Booking.AddBarberNote`.
-- **Manual client booking (2026-11-05).** The barber cabinet can create a booking for a
-  registered client. Three `BarberOnly` reads feed the dialog: `GET api/barber/clients?search=`
+- **Manual client booking (2026-11-05; guest walk-ins added 2026-11-06, issue #50).** The barber
+  cabinet can create a booking for a registered client **or** for a guest (walk-in) without
+  creating an account. Three `BarberOnly` reads feed the dialog: `GET api/barber/clients?search=`
   returns at most ten active `Customer` rows matched by email or phone substring (trimmed,
   3–100 characters; `400 barberClient.search.tooShort`/`.tooLong`); `GET
   api/barber/booking-options` returns the own profile's active services and salons in the
@@ -2073,13 +2110,22 @@ Read endpoints (added 2026-10-19):
   `RequireVisibleProfile = false` — the profile comes from the claim, while active
   salon/service, date overrides, time offs and occupied intervals still apply.
   `POST api/barber/bookings` takes
-  `{ customerId, barberServiceId, salonId, startAt, endAt, idempotencyKey, customerNote }`,
-  takes the profile from the `barber_profile_id` claim (no profile in the body), validates the
-  customer as an existing active `Customer` (`404 booking.create.customerNotFound`), and
-  reuses the create pipeline: idempotency key scoped to the customer, start window, advisory
-  lock, service/salon/ownership and overlap checks. `Booking.Confirm()` runs before the insert,
-  so the row is **`Confirmed`**, not `Pending`; the response is `201 { id }`. The call is a
-  cookie mutation and needs `X-CSRF-TOKEN`. Booking creation is still deliberately not audited.
+  `{ customerId, guestFirstName, guestLastName, guestPhone, barberServiceId, salonId, startAt,
+  endAt, idempotencyKey, customerNote }`, takes the profile from the `barber_profile_id` claim
+  (no profile in the body) and requires **either** `customerId` **or** guest first name + phone,
+  never both (there is no email for a guest). Validation is `400` with
+  `booking.create.customer` (neither supplied), `booking.create.customerAmbiguous` (both
+  supplied), `booking.create.guestFirstName` (blank/too long, max 100),
+  `booking.create.guestLastName` (too long, max 100; blank → `null`) and
+  `booking.create.guestPhone` (blank/too long, max 32). A registered customer is still validated
+  as an existing active `Customer` (`404 booking.create.customerNotFound`); a guest skips the
+  user lookup and the booking stores `user_id = NULL` plus the trimmed contact snapshot.
+  The rest of the pipeline is shared: idempotency key (scoped to the customer, or to
+  `(barber, key)` for a guest), start window, advisory lock, service/salon/ownership and overlap
+  checks. `Booking.Confirm()` runs before the insert, so the row is **`Confirmed`**, not
+  `Pending`; the response is `201 { id }`. The call is a cookie mutation and needs
+  `X-CSRF-TOKEN`. Booking creation is still deliberately not audited, and the guest fields are
+  therefore not in the audit allowlist either.
 - **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.

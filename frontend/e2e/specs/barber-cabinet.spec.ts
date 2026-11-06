@@ -131,5 +131,13 @@ test.describe('кабинет барбера', () => {
     await expect(
       dialog.getByRole('combobox', { name: 'Услуга' })
     ).toBeVisible()
+
+    // Новый клиент без аккаунта: поиск по базе заменяется именем и телефоном.
+    await dialog.getByRole('radio', { name: 'Новый клиент' }).click()
+    await expect(dialog.getByLabel(/Имя/)).toBeVisible()
+    await expect(dialog.getByLabel(/Телефон/)).toBeVisible()
+    await expect(
+      dialog.getByRole('searchbox', { name: 'Клиент' })
+    ).toHaveCount(0)
   })
 })

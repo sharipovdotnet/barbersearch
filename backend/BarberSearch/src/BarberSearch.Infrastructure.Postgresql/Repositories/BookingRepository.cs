@@ -73,6 +73,45 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return booking;
     }
 
+    public async Task<Result<Booking, Failure>> GetByGuestIdempotencyKeyAsync(
+        Guid barberProfileId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Booking.IdempotencyKeyInvalid,
+                DomainMessages.IDEMPOTENCY_KEY_REQUIRED,
+                nameof(idempotencyKey)));
+        }
+
+        var key = idempotencyKey.Trim();
+
+        // Гостевой ключ скоупится парой (барбер, ключ): user_id у гостя нет, а уникальный
+        // индекс клиента NULL-строки не сравнивает. Условие повторяет фильтр частичного
+        // индекса ux_bookings_barber_profile_id_idempotency_key_guest.
+        var booking = await Context.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                x => x.UserId == null
+                     && x.BarberProfileId == barberProfileId
+                     && x.IdempotencyKey == key,
+                cancellationToken);
+
+        if (booking is null)
+        {
+            return new Failure(Error.NotFound(
+                ApiErrorCodes.Booking.IdempotencyKeyNotFound,
+                $"""
+                 Guest booking with idempotency key '{key}' was not found for
+                 barber profile '{barberProfileId}'.
+                 """));
+        }
+
+        return booking;
+    }
+
     public async Task<Result<IReadOnlyList<Booking>, Failure>> GetByUserAsync(
         Guid userId,
         int page,
@@ -215,8 +254,9 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         var bookings = Context.Bookings.AsNoTracking();
 
         // Навигаций между агрегатами в домене нет, поэтому клиент, услуга и салон
-        // присоединяются явными join'ами по идентификаторам. Внутренние join'ы отсекают
-        // историческую строку с оборванной ссылкой: без контекста визита строка бесполезна.
+        // присоединяются явными join'ами по идентификаторам. Услуга и салон — внутренние:
+        // без контекста визита строка бесполезна. Клиент — LEFT JOIN, потому что у гостя
+        // user_id = NULL, и гостевая строка обязана остаться в кабинете барбера.
         var customers = Context.Users
             .AsNoTracking()
             .Select(user => new
@@ -254,8 +294,14 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 salon.TimeZoneId
             });
 
+        // LEFT JOIN клиента: у гостевой брони (walk-in) user_id = NULL, и внутреннее
+        // соединение выкинуло бы её из кабинета барбера. Гость остаётся в выдаче,
+        // а имя и телефон берутся из гостевого снимка самой брони. Поля клиента
+        // проецируются здесь же (паттерн левого соединения, как в админском журнале).
         var joined = from booking in bookings
-                     join customer in customers on booking.UserId equals customer.Id
+                     join customer in customers
+                         on booking.UserId equals (Guid?)customer.Id into customerJoin
+                     from customer in customerJoin.DefaultIfEmpty()
                      join service in barberServices on booking.BarberServiceId equals service.Id
                      join hairService in hairServices on service.HairServiceId equals hairService.Id
                      join salon in salons on booking.SalonId equals salon.Id
@@ -263,7 +309,9 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                      select new
                      {
                          booking,
-                         customer,
+                         CustomerFirstName = customer == null ? null : customer.FirstName,
+                         CustomerLastName = customer == null ? null : customer.LastName,
+                         CustomerPhoneNumber = customer == null ? null : customer.PhoneNumber,
                          hairService,
                          salon
                      };
@@ -314,9 +362,12 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 row.booking.CustomerNote,
                 row.booking.BarberNote,
                 row.booking.CancellationReason,
-                row.customer.FirstName,
-                row.customer.LastName,
-                row.customer.PhoneNumber,
+                row.CustomerFirstName,
+                row.CustomerLastName,
+                row.CustomerPhoneNumber,
+                row.booking.GuestFirstName,
+                row.booking.GuestLastName,
+                row.booking.GuestPhone,
                 row.hairService.Name,
                 row.salon.Name,
                 row.salon.Address,
@@ -380,16 +431,18 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Соединения внутренние, как в кабинете барбера: историческая строка с оборванной
-    /// ссылкой на клиента, барбера, услугу или салон выпадает из админского списка —
-    /// карточка без контекста визита бесполезна, а показать «бронь без клиента» нельзя.
+    /// Барбер, услуга и салон присоединяются внутренними соединениями: историческая строка
+    /// с оборванной ссылкой на них выпадает из админского списка — карточка без контекста
+    /// визита бесполезна. Клиент — <c>LEFT JOIN</c>: у гостевой брони (walk-in)
+    /// <c>user_id = NULL</c>, и внутреннее соединение скрыло бы её от администратора.
     /// </para>
     /// <para>
     /// Поиск: строка, разбирающаяся как <see cref="Guid"/>, — точный идентификатор брони;
     /// иначе подстрока email клиента через <c>ILIKE</c> с экранированными <c>%</c>, <c>_</c>
-    /// и <c>\</c>. По имени и телефону клиента, email барбера и префиксу id поиск
-    /// не выполняется. Порядок — <c>start_at DESC, id ASC</c>; второй ключ обязателен,
-    /// потому что <c>start_at</c> не уникален.
+    /// и <c>\</c>. У гостя email нет, поэтому подстрокой он не находится, но в
+    /// нефильтрованном списке остаётся. По имени и телефону клиента, email барбера
+    /// и префиксу id поиск не выполняется. Порядок — <c>start_at DESC, id ASC</c>;
+    /// второй ключ обязателен, потому что <c>start_at</c> не уникален.
     /// </para>
     /// </remarks>
     internal static IQueryable<AdminBookingRow> BuildAdminBookingsQuery(
@@ -452,8 +505,13 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 salon.TimeZoneId
             });
 
+        // LEFT JOIN клиента: гостевая бронь (walk-in) не имеет user_id, но обязана остаться
+        // видимой администратору. Услуга, барбер и салон по-прежнему внутренние: это
+        // обязательный контекст визита.
         var joined = from booking in bookings
-                     join customer in customers on booking.UserId equals customer.Id
+                     join customer in customers
+                         on booking.UserId equals (Guid?)customer.Id into customerJoin
+                     from customer in customerJoin.DefaultIfEmpty()
                      join barberProfile in barberProfiles
                          on booking.BarberProfileId equals barberProfile.Id
                      join service in barberServices on booking.BarberServiceId equals service.Id
@@ -463,7 +521,11 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                      select new
                      {
                          booking,
-                         customer,
+                         CustomerId = customer == null ? null : (Guid?)customer.Id,
+                         CustomerFirstName = customer == null ? null : customer.FirstName,
+                         CustomerLastName = customer == null ? null : customer.LastName,
+                         CustomerEmail = customer == null ? null : customer.Email,
+                         CustomerPhoneNumber = customer == null ? null : customer.PhoneNumber,
                          barberProfile,
                          hairService,
                          salon
@@ -493,8 +555,13 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             {
                 var pattern = LikePattern.Contains(search);
 
+                // Поиск остаётся по email клиента: у гостя email нет, поэтому подстрокой
+                // он не находится, но в нефильтрованном списке остаётся видимым.
+                // Условие смотрит на уже спроецированное поле: проверка `customer != null`
+                // на анонимном типе после DefaultIfEmpty не транслируется в SQL.
                 joined = joined.Where(row =>
-                    EF.Functions.ILike(row.customer.Email, pattern, "\\"));
+                    row.CustomerEmail != null
+                    && EF.Functions.ILike(row.CustomerEmail, pattern, "\\"));
             }
         }
 
@@ -522,11 +589,14 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.booking.BarberNote,
             row.booking.CancellationReason,
             row.booking.CreatedAt,
-            row.customer.Id,
-            row.customer.FirstName,
-            row.customer.LastName,
-            row.customer.Email,
-            row.customer.PhoneNumber,
+            row.CustomerId,
+            row.CustomerFirstName,
+            row.CustomerLastName,
+            row.CustomerEmail,
+            row.CustomerPhoneNumber,
+            row.booking.GuestFirstName,
+            row.booking.GuestLastName,
+            row.booking.GuestPhone,
             row.barberProfile.Id,
             row.barberProfile.DisplayName,
             row.hairService.Name,
@@ -557,10 +627,11 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.CreatedAt,
             new AdminBookingCustomerResponse(
                 row.CustomerId,
-                row.FirstName,
-                row.LastName,
-                row.Email,
-                row.PhoneNumber),
+                // У гостя зарегистрированных полей нет: имя и телефон берутся из снимка брони.
+                row.CustomerFirstName ?? row.GuestFirstName ?? string.Empty,
+                row.CustomerLastName ?? row.GuestLastName ?? string.Empty,
+                row.CustomerEmail,
+                row.CustomerPhoneNumber ?? row.GuestPhone),
             new AdminBookingBarberResponse(row.BarberProfileId, row.DisplayName),
             new AdminBookingServiceResponse(row.ServiceName),
             new AdminBookingSalonResponse(
@@ -713,8 +784,17 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
     /// <summary>
     /// Собирает вложенные response-записи из плоской строки и нормализует имя клиента.
     /// </summary>
+    /// <remarks>
+    /// Зарегистрированный клиент и гость взаимоисключающие, поэтому имя и телефон берутся
+    /// из первых заполненных полей: у гостя зарегистрированных нет, у клиента — гостевых.
+    /// </remarks>
     private static BarberBookingResponse ToBarberResponse(BarberBookingRow row)
-        => new(
+    {
+        var firstName = row.CustomerFirstName ?? row.GuestFirstName;
+        var lastName = row.CustomerLastName ?? row.GuestLastName;
+        var phone = row.CustomerPhoneNumber ?? row.GuestPhone;
+
+        return new BarberBookingResponse(
             row.Id,
             row.Status,
             row.StartAt,
@@ -724,25 +804,26 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.BarberNote,
             row.CancellationReason,
             new BarberBookingCustomerResponse(
-                BuildCustomerName(row.CustomerFirstName, row.CustomerLastName),
-                string.IsNullOrWhiteSpace(row.CustomerPhoneNumber)
-                    ? null
-                    : row.CustomerPhoneNumber.Trim()),
+                BuildCustomerName(firstName, lastName),
+                string.IsNullOrWhiteSpace(phone) ? null : phone.Trim()),
             new BarberBookingServiceResponse(row.ServiceName),
             new BarberBookingSalonResponse(
                 row.SalonName,
                 row.SalonAddress,
                 row.SalonCity,
                 row.TimeZoneId));
+    }
 
     /// <summary>
     /// Имя клиента для списка: срезает края и схлопывает повторные пробелы.
     /// </summary>
     /// <remarks>
-    /// Домен не нормализует имя пользователя, поэтому «Иван  Петров» и «Иван Петров» могут
-    /// лежать в базе по-разному. Для строки списка нужен один вид — иначе вёрстка прыгает.
+    /// Домен не нормализует имя зарегистрированного пользователя, поэтому «Иван  Петров»
+    /// и «Иван Петров» могут лежать в базе по-разному. Для строки списка нужен один вид —
+    /// иначе вёрстка прыгает. У гостя имя уже нормализовано доменом, но пустые части
+    /// (<c>null</c>) обрабатываются так же.
     /// </remarks>
-    private static string BuildCustomerName(string firstName, string lastName)
+    private static string BuildCustomerName(string? firstName, string? lastName)
     {
         var name = $"{firstName} {lastName}".Trim();
 
@@ -767,9 +848,12 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string? CustomerNote,
         string? BarberNote,
         string? CancellationReason,
-        string CustomerFirstName,
-        string CustomerLastName,
+        string? CustomerFirstName,
+        string? CustomerLastName,
         string? CustomerPhoneNumber,
+        string? GuestFirstName,
+        string? GuestLastName,
+        string? GuestPhone,
         string ServiceName,
         string SalonName,
         string SalonAddress,
@@ -793,11 +877,14 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string? BarberNote,
         string? CancellationReason,
         DateTimeOffset CreatedAt,
-        Guid CustomerId,
-        string FirstName,
-        string LastName,
-        string Email,
-        string? PhoneNumber,
+        Guid? CustomerId,
+        string? CustomerFirstName,
+        string? CustomerLastName,
+        string? CustomerEmail,
+        string? CustomerPhoneNumber,
+        string? GuestFirstName,
+        string? GuestLastName,
+        string? GuestPhone,
         Guid BarberProfileId,
         string DisplayName,
         string ServiceName,

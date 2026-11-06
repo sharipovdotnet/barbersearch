@@ -35,11 +35,12 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// </para>
 /// <para>
 /// Гонку двух одновременных вставок разрешает PostgreSQL: exclusion-ограничение
-/// <c>ex_bookings_no_overlap</c> отдаёт <c>23P01</c>, unique-индекс
-/// <c>ux_bookings_user_id_idempotency_key</c> — <c>23505</c>. Оба маппятся в <c>Conflict</c>.
-/// После такого отказа обработчик ещё раз читает бронь по ключу: если параллельный запрос
-/// с тем же ключом уже сохранил её, возвращается его идентификатор (идемпотентный ответ),
-/// иначе наружу уходит исходный <c>409</c>.
+/// <c>ex_bookings_no_overlap</c> отдаёт <c>23P01</c>, unique-индексы
+/// <c>ux_bookings_user_id_idempotency_key</c> (клиент) и
+/// <c>ux_bookings_barber_profile_id_idempotency_key_guest</c> (гость) — <c>23505</c>.
+/// Оба маппятся в <c>Conflict</c>. После такого отказа обработчик ещё раз читает бронь
+/// по ключу в том же скоупе: если параллельный запрос с тем же ключом уже сохранил её,
+/// возвращается его идентификатор (идемпотентный ответ), иначе наружу уходит исходный <c>409</c>.
 /// </para>
 /// <para>
 /// До проверок ссылок обработчик берёт транзакционную advisory-блокировку барбера через
@@ -51,13 +52,29 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// </para>
 /// <para>
 /// Барбер может записать клиента сам: <see cref="CreateBookingCommand.CustomerId"/>
-/// задаёт клиента, а <see cref="CreateBookingCommand.ConfirmImmediately"/> сразу переводит
-/// бронь в <c>Confirmed</c>. Такой вызов разрешён только владельцу профиля из
-/// <see cref="CreateBookingCommand.Request"/> — профиль обязан совпадать с claim'ом
+/// задаёт зарегистрированного клиента, а <see cref="CreateBookingCommand.ConfirmImmediately"/>
+/// сразу переводит бронь в <c>Confirmed</c>. Такой вызов разрешён только владельцу профиля
+/// из <see cref="CreateBookingCommand.Request"/> — профиль обязан совпадать с claim'ом
 /// <c>barber_profile_id</c>; клиент должен существовать, быть активным и иметь роль
 /// <c>Customer</c>, иначе <c>404 booking.create.customerNotFound</c>. Клиентский путь
 /// (<c>CustomerId = null</c>) по-прежнему берёт пользователя из токена и создаёт
 /// <c>Pending</c>, поэтому передать чужого клиента через публичный контракт нельзя.
+/// </para>
+/// <para>
+/// Вместо аккаунта барбер может записать гостя (walk-in): <see cref="CreateBookingCommand"/>
+/// несёт имя и телефон, <c>Booking.UserId</c> остаётся <c>null</c>, а аккаунт не создаётся.
+/// Гостевой путь доступен только ручному пути барбера (<c>ConfirmImmediately = true</c>);
+/// публичный путь клиента гостевые поля отклоняет как
+/// <c>400 booking.create.customerAmbiguous</c>, потому что клиент там уже задан токеном.
+/// Заполненные одновременно <c>CustomerId</c> и гостевые поля — тот же код. Ручной путь без
+/// клиента и без гостя — <c>400 booking.create.customer</c>; пустое имя или телефон гостя
+/// проверяет домен (<c>booking.create.guestFirstName</c> / <c>booking.create.guestPhone</c>).
+/// </para>
+/// <para>
+/// Ключ идемпотентности клиента остаётся в скоупе <c>(user_id, key)</c>, гостя — в скоупе
+/// <c>(barber_profile_id, key)</c>, потому что <c>user_id</c> у гостя нет. Поэтому гостевые
+/// брони разных барберов с одинаковым ключом не конфликтуют, а гостевая и клиентская бронь
+/// с одинаковым ключом — тоже.
 /// </para>
 /// <para>
 /// Временное окно проверяется здесь, а не в домене: сравнение с «сейчас» — забота
@@ -71,6 +88,16 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// </remarks>
 public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
 {
+    /// <summary>
+    /// Публичный код ошибки «не передан ни зарегистрированный клиент, ни гость»; <c>400</c>.
+    /// </summary>
+    private const string CUSTOMER_REQUIRED_CODE = "booking.create.customer";
+
+    /// <summary>
+    /// Публичный код ошибки «клиент и гость одновременно»; <c>400</c>.
+    /// </summary>
+    private const string CUSTOMER_AMBIGUOUS_CODE = "booking.create.customerAmbiguous";
+
     private readonly IBookingRepository _repository;
     private readonly IBarberProfileRepository _profiles;
     private readonly ISalonRepository _salons;
@@ -120,12 +147,36 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
 
         var actorId = userIdResult.Value;
 
-        // Барбер записывает клиента сам: клиент приходит в команде, а профиль — из claim'а.
-        // Публичный путь (CustomerId = null) по-прежнему работает только со своим id,
-        // поэтому через POST api/bookings чужого клиента передать нельзя.
-        Guid customerId;
+        // Наличие гостевых полей считается по исходным значениям: даже строка из пробелов —
+        // это попытка записать гостя, и молча проигнорировать её нельзя.
+        var hasGuestContact = command.GuestFirstName is not null
+            || command.GuestLastName is not null
+            || command.GuestPhone is not null;
 
-        if (command.CustomerId is { } requestedCustomerId)
+        // Гость — только ручной путь барбера. Публичный путь клиента берёт клиента из токена,
+        // поэтому гостевые поля в нём означают попытку задать двух клиентов сразу.
+        if (hasGuestContact && !command.ConfirmImmediately)
+        {
+            return new Failure(Error.Validation(
+                CUSTOMER_AMBIGUOUS_CODE,
+                "Guest contact fields can only be used when a barber creates a booking manually.",
+                nameof(command.GuestFirstName)));
+        }
+
+        // Клиент и гость одновременно недопустимы: бронь принадлежит ровно одному из них.
+        if (hasGuestContact && command.CustomerId is not null)
+        {
+            return new Failure(Error.Validation(
+                CUSTOMER_AMBIGUOUS_CODE,
+                "A booking cannot belong to a registered customer and a guest at the same time.",
+                nameof(command.GuestFirstName)));
+        }
+
+        Guid? customerId = null;
+        var isGuestBooking = false;
+
+        // Ручной путь барбера (клиент или гость) разрешён только владельцу профиля из claim'а.
+        if (hasGuestContact || command.CustomerId is not null)
         {
             if (!_currentUser.TryGetBarberProfileId(out var actorProfileId)
                 || actorProfileId != request.BarberProfileId)
@@ -134,8 +185,25 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                     ApiErrorCodes.Auth.Forbidden,
                     "A barber can create a booking only for their own profile."));
             }
+        }
 
+        if (hasGuestContact)
+        {
+            isGuestBooking = true;
+        }
+        else if (command.CustomerId is { } requestedCustomerId)
+        {
             customerId = requestedCustomerId;
+        }
+        else if (command.ConfirmImmediately)
+        {
+            // Ручной путь барбера обязан выбрать клиента: зарегистрированного или гостя.
+            // Публичный путь сюда не попадает — при ConfirmImmediately = false клиент
+            // берётся из токена, и эта ветка недостижима.
+            return new Failure(Error.Validation(
+                CUSTOMER_REQUIRED_CODE,
+                "A booking must be created either for a registered customer or for a guest.",
+                nameof(command.CustomerId)));
         }
         else
         {
@@ -153,15 +221,24 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             return new Failure(idempotencyKeyError);
         }
 
-        var existing = await _repository.GetByIdempotencyKeyAsync(
-            customerId,
-            idempotencyKey,
-            cancellationToken);
+        // Скоуп ключа разный: у клиента — (user_id, key), у гостя user_id нет, поэтому
+        // ключ гостя живёт в скоупе (barber_profile_id, key).
+        var existing = isGuestBooking
+            ? await _repository.GetByGuestIdempotencyKeyAsync(
+                request.BarberProfileId,
+                idempotencyKey,
+                cancellationToken)
+            : await _repository.GetByIdempotencyKeyAsync(
+                customerId!.Value,
+                idempotencyKey,
+                cancellationToken);
+
         if (existing.IsSuccess)
         {
             // Ключ уникален в рамках клиента: барбер не должен получить по нему бронь
             // другого мастера, даже если клиент случайно использовал тот же ключ.
-            if (command.CustomerId is not null
+            if (!isGuestBooking
+                && command.CustomerId is not null
                 && existing.Value.BarberProfileId != request.BarberProfileId)
             {
                 return new Failure(Error.Conflict(
@@ -186,10 +263,11 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         }
 
         // Клиента проверяем после ключа идемпотентности: повтор уже созданной брони
-        // обязан вернуть её id, даже если клиента успели заблокировать.
-        if (command.CustomerId is not null)
+        // обязан вернуть её id, даже если клиента успели заблокировать. У гостя аккаунта
+        // нет, поэтому проверять нечего — домен требует только имя и телефон.
+        if (!isGuestBooking && command.CustomerId is not null)
         {
-            var customer = await _users.GetByIdAsync(customerId, cancellationToken);
+            var customer = await _users.GetByIdAsync(customerId!.Value, cancellationToken);
 
             if (customer.IsFailure
                 || customer.Value.Role != UserRole.Customer
@@ -306,6 +384,8 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                     request.SalonId));
             }
 
+            // У гостя UserId = null, а имя и телефон — снимок контакта в самой брони.
+            // Домен проверяет инвариант «клиент или гость» и нормализует контакт.
             var booking = Booking.Create(
                 customerId,
                 request.BarberProfileId,
@@ -315,7 +395,10 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                 request.EndAt,
                 service.Value.Price,
                 idempotencyKey,
-                request.CustomerNote);
+                request.CustomerNote,
+                command.GuestFirstName,
+                command.GuestLastName,
+                command.GuestPhone);
             if (booking.IsFailure)
             {
                 return booking.Error;
@@ -351,14 +434,20 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         }
 
         // Транзакция уже откатилась; проверяем, не выиграл ли параллельный запрос
-        // с тем же ключом идемпотентности.
+        // с тем же ключом идемпотентности — в том же скоупе, в котором его искали.
         if (addFailure is not null
             && addFailure.Errors.Any(error => error.Type == ErrorType.CONFLICT))
         {
-            var raced = await _repository.GetByIdempotencyKeyAsync(
-                customerId,
-                idempotencyKey,
-                cancellationToken);
+            var raced = isGuestBooking
+                ? await _repository.GetByGuestIdempotencyKeyAsync(
+                    request.BarberProfileId,
+                    idempotencyKey,
+                    cancellationToken)
+                : await _repository.GetByIdempotencyKeyAsync(
+                    customerId!.Value,
+                    idempotencyKey,
+                    cancellationToken);
+
             if (raced.IsSuccess)
             {
                 _logger.LogInformation(
@@ -376,7 +465,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                     "booking.create.idempotencyKeyConflict",
                     $"""
                      A booking with idempotency key '{idempotencyKey}' already exists
-                     for this user.
+                     for this customer.
                      """));
             }
         }

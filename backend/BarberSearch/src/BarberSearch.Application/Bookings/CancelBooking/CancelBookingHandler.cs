@@ -52,7 +52,10 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         }
 
         var booking = bookingResult.Value;
-        var isClientOwner = booking.UserId == currentUserId;
+
+        // У гостевой брони (walk-in) клиента-владельца нет: UserId = null, поэтому отменить
+        // её может только барбер профиля или администратор — как и раньше.
+        var isClientOwner = booking.UserId is { } ownerUserId && ownerUserId == currentUserId;
         var isBarberCancellation = false;
 
         if (!isClientOwner)

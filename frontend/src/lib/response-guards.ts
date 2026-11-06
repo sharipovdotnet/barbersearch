@@ -261,7 +261,7 @@ export function isBooking(value: unknown): value is Booking {
   return (
     isRecord(value) &&
     isNonEmptyString(value.id) &&
-    isNonEmptyString(value.userId) &&
+    (value.userId === null || isNonEmptyString(value.userId)) &&
     isNonEmptyString(value.barberProfileId) &&
     isNonEmptyString(value.barberServiceId) &&
     isNonEmptyString(value.salonId) &&
@@ -903,10 +903,10 @@ export const isAdminAuditPage = isPageOf(isAdminAuditEntry)
 function isAdminBookingCustomer(value: unknown): value is AdminBookingCustomer {
   return (
     isRecord(value) &&
-    isNonEmptyString(value.id) &&
+    (value.id === null || isNonEmptyString(value.id)) &&
     isString(value.firstName) &&
     isString(value.lastName) &&
-    isString(value.email) &&
+    (value.email === null || isString(value.email)) &&
     isNullableString(value.phoneNumber)
   )
 }

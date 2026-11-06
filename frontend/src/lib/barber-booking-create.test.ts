@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api'
 import {
   createBarberBooking,
+  formatGuestName,
   type CreateBarberBookingInput,
+  type CreateGuestBarberBookingInput,
 } from '@/lib/barber-booking-create'
 import { describeBarberBookingCreateFailure } from '@/lib/errors'
 import { problemDetails } from '@/test/msw/handlers'
@@ -17,6 +19,19 @@ const INPUT: CreateBarberBookingInput = {
   startAt: '2026-11-05T07:00:00Z',
   endAt: '2026-11-05T07:30:00Z',
   idempotencyKey: 'client-booking-key',
+  customerNote: null,
+}
+
+const GUEST_INPUT: CreateGuestBarberBookingInput = {
+  customerId: null,
+  guestFirstName: 'Анна',
+  guestLastName: 'Смирнова',
+  guestPhone: '+7 999 111-22-33',
+  barberServiceId: '33333333-3333-4333-8333-333333333333',
+  salonId: '44444444-4444-4444-8444-444444444444',
+  startAt: '2026-11-05T07:00:00Z',
+  endAt: '2026-11-05T07:30:00Z',
+  idempotencyKey: 'guest-booking-key',
   customerNote: null,
 }
 
@@ -44,6 +59,25 @@ describe('createBarberBooking', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0].csrf).toBe('csrf-token')
     expect(JSON.parse(requests[0].body)).toStrictEqual(INPUT)
+  })
+
+  it('для нового клиента шлёт контакты без customerId', async () => {
+    let body = ''
+
+    server.use(
+      http.post('/api/barber/bookings', async ({ request }) => {
+        body = await request.text()
+
+        return HttpResponse.json(
+          { id: '55555555-5555-4555-8555-555555555555' },
+          { status: 201 }
+        )
+      })
+    )
+
+    await createBarberBooking(GUEST_INPUT)
+
+    expect(JSON.parse(body)).toStrictEqual(GUEST_INPUT)
   })
 
   it('повторяет запрос один раз на устаревший CSRF-токен', async () => {
@@ -142,5 +176,22 @@ describe('describeBarberBookingCreateFailure', () => {
       message: 'Не удалось занять время, попробуйте ещё раз.',
       reloadSlots: false,
     })
+  })
+
+  it('на неполные контакты гостя просит имя и телефон', () => {
+    expect(failure(400, ['booking.create.guestPhone'])).toStrictEqual({
+      message: 'Укажите имя и телефон клиента.',
+      reloadSlots: false,
+    })
+  })
+})
+
+describe('formatGuestName', () => {
+  it('склеивает имя и фамилию и убирает лишние пробелы', () => {
+    expect(formatGuestName('  Анна ', ' Смирнова ')).toBe('Анна Смирнова')
+  })
+
+  it('без фамилии оставляет только имя', () => {
+    expect(formatGuestName('Анна', null)).toBe('Анна')
   })
 })

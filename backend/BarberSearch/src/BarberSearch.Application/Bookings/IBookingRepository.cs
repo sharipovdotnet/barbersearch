@@ -36,6 +36,24 @@ public interface IBookingRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Бронь гостя (walk-in) по ключу идемпотентности в рамках профиля барбера.
+    /// </summary>
+    /// <remarks>
+    /// У гостевой брони <c>user_id</c> = <c>null</c>, поэтому уникальный ключ клиента
+    /// <c>(user_id, idempotency_key)</c> её не покрывает: гость скоупится парой
+    /// <c>(barber_profile_id, idempotency_key)</c> и частичным уникальным индексом
+    /// <c>ux_bookings_barber_profile_id_idempotency_key_guest</c>. Повтор запроса барбера
+    /// с тем же ключом обязан вернуть ту же гостевую бронь, а не создать вторую.
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль барбера, создавшего гостевую бронь.</param>
+    /// <param name="idempotencyKey">Нормализованный ключ идемпотентности.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<Booking, Failure>> GetByGuestIdempotencyKeyAsync(
+        Guid barberProfileId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Страница броней клиента, свежие сверху. Читается без отслеживания.
     /// </summary>
     Task<Result<IReadOnlyList<Booking>, Failure>> GetByUserAsync(

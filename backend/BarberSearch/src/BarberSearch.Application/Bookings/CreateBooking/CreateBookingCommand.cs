@@ -20,8 +20,19 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// <see cref="ConfirmImmediately"/> переводит бронь в <c>Confirmed</c> сразу: барбер
 /// не подтверждает запись, которую внёс сам.
 /// </para>
+/// <para>
+/// Гостевые поля (<see cref="GuestFirstName"/>, <see cref="GuestLastName"/>,
+/// <see cref="GuestPhone"/>) заполняет только ручной путь барбера
+/// (<see cref="ConfirmImmediately"/> = <c>true</c> и <see cref="CustomerId"/> = <c>null</c>):
+/// запись создаётся по имени и телефону, аккаунт не создаётся. Публичный путь клиента гостевые
+/// поля отклоняет: клиент там всегда берётся из токена. Заполненные одновременно
+/// <see cref="CustomerId"/> и гостевые поля — <c>400 booking.create.customerAmbiguous</c>.
+/// </para>
 /// </remarks>
 public record CreateBookingCommand(
     CreateBookingRequest Request,
     Guid? CustomerId = null,
-    bool ConfirmImmediately = false) : ICommand;
+    bool ConfirmImmediately = false,
+    string? GuestFirstName = null,
+    string? GuestLastName = null,
+    string? GuestPhone = null) : ICommand;

@@ -40,6 +40,30 @@ public class ReviewOwnershipTests
         return booking;
     }
 
+    private static Booking CreateGuestBooking(Guid barberProfileId, bool completed)
+    {
+        var startAt = DateTimeOffset.UtcNow.AddHours(-2);
+        var booking = Booking.Create(
+            null,
+            barberProfileId,
+            Guid.CreateVersion7(),
+            SalonId,
+            startAt,
+            startAt.AddMinutes(45),
+            1500m,
+            $"guest-key-{Guid.NewGuid()}",
+            guestFirstName: "Иван",
+            guestPhone: "+7 999 123-45-67").Value;
+
+        if (completed)
+        {
+            booking.Confirm();
+            booking.Complete();
+        }
+
+        return booking;
+    }
+
     private static BarberProfile CreateProfile()
         => BarberProfile.Create(
             Guid.CreateVersion7(),
@@ -131,6 +155,32 @@ public class ReviewOwnershipTests
     }
 
     [Fact]
+    public async Task Create_ForGuestBooking_ReturnsForbidden()
+    {
+        var profile = CreateProfile();
+        var booking = CreateGuestBooking(profile.Id, completed: true);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var reviews = new FakeReviewRepository();
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = CreateCreateHandler(
+            bookings,
+            reviews,
+            profiles,
+            new FakeCurrentUser(Guid.CreateVersion7()));
+
+        // У гостевой брони (walk-in) автора нет: отзыв по ней не оставляет никто.
+        var result = await handler.Handle(
+            new CreateReviewCommand(booking.Id, 5, "Guest review"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Empty(reviews.Reviews);
+    }
+
+    [Fact]
     public async Task Create_WhenBookingNotCompleted_ReturnsConflict()
     {
         var clientId = Guid.CreateVersion7();
@@ -208,7 +258,7 @@ public class ReviewOwnershipTests
     {
         var profile = CreateProfile();
         var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
-        var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
+        var review = Review.Create(booking, booking.UserId!.Value, 5, "Text").Value;
         var reviews = new FakeReviewRepository();
         reviews.Add(review);
         var profiles = new FakeBarberProfileRepository();
@@ -232,7 +282,7 @@ public class ReviewOwnershipTests
     {
         var profile = CreateProfile();
         var booking = CreateBooking(Guid.CreateVersion7(), profile.Id, completed: true);
-        var review = Review.Create(booking, booking.UserId, 5, "Text").Value;
+        var review = Review.Create(booking, booking.UserId!.Value, 5, "Text").Value;
         var reviews = new FakeReviewRepository();
         reviews.Add(review);
         var profiles = new FakeBarberProfileRepository();

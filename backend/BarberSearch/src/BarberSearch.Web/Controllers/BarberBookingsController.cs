@@ -55,16 +55,18 @@ public class BarberBookingsController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Записывает клиента к текущему барберу; бронь создаётся сразу подтверждённой.
+    /// Записывает клиента или гостя к текущему барберу; бронь создаётся сразу подтверждённой.
     /// </summary>
     /// <remarks>
     /// Профиль барбера берётся из claim'а <c>barber_profile_id</c>, а не из тела:
-    /// записать клиента к чужому мастеру нельзя. Клиент должен быть зарегистрированным
-    /// и активным; его идентификатор приходит из формы поиска <c>GET api/barber/clients</c>.
-    /// Цена берётся из услуги барбера, как и в публичной записи. Это cookie-мутация,
-    /// поэтому глобальный antiforgery-фильтр требует <c>X-CSRF-TOKEN</c>.
+    /// записать клиента к чужому мастеру нельзя. Клиент — либо зарегистрированный и активный
+    /// пользователь (его идентификатор приходит из формы поиска <c>GET api/barber/clients</c>),
+    /// либо гость (walk-in) с именем и телефоном, для которого аккаунт не создаётся.
+    /// Одновременно клиент и гостевые поля не передаются. Цена берётся из услуги барбера,
+    /// как и в публичной записи. Это cookie-мутация, поэтому глобальный antiforgery-фильтр
+    /// требует <c>X-CSRF-TOKEN</c>.
     /// </remarks>
-    /// <param name="request">Клиент, услуга, салон и время визита.</param>
+    /// <param name="request">Клиент или гость, услуга, салон и время визита.</param>
     /// <param name="currentUser">Текущая сессия: профиль барбера из claim'а.</param>
     /// <param name="handler">Обработчик создания брони.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
@@ -93,7 +95,10 @@ public class BarberBookingsController : ApiController
             new CreateBookingCommand(
                 createRequest,
                 request.CustomerId,
-                ConfirmImmediately: true),
+                ConfirmImmediately: true,
+                request.GuestFirstName,
+                request.GuestLastName,
+                request.GuestPhone),
             cancellationToken));
     }
 }

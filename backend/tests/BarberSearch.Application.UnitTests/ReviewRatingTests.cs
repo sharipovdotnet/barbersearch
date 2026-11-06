@@ -400,7 +400,7 @@ public class ReviewRatingTests
         bool published = true,
         string text = "Original")
     {
-        var review = Review.Create(booking, booking.UserId, rating, text).Value;
+        var review = Review.Create(booking, booking.UserId!.Value, rating, text).Value;
 
         // R-35: Create оставляет отзыв скрытым; опубликованные для тестов включаем явно.
         if (published)

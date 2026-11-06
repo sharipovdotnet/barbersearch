@@ -615,6 +615,217 @@ public class BookingCreateTests
     }
 
     [Fact]
+    public async Task CreateByBarber_ForGuest_CreatesConfirmedBookingWithGuestContact()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "guest-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "  Ivan  ",
+                GuestLastName: " Petrov ",
+                GuestPhone: " +7 999 123-45-67 "),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Null(booking.UserId);
+        Assert.Equal("Ivan", booking.GuestFirstName);
+        Assert.Equal("Petrov", booking.GuestLastName);
+        Assert.Equal("+7 999 123-45-67", booking.GuestPhone);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_WithoutCustomerAndGuest_ReturnsCustomerRequired()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "no-client-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.customer", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_WithCustomerAndGuest_ReturnsAmbiguous()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("ambiguous@example.com");
+        context.Users.Add(customer);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "ambiguous-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                customer.Id,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.customerAmbiguous", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task Create_PublicPathWithGuestFields_ReturnsAmbiguous()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(context);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "public-guest-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.customerAmbiguous", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_GuestWithBlankPhone_ReturnsGuestPhoneValidation()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "blank-phone-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "   "),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.guestPhone", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_ForeignProfileForGuest_ReturnsForbidden()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: Guid.CreateVersion7());
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "foreign-guest-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Empty(context.Bookings.Bookings);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_RepeatedGuestKey_ReturnsSameBooking()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "guest-repeat-key");
+        var command = new CreateBookingCommand(
+            request,
+            ConfirmImmediately: true,
+            GuestFirstName: "Ivan",
+            GuestPhone: "+7 999 123-45-67");
+
+        var first = await handler.Handle(command, CancellationToken.None);
+        var second = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value, second.Value);
+        Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(1, context.Bookings.AddCalls);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_GuestIdempotencyKey_IsScopedByBarberProfile()
+    {
+        var context = CreateContext();
+        var other = CreateProfileWithService(200m);
+        Assert.True(other.Profile.AddSalon(SalonId).IsSuccess);
+        context.Profiles.Add(other.Profile);
+
+        var firstHandler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var secondHandler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: other.Profile.Id);
+
+        // Один и тот же ключ у разных барберов не конфликтует: у гостя user_id = NULL,
+        // поэтому ключ скоупится парой (barber_profile_id, idempotency_key).
+        var firstRequest = CreateRequest(context.Profile.Id, context.Service.Id, "shared-guest-key");
+        var secondRequest = CreateRequest(other.Profile.Id, other.Service.Id, "shared-guest-key");
+
+        var first = await firstHandler.Handle(
+            new CreateBookingCommand(
+                firstRequest,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+        var second = await secondHandler.Handle(
+            new CreateBookingCommand(
+                secondRequest,
+                ConfirmImmediately: true,
+                GuestFirstName: "Petr",
+                GuestPhone: "+7 999 765-43-21"),
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.NotEqual(first.Value, second.Value);
+        Assert.Equal(2, context.Bookings.Bookings.Count);
+    }
+
+    [Fact]
     public async Task CreateByBarber_ForCustomer_CreatesConfirmedBookingForCustomer()
     {
         var context = CreateContext();

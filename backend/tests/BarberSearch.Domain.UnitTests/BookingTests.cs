@@ -142,6 +142,191 @@ public class BookingTests
     }
 
     [Fact]
+    public void Create_ForGuest_StoresContactSnapshotAndNullUserId()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "  Ivan  ",
+            guestLastName: " Petrov ",
+            guestPhone: " +7 999 123-45-67 ");
+
+        Assert.True(result.IsSuccess);
+
+        var booking = result.Value;
+        Assert.Null(booking.UserId);
+        Assert.Equal("Ivan", booking.GuestFirstName);
+        Assert.Equal("Petrov", booking.GuestLastName);
+        Assert.Equal("+7 999 123-45-67", booking.GuestPhone);
+    }
+
+    [Fact]
+    public void Create_ForGuestWithoutFirstName_Fails()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "   ",
+            guestPhone: "+7 999 123-45-67");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.guestFirstName");
+    }
+
+    [Fact]
+    public void Create_ForGuestWithoutPhone_Fails()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "Ivan",
+            guestPhone: "   ");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.guestPhone");
+    }
+
+    [Fact]
+    public void Create_ForGuestWithTooLongFirstName_Fails()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: new string('a', Constants.MAX_GUEST_FIRST_NAME_LENGTH + 1),
+            guestPhone: "+7 999 123-45-67");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.guestFirstName");
+    }
+
+    [Fact]
+    public void Create_ForGuestWithTooLongLastName_Fails()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "Ivan",
+            guestLastName: new string('a', Constants.MAX_GUEST_LAST_NAME_LENGTH + 1),
+            guestPhone: "+7 999 123-45-67");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.guestLastName");
+    }
+
+    [Fact]
+    public void Create_ForGuestWithTooLongPhone_Fails()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "Ivan",
+            guestPhone: new string('9', Constants.MAX_GUEST_PHONE_LENGTH + 1));
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.guestPhone");
+    }
+
+    [Fact]
+    public void Create_ForGuest_NormalizesNameAndStoresBlankLastNameAsNull()
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "  Ivan   Petrov  ",
+            guestLastName: "   ",
+            guestPhone: " +7 999 123-45-67 ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Ivan Petrov", result.Value.GuestFirstName);
+        Assert.Null(result.Value.GuestLastName);
+        Assert.Equal("+7 999 123-45-67", result.Value.GuestPhone);
+    }
+
+    [Fact]
+    public void Create_ForRegisteredCustomerWithGuestFields_FailsAsAmbiguous()
+    {
+        var result = Booking.Create(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "key-1",
+            guestFirstName: "Ivan",
+            guestPhone: "+7 999 123-45-67");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(
+            result.Error.Errors,
+            error => error.Code == "booking.create.customerAmbiguous");
+    }
+
+    [Fact]
+    public void Create_ForRegisteredCustomer_LeavesGuestFieldsNull()
+    {
+        var booking = CreateValidBooking();
+
+        Assert.NotNull(booking.UserId);
+        Assert.Null(booking.GuestFirstName);
+        Assert.Null(booking.GuestLastName);
+        Assert.Null(booking.GuestPhone);
+    }
+
+    [Fact]
     public void Confirm_FromPending_Succeeds()
     {
         var booking = CreateValidBooking();

@@ -28,6 +28,23 @@ public class BookingOwnershipTests
             $"key-{Guid.NewGuid()}").Value;
     }
 
+    private static Booking CreateGuestBooking(Guid barberProfileId)
+    {
+        var startAt = DateTimeOffset.UtcNow.AddHours(1);
+
+        return Booking.Create(
+            null,
+            barberProfileId,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            startAt,
+            startAt.AddMinutes(45),
+            1500m,
+            $"guest-key-{Guid.NewGuid()}",
+            guestFirstName: "Иван",
+            guestPhone: "+7 999 123-45-67").Value;
+    }
+
     private static BarberProfile CreateProfile(Guid userId)
         => BarberProfile.Create(
             userId,
@@ -150,6 +167,54 @@ public class BookingOwnershipTests
         Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
         Assert.Equal(BookingStatus.Pending, booking.Status);
+    }
+
+    [Fact]
+    public async Task Cancel_GuestBookingByClient_ReturnsForbidden()
+    {
+        // У гостевой брони нет клиента-владельца (UserId = null): отменить её может только
+        // барбер профиля или администратор.
+        var booking = CreateGuestBooking(Guid.CreateVersion7());
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var handler = new CancelBookingHandler(
+            bookings,
+            new FakeBarberProfileRepository(),
+            new FakeCurrentUser(Guid.CreateVersion7()),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+        Assert.Equal(0, bookings.UpdateCalls);
+    }
+
+    [Fact]
+    public async Task Cancel_GuestBookingByBarberProfileOwner_Succeeds()
+    {
+        var barberId = Guid.CreateVersion7();
+        var profile = CreateProfile(barberId);
+        var booking = CreateGuestBooking(profile.Id);
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var handler = new CancelBookingHandler(
+            bookings,
+            profiles,
+            new FakeCurrentUser(barberId),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id, "Клиент не пришёл"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
     }
 
     [Fact]

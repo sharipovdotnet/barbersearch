@@ -48,10 +48,12 @@ export const ADMIN_BOOKING_STATUS_FILTER_LABELS: Record<
 }
 
 export type AdminBookingCustomer = {
-  id: string
+  /** `null` — человек записан без аккаунта. */
+  id: string | null
   firstName: string
   lastName: string
-  email: string
+  /** `null` у гостя: email есть только у зарегистрированного клиента. */
+  email: string | null
   /** Телефон — PII: показывается только на карточке брони. */
   phoneNumber: string | null
 }
@@ -109,12 +111,23 @@ export const ADMIN_BOOKINGS_PAGE_SIZE = 20
 /** Максимальная длина поисковой строки на сервере; длиннее он ответит 400. */
 export const ADMIN_BOOKINGS_SEARCH_MAX_LENGTH = 100
 
-/** «Ирина Волкова» либо email, если имя не заполнено. */
+/** «Ирина Волкова», email или нейтральная подпись, если имени нет. */
 export function getAdminBookingCustomerName(
   customer: Pick<AdminBookingCustomer, 'firstName' | 'lastName' | 'email'>
 ): string {
   const name = `${customer.firstName} ${customer.lastName}`.trim()
-  return name === '' ? customer.email : name
+  return name === '' ? customer.email ?? 'Без имени' : name
+}
+
+/**
+ * Контакт для списка: email зарегистрированного клиента, иначе телефон гостя.
+ *
+ * У гостя email нет, и пустая строка в таблице выглядела бы как сбой чтения.
+ */
+export function getAdminBookingCustomerContact(
+  customer: Pick<AdminBookingCustomer, 'email' | 'phoneNumber'>
+): string {
+  return customer.email ?? customer.phoneNumber ?? 'Без аккаунта'
 }
 
 /**

@@ -317,7 +317,7 @@ public class DeleteReviewTests
         int rating,
         bool published = true)
     {
-        var review = Review.Create(booking, booking.UserId, rating, "Original").Value;
+        var review = Review.Create(booking, booking.UserId!.Value, rating, "Original").Value;
 
         // R-35: Create оставляет отзыв скрытым; опубликованные для тестов включаем явно.
         if (published)

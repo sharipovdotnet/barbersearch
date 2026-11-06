@@ -27,6 +27,7 @@ import {
   ADMIN_BOOKING_STATUS_FILTER_LABELS,
   ADMIN_BOOKINGS_SEARCH_MAX_LENGTH,
   formatAdminBookingTime,
+  getAdminBookingCustomerContact,
   getAdminBookingCustomerName,
   type AdminBooking,
   type AdminBookingStatus,
@@ -415,9 +416,9 @@ function BookingsTable({
                 </span>
                 <span
                   className="block truncate text-xs text-muted-foreground"
-                  title={booking.customer.email}
+                  title={getAdminBookingCustomerContact(booking.customer)}
                 >
-                  {booking.customer.email}
+                  {getAdminBookingCustomerContact(booking.customer)}
                 </span>
               </td>
               <td className="border-b px-2 py-2 break-words">
@@ -495,7 +496,7 @@ function BookingCards({
                       {customerName}
                     </span>
                     <span className="block text-xs break-all text-muted-foreground">
-                      {booking.customer.email}
+                      {getAdminBookingCustomerContact(booking.customer)}
                     </span>
                   </dd>
                 </div>

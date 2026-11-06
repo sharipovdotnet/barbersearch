@@ -76,7 +76,9 @@ public class CreateReviewHandler : ICommandHandler<Guid, CreateReviewCommand>
             var booking = bookingResult.Value;
 
             // Сначала владение, потом состояние: чужой не должен узнать статус брони по коду ошибки.
-            if (booking.UserId != currentUserId)
+            // У гостевой брони (walk-in) автора нет, поэтому отзыв по ней не оставляет никто:
+            // явная проверка nullable UserId до Review.Create, который принимает Guid.
+            if (booking.UserId is not { } bookingUserId || bookingUserId != currentUserId)
             {
                 return Result.Failure<Guid, Failure>(new Failure(Error.Forbidden(
                     ApiErrorCodes.Auth.Forbidden,
@@ -92,7 +94,7 @@ public class CreateReviewHandler : ICommandHandler<Guid, CreateReviewCommand>
 
             var review = Review.Create(
                 booking,
-                booking.UserId,
+                bookingUserId,
                 command.Rating,
                 command.Text);
             if (review.IsFailure)
