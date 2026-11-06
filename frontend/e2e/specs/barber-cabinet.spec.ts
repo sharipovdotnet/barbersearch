@@ -133,7 +133,11 @@ test.describe('кабинет барбера', () => {
     ).toBeVisible()
 
     // Новый клиент без аккаунта: поиск по базе заменяется именем и телефоном.
-    await dialog.getByRole('radio', { name: 'Новый клиент' }).click()
+    // Радиокнопка скрыта визуально (`sr-only`), поэтому кликаем по её подписи.
+    await dialog.getByText('Новый клиент', { exact: true }).click()
+    await expect(
+      dialog.getByRole('radio', { name: 'Новый клиент' })
+    ).toBeChecked()
     await expect(dialog.getByLabel(/Имя/)).toBeVisible()
     await expect(dialog.getByLabel(/Телефон/)).toBeVisible()
     await expect(
