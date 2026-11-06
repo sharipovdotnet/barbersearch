@@ -66,7 +66,11 @@
 > the shared `paging-*.js` 7.12 kB (gzip 2.64 kB),
 > `use-my-barber-request-*.js` 2.50 kB (gzip 1.18 kB) and `barber-slots-*.js` 0.83 kB (gzip 0.47 kB);
 > CSS 84.98 kB (gzip 14.55 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
-> The E2E suite was not rerun after the place-kind slice.
+> The E2E suite was rerun after the place-kind slice on 2026-11-06: 215 passed, 3 skipped,
+> 0 failed in 4.2 min with 2 workers. `barber-onboarding-mutations` now expects «Добавьте место
+> приёма», and `barber-salons-mutations` runs `serial`: its attach and create tests update the
+> same barber profile and under `fullyParallel` raced into a legitimate `409 ...concurrencyConflict`.
+> The same suite is green in `frontend-e2e` CI.
 > A full run on 2026-11-04 was not green in one pass:
 > 174 passed, 3 mobile admin catalogue/summary checks failed and 14 dependent mutation tests did
 > not run. All three failures pass individually, and both mutation specs (`account-bookings`,
@@ -464,7 +468,7 @@ npm run build → tsc -b + vite build OK, 2497 modules,
                 dist/assets/use-auto-refresh-*.js   0.59 kB (gzip   0.36 kB)  shared
                 dist/assets/barber-slots-*.js       0.83 kB (gzip   0.47 kB)  shared
                 dist/assets/index-*.css            84.98 kB (gzip  14.55 kB)
-npm run test:e2e → not rerun after the place-kind slice
+npm run test:e2e → 215 passed, 3 skipped, 0 failed (2026-11-06, 2 workers)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
