@@ -17,6 +17,10 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// </param>
 /// <param name="Date">Дата, на которую у барбера есть рабочий день; <c>null</c> — фильтр не задан.</param>
 /// <param name="Language">Язык общения; <c>null</c> — фильтр не задан. Один язык, не мультивыбор.</param>
+/// <param name="AdditionalService">
+/// Подстрока дополнительной услуги; <c>null</c> — фильтр не задан. Сравнение
+/// регистронезависимое (<c>ILIKE</c>) и идёт по любому элементу списка.
+/// </param>
 /// <param name="Cursor">Позиция продолжения выдачи; <c>null</c> — первая страница.</param>
 /// <param name="Limit">Сколько строк прочитать из базы (pageSize + 1).</param>
 public sealed record BarberSearchFilter(
@@ -25,5 +29,6 @@ public sealed record BarberSearchFilter(
     Guid? HairServiceId,
     DateOnly? Date,
     Language? Language,
+    string? AdditionalService,
     BarberSearchCursor? Cursor,
     int Limit);

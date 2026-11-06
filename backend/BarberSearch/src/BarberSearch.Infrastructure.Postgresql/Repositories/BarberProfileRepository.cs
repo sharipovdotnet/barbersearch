@@ -30,6 +30,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBarberProfileRepository
 {
+    /// <summary>
+    /// Сколько значений отдаёт подсказка фильтра «дополнительные услуги».
+    /// </summary>
+    private const int ADDITIONAL_SERVICE_SUGGESTION_LIMIT = 100;
+
     public BarberProfileRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
         : base(context, auditTrail)
     {
@@ -412,87 +417,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 nameof(filter.Limit)));
         }
 
-        // Только публичная выдача: активный и подтверждённый профиль.
-        var query = Context.BarberProfiles
-            .AsNoTracking()
-            .Where(x => x.IsActive && x.IsVerified);
-
-        if (!string.IsNullOrWhiteSpace(filter.City))
-        {
-            var city = filter.City.Trim();
-
-            // Город — свойство салона, а не профиля. EXISTS по связи (барбер, салон)
-            // не размножает строки профиля, в отличие от JOIN.
-            query = query.Where(profile => Context.BarberSalons.Any(link =>
-                link.BarberProfileId == profile.Id
-                && Context.Salons.Any(salon =>
-                    salon.Id == link.SalonId
-                    && salon.IsActive
-                    && salon.ModerationStatus == SalonModerationStatus.Active
-                    && salon.City == city)));
-        }
-
-        if (filter.SpecializationId is { } specializationId)
-        {
-            query = query.Where(profile => Context.BarberSpecializations.Any(link =>
-                link.BarberProfileId == profile.Id
-                && link.SpecializationId == specializationId));
-        }
-
-        if (filter.HairServiceId is { } hairServiceId)
-        {
-            query = query.Where(profile => Context.BarberServices.Any(service =>
-                service.BarberProfileId == profile.Id
-                && service.HairServiceId == hairServiceId
-                && service.IsActive));
-        }
-
-        if (filter.Language is { } language)
-        {
-            // Contains по primitive collection переводится в `languages @> ARRAY[1]`,
-            // его покрывает GIN-индекс ix_barber_profiles_languages: коллекция
-            // остаётся в базе, в память профили не тянутся.
-            query = query.Where(profile => profile.Languages.Contains(language));
-        }
-
-        if (filter.Date is { } date)
-        {
-            var dayOfWeek = date.DayOfWeek;
-
-            // Дата — это «есть рабочий день в этот день недели хотя бы в одном активном салоне».
-            // Конкретные свободные интервалы с учётом таймзоны и отпусков считает /slots.
-            query = query.Where(profile => Context.BarberSalons.Any(link =>
-                link.BarberProfileId == profile.Id
-                && Context.Salons.Any(salon => salon.Id == link.SalonId
-                    && salon.IsActive
-                    && salon.ModerationStatus == SalonModerationStatus.Active)
-                && Context.WorkingSchedules.Any(schedule =>
-                    schedule.BarberSalonId == link.Id
-                    && schedule.DayOfWeek == dayOfWeek
-                    && !schedule.IsDayOff)));
-        }
-
-        if (filter.Cursor is { } cursor)
-        {
-            if (cursor.Rating is null)
-            {
-                // null-рейтинг — последняя группа: продолжаем внутри неё по возрастанию id.
-                query = query.Where(profile =>
-                    profile.Rating == null
-                    && profile.Id.CompareTo(cursor.Id) > 0);
-            }
-            else
-            {
-                var rating = cursor.Rating.Value;
-
-                // Барберы с рейтингом: строго меньший рейтинг, либо тот же рейтинг
-                // и больший id. null-рейтинг идёт после всех ненулевых.
-                query = query.Where(profile =>
-                    profile.Rating == null
-                    || profile.Rating < rating
-                    || (profile.Rating == rating && profile.Id.CompareTo(cursor.Id) > 0));
-            }
-        }
+        // Только публичная выдача, фильтры и курсор — в ApplySearchFilters: тест проверяет
+        // их трансляцию через ToQueryString без базы (см. AdditionalServiceSearchQueryTests).
+        var query = ApplySearchFilters(Context.BarberProfiles.AsNoTracking(), filter);
 
         var rows = await query
             // PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок
@@ -516,7 +443,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 profile.IsVerified,
                 null,
                 null,
-                null))
+                null,
+                profile.AdditionalServices.ToList()))
             .ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
@@ -558,6 +486,152 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 : row)
             .ToList();
     }
+
+    /// <summary>
+    /// Предикаты публичного поиска: видимость, фильтры и keyset-курсор.
+    /// </summary>
+    /// <remarks>
+    /// Вынесено из <see cref="SearchAsync"/>, чтобы unit-тест мог проверить трансляцию
+    /// через <c>ToQueryString()</c> без базы. Подстрока дополнительной услуги обязана стать
+    /// <c>EXISTS (SELECT 1 FROM unnest(additional_services) … WHERE … ILIKE …)</c>, а не
+    /// клиентской фильтрацией: иначе keyset-пагинация вернула бы неполную выдачу.
+    /// </remarks>
+    internal IQueryable<BarberProfile> ApplySearchFilters(
+        IQueryable<BarberProfile> query,
+        BarberSearchFilter filter)
+    {
+        // Только публичная выдача: активный и подтверждённый профиль.
+        query = query.Where(profile => profile.IsActive && profile.IsVerified);
+
+        if (!string.IsNullOrWhiteSpace(filter.City))
+        {
+            var city = filter.City.Trim();
+
+            // Город — свойство салона, а не профиля. EXISTS по связи (барбер, салон)
+            // не размножает строки профиля, в отличие от JOIN.
+            query = query.Where(profile => Context.BarberSalons.Any(link =>
+                link.BarberProfileId == profile.Id
+                && Context.Salons.Any(salon =>
+                    salon.Id == link.SalonId
+                    && salon.IsActive
+                    && salon.ModerationStatus == SalonModerationStatus.Active
+                    && salon.City == city)));
+        }
+
+        if (filter.SpecializationId is { } specializationId)
+        {
+            query = query.Where(profile => Context.BarberSpecializations.Any(link =>
+                link.BarberProfileId == profile.Id
+                && link.SpecializationId == specializationId));
+        }
+
+        if (filter.HairServiceId is { } hairServiceId)
+        {
+            query = query.Where(profile => Context.BarberServices.Any(service =>
+                service.BarberProfileId == profile.Id
+                && service.HairServiceId == hairServiceId
+                && service.IsActive));
+        }
+
+        if (filter.Language is { } language)
+        {
+            // Contains по primitive collection переводится в `languages @> ARRAY[1]`,
+            // его покрывает GIN-индекс ix_barber_profiles_languages: коллекция
+            // остаётся в базе, в память профили не тянутся.
+            query = query.Where(profile => profile.Languages.Contains(language));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.AdditionalService))
+        {
+            // Дополнительные услуги — свободный список, поэтому ищем подстроку, а не
+            // точное значение: «бород» находит «Оформление бороды». EF Core 10 переводит
+            // `Any` по primitive collection в `EXISTS (SELECT 1 FROM unnest(...))`, так
+            // что профиль не материализуется. Спецсимволы `%`, `_`, `\` экранируются:
+            // иначе «100%» находило бы всё.
+            var additionalServicePattern = BuildSearchPattern(filter.AdditionalService);
+
+            query = query.Where(profile => profile.AdditionalServices.Any(service =>
+                EF.Functions.ILike(service, additionalServicePattern, "\\")));
+        }
+
+        if (filter.Date is { } date)
+        {
+            var dayOfWeek = date.DayOfWeek;
+
+            // Дата — это «есть рабочий день в этот день недели хотя бы в одном активном салоне».
+            // Конкретные свободные интервалы с учётом таймзоны и отпусков считает /slots.
+            query = query.Where(profile => Context.BarberSalons.Any(link =>
+                link.BarberProfileId == profile.Id
+                && Context.Salons.Any(salon => salon.Id == link.SalonId
+                    && salon.IsActive
+                    && salon.ModerationStatus == SalonModerationStatus.Active)
+                && Context.WorkingSchedules.Any(schedule =>
+                    schedule.BarberSalonId == link.Id
+                    && schedule.DayOfWeek == dayOfWeek
+                    && !schedule.IsDayOff)));
+        }
+
+        if (filter.Cursor is { } cursor)
+        {
+            if (cursor.Rating is null)
+            {
+                // null-рейтинг — последняя группа: продолжаем внутри неё по возрастанию id.
+                query = query.Where(profile =>
+                    profile.Rating == null
+                    && profile.Id.CompareTo(cursor.Id) > 0);
+            }
+            else
+            {
+                var rating = cursor.Rating.Value;
+
+                // Барберы с рейтингом: строго меньший рейтинг, либо тот же рейтинг
+                // и больший id. null-рейтинг идёт после всех ненулевых.
+                query = query.Where(profile =>
+                    profile.Rating == null
+                    || profile.Rating < rating
+                    || (profile.Rating == rating && profile.Id.CompareTo(cursor.Id) > 0));
+            }
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Подсказки фильтра «дополнительные услуги»: различные значения из видимых профилей.
+    /// </summary>
+    /// <remarks>
+    /// Список собирается тем же предикатом видимости, что и поиск: предлагать значение,
+    /// которого нет ни в одной выдаче, бессмысленно. <c>SelectMany</c> по primitive collection
+    /// переводится в <c>JOIN LATERAL unnest(additional_services)</c>, <c>DISTINCT</c> схлопывает
+    /// одинаковые строки разных барберов. Лимит ограничивает выпадающий список: подсказка —
+    /// не справочник, и подсказка длиннее 100 строк всё равно не читается.
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<string>, Failure>> GetAdditionalServicesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var values = await BuildAdditionalServicesQuery(Context.BarberProfiles.AsNoTracking())
+            .ToListAsync(cancellationToken);
+
+        return values;
+    }
+
+    /// <summary>
+    /// Запрос подсказок фильтра «дополнительные услуги».
+    /// </summary>
+    /// <remarks>
+    /// Предикат видимости тот же, что у поиска. <c>SelectMany</c> по primitive collection
+    /// переводится в <c>JOIN LATERAL unnest(additional_services)</c>, <c>DISTINCT</c>
+    /// схлопывает одинаковые строки разных барберов. Вынесено статическим, чтобы тест
+    /// проверил трансляцию через <c>ToQueryString()</c> без базы.
+    /// </remarks>
+    internal static IQueryable<string> BuildAdditionalServicesQuery(
+        IQueryable<BarberProfile> profiles)
+        => profiles
+            .Where(profile => profile.IsActive && profile.IsVerified)
+            .SelectMany(profile => profile.AdditionalServices)
+            .Distinct()
+            .OrderBy(service => service)
+            .Take(ADDITIONAL_SERVICE_SUGGESTION_LIMIT);
 
     public async Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
         AdminBarberStatus status,
@@ -1091,7 +1165,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             profile.IsVerified,
             services,
             salons,
-            specializations);
+            specializations,
+            [.. profile.AdditionalServices]);
     }
 
     /// <summary>

@@ -71,6 +71,7 @@ type FormValues = {
   achievements: string
   communicationFormat: string
   goodies: string
+  additionalServices: string
   latePolicy: string
 }
 
@@ -87,6 +88,7 @@ const INITIAL_VALUES: FormValues = {
   achievements: '',
   communicationFormat: '',
   goodies: '',
+  additionalServices: '',
   latePolicy: '',
 }
 
@@ -118,6 +120,7 @@ const IDS = {
   achievements: 'barber-profile-achievements',
   communicationFormat: 'barber-profile-communication',
   goodies: 'barber-profile-goodies',
+  additionalServices: 'barber-profile-additional-services',
   latePolicy: 'barber-profile-late-policy',
 } as const
 
@@ -249,6 +252,7 @@ function toDraft(
     paymentMethods: values.paymentMethods,
     communicationFormat: toLines(values.communicationFormat),
     goodies: toLines(values.goodies),
+    additionalServices: toLines(values.additionalServices),
     latePolicy: toNullable(values.latePolicy),
   }
 }
@@ -614,6 +618,17 @@ export function BarberProfileForm({
           disabled={isPending}
           onChange={(value) => {
             setValue('goodies', value)
+          }}
+        />
+
+        <ListField
+          id={IDS.additionalServices}
+          label="Дополнительные услуги"
+          description="По одному пункту в строке: бритьё головы, камуфляж седины, уход за бородой."
+          value={values.additionalServices}
+          disabled={isPending}
+          onChange={(value) => {
+            setValue('additionalServices', value)
           }}
         />
 

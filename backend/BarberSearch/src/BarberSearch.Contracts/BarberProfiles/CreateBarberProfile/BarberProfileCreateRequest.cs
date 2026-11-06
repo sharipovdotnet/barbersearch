@@ -13,6 +13,8 @@ namespace BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 /// Enum'ы (<see cref="Language"/>, <see cref="PaymentMethod"/>, <see cref="Grade"/>) приходят из
 /// домена: это словарь предметной области, а не деталь транспорта. Грейд необязателен: старый
 /// клиент, не приславший его, получает <see cref="Grade.None"/>, как и раньше.
+/// <see cref="AdditionalServices"/> тоже необязателен: старый клиент не знает о новом поле,
+/// а пустой список и отсутствие поля означают одно и то же — «дополнительных услуг нет».
 /// </remarks>
 public record BarberProfileCreateRequest(
     string DisplayName,
@@ -25,4 +27,5 @@ public record BarberProfileCreateRequest(
     List<string>? CommunicationFormat,
     List<string>? Goodies,
     string? LatePolicy,
-    Grade Grade = Grade.None);
+    Grade Grade = Grade.None,
+    List<string>? AdditionalServices = null);

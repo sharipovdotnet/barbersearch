@@ -25,6 +25,11 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// </param>
 /// <param name="Cursor">Курсор следующей страницы.</param>
 /// <param name="PageSize">Размер страницы; <c>null</c> — значение по умолчанию.</param>
+/// <param name="AdditionalService">
+/// Строка поиска по дополнительным услугам: пустая строка — без фильтра, иначе
+/// регистронезависимая подстрока любого элемента списка. Параметр добавлен в конец,
+/// чтобы существующие вызовы записи не переставляли курсор и размер страницы.
+/// </param>
 public record SearchBarbersQuery(
     string? City,
     Guid? SpecializationId,
@@ -32,4 +37,5 @@ public record SearchBarbersQuery(
     DateOnly? Date,
     string? Language,
     string? Cursor,
-    int? PageSize) : IQuery<PagedResponse<BarberSearchItemResponse>>;
+    int? PageSize,
+    string? AdditionalService = null) : IQuery<PagedResponse<BarberSearchItemResponse>>;

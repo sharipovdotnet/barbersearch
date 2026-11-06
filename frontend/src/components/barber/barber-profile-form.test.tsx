@@ -24,6 +24,7 @@ const EXPECTED_BODY = {
   paymentMethods: ['Card', 'Sbp'],
   communicationFormat: ['Люблю поболтать'],
   goodies: ['Кофе'],
+  additionalServices: ['Бритьё головы', 'Камуфляж седины'],
   latePolicy: 'Жду максимум 10 минут',
 }
 
@@ -68,6 +69,7 @@ async function fillValidForm() {
   change('Достижения', 'Топ-10 в районе')
   change('Формат общения', 'Люблю поболтать')
   change('Комфорт в кресле', 'Кофе')
+  change('Дополнительные услуги', 'Бритьё головы\n\n  Камуфляж седины  ')
   change('Опоздания', 'Жду максимум 10 минут')
 }
 
@@ -298,6 +300,7 @@ describe('BarberProfileForm', () => {
       paymentMethods: [],
       communicationFormat: [],
       goodies: [],
+      additionalServices: [],
       latePolicy: null,
     })
   })
@@ -377,6 +380,7 @@ describe('BarberProfileForm', () => {
       paymentMethods: [],
       communicationFormat: [],
       goodies: [],
+      additionalServices: [],
       latePolicy: null,
     })
   })

@@ -82,6 +82,9 @@ public sealed class SearchBarbersHandler
             HairServiceId: query.HairServiceId == Guid.Empty ? null : query.HairServiceId,
             Date: query.Date,
             Language: language,
+            AdditionalService: string.IsNullOrWhiteSpace(query.AdditionalService)
+                ? null
+                : query.AdditionalService.Trim(),
             Cursor: cursor,
             Limit: pageSize + 1);
 

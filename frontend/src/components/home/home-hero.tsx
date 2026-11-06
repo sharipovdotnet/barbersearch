@@ -18,8 +18,8 @@ export function HomeHero({ isSearching, onSearch }: HomeHeroProps) {
         Найди барбера и запишись за минуту
       </h1>
       <p className="mt-4 max-w-xl text-muted-foreground">
-        Поиск по городу, дате, языку, специализации и услуге среди подтверждённых
-        барберов. Без звонков и переписок.
+        Поиск по городу, дате, языку, специализации, услуге и дополнительным
+        услугам среди подтверждённых барберов. Без звонков и переписок.
       </p>
 
       <SearchForm isSearching={isSearching} onSearch={onSearch} />

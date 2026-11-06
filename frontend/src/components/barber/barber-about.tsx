@@ -12,6 +12,7 @@ import type { BarberProfile } from '@/lib/catalog'
  */
 export function BarberAbout({ profile }: { profile: BarberProfile }) {
   const lists = [
+    { key: 'additionalServices', title: 'Дополнительные услуги', items: profile.additionalServices },
     { key: 'certificates', title: 'Сертификаты и обучение', items: profile.certificatesAndTraining },
     { key: 'achievements', title: 'Достижения', items: profile.achievements },
     { key: 'goodies', title: 'Особенности', items: profile.goodies },

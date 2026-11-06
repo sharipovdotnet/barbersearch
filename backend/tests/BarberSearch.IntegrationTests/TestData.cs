@@ -44,11 +44,13 @@ internal sealed class TestData
     /// <remarks>
     /// <paramref name="languages"/> по умолчанию <c>null</c>: домен подставляет <c>Ru</c>,
     /// а существующие вызовы не меняются. Явный список нужен тестам фильтра по языку.
+    /// <paramref name="additionalServices"/> — тот же приём для фильтра по дополнительным услугам.
     /// </remarks>
     public async Task<BarberProfile> CreateBarberProfileAsync(
         string displayName,
         string? email = null,
-        List<Language>? languages = null)
+        List<Language>? languages = null,
+        List<string>? additionalServices = null)
     {
         var user = await _app.CreateUserAsync(
             email ?? $"barber-{Guid.NewGuid():N}@barbersearch.test",
@@ -68,7 +70,8 @@ internal sealed class TestData
             paymentMethods: null,
             communicationFormat: null,
             goodies: null,
-            latePolicy: null));
+            latePolicy: null,
+            additionalServices: additionalServices));
 
         Require(profile.Verify());
 

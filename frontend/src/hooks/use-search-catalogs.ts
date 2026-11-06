@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { fetchAdditionalServices } from '@/lib/additional-services'
 import { describeApiFailure } from '@/lib/errors'
 import {
   fetchHairServices,
@@ -16,6 +17,8 @@ export type SearchCatalogsController = {
   status: SearchCatalogsStatus
   specializations: SpecializationOption[]
   hairServices: HairServiceOption[]
+  /** Подсказки свободного поля «дополнительная услуга»; ошибка запроса их просто скрывает. */
+  additionalServices: string[]
   /** Русский текст ошибки; английский `detail` наружу не выходит. */
   error: string | null
   retry: () => void
@@ -25,6 +28,7 @@ type CatalogsState = {
   status: SearchCatalogsStatus
   specializations: SpecializationOption[]
   hairServices: HairServiceOption[]
+  additionalServices: string[]
   error: string | null
 }
 
@@ -34,15 +38,19 @@ const EMPTY: CatalogsState = {
   status: 'loading',
   specializations: [],
   hairServices: [],
+  additionalServices: [],
   error: null,
 }
 
 /**
- * Справочники для фильтров витрины: специализации и услуги.
+ * Справочники для фильтров витрины: специализации, услуги и подсказки
+ * дополнительных услуг.
  *
- * Оба списка читаются одним `Promise.all` на монтирование и отменяются вместе.
- * Номер поколения защищает от StrictMode: первый, уже отменённый запрос не может
- * оставить ошибку или перезаписать результат второго.
+ * Все три запроса уходят одним `Promise.all` на монтирование и отменяются вместе.
+ * Подсказки дополнительные: свободное поле работает и без них, поэтому их сбой
+ * превращается в пустой список, а не в общую ошибку фильтров. Номер поколения
+ * защищает от StrictMode: первый, уже отменённый запрос не может оставить ошибку
+ * или перезаписать результат второго.
  */
 export function useSearchCatalogs(): SearchCatalogsController {
   const [state, setState] = useState<CatalogsState>(EMPTY)
@@ -57,13 +65,20 @@ export function useSearchCatalogs(): SearchCatalogsController {
     Promise.all([
       fetchSpecializations(controller.signal),
       fetchHairServices(controller.signal),
+      fetchAdditionalServices(controller.signal).catch(() => [] as string[]),
     ])
-      .then(([specializations, hairServices]) => {
+      .then(([specializations, hairServices, additionalServices]) => {
         if (versionRef.current !== version) {
           return
         }
 
-        setState({ status: 'ready', specializations, hairServices, error: null })
+        setState({
+          status: 'ready',
+          specializations,
+          hairServices,
+          additionalServices,
+          error: null,
+        })
       })
       .catch((cause: unknown) => {
         if (versionRef.current !== version || controller.signal.aborted) {
@@ -74,6 +89,7 @@ export function useSearchCatalogs(): SearchCatalogsController {
           status: 'error',
           specializations: [],
           hairServices: [],
+          additionalServices: [],
           error: describeApiFailure(cause, CATALOGS_FALLBACK),
         })
       })
@@ -95,6 +111,7 @@ export function useSearchCatalogs(): SearchCatalogsController {
     status: state.status,
     specializations: state.specializations,
     hairServices: state.hairServices,
+    additionalServices: state.additionalServices,
     error: state.error,
     retry,
   }

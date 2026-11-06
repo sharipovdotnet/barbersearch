@@ -220,6 +220,53 @@ public class BarberSearchTests
             repository.LastSearchFilter!.Language);
     }
 
+    [Fact]
+    public async Task Search_ForwardsAdditionalServiceAndTrimsIt()
+    {
+        var repository = new FakeBarberProfileRepository();
+        var handler = new SearchBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new SearchBarbersQuery(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "  бород  "),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("бород", repository.LastSearchFilter!.AdditionalService);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Search_WithBlankAdditionalService_DoesNotFilter(string? additionalService)
+    {
+        var repository = new FakeBarberProfileRepository();
+        var handler = new SearchBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new SearchBarbersQuery(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                additionalService),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(repository.LastSearchFilter!.AdditionalService);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -290,7 +337,8 @@ public class BarberSearchTests
             true,
             null,
             null,
-            null);
+            null,
+            []);
 
         repository.AddSearchItem(item);
 

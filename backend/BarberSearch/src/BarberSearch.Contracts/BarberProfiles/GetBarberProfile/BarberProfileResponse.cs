@@ -30,6 +30,7 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// <param name="Services">Активные услуги барбера с ценами и длительностью.</param>
 /// <param name="Salons">Активные салоны барбера вместе с расписанием пары (барбер, салон).</param>
 /// <param name="Specializations">Специализации барбера из справочника.</param>
+/// <param name="AdditionalServices">Дополнительные услуги, которые барбер заполнил сам.</param>
 public record BarberProfileResponse(
     Guid Id,
     Guid UserId,
@@ -50,4 +51,5 @@ public record BarberProfileResponse(
     bool IsVerified,
     IReadOnlyList<BarberProfileServiceResponse> Services,
     IReadOnlyList<BarberProfileSalonResponse> Salons,
-    IReadOnlyList<BarberProfileSpecializationResponse> Specializations);
+    IReadOnlyList<BarberProfileSpecializationResponse> Specializations,
+    IReadOnlyList<string> AdditionalServices);

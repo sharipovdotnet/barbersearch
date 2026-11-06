@@ -23,6 +23,8 @@ const SELECT_CLASSES =
 
 const LANGUAGE_VALUES = Object.keys(LANGUAGE_LABELS) as Language[]
 
+const ADDITIONAL_SERVICE_LIST_ID = 'search-additional-services'
+
 function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -35,11 +37,16 @@ function todayLocal(): string {
 }
 
 /**
- * Форма поиска: город, дата, язык, специализация и услуга.
+ * Форма поиска: город, дата, язык, специализация, услуга и дополнительная услуга.
  *
  * Все запросы уходят только по submit — изменение поля ничего не перезапрашивает.
  * Справочники грузятся отдельно: их ошибка не блокирует город, дату и язык.
  * Пустой справочник скрывает свой селект, чтобы не висел мёртвый список.
+ *
+ * Дополнительная услуга — свободный текст с подсказками `<datalist>`: значения
+ * приходят из карточек барберов, но выбрать можно и частичное совпадение
+ * («бород» найдёт «Оформление бороды»). Подсказки — не зависимость поиска:
+ * без них поле остаётся рабочим.
  */
 export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
   const [city, setCity] = useState('')
@@ -47,6 +54,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
   const [language, setLanguage] = useState<Language | ''>('')
   const [specializationId, setSpecializationId] = useState('')
   const [hairServiceId, setHairServiceId] = useState('')
+  const [additionalService, setAdditionalService] = useState('')
 
   const catalogs = useSearchCatalogs()
   const isLoading = catalogs.status === 'loading'
@@ -60,7 +68,14 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     scrollToSection('barbers')
-    onSearch({ city, date, specializationId, hairServiceId, language })
+    onSearch({
+      city,
+      date,
+      specializationId,
+      hairServiceId,
+      language,
+      additionalService,
+    })
   }
 
   return (
@@ -165,6 +180,30 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
           </select>
         </div>
       )}
+
+      <div className="min-w-0 lg:min-w-56 lg:flex-[1.6]">
+        <Label htmlFor="search-additional-service" className="sr-only">
+          Дополнительная услуга
+        </Label>
+        <Input
+          id="search-additional-service"
+          name="additionalService"
+          type="search"
+          list={ADDITIONAL_SERVICE_LIST_ID}
+          value={additionalService}
+          placeholder="Доп. услуга: например, борода"
+          autoComplete="off"
+          className="h-10"
+          onChange={(event) => setAdditionalService(event.target.value)}
+        />
+        {catalogs.additionalServices.length > 0 && (
+          <datalist id={ADDITIONAL_SERVICE_LIST_ID}>
+            {catalogs.additionalServices.map((service) => (
+              <option key={service} value={service} />
+            ))}
+          </datalist>
+        )}
+      </div>
 
       <Button
         type="submit"

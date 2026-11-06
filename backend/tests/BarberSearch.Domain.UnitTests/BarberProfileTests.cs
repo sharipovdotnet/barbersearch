@@ -14,7 +14,8 @@ public class BarberProfileTests
     private static BarberProfileCreateRequest CreateData(
         string displayName = "Ivan the Barber",
         int yearsOfExperience = 5,
-        Grade grade = Grade.None)
+        Grade grade = Grade.None,
+        List<string>? additionalServices = null)
         => new(
             displayName,
             yearsOfExperience,
@@ -26,11 +27,13 @@ public class BarberProfileTests
             ["Chatty"],
             ["Coffee"],
             "Wait 10 minutes max",
-            grade);
+            grade,
+            additionalServices);
 
     private static BarberProfileUpdateRequest UpdateData(
         string displayName = "Ivan the Barber",
-        string? bio = "Bio")
+        string? bio = "Bio",
+        List<string>? additionalServices = null)
         => new(
             displayName,
             5,
@@ -41,7 +44,8 @@ public class BarberProfileTests
             [PaymentMethod.Cash],
             ["Chatty"],
             ["Coffee"],
-            "Wait 10 minutes max");
+            "Wait 10 minutes max",
+            additionalServices ?? []);
 
     /// <summary>
     /// Домен принимает значения явными параметрами (на слой Contracts он не ссылается),
@@ -60,7 +64,8 @@ public class BarberProfileTests
             communicationFormat: request.CommunicationFormat,
             goodies: request.Goodies,
             latePolicy: request.LatePolicy,
-            grade: request.Grade);
+            grade: request.Grade,
+            additionalServices: request.AdditionalServices);
 
     private static UnitResult<Failure> UpdateProfile(
         BarberProfile profile,
@@ -75,7 +80,8 @@ public class BarberProfileTests
             paymentMethods: request.PaymentMethods,
             communicationFormat: request.CommunicationFormat,
             goodies: request.Goodies,
-            latePolicy: request.LatePolicy);
+            latePolicy: request.LatePolicy,
+            additionalServices: request.AdditionalServices);
 
     private static BarberProfile CreateProfile()
         => CreateProfile(CreateData()).Value;
@@ -270,6 +276,48 @@ public class BarberProfileTests
         Assert.Single(profile.PaymentMethods);
         Assert.Single(profile.CommunicationFormat);
         Assert.Single(profile.Goodies);
+    }
+
+    [Fact]
+    public void Create_NormalizesAdditionalServices()
+    {
+        var profile = CreateProfile(CreateData(
+            additionalServices:
+                ["  Бритьё головы ", "", "бритьё головы", "Уход за бородой"])).Value;
+
+        Assert.Equal(
+            ["Бритьё головы", "Уход за бородой"],
+            profile.AdditionalServices);
+    }
+
+    [Fact]
+    public void Create_WithoutAdditionalServices_StartsWithEmptyList()
+    {
+        Assert.Empty(CreateProfile().AdditionalServices);
+    }
+
+    [Fact]
+    public void UpdateProfile_ReplacesAdditionalServicesInsteadOfAppending()
+    {
+        var profile = CreateProfile(CreateData(additionalServices: ["Бритьё головы"])).Value;
+
+        var result = UpdateProfile(
+            profile,
+            UpdateData(additionalServices: ["Камуфляж седины"]));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["Камуфляж седины"], profile.AdditionalServices);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithEmptyAdditionalServices_ClearsTheList()
+    {
+        var profile = CreateProfile(CreateData(additionalServices: ["Бритьё головы"])).Value;
+
+        var result = UpdateProfile(profile, UpdateData(additionalServices: []));
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(profile.AdditionalServices);
     }
 
     [Fact]

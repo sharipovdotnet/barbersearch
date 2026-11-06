@@ -36,6 +36,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("achievements");
 
+                    b.PrimitiveCollection<string[]>("AdditionalServices")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("additional_services");
+
                     b.Property<string>("Bio")
                         .HasColumnType("text")
                         .HasColumnName("bio");

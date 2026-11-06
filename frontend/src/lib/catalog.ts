@@ -77,6 +77,8 @@ export type BarberProfile = {
   paymentMethods: PaymentMethod[]
   communicationFormat: string[]
   goodies: string[]
+  /** Дополнительные услуги, которые барбер заполнил сам; пустой список — секции нет. */
+  additionalServices: string[]
   latePolicy: string
   isActive: boolean
   isVerified: boolean

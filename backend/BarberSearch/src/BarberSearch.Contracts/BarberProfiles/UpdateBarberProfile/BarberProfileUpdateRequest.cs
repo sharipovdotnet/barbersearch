@@ -11,6 +11,7 @@ namespace BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 /// параметрами, потому что на слой Contracts он не ссылается.
 /// Грейда здесь нет: <c>Grade</c> меняется только административным сценарием
 /// (<c>BarberProfile.ChangeGrade</c>). <see cref="Bio"/> nullable, чтобы описание можно было очистить.
+/// <see cref="AdditionalServices"/> — полная замена списка: пустой список очищает поле.
 /// </remarks>
 public record BarberProfileUpdateRequest(
     string DisplayName,
@@ -22,4 +23,5 @@ public record BarberProfileUpdateRequest(
     List<PaymentMethod> PaymentMethods,
     List<string> CommunicationFormat,
     List<string> Goodies,
-    string LatePolicy);
+    string LatePolicy,
+    List<string> AdditionalServices);

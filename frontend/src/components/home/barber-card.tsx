@@ -102,6 +102,29 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
               </span>
             </p>
           )}
+
+          {barber.additionalServices.length > 0 && (
+            <ul
+              aria-label="Дополнительные услуги"
+              className="flex flex-wrap gap-1.5"
+            >
+              {barber.additionalServices.slice(0, 3).map((service) => (
+                <li key={service} className="max-w-full">
+                  <Badge variant="outline" className="whitespace-normal">
+                    {service}
+                  </Badge>
+                </li>
+              ))}
+              {barber.additionalServices.length > 3 && (
+                <li>
+                  <Badge variant="outline" className="text-muted-foreground">
+                    +{barber.additionalServices.length - 3}
+                    <span className="sr-only"> ещё дополнительных услуг</span>
+                  </Badge>
+                </li>
+              )}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </a>

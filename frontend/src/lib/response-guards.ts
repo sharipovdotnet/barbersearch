@@ -374,11 +374,20 @@ export function isBarberSearchItem(value: unknown): value is BarberSearchItem {
     isBoolean(value.isVerified) &&
     isNullable(isNonEmptyString)(value.primarySalonId) &&
     isNullableString(value.primarySalonName) &&
-    isNullableString(value.city)
+    isNullableString(value.city) &&
+    isArrayOf(isString)(value.additionalServices)
   )
 }
 
 export const isBarberSearchPage = isPageOf(isBarberSearchItem)
+
+/**
+ * Подсказки фильтра «дополнительные услуги»: массив непустых строк.
+ *
+ * Пустая строка в ответе — битый контракт: такой вариант попал бы в выпадающий
+ * список и не дал бы отфильтровать ничего осмысленного.
+ */
+export const isAdditionalServiceList = isArrayOf(isNonEmptyString)
 
 /** Строка публичного справочника специализаций; описание может отсутствовать. */
 export function isSpecializationOption(
@@ -532,6 +541,7 @@ export function isBarberProfile(value: unknown): value is BarberProfile {
     isArrayOf(isPaymentMethod)(value.paymentMethods) &&
     isArrayOf(isString)(value.communicationFormat) &&
     isArrayOf(isString)(value.goodies) &&
+    isArrayOf(isString)(value.additionalServices) &&
     isString(value.latePolicy) &&
     isBoolean(value.isActive) &&
     isBoolean(value.isVerified) &&
