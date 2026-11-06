@@ -93,7 +93,7 @@ function sessionValue(
   return {
     status,
     user,
-    signIn: async () => {},
+    signIn: async () => BARBER,
     signOut: async () => {},
     retrySession: () => {},
   }

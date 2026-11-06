@@ -34,7 +34,7 @@ function renderHeader({
   const context: SessionContextValue = {
     status,
     user,
-    signIn: vi.fn(async () => {}),
+    signIn: vi.fn(async () => sessionUser),
     signOut,
     retrySession: vi.fn(),
   }

@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionProvider } from '@/components/session-provider'
+import type { SessionUser } from '@/lib/auth'
 import {
   noContent,
   problemDetails,
@@ -13,6 +14,14 @@ import {
 } from '@/test/msw/handlers'
 import { recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
+
+const BARBER: SessionUser = {
+  ...testUser,
+  role: 'Barber',
+  barberProfileId: '22222222-2222-4222-8222-222222222222',
+}
+
+const ADMIN: SessionUser = { ...testUser, role: 'Admin' }
 
 /** Диалог живёт внутри настоящей сессии: вход — это `signIn` из `SessionProvider`. */
 function renderDialog(
@@ -24,6 +33,39 @@ function renderDialog(
     </SessionProvider>
   )
 }
+
+/** Вход тем же путём, что и у пользователя: открыть диалог, ввести данные, отправить. */
+async function signInAs(
+  user: ReturnType<typeof userEvent.setup>,
+  email: string,
+  options: { redirectTo?: string | null } = {}
+) {
+  renderDialog(options)
+
+  const dialog = await openDialog(user)
+  await user.type(within(dialog).getByLabelText('Email'), email)
+  await user.type(within(dialog).getByLabelText('Пароль'), 'secret-pass')
+  await user.click(submitButton(dialog))
+}
+
+/** `/auth/me` отдаёт пользователя только после успешного `POST /login/cookie`. */
+function mockSignedInUser(signedInUser: SessionUser) {
+  let signedIn = false
+
+  server.use(
+    http.post('/api/auth/login/cookie', () => {
+      signedIn = true
+      return noContent()
+    }),
+    http.get('/api/auth/me', () =>
+      signedIn ? HttpResponse.json(signedInUser) : unauthorized()
+    )
+  )
+}
+
+beforeEach(() => {
+  window.history.replaceState(null, '', '/')
+})
 
 /** Открытие — кликом по триггеру в шапке, как это делает пользователь. */
 async function openDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -192,6 +234,61 @@ describe('LoginDialog', () => {
         rememberMe: false,
       },
     ])
+  })
+
+  it('барбер после входа попадает в кабинет барбера, а не в «Мой кабинет»', async () => {
+    const user = userEvent.setup()
+    mockSignedInUser(BARBER)
+
+    await signInAs(user, BARBER.email, { redirectTo: undefined })
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/barber')
+    })
+  })
+
+  it('администратор после входа попадает в администрирование', async () => {
+    const user = userEvent.setup()
+    mockSignedInUser(ADMIN)
+
+    await signInAs(user, ADMIN.email, { redirectTo: undefined })
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/admin')
+    })
+  })
+
+  it('клиент после входа попадает в «Мой кабинет»', async () => {
+    const user = userEvent.setup()
+    mockSignedInUser(testUser)
+
+    await signInAs(user, testUser.email, { redirectTo: undefined })
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/account')
+    })
+  })
+
+  it('барбер, вошедший из гейта «Мой кабинет», не остаётся в нём', async () => {
+    const user = userEvent.setup()
+    mockSignedInUser(BARBER)
+
+    await signInAs(user, BARBER.email, { redirectTo: '/account' })
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/barber')
+    })
+  })
+
+  it('явный возврат сохраняется: барбер возвращается в расписание', async () => {
+    const user = userEvent.setup()
+    mockSignedInUser(BARBER)
+
+    await signInAs(user, BARBER.email, { redirectTo: '/barber/schedule' })
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/barber/schedule')
+    })
   })
 
   it('на 401 auth.login.invalidCredentials показывает текст про неверные данные', async () => {

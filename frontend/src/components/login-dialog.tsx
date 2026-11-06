@@ -22,7 +22,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate } from '@/lib/router'
+import { signInDestination } from '@/lib/sign-in-destination'
 import { describeSignInError } from '@/lib/sign-in-errors'
+import type { SessionUser } from '@/lib/auth'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -56,7 +58,7 @@ function LoginForm({
   onSuccess,
   onRegister,
 }: {
-  onSuccess: () => void
+  onSuccess: (user: SessionUser) => void
   onRegister: () => void
 }) {
   const { signIn } = useSession()
@@ -83,12 +85,12 @@ function LoginForm({
     setIsPending(true)
 
     try {
-      await signIn({
+      const signedInUser = await signIn({
         email: normalizedEmail,
         password,
         rememberMe,
       })
-      onSuccess()
+      onSuccess(signedInUser)
     } catch (error) {
       setFormError(describeSignInError(error))
       setIsPending(false)
@@ -210,7 +212,7 @@ function LoginDialog({
   variant = 'ghost',
   size = 'sm',
   className,
-  redirectTo = '/account',
+  redirectTo,
   onSignedIn,
 }: {
   /** Содержимое кнопки-триггера; по умолчанию — «Войти» с иконкой. */
@@ -218,7 +220,11 @@ function LoginDialog({
   variant?: 'ghost' | 'default'
   size?: 'sm' | 'default' | 'lg'
   className?: string
-  /** Куда вернуться после входа; по умолчанию — кабинет клиента, `null` — остаться здесь. */
+  /**
+   * Куда вернуться после входа. `null` — остаться на странице, адрес — вернуться
+   * именно туда; без значения роль открывает свой раздел (барбер — `/barber`,
+   * администратор — `/admin`, клиент — `/account`).
+   */
   redirectTo?: string | null
   /** Дополнительное действие после успешного входа, например повторный запрос данных. */
   onSignedIn?: () => void
@@ -243,12 +249,17 @@ function LoginDialog({
           </DialogDescription>
         </DialogHeader>
         <LoginForm
-          onSuccess={() => {
+          onSuccess={(signedInUser) => {
             setIsOpen(false)
             // После входа пользователь возвращается туда, откуда открыл диалог.
             // `null` — выбора слота на странице барбера: уходить с неё нельзя.
-            if (redirectTo) {
-              navigate(redirectTo)
+            const destination = signInDestination(
+              signedInUser.role,
+              redirectTo
+            )
+
+            if (destination !== null) {
+              navigate(destination)
             }
             onSignedIn?.()
           }}

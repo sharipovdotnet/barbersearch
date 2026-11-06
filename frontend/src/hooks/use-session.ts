@@ -16,7 +16,8 @@ export type SessionContextValue = {
   /** `loading` — сессия ещё проверяется, до этого нельзя показать «Войти» или профиль. */
   status: SessionStatus
   user: SessionUser | null
-  signIn: (credentials: SignInCredentials) => Promise<void>
+  /** Возвращает вошедшего пользователя: по его роли выбирается раздел после входа. */
+  signIn: (credentials: SignInCredentials) => Promise<SessionUser>
   signOut: () => Promise<void>
   /** Повторная полная проверка сессии — тот же bootstrap, включая подсказку и refresh. */
   retrySession: () => void
