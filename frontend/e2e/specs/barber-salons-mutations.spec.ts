@@ -21,6 +21,12 @@ import { AdminCataloguePage } from '../pages/admin-catalogue-page'
  */
 test.use({ storageState: storageStatePath('barber') })
 
+// Все тесты файла меняют один и тот же профиль барбера: привязка и создание своего
+// места делают `UPDATE barber_profiles` (xmin-токен). При `fullyParallel` они шли бы
+// параллельно и один получал бы законный `409 ...update.concurrencyConflict`
+// («Запись изменили одновременно») не из-за ошибки, а из-за гонки самих тестов.
+test.describe.configure({ mode: 'serial' })
+
 test.describe('мои салоны: привязка', () => {
   test('новый салон добавляется, перечитывается и удаляется в finally', async ({
     page,
@@ -109,7 +115,9 @@ test.describe('мои салоны: создание и модерация', () 
     ).toBeVisible()
 
     await dialog.getByLabel('Название').fill(own.name)
-    await dialog.getByLabel('Адрес').fill(own.address)
+    // `exact`: в форме появилась радио-группа типа места, и подсказка
+    // «На дому — адрес виден в карточке» содержит слово «адрес».
+    await dialog.getByLabel('Адрес', { exact: true }).fill(own.address)
     await dialog.getByLabel('Город').fill(own.city)
     await dialog.getByLabel('Страна').fill(own.country)
     await dialog.getByLabel('Широта').fill(String(own.latitude))
