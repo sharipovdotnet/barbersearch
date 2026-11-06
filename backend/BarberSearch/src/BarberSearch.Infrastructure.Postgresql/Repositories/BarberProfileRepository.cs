@@ -10,6 +10,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Salons.GetSalonBarbers;
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
@@ -174,6 +175,72 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     salon.OwnerUserId,
                     salon.ModerationStatus,
                     salon.RejectionReason))
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    public async Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>> GetSalonBarbersAsync(
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+    {
+        // Привязки не фильтруются по активности профиля или модерации салона:
+        // владелец управляет составом и до публикации, а выключенный мастер должен
+        // быть виден в списке, иначе его нельзя убрать.
+        var rows = await (
+                from link in Context.BarberSalons.AsNoTracking()
+                join profile in Context.BarberProfiles.AsNoTracking()
+                    on link.BarberProfileId equals profile.Id
+                join user in Context.Users.AsNoTracking()
+                    on profile.UserId equals user.Id
+                where link.SalonId == salonId
+                orderby profile.DisplayName.Value, profile.Id
+                select new SalonBarberResponse(
+                    profile.Id,
+                    profile.UserId,
+                    profile.DisplayName.Value,
+                    user.Email,
+                    profile.IsActive,
+                    profile.IsVerified))
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    public async Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>>
+        SearchSalonBarberCandidatesAsync(
+            Guid salonId,
+            string search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return Result.Success<IReadOnlyList<SalonBarberResponse>, Failure>([]);
+        }
+
+        var pattern = BuildSearchPattern(search);
+
+        // NOT EXISTS по связи, а не LEFT JOIN: привязка не размножает строку профиля,
+        // а unique-индекс (barber_profile_id, salon_id) делает проверку дешёвой.
+        var rows = await (
+                from profile in Context.BarberProfiles.AsNoTracking()
+                join user in Context.Users.AsNoTracking()
+                    on profile.UserId equals user.Id
+                where profile.IsActive
+                      && !Context.BarberSalons.Any(link =>
+                          link.SalonId == salonId && link.BarberProfileId == profile.Id)
+                      && (EF.Functions.ILike(profile.DisplayName.Value, pattern, "\\")
+                          || EF.Functions.ILike(user.Email, pattern, "\\"))
+                orderby profile.DisplayName.Value, profile.Id
+                select new SalonBarberResponse(
+                    profile.Id,
+                    profile.UserId,
+                    profile.DisplayName.Value,
+                    user.Email,
+                    profile.IsActive,
+                    profile.IsVerified))
+            .Take(limit)
             .ToListAsync(cancellationToken);
 
         return rows;

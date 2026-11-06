@@ -146,7 +146,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 25 controllers: 24 доменных (106 endpoints) + AuthController (8 actions)
+            ├── Controllers/              ← 25 controllers: 24 доменных (115 endpoints) + AuthController (8 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -668,7 +668,7 @@ The rules below were pushed to the application layer because the aggregate canno
 | Application | ✅ 113 обработчиков (81 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 35 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишется `ModerationStatus`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
-| Web | ✅ 25 контроллеров / 119 endpoints (111 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 25 контроллеров / 123 endpoints (115 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -963,7 +963,10 @@ Suggested order:
     `ModerationStatus == Active`. Имя салона неизменно (переименование — отдельный срез),
     координаты вводятся вручную (карта/геокодер — отдельное решение), повторная отправка после
     отказа не реализована — UI не показывает мёртвую кнопку. Аудит: `moderationStatus` в
-    allowlist, `ownerUserId`/`rejectionReason` — нет (§17.8).
+    allowlist, `ownerUserId`/`rejectionReason` — нет (§17.8). Владелец управляет составом салона:
+    читает прикреплённых барберов, ищет кандидатов по имени/email, прикрепляет и открепляет их
+    (`GET/POST/DELETE api/salons/{id}/barbers`, `GET .../barber-candidates`); привязка — та же
+    строка `barber_salons`, первый салон профиля становится основным, владельца убрать нельзя.
 
 ---
 
@@ -1600,7 +1603,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**25 controllers, 119 endpoints: 111 domain + 8 auth** — one endpoint per Application operation,
+**25 controllers, 123 endpoints: 115 domain + 8 auth** — one endpoint per Application operation,
 plus the eight `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
@@ -1613,7 +1616,7 @@ child entity:
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
 | `BarberScheduleController` | `api/barber-profiles/{id}` | 4 (read, replace week, set/remove date exception) |
-| `SalonsController` | `api/salons` | 9 (1 public directory + 1 barber self-create + 2 owner/admin edits + 2 activation + 2 moderation) |
+| `SalonsController` | `api/salons` | 13 (1 public directory + 1 barber self-create + 2 owner/admin edits + 4 salon-barber composition + 2 activation + 2 moderation) |
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
@@ -2011,6 +2014,23 @@ Read endpoints (added 2026-10-19):
   **Audit:** the `Salon` allowlist gained `ModerationStatus`, so an approval/rejection is visible
   as `salon.updated`; `OwnerUserId` and `RejectionReason` are deliberately **not** audited
   (owner is not a useful diff, and the reason is the administrator's text, not a row change).
+- **Salon barber composition (2026-11-06).** Four owner/admin endpoints on `SalonsController`
+  (`[Authorize]`, ownership checked in the handler with `EnsureCanManageSalon`):
+  `GET api/salons/{id}/barbers`, `GET api/salons/{id}/barber-candidates?search=`,
+  `POST api/salons/{id}/barbers` and `DELETE api/salons/{id}/barbers/{barberProfileId}`.
+  The owner is the barber who created the salon (`CreateOwnSalon` writes `OwnerUserId`), so no
+  separate owner role or assignment exists. The list returns every attached profile — including
+  an unverified master and a disabled profile — with `userId` (the client compares it with
+  `ownerUserId`), `displayName`, `email`, `isActive` and `isVerified`; a disabled master stays
+  visible so he can be removed. Candidates are active profiles only, not yet attached, searched
+  by display name or owner email (3..100 chars, ten rows, `ILIKE` with escaped wildcards;
+  `400 salon.barbers.search.tooShort` / `.tooLong`). `POST` loads the target profile with salons,
+  rejects an inactive profile with `409 salon.barbers.inactive`, adds the link
+  (`isPrimary = profile.Salons.Count == 0`) and saves in one transaction; a duplicate is the
+  domain `409 barberProfile.addSalon.duplicate`. `DELETE` removes the link and its weekly
+  schedule, but refuses to remove the salon owner (`409 salon.barbers.owner`); a missing link
+  is `404 barberProfile.removeSalon.notFound`. Foreign salon — `403 auth.forbidden`, unknown
+  salon/profile — `404`. No migration: this is the existing `barber_salons` row.
 - **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
   rating; `404` for a missing/inactive/unverified profile. Response is `BarberProfileResponse` and
   nested records; no domain entity is serialized. Each service carries
@@ -2571,6 +2591,15 @@ salon.activation.notApproved`). Это сознательно: «включит�
 действия, иначе барбер одобрил бы себя сам. Аудит: `salon.updated` с `moderationStatus` делает
 решение администратора проверяемым; `ownerUserId` и `rejectionReason` в allowlist не входят
 (владелец — не полезный diff, причина отказа — текст администратора, а не состояние строки).
+
+Состав салона (2026-11-06) — продолжение владения: тот же `EnsureCanManageSalon` открывает
+владельцу четыре действия над `barber_salons`. Владелец читает состав, ищет активных барберов
+по имени/email и прикрепляет или открепляет их; первый салон профиля становится основным, а
+владельца салона убрать нельзя (`409 salon.barbers.owner`). Список состава намеренно не
+фильтруется по `is_active` и модерации: выключенного мастера владелец должен видеть, чтобы
+убрать. Публичная витрина по-прежнему требует активный и подтверждённый профиль, поэтому
+привязка неподтверждённого барбера не делает его видимым. Новых таблиц и аудита нет: строка
+`barber_salons` уже существовала, а изменение состава не входит в allowlist профиля.
 
 Заявка в барберы (`POST api/barber-requests`, 2026-11-06) — публичное действие, которое создаёт
 ресурс от имени клиента, но **не даёт прав**: роль `Barber` появляется только после одобрения

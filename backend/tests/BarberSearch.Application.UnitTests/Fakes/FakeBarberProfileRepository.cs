@@ -8,6 +8,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Salons.GetSalonBarbers;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
@@ -35,6 +36,8 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     private readonly List<AdminBarberResponse> _adminBarbers = [];
     private readonly Dictionary<Guid, AdminBarberDetailResponse> _adminDetails = [];
     private readonly List<BarberSalonSummaryResponse> _salonSummaries = [];
+    private readonly List<SalonBarberResponse> _salonBarbers = [];
+    private readonly List<SalonBarberResponse> _salonBarberCandidates = [];
     private Dictionary<Guid, BarberProfile>? _snapshot;
 
     public IReadOnlyCollection<BarberProfile> Profiles => _profiles.Values;
@@ -113,6 +116,19 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     /// <summary>Строка «Мои салоны» для сценариев чтения привязок.</summary>
     public void AddSalonSummary(BarberSalonSummaryResponse summary) => _salonSummaries.Add(summary);
+
+    /// <summary>Строка «Барберы салона» для сценария управления составом.</summary>
+    public void AddSalonBarber(SalonBarberResponse barber) => _salonBarbers.Add(barber);
+
+    /// <summary>Ответ подсказки поиска барбера для салона.</summary>
+    public void AddSalonBarberCandidate(SalonBarberResponse barber)
+        => _salonBarberCandidates.Add(barber);
+
+    /// <summary>Строка поиска, которую обработчик передал в репозиторий.</summary>
+    public string? LastSalonBarberSearch { get; private set; }
+
+    /// <summary>Лимит, который обработчик передал в репозиторий.</summary>
+    public int? LastSalonBarberLimit { get; private set; }
 
     public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
 
@@ -206,6 +222,33 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
         return Task.FromResult<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>>(
             ordered);
+    }
+
+    public Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>> GetSalonBarbersAsync(
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<IReadOnlyList<SalonBarberResponse>, Failure>>(
+            _salonBarbers
+                .OrderBy(barber => barber.DisplayName, StringComparer.Ordinal)
+                .ThenBy(barber => barber.BarberProfileId)
+                .ToList());
+
+    public Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>>
+        SearchSalonBarberCandidatesAsync(
+            Guid salonId,
+            string search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        LastSalonBarberSearch = search;
+        LastSalonBarberLimit = limit;
+
+        IReadOnlyList<SalonBarberResponse> rows = _salonBarberCandidates
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<SalonBarberResponse>, Failure>(rows));
     }
 
     public Task<Result<BarberSalon, Failure>> GetSalonAsync(

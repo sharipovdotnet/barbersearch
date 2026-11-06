@@ -57,6 +57,7 @@ import type {
 import type { BarberSearchItem } from '@/lib/barber-search'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
 import type { BarberSlot, BarberSlots } from '@/lib/barber-slots'
+import type { SalonBarber } from '@/lib/salon-barbers'
 import type { Booking, BookingStatus } from '@/lib/bookings'
 import type {
   BarberProfile,
@@ -434,6 +435,21 @@ export function isBarberSalonSummary(
 }
 
 export const isBarberSalonSummaryList = isArrayOf(isBarberSalonSummary)
+
+/** Барбер в составе салона: профиль, владелец профиля, имя, email и два статуса. */
+export function isSalonBarber(value: unknown): value is SalonBarber {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.barberProfileId) &&
+    isNonEmptyString(value.userId) &&
+    isString(value.displayName) &&
+    isString(value.email) &&
+    isBoolean(value.isActive) &&
+    isBoolean(value.isVerified)
+  )
+}
+
+export const isSalonBarberList = isArrayOf(isSalonBarber)
 
 /** Строка публичного справочника услуг; длительность и описание UI не читает. */
 export function isHairServiceOption(value: unknown): value is HairServiceOption {

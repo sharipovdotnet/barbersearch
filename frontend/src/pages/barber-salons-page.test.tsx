@@ -77,6 +77,15 @@ const CATALOG_ITEM = {
   timeZoneId: 'Asia/Yekaterinburg',
 }
 
+const SALON_BARBER = {
+  barberProfileId: PROFILE_ID,
+  userId: BARBER.id,
+  displayName: 'Тимур Барберов',
+  email: 'timur@barbersearch.test',
+  isActive: true,
+  isVerified: true,
+}
+
 function sessionValue(
   status: SessionContextValue['status'],
   user: SessionContextValue['user']
@@ -169,6 +178,9 @@ describe('BarberSalonsPage', () => {
     expect(within(salonCard!).getByText('Основной')).toBeInTheDocument()
     expect(within(salonCard!).getByText(/Ленина, 1/)).toBeInTheDocument()
     expect(within(salonCard!).getByText(/Asia\/Yekaterinburg/)).toBeInTheDocument()
+    expect(
+      within(salonCard!).getByRole('button', { name: 'Барберы салона' })
+    ).toBeInTheDocument()
 
     const nav = screen.getByRole('navigation', {
       name: 'Разделы кабинета барбера',
@@ -375,6 +387,9 @@ describe('BarberSalonsPage', () => {
 
     expect(card).not.toBeNull()
     expect(
+      within(card!).queryByRole('button', { name: 'Барберы салона' })
+    ).not.toBeInTheDocument()
+    expect(
       within(card!).queryByRole('button', { name: 'Изменить адрес' })
     ).not.toBeInTheDocument()
     expect(
@@ -382,6 +397,41 @@ describe('BarberSalonsPage', () => {
     ).not.toBeInTheDocument()
     // Статус и адрес при этом видны: карточка не прячется от барбера.
     expect(within(card!).getByText('Одобрен')).toBeInTheDocument()
+  })
+
+  it('владелец открывает состав салона из карточки', async () => {
+    const user = userEvent.setup()
+    let barbersRequested = 0
+
+    server.use(
+      http.get(LIST_URL, () => HttpResponse.json([SALON])),
+      http.get(`/api/salons/${SALON_ID}/barbers`, () => {
+        barbersRequested += 1
+
+        return HttpResponse.json([SALON_BARBER])
+      })
+    )
+
+    renderPage()
+
+    const card = (await screen.findByText(SALON.name)).closest('li')
+
+    expect(card).not.toBeNull()
+
+    await user.click(
+      within(card!).getByRole('button', { name: 'Барберы салона' })
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(
+      within(dialog).getByRole('heading', { name: 'Барберы салона' })
+    ).toBeInTheDocument()
+    expect(
+      await within(dialog).findByText(SALON_BARBER.displayName)
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Владелец')).toBeInTheDocument()
+    expect(barbersRequested).toBe(1)
   })
 
   it('правка владельцем отправляет два независимых PUT и перечитывает список', async () => {

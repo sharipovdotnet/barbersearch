@@ -6,6 +6,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
+using BarberSearch.Contracts.Salons.GetSalonBarbers;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
@@ -151,6 +152,40 @@ public interface IBarberProfileRepository
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>> GetSalonSummariesAsync(
         Guid barberProfileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Барберы, прикреплённые к салону: профиль, владелец и статусы. Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Экран «Барберы салона» — рабочий список владельца, поэтому салон на проверке
+    /// и отклонённый тоже возвращают своих барберов: салон может быть ещё не опубликован.
+    /// Порядок — отображаемое имя, затем идентификатор профиля, чтобы список не менялся
+    /// между запросами.
+    /// </remarks>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>> GetSalonBarbersAsync(
+        Guid salonId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ищет активных барберов, ещё не прикреплённых к салону, по имени или email.
+    /// </summary>
+    /// <remarks>
+    /// Подсказка формы, а не справочник: результат ограничен <paramref name="limit"/>,
+    /// пагинации нет. Уже прикреплённые профили исключаются тем же <c>NOT EXISTS</c>,
+    /// поэтому повторно предложить их нельзя. Профиль без подтверждения находится:
+    /// прикрепить мастера можно до верификации.
+    /// </remarks>
+    /// <param name="salonId">Салон, к которому идёт прикрепление.</param>
+    /// <param name="search">Имя или email после обрезки пробелов.</param>
+    /// <param name="limit">Сколько строк вернуть; не больше десяти на уровне обработчика.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<SalonBarberResponse>, Failure>> SearchSalonBarberCandidatesAsync(
+        Guid salonId,
+        string search,
+        int limit,
         CancellationToken cancellationToken = default);
 
     /// <summary>
