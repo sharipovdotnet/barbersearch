@@ -52,12 +52,12 @@ export function BarberCabinetNav({ active }: { active: Section }) {
           const isCurrent = item.section === active
 
           return (
-            <li key={item.section} className="flex-1 sm:flex-none">
+            <li key={item.section} className="min-w-0 flex-1 sm:flex-none">
               <a
                 href={item.href}
                 aria-current={isCurrent ? 'page' : undefined}
                 className={cn(
-                  'flex h-11 items-center justify-center gap-2 rounded-md px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-8',
+                  'flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-8 sm:gap-2 sm:px-3',
                   isCurrent
                     ? 'bg-background font-medium text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -69,8 +69,8 @@ export function BarberCabinetNav({ active }: { active: Section }) {
                   }
                 }}
               >
-                <Icon className="size-4 shrink-0" aria-hidden />
-                {item.label}
+                <Icon className="hidden size-4 shrink-0 sm:block" aria-hidden />
+                <span className="truncate">{item.label}</span>
               </a>
             </li>
           )

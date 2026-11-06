@@ -232,7 +232,9 @@ describe('BarberSalonsPage', () => {
     expect(
       await screen.findByText('Этот салон уже добавлен.')
     ).toBeInTheDocument()
-    expect(listCalls).toBe(2)
+    await waitFor(() => {
+      expect(listCalls).toBe(2)
+    })
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
