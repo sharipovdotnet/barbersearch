@@ -406,14 +406,16 @@ said «Профиль барбера не привязан к аккаунту. 
 `POST /api/barber-profiles` was reachable only by a `Barber` — exactly the person who could not
 get to it. The missing-profile gate now leads to `/barber/onboarding`, a lazy screen with one form
 for every field of `BarberProfileCreateRequest`: the display name (1–120), experience (1–70),
-«О себе» (2000), at least one language, optional payment methods, and four optional one-per-line
-lists (certificates, achievements, communication format, goodies) plus «Опоздания» (500). Empty
-lines are trimmed away, an empty optional field is sent as `null`, and empty lists as `[]`;
-`userId`, grade, rating and verification are never sent — the profile always belongs to the
-current user. Client rules repeat the domain ones, and server codes
+grade, «О себе» (2000), at least one language, optional payment methods, and four optional
+one-per-line lists (certificates, achievements, communication format, goodies) plus «Опоздания»
+(500). Empty lines are trimmed away, an empty optional field is sent as `null`, and empty lists as
+`[]`; `userId`, rating and verification are never sent — the profile always belongs to the current
+user. The grade is chosen from the ten assigned grades: «Без грейда» is not offered, because only
+an administrator can clear it. Client rules repeat the domain ones, and server codes
 (`barberProfile.displayName.tooLong`, `barberProfile.yearsOfExperience`,
-`barberProfile.languages.unknown`, …) are mapped to Russian field errors; `429`, a network
-failure and `5xx` show a form error with «Повторить» (the form is not re-submitted automatically).
+`barberProfile.grade.unknown`, `barberProfile.languages.unknown`, …) are mapped to Russian field
+errors; `429`, a network failure and `5xx` show a form error with «Повторить» (the form is not
+re-submitted automatically).
 `409 barberProfile.create.alreadyExists` is not an error: the profile exists, so the screen
 continues as if the `201` had just happened.
 

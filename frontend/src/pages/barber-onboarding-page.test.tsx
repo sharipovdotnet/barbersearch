@@ -72,6 +72,7 @@ async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByLabelText('Как вас представить')
   await user.type(screen.getByLabelText('Как вас представить'), 'Тимур')
   await user.type(screen.getByLabelText('Опыт, лет'), '5')
+  await user.selectOptions(screen.getByLabelText('Грейд'), 'MiddleBarber')
   await user.click(screen.getByRole('checkbox', { name: 'Русский' }))
 }
 
@@ -196,6 +197,10 @@ describe('BarberOnboardingPage', () => {
     expect(screen.getByLabelText('О себе')).toHaveValue('Стрижки и борода.')
     expect(screen.getByLabelText('О себе')).toHaveAttribute('readonly')
 
+    await userEvent.selectOptions(
+      screen.getByLabelText('Грейд'),
+      'SeniorBarber'
+    )
     await userEvent.click(screen.getByRole('checkbox', { name: 'Русский' }))
     await userEvent.click(
       screen.getByRole('button', { name: 'Создать профиль' })
@@ -208,6 +213,7 @@ describe('BarberOnboardingPage', () => {
     expect(body).toMatchObject({
       displayName: 'E2E Заявитель',
       yearsOfExperience: 6,
+      grade: 'SeniorBarber',
       bio: 'Стрижки и борода.',
     })
     expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()

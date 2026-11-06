@@ -33,7 +33,9 @@ Profile.
 _Avoid_: Barber application, role request
 
 **Grade**:
-An administrative rank of a Barber (Intern … Barbershop Owner). Not self-declared.
+A rank of a Barber (Intern … Barbershop Owner). A Barber chooses one of the assigned grades when
+creating the profile; an administrator can change or clear it. It grants no rights.
+
 _Avoid_: Level, rank, tier
 
 ## Places

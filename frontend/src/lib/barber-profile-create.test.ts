@@ -41,6 +41,17 @@ describe('describeBarberProfileCreateError', () => {
     ).toMatchObject({ field: 'yearsOfExperience' })
   })
 
+  it('неизвестный грейд привязан к своему полю', () => {
+    expect(
+      describeBarberProfileCreateError(
+        apiError(400, ['barberProfile.grade.unknown'])
+      )
+    ).toMatchObject({
+      field: 'grade',
+      message: 'Выберите грейд из списка.',
+    })
+  })
+
   it('неизвестные языки и способы оплаты привязаны к своим группам', () => {
     expect(
       describeBarberProfileCreateError(

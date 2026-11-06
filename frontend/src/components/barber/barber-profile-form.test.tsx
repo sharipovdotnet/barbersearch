@@ -16,6 +16,7 @@ const CREATED_ID = '77777777-7777-4777-8777-777777777777'
 const EXPECTED_BODY = {
   displayName: 'Тимур Барберов',
   yearsOfExperience: 8,
+  grade: 'SeniorBarber',
   bio: 'Стрижки и борода.',
   languages: ['Ru', 'En'],
   certificatesAndTraining: ['Курс барберинга', 'Обучение колористике'],
@@ -53,6 +54,7 @@ async function clickOption(name: string) {
 async function fillValidForm() {
   change('Как вас представить', 'Тимур Барберов')
   change('Опыт, лет', '8')
+  change('Грейд', 'SeniorBarber')
   change('О себе', 'Стрижки и борода.')
   await clickOption('Русский')
   await clickOption('English')
@@ -86,12 +88,24 @@ describe('BarberProfileForm', () => {
       screen.getByText('Укажите, как вас представить.')
     ).toBeInTheDocument()
     expect(screen.getByText('Укажите опыт работы в годах.')).toBeInTheDocument()
+    expect(screen.getByText('Выберите грейд.')).toBeInTheDocument()
     expect(screen.getByText('Выберите хотя бы один язык.')).toBeInTheDocument()
     expect(requests.filter((path) => path.startsWith('/api/barber'))).toEqual([])
   })
 
-  it('опыт 0 и 71: ошибка диапазона, запросов нет', async () => {
-    const createCalls = countRequests(CREATE_URL)
+  it('грейд обязателен и «Без грейда» в выборе нет', () => {
+    renderForm()
+
+    expect(screen.getByLabelText('Грейд')).toHaveValue('')
+    expect(
+      screen.queryByRole('option', { name: 'Без грейда' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Старший барбер' })
+    ).toBeInTheDocument()
+  })
+
+  it('опыт 0 и 71: ошибка диапазона, запросов нет', async () => {    const createCalls = countRequests(CREATE_URL)
 
     renderForm()
     change('Как вас представить', 'Тимур')
@@ -265,6 +279,7 @@ describe('BarberProfileForm', () => {
     renderForm()
     change('Как вас представить', 'Тимур')
     change('Опыт, лет', '1')
+    change('Грейд', 'Intern')
     await clickOption('Русский')
     await submit()
 
@@ -275,6 +290,7 @@ describe('BarberProfileForm', () => {
     expect(body).toStrictEqual({
       displayName: 'Тимур',
       yearsOfExperience: 1,
+      grade: 'Intern',
       bio: null,
       languages: ['Ru'],
       certificatesAndTraining: [],
@@ -342,6 +358,7 @@ describe('BarberProfileForm', () => {
       bio: null,
     })
 
+    change('Грейд', 'ArtDirector')
     await clickOption('Русский')
     await submit()
 
@@ -352,6 +369,7 @@ describe('BarberProfileForm', () => {
     expect(body).toStrictEqual({
       displayName: 'Тимур Барберов',
       yearsOfExperience: 8,
+      grade: 'ArtDirector',
       bio: null,
       languages: ['Ru'],
       certificatesAndTraining: [],

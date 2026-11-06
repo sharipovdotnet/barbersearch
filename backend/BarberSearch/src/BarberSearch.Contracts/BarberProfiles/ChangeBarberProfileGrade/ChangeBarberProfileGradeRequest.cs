@@ -7,6 +7,6 @@ namespace BarberSearch.Contracts.BarberProfiles.ChangeBarberProfileGrade;
 /// </summary>
 /// <remarks>
 /// Грейд — административное действие, поэтому запрос отдельный от обновления профиля:
-/// сам барбер свой грейд не поднимает.
+/// сам барбер выбирает грейд только при создании, но не меняет его в <c>UpdateProfile</c>.
 /// </remarks>
 public record ChangeBarberProfileGradeRequest(Grade Grade);

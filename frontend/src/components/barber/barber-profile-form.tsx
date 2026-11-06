@@ -16,6 +16,11 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiError } from '@/lib/api'
 import {
+  BARBER_GRADE_LABELS,
+  BARBER_GRADES,
+  type BarberGrade,
+} from '@/lib/barber-grade'
+import {
   BARBER_PROFILE_BIO_MAX,
   BARBER_PROFILE_DISPLAY_NAME_MAX,
   BARBER_PROFILE_EXPERIENCE_MAX,
@@ -44,9 +49,10 @@ import { cn } from '@/lib/utils'
  * `barber_profile_id` ещё старый, и продлением сессии занимается экран, который знает,
  * куда вернуться. Такую же форму переиспользует редактирование профиля.
  *
- * Клиентские правила совпадают с доменными: имя 1..120, опыт 1..70, минимум один язык.
- * `languages` пустым не отправляется, хотя сервер подставил бы `Ru`: человек должен
- * понимать, что именно попадёт в карточку.
+ * Клиентские правила совпадают с доменными: имя 1..120, опыт 1..70, минимум один язык
+ * и выбранный грейд. `languages` пустым не отправляется, хотя сервер подставил бы `Ru`:
+ * человек должен понимать, что именно попадёт в карточку. `Grade.None` в выборе нет:
+ * барбер выбирает настоящий грейд, а сбросить его в «Без грейда» может администратор.
  *
  * Одобренная заявка «Стать барбером» — второй источник тех же трёх значений. Всё, что
  * в ней заполнено, приходит сюда готовым и помечается `readOnly`: одно и то же нельзя
@@ -57,6 +63,7 @@ import { cn } from '@/lib/utils'
 type FormValues = {
   displayName: string
   yearsOfExperience: string
+  grade: BarberGrade | ''
   bio: string
   languages: Language[]
   paymentMethods: PaymentMethod[]
@@ -72,6 +79,7 @@ type ProfileErrors = Partial<Record<BarberProfileField, string>>
 const INITIAL_VALUES: FormValues = {
   displayName: '',
   yearsOfExperience: '',
+  grade: '',
   bio: '',
   languages: [],
   paymentMethods: [],
@@ -82,11 +90,15 @@ const INITIAL_VALUES: FormValues = {
   latePolicy: '',
 }
 
+// `None` — «грейд не присвоен»: это административное состояние, а не выбор барбера.
+const SELECTABLE_GRADES = BARBER_GRADES.filter((grade) => grade !== 'None')
+
 // Клиентские тексты совпадают с серверными кодами: одно правило — одна формулировка.
 const DISPLAY_NAME_REQUIRED_ERROR = 'Укажите, как вас представить.'
 const DISPLAY_NAME_TOO_LONG_ERROR = 'Не длиннее 120 символов.'
 const EXPERIENCE_REQUIRED_ERROR = 'Укажите опыт работы в годах.'
 const EXPERIENCE_RANGE_ERROR = 'Опыт — от 1 до 70 лет.'
+const GRADE_REQUIRED_ERROR = 'Выберите грейд.'
 const LANGUAGES_REQUIRED_ERROR = 'Выберите хотя бы один язык.'
 
 const IDS = {
@@ -96,6 +108,8 @@ const IDS = {
   yearsOfExperience: 'barber-profile-experience',
   yearsOfExperienceError: 'barber-profile-experience-error',
   yearsOfExperienceLocked: 'barber-profile-experience-locked',
+  grade: 'barber-profile-grade',
+  gradeError: 'barber-profile-grade-error',
   bio: 'barber-profile-bio',
   bioLocked: 'barber-profile-bio-locked',
   languagesError: 'barber-profile-languages-error',
@@ -198,6 +212,10 @@ function validate(values: FormValues, years: number | null): ProfileErrors {
     errors.languages = LANGUAGES_REQUIRED_ERROR
   }
 
+  if (values.grade === '') {
+    errors.grade = GRADE_REQUIRED_ERROR
+  }
+
   return errors
 }
 
@@ -215,10 +233,15 @@ function toNullable(value: string): string | null {
   return trimmed === '' ? null : trimmed
 }
 
-function toDraft(values: FormValues, years: number): BarberProfileDraft {
+function toDraft(
+  values: FormValues,
+  years: number,
+  grade: BarberGrade
+): BarberProfileDraft {
   return {
     displayName: values.displayName.trim(),
     yearsOfExperience: years,
+    grade,
     bio: toNullable(values.bio),
     languages: values.languages,
     certificatesAndTraining: toLines(values.certificates),
@@ -266,6 +289,7 @@ export function BarberProfileForm({
     if (
       key === 'displayName' ||
       key === 'yearsOfExperience' ||
+      key === 'grade' ||
       key === 'languages' ||
       key === 'paymentMethods'
     ) {
@@ -285,14 +309,20 @@ export function BarberProfileForm({
     setErrors(nextErrors)
     setFormError(null)
 
-    if (Object.keys(nextErrors).length > 0 || years === null) {
+    if (
+      Object.keys(nextErrors).length > 0 ||
+      years === null ||
+      values.grade === ''
+    ) {
       return
     }
 
     setIsPending(true)
 
     try {
-      const created = await createBarberProfile(toDraft(values, years))
+      const created = await createBarberProfile(
+        toDraft(values, years, values.grade)
+      )
       onCreated(created.id)
     } catch (error) {
       // Профиль уже создан: это не ошибка, а гонка двух вкладок.
@@ -403,6 +433,38 @@ export function BarberProfileForm({
             </FieldError>
           </Field>
         </div>
+
+        <Field data-invalid={Boolean(errors.grade)}>
+          <FieldLabel htmlFor={IDS.grade}>Грейд</FieldLabel>
+          <select
+            id={IDS.grade}
+            name="grade"
+            value={values.grade}
+            disabled={isPending}
+            aria-invalid={Boolean(errors.grade)}
+            aria-describedby={describedBy(
+              errors.grade ? IDS.gradeError : undefined
+            )}
+            onChange={(event) => {
+              setValue('grade', event.target.value as BarberGrade | '')
+            }}
+            className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
+          >
+            <option value="" disabled>
+              Выберите грейд
+            </option>
+            {SELECTABLE_GRADES.map((grade) => (
+              <option key={grade} value={grade}>
+                {BARBER_GRADE_LABELS[grade]}
+              </option>
+            ))}
+          </select>
+          <FieldDescription>
+            Грейд видят клиенты в карточке. Администратор может изменить его
+            позже.
+          </FieldDescription>
+          <FieldError id={IDS.gradeError}>{errors.grade}</FieldError>
+        </Field>
 
         <Field>
           <FieldLabel htmlFor={IDS.bio}>О себе</FieldLabel>

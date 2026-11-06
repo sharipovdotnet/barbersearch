@@ -13,7 +13,8 @@ public class BarberProfileTests
 {
     private static BarberProfileCreateRequest CreateData(
         string displayName = "Ivan the Barber",
-        int yearsOfExperience = 5)
+        int yearsOfExperience = 5,
+        Grade grade = Grade.None)
         => new(
             displayName,
             yearsOfExperience,
@@ -24,7 +25,8 @@ public class BarberProfileTests
             [PaymentMethod.Cash],
             ["Chatty"],
             ["Coffee"],
-            "Wait 10 minutes max");
+            "Wait 10 minutes max",
+            grade);
 
     private static BarberProfileUpdateRequest UpdateData(
         string displayName = "Ivan the Barber",
@@ -57,7 +59,8 @@ public class BarberProfileTests
             paymentMethods: request.PaymentMethods,
             communicationFormat: request.CommunicationFormat,
             goodies: request.Goodies,
-            latePolicy: request.LatePolicy);
+            latePolicy: request.LatePolicy,
+            grade: request.Grade);
 
     private static UnitResult<Failure> UpdateProfile(
         BarberProfile profile,
@@ -88,6 +91,23 @@ public class BarberProfileTests
         Assert.True(profile.IsActive);
         Assert.False(profile.IsVerified);
         Assert.Equal(Grade.None, profile.Grade);
+    }
+
+    [Fact]
+    public void Create_WithGrade_StoresIt()
+    {
+        var profile = CreateProfile(CreateData(grade: Grade.SeniorBarber)).Value;
+
+        Assert.Equal(Grade.SeniorBarber, profile.Grade);
+    }
+
+    [Fact]
+    public void Create_WithUnknownGrade_Fails()
+    {
+        var result = CreateProfile(CreateData(grade: (Grade)1234));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberProfile.grade.unknown", result.Error.Errors[0].Code);
     }
 
     [Fact]

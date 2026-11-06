@@ -1,4 +1,4 @@
-﻿import { useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ArrowLeft, CheckCircle2, Circle, Loader2, Star } from 'lucide-react'
 
 import { BarberStatusBadge } from '@/components/admin/barber-list'
@@ -319,8 +319,8 @@ function BarberActions({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Грейд видят клиенты в карточке барбера. Это административное поле: сам
-          барбер его не меняет.
+          Грейд видят клиенты в карточке барбера. Барбер выбирает его при создании
+          профиля, здесь его можно изменить.
         </p>
       </div>
 

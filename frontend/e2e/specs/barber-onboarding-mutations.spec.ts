@@ -66,6 +66,7 @@ test.describe('онбординг барбера', () => {
 
     await page.getByLabel('Как вас представить').fill('E2E Новый Барбер')
     await page.getByLabel('Опыт, лет').fill('6')
+    await page.getByLabel('Грейд').selectOption('MiddleBarber')
     await page.getByRole('checkbox', { name: 'Русский' }).click()
     await page.getByRole('checkbox', { name: 'Карта' }).click()
 
