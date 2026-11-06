@@ -98,4 +98,53 @@ describe('usePagedList', () => {
     expect(result.current.items).toEqual(['первая', 'новая'])
     expect(result.current.status, 'строки не уходят в загрузку').toBe('ready')
   })
+
+  it('goFirst возвращает на первую страницу без запроса и сохраняет кэш', async () => {
+    const calls: (string | null)[] = []
+    const fetchPage = async (cursor: string | null) => {
+      calls.push(cursor)
+
+      return cursor === null
+        ? { items: ['первая'], nextCursor: 'cursor-2' }
+        : { items: ['вторая'], nextCursor: null }
+    }
+
+    const { result } = renderHook(() =>
+      usePagedList<string>({
+        getId: (item) => item,
+        fetchPage,
+        fallback: 'Не удалось загрузить список.',
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.items).toEqual(['первая'])
+    })
+
+    await act(async () => {
+      result.current.goNext()
+    })
+
+    await waitFor(() => {
+      expect(result.current.items).toEqual(['вторая'])
+    })
+
+    const before = calls.length
+
+    await act(async () => {
+      result.current.goFirst()
+    })
+
+    expect(result.current.pageIndex).toBe(0)
+    expect(result.current.items).toEqual(['первая'])
+    expect(calls.length, 'goFirst не ходит в сеть').toBe(before)
+
+    // Страница из кэша: «Дальше» после возврата тоже без запроса.
+    await act(async () => {
+      result.current.goNext()
+    })
+
+    expect(result.current.items).toEqual(['вторая'])
+    expect(calls.length, 'кэш страницы переиспользуется').toBe(before)
+  })
 })

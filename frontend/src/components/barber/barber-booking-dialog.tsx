@@ -71,8 +71,15 @@ type ClientMode = 'registered' | 'guest'
 type BarberBookingDialogProps = {
   /** Профиль из сессии: чужой профиль сервер не примет. */
   barberProfileId: string
+  /** Локальная дата салона `YYYY-MM-DD`; без неё — сегодня, как раньше. */
+  initialDate?: string
+  /** Желаемое начало (ISO): ближайший слот к нему выбирается заранее. */
+  preferredStartAt?: string
   /** Вызывается после `201`: список записей и объявление обновляет экран. */
   onCreated: (clientName: string) => void
+  /** Внешнее управление: окно дня и пустое состояние открывают диалог сами. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 /**
@@ -85,23 +92,41 @@ type BarberBookingDialogProps = {
  * сразу подтверждённой. Зарегистрированный клиент увидит её в своём кабинете.
  * Пока запрос в полёте, диалог нельзя закрыть: иначе повтор после закрытия создал бы
  * вторую попытку с новым ключом идемпотентности.
+ *
+ * `initialDate` и `preferredStartAt` приходят из ленты дня: окно между визитами
+ * открывает диалог с уже нужной датой и ближайшим к началу окна слотом. Предвыбор
+ * ничего не отправляет — барбер выбирает любую другую радиокнопку.
  */
 export function BarberBookingDialog({
   barberProfileId,
+  initialDate,
+  preferredStartAt,
   onCreated,
+  open,
+  onOpenChange,
 }: BarberBookingDialogProps) {
-  const [open, setOpen] = useState(false)
+  const isControlled = open !== undefined
+  const [internalOpen, setInternalOpen] = useState(false)
   const [isPending, setIsPending] = useState(false)
+  const isOpen = isControlled ? open : internalOpen
+
+  const changeOpen = (next: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(next)
+    } else {
+      setInternalOpen(next)
+    }
+  }
 
   return (
     <Dialog
-      open={open}
+      open={isOpen}
       onOpenChange={(next) => {
         if (!next && isPending) {
           return
         }
 
-        setOpen(next)
+        changeOpen(next)
       }}
     >
       <DialogTrigger
@@ -115,16 +140,18 @@ export function BarberBookingDialog({
         className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-lg"
         showCloseButton={!isPending}
       >
-        {open && (
+        {isOpen && (
           <BarberBookingForm
             barberProfileId={barberProfileId}
+            initialDate={initialDate}
+            preferredStartAt={preferredStartAt}
             isPending={isPending}
             onPendingChange={setIsPending}
             onClose={() => {
-              setOpen(false)
+              changeOpen(false)
             }}
             onCreated={(clientName) => {
-              setOpen(false)
+              changeOpen(false)
               onCreated(clientName)
             }}
           />
@@ -136,6 +163,8 @@ export function BarberBookingDialog({
 
 type BarberBookingFormProps = {
   barberProfileId: string
+  initialDate?: string
+  preferredStartAt?: string
   isPending: boolean
   onPendingChange: (isPending: boolean) => void
   onClose: () => void
@@ -144,6 +173,8 @@ type BarberBookingFormProps = {
 
 function BarberBookingForm({
   barberProfileId,
+  initialDate,
+  preferredStartAt,
   isPending,
   onPendingChange,
   onClose,
@@ -161,7 +192,11 @@ function BarberBookingForm({
   const [guestPhone, setGuestPhone] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [salonId, setSalonId] = useState('')
-  const [date, setDate] = useState('')
+  // Желаемая дата приходит из ленты дня. Если она не `YYYY-MM-DD`, работает
+  // прежнее поведение: пустое поле означает «сегодня в поясе салона».
+  const [date, setDate] = useState(() =>
+    initialDate !== undefined && isSalonDate(initialDate) ? initialDate : ''
+  )
   const [slotStartAt, setSlotStartAt] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
@@ -203,8 +238,22 @@ function BarberBookingForm({
     own: true,
   })
 
+  /**
+   * Предвыбор слота из ленты дня — производное значение, а не эффект.
+   *
+   * Пока барбер не нажал радиокнопку, выбран «ближайший к желаемому» слот; ручной
+   * выбор всегда сильнее. Смена услуги, салона или даты сбрасывает выбор, и предвыбор
+   * пересчитывается на новой сетке.
+   */
+  const preferredSlot =
+    preferredStartAt === undefined
+      ? null
+      : pickPreferredSlot(slots.slots?.slots ?? [], preferredStartAt)
+  const effectiveSlotStartAt = slotStartAt ?? preferredSlot?.startAt ?? null
+
   const selectedSlot =
-    slots.slots?.slots.find((item) => item.startAt === slotStartAt) ?? null
+    slots.slots?.slots.find((item) => item.startAt === effectiveSlotStartAt) ??
+    null
 
   const guestFirstNameValue = guestFirstName.trim()
   const guestLastNameValue = guestLastName.trim()
@@ -500,7 +549,7 @@ function BarberBookingForm({
                   <BarberSlotOptions
                     slots={slots.slots}
                     selectable
-                    selectedStartAt={slotStartAt}
+                    selectedStartAt={effectiveSlotStartAt}
                     onSelect={handleSelectSlot}
                     name="barber-booking-slot"
                   />
@@ -1013,6 +1062,51 @@ function SalonField({
       </select>
     </div>
   )
+}
+
+/**
+ * Слот, ближайший к желаемому началу.
+ *
+ * 1. Кандидаты — слоты не раньше `preferredStartAt`, побеждает минимальная разница
+ *    `startAt - preferredStartAt`.
+ * 2. Если таких нет — ближайший вообще по модулю разницы.
+ * 3. Желаемое время в прошлом попадает в первый пункт: сервер уже вырезал
+ *    прошедшие слоты, поэтому «кандидат» — первый будущий.
+ *
+ * Предвыбор ничего не отправляет и не блокирует ручной выбор радиокнопки.
+ */
+function pickPreferredSlot(
+  slots: readonly BarberSlot[],
+  preferredStartAt: string
+): BarberSlot | null {
+  const first = slots[0]
+
+  if (first === undefined) {
+    return null
+  }
+
+  const preferred = Date.parse(preferredStartAt)
+
+  if (Number.isNaN(preferred)) {
+    return first
+  }
+
+  const later = slots.filter((slot) => Date.parse(slot.startAt) >= preferred)
+  const pool = later.length > 0 ? later : slots
+
+  let best = pool[0]
+  let distance = Math.abs(Date.parse(best.startAt) - preferred)
+
+  for (const slot of pool.slice(1)) {
+    const candidate = Math.abs(Date.parse(slot.startAt) - preferred)
+
+    if (candidate < distance) {
+      best = slot
+      distance = candidate
+    }
+  }
+
+  return best
 }
 
 function OptionsSkeleton() {

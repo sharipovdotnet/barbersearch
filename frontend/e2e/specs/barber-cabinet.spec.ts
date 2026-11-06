@@ -12,8 +12,17 @@ import { CabinetPage } from '../pages/cabinet-page'
 test.use({ storageState: storageStatePath('barber') })
 
 test.describe('кабинет барбера', () => {
-  test('вкладки: переключение начинает с первой страницы и чистит кэш', async ({ page }) => {
+  test('вкладки: переключение не делает запросов, «Сегодня» возвращает списки к началу', async ({
+    page,
+  }) => {
     const cabinet = new CabinetPage(page)
+    const requests: string[] = []
+
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/barber/bookings') {
+        requests.push(request.url())
+      }
+    })
 
     await cabinet.goto()
     await cabinet.waitForUpcoming()
@@ -22,28 +31,37 @@ test.describe('кабинет барбера', () => {
     await cabinet.pager.clickNext()
     await expect(cabinet.pager.range).not.toHaveText('1–20')
 
-    // «История» — другая выборка, поэтому первая страница и другой заголовок.
+    // «История» — свой контроллер: первая страница и другой заголовок.
+    let before = requests.length
     await cabinet.openTab('История')
     await expect(cabinet.listHeading).toHaveText('История записей')
     await expect(cabinet.rows).toHaveCount(20)
-    await expect(cabinet.pager.range).toHaveText('1–20')
+    await cabinet.pager.expectRange('1–20')
+    expect(requests.length - before, 'вкладки не ходят в сеть').toBe(0)
 
-    // Возврат на «Ближайшие» — снова первая страница, а не закэшированная вторая.
+    // Возврат в «Ближайшие»: страница и кэш на месте, запроса тоже нет.
+    before = requests.length
     await cabinet.openTab('Ближайшие')
     await expect(cabinet.listHeading).toHaveText('Ближайшие записи')
-    await expect(cabinet.pager.range).toHaveText('1–20')
+    const bounds = await cabinet.pager.expectRangeFrom(21)
 
-    // Кэш очищен: «Дальше» снова идёт в сеть.
-    const requests: string[] = []
-    page.on('request', (request) => {
-      if (new URL(request.url()).pathname === '/api/barber/bookings') {
-        requests.push(request.url())
-      }
-    })
+    expect(bounds.from).toBe(21)
+    expect(requests.length - before, 'вкладки не ходят в сеть').toBe(0)
 
+    // Лента дня читает первые страницы, поэтому сбрасывает номер страницы.
+    before = requests.length
+    await cabinet.openTab('Сегодня')
+    await expect(cabinet.dayHeading).toBeVisible()
+    await cabinet.openTab('Ближайшие')
+    await expect(cabinet.listHeading).toHaveText('Ближайшие записи')
+    await cabinet.pager.expectRange('1–20')
+    expect(requests.length - before, 'переключение вкладок не делает запросов').toBe(0)
+
+    // «Дальше» берёт уже загруженную страницу из кэша — без запроса.
+    before = requests.length
     await cabinet.pager.clickNext()
     await expect(cabinet.pager.range).not.toHaveText('1–20')
-    expect(requests.some((url) => url.includes('cursor='))).toBe(true)
+    expect(requests.length - before, 'кэш страницы переиспользуется').toBe(0)
   })
 
   test('история: 20 строк, «Дальше» → «21–40», «Назад» без запросов', async ({ page }) => {

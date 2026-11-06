@@ -3,7 +3,13 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import { pageSize } from '../fixtures/accounts'
 import { ListPagerComponent } from './list-pager-component'
 
-/** `/barber` — кабинет барбера: вкладки «Ближайшие»/«История» и действия строк. */
+/**
+ * `/barber` — кабинет барбера.
+ *
+ * Три вкладки: лента дня (вид по умолчанию), «Ближайшие» и «История». Вкладки
+ * живут на уровне страницы, поэтому объект страницы сначала переключает вид, а
+ * потом ищет строки: панель одна на всех.
+ */
 export class CabinetPage {
   readonly page: Page
   readonly pager: ListPagerComponent
@@ -25,8 +31,12 @@ export class CabinetPage {
     return this.page.getByRole('tablist', { name: 'Какие записи показать' })
   }
 
-  tab(name: 'Ближайшие' | 'История'): Locator {
+  tab(name: 'Сегодня' | 'Ближайшие' | 'История'): Locator {
     return this.tablist.getByRole('tab', { name })
+  }
+
+  get panel(): Locator {
+    return this.page.locator('#barber-bookings-panel')
   }
 
   /** Заголовок списка: цель фокуса после смены страницы и смены вкладки. */
@@ -34,8 +44,23 @@ export class CabinetPage {
     return this.page.locator('h2#barber-bookings-heading')
   }
 
-  get panel(): Locator {
-    return this.page.locator('#barber-bookings-panel')
+  /** Заголовок ленты дня. */
+  get dayHeading(): Locator {
+    return this.page.locator('h2#barber-day-heading')
+  }
+
+  /** Лента дня: строки записей вперемешку с окнами. */
+  get dayList(): Locator {
+    return this.page.getByRole('list', { name: 'Расписание на сегодня' })
+  }
+
+  get dayRows(): Locator {
+    return this.dayList.locator('li')
+  }
+
+  /** Кнопка окна: доступное имя уточняет время, видимый текст — «Занять». */
+  gapButton(): Locator {
+    return this.panel.getByRole('button', { name: /^Занять время с / })
   }
 
   get rows(): Locator {
@@ -48,7 +73,7 @@ export class CabinetPage {
 
   /** Кнопка «Записать клиента» над списком ближайших записей. */
   get bookClientButton(): Locator {
-    return this.page.getByRole('button', { name: 'Записать клиента' })
+    return this.page.getByRole('button', { name: 'Записать клиента' }).first()
   }
 
   /** Диалог ручной записи: клиент, услуга, салон, дата, слоты и комментарий. */
@@ -61,11 +86,16 @@ export class CabinetPage {
     await expect(this.bookingDialog).toBeVisible()
   }
 
-  async openTab(name: 'Ближайшие' | 'История'): Promise<void> {
+  async openTab(name: 'Сегодня' | 'Ближайшие' | 'История'): Promise<void> {
     await this.tab(name).click()
   }
 
+  /**
+   * Большинство сцен ждёт серверный список из двадцати строк: кабинет теперь
+   * открывается на «Сегодня», поэтому сначала переключаем вид.
+   */
   async waitForUpcoming(): Promise<void> {
+    await this.openTab('Ближайшие')
     await expect(this.rows).toHaveCount(pageSize.cabinet)
   }
 }

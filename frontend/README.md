@@ -37,7 +37,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
-| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
+| `/barber` | barber cabinet: the «Сегодня» day feed by default (visits of the day, the free windows between them and a one-click booking into a window), then «Ближайшие» / «История» lists with confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
@@ -283,14 +283,37 @@ does not expose one, and the screen does not invent it.
 
 `/barber` is a separate lazy screen for a signed-in `Barber` with a linked profile. The cabinet
 has three sections — записи (`/barber`), расписание (`/barber/schedule`) and salons
-(`/barber/salons`) — linked by `BarberCabinetNav` and sharing the same gates. It calls
-`GET /api/barber/bookings?scope=upcoming&pageSize=20` (the profile comes from the
-`barber_profile_id` claim, there is no profile query parameter) and switches to `scope=past`
-for «История». The server orders both scopes (`start_at ASC` for upcoming, `DESC` for history),
-so the client never sorts; the next page is fetched with the opaque `nextCursor`. Twenty rows are
-shown per page instead of growing: a page replaces the visible rows, visited pages stay in memory
-for «Назад» without a request, and the range («21–40», never «из N» — the server returns no total)
-lives in the shared pager footer. Switching tabs starts from the first page and drops the cache.
+(`/barber/salons`) — linked by `BarberCabinetNav` and sharing the same gates. The bookings screen
+has three tabs and **opens on «Сегодня»**: the day feed, then «Ближайшие» and «История».
+
+The day feed answers «кто придёт сегодня и что у меня в ближайший час». It is assembled from the
+**first pages** of the two existing server lists (`scope=upcoming` and `scope=past`), filtered by
+the browser-local calendar date: the server already orders both scopes so that today's rows come
+first, and a separate «day» endpoint would duplicate the contract for one screen. Both list
+controllers are created once, above the tabs, so switching «Сегодня → Ближайшие» makes no request
+and polling and actions cannot disagree with the tab. Rows and the free windows between them read
+top to bottom (`<ol aria-label="Расписание на сегодня">`); windows are counted **only between
+visits**, at least 20 minutes, and only from the loaded rows — working hours would need a schedule
+per salon and are a separate slice. The header shows the date, «3 записи · 2 окна» and the next
+client («Следующий клиент через 40 минут», «Следующий клиент в 18:30», «Идёт визит до 15:30»).
+An empty window is a clickable card («свободно 45 мин» + «Занять») that opens the same
+«Записать клиента» dialog with the day and the window's start, where the nearest slot is
+pre-selected once the barber picks a service and a salon. More than twenty rows in a day are
+truncated with «Показаны первые 20 записей дня.» — there is no per-day cursor. Actions are the
+same five, through the same `CabinetBookingRow`; a terminal action makes the other list reload, so
+the row moves from «Ближайшие» to «История» without a manual refresh. One failed list keeps the
+feed and adds «Не удалось обновить часть записей.» with «Повторить».
+
+The lists themselves page the server: `GET /api/barber/bookings?scope=upcoming&pageSize=20` (the
+profile comes from the `barber_profile_id` claim, there is no profile query parameter) and
+`scope=past` for «История». The server orders both scopes (`start_at ASC` for upcoming, `DESC` for
+history), so the client never sorts; the next page is fetched with the opaque `nextCursor`. Twenty
+rows are shown per page instead of growing: a page replaces the visible rows, visited pages stay
+in memory for «Назад» without a request, and the range («21–40», never «из N» — the server returns
+no total) lives in the shared pager footer. Both lists are mounted once, so switching tabs makes no
+request at all: each keeps its page and its cache. Entering «Сегодня» only moves both back to the
+first page (no request) — the day is built from the first documents, and a page left open in a
+neighbouring tab must not silently hide the beginning of the day.
 
 A row shows the visit date and time in the salon time zone (`salon.timeZoneId`), the customer's
 name and, when present, a `tel:` phone link, the service, the salon name/city/address, the price
@@ -322,12 +345,13 @@ sees it in their cabinet immediately, a guest does not have a cabinet. The dialo
 be closed while the request is pending; a `409` overlap, `400` start window or `404`
 service/salon clears the chosen slot and reloads the grid, `404
 booking.create.customerNotFound` asks to repeat the search, and `400 booking.create.guest*`
-asks for the missing guest contact. On success the list reloads (or switches from «История»
-to «Ближайшие») and the screen announces «Клиент записан: …».
+asks for the missing guest contact. On success the day feed reloads (or the screen returns from
+«История» to «Сегодня») and the screen announces «Клиент записан: …».
 
 States: skeleton while the first page loads (StrictMode may send a second, aborted request),
 first-page error with «Повторить», a next-page error that keeps the rows and turns «Дальше» into
-«Повторить», «Ближайших записей нет.» and «История пуста.». An action that empties the visible
+«Повторить», «На сегодня записей нет.» with «Записать клиента», «Ближайших записей нет.» and
+«История пуста.». An action that empties the visible
 page follows the shared policy: the previous page if it is not the first, otherwise the first page
 is loaded again. A `401` on the list becomes the sign-in gate with
 a retry after login. A `409` says «Запись уже изменилась — обновите список.» with an «Обновить»
@@ -341,19 +365,24 @@ The header shows «Мой кабинет» for every authenticated user, plus «
 and «Администрирование» for an admin. The work area is also linked from the account rail; `/barber`
 keeps its own role gates and `/account` no longer turns a barber away.
 
-- `src/pages/barber-cabinet-page.tsx` — gates, title, list composition, announcements and the
-  «Записать клиента» trigger.
-- `src/components/barber/barber-cabinet-gates.tsx`, `cabinet-booking-list.tsx`,
-  `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`, `barber-booking-action-dialog.tsx`,
-  `barber-booking-dialog.tsx` (manual booking) and `barber-slot-options.tsx` (shared slot
+- `src/pages/barber-cabinet-page.tsx` — gates, title, the `view: 'day' | 'upcoming' | 'past'`
+  state, one `tablist` + panel, announcements and the «Записать клиента» trigger.
+- `src/components/barber/barber-cabinet-gates.tsx`, `barber-cabinet-view-tabs.tsx` (three tabs,
+  arrows/Home/End, roving `tabIndex`), `barber-day.tsx` (day header, feed and windows),
+  `cabinet-booking-list.tsx`, `cabinet-booking-row.tsx`, `barber-note-dialog.tsx`,
+  `barber-booking-action-dialog.tsx`, `barber-booking-dialog.tsx` (manual booking, with
+  `initialDate`/`preferredStartAt` from a window) and `barber-slot-options.tsx` (shared slot
   chips/radios).
 - `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, five local mutations,
-  `401`, click guard; `use-barber-clients.ts` — debounced client search; and
-  `use-barber-booking-options.ts` — own services and salons.
-- `src/lib/barber-bookings.ts` — DTO, list read and the five write actions;
-  `barber-booking-create.ts`/`barber-booking-options.ts`/`barber-clients.ts` — the manual
-  booking transport; `src/lib/barber-cabinet-path.ts` — the `/barber`, `/barber/schedule` and
-  `/barber/salons` path helpers.
+  `401`, click guard; `use-barber-day.ts` — the derived day controller over the two lists (merge,
+  windows, next client, routed actions, partial failure); `use-barber-clients.ts` — debounced
+  client search; and `use-barber-booking-options.ts` — own services and salons.
+- `src/lib/barber-bookings.ts` — DTO, list read and the five write actions; `barber-day.ts` — pure
+  day helpers (`isSameLocalDay`, `mergeDayBookings`, `findDayGaps`, `findNextBooking`);
+  `barber-cabinet-view.ts` — the tab union and labels; `barber-booking-create.ts`/
+  `barber-booking-options.ts`/`barber-clients.ts` — the manual booking transport;
+  `src/lib/barber-cabinet-path.ts` — the `/barber`, `/barber/schedule` and `/barber/salons` path
+  helpers.
 
 ### My salons
 

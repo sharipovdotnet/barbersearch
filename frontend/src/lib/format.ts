@@ -315,6 +315,11 @@ export function formatBookingsCount(count: number): string {
   return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
 }
 
+/** «2 окна», «1 окно», «5 окон» — свободные промежутки в ленте дня. */
+export function formatGapsCount(count: number): string {
+  return `${count} ${plural(count, ['окно', 'окна', 'окон'])}`
+}
+
 /** «5 дней», «1 день», «2 дня» — рабочее расписание в чек-листе готовности. */
 export function formatDaysCount(count: number): string {
   return `${count} ${plural(count, ['день', 'дня', 'дней'])}`

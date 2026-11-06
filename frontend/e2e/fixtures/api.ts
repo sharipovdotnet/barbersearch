@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
+
 import { expect, type APIRequestContext } from '@playwright/test'
 
-import { baseURL, storageStatePath } from './accounts'
+import { baseURL, fixtures, storageStatePath } from './accounts'
 
 /**
  * Подготовка состояния через API для мутирующих сцен.
@@ -176,14 +178,7 @@ export async function detachBarberSalon(
 }
 
 /**
- * Запись на будущее для восстановления «Ближайших» после терминального действия.
- *
- * Слот, который освобождает тест, лежит в будущем относительно seed, поэтому
- * создаём запись на свободные сутки дальше: тот же день мог быть занят прошлым
- * прогоном, отсюда перебор со сдвигом и повтор на `409`.
- *
- * Запись создаёт клиент, а не барбер: роль кабинета бронировать не может,
- * поэтому контекст берётся из storageState клиента.
+ * Минимальный срез `Playwright`-фикстуры: контекст запросов с чужим storageState.
  */
 export type PlaywrightApi = {
   request: {
@@ -194,6 +189,173 @@ export type PlaywrightApi = {
   }
 }
 
+/**
+ * Гостевая запись витринного барбера на конкретный момент.
+ *
+ * Гость не создаёт аккаунт: кабинеты клиентов и поиск админских броней по email
+ * такие строки не видят, поэтому чужие счётчики от фикстуры ленты дня не меняются.
+ * Удаления брони в API нет — `finally` отменяет созданное, это единственная
+ * доступная уборка.
+ */
+export type GuestBooking = {
+  id: string
+  /** Фактическое начало: пересечение с прошлым прогоном сдвигает время. */
+  startAt: string
+  /** Как имя гостя выглядит в строке кабинета. */
+  guestName: string
+}
+
+export type GuestBookingRequest = {
+  startAt: Date
+  /** Фамилия гостя: по ней тест находит свою строку в ленте. */
+  lastName: string
+}
+
+/** Полчаса — шаг сдвига при `409`: сдвиг не должен выйти за пределы дня. */
+const GUEST_SHIFT_MINUTES = 30
+const GUEST_MAX_ATTEMPTS = 4
+
+/**
+ * Создаёт гостевые записи через кабинет барбера.
+ *
+ * `POST /api/barber/bookings` проверяет только окно начала (`BOOKING_START_TOLERANCE_MINUTES`),
+ * а не расписание, поэтому время можно выбрать свободно. Пересечение отменяет
+ * попытку `409`-ом: время сдвигается на полчаса, но не дальше конца суток.
+ */
+export async function createGuestBookings(
+  playwright: PlaywrightApi,
+  requests: readonly GuestBookingRequest[]
+): Promise<GuestBooking[]> {
+  const context = await playwright.request.newContext({
+    baseURL,
+    storageState: storageStatePath('barber'),
+  })
+
+  const created: GuestBooking[] = []
+
+  try {
+    const token = await csrfToken(context)
+
+    for (const request of requests) {
+      const booking = await createGuestBooking(context, token, request)
+
+      if (booking === null) {
+        throw new Error(
+          `не удалось создать запись «${request.lastName}» на ${request.startAt.toISOString()}`
+        )
+      }
+
+      created.push(booking)
+    }
+  } finally {
+    await context.dispose()
+  }
+
+  return created
+}
+
+async function createGuestBooking(
+  context: APIRequestContext,
+  token: string,
+  request: GuestBookingRequest
+): Promise<GuestBooking | null> {
+  const endOfDay = new Date(request.startAt)
+  endOfDay.setHours(23, 59, 59, 0)
+
+  for (let attempt = 0; attempt < GUEST_MAX_ATTEMPTS; attempt += 1) {
+    const start = new Date(
+      request.startAt.getTime() + attempt * GUEST_SHIFT_MINUTES * 60_000
+    )
+
+    if (start.getTime() >= endOfDay.getTime()) {
+      return null
+    }
+
+    const end = new Date(start.getTime() + 30 * 60_000)
+
+    const response = await context.post('/api/barber/bookings', {
+      headers: { 'X-CSRF-TOKEN': token },
+      data: {
+        customerId: null,
+        guestFirstName: 'E2E',
+        guestLastName: request.lastName,
+        guestPhone: '+79990000000',
+        barberServiceId: fixtures.barberServiceId,
+        salonId: fixtures.salonId,
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        idempotencyKey: `e2e-day-${randomUUID()}`,
+        customerNote: null,
+      },
+    })
+
+    if (response.status() === 201) {
+      const body = (await response.json()) as { id: string }
+
+      return {
+        id: body.id,
+        startAt: start.toISOString(),
+        guestName: `E2E ${request.lastName}`,
+      }
+    }
+
+    expect(
+      [400, 409],
+      `POST /api/barber/bookings: ${response.status()}`
+    ).toContain(response.status())
+  }
+
+  return null
+}
+
+/**
+ * Отмена созданных гостевых записей — уборка фикстур ленты дня.
+ *
+ * Барбер обязан указать причину, а иначе сервер ответит `400`. `409`/`404` терпим:
+ * параллельный прогон мог уже завершить или отменить строку.
+ */
+export async function cancelGuestBookings(
+  playwright: PlaywrightApi,
+  ids: readonly string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    return
+  }
+
+  const context = await playwright.request.newContext({
+    baseURL,
+    storageState: storageStatePath('barber'),
+  })
+
+  try {
+    const token = await csrfToken(context)
+
+    for (const id of ids) {
+      const response = await context.post(`/api/bookings/${id}/cancellation`, {
+        headers: { 'X-CSRF-TOKEN': token },
+        data: { reason: 'E2E: уборка фикстур ленты дня' },
+      })
+
+      expect(
+        [204, 404, 409],
+        `POST /api/bookings/{id}/cancellation: ${response.status()}`
+      ).toContain(response.status())
+    }
+  } finally {
+    await context.dispose()
+  }
+}
+
+/**
+ * Запись на будущее для восстановления «Ближайших» после терминального действия.
+ *
+ * Слот, который освобождает тест, лежит в будущем относительно seed, поэтому
+ * создаём запись на свободные сутки дальше: тот же день мог быть занят прошлым
+ * прогоном, отсюда перебор со сдвигом и повтор на `409`.
+ *
+ * Запись создаёт клиент, а не барбер: роль кабинета бронировать не может,
+ * поэтому контекст берётся из storageState клиента.
+ */
 export async function createUpcomingBooking(
   playwright: PlaywrightApi,
   ids: { barberProfileId: string; barberServiceId: string; salonId: string }

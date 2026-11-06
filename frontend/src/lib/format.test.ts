@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatProfilesCount, formatSalonsCount } from '@/lib/format'
+import { formatGapsCount, formatProfilesCount, formatSalonsCount } from '@/lib/format'
 
 /**
  * Формы счётчиков сводки: число — часть текста, поэтому падеж проверяется
@@ -25,5 +25,16 @@ describe('счётчики сводки', () => {
     [21, '21 салон'],
   ])('formatSalonsCount(%i) → «%s»', (count, expected) => {
     expect(formatSalonsCount(count)).toBe(expected)
+  })
+
+  it.each([
+    [1, '1 окно'],
+    [2, '2 окна'],
+    [4, '4 окна'],
+    [5, '5 окон'],
+    [11, '11 окон'],
+    [21, '21 окно'],
+  ])('formatGapsCount(%i) → «%s»', (count, expected) => {
+    expect(formatGapsCount(count)).toBe(expected)
   })
 })

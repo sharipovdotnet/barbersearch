@@ -9,6 +9,7 @@ import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
+import { CabinetPage } from '../pages/cabinet-page'
 import { ProfilePage } from '../pages/profile-page'
 
 /**
@@ -110,6 +111,25 @@ test.describe('axe: 320 px, заявка на роль барбера', () => {
 
 test.describe('axe: 320 px, расписание барбера', () => {
   test.use({ storageState: storageStatePath('barber') })
+
+  test('/barber: лента дня не расширяет страницу', async ({ page }) => {
+    const cabinet = new CabinetPage(page)
+
+    await cabinet.goto()
+    await expect(cabinet.dayHeading).toBeVisible()
+    await expect(cabinet.tablist).toBeVisible()
+
+    // Три вкладки в одну строку: уменьшается отступ, а не появляется scroll.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/barber @320', test.info())
+  })
 
   test('неделя, исключения и отпуска не расширяют страницу', async ({ page }) => {
     await page.goto('/barber/schedule')
