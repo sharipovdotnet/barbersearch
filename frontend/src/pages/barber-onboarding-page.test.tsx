@@ -11,7 +11,22 @@ import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 const CREATE_URL = '/api/barber-profiles'
+const MINE_URL = '/api/barber-requests/mine'
 const CREATED_ID = '77777777-7777-4777-8777-777777777777'
+
+/** Одобренная заявка — источник имени, опыта и «О себе» для формы профиля. */
+const APPROVED_REQUEST = {
+  id: '55555555-5555-4555-8555-555555555555',
+  status: 'Approved',
+  displayName: 'E2E Заявитель',
+  yearsOfExperience: 6,
+  city: 'Москва',
+  about: 'Стрижки и борода.',
+  hasSalon: false,
+  createdAt: '2026-11-01T10:00:00+00:00',
+  reviewedAt: '2026-11-02T10:00:00+00:00',
+  rejectionReason: null,
+} as const
 
 const BARBER_WITHOUT_PROFILE = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -53,6 +68,8 @@ function renderPage(
 }
 
 async function fillMinimalForm(user: ReturnType<typeof userEvent.setup>) {
+  // Форма появляется только после чтения заявки (`GET /barber-requests/mine`).
+  await screen.findByLabelText('Как вас представить')
   await user.type(screen.getByLabelText('Как вас представить'), 'Тимур')
   await user.type(screen.getByLabelText('Опыт, лет'), '5')
   await user.click(screen.getByRole('checkbox', { name: 'Русский' }))
@@ -89,6 +106,7 @@ beforeEach(() => {
 describe('BarberOnboardingPage', () => {
   it('аноним видит гейт входа и форма не шлёт запрос', async () => {
     const createCalls = countRequests(CREATE_URL)
+    const mineCalls = countRequests(MINE_URL)
 
     renderPage('anonymous', null)
 
@@ -99,10 +117,12 @@ describe('BarberOnboardingPage', () => {
       screen.queryByLabelText('Как вас представить')
     ).not.toBeInTheDocument()
     expect(createCalls()).toBe(0)
+    expect(mineCalls()).toBe(0)
   })
 
   it('клиент видит гейт роли и форма не шлёт запрос', async () => {
     const createCalls = countRequests(CREATE_URL)
+    const mineCalls = countRequests(MINE_URL)
 
     renderPage('authenticated', { ...BARBER_WITHOUT_PROFILE, role: 'Customer' })
 
@@ -111,6 +131,7 @@ describe('BarberOnboardingPage', () => {
       screen.queryByLabelText('Как вас представить')
     ).not.toBeInTheDocument()
     expect(createCalls()).toBe(0)
+    expect(mineCalls()).toBe(0)
   })
 
   it('барбер с профилем уходит в кабинет и не видит форму дважды', async () => {
@@ -150,6 +171,112 @@ describe('BarberOnboardingPage', () => {
     expect(createCalls()).toBe(1)
     expect(refreshCalls()).toBe(1)
     expect(retrySession).toHaveBeenCalledTimes(1)
+  })
+
+  it('одобренная заявка заполняет имя, опыт и «О себе» только для чтения', async () => {
+    let body: unknown = null
+
+    server.use(
+      http.get(MINE_URL, () => HttpResponse.json({ request: APPROVED_REQUEST })),
+      http.post(CREATE_URL, async ({ request }) => {
+        body = await request.json()
+
+        return HttpResponse.json({ id: CREATED_ID }, { status: 201 })
+      })
+    )
+
+    renderPage()
+
+    const displayName = await screen.findByLabelText('Как вас представить')
+
+    expect(displayName).toHaveValue('E2E Заявитель')
+    expect(displayName).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Опыт, лет')).toHaveValue(6)
+    expect(screen.getByLabelText('Опыт, лет')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('О себе')).toHaveValue('Стрижки и борода.')
+    expect(screen.getByLabelText('О себе')).toHaveAttribute('readonly')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Русский' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Создать профиль' })
+    )
+
+    await waitFor(() => {
+      expect(body).not.toBeNull()
+    })
+
+    expect(body).toMatchObject({
+      displayName: 'E2E Заявитель',
+      yearsOfExperience: 6,
+      bio: 'Стрижки и борода.',
+    })
+    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
+  })
+
+  it('заявка без «О себе»: описание в профиле остаётся редактируемым', async () => {
+    server.use(
+      http.get(MINE_URL, () =>
+        HttpResponse.json({ request: { ...APPROVED_REQUEST, about: null } })
+      )
+    )
+
+    renderPage()
+
+    const bio = await screen.findByLabelText('О себе')
+
+    expect(bio).toHaveValue('')
+    expect(bio).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Как вас представить')).toHaveAttribute(
+      'readonly'
+    )
+  })
+
+  it('заявка на рассмотрении не заполняет профиль', async () => {
+    server.use(
+      http.get(MINE_URL, () =>
+        HttpResponse.json({
+          request: { ...APPROVED_REQUEST, status: 'Pending' },
+        })
+      )
+    )
+
+    renderPage()
+
+    const displayName = await screen.findByLabelText('Как вас представить')
+
+    expect(displayName).toHaveValue('')
+    expect(displayName).not.toHaveAttribute('readonly')
+  })
+
+  it('ошибка чтения заявки: форма закрыта, «Повторить» перечитывает', async () => {
+    const mineCalls = countRequests(MINE_URL)
+    let attempts = 0
+
+    server.use(
+      http.get(MINE_URL, () => {
+        attempts += 1
+
+        return attempts === 1
+          ? HttpResponse.json(problemDetails(500), { status: 500 })
+          : HttpResponse.json({ request: null })
+      })
+    )
+
+    renderPage()
+
+    expect(
+      await screen.findByText('Не удалось проверить заявку.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Как вас представить')
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+
+    expect(
+      await screen.findByLabelText('Как вас представить')
+    ).toBeInTheDocument()
+    expect(mineCalls()).toBe(2)
   })
 
   it('409 «профиль уже есть»: тот же переход без текста ошибки', async () => {

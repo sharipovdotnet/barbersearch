@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { BarberProfileForm } from '@/components/barber/barber-profile-form'
+import type { BarberProfilePrefill } from '@/components/barber/barber-profile-form'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests, recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
@@ -25,7 +26,7 @@ const EXPECTED_BODY = {
   latePolicy: 'Жду максимум 10 минут',
 }
 
-function renderForm() {
+function renderForm(prefill?: BarberProfilePrefill) {
   const onCreated = vi.fn()
   const onAlreadyExists = vi.fn()
 
@@ -33,6 +34,7 @@ function renderForm() {
     <BarberProfileForm
       onCreated={onCreated}
       onAlreadyExists={onAlreadyExists}
+      prefill={prefill}
     />
   )
 
@@ -273,6 +275,83 @@ describe('BarberProfileForm', () => {
     expect(body).toStrictEqual({
       displayName: 'Тимур',
       yearsOfExperience: 1,
+      bio: null,
+      languages: ['Ru'],
+      certificatesAndTraining: [],
+      achievements: [],
+      paymentMethods: [],
+      communicationFormat: [],
+      goodies: [],
+      latePolicy: null,
+    })
+  })
+
+  it('заявка: имя, опыт и «О себе» заполнены и только для чтения', () => {
+    renderForm({
+      displayName: 'Тимур Барберов',
+      yearsOfExperience: 8,
+      bio: 'Стрижки и борода.',
+    })
+
+    expect(screen.getByLabelText('Как вас представить')).toHaveValue(
+      'Тимур Барберов'
+    )
+    expect(screen.getByLabelText('Опыт, лет')).toHaveValue(8)
+    expect(screen.getByLabelText('О себе')).toHaveValue('Стрижки и борода.')
+
+    for (const label of ['Как вас представить', 'Опыт, лет', 'О себе']) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
+    }
+
+    expect(
+      screen.getAllByText('Перенесено из заявки — изменить нельзя.')
+    ).toHaveLength(3)
+  })
+
+  it('заявка без «О себе»: описание остаётся редактируемым', () => {
+    renderForm({
+      displayName: 'Тимур Барберов',
+      yearsOfExperience: 8,
+      bio: null,
+    })
+
+    expect(screen.getByLabelText('Как вас представить')).toHaveAttribute(
+      'readonly'
+    )
+    expect(screen.getByLabelText('Опыт, лет')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('О себе')).not.toHaveAttribute('readonly')
+    expect(
+      screen.getAllByText('Перенесено из заявки — изменить нельзя.')
+    ).toHaveLength(2)
+  })
+
+  it('профиль уходит с данными заявки: POST повторяет её значения', async () => {
+    let body: unknown = null
+
+    server.use(
+      http.post(CREATE_URL, async ({ request }) => {
+        body = await request.json()
+
+        return HttpResponse.json({ id: CREATED_ID }, { status: 201 })
+      })
+    )
+
+    renderForm({
+      displayName: 'Тимур Барберов',
+      yearsOfExperience: 8,
+      bio: null,
+    })
+
+    await clickOption('Русский')
+    await submit()
+
+    await waitFor(() => {
+      expect(body).not.toBeNull()
+    })
+
+    expect(body).toStrictEqual({
+      displayName: 'Тимур Барберов',
+      yearsOfExperience: 8,
       bio: null,
       languages: ['Ru'],
       certificatesAndTraining: [],

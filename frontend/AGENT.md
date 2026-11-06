@@ -1,7 +1,7 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/salon-owner-attach-barbers` (default `main`). The landing page searches real
+> Code state: branch `features/issue-51` (default `main`). The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
@@ -48,20 +48,21 @@
 > an informational cookie notice on the first visit; registration requires a separate consent
 > checkbox, and the consent is now provable: the backend stores the policy edition, the server UTC
 > time and the IP, the admin card shows the record, and the policy describes it.
-> Verified on 2026-11-06 after the salon-barber composition slice: `npm run lint` — 0 warnings /
-> 0 errors (347 files, 116 rules); `npm test -- --maxWorkers=4` — 512 tests in 64 files, green;
-> `npm run build` — success, 2494 modules, entry `index-*.js` 340.53 kB (gzip 110.42 kB);
+> Verified on 2026-11-06 after the onboarding-prefill slice: `npm run lint` — 0 warnings /
+> 0 errors (347 files, 116 rules); `npm test -- --maxWorkers=4` — 519 tests in 64 files, green;
+> `npm run build` — success, 2494 modules, entry `index-*.js` 340.53 kB (gzip 110.43 kB);
 > lazy `admin-page` 217.82 kB (gzip 44.28 kB), `barber-cabinet-page` 42.85 kB (gzip 11.51 kB),
 > `barber-page` 32.01 kB (gzip 8.52 kB), `privacy-page` 29.43 kB (gzip 7.57 kB),
 > `account-page` 28.27 kB (gzip 8.81 kB), `barber-schedule-page` 22.59 kB (gzip 6.34 kB),
-> `barber-salons-page` 20.20 kB (gzip 5.67 kB), `become-a-barber-page` 17.83 kB (gzip 5.34 kB),
-> `account-reviews-page` 16.75 kB (gzip 5.39 kB), `barber-onboarding-page` 15.71 kB (gzip 4.95 kB),
+> `barber-salons-page` 20.20 kB (gzip 5.67 kB), `barber-onboarding-page` 18.24 kB (gzip 5.60 kB),
+> `become-a-barber-page` 17.83 kB (gzip 5.34 kB),
+> `account-reviews-page` 16.75 kB (gzip 5.39 kB),
 > `register-page` 11.57 kB (gzip 3.97 kB), `account-security-page` 8.91 kB (gzip 3.15 kB),
 > `account-profile-page` 7.84 kB (gzip 2.91 kB),
 > the shared `paging-*.js` 7.12 kB (gzip 2.64 kB),
 > `use-my-barber-request-*.js` 2.50 kB (gzip 1.18 kB) and `barber-slots-*.js` 0.83 kB (gzip 0.47 kB);
-> CSS 84.74 kB (gzip 14.53 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
-> The E2E suite was not rerun after the salon-barber composition slice.
+> CSS 84.95 kB (gzip 14.55 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
+> The E2E suite was not rerun after the onboarding-prefill slice.
 > A full run on 2026-11-04 was not green in one pass:
 > 174 passed, 3 mobile admin catalogue/summary checks failed and 14 dependent mutation tests did
 > not run. All three failures pass individually, and both mutation specs (`account-bookings`,
@@ -230,6 +231,7 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── barber-services.tsx     price list with category and duration, no booking
     │   │   ├── barber-reviews.tsx      published reviews, summary, stars, cursor pagination
     │   │   ├── barber-cabinet-gates.tsx  /barber gates: wrong role, unlinked profile, skeleton
+    │   │   ├── barber-profile-form.tsx  onboarding profile: bounds, approved-request prefill
     │   │   ├── barber-request-form.tsx    «Стать барбером» form: bounds, CSRF POST, 201 card
     │   │   ├── barber-request-status.tsx  own request: status, date, rejection reason, re-login
     │   │   ├── barber-cabinet-nav.tsx    «Записи» / «Расписание» links for both cabinet sections
@@ -731,7 +733,15 @@ address, `App.tsx` checks it **before** `isBarberCabinetPath`, and the screen ha
 (anonymous → `SignInGate` with `redirectTo` here, non-`Barber` → `BarberRoleGate`, a profile that
 already exists → `navigate('/barber', { replace: true })` from an idempotent effect, so the form
 never renders twice). The profile is created through the existing `POST /api/barber-profiles`
-(role `Barber`, always the current user). `barber_profile_id` lives in the access-token claim, so
+(role `Barber`, always the current user). The form first reads the caller's own
+`GET /api/barber-requests/mine`: an `Approved` request pre-fills «Как вас представить»,
+«Опыт, лет» and «О себе» and renders those fields `readOnly` with the hint
+«Перенесено из заявки — изменить нельзя» — the same facts must not be asked twice. A
+request without an «О себе» leaves the bio editable (otherwise the profile would stay
+without a description forever, since no profile-edit screen exists yet); no request at
+all (a role granted by an admin) leaves all three editable; a failed read blocks the form
+with «Повторить», so a profile is never created without the request data.
+`barber_profile_id` lives in the access-token claim, so
 the token issued before the `201` still says `null`: the form's screen calls `refreshSession()`,
 then `retrySession()` and then stays on the «Добавьте салон» step (the same `SalonPickerDialog`
 as `/barber/salons`, with the `profileId` from the `201` body and a «Пропустить» link to
