@@ -29,18 +29,67 @@ public class Salon : AggregateRoot
     public string? PhoneNumber { get; private set; }
     public string? WebsiteUrl { get; private set; }
 
+    /// <summary>
+    /// Виден ли салон в поиске и на карточках. Не то же самое, что
+    /// <see cref="ModerationStatus"/>: салон участвует в публичной выдаче, только когда
+    /// <c>IsActive</c> и статус модерации — <see cref="SalonModerationStatus.Active"/>.
+    /// </summary>
     public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Владелец салона — пользователь, создавший его сам как барбер; <c>null</c> — салон
+    /// создан администратором. Это связь, а не роль: отдельной роли владельца нет.
+    /// </summary>
+    /// <remarks>
+    /// Меняется только фабрикой <see cref="SubmitByOwner"/>: сеттера нет, передать владение
+    /// другой учётной записи в этом срезе нельзя.
+    /// </remarks>
+    public Guid? OwnerUserId { get; private set; }
+
+    /// <summary>
+    /// Состояние проверки салона администратором. Управляет только модерация:
+    /// владелец не может ни одобрить себя, ни изменить статус.
+    /// </summary>
+    public SalonModerationStatus ModerationStatus { get; private set; }
+
+    /// <summary>
+    /// Причина отказа из <see cref="Reject"/>; <c>null</c> — салон не отклонён.
+    /// </summary>
+    public string? RejectionReason { get; private set; }
+
+    /// <summary>
+    /// Когда администратор принял решение; <c>null</c> — салон ещё ждёт проверки
+    /// (или создан администратором и не проходил её).
+    /// </summary>
+    public DateTimeOffset? ReviewedAt { get; private set; }
+
+    /// <summary>
+    /// Кто принял решение; <c>null</c> — салон ещё ждёт проверки (или создан администратором).
+    /// </summary>
+    public Guid? ReviewedByUserId { get; private set; }
 
     private const string ADDRESS_ERROR_CODE = "salon.address";
     private const string CITY_ERROR_CODE = "salon.city";
     private const string COUNTRY_ERROR_CODE = "salon.country";
     private const string TIME_ZONE_ID_ERROR_CODE = "salon.timeZoneId";
     private const string WEBSITE_URL_ERROR_CODE = "salon.websiteUrl";
+    private const string REJECTION_REASON_REQUIRED_CODE = "salon.reject.reasonRequired";
+    private const string REJECTION_REASON_TOO_LONG_CODE = "salon.reject.reasonTooLong";
+    private const string REVIEW_INVALID_STATUS_CODE = "salon.review.invalidStatus";
+    private const string ACTIVATION_NOT_APPROVED_CODE = "salon.activation.notApproved";
 
     private Salon()
     {
     }
 
+    /// <summary>
+    /// Создаёт салон администратором: владельца нет, статус — <see cref="SalonModerationStatus.Active"/>,
+    /// салон сразу виден и участвует в поиске.
+    /// </summary>
+    /// <remarks>
+    /// Путь барбера — <see cref="SubmitByOwner"/>: его салон ждёт проверки. Обе фабрики
+    /// валидируют поля одинаково, поэтому правила адреса и координат не расходятся.
+    /// </remarks>
     public static Result<Salon, Failure> Create(
         string name,
         string address,
@@ -52,6 +101,85 @@ public class Salon : AggregateRoot
         string? postalCode = null,
         string? phoneNumber = null,
         string? websiteUrl = null)
+    {
+        var salon = BuildValidated(
+            name,
+            address,
+            city,
+            country,
+            timeZoneId,
+            latitude,
+            longitude,
+            postalCode,
+            phoneNumber,
+            websiteUrl);
+        if (salon.IsFailure)
+        {
+            return salon.Error;
+        }
+
+        salon.Value.ModerationStatus = SalonModerationStatus.Active;
+        salon.Value.IsActive = true;
+
+        return salon;
+    }
+
+    /// <summary>
+    /// Создаёт салон от имени барбера-владельца: статус <see cref="SalonModerationStatus.Pending"/>,
+    /// в поиске салон не участвует до одобрения администратором.
+    /// </summary>
+    /// <remarks>
+    /// Проверка «у пользователя есть профиль барбера» живёт в Application: домен салона
+    /// не знает про профиль. Владелец фиксируется здесь и дальше не меняется.
+    /// </remarks>
+    /// <param name="ownerUserId">Пользователь-владелец (барбер с профилем).</param>
+    public static Result<Salon, Failure> SubmitByOwner(
+        Guid ownerUserId,
+        string name,
+        string address,
+        string city,
+        string country,
+        string timeZoneId,
+        double latitude,
+        double longitude,
+        string? postalCode = null,
+        string? phoneNumber = null,
+        string? websiteUrl = null)
+    {
+        var salon = BuildValidated(
+            name,
+            address,
+            city,
+            country,
+            timeZoneId,
+            latitude,
+            longitude,
+            postalCode,
+            phoneNumber,
+            websiteUrl);
+        if (salon.IsFailure)
+        {
+            return salon.Error;
+        }
+
+        salon.Value.OwnerUserId = ownerUserId;
+        salon.Value.ModerationStatus = SalonModerationStatus.Pending;
+        salon.Value.IsActive = false;
+
+        return salon;
+    }
+
+    private static Result<Salon, Failure> BuildValidated(
+        string name,
+        string address,
+        string city,
+        string country,
+        string timeZoneId,
+        double latitude,
+        double longitude,
+        string? postalCode,
+        string? phoneNumber,
+        string? websiteUrl)
     {
         var errors = DomainErrors.Collect();
 
@@ -90,9 +218,89 @@ public class Salon : AggregateRoot
             Longitude = longitude,
             PostalCode = postalCode,
             PhoneNumber = phoneNumber,
-            WebsiteUrl = normalizedWebsiteUrl,
-            IsActive = true
+            WebsiteUrl = normalizedWebsiteUrl
         };
+    }
+
+    /// <summary>
+    /// Одобряет салон на модерации: салон становится активным и видимым.
+    /// </summary>
+    /// <remarks>
+    /// Одобрить можно только салон в статусе <see cref="SalonModerationStatus.Pending"/>:
+    /// повторное решение — <c>409 salon.review.invalidStatus</c>. Если администратор успел
+    /// скрыть салон, одобрение всё равно включает видимость — это и есть решение.
+    /// </remarks>
+    /// <param name="adminId">Администратор, принявший решение.</param>
+    /// <param name="now">Момент решения в UTC.</param>
+    public UnitResult<Failure> Approve(Guid adminId, DateTimeOffset now)
+    {
+        if (ModerationStatus != SalonModerationStatus.Pending)
+        {
+            return ReviewInvalidStatus();
+        }
+
+        ModerationStatus = SalonModerationStatus.Active;
+        IsActive = true;
+        ReviewedByUserId = adminId;
+        ReviewedAt = now;
+        RejectionReason = null;
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Отклоняет салон с обязательной причиной; салон остаётся невидимым.
+    /// </summary>
+    /// <remarks>
+    /// Причина тримится и хранится без окружающих пробелов; пустая причина —
+    /// <c>400 salon.reject.reasonRequired</c>, длиннее
+    /// <see cref="Constants.MAX_SALON_REJECTION_REASON_LENGTH"/> символов —
+    /// <c>400 salon.reject.reasonTooLong</c>. Отклонить можно только
+    /// <see cref="SalonModerationStatus.Pending"/>-салон, повторное решение —
+    /// <c>409 salon.review.invalidStatus</c>.
+    /// </remarks>
+    /// <param name="adminId">Администратор, принявший решение.</param>
+    /// <param name="reason">Причина отказа.</param>
+    /// <param name="now">Момент решения в UTC.</param>
+    public UnitResult<Failure> Reject(Guid adminId, string? reason, DateTimeOffset now)
+    {
+        if (ModerationStatus != SalonModerationStatus.Pending)
+        {
+            return ReviewInvalidStatus();
+        }
+
+        var normalizedReason = reason?.Trim();
+
+        if (string.IsNullOrEmpty(normalizedReason))
+        {
+            return new Failure(Error.Validation(
+                REJECTION_REASON_REQUIRED_CODE,
+                "A rejection reason is required.",
+                nameof(reason)));
+        }
+
+        if (normalizedReason.Length > Constants.MAX_SALON_REJECTION_REASON_LENGTH)
+        {
+            return new Failure(Error.Validation(
+                REJECTION_REASON_TOO_LONG_CODE,
+                $"""
+                 A rejection reason cannot be longer than
+                 {Constants.MAX_SALON_REJECTION_REASON_LENGTH} characters.
+                 """,
+                nameof(reason)));
+        }
+
+        ModerationStatus = SalonModerationStatus.Rejected;
+        IsActive = false;
+        ReviewedByUserId = adminId;
+        ReviewedAt = now;
+        RejectionReason = normalizedReason;
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
     }
 
     public UnitResult<Failure> UpdateLocation(
@@ -161,8 +369,23 @@ public class Salon : AggregateRoot
         return DomainErrors.Ok();
     }
 
+    /// <summary>
+    /// Включает видимость салона.
+    /// </summary>
+    /// <remarks>
+    /// Включить можно только одобренный салон: pending/rejected сначала проходят модерацию,
+    /// иначе барбер обходил бы проверку, просто включив строку. Отказ —
+    /// <c>409 salon.activation.notApproved</c>.
+    /// </remarks>
     public UnitResult<Failure> Activate()
     {
+        if (ModerationStatus != SalonModerationStatus.Active)
+        {
+            return new Failure(Error.Conflict(
+                ACTIVATION_NOT_APPROVED_CODE,
+                "The salon must be approved before it can be activated."));
+        }
+
         if (IsActive)
         {
             return DomainErrors.Ok();
@@ -259,4 +482,9 @@ public class Salon : AggregateRoot
                 nameof(longitude)));
         }
     }
+
+    private static Failure ReviewInvalidStatus()
+        => new(Error.Conflict(
+            REVIEW_INVALID_STATUS_CODE,
+            "Only a pending salon can be reviewed."));
 }

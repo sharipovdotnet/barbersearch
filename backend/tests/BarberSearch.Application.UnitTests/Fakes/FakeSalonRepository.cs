@@ -10,20 +10,27 @@ using Shared;
 namespace BarberSearch.Application.UnitTests.Fakes;
 
 /// <summary>
-/// In-memory <see cref="ISalonRepository"/> для тестов проверок ссылочной целостности
-/// и админского чтения справочника.
+/// In-memory <see cref="ISalonRepository"/> для тестов проверок ссылочной целостности,
+/// админского чтения справочника и модерации салонов.
 /// </summary>
 /// <remarks>
-/// Реализовано только то, что вызывают проверяемые сценарии: <see cref="ExistsAsync"/>
+/// Реализовано только то, что вызывают проверяемые сценарии: <see cref="ExistsAsync"/>,
+/// <see cref="GetByIdAsync"/>, <see cref="AddAsync"/>, <see cref="UpdateAsync"/>
 /// и <see cref="GetAdminListAsync"/>. Остальные методы намеренно падают, чтобы тест не прошёл
 /// случайно по неверной ветке. Админский список фильтрует и сортирует по тем же правилам,
 /// что и реальный репозиторий (город, название, идентификатор).
+/// <para>
+/// Как участник <see cref="FakeUnitOfWork"/> репозиторий снимает снимок словаря салонов:
+/// так тест видит, что создание и привязка к профилю фиксируются одной транзакцией.
+/// </para>
 /// </remarks>
-public sealed class FakeSalonRepository : ISalonRepository
+public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionParticipant
 {
     private readonly HashSet<Guid> _existingIds = [];
     private readonly Dictionary<Guid, Salon> _salons = [];
     private readonly List<AdminSalonResponse> _adminRows = [];
+    private Dictionary<Guid, Salon>? _snapshot;
+    private HashSet<Guid>? _existingIdsSnapshot;
 
     /// <summary>Сбой админского чтения: обработчик обязан пробросить его как <c>Result</c>.</summary>
     public Failure? GetAdminListFailure { get; set; }
@@ -46,6 +53,21 @@ public sealed class FakeSalonRepository : ISalonRepository
     /// <summary>Подмена ошибки счётчика выключенных салонов.</summary>
     public Failure? CountInactiveFailure { get; set; }
 
+    /// <summary>Сколько раз обработчик вызывал <see cref="AddAsync"/>.</summary>
+    public int AddCalls { get; private set; }
+
+    /// <summary>Сколько раз обработчик вызывал <see cref="UpdateAsync"/>.</summary>
+    public int UpdateCalls { get; private set; }
+
+    /// <summary>Салоны, сохранённые через <see cref="AddAsync"/> или <see cref="UpdateAsync"/>.</summary>
+    public IReadOnlyCollection<Salon> Salons => _salons.Values;
+
+    /// <summary>Подмена вставки салона: тест проверяет откат транзакции.</summary>
+    public Func<Salon, UnitResult<Failure>>? AddBehavior { get; set; }
+
+    /// <summary>Подмена сохранения салона: тест проверяет откат транзакции.</summary>
+    public Func<Salon, UnitResult<Failure>>? UpdateBehavior { get; set; }
+
     public void AddExisting(Guid id) => _existingIds.Add(id);
 
     public void AddSalon(Salon salon)
@@ -55,6 +77,39 @@ public sealed class FakeSalonRepository : ISalonRepository
     }
 
     public void AddAdminRow(AdminSalonResponse row) => _adminRows.Add(row);
+
+    public void BeginTransaction()
+    {
+        _snapshot = new Dictionary<Guid, Salon>(_salons);
+        _existingIdsSnapshot = [.. _existingIds];
+    }
+
+    public void CommitTransaction()
+    {
+        _snapshot = null;
+        _existingIdsSnapshot = null;
+    }
+
+    public void RollbackTransaction()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        _salons.Clear();
+
+        foreach (var entry in _snapshot)
+        {
+            _salons[entry.Key] = entry.Value;
+        }
+
+        _existingIds.Clear();
+        _existingIds.UnionWith(_existingIdsSnapshot!);
+
+        _snapshot = null;
+        _existingIdsSnapshot = null;
+    }
 
     public Task<Result<bool, Failure>> ExistsAsync(
         Guid id,
@@ -84,8 +139,12 @@ public sealed class FakeSalonRepository : ISalonRepository
 
         rows = status switch
         {
-            AdminCatalogueStatus.Active => rows.Where(row => row.IsActive),
-            AdminCatalogueStatus.Hidden => rows.Where(row => !row.IsActive),
+            AdminCatalogueStatus.Active => rows.Where(row =>
+                row.IsActive && row.ModerationStatus == SalonModerationStatus.Active),
+            AdminCatalogueStatus.Hidden => rows.Where(row =>
+                !row.IsActive && row.ModerationStatus == SalonModerationStatus.Active),
+            AdminCatalogueStatus.Pending => rows.Where(row =>
+                row.ModerationStatus == SalonModerationStatus.Pending),
             _ => rows
         };
 
@@ -115,7 +174,8 @@ public sealed class FakeSalonRepository : ISalonRepository
         LastDirectoryCity = city;
         LastDirectorySearch = search;
 
-        IEnumerable<Salon> rows = _salons.Values.Where(salon => salon.IsActive);
+        IEnumerable<Salon> rows = _salons.Values.Where(salon =>
+            salon.IsActive && salon.ModerationStatus == SalonModerationStatus.Active);
 
         if (city is not null)
         {
@@ -184,12 +244,36 @@ public sealed class FakeSalonRepository : ISalonRepository
     public Task<UnitResult<Failure>> AddAsync(
         Salon salon,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        AddCalls++;
+
+        var result = AddBehavior?.Invoke(salon) ?? UnitResult.Success<Failure>();
+
+        if (result.IsSuccess)
+        {
+            _salons[salon.Id] = salon;
+            _existingIds.Add(salon.Id);
+        }
+
+        return Task.FromResult(result);
+    }
 
     public Task<UnitResult<Failure>> UpdateAsync(
         Salon salon,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        UpdateCalls++;
+
+        var result = UpdateBehavior?.Invoke(salon) ?? UnitResult.Success<Failure>();
+
+        if (result.IsSuccess)
+        {
+            _salons[salon.Id] = salon;
+            _existingIds.Add(salon.Id);
+        }
+
+        return Task.FromResult(result);
+    }
 
     public Task<UnitResult<Failure>> DeleteAsync(
         Salon salon,

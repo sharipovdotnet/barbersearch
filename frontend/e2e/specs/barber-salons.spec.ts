@@ -30,6 +30,10 @@ test.describe('мои салоны', () => {
     await expect(salonCard).toContainText('Москва')
     await expect(salonCard).toContainText('ул. Тестовая, 1')
     await expect(salonCard).toContainText('Europe/Moscow')
+    // Салон создан администратором: владельца у него нет, правки барберу недоступны.
+    await expect(
+      salonCard.getByRole('button', { name: 'Изменить адрес' })
+    ).toHaveCount(0)
 
     await expect(page.getByRole('link', { name: 'Записи' })).toHaveAttribute(
       'href',

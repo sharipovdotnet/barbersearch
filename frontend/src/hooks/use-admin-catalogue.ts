@@ -40,6 +40,10 @@ type CommonListFields = {
   updatedAt: number | null
   reload: () => void
   refresh: () => void
+  /** Локальное удаление строки: решение по салону убирает его из очереди сразу. */
+  removeRow: (rowId: string) => void
+  /** Локальная замена строки до тихого refresh. */
+  replaceRow: (row: CatalogueRows[number]) => void
 }
 
 /**
@@ -176,6 +180,24 @@ export function useAdminCatalogueList(
   const reload = useCallback(() => load('initial'), [load])
   const refresh = useCallback(() => load('refresh'), [load])
 
+  const removeRow = useCallback((rowId: string) => {
+    setState((previous) => ({
+      ...previous,
+      // `CatalogueRows` — союз массивов, и `filter` сохраняет тип элементов, но
+      // TypeScript не умеет распределить его по союзу без приведения.
+      rows: previous.rows.filter((row) => row.id !== rowId) as CatalogueRows,
+    }))
+  }, [])
+
+  const replaceRow = useCallback((row: CatalogueRows[number]) => {
+    setState((previous) => ({
+      ...previous,
+      rows: previous.rows.map((current) =>
+        current.id === row.id ? row : current
+      ) as CatalogueRows,
+    }))
+  }, [])
+
   const common: CommonListFields = {
     status: state.status,
     error: state.error,
@@ -185,6 +207,8 @@ export function useAdminCatalogueList(
     updatedAt: state.updatedAt,
     reload,
     refresh,
+    removeRow,
+    replaceRow,
   }
 
   // `rows` и `tab` меняются одним и тем же запросом, поэтому строки всегда принадлежат

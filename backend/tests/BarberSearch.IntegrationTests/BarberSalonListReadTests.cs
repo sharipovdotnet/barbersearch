@@ -21,7 +21,23 @@ public sealed class BarberSalonListReadTests
     private readonly PostgresFixture _database;
 
     private static readonly string[] SUMMARY_FIELDS =
-        ["salonId", "name", "city", "address", "timeZoneId", "isPrimary"];
+    [
+        "salonId",
+        "name",
+        "city",
+        "address",
+        "timeZoneId",
+        "isPrimary",
+        "country",
+        "postalCode",
+        "latitude",
+        "longitude",
+        "phoneNumber",
+        "websiteUrl",
+        "ownerUserId",
+        "moderationStatus",
+        "rejectionReason"
+    ];
 
     private static readonly string[] OTHER_SALON_NAMES =
         ["Aaa Salon", "Hidden Salon", "Salon List Barber Secondary"];

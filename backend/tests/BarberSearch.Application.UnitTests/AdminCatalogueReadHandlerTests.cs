@@ -7,6 +7,7 @@ using BarberSearch.Contracts.HairServices.Admin;
 using BarberSearch.Contracts.Salons.Admin;
 using BarberSearch.Contracts.Specializations.Admin;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.Salons;
 using Shared;
 using Xunit;
 
@@ -74,6 +75,43 @@ public class AdminCatalogueReadHandlerTests
                 salonResult.Error
             },
             failure => Assert.Equal("admin.catalogue.status", failure.Errors[0].Code));
+    }
+
+    [Fact]
+    public async Task Salons_accept_pending_status_and_forward_it_to_the_repository()
+    {
+        var repository = new FakeSalonRepository();
+        var handler = new GetAdminSalonsHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminSalonsQuery(" Pending ", null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AdminCatalogueStatus.Pending, repository.LastStatus);
+    }
+
+    [Fact]
+    public async Task Pending_status_is_rejected_for_hair_services_and_specializations()
+    {
+        var hairServiceResult = await new GetAdminHairServicesHandler(
+                new FakeHairServiceRepository())
+            .Handle(new GetAdminHairServicesQuery("pending", null), CancellationToken.None);
+        var specializationResult = await new GetAdminSpecializationsHandler(
+                new FakeSpecializationRepository())
+            .Handle(new GetAdminSpecializationsQuery("pending", null), CancellationToken.None);
+
+        Assert.True(hairServiceResult.IsFailure);
+        Assert.True(specializationResult.IsFailure);
+
+        // Очередь модерации есть только у салонов: у справочников pending — неизвестный статус.
+        Assert.All(
+            new[] { hairServiceResult.Error, specializationResult.Error },
+            failure =>
+            {
+                Assert.Equal(ErrorType.VALIDATION, failure.Errors[0].Type);
+                Assert.Equal("admin.catalogue.status", failure.Errors[0].Code);
+            });
     }
 
     [Fact]
@@ -163,6 +201,10 @@ public class AdminCatalogueReadHandlerTests
             "+78120000000",
             "https://nord.example/",
             IsActive: true,
+            ModerationStatus: SalonModerationStatus.Active,
+            RejectionReason: null,
+            ReviewedAt: null,
+            OwnerEmail: null,
             UsageCount: 3));
         var handler = new GetAdminSalonsHandler(repository);
 

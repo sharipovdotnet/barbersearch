@@ -1,13 +1,23 @@
+using BarberSearch.Domain.Salons;
+
 namespace BarberSearch.Contracts.Salons.Admin;
 
 /// <summary>
-/// Строка админского справочника салонов: все поля формы правки.
+/// Строка админского справочника салонов: все поля формы правки и состояние модерации.
 /// </summary>
 /// <remarks>
 /// До этого этапа у салонов не было ни одного чтения, поэтому контракт новый: администратор
 /// должен видеть адрес, координаты, контакты и статус, чтобы править и выключать строку.
 /// Название приходит как есть, но не редактируется — переименования в домене нет.
-/// Ответ — полный справочник без пагинации.
+/// <para>
+/// <c>ownerEmail</c> — связь с владельцем-барбером (<c>null</c> у салона, созданного
+/// администратором). Это единственное персональное поле строки и только в админском чтении:
+/// барберу в «Мои салоны» владелец не нужен.
+/// </para>
+/// <para>
+/// Статус модерации и <c>isActive</c> — разные вещи: <c>active</c> в фильтре каталога —
+/// это <c>isActive &amp;&amp; moderationStatus == Active</c>, <c>pending</c> — очередь проверки.
+/// </para>
 /// </remarks>
 /// <param name="Id">Идентификатор салона.</param>
 /// <param name="Name">Название; задаётся при создании и не меняется.</param>
@@ -21,6 +31,10 @@ namespace BarberSearch.Contracts.Salons.Admin;
 /// <param name="PhoneNumber">Телефон; <c>null</c>, если его нет.</param>
 /// <param name="WebsiteUrl">Сайт; <c>null</c>, если его нет.</param>
 /// <param name="IsActive">Виден ли салон в поиске и на карточках.</param>
+/// <param name="ModerationStatus">Состояние проверки салона администратором.</param>
+/// <param name="RejectionReason">Причина отказа; <c>null</c>, если салон не отклонён.</param>
+/// <param name="ReviewedAt">Когда принято решение; <c>null</c>, если салон ещё не проверяли.</param>
+/// <param name="OwnerEmail">Email владельца-барбера; <c>null</c> у админского салона.</param>
 /// <param name="UsageCount">
 /// Сколько активных и подтверждённых профилей барберов работают в салоне: считается
 /// <c>DISTINCT barber_profile_id</c> по <c>barber_salons</c> с условием «профиль активен
@@ -39,4 +53,8 @@ public record AdminSalonResponse(
     string? PhoneNumber,
     string? WebsiteUrl,
     bool IsActive,
+    SalonModerationStatus ModerationStatus,
+    string? RejectionReason,
+    DateTimeOffset? ReviewedAt,
+    string? OwnerEmail,
     int UsageCount);

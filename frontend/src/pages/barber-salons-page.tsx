@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, MapPin, TriangleAlert, X } from 'lucide-react'
+import { Loader2, MapPin, Plus, TriangleAlert, X } from 'lucide-react'
 
 import { SignInGate } from '@/components/account/account-gates'
 import { BarberCabinetNav } from '@/components/barber/barber-cabinet-nav'
@@ -8,9 +8,10 @@ import {
   BarberProfileMissingGate,
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
+import { BarberSalonCard } from '@/components/barber/barber-salon-card'
+import { BarberSalonDialog } from '@/components/barber/barber-salon-dialog'
 import { SalonPickerDialog } from '@/components/barber/barber-salon-picker-dialog'
 import { SessionUnavailable } from '@/components/session-unavailable'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,8 +23,14 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberSalons } from '@/hooks/use-barber-salons'
 import { useSession } from '@/hooks/use-session'
+import type { BarberSalonSummary } from '@/lib/barber-salons'
 import { BARBER_SALONS_PATH, BARBER_SCHEDULE_PATH } from '@/lib/barber-cabinet-path'
 import { navigate } from '@/lib/router'
+
+type EditingSalon = {
+  salon: BarberSalonSummary
+  focus: 'location' | 'contacts'
+}
 
 /**
  * «Мои салоны»: привязанные салоны и выбор нового из публичного каталога.
@@ -81,6 +88,7 @@ export function BarberSalonsPage() {
           <BarberSalonsScreen
             key={user.barberProfileId}
             barberProfileId={user.barberProfileId}
+            userId={user.id}
           />
         )
       )}
@@ -88,19 +96,43 @@ export function BarberSalonsPage() {
   )
 }
 
-function BarberSalonsScreen({ barberProfileId }: { barberProfileId: string }) {
+function BarberSalonsScreen({
+  barberProfileId,
+  userId,
+}: {
+  barberProfileId: string
+  /** Id текущего пользователя: правка салона доступна только его владельцу. */
+  userId: string
+}) {
   const { status, salons, error, isRefreshing, reload } =
     useBarberSalons(barberProfileId)
   const [announcement, setAnnouncement] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [editing, setEditing] = useState<EditingSalon | null>(null)
 
   function handleAttached() {
     setAnnouncement('Салон добавлен.')
     reload()
   }
 
+  function handleSaved(message: string) {
+    setIsCreateOpen(false)
+    setEditing(null)
+    setAnnouncement(message)
+    reload()
+  }
+
+  function handleContactsFailed() {
+    // Адрес уже сохранён: диалог остаётся открытым, а список перечитывается.
+    setAnnouncement(
+      'Адрес сохранён, контакты — нет. Обновите список и попробуйте ещё раз.'
+    )
+    reload()
+  }
+
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-full bg-muted">
             <MapPin className="size-5 text-muted-foreground" aria-hidden />
@@ -116,13 +148,28 @@ function BarberSalonsScreen({ barberProfileId }: { barberProfileId: string }) {
           </div>
         </div>
 
-        {status === 'ready' && salons.length > 0 && (
-          <SalonPickerDialog
-            barberProfileId={barberProfileId}
-            hasSalons={salons.length > 0}
-            onAttached={handleAttached}
-            onStale={reload}
-          />
+        {status === 'ready' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              className="h-11 gap-2 sm:h-8"
+              onClick={() => {
+                setAnnouncement(null)
+                setIsCreateOpen(true)
+              }}
+            >
+              <Plus data-icon="inline-start" aria-hidden />
+              Создать салон
+            </Button>
+            {salons.length > 0 && (
+              <SalonPickerDialog
+                barberProfileId={barberProfileId}
+                hasSalons={salons.length > 0}
+                onAttached={handleAttached}
+                onStale={reload}
+              />
+            )}
+          </div>
         )}
       </header>
 
@@ -234,26 +281,16 @@ function BarberSalonsScreen({ barberProfileId }: { barberProfileId: string }) {
           <ul className="space-y-3">
             {salons.map((salon) => (
               <li key={salon.salonId}>
-                <Card>
-                  <CardContent className="space-y-2 pt-6">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-medium break-words">{salon.name}</h2>
-                      {salon.isPrimary && (
-                        <Badge variant="secondary">Основной</Badge>
-                      )}
-                    </div>
-
-                    <p className="text-sm break-words text-muted-foreground">
-                      {salon.city}
-                      {salon.address ? `, ${salon.address}` : ''}
-                    </p>
-
-                    <p className="text-sm text-muted-foreground">
-                      Часовой пояс:{' '}
-                      <span className="text-foreground">{salon.timeZoneId}</span>
-                    </p>
-                  </CardContent>
-                </Card>
+                <BarberSalonCard
+                  salon={salon}
+                  canEdit={
+                    salon.ownerUserId !== null && salon.ownerUserId === userId
+                  }
+                  onEdit={(focus) => {
+                    setAnnouncement(null)
+                    setEditing({ salon, focus })
+                  }}
+                />
               </li>
             ))}
           </ul>
@@ -269,6 +306,26 @@ function BarberSalonsScreen({ barberProfileId }: { barberProfileId: string }) {
             Настроить расписание
           </Button>
         </>
+      )}
+
+      {isCreateOpen && (
+        <BarberSalonDialog
+          mode="create"
+          salon={null}
+          onClose={() => setIsCreateOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {editing && (
+        <BarberSalonDialog
+          mode="edit"
+          salon={editing.salon}
+          initialFocus={editing.focus}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+          onContactsFailed={handleContactsFailed}
+        />
       )}
     </div>
   )

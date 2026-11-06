@@ -589,6 +589,10 @@ public static class ApiErrorCodes
         /// <summary>
         /// Фильтр статуса не <c>all</c>, не <c>active</c> и не <c>hidden</c>; <c>400</c>.
         /// </summary>
+        /// <remarks>
+        /// Для салонов допустим ещё <c>pending</c> — очередь модерации. Услуги и специализации
+        /// модерации не имеют и отвечают на <c>pending</c> этой же ошибкой.
+        /// </remarks>
         public const string StatusInvalid = "admin.catalogue.status";
 
         /// <summary>
@@ -738,6 +742,26 @@ public static class ApiErrorCodes
         /// Строку изменил или удалил параллельный запрос; <c>409</c>.
         /// </summary>
         public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
+
+        /// <summary>
+        /// Повторное решение по салону, который уже не ждёт проверки; <c>409</c>.
+        /// </summary>
+        public const string ReviewInvalidStatus = "salon.review.invalidStatus";
+
+        /// <summary>
+        /// Причина отказа пуста или состоит из пробелов; <c>400</c>.
+        /// </summary>
+        public const string RejectReasonRequired = "salon.reject.reasonRequired";
+
+        /// <summary>
+        /// Причина отказа длиннее <c>500</c> символов; <c>400</c>.
+        /// </summary>
+        public const string RejectReasonTooLong = "salon.reject.reasonTooLong";
+
+        /// <summary>
+        /// Попытка включить салон, который не прошёл модерацию; <c>409</c>.
+        /// </summary>
+        public const string ActivationNotApproved = "salon.activation.notApproved";
     }
 
     /// <summary>

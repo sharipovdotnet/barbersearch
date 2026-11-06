@@ -802,10 +802,20 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("longitude");
 
+                    b.Property<int>("ModerationStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("moderation_status");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text")
@@ -814,6 +824,19 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.Property<string>("PostalCode")
                         .HasColumnType("text")
                         .HasColumnName("postal_code");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
 
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
@@ -838,6 +861,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasKey("Id")
                         .HasName("pk_salons");
 
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_salons_owner_user_id");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_salons_reviewed_by_user_id");
+
                     b.HasIndex("City", "IsActive")
                         .HasDatabaseName("ix_salons_city_is_active");
 
@@ -853,7 +882,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_salons_longitude", "longitude BETWEEN -180 AND 180");
 
+                            t.HasCheckConstraint("ck_salons_moderation_status", "moderation_status IN (1, 2, 3)");
+
                             t.HasCheckConstraint("ck_salons_name", "char_length(btrim(name)) > 0");
+
+                            t.HasCheckConstraint("ck_salons_rejection_reason", "rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND 500");
 
                             t.HasCheckConstraint("ck_salons_time_zone_id", "char_length(btrim(time_zone_id)) > 0");
                         });
@@ -1449,6 +1482,21 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.Salons.Salon", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_salons_users_owner_user_id");
+
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_salons_users_reviewed_by_user_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.TimeOffs.TimeOff", b =>

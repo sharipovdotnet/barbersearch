@@ -7,6 +7,8 @@ namespace BarberSearch.Application.Common;
 /// <see cref="All"/> — полный справочник, включая выключенные строки; это значение
 /// по умолчанию, иначе выключенную строку нельзя найти, чтобы включить обратно.
 /// <see cref="Active"/> — строки, видимые витрине; <see cref="Hidden"/> — выключенные.
+/// <see cref="Pending"/> — очередь модерации; есть только у салонов, у услуг и
+/// специализаций такого статуса нет.
 /// </remarks>
 public enum AdminCatalogueStatus
 {
@@ -17,7 +19,10 @@ public enum AdminCatalogueStatus
     Active = 1,
 
     /// <summary>Только выключенные строки.</summary>
-    Hidden = 2
+    Hidden = 2,
+
+    /// <summary>Только салоны, ожидающие проверки администратором.</summary>
+    Pending = 3
 }
 
 /// <summary>
@@ -29,6 +34,10 @@ public enum AdminCatalogueStatus
 /// статус возвращает <c>null</c> — обработчик отвечает <c>400 admin.catalogue.status</c>;
 /// <c>Enum.TryParse</c> здесь не используется, потому что он принимает и числа
 /// (<c>"0"</c> — это <c>All</c>), а публичный контракт обещает имена.
+/// <para>
+/// <c>pending</c> принимается только салонами: у услуг и специализаций модерации нет,
+/// и они отвечают на него <c>400 admin.catalogue.status</c>, а не молча показывают всё.
+/// </para>
 /// </remarks>
 public static class AdminCatalogueFilters
 {
@@ -41,13 +50,17 @@ public static class AdminCatalogueFilters
     /// Разбирает статус: <c>null</c> и пустая строка — <see cref="AdminCatalogueStatus.All"/>.
     /// </summary>
     /// <param name="status">Значение параметра <c>status</c>.</param>
+    /// <param name="allowPending">
+    /// Принимать ли <c>pending</c>: только для салонов, у которых есть очередь модерации.
+    /// </param>
     /// <returns>Статус фильтра либо <c>null</c>, если значение неизвестно.</returns>
-    public static AdminCatalogueStatus? ParseStatus(string? status)
+    public static AdminCatalogueStatus? ParseStatus(string? status, bool allowPending = false)
         => status?.Trim().ToLowerInvariant() switch
         {
             null or "" or "all" => AdminCatalogueStatus.All,
             "active" => AdminCatalogueStatus.Active,
             "hidden" => AdminCatalogueStatus.Hidden,
+            "pending" when allowPending => AdminCatalogueStatus.Pending,
             _ => null
         };
 }

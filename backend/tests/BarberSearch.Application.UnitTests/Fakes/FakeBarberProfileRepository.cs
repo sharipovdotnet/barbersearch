@@ -80,6 +80,9 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     /// </summary>
     public Func<BarberProfile, UnitResult<Failure>>? AddBehavior { get; set; }
 
+    /// <summary>Сколько раз обработчик сохранял профиль через <see cref="UpdateAsync"/>.</summary>
+    public int UpdateCallCount { get; private set; }
+
     public void Add(BarberProfile profile) => _profiles[profile.Id] = profile;
 
     public void BeginTransaction()
@@ -483,8 +486,15 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         BarberProfile barberProfile,
         CancellationToken cancellationToken = default)
     {
+        UpdateCallCount++;
+
         var result = UpdateBehavior?.Invoke(barberProfile)
             ?? UnitResult.Success<Failure>();
+
+        if (result.IsSuccess)
+        {
+            _profiles[barberProfile.Id] = barberProfile;
+        }
 
         return Task.FromResult(result);
     }

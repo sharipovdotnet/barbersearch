@@ -40,11 +40,12 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered client |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
+| `/barber/salons` | «Мои салоны»: linked salons with moderation status (approved / pending / rejected + reason), «Создать салон» for a barber with a profile (goes to admin review), owner address/contacts edits, picker for an existing salon |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
-| `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions |
+| `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions; a salon waiting for moderation is not counted as disabled |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden (filter in `?status=all\|hidden`, `pending` by default), search by name or email |
@@ -53,7 +54,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 | `/admin/barber-requests` | «Стать барбером» queue: pending requests oldest first, `?status=all` for every request newest first |
 | `/admin/barber-requests/{id}` | one request: applicant, answers, submission/review dates and the rejection reason; approve (with the session warning) or reject with a required reason |
-| `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter, search, hide/return |
+| `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter (salons add «На проверке»), search, hide/return, salon approve/reject |
 | `/admin/bookings` | booking support list: customer email or exact booking id search, status filter, paged table/cards, split-view detail |
 | `/admin/bookings/{id}` | one booking: time in the salon zone, customer, barber, service, salon, notes; cancel or mark a no-show |
 | `/admin/audit` | read-only change journal: filters by entity type, author email and UTC dates, paged list with an expandable diff |
@@ -347,14 +348,33 @@ keeps its own role gates and `/account` no longer turns a barber away.
 
 `/barber/salons` is the third cabinet section. It reads
 `GET /api/barber-profiles/{id}/salons` (owner or admin; includes every linked salon, primary
-first) and shows a card per salon with the name, city, address, «Основной» badge and time zone.
+first) and shows a card per salon with the name, city, address, «Основной» badge, time zone and
+the moderation status: «Одобрен», «На проверке» or «Отклонён» with the administrator's reason.
 An empty profile explains the consequence — «Салон не добавлен. Без салона расписание и запись
-не работают.» — and offers «Добавить салон».
+не работают.» — and offers «Добавить салон» and «Создать салон».
+
+«Создать салон» is the barber's own path (`POST /api/salons/own`, cookie mutation with CSRF,
+role `Barber`): the form is the shared `SalonDialogForm` (`src/components/salon/salon-form.tsx`,
+the same fields the admin dialog uses) with name, address, city, country, time zone, coordinates,
+phone and website. Coordinates are typed by hand — the form says to copy them from maps; there is
+no map or geocoder in this slice. The name is fixed after creation and the form says so. The
+server creates the salon in `Pending`, links it to the barber profile in one transaction (the
+first salon becomes primary) and answers `201 { id }`; the screen re-reads the list and shows the
+card with «На проверке» and «Салон появится в поиске после проверки администратором». Pending and
+rejected salons are absent from the public directory, search, slots and the booking picker.
+
+The owner edits the salon through two independent mutations, exactly like the admin dialog:
+«Изменить адрес» sends `PUT /api/salons/{id}/location`, «Изменить контакты» sends
+`PUT /api/salons/{id}/contact-info`. The dialog is pre-filled from the salon summary (country,
+postal code, coordinates, phone, website), so saving does not wipe values the owner did not type.
+Editing is allowed for a pending or rejected salon; the barber UI never activates, hides, renames
+or resubmits it (there is no resend endpoint, so no dead button). Actions are shown only on salons
+the user owns (`ownerUserId`; `null` for an admin-created salon linked to the profile).
 
 «Добавить салон» opens a dialog over the public catalogue (`GET /api/salons?city=&search=`,
-anonymous, only active rows, no pagination): the search is debounced 300 ms and starts at two
-characters, the city is optional, results are a native radio list in a `fieldset`, and every new
-input or closing the dialog aborts the previous request. The first salon of an empty profile is
+anonymous, only approved and active rows, no pagination): the search is debounced 300 ms and starts
+at two characters, the city is optional, results are a native radio list in a `fieldset`, and every
+new input or closing the dialog aborts the previous request. The first salon of an empty profile is
 forced primary (`isPrimary: true`, the checkbox is checked and disabled); with existing salons
 «Сделать основным» is the user's choice. `POST /api/barber-profiles/{id}/salons` is a cookie
 mutation; after `204` the screen re-reads the list, announces «Салон добавлен.» and closes the
@@ -362,11 +382,17 @@ dialog. A `409` duplicate or `404` vanished salon keeps the dialog open with Rus
 re-reads the list; `403`, `401`, `429` and a network failure have their own messages. The route
 does not change and «Настроить расписание» links to `/barber/schedule`.
 
-- `src/pages/barber-salons-page.tsx` — gates, list, empty state, announcements.
+- `src/pages/barber-salons-page.tsx` — gates, list, empty state, create/edit dialogs, announcements.
+- `src/components/barber/barber-salon-card.tsx` — one linked salon: status, rejection reason,
+  owner edit actions.
+- `src/components/barber/barber-salon-dialog.tsx` — owner create/edit wrapper over the shared form.
 - `src/components/barber/barber-salon-picker-dialog.tsx` — the shared catalogue picker (also the
   onboarding step).
-- `src/lib/salons.ts` / `src/lib/barber-salons.ts` — directory read, linked-salon read and attach
-  transport; `src/hooks/use-barber-salons.ts` — re-read after a write.
+- `src/components/salon/salon-form.tsx` / `src/lib/salon-form.ts` — shared fields, validation and
+  payloads for the admin and owner dialogs; `src/lib/salon-moderation.ts` — status union, Russian
+  labels and rejection-reason validation.
+- `src/lib/salons.ts` / `src/lib/barber-salons.ts` — directory read, linked-salon read, attach and
+  `createOwnSalon` transport; `src/hooks/use-barber-salons.ts` — re-read after a write.
 
 ### Creating the barber profile
 
@@ -816,16 +842,20 @@ falls back to services instead of «Раздел не найден». The catalo
 like the rest of the admin.
 
 - `src/lib/admin-catalogue.ts` — three admin reads, all mutations of the existing endpoints, the
-  labels and `describeAdminCatalogueError`.
+  labels and `describeAdminCatalogueError`; the four salon status filters and the
+  approve/reject calls.
+- `src/lib/salon-form.ts` / `src/components/salon/salon-form.tsx` — the salon fields, validation and
+  the dialog form shared with the barber cabinet (the admin dialog is now a thin wrapper over it).
 - `src/lib/response-guards.ts` — `isAdminHairServiceList`, `isAdminSpecializationList`,
   `isAdminSalonList`.
 - `src/hooks/use-admin-catalogue.ts` — the list controller: `status`/`search` are part of the
-  request, a late answer of a cancelled request is dropped by generation, quiet `refresh()`, and a
-  discriminated union so a table only sees rows of its own tab.
+  request, a late answer of a cancelled request is dropped by generation, quiet `refresh()`,
+  `removeRow`/`replaceRow` for local moderation updates, and a discriminated union so a table only
+  sees rows of its own tab.
 - `src/components/admin/catalogue-screen.tsx` — header, tabs, status filter, debounced search, the
   active panel and the dialogs; `catalogue-tabs.tsx`, `catalogue-table.tsx`,
   `hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`,
-  `catalogue-action-dialog.tsx` — the parts.
+  `salon-moderation-dialog.tsx` (approve/reject), `catalogue-action-dialog.tsx` — the parts.
 - `src/lib/admin-path.ts` — `catalogue` route, `CatalogueTab`, `cataloguePath()`,
   `parseCatalogueTab()`.
 
@@ -833,9 +863,21 @@ What it does:
 
 - Shows the **full** dictionary, including rows that are switched off: `status=all` is the default
   precisely so a hidden row can be found and switched back on. The status filter is one segmented
-  `role="group"` («Все», «Активные», «Выключенные») shared by the tabs; changing a tab resets the
-  search but keeps the status. Search is debounced by 300 ms, capped at 100 characters, and hits the
-  name (salons — name and city).
+  `role="group"` shared by the tabs; changing a tab resets the search but keeps the status. Search
+  is debounced by 300 ms, capped at 100 characters, and hits the name (salons — name and city).
+- Only the «Салоны» tab has a fourth filter «На проверке» (`status=pending`) — the moderation queue.
+  Hair services and specializations have no moderation and show no such filter (the server rejects
+  `pending` for them with `400 admin.catalogue.status`). `active` means `isActive && moderationStatus
+  === 'Active'`, `hidden` means `!isActive && Active`, so the queue is never mixed into «Активные» or
+  «Выключенные».
+- Salon rows carry the owner email (`ownerEmail`, `null` for an admin-created salon) under the name
+  and a moderation badge («Одобрен» / «На проверке» / «Отклонён», with the rejection reason). Pending
+  rows offer «Одобрить» and «Отклонить» in an `alertdialog`: approval explains «Салон появится в
+  поиске и станет доступен для записи», rejection requires a reason of at most 500 characters
+  (`salon.reject.reasonRequired` / `salon.reject.reasonTooLong`). After `204` the row is removed
+  from the `pending` filter (or replaced in `all`) and the list refreshes quietly; a `409
+  salon.review.invalidStatus` means someone already decided and the list is re-read. Activation is
+  hidden for non-approved rows: a pending salon cannot be switched on, it must be approved.
 - «Барберы» is `usageCount` from the API: the number of **active and verified** barber profiles that
   use the row right now (for a service, only active `barber_services` links count). The screen never
   derives it from the array length and shows no other counters.

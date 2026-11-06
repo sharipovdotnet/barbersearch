@@ -14,6 +14,7 @@ import {
 import { CatalogueTabs } from '@/components/admin/catalogue-tabs'
 import { HairServiceDialog } from '@/components/admin/hair-service-dialog'
 import { SalonDialog } from '@/components/admin/salon-dialog'
+import { SalonModerationDialog } from '@/components/admin/salon-moderation-dialog'
 import { SpecializationDialog } from '@/components/admin/specialization-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,10 +25,13 @@ import {
   ADMIN_CATALOGUE_ENTITY_LABELS,
   ADMIN_CATALOGUE_SEARCH_LABELS,
   ADMIN_CATALOGUE_SEARCH_MAX_LENGTH,
-  ADMIN_CATALOGUE_STATUSES,
   ADMIN_CATALOGUE_STATUS_LABELS,
   ADMIN_CATALOGUE_TAB_LABELS,
+  approveSalon,
+  catalogueStatuses,
   describeAdminCatalogueError,
+  describeSalonModerationError,
+  rejectSalon,
   setHairServiceActive,
   setSalonActive,
   setSpecializationActive,
@@ -36,6 +40,7 @@ import {
   type AdminSalon,
   type AdminSpecialization,
   type CatalogueTab,
+  type SalonModerationAction,
 } from '@/lib/admin-catalogue'
 import { cataloguePath } from '@/lib/admin-path'
 import { ApiError } from '@/lib/api'
@@ -51,7 +56,8 @@ import { cn } from '@/lib/utils'
  * которую администратор может включить обратно, а не «первая из двадцати».
  */
 export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
-  const [statusFilter, setStatusFilter] = useState<AdminCatalogueStatus>('all')
+  const [rawStatusFilter, setRawStatusFilter] =
+    useState<AdminCatalogueStatus>('all')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [requiresSignIn, setRequiresSignIn] = useState(false)
@@ -60,12 +66,23 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [toggleId, setToggleId] = useState<string | null>(null)
+  const [moderation, setModeration] = useState<{
+    rowId: string
+    action: SalonModerationAction
+  } | null>(null)
   const [pendingRowId, setPendingRowId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<{
     rowId: string
     message: string
   } | null>(null)
   const [actionDialogError, setActionDialogError] = useState<string | null>(null)
+
+  // `pending` есть только у салонов. При переходе на другую вкладку фильтр
+  // становится «Все», а не уходит на сервер и не получает 400.
+  const statuses = catalogueStatuses(tab)
+  const statusFilter = statuses.includes(rawStatusFilter)
+    ? rawStatusFilter
+    : 'all'
 
   // Задержка перед запросом: 300 мс хватает, чтобы не искать на каждую букву.
   useEffect(() => {
@@ -100,6 +117,10 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
       ? (list.rows.find((row) => row.id === editId) ?? null)
       : null
   const toggleRow = findToggleRow(list.tab, toggleId, list.rows)
+  const moderationRow =
+    list.tab === 'salons' && moderation !== null
+      ? (list.rows.find((row) => row.id === moderation.rowId) ?? null)
+      : null
 
   function resetSearch() {
     setSearchInput('')
@@ -134,11 +155,11 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
   }
 
   function handleStatusChange(next: AdminCatalogueStatus) {
-    if (next === statusFilter) {
+    if (next === rawStatusFilter) {
       return
     }
 
-    setStatusFilter(next)
+    setRawStatusFilter(next)
     resetSearch()
   }
 
@@ -194,6 +215,76 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
       if (cause instanceof ApiError && (cause.status === 409 || cause.status === 404)) {
         list.refresh()
       }
+    } finally {
+      setPendingRowId(null)
+    }
+  }
+
+  async function runModeration(
+    row: AdminSalon,
+    action: SalonModerationAction,
+    reason: string | null
+  ): Promise<string | null> {
+    setPendingRowId(row.id)
+    setActionError(null)
+
+    try {
+      if (action === 'approve') {
+        await approveSalon(row.id)
+      } else {
+        await rejectSalon(row.id, reason ?? '')
+      }
+
+      const updated: AdminSalon = {
+        ...row,
+        moderationStatus: action === 'approve' ? 'Active' : 'Rejected',
+        isActive: action === 'approve',
+        rejectionReason: action === 'approve' ? null : reason,
+        reviewedAt: new Date().toISOString(),
+      }
+
+      setAnnouncement(
+        action === 'approve'
+          ? `Салон «${row.name}» одобрен — он появился в поиске.`
+          : `Салон «${row.name}» отклонён. Владелец увидит причину.`
+      )
+
+      // В очереди проверки решения больше нет; в «Всех» строка остаётся с новым
+      // статусом. Затем тихий refresh: сервер остаётся источником правды.
+      if (statusFilter === 'pending') {
+        list.removeRow(row.id)
+      } else {
+        list.replaceRow(updated)
+      }
+
+      list.refresh()
+
+      return null
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        setRequiresSignIn(true)
+        return null
+      }
+
+      // Салон уже удалён или его рассмотрели: строку убираем молча.
+      if (
+        cause instanceof ApiError &&
+        (cause.status === 404 || cause.hasCode('salon.notFound'))
+      ) {
+        list.removeRow(row.id)
+        setAnnouncement(`Салон «${row.name}» больше не существует — список обновлён.`)
+        list.refresh()
+        return null
+      }
+
+      if (
+        cause instanceof ApiError &&
+        (cause.status === 409 || cause.hasCode('salon.review.invalidStatus'))
+      ) {
+        list.refresh()
+      }
+
+      return describeSalonModerationError(cause, action)
     } finally {
       setPendingRowId(null)
     }
@@ -288,6 +379,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedStatusFilter
           value={statusFilter}
+          statuses={statuses}
           onChange={handleStatusChange}
         />
 
@@ -345,6 +437,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
         {isEmpty && (
           <CatalogueEmpty
             tab={tab}
+            status={statusFilter}
             isSearching={search !== ''}
             onRefresh={list.refresh}
           />
@@ -363,6 +456,10 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
               setActionError(null)
               setActionDialogError(null)
               setToggleId(rowId)
+            }}
+            onModerate={(rowId, action) => {
+              setActionError(null)
+              setModeration({ rowId, action })
             }}
           />
         )}
@@ -465,6 +562,21 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
           }}
         />
       )}
+
+      {moderationRow && moderation && (
+        <SalonModerationDialog
+          action={moderation.action}
+          salon={moderationRow}
+          onClose={() => {
+            const rowId = moderationRow.id
+            setModeration(null)
+            focusRowAction(rowId)
+          }}
+          onConfirm={(reason) =>
+            runModeration(moderationRow, moderation.action, reason)
+          }
+        />
+      )}
     </div>
   )
 }
@@ -511,14 +623,22 @@ function CatalogueRows({
   actionError,
   onEdit,
   onToggle,
+  onModerate,
 }: {
   list: List
   pendingRowId: string | null
   actionError: { rowId: string; message: string } | null
   onEdit: (rowId: string) => void
   onToggle: (rowId: string) => void
+  onModerate: (rowId: string, action: SalonModerationAction) => void
 }) {
-  const handlers = { pendingRowId, actionError, onEdit, onToggle }
+  const handlers = {
+    pendingRowId,
+    actionError,
+    onEdit,
+    onToggle,
+    onModerate,
+  }
 
   if (list.tab === 'services') {
     return <HairServiceTable rows={list.rows} {...handlers} />
@@ -534,9 +654,11 @@ function CatalogueRows({
 /** Сегментированный фильтр: одна группа кнопок с `aria-pressed`, как у остальных списков. */
 function SegmentedStatusFilter({
   value,
+  statuses,
   onChange,
 }: {
   value: AdminCatalogueStatus
+  statuses: readonly AdminCatalogueStatus[]
   onChange: (value: AdminCatalogueStatus) => void
 }) {
   return (
@@ -545,7 +667,7 @@ function SegmentedStatusFilter({
       aria-label="Статус строк каталога"
       className="flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5"
     >
-      {ADMIN_CATALOGUE_STATUSES.map((status) => {
+      {statuses.map((status) => {
         const isSelected = status === value
 
         return (
@@ -610,10 +732,12 @@ function CatalogueError({
 
 function CatalogueEmpty({
   tab,
+  status,
   isSearching,
   onRefresh,
 }: {
   tab: CatalogueTab
+  status: AdminCatalogueStatus
   isSearching: boolean
   onRefresh: () => void
 }) {
@@ -630,6 +754,25 @@ function CatalogueEmpty({
             с таким названием. Попробуйте другую строку.
           </p>
         </div>
+      </div>
+    )
+  }
+
+  if (tab === 'salons' && status === 'pending') {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
+        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+          <Search className="size-4 text-muted-foreground" aria-hidden />
+        </div>
+        <div className="space-y-1">
+          <p className="font-medium">Салоны на проверке</p>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            Очередь пуста: новые салоны появятся здесь после создания барберами.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRefresh}>
+          Обновить
+        </Button>
       </div>
     )
   }

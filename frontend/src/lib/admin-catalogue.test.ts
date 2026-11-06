@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '@/lib/api'
 import {
+  approveSalon,
   createSalon,
   describeAdminCatalogueError,
+  describeSalonModerationError,
   fetchAdminHairServices,
   fetchAdminSalons,
+  rejectSalon,
   setHairServiceActive,
 } from '@/lib/admin-catalogue'
 import { problemDetails } from '@/test/msw/handlers'
@@ -61,6 +64,14 @@ describe('fetchAdminHairServices', () => {
       ['status', 'hidden'],
       ['search', 'Норд'],
     ])
+  })
+
+  it('очередь проверки салонов уходит как status=pending', async () => {
+    const captured = captureList('/api/admin/catalogue/salons')
+
+    await fetchAdminSalons({ status: 'pending' })
+
+    expect(entries(captured[0])).toStrictEqual([['status', 'pending']])
   })
 
   it('не отправляет пустой поиск', async () => {
@@ -212,6 +223,102 @@ describe('createSalon', () => {
 
     await expect(createSalon(input)).resolves.toStrictEqual({ id: 'salon-1' })
     expect(bodies).toStrictEqual([input])
+  })
+})
+
+describe('модерация салона', () => {
+  const salonId = '33333333-3333-4333-8333-333333333333'
+
+  type CapturedAction = {
+    method: string
+    path: string
+    csrfToken: string | null
+    body: string
+  }
+
+  function capture(path: string): CapturedAction[] {
+    const calls: CapturedAction[] = []
+
+    server.use(
+      http.post(path, async ({ request }) => {
+        calls.push({
+          method: request.method,
+          path: new URL(request.url).pathname,
+          csrfToken: request.headers.get('X-CSRF-TOKEN'),
+          body: await request.text(),
+        })
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    return calls
+  }
+
+  it('одобрение — POST без тела и с CSRF', async () => {
+    const csrfCalls = countRequests('/api/auth/csrf')
+    const calls = capture(`/api/salons/${salonId}/approval`)
+
+    await expect(approveSalon(salonId)).resolves.toBeUndefined()
+
+    expect(csrfCalls()).toBe(1)
+    expect(calls).toStrictEqual([
+      {
+        method: 'POST',
+        path: `/api/salons/${salonId}/approval`,
+        csrfToken: 'csrf-token',
+        body: '',
+      },
+    ])
+  })
+
+  it('отказ отправляет причину в теле', async () => {
+    const calls = capture(`/api/salons/${salonId}/rejection`)
+
+    await expect(
+      rejectSalon(salonId, 'Не подтверждён адрес')
+    ).resolves.toBeUndefined()
+
+    expect(calls).toStrictEqual([
+      {
+        method: 'POST',
+        path: `/api/salons/${salonId}/rejection`,
+        csrfToken: 'csrf-token',
+        body: JSON.stringify({ reason: 'Не подтверждён адрес' }),
+      },
+    ])
+  })
+
+  it('переводит 400 причины, 409 повторного решения и 403', () => {
+    const reasonRequired = new ApiError(
+      400,
+      problemDetails(400, { errorCodes: ['salon.reject.reasonRequired'] }),
+      'Invalid.'
+    )
+    const reasonTooLong = new ApiError(
+      400,
+      problemDetails(400, { errorCodes: ['salon.reject.reasonTooLong'] }),
+      'Invalid.'
+    )
+    const invalidStatus = new ApiError(
+      409,
+      problemDetails(409, { errorCodes: ['salon.review.invalidStatus'] }),
+      'Conflict.'
+    )
+    const forbidden = new ApiError(403, problemDetails(403), 'Forbidden.')
+
+    expect(describeSalonModerationError(reasonRequired, 'reject')).toBe(
+      'Укажите причину отказа.'
+    )
+    expect(describeSalonModerationError(reasonTooLong, 'reject')).toBe(
+      'Слишком длинная причина — максимум 500 символов.'
+    )
+    expect(describeSalonModerationError(invalidStatus, 'approve')).toBe(
+      'Салон уже проверили. Обновите список.'
+    )
+    expect(describeSalonModerationError(forbidden, 'approve')).toBe(
+      'Раздел доступен только администратору.'
+    )
   })
 })
 
