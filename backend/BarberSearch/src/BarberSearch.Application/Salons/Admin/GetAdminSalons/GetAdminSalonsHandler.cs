@@ -35,13 +35,13 @@ public sealed class GetAdminSalonsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var status = AdminCatalogueFilters.ParseStatus(query.Status);
+        var status = AdminCatalogueFilters.ParseStatus(query.Status, allowPending: true);
 
         if (status is null)
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.AdminCatalogue.StatusInvalid,
-                "Status must be one of 'all', 'active' or 'hidden'.",
+                "Status must be one of 'all', 'active', 'hidden' or 'pending'.",
                 nameof(query.Status)));
         }
 

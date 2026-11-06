@@ -78,6 +78,10 @@ public static class Constants
     public const int MAX_BARBER_REQUEST_CITY_LENGTH = 100;
     public const int MAX_BARBER_REQUEST_REJECTION_REASON_LENGTH = 500;
 
+    // Причина отказа салону на модерации. Короткая пометка администратора; предел тот же,
+    // что у причины отказа заявки в барберы, — это одинаковый по смыслу текст.
+    public const int MAX_SALON_REJECTION_REASON_LENGTH = 500;
+
     // Окно, в которое обязан попадать StartAt брони. Сравнение идёт по абсолютному
     // моменту (DateTimeOffset), поэтому часовой пояс салона на него не влияет; допуск
     // покрывает расхождение часов клиента и сервера, а не разницу поясов.

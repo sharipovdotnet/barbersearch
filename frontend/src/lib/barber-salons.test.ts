@@ -1,18 +1,23 @@
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/lib/api'
 import {
   attachSalon,
+  createOwnSalon,
   describeSalonAttachError,
   fetchBarberProfileSalons,
   isSalonAttachStale,
 } from '@/lib/barber-salons'
+import { problemDetails } from '@/test/msw/handlers'
+import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 const PROFILE_ID = '11111111-1111-4111-8111-111111111111'
 const SALON_ID = '22222222-2222-4222-8222-222222222222'
 const LIST_URL = `/api/barber-profiles/${PROFILE_ID}/salons`
+
+const OWNER_ID = '33333333-3333-4333-8333-333333333333'
 
 const SUMMARY = {
   salonId: SALON_ID,
@@ -21,6 +26,15 @@ const SUMMARY = {
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
   isPrimary: true,
+  country: 'Russia',
+  postalCode: '620000',
+  latitude: 56.8389,
+  longitude: 60.6057,
+  phoneNumber: '+73430000000',
+  websiteUrl: 'https://barbershop.example',
+  ownerUserId: OWNER_ID,
+  moderationStatus: 'Active',
+  rejectionReason: null,
 }
 
 describe('fetchBarberProfileSalons', () => {
@@ -33,6 +47,112 @@ describe('fetchBarberProfileSalons', () => {
 
     expect(salons).toHaveLength(1)
     expect(salons[0]).toMatchObject(SUMMARY)
+  })
+
+  it('не прячет салон на проверке и его причину отказа', async () => {
+    server.use(
+      http.get(LIST_URL, () =>
+        HttpResponse.json([
+          {
+            ...SUMMARY,
+            moderationStatus: 'Rejected',
+            rejectionReason: 'Нет подтверждения адреса',
+          },
+        ])
+      )
+    )
+
+    const [salon] = await fetchBarberProfileSalons(PROFILE_ID)
+
+    expect(salon?.moderationStatus).toBe('Rejected')
+    expect(salon?.rejectionReason).toBe('Нет подтверждения адреса')
+  })
+
+  it('отвергает ответ без координат и владельца: контракт расширен', async () => {
+    const oldSummary = {
+      salonId: SUMMARY.salonId,
+      name: SUMMARY.name,
+      city: SUMMARY.city,
+      address: SUMMARY.address,
+      timeZoneId: SUMMARY.timeZoneId,
+      isPrimary: SUMMARY.isPrimary,
+      moderationStatus: SUMMARY.moderationStatus,
+      rejectionReason: SUMMARY.rejectionReason,
+    }
+
+    server.use(http.get(LIST_URL, () => HttpResponse.json([oldSummary])))
+
+    await expect(fetchBarberProfileSalons(PROFILE_ID)).rejects.toBeInstanceOf(
+      ApiError
+    )
+  })
+})
+
+describe('createOwnSalon', () => {
+  const input = {
+    name: 'E2E Studio Проверка',
+    address: 'ул. Проверочная, 5',
+    city: 'Москва',
+    country: 'Russia',
+    timeZoneId: 'Europe/Moscow',
+    latitude: 55.75,
+    longitude: 37.62,
+    postalCode: null,
+    phoneNumber: '+70000000055',
+    websiteUrl: 'https://e2e-salon.example',
+  }
+
+  it('отправляет POST /api/salons/own с CSRF, cookie и полным телом', async () => {
+    const csrfCalls = countRequests('/api/auth/csrf')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const calls: { body: unknown; csrfToken: string | null }[] = []
+
+    server.use(
+      http.post('/api/salons/own', async ({ request }) => {
+        calls.push({
+          body: await request.json(),
+          csrfToken: request.headers.get('X-CSRF-TOKEN'),
+        })
+
+        return HttpResponse.json({ id: SALON_ID }, { status: 201 })
+      })
+    )
+
+    await expect(createOwnSalon(input)).resolves.toStrictEqual({
+      id: SALON_ID,
+    })
+
+    expect(csrfCalls()).toBe(1)
+    expect(calls).toStrictEqual([
+      {
+        body: input,
+        csrfToken: 'csrf-token',
+      },
+    ])
+
+    // Cookie-сессия: запрос уходит с `credentials: 'include'` (MSW нормализует
+    // значение в Request, поэтому проверяем инициатора запроса).
+    const ownCall = fetchSpy.mock.calls.find(([url]) =>
+      String(url).includes('/api/salons/own')
+    )
+
+    expect(ownCall?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+    })
+  })
+
+  it('барбер без профиля получает 403 barberProfile.notFound', async () => {
+    server.use(
+      http.post('/api/salons/own', () =>
+        HttpResponse.json(
+          problemDetails(403, { errorCodes: ['barberProfile.notFound'] }),
+          { status: 403 }
+        )
+      )
+    )
+
+    await expect(createOwnSalon(input)).rejects.toMatchObject({ status: 403 })
   })
 })
 

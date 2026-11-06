@@ -28,6 +28,45 @@ const SALON = {
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
   isPrimary: true,
+  country: 'Russia',
+  postalCode: '620000',
+  latitude: 56.8389,
+  longitude: 60.6057,
+  phoneNumber: '+73430000000',
+  websiteUrl: 'https://barbershop.example',
+  ownerUserId: BARBER.id,
+  moderationStatus: 'Active',
+  rejectionReason: null,
+}
+
+const PENDING_SALON = {
+  salonId: '44444444-4444-4444-8444-444444444444',
+  name: 'Барбершоп на Проверке',
+  city: 'Москва',
+  address: 'ул. Проверочная, 5',
+  timeZoneId: 'Europe/Moscow',
+  isPrimary: false,
+  country: 'Russia',
+  postalCode: null,
+  latitude: 55.75,
+  longitude: 37.62,
+  phoneNumber: '+79990000000',
+  websiteUrl: null,
+  ownerUserId: BARBER.id,
+  moderationStatus: 'Pending',
+  rejectionReason: null,
+}
+
+/**
+ * Салон, созданный администратором: у него нет владельца, поэтому кнопок правки
+ * у барбера быть не должно, хотя салон привязан к его профилю.
+ */
+const ADMIN_SALON = {
+  ...SALON,
+  salonId: '66666666-6666-4666-8666-666666666666',
+  name: 'Барбершоп администратора',
+  isPrimary: false,
+  ownerUserId: null,
 }
 
 const CATALOG_ITEM = {
@@ -236,5 +275,211 @@ describe('BarberSalonsPage', () => {
       expect(listCalls).toBe(2)
     })
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('создание своего салона: POST /api/salons/own и карточка «На проверке»', async () => {
+    const user = userEvent.setup()
+    let listCalls = 0
+    let body: Record<string, unknown> | null = null
+
+    server.use(
+      http.get(LIST_URL, () => {
+        listCalls += 1
+
+        return HttpResponse.json(listCalls === 1 ? [] : [PENDING_SALON])
+      }),
+      http.post('/api/salons/own', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+
+        return HttpResponse.json({ id: PENDING_SALON.salonId }, { status: 201 })
+      })
+    )
+
+    renderPage()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Создать салон' })
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(
+      within(dialog).getByText(
+        'Название нельзя изменить после создания салона.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/Скопируйте координаты из карт/)
+    ).toBeInTheDocument()
+
+    await user.type(within(dialog).getByLabelText('Название'), PENDING_SALON.name)
+    await user.type(
+      within(dialog).getByLabelText('Адрес'),
+      PENDING_SALON.address
+    )
+    await user.type(within(dialog).getByLabelText('Город'), PENDING_SALON.city)
+    await user.type(within(dialog).getByLabelText('Страна'), 'Россия')
+    await user.type(within(dialog).getByLabelText('Широта'), '55.75')
+    await user.type(within(dialog).getByLabelText('Долгота'), '37.62')
+    await user.type(within(dialog).getByLabelText('Телефон'), '+79990000000')
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Отправить на проверку' })
+    )
+
+    await waitFor(() => {
+      expect(body).not.toBeNull()
+    })
+
+    expect(body).toMatchObject({
+      name: PENDING_SALON.name,
+      address: PENDING_SALON.address,
+      city: PENDING_SALON.city,
+      country: 'Россия',
+      latitude: 55.75,
+      longitude: 37.62,
+      postalCode: null,
+      phoneNumber: '+79990000000',
+      websiteUrl: null,
+    })
+    expect(body).toHaveProperty('timeZoneId')
+
+    expect(
+      await screen.findByText('Салон отправлен на проверку.')
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listCalls).toBe(2)
+    })
+
+    const card = screen.getByText(PENDING_SALON.name).closest('li')
+
+    expect(card).not.toBeNull()
+    expect(within(card!).getByText('На проверке')).toBeInTheDocument()
+    expect(
+      within(card!).getByText(
+        'Салон появится в поиске после проверки администратором.'
+      )
+    ).toBeInTheDocument()
+    expect(within(card!).getByRole('button', { name: 'Изменить адрес' })).toBeInTheDocument()
+    expect(
+      within(card!).getByRole('button', { name: 'Изменить контакты' })
+    ).toBeInTheDocument()
+  })
+
+  it('салон, созданный администратором, не показывает правку владельца', async () => {
+    mockSalons([ADMIN_SALON])
+
+    renderPage()
+
+    const card = (await screen.findByText(ADMIN_SALON.name)).closest('li')
+
+    expect(card).not.toBeNull()
+    expect(
+      within(card!).queryByRole('button', { name: 'Изменить адрес' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(card!).queryByRole('button', { name: 'Изменить контакты' })
+    ).not.toBeInTheDocument()
+    // Статус и адрес при этом видны: карточка не прячется от барбера.
+    expect(within(card!).getByText('Одобрен')).toBeInTheDocument()
+  })
+
+  it('правка владельцем отправляет два независимых PUT и перечитывает список', async () => {
+    const user = userEvent.setup()
+    let listCalls = 0
+    const calls: { method: string; path: string; body: unknown }[] = []
+
+    server.use(
+      http.get(LIST_URL, () => {
+        listCalls += 1
+
+        return HttpResponse.json([SALON])
+      }),
+      http.put(`/api/salons/${SALON_ID}/location`, async ({ request }) => {
+        calls.push({
+          method: request.method,
+          path: new URL(request.url).pathname,
+          body: await request.json(),
+        })
+
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.put(`/api/salons/${SALON_ID}/contact-info`, async ({ request }) => {
+        calls.push({
+          method: request.method,
+          path: new URL(request.url).pathname,
+          body: await request.json(),
+        })
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    renderPage()
+
+    const card = (await screen.findByText(SALON.name)).closest('li')
+
+    expect(card).not.toBeNull()
+    await user.click(
+      within(card!).getByRole('button', { name: 'Изменить адрес' })
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    // Правка предзаполняет настоящие значения из DTO, а не просит вводить их заново.
+    expect(within(dialog).getByLabelText('Страна')).toHaveValue(SALON.country)
+    expect(within(dialog).getByLabelText('Почтовый индекс')).toHaveValue(
+      SALON.postalCode
+    )
+    expect(within(dialog).getByLabelText('Широта')).toHaveValue(
+      String(SALON.latitude)
+    )
+    expect(within(dialog).getByLabelText('Долгота')).toHaveValue(
+      String(SALON.longitude)
+    )
+    expect(within(dialog).getByLabelText('Телефон')).toHaveValue(
+      SALON.phoneNumber
+    )
+    expect(within(dialog).getByLabelText('Сайт')).toHaveValue(SALON.websiteUrl)
+
+    await user.clear(within(dialog).getByLabelText('Телефон'))
+    await user.type(within(dialog).getByLabelText('Телефон'), '+79990000001')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => {
+      expect(calls).toHaveLength(2)
+    })
+
+    expect(calls).toStrictEqual([
+      {
+        method: 'PUT',
+        path: `/api/salons/${SALON_ID}/location`,
+        body: {
+          address: SALON.address,
+          city: SALON.city,
+          country: SALON.country,
+          timeZoneId: SALON.timeZoneId,
+          latitude: SALON.latitude,
+          longitude: SALON.longitude,
+          postalCode: SALON.postalCode,
+        },
+      },
+      {
+        method: 'PUT',
+        path: `/api/salons/${SALON_ID}/contact-info`,
+        body: {
+          phoneNumber: '+79990000001',
+          websiteUrl: SALON.websiteUrl,
+        },
+      },
+    ])
+
+    expect(
+      await screen.findByText('Изменения сохранены')
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listCalls).toBe(2)
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

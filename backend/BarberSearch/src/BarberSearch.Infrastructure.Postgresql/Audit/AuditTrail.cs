@@ -119,8 +119,12 @@ public sealed class AuditTrail
 
             // Салон: имя попадает в values строки создания (переименования салона нет),
             // контакты и координаты администратор правит существующими ручками, выключение
-            // пишет isActive. Дети салона (BarberSalon, WorkingSchedule) — другие агрегаты,
-            // их правки сюда не относятся.
+            // пишет isActive. ModerationStatus добавлен в #48: без него решение администратора
+            // (одобрение/отказ) не видно в журнале, хотя пишется как salon.updated.
+            // RejectionReason сознательно не в allowlist: это текст администратора, а не
+            // история изменения строки; OwnerUserId тоже не нужен — владелец не PII, но
+            // и diff по нему бесполезен. Дети салона (BarberSalon, WorkingSchedule) —
+            // другие агрегаты, их правки сюда не относятся.
             [typeof(Salon)] = new(
                 "salon",
                 [
@@ -134,7 +138,8 @@ public sealed class AuditTrail
                     nameof(Salon.Longitude),
                     nameof(Salon.PhoneNumber),
                     nameof(Salon.WebsiteUrl),
-                    nameof(Salon.IsActive)
+                    nameof(Salon.IsActive),
+                    nameof(Salon.ModerationStatus)
                 ]),
 
             // Услуга каталога: Update меняет имя, описание и длительность, а категория

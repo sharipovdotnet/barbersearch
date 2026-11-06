@@ -526,7 +526,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
-| `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional) |
+| `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`) |
 | `HairService` | non-empty name, known category, duration `1..1440` |
 | `Specialization` | non-empty name |
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
@@ -546,6 +546,11 @@ All persisted enums have **explicit numeric values** (§10.10).
 - `Grade`: `None=0, Intern=1 … BarbershopOwner=10`.
 - `Language`: `Ru=1, En=2, De=3, Kg=4, Tj=5, Uz=6`.
 - `PaymentMethod`: `Cash=1, Card=2, DigitalWallet=3, Sbp=4, BankTransfer=5`.
+- `SalonModerationStatus`: `Pending=1, Active=2, Rejected=3` — the administrator's review of a
+  salon, not visibility. `IsActive` stays «visible and participates in search», and the public
+  read predicate is `IsActive && ModerationStatus == Active`. `Salon.Create` (admin path) starts
+  `Active` with `IsActive = true`; `Salon.SubmitByOwner` starts `Pending` with `IsActive = false`.
+  Historical rows are backfilled by the column default `2` (Active), owner `NULL`.
 - `UserRole`: `Customer=1, Barber=2, Admin=3`.
 - `Language`/`PaymentMethod` in `BarberProfile.Languages`/`PaymentMethods` are checked element by
   element with `Enum.IsDefined` in `Create`/`UpdateProfile`: an unknown number is rejected
@@ -654,23 +659,29 @@ The rules below were pushed to the application layer because the aggregate canno
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 18 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 231 domain + 440 application + 116 infrastructure + 148 integration (935 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 110 обработчиков (78 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 34 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
-| Web | ✅ 25 контроллеров / 114 endpoints (106 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Domain | ✅ 19 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 248 domain + 461 application + 116 infrastructure + 158 integration (983 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 113 обработчиков (81 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 35 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишется `ModerationStatus`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
+| Web | ✅ 25 контроллеров / 119 endpoints (111 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (23):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
+**Миграции (24):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`, `AddReadIndexes`,
 `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
-`AddBookingCancellationReason`, `AddBarberRequests`.
+`AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`.
+
+**`AddSalonOwnership` (2026-11-06, issue-48).** Adds `salons.owner_user_id` (FK `users`,
+`ON DELETE SET NULL`, index), `moderation_status` (`NOT NULL DEFAULT 2`, check `IN (1,2,3)`),
+`rejection_reason` (`varchar(500)`, check `NULL OR 1..500`), `reviewed_at`,
+`reviewed_by_user_id` (FK `users`, `SET NULL`, index). No backfill: the default `2` and `NULL`
+owner describe every existing and admin-created row, and no data changes.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -926,6 +937,16 @@ Suggested order:
    отзыв через `DELETE api/reviews/{id}`. Ограничение осталось только в статусе: в таблице
    один boolean, поэтому «на модерации» и «скрыт администратором» неразличимы, и UI не должен
    обещать второе (§17.8).
+10. **Salon ownership and moderation** — **decided 2026-11-06 and implemented (issue-48):**
+    владелец — связь `Salon.OwnerUserId` (`NULL` у админских салонов), **не роль**; управляющий
+    без профиля барбера и передача владения — отдельные срезы. Барбер с профилем создаёт салон
+    через `POST api/salons/own`; салон сразу `Pending` и невидим, пока администратор не одобрит
+    (`approve`/`reject`, причина отказа 1..500). Админский `POST api/salons` по-прежнему создаёт
+    сразу `Active`-салон. `IsActive` остаётся видимостью, публичная выдача требует ещё
+    `ModerationStatus == Active`. Имя салона неизменно (переименование — отдельный срез),
+    координаты вводятся вручную (карта/геокодер — отдельное решение), повторная отправка после
+    отказа не реализована — UI не показывает мёртвую кнопку. Аудит: `moderationStatus` в
+    allowlist, `ownerUserId`/`rejectionReason` — нет (§17.8).
 
 ---
 
@@ -1552,7 +1573,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**25 controllers, 116 endpoints: 108 domain + 8 auth** — one endpoint per Application operation,
+**25 controllers, 119 endpoints: 111 domain + 8 auth** — one endpoint per Application operation,
 plus the eight `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
@@ -1565,7 +1586,7 @@ child entity:
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
 | `BarberScheduleController` | `api/barber-profiles/{id}` | 4 (read, replace week, set/remove date exception) |
-| `SalonsController` | `api/salons` | 6 (1 public directory + 5 admin writes) |
+| `SalonsController` | `api/salons` | 9 (1 public directory + 1 barber self-create + 2 owner/admin edits + 2 activation + 2 moderation) |
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 3 (search, card, slots) |
@@ -1610,10 +1631,10 @@ Conventions:
   политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48) и `reads` (120/мин на IP)
   на семи публичных read-действиях (R-25, §17.5).
 - Create endpoints answer **201** with `CreatedResourceResponse` and deliberately **no `Location`**
-  header (2026-10-25, R-42): none of the eight create endpoints has a self-URI readable right after
+  header (2026-10-25, R-42): none of the nine create endpoints has a self-URI readable right after
   creation. `GET api/bookings` and `GET api/reviews` are lists (the new review is hidden until
   publication, R-35), `salons` now have a public directory `GET api/salons` but still no read by
-  id, `users` has only the self-read
+  id (the self-service `POST api/salons/own` answers the same `201 { id }`), `users` has only the self-read
   `GET api/users/me` (not a resource-by-id for the admin-created user), `hair-services`/`specializations` have
   only the two public list GETs (no read by id), `GET api/auth/me` is not a resource-by-id, and
   `GET api/barbers/{id}` is 404 until the profile is
@@ -1912,20 +1933,51 @@ Read endpoints (added 2026-10-19):
   anonymous `reads`-limited selection catalogue for the barber cabinet: a bare
   `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`) without
   pagination — the same «dictionary, not a pager» exception as the two public catalogues above.
-  Only `IsActive` rows; `city` is an exact trimmed match, `search` is `ILIKE` over name **and**
-  address with `%`, `_` and `\` escaped; both filters are trimmed, empty means no filter, and
-  more than 100 characters is `400 salon.directory.city` / `salon.directory.search`. Order is
-  city, name, id. A `TODO(#48)` sits on the `IsActive` predicate: moderation must add
-  `ModerationStatus == Approved` to both the directory and the invariant behind it.
-  Because the class-level `[Authorize(AdminOnly)]` was removed, every one of the five salon
-  mutations (`POST`, `PUT location`, `PUT contact-info`, `POST`/`DELETE activation`) now carries
-  the attribute itself; `Anonymous` → `401`, `Customer`/`Barber` → `403`, `Admin` unchanged.
+  Since issue-48 the predicate is `IsActive && ModerationStatus == Active` (a `Pending`/`Rejected`
+  salon is not a selection candidate); `city` is an exact trimmed match, `search` is `ILIKE` over
+  name **and** address with `%`, `_` and `\` escaped; both filters are trimmed, empty means no
+  filter, and more than 100 characters is `400 salon.directory.city` /
+  `salon.directory.search`. Order is city, name, id.
+  Because the class-level `[Authorize(AdminOnly)]` was removed, every salon mutation carries
+  the attribute itself: `POST` and `POST activation`/`DELETE activation` are `AdminOnly`,
+  `PUT location`/`PUT contact-info` are `[Authorize]` with the ownership check inside the
+  handlers (§17.8), and `POST own` is `BarberOnly`.
   `GET api/barber-profiles/{id}/salons` is the owner/admin read behind «Мои салоны»: all links,
-  no `is_active` filter (future `Pending` salons must appear after #48), ordered primary first
-  then by name, returning `BarberSalonSummaryResponse` (`salonId`, `name`, `city`, `address`,
-  `timeZoneId`, `isPrimary`). It works for an unverified profile, like the schedule read; ownership
-  is `ICurrentUser.EnsureCanManage(profile.UserId)`, so a foreign barber gets `403` and an unknown
-  profile `404`. The existing `POST .../salons` and `primary` contract did not change.
+  no `is_active`/moderation filter (`Pending` and `Rejected` salons must appear), ordered primary
+  first then by name, returning `BarberSalonSummaryResponse` (`salonId`, `name`, `city`,
+  `address`, `timeZoneId`, `isPrimary`, the full edit fields — `country`, `postalCode`,
+  `latitude`, `longitude`, `phoneNumber`, `websiteUrl`, `ownerUserId`, `moderationStatus`,
+  `rejectionReason`). The edit fields exist for the owner's pre-filled form; `ownerUserId` is
+  `null` for an admin-created salon, so the cabinet hides the two owner `PUT`s there. It works
+  for an unverified profile, like the schedule read; ownership is
+  `ICurrentUser.EnsureCanManage(profile.UserId)`, so a foreign barber gets `403` and an unknown
+  profile `404`.
+- **Salon ownership and moderation (2026-11-06, issue-48).** The owner is a link
+  (`Salon.OwnerUserId`), **not a fourth role**: a `Barber` with a profile creates his own salon
+  through `POST api/salons/own` (`BarberOnly`, CSRF, `CreateOwnSalonHandler`). The profile comes
+  from the `barber_profile_id` claim (`TryGetBarberProfileId`), the body never carries a profile
+  or owner; a barber without a profile gets `403 barberProfile.notFound`. One transaction creates
+  the `Pending` salon, inserts it, links it to the profile with `isPrimary = profile.Salons.Count
+  == 0` and saves the profile; the response is `201 { id }`. The public directory, search, slots,
+  booking options and the barber card all require `ModerationStatus == Active` as well.
+  Admin decisions: `POST api/salons/{id}/approval` and `POST api/salons/{id}/rejection`
+  (`AdminOnly`, both transactional, `Approve`/`Reject` domain methods) — approval makes the salon
+  visible and recordable, rejection keeps it hidden and stores a trimmed reason 1..500 chars
+  (`salon.reject.reasonRequired` / `salon.reject.reasonTooLong`); a repeated decision is
+  `409 salon.review.invalidStatus`. `POST .../activation` on a not-approved salon is
+  `409 salon.activation.notApproved` — activation is still «show/hide an approved salon», never
+  «approve». The owner may edit address and contacts (two independent `PUT`s) in any moderation
+  state, but cannot activate, hide, rename, change the owner or resubmit after rejection.
+  Admin catalogue `GET api/admin/catalogue/salons?status=` accepts a fourth value `pending`
+  (`AdminCatalogueStatus.Pending`), only for salons: `active` = `IsActive && Active`,
+  `hidden` = `!IsActive && Active`, `pending` = `Pending`, `all` = everything. Hair services and
+  specializations still reject `pending` with `400 admin.catalogue.status` because they have no
+  moderation. `AdminSalonResponse` gained `moderationStatus`, `rejectionReason`, `reviewedAt` and
+  `ownerEmail` (left join `users`, nullable for admin-created rows); `CountInactiveAsync` counts
+  only `!IsActive && Active`, so a `Pending` salon no longer inflates «Выключенные салоны».
+  **Audit:** the `Salon` allowlist gained `ModerationStatus`, so an approval/rejection is visible
+  as `salon.updated`; `OwnerUserId` and `RejectionReason` are deliberately **not** audited
+  (owner is not a useful diff, and the reason is the administrator's text, not a row change).
 - **`GET api/barbers/{id}`** — card with profile, services, salons + schedules, specializations and
   rating; `404` for a missing/inactive/unverified profile. Response is `BarberProfileResponse` and
   nested records; no domain entity is serialized. Each service carries
@@ -2439,10 +2491,10 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 
 | Ресурс | Создание | Изменение | Только admin |
 |---|---|---|---|
-| `Salons`, `HairServices`, `Specializations` | admin | admin | create / update / activate |
+| `HairServices`, `Specializations` | admin | admin | create / update / activate |
 | `BarberProfile` | роль `Barber`, `UserId = sub` | владелец профиля | `Verify`, `Unverify`, `ChangeGrade`, `UpdateRating` |
 | Дети профиля (фото, услуги, салоны, график, отпуска) | владелец профиля | владелец профиля | — |
-| `Salons` (каталог) | admin | admin | create / location / contacts / activation; **чтение** `GET api/salons` — анонимно |
+| `Salon` | admin (`POST api/salons`, сразу `Active`) или `Barber` с профилем (`POST api/salons/own`, свой салон в `Pending`) | адрес и контакты — admin или владелец (`EnsureCanManageSalon`); имя и владелец не меняются никем | активация/деактивация, `approval`/`rejection`; **чтение** `GET api/salons` — анонимно |
 | `BarberProfile.Salons` (список) | владелец профиля | владелец профиля | — (чтение владельцем или admin) |
 | `Booking` | клиент, `UserId = sub` | `Confirm`/`Complete`/`NoShow`/`BarberNote` — барбер; `Cancel` — клиент, барбер или admin (барбер обязан передать причину) | — (admin обходит) |
 | `Review` | клиент по своей завершённой брони | автор; удаление — только автор, без admin-обхода | `Publish`/`Hide` |
@@ -2458,6 +2510,18 @@ ProblemDetails (без 302), старый refresh `401`, `login` с новым �
 нового отзыва, и отдать это право админу значило бы дать ему менять историю автора.
 `Publish`/`Hide` отзыва и четыре admin-действия профиля закрыты атрибутом на действии, а не
 проверкой в обработчике: там решение зависит от роли, а не от загруженного ресурса.
+
+Салон (2026-11-06, issue-48) — первый ресурс с «мягким» владельцем: `OwnerUserId` nullable,
+`NULL` значит «салон создан администратором», и такой салон правит только администратор.
+Проверка живёт в `CurrentUserExtensions.EnsureCanManageSalon(salon)` и сравнивает идентификатор
+с `salon.OwnerUserId` через pattern `is { } owner`, а не с `Guid.Empty` (R-29). Владение — связь,
+а не роль: четвёртой роли нет, а переданное владение (`SetOwner`) и управляющий без профиля
+барбера — вне среза. Салон, созданный барбером, **не** активен, пока администратор не одобрит
+его (`POST .../approval`); `POST .../activation` не может обойти модерацию (`409
+salon.activation.notApproved`). Это сознательно: «включить» и «одобрить» — разные права и разные
+действия, иначе барбер одобрил бы себя сам. Аудит: `salon.updated` с `moderationStatus` делает
+решение администратора проверяемым; `ownerUserId` и `rejectionReason` в allowlist не входят
+(владелец — не полезный diff, причина отказа — текст администратора, а не состояние строки).
 
 Заявка в барберы (`POST api/barber-requests`, 2026-11-06) — публичное действие, которое создаёт
 ресурс от имени клиента, но **не даёт прав**: роль `Barber` появляется только после одобрения

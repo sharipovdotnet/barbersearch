@@ -72,6 +72,34 @@ WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
 DELETE FROM refresh_tokens
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
 
+-- 1.1 Салоны, созданные барбером в сценарии #48 (`POST /api/salons/own`).
+-- Удаления салона в API нет, поэтому без этой чистки одобренный салон остался бы
+-- в публичном каталоге и в «Моих салонах» к следующему прогону.
+-- Владелец — пользователь фикстур, у админских салонов `owner_user_id IS NULL`,
+-- поэтому чужие строки не трогаются. Аудит удаляется до салона: `entity_id` ссылается
+-- на его идентификатор. Связи `barber_salons` уходят явно, а не по каскаду.
+DELETE FROM audit_log
+WHERE entity_type = 'salon'
+  AND entity_id IN (
+    SELECT id FROM salons
+    WHERE owner_user_id IN (
+      SELECT id FROM users WHERE email LIKE '%@barbersearch.test'
+    )
+  );
+
+DELETE FROM barber_salons
+WHERE salon_id IN (
+  SELECT id FROM salons
+  WHERE owner_user_id IN (
+    SELECT id FROM users WHERE email LIKE '%@barbersearch.test'
+  )
+);
+
+DELETE FROM salons
+WHERE owner_user_id IN (
+  SELECT id FROM users WHERE email LIKE '%@barbersearch.test'
+);
+
 -- 2. Пользователи. Пароль `e2e-password` (IdentityV3).
 INSERT INTO users
     (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
@@ -254,6 +282,11 @@ ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     city = EXCLUDED.city,
     is_active = EXCLUDED.is_active,
+    owner_user_id = NULL,
+    moderation_status = 2,
+    rejection_reason = NULL,
+    reviewed_at = NULL,
+    reviewed_by_user_id = NULL,
     updated_at = now();
 
 INSERT INTO hair_services
@@ -334,6 +367,11 @@ ON CONFLICT (id) DO UPDATE SET
     phone_number = EXCLUDED.phone_number,
     website_url = EXCLUDED.website_url,
     is_active = EXCLUDED.is_active,
+    owner_user_id = NULL,
+    moderation_status = 2,
+    rejection_reason = NULL,
+    reviewed_at = NULL,
+    reviewed_by_user_id = NULL,
     updated_at = now();
 
 -- 4. Профили барберов: витринный B1 и B2…B13 для пагинации поиска.

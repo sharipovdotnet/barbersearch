@@ -28,10 +28,16 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
     {
         var query = Context.Salons.AsNoTracking();
 
+        // «Видимые» и «выключенные» считаются только среди одобренных салонов: pending
+        // не должен ни попадать в активный каталог, ни раздувать счётчик выключенных.
         query = status switch
         {
-            AdminCatalogueStatus.Active => query.Where(x => x.IsActive),
-            AdminCatalogueStatus.Hidden => query.Where(x => !x.IsActive),
+            AdminCatalogueStatus.Active => query.Where(x =>
+                x.IsActive && x.ModerationStatus == SalonModerationStatus.Active),
+            AdminCatalogueStatus.Hidden => query.Where(x =>
+                !x.IsActive && x.ModerationStatus == SalonModerationStatus.Active),
+            AdminCatalogueStatus.Pending => query.Where(x =>
+                x.ModerationStatus == SalonModerationStatus.Pending),
             _ => query
         };
 
@@ -47,25 +53,30 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         // Связи с салоном не удаляются при выключении, поэтому счётчик показывает, сколько
         // активных подтверждённых барберов останутся привязанными к выключенной строке.
-        var rows = await query
-            .OrderBy(x => x.City)
-            .ThenBy(x => x.Name)
-            .ThenBy(x => x.Id)
-            .Select(x => new AdminSalonResponse(
-                x.Id,
-                x.Name,
-                x.Address,
-                x.City,
-                x.PostalCode,
-                x.Country,
-                x.TimeZoneId,
-                x.Latitude,
-                x.Longitude,
-                x.PhoneNumber,
-                x.WebsiteUrl,
-                x.IsActive,
+        var rows = await (
+            from salon in query
+            join user in Context.Users.AsNoTracking() on salon.OwnerUserId equals (Guid?)user.Id into owners
+            from owner in owners.DefaultIfEmpty()
+            orderby salon.City, salon.Name, salon.Id
+            select new AdminSalonResponse(
+                salon.Id,
+                salon.Name,
+                salon.Address,
+                salon.City,
+                salon.PostalCode,
+                salon.Country,
+                salon.TimeZoneId,
+                salon.Latitude,
+                salon.Longitude,
+                salon.PhoneNumber,
+                salon.WebsiteUrl,
+                salon.IsActive,
+                salon.ModerationStatus,
+                salon.RejectionReason,
+                salon.ReviewedAt,
+                owner == null ? null : owner.Email,
                 Context.BarberSalons.Count(link =>
-                    link.SalonId == x.Id
+                    link.SalonId == salon.Id
                     && Context.BarberProfiles.Any(profile =>
                         profile.Id == link.BarberProfileId
                         && profile.IsActive
@@ -82,10 +93,9 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
     {
         var query = Context.Salons
             .AsNoTracking()
-            .Where(salon => salon.IsActive);
+            .Where(salon =>
+                salon.IsActive && salon.ModerationStatus == SalonModerationStatus.Active);
 
-        // TODO(#48): после модерации добавить `&& salon.ModerationStatus == Approved`,
-        // иначе каталог покажет салон, который ещё не прошёл проверку.
         if (city is not null)
         {
             query = query.Where(salon => salon.City == city);
@@ -119,8 +129,10 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
     /// Сколько салонов выключено — ровно <see cref="AdminCatalogueStatus.Hidden"/>.
     /// </summary>
     /// <remarks>
-    /// Предикат <c>is_active = false</c> — тот же, что у <see cref="GetAdminListAsync"/>
-    /// со статусом <c>Hidden</c>: число в сводке обязано совпадать с разделом каталога.
+    /// Предикат <c>is_active = false AND moderation_status = 2</c> — тот же, что у
+    /// <see cref="GetAdminListAsync"/> со статусом <c>Hidden</c>: число в сводке обязано
+    /// совпадать с разделом каталога. Салон на проверке тоже неактивен, но он не «выключен
+    /// администратором» и в счётчик не входит.
     /// Связи барберов с выключенным салоном сохраняются, поэтому join'ов у счётчика нет.
     /// </remarks>
     public async Task<Result<int, Failure>> CountInactiveAsync(
@@ -128,7 +140,10 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
     {
         var count = await Context.Salons
             .AsNoTracking()
-            .CountAsync(salon => !salon.IsActive, cancellationToken);
+            .CountAsync(
+                salon => !salon.IsActive
+                         && salon.ModerationStatus == SalonModerationStatus.Active,
+                cancellationToken);
 
         return Result.Success<int, Failure>(count);
     }
@@ -199,7 +214,8 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         if (onlyActive)
         {
-            query = query.Where(x => x.IsActive);
+            query = query.Where(x =>
+                x.IsActive && x.ModerationStatus == SalonModerationStatus.Active);
         }
 
         var salons = await query
@@ -231,7 +247,8 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
 
         if (onlyActive)
         {
-            query = query.Where(x => x.IsActive);
+            query = query.Where(x =>
+                x.IsActive && x.ModerationStatus == SalonModerationStatus.Active);
         }
 
         var salons = await query

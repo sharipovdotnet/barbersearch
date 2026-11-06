@@ -16,6 +16,7 @@ using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Common;
+using BarberSearch.Domain.Salons;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -149,9 +150,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
     {
-        // Привязки не фильтруются по is_active: «Мои салоны» — список работы барбера,
-        // а не витрина. #48 добавит сюда статус «на проверке», и прятать такие салоны
-        // клиент не должен.
+        // Привязки не фильтруются по is_active и модерации: «Мои салоны» — список работы
+        // барбера, а не витрина. Владелец должен видеть салон на проверке или отклонённый
+        // вместе с причиной отказа — иначе он не поймёт, почему салона нет в поиске.
         var rows = await (
                 from link in Context.BarberSalons.AsNoTracking()
                 join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
@@ -163,7 +164,16 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     salon.City,
                     salon.Address,
                     salon.TimeZoneId,
-                    link.IsPrimary))
+                    link.IsPrimary,
+                    salon.Country,
+                    salon.PostalCode,
+                    salon.Latitude,
+                    salon.Longitude,
+                    salon.PhoneNumber,
+                    salon.WebsiteUrl,
+                    salon.OwnerUserId,
+                    salon.ModerationStatus,
+                    salon.RejectionReason))
             .ToListAsync(cancellationToken);
 
         return rows;
@@ -351,6 +361,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 && Context.Salons.Any(salon =>
                     salon.Id == link.SalonId
                     && salon.IsActive
+                    && salon.ModerationStatus == SalonModerationStatus.Active
                     && salon.City == city)));
         }
 
@@ -385,7 +396,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             // Конкретные свободные интервалы с учётом таймзоны и отпусков считает /slots.
             query = query.Where(profile => Context.BarberSalons.Any(link =>
                 link.BarberProfileId == profile.Id
-                && Context.Salons.Any(salon => salon.Id == link.SalonId && salon.IsActive)
+                && Context.Salons.Any(salon => salon.Id == link.SalonId
+                    && salon.IsActive
+                    && salon.ModerationStatus == SalonModerationStatus.Active)
                 && Context.WorkingSchedules.Any(schedule =>
                     schedule.BarberSalonId == link.Id
                     && schedule.DayOfWeek == dayOfWeek
@@ -451,7 +464,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var salons = await (
             from link in Context.BarberSalons.AsNoTracking()
             join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
-            where profileIds.Contains(link.BarberProfileId) && salon.IsActive
+            where profileIds.Contains(link.BarberProfileId)
+                  && salon.IsActive
+                  && salon.ModerationStatus == SalonModerationStatus.Active
             orderby link.IsPrimary descending, link.Id
             select new
             {
@@ -782,7 +797,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var salonLinks = await (
             from link in Context.BarberSalons.AsNoTracking()
             join salon in Context.Salons.AsNoTracking() on link.SalonId equals salon.Id
-            where link.BarberProfileId == barberProfileId && salon.IsActive
+            where link.BarberProfileId == barberProfileId
+                  && salon.IsActive
+                  && salon.ModerationStatus == SalonModerationStatus.Active
             select new
             {
                 link.Id,
@@ -1099,7 +1116,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var salonIds = profile.Salons.Select(salon => salon.SalonId).Distinct().ToArray();
         var salonsById = await Context.Salons
             .AsNoTracking()
-            .Where(salon => salonIds.Contains(salon.Id) && salon.IsActive)
+            .Where(salon => salonIds.Contains(salon.Id)
+                            && salon.IsActive
+                            && salon.ModerationStatus == SalonModerationStatus.Active)
             .ToDictionaryAsync(salon => salon.Id, cancellationToken);
 
         return profile.Salons

@@ -1,5 +1,6 @@
 using BarberSearch.Domain;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -37,6 +38,15 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
                 "ck_salons_longitude",
                 FormattableString.Invariant(
                     $"longitude BETWEEN {Constants.MIN_LONGITUDE} AND {Constants.MAX_LONGITUDE}"));
+            // Модерация: те же правила, что у заявки в барберы, — причина отказа не пустая
+            // и не длиннее 500 символов, статус — одно из трёх значений.
+            table.HasCheckConstraint(
+                "ck_salons_moderation_status",
+                CheckConstraintSql.EnumIn<SalonModerationStatus>("moderation_status"));
+            table.HasCheckConstraint(
+                "ck_salons_rejection_reason",
+                FormattableString.Invariant(
+                    $"rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND {Constants.MAX_SALON_REJECTION_REASON_LENGTH}"));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_salons");
@@ -66,7 +76,38 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
             .HasMaxLength(Constants.MAX_URL_LENGTH);
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 
+        // Владелец — связь, а не роль: у админского салона owner_user_id = NULL.
+        // Удаление аккаунта владельца не удаляет салон, а обнуляет владельца.
+        builder.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+        builder.Property(x => x.ModerationStatus)
+            .HasColumnName("moderation_status")
+            .HasConversion<int>()
+            .HasDefaultValue(SalonModerationStatus.Active);
+        builder.Property(x => x.RejectionReason)
+            .HasColumnName("rejection_reason")
+            .HasMaxLength(Constants.MAX_SALON_REJECTION_REASON_LENGTH);
+        builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
+        builder.Property(x => x.ReviewedByUserId).HasColumnName("reviewed_by_user_id");
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(x => x.OwnerUserId)
+            .HasConstraintName("fk_salons_users_owner_user_id")
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(x => x.ReviewedByUserId)
+            .HasConstraintName("fk_salons_users_reviewed_by_user_id")
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(x => new { x.City, x.IsActive })
             .HasDatabaseName("ix_salons_city_is_active");
+
+        // Индексы под FK: удаление аккаунта владельца/администратора проверяет ссылки.
+        builder.HasIndex(x => x.OwnerUserId)
+            .HasDatabaseName("ix_salons_owner_user_id");
+        builder.HasIndex(x => x.ReviewedByUserId)
+            .HasDatabaseName("ix_salons_reviewed_by_user_id");
     }
 }

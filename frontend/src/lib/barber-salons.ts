@@ -1,14 +1,18 @@
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
-import { isBarberSalonSummaryList } from '@/lib/response-guards'
+import { isCreatedId, isBarberSalonSummaryList } from '@/lib/response-guards'
+import type { SalonInput } from '@/lib/salon-form'
+import type { SalonModerationStatus } from '@/lib/salon-moderation'
 
 /**
  * Салоны барбера в кабинете.
  *
  * `GET /api/barber-profiles/{id}/salons` — все привязки профиля, основной салон первым.
- * Список не фильтруется по активности: после #48 в нём появятся салоны «на проверке»,
- * и клиент не должен их прятать.
+ * Список не фильтруется по активности и модерации: «Мои салоны» — рабочий список,
+ * а не витрина, поэтому салон «на проверке» и отклонённый тоже видны владельцу.
+ * Строка несёт полные поля салона и `ownerUserId`: по нему UI решает, показывать ли
+ * правку, а форма заполняет текущие адрес, координаты и контакты без повторного ввода.
  */
 
 export type BarberSalonSummary = {
@@ -18,6 +22,16 @@ export type BarberSalonSummary = {
   address: string
   timeZoneId: string
   isPrimary: boolean
+  country: string
+  postalCode: string | null
+  latitude: number
+  longitude: number
+  phoneNumber: string | null
+  websiteUrl: string | null
+  /** Владелец-барбер; `null` у салона, созданного администратором. */
+  ownerUserId: string | null
+  moderationStatus: SalonModerationStatus
+  rejectionReason: string | null
 }
 
 export type AttachSalonInput = {
@@ -34,6 +48,28 @@ export function fetchBarberProfileSalons(
     signal ? { signal } : {},
     { validate: isBarberSalonSummaryList }
   )
+}
+
+export type CreateOwnSalonResult = {
+  id: string
+}
+
+/**
+ * Создание собственного салона барбера: `POST /api/salons/own`.
+ *
+ * Тело — те же поля, что у админского `POST /api/salons`, поэтому форма общая.
+ * Профиль берётся из claim'а, а не из тела: барбер без профиля получит
+ * `403 barberProfile.notFound`. Салон создаётся `Pending` и сразу привязывается
+ * к профилю, поэтому после `201` достаточно перечитать «Мои салоны».
+ */
+export async function createOwnSalon(
+  input: SalonInput
+): Promise<CreateOwnSalonResult> {
+  return mutateWithCsrf<CreateOwnSalonResult>('/salons/own', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    validate: isCreatedId,
+  })
 }
 
 /**

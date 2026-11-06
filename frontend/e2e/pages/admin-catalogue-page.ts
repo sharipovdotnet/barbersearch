@@ -16,7 +16,11 @@ const TAB_LABELS: Record<CatalogueTabName, string> = {
   salons: 'Салоны',
 }
 
-export type CatalogueStatusLabel = 'Все' | 'Активные' | 'Выключенные'
+export type CatalogueStatusLabel =
+  | 'Все'
+  | 'Активные'
+  | 'Выключенные'
+  | 'На проверке'
 
 export class AdminCataloguePage {
   readonly page: Page
@@ -120,6 +124,15 @@ export class AdminCataloguePage {
     return this.row(rowName).getByRole('button', {
       name: /^(Выключить|Включить)$/,
     })
+  }
+
+  /** Модерация салона: кнопки есть только у строки со статусом «На проверке». */
+  approveButton(rowName: string): Locator {
+    return this.row(rowName).getByRole('button', { name: 'Одобрить' })
+  }
+
+  rejectButton(rowName: string): Locator {
+    return this.row(rowName).getByRole('button', { name: 'Отклонить' })
   }
 
   async waitForRows(): Promise<void> {

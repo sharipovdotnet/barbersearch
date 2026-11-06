@@ -3,6 +3,15 @@ import { ApiError, apiRequest } from '@/lib/api'
 import type { ServiceCategory } from '@/lib/barber-profile-labels'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type {
+  SalonContactInput,
+  SalonInput,
+  SalonLocationInput,
+} from '@/lib/salon-form'
+import {
+  SALON_REJECTION_MAX_LENGTH,
+  type SalonModerationStatus,
+} from '@/lib/salon-moderation'
 import {
   isAdminHairServiceList,
   isAdminSalonList,
@@ -11,12 +20,14 @@ import {
 } from '@/lib/response-guards'
 
 /**
- * Админский каталог: три справочника и мутации существующих эндпоинтов.
+ * Админский каталог: три справочника, мутации существующих эндпоинтов и модерация
+ * салонов.
  *
  * Чтения новые (`GET api/admin/catalogue/*`): они отдают полный справочник, включая
- * выключенные строки, поэтому администратор может найти строку и вернуть её обратно.
- * Мутации остаются на публичных адресах `api/hair-services`, `api/specializations`
- * и `api/salons` — новых прецедентов этап не заводит.
+ * выключенные строки и очередь проверки салонов, поэтому администратор может найти
+ * строку и вернуть её обратно. Мутации остаются на публичных адресах
+ * `api/hair-services`, `api/specializations` и `api/salons`; решения по салону —
+ * отдельные админские `approval`/`rejection` на том же контроллере.
  *
  * Пагинации здесь нет намеренно: справочники маленькие, а созданная строка должна быть
  * видна сразу. Это исключение из правила «список = пейджер».
@@ -26,19 +37,38 @@ import {
 // чтобы экран и хук брали типы справочников из одного модуля.
 export type { CatalogueTab } from '@/lib/admin-path'
 
-export type AdminCatalogueStatus = 'all' | 'active' | 'hidden'
+export type AdminCatalogueStatus = 'all' | 'active' | 'hidden' | 'pending'
 
-/** Порядок кнопок фильтра: от широкого к узкому. */
+/**
+ * Статусы общего фильтра. `pending` есть только у салонов: у услуг и специализаций
+ * модерации нет, и сервер отвечает на него `400 admin.catalogue.status`.
+ */
 export const ADMIN_CATALOGUE_STATUSES: readonly AdminCatalogueStatus[] = [
   'all',
   'active',
   'hidden',
 ]
 
+/** Четвёртый фильтр вкладки «Салоны» — очередь проверки. */
+export const ADMIN_SALON_CATALOGUE_STATUSES: readonly AdminCatalogueStatus[] = [
+  ...ADMIN_CATALOGUE_STATUSES,
+  'pending',
+]
+
+/** Набор фильтров вкладки: `pending` не должен появляться у услуг и специализаций. */
+export function catalogueStatuses(
+  tab: CatalogueTab
+): readonly AdminCatalogueStatus[] {
+  return tab === 'salons'
+    ? ADMIN_SALON_CATALOGUE_STATUSES
+    : ADMIN_CATALOGUE_STATUSES
+}
+
 export const ADMIN_CATALOGUE_STATUS_LABELS: Record<AdminCatalogueStatus, string> = {
   all: 'Все',
   active: 'Активные',
   hidden: 'Выключенные',
+  pending: 'На проверке',
 }
 
 /**
@@ -121,6 +151,13 @@ export type AdminSalon = {
   phoneNumber: string | null
   websiteUrl: string | null
   isActive: boolean
+  moderationStatus: SalonModerationStatus
+  /** Причина отказа; `null` у салона не в статусе `Rejected`. */
+  rejectionReason: string | null
+  /** Когда администратор принял решение; `null` у салона, не проходившего проверку. */
+  reviewedAt: string | null
+  /** Email владельца-барбера; `null` у салона, созданного администратором. */
+  ownerEmail: string | null
   usageCount: number
 }
 
@@ -253,35 +290,6 @@ export async function setSpecializationActive(
   })
 }
 
-export type SalonInput = {
-  name: string
-  address: string
-  city: string
-  country: string
-  timeZoneId: string
-  latitude: number
-  longitude: number
-  postalCode: string | null
-  phoneNumber: string | null
-  websiteUrl: string | null
-}
-
-/** Правка салона идёт двумя независимыми запросами: адрес и контакты. */
-export type SalonLocationInput = {
-  address: string
-  city: string
-  country: string
-  timeZoneId: string
-  latitude: number
-  longitude: number
-  postalCode: string | null
-}
-
-export type SalonContactInput = {
-  phoneNumber: string | null
-  websiteUrl: string | null
-}
-
 export async function createSalon(input: SalonInput): Promise<{ id: string }> {
   return mutateWithCsrf<{ id: string }>('/salons', {
     method: 'POST',
@@ -319,48 +327,24 @@ export async function setSalonActive(
   })
 }
 
-/** Коды серверных ошибок, которые показываются у конкретного поля формы салона. */
-export type SalonField = 'address' | 'city' | 'country' | 'timeZoneId' | 'websiteUrl'
+export type SalonModerationAction = 'approve' | 'reject'
 
-const SALON_FIELD_MESSAGES: Readonly<
-  Record<SalonField, { codes: readonly string[]; message: string }>
-> = {
-  address: { codes: ['salon.address'], message: 'Введите адрес.' },
-  city: { codes: ['salon.city.invalid'], message: 'Город не может быть пустым.' },
-  country: { codes: ['salon.country'], message: 'Введите страну.' },
-  timeZoneId: {
-    codes: ['salon.timeZoneId.unknown', 'salon.timeZoneId'],
-    message: 'Неизвестный часовой пояс. Выберите зону из списка.',
-  },
-  websiteUrl: {
-    codes: ['salon.websiteUrl'],
-    message: 'Сайт должен быть адресом http(s) не длиннее 2048 символов.',
-  },
+/** Одобрение салона: `POST /api/salons/{id}/approval`, тела нет. */
+export async function approveSalon(salonId: string): Promise<void> {
+  await mutateWithCsrf<void>(`/salons/${salonId}/approval`, {
+    method: 'POST',
+  })
 }
 
-/**
- * Ошибки полей формы салона из ответа сервера.
- *
- * Домен проверяет поля сам, и опечатка в часовом поясе или пустой город приходят кодом,
- * а не текстом; показывать их нужно у поля, иначе пользователь ищет причину в общем alert.
- */
-export function salonFieldErrors(cause: unknown): Partial<Record<SalonField, string>> {
-  if (!(cause instanceof ApiError)) {
-    return {}
-  }
-
-  const errors: Partial<Record<SalonField, string>> = {}
-
-  for (const [field, rule] of Object.entries(SALON_FIELD_MESSAGES) as [
-    SalonField,
-    { codes: readonly string[]; message: string },
-  ][]) {
-    if (rule.codes.some((code) => cause.hasCode(code))) {
-      errors[field] = rule.message
-    }
-  }
-
-  return errors
+/** Отказ: причина обязательна, её увидит владелец в «Моих салонах». */
+export async function rejectSalon(
+  salonId: string,
+  reason: string
+): Promise<void> {
+  await mutateWithCsrf<void>(`/salons/${salonId}/rejection`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
 }
 
 /**
@@ -403,7 +387,7 @@ export function describeAdminCatalogueError(
     return 'Неизвестный часовой пояс. Выберите зону из списка.'
   }
 
-  if (cause.hasCode('salon.city.invalid')) {
+  if (cause.hasCode('salon.city') || cause.hasCode('salon.city.invalid')) {
     return 'Город не может быть пустым.'
   }
 
@@ -412,4 +396,48 @@ export function describeAdminCatalogueError(
   }
 
   return describeApiFailure(cause, fallback)
+}
+
+/**
+ * Ошибки одобрения и отказа салона.
+ *
+ * `409 salon.review.invalidStatus` значит, что салон уже рассмотрели в другой вкладке:
+ * помочь может только повторное чтение. `400 salon.reject.*` показываются у поля причины.
+ */
+export function describeSalonModerationError(
+  cause: unknown,
+  action: SalonModerationAction
+): string {
+  if (cause instanceof ApiError) {
+    if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
+      return 'Раздел доступен только администратору.'
+    }
+
+    if (cause.status === 404 || cause.hasCode('salon.notFound')) {
+      return 'Салон больше не существует. Обновите список.'
+    }
+
+    if (cause.hasCode('salon.review.invalidStatus') || cause.status === 409) {
+      return 'Салон уже проверили. Обновите список.'
+    }
+
+    if (cause.hasCode('salon.reject.reasonRequired')) {
+      return 'Укажите причину отказа.'
+    }
+
+    if (cause.hasCode('salon.reject.reasonTooLong')) {
+      return `Слишком длинная причина — максимум ${SALON_REJECTION_MAX_LENGTH} символов.`
+    }
+
+    if (cause.hasCode('auth.csrf.invalid')) {
+      return 'Сессия устарела. Обновите страницу и повторите действие.'
+    }
+  }
+
+  return describeApiFailure(
+    cause,
+    action === 'approve'
+      ? 'Не удалось одобрить салон. Попробуйте ещё раз.'
+      : 'Не удалось отклонить салон. Попробуйте ещё раз.'
+  )
 }

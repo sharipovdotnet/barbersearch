@@ -42,6 +42,21 @@ _Avoid_: Level, rank, tier
 A physical place that opens and closes in one time zone, with an address and coordinates.
 _Avoid_: Shop, branch, location
 
+**Salon Owner**:
+The User who owns a Salon. It is a link (`Salon.OwnerUserId`), not a role: a Salon has at most
+one owner, the owner is always a Barber with a Barber Profile, and there is no fourth role.
+A Salon with no owner was created by an administrator. The owner can edit the address and
+contacts, but cannot activate, hide or rename the Salon.
+_Avoid_: Salon admin, shop owner role
+
+**Salon Moderation Status**:
+The state of a Salon before and after an administrator's review: Pending → Active | Rejected.
+It is not IsActive (visibility): the Salon is publicly visible only when it is both active and
+IsActive. Salons created by an administrator start Active; a Salon created by its Barber starts
+Pending. Rejected means the administrator declined it with a reason; the owner cannot resubmit
+in this slice.
+_Avoid_: Approval flag, publication status
+
 **Barber Salon**:
 The fact that one Barber works in one Salon, together with that Barber's weekly schedule at that
 Salon and whether it is his primary Salon.

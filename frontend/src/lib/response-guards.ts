@@ -70,6 +70,7 @@ import type { MyReview } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import type { Review } from '@/lib/reviews'
+import { isSalonModerationStatus } from '@/lib/salon-moderation'
 import type { SalonDirectoryItem } from '@/lib/salons'
 import type { SpecializationOption } from '@/lib/specializations'
 
@@ -419,7 +420,16 @@ export function isBarberSalonSummary(
     isString(value.city) &&
     isString(value.address) &&
     isString(value.timeZoneId) &&
-    isBoolean(value.isPrimary)
+    isBoolean(value.isPrimary) &&
+    isString(value.country) &&
+    isNullableString(value.postalCode) &&
+    isNumber(value.latitude) &&
+    isNumber(value.longitude) &&
+    isNullableString(value.phoneNumber) &&
+    isNullableString(value.websiteUrl) &&
+    isNullable(isNonEmptyString)(value.ownerUserId) &&
+    isSalonModerationStatus(value.moderationStatus) &&
+    isNullableString(value.rejectionReason)
   )
 }
 
@@ -811,7 +821,7 @@ export function isAdminSpecializationRow(
 
 export const isAdminSpecializationList = isArrayOf(isAdminSpecializationRow)
 
-/** Строка админского справочника салонов: все поля формы правки и координаты. */
+/** Строка админского справочника салонов: все поля формы правки, модерация и владелец. */
 export function isAdminSalonRow(value: unknown): value is AdminSalon {
   return (
     isRecord(value) &&
@@ -827,6 +837,10 @@ export function isAdminSalonRow(value: unknown): value is AdminSalon {
     isNullableString(value.phoneNumber) &&
     isNullableString(value.websiteUrl) &&
     isBoolean(value.isActive) &&
+    isSalonModerationStatus(value.moderationStatus) &&
+    isNullableString(value.rejectionReason) &&
+    isNullableString(value.reviewedAt) &&
+    isNullableString(value.ownerEmail) &&
     isNumber(value.usageCount)
   )
 }

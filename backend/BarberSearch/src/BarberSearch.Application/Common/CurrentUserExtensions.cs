@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.Salons;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -72,6 +73,51 @@ public static class CurrentUserExtensions
         }
 
         if (userId.Value == ownerId)
+        {
+            return UnitResult.Success<Failure>();
+        }
+
+        return new Failure(Error.Forbidden(
+            ApiErrorCodes.Auth.Forbidden,
+            FORBIDDEN_MESSAGE));
+    }
+
+    /// <summary>
+    /// Может ли текущий пользователь править салон: администратор может всё, владелец —
+    /// свой салон.
+    /// </summary>
+    /// <remarks>
+    /// У салона, созданного администратором, владельца нет (<c>null</c>), поэтому править
+    /// его может только администратор. Сравнение идёт с <see cref="Salon.OwnerUserId"/>,
+    /// а не с <c>Guid.Empty</c>: отсутствие владельца — это <c>null</c>, а не пустой
+    /// идентификатор (R-29).
+    /// </remarks>
+    /// <param name="currentUser">Текущий пользователь запроса.</param>
+    /// <param name="salon">Загруженный салон.</param>
+    /// <returns>
+    /// Успех, если операция разрешена; <c>Failure</c> с <see cref="ErrorType.UNAUTHORIZED"/>
+    /// для анонимного запроса; иначе <c>Failure</c> с <see cref="ErrorType.FORBIDDEN"/>.
+    /// </returns>
+    public static UnitResult<Failure> EnsureCanManageSalon(
+        this ICurrentUser currentUser,
+        Salon salon)
+    {
+        ArgumentNullException.ThrowIfNull(currentUser);
+        ArgumentNullException.ThrowIfNull(salon);
+
+        // Сначала аутентификация, потом роль: администратор без claim'а sub — всё равно аноним.
+        var userId = currentUser.RequireUserId();
+        if (userId.IsFailure)
+        {
+            return userId.Error;
+        }
+
+        if (currentUser.IsAdmin)
+        {
+            return UnitResult.Success<Failure>();
+        }
+
+        if (salon.OwnerUserId is { } ownerUserId && userId.Value == ownerUserId)
         {
             return UnitResult.Success<Failure>();
         }

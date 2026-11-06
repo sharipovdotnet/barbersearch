@@ -84,10 +84,19 @@ public class AdminCatalogueController : ApiController
     /// </summary>
     /// <remarks>
     /// Поиск идёт по названию и городу. Ответ — голый JSON-массив, порядок — город, название,
-    /// идентификатор; строки несут все поля формы правки. <c>usageCount</c> — число активных
-    /// подтверждённых барберов, работающих в салоне.
+    /// идентификатор; строки несут все поля формы правки, состояние модерации
+    /// (<c>moderationStatus</c>, <c>rejectionReason</c>, <c>reviewedAt</c>) и email владельца
+    /// (<c>ownerEmail</c>, <c>null</c> у салона, созданного администратором).
+    /// <c>usageCount</c> — число активных подтверждённых барберов, работающих в салоне.
+    /// <para>
+    /// Только у салонов есть четвёртый фильтр <c>pending</c> — очередь модерации. У услуг
+    /// и специализаций модерации нет, поэтому им <c>pending</c> не передаётся: они отвечают
+    /// <c>400 admin.catalogue.status</c>.
+    /// </para>
     /// </remarks>
-    /// <param name="status">Фильтр <c>all</c> (по умолчанию), <c>active</c> или <c>hidden</c>.</param>
+    /// <param name="status">
+    /// Фильтр <c>all</c> (по умолчанию), <c>active</c>, <c>hidden</c> или <c>pending</c>.
+    /// </param>
     /// <param name="search">Поиск по названию или городу; не длиннее 100 символов.</param>
     /// <param name="handler">Обработчик запроса.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
