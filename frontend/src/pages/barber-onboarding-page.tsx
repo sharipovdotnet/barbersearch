@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, UserRound } from 'lucide-react'
+import { Loader2, MapPin, UserRound } from 'lucide-react'
 
 import { SignInGate } from '@/components/account/account-gates'
 import {
@@ -7,6 +7,7 @@ import {
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberProfileForm } from '@/components/barber/barber-profile-form'
+import { SalonPickerDialog } from '@/components/barber/barber-salon-picker-dialog'
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button } from '@/components/ui/button'
@@ -39,11 +40,17 @@ import { refreshSession } from '@/lib/session-refresh'
  * возвращается — профиль уже есть.
  */
 
-type OnboardingStage = 'form' | 'finishing' | 'terminal' | 'transient'
+type OnboardingStage =
+  | 'form'
+  | 'refreshing'
+  | 'salon'
+  | 'terminal'
+  | 'transient'
 
 export function BarberOnboardingPage() {
   const { status, user, retrySession } = useSession()
   const [stage, setStage] = useState<OnboardingStage>('form')
+  const [profileId, setProfileId] = useState<string | null>(null)
 
   useEffect(() => {
     document.title = 'Профиль барбера — BarberSearch'
@@ -56,26 +63,67 @@ export function BarberOnboardingPage() {
     user.barberProfileId !== null
 
   // Профиль уже есть (вкладку открыли с устаревшей сессией): форме здесь не место.
-  // Переход идемпотентен — StrictMode выполняет эффект дважды.
+  // Шаг «Добавить салон» — исключение: профиль только что создан, и уходить с него
+  // нельзя, поэтому авто-переход работает только из формы.
   useEffect(() => {
-    if (hasProfile) {
+    if (hasProfile && stage === 'form') {
       navigate(BARBER_CABINET_PATH, { replace: true })
     }
-  }, [hasProfile])
+  }, [hasProfile, stage])
 
   /**
-   * Один общий финал для `201` и `409`: профиль существует, нужен свежий claim.
-   * Провал продления терминален (сессию начинают заново) или временный (повторяем
-   * только refresh, но никогда не `POST` — иначе получили бы `409`).
+   * После `201` профиль уже существует, но claim ещё старый. Продлеваем сессию и
+   * остаёмся на шаге выбора салона: `profileId` берём из ответа `POST`, а не из сессии.
+   * Провал продления терминален или временный — оба состояния уже были в онбординге.
    */
-  async function finishCreation(): Promise<void> {
-    setStage('finishing')
+  async function finishCreation(id: string): Promise<void> {
+    setProfileId(id)
+    setStage('refreshing')
+
+    const outcome = await refreshSession()
+
+    if (outcome.kind === 'refreshed') {
+      retrySession()
+      setStage('salon')
+      return
+    }
+
+    setStage(outcome.kind === 'terminal' ? 'terminal' : 'transient')
+  }
+
+  /**
+   * `409` значит, что профиль уже создан, но его id неизвестен: салон предложить
+   * нельзя, ведём в кабинет после продления сессии — как было до этого среза.
+   */
+  async function finishExistingProfile(): Promise<void> {
+    setStage('refreshing')
 
     const outcome = await refreshSession()
 
     if (outcome.kind === 'refreshed') {
       retrySession()
       navigate(BARBER_CABINET_PATH, { replace: true })
+      return
+    }
+
+    setStage(outcome.kind === 'terminal' ? 'terminal' : 'transient')
+  }
+
+  /** Повтор продления из терминального/временного состояния — без повторного `POST`. */
+  async function retrySessionRefresh(): Promise<void> {
+    setStage('refreshing')
+
+    const outcome = await refreshSession()
+
+    if (outcome.kind === 'refreshed') {
+      retrySession()
+
+      if (profileId !== null) {
+        setStage('salon')
+      } else {
+        navigate(BARBER_CABINET_PATH, { replace: true })
+      }
+
       return
     }
 
@@ -116,17 +164,20 @@ export function BarberOnboardingPage() {
       )}
 
       {status === 'authenticated' && user && user.role === 'Barber' && (
-        user.barberProfileId === null ? (
+        user.barberProfileId === null ||
+        stage === 'salon' ||
+        stage === 'refreshing' ? (
           <OnboardingScreen
             stage={stage}
-            onCreated={() => {
-              void finishCreation()
+            profileId={profileId}
+            onCreated={(id) => {
+              void finishCreation(id)
             }}
             onAlreadyExists={() => {
-              void finishCreation()
+              void finishExistingProfile()
             }}
             onRetrySession={() => {
-              void finishCreation()
+              void retrySessionRefresh()
             }}
           />
         ) : (
@@ -142,18 +193,22 @@ export function BarberOnboardingPage() {
   )
 }
 
-/** Форма или финальная карточка: после создания профиля форма не возвращается. */
+/** Форма, шаг салона или финальная карточка: после создания профиля форма не возвращается. */
 function OnboardingScreen({
   stage,
+  profileId,
   onCreated,
   onAlreadyExists,
   onRetrySession,
 }: {
   stage: OnboardingStage
-  onCreated: () => void
+  profileId: string | null
+  onCreated: (id: string) => void
   onAlreadyExists: () => void
   onRetrySession: () => void
 }) {
+  const [salonAdded, setSalonAdded] = useState(false)
+
   return (
     <div className="space-y-5">
       <header className="flex items-center gap-3">
@@ -188,11 +243,77 @@ function OnboardingScreen({
         </Card>
       )}
 
-      {stage === 'finishing' && (
+      {stage === 'refreshing' && (
         <Card>
           <CardContent className="flex items-center gap-2 pt-6 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />
             <p role="status">Профиль создан. Обновляем сессию…</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {stage === 'salon' && profileId !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Добавьте салон</CardTitle>
+            <CardDescription>
+              Расписание и запись ведутся по паре «барбер — салон». Выберите салон
+              из каталога или пропустите шаг — кабинет откроется и без него, но
+              расписание будет пустым.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {salonAdded ? (
+              <p role="status" className="text-sm">
+                Салон добавлен.
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {!salonAdded && (
+                <SalonPickerDialog
+                  barberProfileId={profileId}
+                  hasSalons={false}
+                  trigger={
+                    <>
+                      <MapPin data-icon="inline-start" aria-hidden />
+                      Выбрать салон
+                    </>
+                  }
+                  onAttached={() => {
+                    setSalonAdded(true)
+                  }}
+                  onStale={() => {}}
+                />
+              )}
+
+              <Button
+                type="button"
+                className="h-11 sm:h-8"
+                onClick={() => {
+                  navigate(BARBER_CABINET_PATH)
+                }}
+              >
+                Перейти в кабинет
+              </Button>
+
+              {!salonAdded && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-11 sm:h-8"
+                  onClick={() => {
+                    navigate(BARBER_CABINET_PATH)
+                  }}
+                >
+                  Пропустить
+                </Button>
+              )}
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Настроить расписание можно позже — в разделе «Расписание».
+            </p>
           </CardContent>
         </Card>
       )}

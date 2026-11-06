@@ -2,6 +2,7 @@ using BarberSearch.Application.Common;
 using BarberSearch.Application.Salons;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Salons.Admin;
+using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -69,6 +70,46 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
                         profile.Id == link.BarberProfileId
                         && profile.IsActive
                         && profile.IsVerified))))
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    public async Task<Result<IReadOnlyList<SalonDirectoryItemResponse>, Failure>> GetDirectoryAsync(
+        string? city,
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Context.Salons
+            .AsNoTracking()
+            .Where(salon => salon.IsActive);
+
+        // TODO(#48): после модерации добавить `&& salon.ModerationStatus == Approved`,
+        // иначе каталог покажет салон, который ещё не прошёл проверку.
+        if (city is not null)
+        {
+            query = query.Where(salon => salon.City == city);
+        }
+
+        if (search is not null)
+        {
+            var pattern = LikePattern.Contains(search);
+
+            query = query.Where(salon =>
+                EF.Functions.ILike(salon.Name, pattern, "\\")
+                || EF.Functions.ILike(salon.Address, pattern, "\\"));
+        }
+
+        var rows = await query
+            .OrderBy(salon => salon.City)
+            .ThenBy(salon => salon.Name)
+            .ThenBy(salon => salon.Id)
+            .Select(salon => new SalonDirectoryItemResponse(
+                salon.Id,
+                salon.Name,
+                salon.City,
+                salon.Address,
+                salon.TimeZoneId))
             .ToListAsync(cancellationToken);
 
         return rows;

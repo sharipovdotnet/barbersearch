@@ -1,11 +1,15 @@
 import type { MouseEvent } from 'react'
-import { CalendarCheck, CalendarClock, type LucideIcon } from 'lucide-react'
+import { CalendarCheck, CalendarClock, MapPin, type LucideIcon } from 'lucide-react'
 
-import { BARBER_CABINET_PATH, BARBER_SCHEDULE_PATH } from '@/lib/barber-cabinet-path'
+import {
+  BARBER_CABINET_PATH,
+  BARBER_SALONS_PATH,
+  BARBER_SCHEDULE_PATH,
+} from '@/lib/barber-cabinet-path'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
-type Section = 'bookings' | 'schedule'
+type Section = 'bookings' | 'schedule' | 'salons'
 
 const ITEMS: readonly {
   section: Section
@@ -25,10 +29,16 @@ const ITEMS: readonly {
     label: 'Расписание',
     icon: CalendarClock,
   },
+  {
+    section: 'salons',
+    href: BARBER_SALONS_PATH,
+    label: 'Салоны',
+    icon: MapPin,
+  },
 ]
 
 /**
- * Два раздела кабинета барбера: записи клиентов и собственное расписание.
+ * Три раздела кабинета барбера: записи клиентов, расписание и салоны.
  *
  * Ссылки настоящие, поэтому средний клик и «открыть в новой вкладке» работают;
  * `aria-current` помечает текущий раздел.

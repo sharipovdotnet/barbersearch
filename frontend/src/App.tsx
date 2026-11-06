@@ -15,6 +15,7 @@ import { isBecomeABarberPath } from '@/lib/barber-request-path'
 import {
   isBarberCabinetPath,
   isBarberOnboardingPath,
+  isBarberSalonsPath,
   isBarberSchedulePath,
 } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
@@ -72,6 +73,12 @@ const BarberSchedulePage = lazy(() =>
   })),
 )
 
+const BarberSalonsPage = lazy(() =>
+  import('@/pages/barber-salons-page').then((module) => ({
+    default: module.BarberSalonsPage,
+  })),
+)
+
 const BarberOnboardingPage = lazy(() =>
   import('@/pages/barber-onboarding-page').then((module) => ({
     default: module.BarberOnboardingPage,
@@ -119,6 +126,7 @@ function App() {
   const isAccountSecurity = isAccountSecurityPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const isBarberSchedule = isBarberSchedulePath(pathname)
+  const isBarberSalons = isBarberSalonsPath(pathname)
   const isBarberOnboarding = isBarberOnboardingPath(pathname)
   const pageKey = isRegister
     ? 'register'
@@ -138,13 +146,15 @@ function App() {
                   ? 'barber-onboarding'
                   : isBarberSchedule
                     ? 'barber-schedule'
-                    : isBarberCabinet
-                      ? 'barber-cabinet'
-                      : pathname === '/account'
-                        ? 'account'
-                        : barberId !== null
-                          ? `barber:${barberId}`
-                          : 'home'
+                    : isBarberSalons
+                      ? 'barber-salons'
+                      : isBarberCabinet
+                        ? 'barber-cabinet'
+                        : pathname === '/account'
+                          ? 'account'
+                          : barberId !== null
+                            ? `barber:${barberId}`
+                            : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -191,6 +201,8 @@ function App() {
               <BarberOnboardingPage />
             ) : isBarberSchedule ? (
               <BarberSchedulePage />
+            ) : isBarberSalons ? (
+              <BarberSalonsPage />
             ) : isBarberCabinet ? (
               <BarberCabinetPage />
             ) : pathname === '/account' ? (

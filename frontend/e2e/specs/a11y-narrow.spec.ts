@@ -135,6 +135,39 @@ test.describe('axe: 320 px, расписание барбера', () => {
       test.info()
     )
   })
+
+  test('«Мои салоны» и диалог каталога на 320', async ({ page }) => {
+    await page.goto('/barber/salons')
+    await expect(
+      page.getByRole('heading', { name: 'Мои салоны', level: 1 })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Добавить салон' }).first()
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: 'Добавить салон' }).first().click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Поиск').fill('E2E Studio')
+    await expect(dialog.getByRole('radio').first()).toBeVisible()
+
+    // Длинные название, адрес и часовой пояс не должны расширять страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/salons + диалог @320',
+      test.info()
+    )
+  })
 })
 
 test.describe('axe: 320 px, админка без выбранной строки', () => {

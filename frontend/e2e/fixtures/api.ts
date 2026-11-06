@@ -143,6 +143,39 @@ export async function hidePublishedReview(
 }
 
 /**
+ * Отвязывает салон от профиля барбера — откат мутирующего спека «Мои салоны».
+ *
+ * UI среза удаление салона не умеет (оно осталось в API), поэтому `finally` зовёт
+ * существующий `DELETE /api/barber-profiles/{id}/salons/{salonId}` от имени барбера.
+ * `404` допустим: параллельный прогон уже удалил связь.
+ */
+export async function detachBarberSalon(
+  playwright: PlaywrightApi,
+  ids: { barberProfileId: string; salonId: string }
+): Promise<void> {
+  const context = await playwright.request.newContext({
+    baseURL,
+    storageState: storageStatePath('barber'),
+  })
+
+  try {
+    const token = await csrfToken(context)
+
+    const response = await context.delete(
+      `/api/barber-profiles/${ids.barberProfileId}/salons/${ids.salonId}`,
+      { headers: { 'X-CSRF-TOKEN': token } }
+    )
+
+    expect(
+      [204, 404],
+      `DELETE barber salon: ${response.status()}`
+    ).toContain(response.status())
+  } finally {
+    await context.dispose()
+  }
+}
+
+/**
  * Запись на будущее для восстановления «Ближайших» после терминального действия.
  *
  * Слот, который освобождает тест, лежит в будущем относительно seed, поэтому

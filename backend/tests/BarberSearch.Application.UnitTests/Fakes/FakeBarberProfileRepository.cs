@@ -5,6 +5,7 @@ using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles;
@@ -33,6 +34,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     private readonly Dictionary<Guid, BarberProfileResponse> _cards = [];
     private readonly List<AdminBarberResponse> _adminBarbers = [];
     private readonly Dictionary<Guid, AdminBarberDetailResponse> _adminDetails = [];
+    private readonly List<BarberSalonSummaryResponse> _salonSummaries = [];
     private Dictionary<Guid, BarberProfile>? _snapshot;
 
     public IReadOnlyCollection<BarberProfile> Profiles => _profiles.Values;
@@ -106,6 +108,9 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     public void AddSearchItem(BarberSearchItemResponse item) => _searchItems.Add(item);
 
+    /// <summary>Строка «Мои салоны» для сценариев чтения привязок.</summary>
+    public void AddSalonSummary(BarberSalonSummaryResponse summary) => _salonSummaries.Add(summary);
+
     public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
 
     public void AddAdminBarber(AdminBarberResponse barber) => _adminBarbers.Add(barber);
@@ -173,6 +178,31 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
                     ApiErrorCodes.BarberProfile.NotFound,
                     $"Barber profile '{id}' was not found.",
                     id)));
+    }
+
+    public Task<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>> GetSalonSummariesAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        LoadCalls.Add("salonSummaries");
+
+        if (!_profiles.ContainsKey(barberProfileId))
+        {
+            return Task.FromResult<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>>(
+                new Failure(Error.NotFound(
+                    ApiErrorCodes.BarberProfile.NotFound,
+                    $"Barber profile '{barberProfileId}' was not found.",
+                    barberProfileId)));
+        }
+
+        var ordered = _salonSummaries
+            .OrderByDescending(row => row.IsPrimary)
+            .ThenBy(row => row.Name, StringComparer.Ordinal)
+            .ThenBy(row => row.SalonId)
+            .ToList();
+
+        return Task.FromResult<Result<IReadOnlyList<BarberSalonSummaryResponse>, Failure>>(
+            ordered);
     }
 
     public Task<Result<BarberSalon, Failure>> GetSalonAsync(

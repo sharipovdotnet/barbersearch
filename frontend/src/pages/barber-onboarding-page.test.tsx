@@ -124,7 +124,7 @@ describe('BarberOnboardingPage', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('201: обновляет сессию, повторяет проверку и ведёт в кабинет', async () => {
+  it('201: обновляет сессию и показывает шаг «Добавить салон»', async () => {
     const user = userEvent.setup()
     const createCalls = mockCreate()
     const refreshCalls = countRequests('/api/auth/refresh')
@@ -134,6 +134,14 @@ describe('BarberOnboardingPage', () => {
 
     await fillMinimalForm(user)
     await submitForm()
+
+    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Выбрать салон' })
+    ).toBeInTheDocument()
+
+    // Шаг не блокирует кабинет: «Пропустить» ведёт в /barber.
+    await user.click(screen.getByRole('button', { name: 'Пропустить' }))
 
     await waitFor(() => {
       expect(window.location.pathname).toBe('/barber')
@@ -230,9 +238,8 @@ describe('BarberOnboardingPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Повторить' }))
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/barber')
-    })
+    // Профиль уже создан: после успешного продления остаётся шаг салона.
+    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
     expect(refreshAttempts).toBe(2)
     expect(createCalls()).toBe(1)
   })

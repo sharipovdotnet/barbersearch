@@ -179,6 +179,27 @@ test.describe('axe: кабинет барбера', () => {
 
     await expectNoBlockingViolations(page, '/barber (запись клиента)', test.info())
   })
+
+  test('/barber/salons: карточки и открытый диалог каталога', async ({ page }) => {
+    await page.goto('/barber/salons')
+    await expect(
+      page.getByRole('heading', { name: 'Мои салоны', level: 1 })
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: 'Добавить салон' }).click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Поиск').fill('E2E Studio')
+    await expect(dialog.getByRole('radio').first()).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/salons + диалог',
+      test.info()
+    )
+  })
 })
 
 test.describe('axe: админка', () => {
