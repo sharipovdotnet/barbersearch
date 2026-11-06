@@ -20,8 +20,9 @@ namespace BarberSearch.Contracts.Bookings.CreateBarberBooking;
 /// </para>
 /// </remarks>
 /// <param name="CustomerId">
-/// Идентификатор зарегистрированного клиента, найденного через <c>GET api/barber/clients</c>;
-/// роль и активность проверяет Application. <c>null</c> — запись создаётся для гостя.
+/// Идентификатор активного пользователя, найденного через <c>GET api/barber/clients</c>;
+/// роль не важна — записать можно клиента, администратора, барбера и т. д.
+/// <c>null</c> — запись создаётся для гостя.
 /// </param>
 /// <param name="GuestFirstName">Имя гостя; обязательно, если <paramref name="CustomerId"/> = <c>null</c>.</param>
 /// <param name="GuestLastName">Фамилия гостя; необязательна.</param>

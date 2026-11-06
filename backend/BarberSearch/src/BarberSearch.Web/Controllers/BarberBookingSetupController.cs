@@ -28,14 +28,14 @@ namespace BarberSearch.Web.Controllers;
 public class BarberBookingSetupController : ApiController
 {
     /// <summary>
-    /// Ищет зарегистрированного клиента по email или телефону.
+    /// Ищет активного пользователя по email или телефону.
     /// </summary>
     /// <remarks>
     /// Минимум три символа и максимум сто проверяет Application; ответ ограничен
-    /// десятью строками. Возвращаются только активные пользователи с ролью
-    /// <c>Customer</c> — контакты администраторов и барберов форме не нужны.
+    /// десятью строками. Роль не фильтруется: записать можно клиента, администратора,
+    /// барбера и любого другого активного пользователя.
     /// </remarks>
-    /// <param name="search">Email или телефон клиента.</param>
+    /// <param name="search">Email или телефон пользователя.</param>
     /// <param name="handler">Обработчик поиска.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     [HttpGet("clients")]

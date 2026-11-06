@@ -9,7 +9,7 @@ using Xunit;
 namespace BarberSearch.Application.UnitTests;
 
 /// <summary>
-/// Поиск клиента и данные формы ручной записи: границы строки, роль, активность и
+/// Поиск пользователя и данные формы ручной записи: границы строки, роль, активность и
 /// передача коллекций из репозитория.
 /// </summary>
 public class BarberClientSearchTests
@@ -42,7 +42,7 @@ public class BarberClientSearchTests
     }
 
     [Fact]
-    public async Task Search_ReturnsOnlyActiveCustomersMatchingEmailOrPhone()
+    public async Task Search_ReturnsOnlyActiveUsersOfAnyRoleMatchingEmailOrPhone()
     {
         var users = new FakeUserRepository();
         var customer = CreateCustomer("client@example.com", "+7 999 000-00-00");
@@ -54,9 +54,16 @@ public class BarberClientSearchTests
             "Admin",
             "User",
             UserRole.Admin).Value;
+        var barber = User.Create(
+            "barber@example.com",
+            "hash",
+            "Boris",
+            "Barber",
+            UserRole.Barber).Value;
         users.Add(customer);
         users.Add(inactive);
         users.Add(admin);
+        users.Add(barber);
         var handler = new SearchBarberClientsHandler(users);
 
         var byEmail = await handler.Handle(
@@ -67,7 +74,12 @@ public class BarberClientSearchTests
             CancellationToken.None);
 
         Assert.True(byEmail.IsSuccess);
-        Assert.Equal(customer.Id, Assert.Single(byEmail.Value).Id);
+        var ids = byEmail.Value.Select(user => user.Id).ToHashSet();
+        Assert.Equal(3, ids.Count);
+        Assert.Contains(customer.Id, ids);
+        Assert.Contains(admin.Id, ids);
+        Assert.Contains(barber.Id, ids);
+        Assert.DoesNotContain(inactive.Id, ids);
 
         Assert.True(byPhone.IsSuccess);
         Assert.Equal(customer.Id, Assert.Single(byPhone.Value).Id);

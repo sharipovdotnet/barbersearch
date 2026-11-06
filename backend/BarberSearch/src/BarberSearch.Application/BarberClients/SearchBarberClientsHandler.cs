@@ -8,7 +8,7 @@ using Shared;
 namespace BarberSearch.Application.BarberClients;
 
 /// <summary>
-/// Обработчик поиска клиентов для формы «Записать клиента».
+/// Обработчик поиска пользователей для формы «Записать клиента».
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,7 +18,9 @@ namespace BarberSearch.Application.BarberClients;
 /// </para>
 /// <para>
 /// Результат ограничен десятью строками: это подсказка в форме, а не справочник.
-/// Пагинации нет сознательно — барбер либо узнаёт клиента, либо уточняет запрос.
+/// Пагинации нет сознательно — барбер либо узнаёт человека, либо уточняет запрос.
+/// Роль не фильтруется: записать можно клиента, администратора, барбера и любого
+/// другого активного пользователя.
 /// </para>
 /// </remarks>
 public sealed class SearchBarberClientsHandler
@@ -43,7 +45,8 @@ public sealed class SearchBarberClientsHandler
     }
 
     /// <summary>
-    /// Ищет клиентов по email или телефону; короткая и слишком длинная строка — <c>400</c>.
+    /// Ищет активных пользователей по email или телефону; короткая и слишком длинная
+    /// строка — <c>400</c>.
     /// </summary>
     public async Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> Handle(
         SearchBarberClientsQuery query,

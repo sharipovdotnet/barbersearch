@@ -37,7 +37,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out and email verification status |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
-| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered client or a walk-in without an account |
+| `/barber` | barber cabinet: client bookings, confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked salons with moderation status (approved / pending / rejected + reason), «Создать салон» for a barber with a profile (goes to admin review), owner address/contacts edits, picker for an existing salon |
@@ -303,14 +303,14 @@ reason; the note dialog (1000 characters, an empty field clears the note) update
 read does not. Double clicks are ignored while a request is in flight.
 
 «Записать клиента» opens a dialog on the same screen. The barber chooses who the visit is
-for. For a registered client he types at least three characters of the email or phone
-(`GET /api/barber/clients`, debounced 300 ms, only active `Customer` rows, ten results). For
+for. For a registered user he types at least three characters of the email or phone
+(`GET /api/barber/clients`, debounced 300 ms, active users of any role, ten results). For
 a walk-in he switches to «Новый клиент» and enters a required first name and phone (last
 name optional); no account is created, and the contact is stored on the booking. Then he
 picks a service and salon from his own profile (`GET /api/barber/booking-options` — works
 before the profile is verified), chooses a salon-local date and a free slot
 (`GET /api/barber/slots`), optionally adds a comment and submits. `POST /api/barber/bookings`
-always creates a `Confirmed` booking with an idempotency key and CSRF; a registered client
+always creates a `Confirmed` booking with an idempotency key and CSRF; a registered user
 sees it in their cabinet immediately, a guest does not have a cabinet. The dialog cannot
 be closed while the request is pending; a `409` overlap, `400` start window or `404`
 service/salon clears the chosen slot and reloads the grid, `404

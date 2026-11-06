@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures/test'
 
-import { storageStatePath } from '../fixtures/accounts'
+import { accounts, storageStatePath } from '../fixtures/accounts'
 import { CabinetPage } from '../pages/cabinet-page'
 
 /**
@@ -128,6 +128,17 @@ test.describe('кабинет барбера', () => {
         name: /e2e-customer@barbersearch\.test/,
       })
     ).toBeVisible()
+
+    // Роль не ограничена: администратора тоже можно записать.
+    await dialog
+      .getByRole('searchbox', { name: 'Клиент' })
+      .fill(accounts.admin.email)
+    await expect(
+      dialog.getByRole('button', {
+        name: new RegExp(accounts.admin.email.replaceAll('.', '\\.')),
+      })
+    ).toBeVisible()
+
     await expect(
       dialog.getByRole('combobox', { name: 'Услуга' })
     ).toBeVisible()
