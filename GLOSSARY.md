@@ -25,6 +25,13 @@ The public identity of a Barber: display name, experience, bio, ratings, portfol
 weekly availability. A User without a Barber Profile is not a Barber.
 _Avoid_: Master card, barber card
 
+**Barber Request**:
+A Customer's application for the Barber role. A Customer has at most one active request; an
+administrator approves it or rejects it with a reason. It grants no rights by itself: the role
+changes only on approval, and the Barber Profile is created afterwards. Not the same as a Barber
+Profile.
+_Avoid_: Barber application, role request
+
 **Grade**:
 An administrative rank of a Barber (Intern … Barbershop Owner). Not self-declared.
 _Avoid_: Level, rank, tier

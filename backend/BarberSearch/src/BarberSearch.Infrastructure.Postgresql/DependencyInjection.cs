@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Audit;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberRequests;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.HairServices;
 using BarberSearch.Application.RefreshTokens;
@@ -74,6 +75,7 @@ public static class DependencyInjection
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBarberProfileRepository, BarberProfileRepository>();
+        services.AddScoped<IBarberRequestRepository, BarberRequestRepository>();
         services.AddScoped<ISalonRepository, SalonRepository>();
         services.AddScoped<IHairServiceRepository, HairServiceRepository>();
         services.AddScoped<ISpecializationRepository, SpecializationRepository>();

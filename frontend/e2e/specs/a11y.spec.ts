@@ -62,6 +62,18 @@ test.describe('axe: публичные экраны', () => {
     await expectNoBlockingViolations(page, '/register', test.info())
   })
 
+  test('«Стать барбером» /become-a-barber: анонимный экран', async ({ page }) => {
+    await page.goto('/become-a-barber')
+    await expect(
+      page.getByRole('heading', { name: 'Стать барбером', level: 1 })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Что даёт статус барбера' })
+    ).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/become-a-barber', test.info())
+  })
+
   test('политика обработки данных /privacy и уведомление о cookie', async ({
     page,
   }) => {
@@ -105,6 +117,11 @@ test.describe('axe: кабинет клиента', () => {
       page.getByRole('heading', { name: 'Мои записи', level: 1 })
     ).toBeVisible()
     await expect(page.locator('#bookings-panel')).toBeVisible()
+    // Карточка заявки читает `/barber-requests/mine` отдельно: сканируем уже
+    // загруженное состояние, а не «Проверяем заявку…».
+    await expect(
+      page.getByRole('button', { name: 'Стать барбером' })
+    ).toBeVisible()
 
     await expectNoBlockingViolations(page, '/account', test.info())
   })
@@ -303,6 +320,41 @@ test.describe('axe: админка', () => {
     await expect(audit.diff(fixtures.journal.roleChangeRowId)).toBeVisible()
 
     await expectNoBlockingViolations(page, '/admin/audit + diff', test.info())
+  })
+
+  // Пустая очередь — состояние, в котором раздел открывается после reseed:
+  // заявку создаёт только мутирующий спек, а он идёт последним.
+  test('/admin/barber-requests: пустая очередь', async ({ page }) => {
+    await page.goto('/admin/barber-requests')
+    await expect(
+      page.getByRole('heading', { name: 'Заявки', level: 1 })
+    ).toBeVisible()
+    await expect(page.getByText('Заявок нет')).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/barber-requests',
+      test.info()
+    )
+  })
+})
+
+test.describe('axe: заявка на роль барбера', () => {
+  // e2e-applicant после сида без заявки: это ровно форма, а не статус.
+  test.use({ storageState: storageStatePath('applicant') })
+
+  test('форма клиента без заявки', async ({ page }) => {
+    await page.goto('/become-a-barber')
+    await expect(
+      page.getByRole('heading', { name: 'Заявка на роль барбера' })
+    ).toBeVisible()
+    await expect(page.getByLabel('Как вас представить')).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/become-a-barber (форма)',
+      test.info()
+    )
   })
 })
 

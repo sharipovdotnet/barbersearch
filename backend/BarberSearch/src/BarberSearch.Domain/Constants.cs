@@ -73,6 +73,11 @@ public static class Constants
     // пометка для клиента, а не описание: предел совпадает с причиной исключения расписания.
     public const int MAX_CANCELLATION_REASON_LENGTH = 500;
 
+    // Заявка на роль барбера. Город и причина отказа — короткие тексты; «о себе» использует
+    // общий предел MAX_TEXT_LENGTH (2000), как описание фото и текст отзыва.
+    public const int MAX_BARBER_REQUEST_CITY_LENGTH = 100;
+    public const int MAX_BARBER_REQUEST_REJECTION_REASON_LENGTH = 500;
+
     // Окно, в которое обязан попадать StartAt брони. Сравнение идёт по абсолютному
     // моменту (DateTimeOffset), поэтому часовой пояс салона на него не влияет; допуск
     // покрывает расхождение часов клиента и сервера, а не разницу поясов.

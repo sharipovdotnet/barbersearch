@@ -1,4 +1,5 @@
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberRequests;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.BarberSpecializations;
@@ -47,9 +48,11 @@ public class ConcurrencyModelTests
             typeof(TimeOff),
             typeof(Booking),
             typeof(Review),
+            typeof(BarberRequest),
             typeof(Salon),
             typeof(HairService),
-            typeof(Specialization)
+            typeof(Specialization),
+            typeof(ScheduleOverride)
         ];
 
         foreach (var aggregateEntity in aggregateEntities)

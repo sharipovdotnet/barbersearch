@@ -1,4 +1,5 @@
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberRequests;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.BarberSpecializations;
@@ -43,6 +44,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Specialization> Specializations => Set<Specialization>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<BarberRequest> BarberRequests => Set<BarberRequest>();
 
     // Аутентификация
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();

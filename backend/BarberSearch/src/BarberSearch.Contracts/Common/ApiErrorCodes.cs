@@ -315,6 +315,102 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Заявки на роль барбера: подача, своя заявка, административное решение.
+    /// </summary>
+    /// <remarks>
+    /// Заявка не выдаёт прав: <c>Barber</c> появляется только после одобрения. Коды подачи
+    /// отделены от кодов решения, потому что клиент различает «я не могу подать» и
+    /// «администратор уже решил». Ошибки валидации полей живут в домене
+    /// (<c>barberRequest.city</c> и т. п.) и в реестр не дублируются.
+    /// </remarks>
+    public static class BarberRequest
+    {
+        /// <summary>
+        /// Заявки с указанным идентификатором нет; <c>404</c>.
+        /// </summary>
+        public const string NotFound = "barberRequest.notFound";
+
+        /// <summary>
+        /// Заявку подаёт не клиент (барбер или администратор); <c>403</c>.
+        /// </summary>
+        /// <remarks>
+        /// Роль в теле запроса не принимается: право подать заявку определяется по аккаунту,
+        /// иначе клиент выдал бы себе роль <c>Barber</c> в обход администратора.
+        /// </remarks>
+        public const string CreateForbidden = "barberRequest.create.forbidden";
+
+        /// <summary>
+        /// У пользователя уже есть заявка в статусе <c>Pending</c>; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Возвращается и при гонке двух одновременных подач: предпроверка и уникальный
+        /// частичный индекс дают один и тот же публичный код, а не <c>500</c>.
+        /// </remarks>
+        public const string CreateAlreadyPending = "barberRequest.create.alreadyPending";
+
+        /// <summary>
+        /// Заявка уже не в статусе <c>Pending</c>, поэтому решение невозможно; <c>409</c>.
+        /// </summary>
+        public const string ReviewInvalidStatus = "barberRequest.review.invalidStatus";
+
+        /// <summary>
+        /// Заявитель уже не клиент, поэтому одобрение не должно менять его роль; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Защитный случай: заявку подаёт <c>Customer</c>, но пока она ждала решения, роль
+        /// могли сменить административным действием. Повторно выдавать <c>Barber</c> (или
+        /// понижать администратора) нельзя — заявка остаётся открытой, а решение принимает
+        /// человек через административный интерфейс.
+        /// </remarks>
+        public const string ReviewInvalidApplicant = "barberRequest.review.invalidApplicant";
+
+        /// <summary>
+        /// Отказ без причины или с причиной из одних пробелов; <c>400</c>.
+        /// </summary>
+        public const string RejectionReasonRequired = "barberRequest.rejection.reasonRequired";
+
+        /// <summary>
+        /// Причина отказа длиннее <c>500</c> символов; <c>400</c>.
+        /// </summary>
+        public const string RejectionReasonTooLong = "barberRequest.rejection.reasonTooLong";
+
+        /// <summary>
+        /// Фильтр статуса не <c>pending</c> и не <c>all</c>; <c>400</c>.
+        /// </summary>
+        public const string StatusInvalid = "barberRequest.list.status";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>barberRequest.list.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "barberRequest.list";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "barberRequest.page.limit";
+
+        /// <summary>
+        /// Префикс кодов сохранения заявки; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        public const string AddPrefix = "barberRequest.add";
+
+        /// <summary>
+        /// Префикс кодов обновления заявки; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        public const string UpdatePrefix = "barberRequest.update";
+
+        /// <summary>
+        /// Гонка двух подач на частичном уникальном индексе; <c>409</c>.
+        /// </summary>
+        public const string AddUniqueViolation = AddPrefix + ".uniqueViolation";
+
+        /// <summary>
+        /// Строку изменил или удалил параллельный запрос; <c>409</c>.
+        /// </summary>
+        public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
+    }
+
+    /// <summary>
     /// Пользователи.
     /// </summary>
     public static class User

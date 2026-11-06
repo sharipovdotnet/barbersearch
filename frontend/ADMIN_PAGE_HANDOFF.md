@@ -586,7 +586,43 @@ Read-only история: когда, кто, что изменил, у како
   входа с `returnTo="/admin/summary"`, `403` — текст про роль. Ссылки —
   настоящие `<a href>`; 320 px — один столбец без горизонтального скролла.
 
-### 3.11 Визуальный язык
+### 3.11 «Заявки» — реализовано
+
+✅ Реализовано 6.11.2026 (#46). `/admin/barber-requests` — пятый пункт рейла,
+сразу после «Пользователей»: очередь заявок клиентов на роль барбера и все
+заявки на одном экране.
+
+- Адрес: `/admin/barber-requests` (очередь, `pending` по умолчанию),
+  `/admin/barber-requests?status=all` (все заявки, новые сверху) и
+  `/admin/barber-requests/{id}` (карточка). Фильтр — в `?status=`, карточка — в пути,
+  как у барберов: перезагрузка сохраняет и то и другое, а карточка не может
+  принадлежать чужой выборке.
+- Список: строки «имя заявителя · город · дата подачи · статус»; выбранная строка
+  `aria-current`, ссылка остаётся настоящей. Счётчиков нет — API не отдаёт `total`,
+  диапазон показывает общий `ListPager`. На `lg` список и карточка рядом, на телефоне
+  карточка заменяет список.
+- Карточка: кто подал (имя и email — только в админском контракте), ответы заявителя
+  (стаж, город, «уже работаю в салоне», «о себе»), даты подачи и решения.
+  Действия есть только у `Pending`.
+- **Одобрение** — `alertdialog` с последствием: «Смена роли завершит все его сессии —
+  он войдёт заново, и после входа создаст профиль барбера». Это правда домена:
+  `ChangeRole` ротирует security stamp, а refresh-токены отзываются в той же
+  транзакции. Никакого «мягкого» продления сессии заявителя нет.
+- **Отказ** — `alertdialog` с обязательной причиной (≤ 500 символов). Пустая строка
+  не отправляется вовсе, сервер дополнительно отвечает
+  `barberRequest.rejection.reasonRequired` / `.reasonTooLong`. Причину видит
+  заявитель; повторная заявка разрешена.
+- После решения строка обновляется локально (в очереди — исчезает), затем список и
+  карточка тихо перечитываются; результат — `role="status"`, ошибки — `role="alert"`.
+  `409 barberRequest.review.invalidStatus` значит «уже разобрали, обновите список»,
+  `404` — «заявка больше не существует».
+- Пустые состояния: «Заявок нет» (очередь) и «Заявок с таким статусом нет» (все заявки).
+- Состояния: скелетон, ошибка первой загрузки с «Повторить», ошибка обновления без
+  стирания строк, `401` — гейт входа, `403` — «Раздел доступен только администратору».
+- Аудит: заявки **не** пишутся в `audit_log` (город и «о себе» — ПД, плюс строка сама
+  хранит решение); в журнал попадает только `user.updated` со сменой роли.
+
+### 3.12 Визуальный язык
 
 Остаёмся внутри существующей системы: Geist, нейтральные токены,
 `ring-1 ring-foreground/10`, радиусы из `--radius`. Новых шрифтов
@@ -610,7 +646,7 @@ Read-only история: когда, кто, что изменил, у како
 не тянуть: в `booking-list.tsx` уже есть аккуратный ручной паттерн
 с roving tabindex.
 
-### 3.12 Состояния и доступность
+### 3.13 Состояния и доступность
 
 - Загрузка: скелетон повторяет силуэт (рейл + строки + деталь),
   `aria-busy`, `sr-only`-статус.
@@ -687,7 +723,7 @@ Read-only история: когда, кто, что изменил, у како
    пишутся в `audit_log` (`hair_service.*`/`specialization.*`/`salon.*`) и видны
    в журнале; экран каталога своего UI журнала не добавляет.
 5. **«Журнал».** Read-only история и diff.
-   ✅ Реализовано 2.11.2026: `/admin/audit` — пятый пункт рейла, `GET /api/admin/audit`
+   ✅ Реализовано 2.11.2026: `/admin/audit` — восьмой пункт рейла, `GET /api/admin/audit`
    с keyset-лентой и фильтрами по типу сущности, автору и UTC-датам, общий
    пейджер (20 строк, «Назад» без запроса), раскрываемый diff с русскими
    подписями полей, «Система»/«Удалённый пользователь», `401`/`403`, пустые
@@ -932,7 +968,7 @@ Read-only история: когда, кто, что изменил, у како
     Unit-тесты (`AdminCatalogueReadHandlerTests`) и фейки репозиториев получили
     `GetAdminListAsync` с тем же фильтром и порядком.
 40. Frontend: `lib/admin-path.ts` (`catalogue`, `CatalogueTab`,
-    `cataloguePath`, `parseCatalogueTab`), четвёртый пункт рейла, заголовок
+    `cataloguePath`, `parseCatalogueTab`), шестой пункт рейла, заголовок
     документа, dispatch на `CatalogueScreen`; `lib/admin-catalogue.ts`
     (чтения, мутации, подписи, разбор ошибок и полевые коды салона);
     `response-guards` — три строгих guard'а.
@@ -972,7 +1008,7 @@ Read-only история: когда, кто, что изменил, у како
     `AddAdminAuditKeysetIndex` после `EXPLAIN (ANALYZE, BUFFERS)` на 120 000 строк
     (`AuditLogModelTests` обновлён).
 47. Frontend: `lib/admin-path.ts` (`audit`, точный `/admin/audit`, без builder'а),
-    пятый пункт рейла, заголовок документа, dispatch на `AuditScreen`;
+    восьмой пункт рейла, заголовок документа, dispatch на `AuditScreen`;
     `lib/admin-audit.ts` (типы, подписи, `formatAuditAction`, `formatAuditValue`,
     чтение, разбор ошибок), `response-guards` — `isAdminAuditEntry`/
     `isAdminAuditPage`, `hooks/use-admin-audit-list.ts` на `usePagedList`.
@@ -1021,7 +1057,7 @@ Read-only история: когда, кто, что изменил, у како
     `ix_bookings_start_at_id` остаётся для страницы без фильтра. Логи —
     `frontend/verification/issue-39-explain.txt` и `issue-39-explain-index.txt`.
 55. Frontend: `lib/admin-path.ts` (`bookings`, `bookingsPath`, `isBookingId`) —
-    шестой пункт рейла перед «Журналом» (порядок «Пользователи»/«Каталог» приведён
+    седьмой пункт рейла перед «Журналом» (порядок «Пользователи»/«Каталог» приведён
     к §3.2), заголовок `ADMIN_TITLES.bookings`, dispatch на `BookingsScreen`;
     `lib/admin-bookings.ts` (типы, подписи шести статусов, чтения, две мутации
     с CSRF, `formatAdminBookingTime` в поясе салона, разбор ошибок),
@@ -1138,6 +1174,28 @@ Read-only история: когда, кто, что изменил, у како
     `issue-41-lint.txt`, `issue-41-build.txt`. E2E на запущенном API и `barbersearch_e2e`
     прогоняется отдельно; новых зависимостей и правок `ui/**` нет.
 
+77. **Реализация #46 — «Стать барбером» (6.11.2026).** Публичная
+    `/become-a-barber` (аноним без запросов, форма или статус у клиента, ссылки у
+    барбера и администратора), карточка статуса в `/account` для клиента и пятый
+    раздел админки `/admin/barber-requests` с очередью, всеми заявками,
+    split-view карточкой и двумя `alertdialog`. Backend: сущность `BarberRequest`,
+    шесть эндпоинтов, одна активная `Pending` на пользователя (partial unique
+    index), одобрение меняет роль и отзывает refresh-токены в одной транзакции.
+    Frontend: `lib/barber-request-path.ts`, `lib/barber-requests.ts`,
+    `lib/barber-request-form.ts`, `lib/admin-barber-requests.ts`, три хука,
+    `components/barber/barber-request-*.tsx`, `components/account/barber-request-card.tsx`,
+    `components/admin/barber-request*.tsx`, расширенный `admin-path`
+    (`barberRequests`, `?status=pending|all`, `barberRequestsPath()`) и пункт рейла
+    «Заявки» после «Пользователей». Тесты: 420 unit в 54 файлах, E2E
+    `barber-request-mutations.spec.ts` (заявка → очередь → отказ с причиной →
+    причина у заявителя), новый аккаунт `e2e-applicant` и пересев, который удаляет
+    заявки фикстур и возвращает аккаунту роль `Customer` (иначе повторный прогон —
+    `409 barberRequest.create.alreadyPending`). `npm run lint` — 0/0 (321 файлов),
+    `npm run build` — успешно (2481 модуль, `become-a-barber-page` 17,83 / 5,34 kB,
+    `admin-page` 222,93 / 45,58 kB, `account-page` 28,23 / 8,79 kB, css 83,18 /
+    14,30 kB). Новых зависимостей и правок `ui/**` нет; заявки не пишутся в
+    `audit_log` — только `user.updated` со сменой роли.
+
 ---
 
 ## 9. Карта файлов
@@ -1157,6 +1215,9 @@ Read-only история: когда, кто, что изменил, у како
 | Админка: API пользователей | `frontend/src/lib/admin-users.ts` |
 | Админка: согласие на обработку ПД в карточке (#42) | `frontend/src/components/admin/user-detail.tsx` (строка «Согласие на обработку ПД»), `frontend/src/lib/response-guards.ts` (`isAdminUser`), сервер — `AdminUserDetailResponse`/`UserRepository` (IP не отдаётся) |
 | Админка: хуки пользователей | `frontend/src/hooks/use-admin-user-list.ts`, `use-admin-user.ts` |
+| Админка: экран заявок «Стать барбером» (#46) | `frontend/src/components/admin/barber-requests-screen.tsx`, `barber-request-list.tsx`, `barber-request-detail.tsx`, `barber-request-action-dialog.tsx` |
+| Админка: API и хуки заявок | `frontend/src/lib/admin-barber-requests.ts`, `frontend/src/hooks/use-admin-barber-request-list.ts`, `use-admin-barber-request.ts` |
+| Заявка «Стать барбером»: страница, форма, статус, карточка кабинета | `frontend/src/pages/become-a-barber-page.tsx`, `src/components/barber/barber-request-form.tsx`, `barber-request-status.tsx`, `src/components/account/barber-request-card.tsx`, `src/lib/barber-requests.ts`, `src/lib/barber-request-form.ts`, `src/lib/barber-request-path.ts` |
 | Админка: экран каталога | `frontend/src/components/admin/catalogue-screen.tsx`, `catalogue-tabs.tsx`, `catalogue-table.tsx` |
 | Админка: диалоги каталога | `frontend/src/components/admin/hair-service-dialog.tsx`, `specialization-dialog.tsx`, `salon-dialog.tsx`, `catalogue-action-dialog.tsx` |
 | Админка: API каталога | `frontend/src/lib/admin-catalogue.ts`, `frontend/src/hooks/use-admin-catalogue.ts` |

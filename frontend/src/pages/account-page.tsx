@@ -7,6 +7,7 @@ import {
   SignInGate,
 } from '@/components/account/account-gates'
 import { AccountShell } from '@/components/account/account-shell'
+import { BarberRequestCard } from '@/components/account/barber-request-card'
 import { BookingList, type BookingsTab } from '@/components/account/booking-list'
 import { buildBookingView, type BookingView } from '@/components/account/booking-view'
 import { CancelBookingDialog } from '@/components/account/cancel-booking-dialog'
@@ -50,14 +51,14 @@ export function AccountPage() {
           title="Мои записи"
           description="Ближайший визит, история и отмена — без звонков в салон."
         >
-          <BookingsCabinet />
+          <BookingsCabinet role={user.role} />
         </AccountShell>
       )}
     </AccountAccess>
   )
 }
 
-function BookingsCabinet() {
+function BookingsCabinet({ role }: { role: string }) {
   const [tab, setTab] = useState<BookingsTab>('upcoming')
   // История ленивая: на входе в кабинет грузятся только «Предстоящие».
   const historyEnabled = tab === 'history'
@@ -181,6 +182,10 @@ function BookingsCabinet() {
 
   return (
     <div className="space-y-5">
+      {/* Карточка заявки — только клиенту: барберу и администратору она не нужна.
+          У неё своя загрузка и своя ошибка, поэтому список записей она не блокирует. */}
+      {role === 'Customer' && <BarberRequestCard />}
+
       {announcement && (
         <div
           role="status"
