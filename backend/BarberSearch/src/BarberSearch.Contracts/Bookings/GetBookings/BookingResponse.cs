@@ -10,7 +10,9 @@ namespace BarberSearch.Contracts.Bookings.GetBookings;
 /// связанных агрегатов, без навигаций и циклических графов.
 /// </remarks>
 /// <param name="Id">Идентификатор брони.</param>
-/// <param name="UserId">Идентификатор клиента.</param>
+/// <param name="UserId">
+/// Идентификатор клиента; <c>null</c> — бронь создана барбером для гостя (walk-in).
+/// </param>
 /// <param name="BarberProfileId">Идентификатор профиля барбера.</param>
 /// <param name="BarberServiceId">Идентификатор услуги барбера (<c>barber_services.id</c>).</param>
 /// <param name="SalonId">Идентификатор салона.</param>
@@ -28,7 +30,7 @@ namespace BarberSearch.Contracts.Bookings.GetBookings;
 /// <param name="CreatedAt">Когда бронь создана.</param>
 public record BookingResponse(
     Guid Id,
-    Guid UserId,
+    Guid? UserId,
     Guid BarberProfileId,
     Guid BarberServiceId,
     Guid SalonId,

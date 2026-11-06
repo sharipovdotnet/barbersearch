@@ -65,6 +65,16 @@ public static class Constants
     // Бронирование
     public const int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
+    // Гость (walk-in) в брони: контактный снимок на момент визита, а не аккаунт.
+    // Значения совпадают с varchar-колонками bookings: строка сверх предела не пролезет
+    // в схему, поэтому домен обязан отклонить её раньше.
+    public const int MAX_GUEST_FIRST_NAME_LENGTH = 100;
+    public const int MAX_GUEST_LAST_NAME_LENGTH = 100;
+
+    // Телефон гостя — свободная строка (номера бывают с пробелами, скобками и «+»),
+    // предел ограничивает размер поля, а не формат.
+    public const int MAX_GUEST_PHONE_LENGTH = 32;
+
     // Заметка барбера — свободный текст, который видит только барбер. Предел ограничивает
     // размер строки и защищает от случайной вставки целого документа в поле.
     public const int MAX_BARBER_NOTE_LENGTH = 1000;

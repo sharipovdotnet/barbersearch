@@ -35,7 +35,9 @@ namespace BarberSearch.Contracts.Bookings.Admin;
 /// <param name="BarberNote">Заметка барбера; администратор её только читает.</param>
 /// <param name="CancellationReason">Причина отмены, оставленная барбером; только чтение.</param>
 /// <param name="CreatedAt">Когда бронь создана, в UTC.</param>
-/// <param name="Customer">Клиент визита: имя, email и телефон.</param>
+/// <param name="Customer">
+/// Клиент визита: зарегистрированный пользователь либо гость (тогда без id и email).
+/// </param>
 /// <param name="Barber">Барбер визита: профиль и отображаемое имя.</param>
 /// <param name="Service">Услуга визита.</param>
 /// <param name="Salon">Салон визита, включая часовой пояс для показа времени.</param>

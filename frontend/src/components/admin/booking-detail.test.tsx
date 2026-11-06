@@ -113,6 +113,25 @@ describe('BookingDetail', () => {
     expect(screen.getByText(BASE_BOOKING.id)).toBeInTheDocument()
   })
 
+  it('показывает гостя без аккаунта по имени и телефону', () => {
+    renderDetail(
+      makeBooking({
+        customer: {
+          id: null,
+          firstName: 'Анна',
+          lastName: 'Смирнова',
+          email: null,
+          phoneNumber: '+79991112233',
+        },
+      })
+    )
+
+    expect(screen.getByText('Анна Смирнова')).toBeInTheDocument()
+    expect(screen.getByText('+79991112233')).toBeInTheDocument()
+    expect(screen.getByText('Записан без аккаунта')).toBeInTheDocument()
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument()
+  })
+
   it('для Pending показывает только отмену', () => {
     renderDetail(makeBooking({ status: 'Pending' }))
 

@@ -25,7 +25,8 @@ export type BookingScope = 'all' | 'upcoming' | 'past'
 
 export type Booking = {
   id: string
-  userId: string
+  /** `null` — запись создана барбером для человека без аккаунта. */
+  userId: string | null
   barberProfileId: string
   barberServiceId: string
   salonId: string

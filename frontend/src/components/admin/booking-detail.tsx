@@ -18,6 +18,7 @@ import {
   cancelAdminBooking,
   describeAdminBookingActionError,
   formatAdminBookingTime,
+  getAdminBookingCustomerContact,
   getAdminBookingCustomerName,
   markAdminBookingNoShow,
   type AdminBooking,
@@ -205,11 +206,18 @@ export function BookingDetail({
           <ContextItem label="Клиент">
             <span className="block break-words">{customerName}</span>
             <span className="block break-all text-muted-foreground">
-              {booking.customer.email}
+              {getAdminBookingCustomerContact(booking.customer)}
             </span>
-            {booking.customer.phoneNumber && (
-              <span className="block text-muted-foreground tabular-nums">
-                {booking.customer.phoneNumber}
+            {booking.customer.phoneNumber &&
+              booking.customer.phoneNumber !==
+                getAdminBookingCustomerContact(booking.customer) && (
+                <span className="block text-muted-foreground tabular-nums">
+                  {booking.customer.phoneNumber}
+                </span>
+              )}
+            {booking.customer.id === null && (
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Записан без аккаунта
               </span>
             )}
           </ContextItem>

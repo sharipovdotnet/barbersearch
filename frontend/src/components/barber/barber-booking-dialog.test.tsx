@@ -143,6 +143,78 @@ describe('BarberBookingDialog', () => {
     expect(body.idempotencyKey).toEqual(expect.any(String))
   })
 
+  it('записывает нового клиента без аккаунта по имени и телефону', async () => {
+    useFormHandlers()
+
+    const captured = {
+      csrf: null as string | null,
+      body: '',
+    }
+
+    server.use(
+      http.post('/api/barber/bookings', async ({ request }) => {
+        captured.csrf = request.headers.get('x-csrf-token')
+        captured.body = await request.text()
+
+        return HttpResponse.json(
+          { id: '77777777-7777-4777-8777-777777777777' },
+          { status: 201 }
+        )
+      })
+    )
+
+    const onCreated = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <BarberBookingDialog
+        barberProfileId={PROFILE_ID}
+        onCreated={onCreated}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Записать клиента' }))
+    await screen.findByRole('dialog')
+
+    await user.click(
+      await screen.findByRole('radio', { name: 'Новый клиент' })
+    )
+    await user.type(screen.getByLabelText(/Имя/), 'Анна')
+    await user.type(screen.getByLabelText(/Фамилия/), 'Смирнова')
+    await user.type(
+      screen.getByLabelText(/Телефон/),
+      '+7 999 111-22-33'
+    )
+
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Услуга' }),
+      SERVICE.barberServiceId
+    )
+
+    await user.click(await screen.findByRole('radio', { name: '10:00' }))
+    await user.click(screen.getByRole('button', { name: 'Записать' }))
+
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith('Анна Смирнова')
+    )
+    expect(captured.csrf).toBe('csrf-token')
+
+    const body = JSON.parse(captured.body) as Record<string, unknown>
+
+    expect(body).toMatchObject({
+      customerId: null,
+      guestFirstName: 'Анна',
+      guestLastName: 'Смирнова',
+      guestPhone: '+7 999 111-22-33',
+      barberServiceId: SERVICE.barberServiceId,
+      salonId: SALON.salonId,
+      startAt: SLOT.startAt,
+      endAt: SLOT.endAt,
+      customerNote: null,
+    })
+    expect(body.idempotencyKey).toEqual(expect.any(String))
+  })
+
   it('на пересечение времени показывает русский текст и перечитывает слоты', async () => {
     let slotsRequests = 0
 

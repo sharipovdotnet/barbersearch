@@ -87,7 +87,7 @@ public class ReviewModerationTests
             startAt.AddMinutes(30),
             30m,
             $"key-{Guid.NewGuid()}").Value;
-        var review = Review.Create(booking, booking.UserId, 5, text).Value;
+        var review = Review.Create(booking, booking.UserId!.Value, 5, text).Value;
 
         // R-35: Create оставляет отзыв скрытым; опубликованный для контраста включаем явно.
         if (published)

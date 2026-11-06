@@ -22,7 +22,14 @@ import {
   type BarberClientsStatus,
 } from '@/hooks/use-barber-clients'
 import { useBarberSlots } from '@/hooks/use-barber-slots'
-import { createBarberBooking } from '@/lib/barber-booking-create'
+import {
+  createBarberBooking,
+  formatGuestName,
+  MAX_GUEST_FIRST_NAME_LENGTH,
+  MAX_GUEST_LAST_NAME_LENGTH,
+  MAX_GUEST_PHONE_LENGTH,
+  type CreateBarberBookingInput,
+} from '@/lib/barber-booking-create'
 import {
   formatBarberClientName,
   MAX_BARBER_CLIENT_SEARCH,
@@ -55,6 +62,12 @@ const SELECT_CLASSES =
 
 const CLIENT_SKELETON_KEYS = ['client-skeleton-1', 'client-skeleton-2']
 
+/**
+ * Кто записывается: найденный в сервисе клиент или новый человек без аккаунта.
+ * Режим меняет только блок контактов; услуга, салон, дата и время общие.
+ */
+type ClientMode = 'registered' | 'guest'
+
 type BarberBookingDialogProps = {
   /** Профиль из сессии: чужой профиль сервер не примет. */
   barberProfileId: string
@@ -65,9 +78,11 @@ type BarberBookingDialogProps = {
 /**
  * Диалог «Записать клиента» в кабинете барбера.
  *
- * Барбер ищет зарегистрированного клиента по email или телефону, выбирает услугу,
- * салон, дату и свободное время, затем отправляет `POST api/barber/bookings`.
- * Сервер создаёт бронь сразу подтверждённой; клиент увидит её в своём кабинете.
+ * Барбер выбирает услугу, салон, дату и свободное время, затем указывает клиента:
+ * находит зарегистрированного по email или телефону либо заполняет имя и телефон
+ * нового человека. Второй вариант не создаёт аккаунт — сервер сохраняет контакты
+ * в самой брони. Отправляется один `POST api/barber/bookings`; сервер создаёт бронь
+ * сразу подтверждённой. Зарегистрированный клиент увидит её в своём кабинете.
  * Пока запрос в полёте, диалог нельзя закрыть: иначе повтор после закрытия создал бы
  * вторую попытку с новым ключом идемпотентности.
  */
@@ -135,9 +150,15 @@ function BarberBookingForm({
   onCreated,
 }: BarberBookingFormProps) {
   const options = useBarberBookingOptions()
+  const [clientMode, setClientMode] = useState<ClientMode>('registered')
   const [search, setSearch] = useState('')
-  const clients = useBarberClients(search)
+  // В режиме нового клиента поиск по базе не нужен: старый запрос не должен
+  // продолжать ходить за контактами, пока барбер заполняет гостевые поля.
+  const clients = useBarberClients(clientMode === 'registered' ? search : '')
   const [client, setClient] = useState<BarberClient | null>(null)
+  const [guestFirstName, setGuestFirstName] = useState('')
+  const [guestLastName, setGuestLastName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [salonId, setSalonId] = useState('')
   const [date, setDate] = useState('')
@@ -184,8 +205,17 @@ function BarberBookingForm({
 
   const selectedSlot =
     slots.slots?.slots.find((item) => item.startAt === slotStartAt) ?? null
+
+  const guestFirstNameValue = guestFirstName.trim()
+  const guestLastNameValue = guestLastName.trim()
+  const guestPhoneValue = guestPhone.trim()
+  const hasGuestContacts =
+    guestFirstNameValue !== '' && guestPhoneValue !== ''
+  const hasClient =
+    clientMode === 'registered' ? client !== null : hasGuestContacts
+
   const canSubmit =
-    client !== null &&
+    hasClient &&
     service !== null &&
     salon !== null &&
     selectedSlot !== null &&
@@ -207,6 +237,19 @@ function BarberBookingForm({
     setIdempotencyKey(crypto.randomUUID())
   }
 
+  function handleModeChange(next: ClientMode) {
+    if (next === clientMode) {
+      return
+    }
+
+    // Режим меняет состав тела запроса, поэтому старый ключ идемпотентности
+    // вернул бы уже созданную бронь с прежними контактами.
+    setClientMode(next)
+    setClient(null)
+    setFailure(null)
+    setIdempotencyKey(crypto.randomUUID())
+  }
+
   function handleSearchChange(value: string) {
     setSearch(value)
     setClient(null)
@@ -215,6 +258,21 @@ function BarberBookingForm({
 
   function handleSelectClient(next: BarberClient) {
     setClient(next)
+    setFailure(null)
+  }
+
+  function handleGuestFirstNameChange(value: string) {
+    setGuestFirstName(value)
+    setFailure(null)
+  }
+
+  function handleGuestLastNameChange(value: string) {
+    setGuestLastName(value)
+    setFailure(null)
+  }
+
+  function handleGuestPhoneChange(value: string) {
+    setGuestPhone(value)
     setFailure(null)
   }
 
@@ -252,7 +310,6 @@ function BarberBookingForm({
     if (
       submittingRef.current ||
       !canSubmit ||
-      client === null ||
       service === null ||
       salon === null ||
       selectedSlot === null
@@ -260,23 +317,52 @@ function BarberBookingForm({
       return
     }
 
+    const common = {
+      barberServiceId: service.barberServiceId,
+      salonId: salon.salonId,
+      startAt: selectedSlot.startAt,
+      endAt: selectedSlot.endAt,
+      idempotencyKey,
+      customerNote: note.trim() === '' ? null : note.trim(),
+    }
+
+    let input: CreateBarberBookingInput
+    let createdName: string
+
+    if (clientMode === 'registered') {
+      if (client === null) {
+        return
+      }
+
+      input = { ...common, customerId: client.id }
+      createdName = formatBarberClientName(client)
+    } else {
+      if (!hasGuestContacts) {
+        return
+      }
+
+      const guestLastNameOrNull =
+        guestLastNameValue === '' ? null : guestLastNameValue
+
+      input = {
+        ...common,
+        customerId: null,
+        guestFirstName: guestFirstNameValue,
+        guestLastName: guestLastNameOrNull,
+        guestPhone: guestPhoneValue,
+      }
+      createdName = formatGuestName(guestFirstNameValue, guestLastNameOrNull)
+    }
+
     submittingRef.current = true
     onPendingChange(true)
     setFailure(null)
 
     try {
-      await createBarberBooking({
-        customerId: client.id,
-        barberServiceId: service.barberServiceId,
-        salonId: salon.salonId,
-        startAt: selectedSlot.startAt,
-        endAt: selectedSlot.endAt,
-        idempotencyKey,
-        customerNote: note.trim() === '' ? null : note.trim(),
-      })
+      await createBarberBooking(input)
 
       onPendingChange(false)
-      onCreated(formatBarberClientName(client))
+      onCreated(createdName)
     } catch (cause) {
       const next = describeBarberBookingCreateFailure(
         cause,
@@ -305,7 +391,9 @@ function BarberBookingForm({
       <DialogHeader>
         <DialogTitle>Записать клиента</DialogTitle>
         <DialogDescription>
-          Запись создаётся сразу подтверждённой и появится в кабинете клиента.
+          Запись создаётся сразу подтверждённой. Зарегистрированный клиент увидит её
+          в кабинете; для нового человека достаточно имени и телефона — аккаунт
+          не создаётся.
         </DialogDescription>
       </DialogHeader>
 
@@ -320,16 +408,34 @@ function BarberBookingForm({
 
       {options.status === 'ready' && (
         <>
-          <ClientPicker
-            search={search}
-            status={clients.status}
-            clients={clients.clients}
-            error={clients.error}
-            selected={client}
-            onSearchChange={handleSearchChange}
-            onSelect={handleSelectClient}
-            onRetry={clients.retry}
+          <ClientModeSwitch
+            mode={clientMode}
+            disabled={isPending}
+            onChange={handleModeChange}
           />
+
+          {clientMode === 'registered' ? (
+            <ClientPicker
+              search={search}
+              status={clients.status}
+              clients={clients.clients}
+              error={clients.error}
+              selected={client}
+              onSearchChange={handleSearchChange}
+              onSelect={handleSelectClient}
+              onRetry={clients.retry}
+            />
+          ) : (
+            <GuestFields
+              firstName={guestFirstName}
+              lastName={guestLastName}
+              phone={guestPhone}
+              disabled={isPending}
+              onFirstNameChange={handleGuestFirstNameChange}
+              onLastNameChange={handleGuestLastNameChange}
+              onPhoneChange={handleGuestPhoneChange}
+            />
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <ServiceField
@@ -517,6 +623,165 @@ function BarberBookingForm({
   )
 }
 
+/**
+ * Переключатель «зарегистрированный / новый».
+ *
+ * Радиокнопки вместо вкладок: это выбор одного значения, а не навигация по панелям,
+ * и он остаётся доступным с клавиатуры стрелками.
+ */
+function ClientModeSwitch({
+  mode,
+  disabled,
+  onChange,
+}: {
+  mode: ClientMode
+  disabled: boolean
+  onChange: (mode: ClientMode) => void
+}) {
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="text-sm font-medium">Кто клиент</legend>
+      <div className="grid grid-cols-2 gap-2">
+        <ClientModeOption
+          value="registered"
+          label="Зарегистрированный"
+          checked={mode === 'registered'}
+          onChange={onChange}
+        />
+        <ClientModeOption
+          value="guest"
+          label="Новый клиент"
+          checked={mode === 'guest'}
+          onChange={onChange}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        «Новый клиент» — человек без аккаунта в сервисе. Аккаунт не создаётся.
+      </p>
+    </fieldset>
+  )
+}
+
+function ClientModeOption({
+  value,
+  label,
+  checked,
+  onChange,
+}: {
+  value: ClientMode
+  label: string
+  checked: boolean
+  onChange: (mode: ClientMode) => void
+}) {
+  return (
+    <label className="cursor-pointer">
+      <input
+        type="radio"
+        name="barber-client-mode"
+        value={value}
+        checked={checked}
+        className="peer sr-only"
+        onChange={() => onChange(value)}
+      />
+      <span className="flex min-h-11 items-center justify-center rounded-lg border px-3 py-2 text-center text-sm transition-colors peer-checked:border-primary peer-checked:bg-primary/5 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 sm:min-h-9">
+        {label}
+      </span>
+    </label>
+  )
+}
+
+/**
+ * Контакты нового клиента.
+ *
+ * Имя и телефон обязательны: по ним барбер узнаёт человека и может позвонить.
+ * Фамилия необязательна, email не спрашиваем — аккаунта и рассылки нет.
+ */
+function GuestFields({
+  firstName,
+  lastName,
+  phone,
+  disabled,
+  onFirstNameChange,
+  onLastNameChange,
+  onPhoneChange,
+}: {
+  firstName: string
+  lastName: string
+  phone: string
+  disabled: boolean
+  onFirstNameChange: (value: string) => void
+  onLastNameChange: (value: string) => void
+  onPhoneChange: (value: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="barber-guest-first-name">
+            Имя{' '}
+            <span className="font-normal text-muted-foreground">
+              — обязательно
+            </span>
+          </Label>
+          <Input
+            id="barber-guest-first-name"
+            type="text"
+            value={firstName}
+            autoComplete="given-name"
+            maxLength={MAX_GUEST_FIRST_NAME_LENGTH}
+            disabled={disabled}
+            required
+            aria-required="true"
+            onChange={(event) => onFirstNameChange(event.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="barber-guest-last-name">
+            Фамилия{' '}
+            <span className="font-normal text-muted-foreground">
+              — необязательно
+            </span>
+          </Label>
+          <Input
+            id="barber-guest-last-name"
+            type="text"
+            value={lastName}
+            autoComplete="family-name"
+            maxLength={MAX_GUEST_LAST_NAME_LENGTH}
+            disabled={disabled}
+            onChange={(event) => onLastNameChange(event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="barber-guest-phone">
+          Телефон{' '}
+          <span className="font-normal text-muted-foreground">— обязательно</span>
+        </Label>
+        <Input
+          id="barber-guest-phone"
+          type="tel"
+          value={phone}
+          autoComplete="tel"
+          inputMode="tel"
+          maxLength={MAX_GUEST_PHONE_LENGTH}
+          placeholder="+7 900 000-00-00"
+          disabled={disabled}
+          required
+          aria-required="true"
+          onChange={(event) => onPhoneChange(event.target.value)}
+        />
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Контакты сохранятся в записи, чтобы вы могли связаться с клиентом.
+      </p>
+    </div>
+  )
+}
+
 function ClientPicker({
   search,
   status,
@@ -553,8 +818,8 @@ function ClientPicker({
         onChange={(event) => onSearchChange(event.target.value)}
       />
       <p id={hintId} className="text-xs text-muted-foreground">
-        Минимум {MIN_BARBER_CLIENT_SEARCH} символа. Записать можно только
-        зарегистрированного клиента.
+        Минимум {MIN_BARBER_CLIENT_SEARCH} символа. Нет клиента в сервисе?
+        Выберите «Новый клиент».
       </p>
 
       {selected !== null && (

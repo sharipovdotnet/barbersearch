@@ -99,6 +99,28 @@ describe('BookingsScreen', () => {
     expect(link).toHaveAttribute('href', `/admin/bookings/${BOOKING.id}`)
   })
 
+  it('показывает гостя без аккаунта по телефону вместо email', async () => {
+    mockList([
+      {
+        ...BOOKING,
+        customer: {
+          id: null,
+          firstName: 'Анна',
+          lastName: 'Смирнова',
+          email: null,
+          phoneNumber: '+79991112233',
+        },
+      },
+    ])
+
+    render(<BookingsScreen bookingId={null} />)
+
+    const list = await screen.findByRole('list', { name: 'Список броней' })
+
+    expect(within(list).getByText('Анна Смирнова')).toBeInTheDocument()
+    expect(within(list).getByText('+79991112233')).toBeInTheDocument()
+  })
+
   it('выбранная строка помечена aria-current, а карточка открывается по id', async () => {
     mockList([BOOKING])
     server.use(

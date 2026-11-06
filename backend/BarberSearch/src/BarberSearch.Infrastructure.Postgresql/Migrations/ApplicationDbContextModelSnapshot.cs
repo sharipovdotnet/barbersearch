@@ -405,6 +405,21 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("end_at");
 
+                    b.Property<string>("GuestFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("guest_first_name");
+
+                    b.Property<string>("GuestLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("guest_last_name");
+
+                    b.Property<string>("GuestPhone")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("guest_phone");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasColumnType("text")
@@ -431,7 +446,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -443,6 +458,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_bookings");
+
+                    b.HasIndex("BarberProfileId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_bookings_barber_profile_id_idempotency_key_guest")
+                        .HasFilter("user_id IS NULL");
 
                     b.HasIndex("BarberProfileId", "StartAt")
                         .HasDatabaseName("ix_bookings_barber_profile_id_start_at_active")
@@ -461,6 +481,14 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.ToTable("bookings", null, t =>
                         {
                             t.HasCheckConstraint("ck_bookings_cancellation_reason", "cancellation_reason IS NULL OR char_length(cancellation_reason) BETWEEN 1 AND 500");
+
+                            t.HasCheckConstraint("ck_bookings_customer", "(user_id IS NOT NULL AND guest_first_name IS NULL AND guest_last_name IS NULL AND guest_phone IS NULL) OR (user_id IS NULL AND guest_first_name IS NOT NULL AND guest_phone IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_bookings_guest_first_name", "guest_first_name IS NULL OR char_length(btrim(guest_first_name)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("ck_bookings_guest_last_name", "guest_last_name IS NULL OR char_length(btrim(guest_last_name)) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("ck_bookings_guest_phone", "guest_phone IS NULL OR char_length(btrim(guest_phone)) BETWEEN 1 AND 32");
 
                             t.HasCheckConstraint("ck_bookings_idempotency_key", "char_length(idempotency_key) BETWEEN 1 AND 128");
 

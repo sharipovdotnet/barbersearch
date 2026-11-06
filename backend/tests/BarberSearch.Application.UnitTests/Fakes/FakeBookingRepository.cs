@@ -135,6 +135,37 @@ public sealed class FakeBookingRepository : IBookingRepository
         return Task.FromResult<Result<Booking, Failure>>(booking);
     }
 
+    public Task<Result<Booking, Failure>> GetByGuestIdempotencyKeyAsync(
+        Guid barberProfileId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        GetByIdempotencyKeyCalls++;
+
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.Validation(
+                ApiErrorCodes.Booking.IdempotencyKeyInvalid,
+                "Idempotency key cannot be empty.",
+                nameof(idempotencyKey))));
+        }
+
+        var key = idempotencyKey.Trim();
+        var booking = _bookings.Values.FirstOrDefault(
+            x => x.UserId == null
+                 && x.BarberProfileId == barberProfileId
+                 && x.IdempotencyKey == key);
+
+        if (booking is null)
+        {
+            return Task.FromResult<Result<Booking, Failure>>(new Failure(Error.NotFound(
+                ApiErrorCodes.Booking.IdempotencyKeyNotFound,
+                $"Guest booking with idempotency key '{key}' was not found.")));
+        }
+
+        return Task.FromResult<Result<Booking, Failure>>(booking);
+    }
+
     public Task<Result<IReadOnlyList<Booking>, Failure>> GetByUserAsync(
         Guid userId,
         int page,
@@ -290,11 +321,13 @@ public sealed class FakeBookingRepository : IBookingRepository
         if (filters.Search is { } search)
         {
             // Повторяем правило репозитория: GUID — точный id, иначе подстрока email.
+            // У гостя email нет: подстрокой он не находится, но в списке остаётся.
             query = Guid.TryParse(search, out var searchedId)
                 ? query.Where(row => row.Id == searchedId)
-                : query.Where(row => row.Customer.Email.Contains(
-                    search,
-                    StringComparison.OrdinalIgnoreCase));
+                : query.Where(row => row.Customer.Email is not null
+                    && row.Customer.Email.Contains(
+                        search,
+                        StringComparison.OrdinalIgnoreCase));
         }
 
         if (cursor is { } position)
@@ -379,9 +412,17 @@ public sealed class FakeBookingRepository : IBookingRepository
         }
 
         // Повторяем правила БД, чтобы тесты видели те же коды, что и на PostgreSQL.
-        if (_bookings.Values.Any(x =>
-                x.UserId == booking.UserId
-                && x.IdempotencyKey == booking.IdempotencyKey))
+        // Клиент — (user_id, key), гость — (barber_profile_id, key) при user_id IS NULL.
+        var duplicate = booking.UserId is { } userId
+            ? _bookings.Values.Any(x =>
+                x.UserId == userId
+                && x.IdempotencyKey == booking.IdempotencyKey)
+            : _bookings.Values.Any(x =>
+                x.UserId == null
+                && x.BarberProfileId == booking.BarberProfileId
+                && x.IdempotencyKey == booking.IdempotencyKey);
+
+        if (duplicate)
         {
             return Task.FromResult(UnitResult.Failure<Failure>(new Failure(Error.Conflict(
                 ApiErrorCodes.Booking.AddUniqueViolation,
@@ -432,7 +473,8 @@ public sealed class FakeBookingRepository : IBookingRepository
 
     /// <summary>
     /// Запись барбера с синтетическим клиентом: фейк проверяет фильтры и порядок,
-    /// а имена и телефоны приходят из базы в интеграционных тестах.
+    /// а имена и телефоны приходят из базы в интеграционных тестах. У гостя аккаунта нет,
+    /// поэтому имя и телефон берутся из снимка брони.
     /// </summary>
     private static BarberBookingResponse ToBarberResponse(Booking booking)
         => new(
@@ -444,7 +486,11 @@ public sealed class FakeBookingRepository : IBookingRepository
             booking.CustomerNote,
             booking.BarberNote,
             booking.CancellationReason,
-            new BarberBookingCustomerResponse($"Customer {booking.UserId:N}", null),
+            new BarberBookingCustomerResponse(
+                booking.UserId is { } userId
+                    ? $"Customer {userId:N}"
+                    : $"{booking.GuestFirstName} {booking.GuestLastName}".Trim(),
+                booking.UserId is null ? booking.GuestPhone : null),
             new BarberBookingServiceResponse($"Service {booking.BarberServiceId:N}"),
             new BarberBookingSalonResponse("Fake salon", "Fake address", "Fake city", "Europe/Moscow"));
 }

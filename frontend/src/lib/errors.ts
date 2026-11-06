@@ -98,8 +98,10 @@ export type BarberBookingCreateFailure = {
 /**
  * Ошибки `POST api/barber/bookings`.
  *
- * Барбер записывает зарегистрированного клиента; `404 booking.create.customerNotFound`
- * означает, что клиент исчез или заблокирован, а не что «страница не найдена».
+ * Барбер записывает зарегистрированного клиента или нового человека без аккаунта;
+ * `404 booking.create.customerNotFound` означает, что клиент исчез или заблокирован,
+ * а не что «страница не найдена», а `booking.create.guest*` — что не заполнены
+ * обязательные имя и телефон гостя.
  * `409 booking.add.overlap` и `400 booking.create.startAt.*` лечатся только новым
  * свободным временем, поэтому просим форму перезапросить слоты. `detail` не
  * показываем никогда, он английский.
@@ -126,6 +128,25 @@ export function describeBarberBookingCreateFailure(
   if (error.hasCode('booking.create.customerNotFound')) {
     return {
       message: 'Клиент не найден — возможно, аккаунт заблокирован. Повторите поиск.',
+      reloadSlots: false,
+    }
+  }
+
+  if (error.hasCode('booking.create.customerAmbiguous')) {
+    return {
+      message:
+        'Выберите зарегистрированного клиента или заполните данные нового — не оба варианта сразу.',
+      reloadSlots: false,
+    }
+  }
+
+  if (
+    error.hasCode('booking.create.customer')
+    || error.hasCode('booking.create.guestFirstName')
+    || error.hasCode('booking.create.guestPhone')
+  ) {
+    return {
+      message: 'Укажите имя и телефон клиента.',
       reloadSlots: false,
     }
   }
