@@ -1,10 +1,11 @@
 import { StrictMode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BarbersScreen } from '@/components/admin/barbers-screen'
+import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminBarber, AdminBarberDetail } from '@/lib/admin-barbers'
 import { parseAdminPath } from '@/lib/admin-path'
 import { useLocation } from '@/lib/router'
@@ -140,6 +141,10 @@ describe('BarbersScreen', () => {
     mockAdminBarbers()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('смена фильтра не оставляет карточку барбера из прошлой выборки', async () => {
     const user = userEvent.setup()
 
@@ -232,5 +237,30 @@ describe('BarbersScreen', () => {
     expect(
       screen.queryByRole('region', { name: VERIFIED.displayName })
     ).not.toBeInTheDocument()
+  })
+
+  it('через период опроса перечитывает очередь и карточку', async () => {
+    vi.useFakeTimers()
+    const requests = mockAdminBarbers()
+
+    openAt('/admin/barbers?status=all')
+    render(
+      <StrictMode>
+        <AdminBarbersRoute />
+      </StrictMode>
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const initial = requests.length
+
+    expect(initial).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REFRESH_INTERVAL_MS)
+    })
+
+    expect(requests).toHaveLength(initial + 1)
   })
 })

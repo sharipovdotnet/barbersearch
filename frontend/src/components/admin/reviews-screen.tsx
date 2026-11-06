@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminReview } from '@/hooks/use-admin-review'
 import { useAdminReviewList } from '@/hooks/use-admin-review-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useNow } from '@/hooks/use-now'
 import {
@@ -90,6 +91,32 @@ export function ReviewsScreen({
     review && actionFailure?.reviewId === review.id
       ? actionFailure.message
       : null
+
+  // Очередь модерации меняется и без текущего администратора: новый отзыв от
+  // клиента или решение второго админа. Пока идёт действие или загрузка страницы,
+  // список не трогаем — ответ, прочитанный до коммита, вернул бы строку обратно.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !list.isLoadingPage &&
+      !requiresSignIn &&
+      pendingAction === null,
+    onRefresh: () => {
+      list.refresh()
+
+      // Карточка вне загруженной страницы живёт отдельным чтением: без него
+      // прямой адрес `/admin/reviews/{id}` остался бы устаревшим. Если отзыв
+      // уже разобрали (`notFound`), повторять запрос каждые 30 секунд незачем.
+      if (
+        reviewId !== null &&
+        listItem === null &&
+        detail.status !== 'notFound'
+      ) {
+        detail.reload()
+      }
+    },
+  })
 
   // На широком экране очередь открывается с первой карточкой; на телефоне — со списка.
   useEffect(() => {
