@@ -6,7 +6,6 @@ using BarberSearch.Application.Users;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
 using BarberSearch.Domain.Bookings;
-using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -52,11 +51,12 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// </para>
 /// <para>
 /// Барбер может записать клиента сам: <see cref="CreateBookingCommand.CustomerId"/>
-/// задаёт зарегистрированного клиента, а <see cref="CreateBookingCommand.ConfirmImmediately"/>
+/// задаёт зарегистрированного пользователя, а <see cref="CreateBookingCommand.ConfirmImmediately"/>
 /// сразу переводит бронь в <c>Confirmed</c>. Такой вызов разрешён только владельцу профиля
 /// из <see cref="CreateBookingCommand.Request"/> — профиль обязан совпадать с claim'ом
-/// <c>barber_profile_id</c>; клиент должен существовать, быть активным и иметь роль
-/// <c>Customer</c>, иначе <c>404 booking.create.customerNotFound</c>. Клиентский путь
+/// <c>barber_profile_id</c>; пользователь должен существовать и быть активным, роль при этом
+/// не важна (клиент, администратор, барбер и т. д.), иначе
+/// <c>404 booking.create.customerNotFound</c>. Клиентский путь
 /// (<c>CustomerId = null</c>) по-прежнему берёт пользователя из токена и создаёт
 /// <c>Pending</c>, поэтому передать чужого клиента через публичный контракт нельзя.
 /// </para>
@@ -262,20 +262,20 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
             return existing.Error;
         }
 
-        // Клиента проверяем после ключа идемпотентности: повтор уже созданной брони
-        // обязан вернуть её id, даже если клиента успели заблокировать. У гостя аккаунта
-        // нет, поэтому проверять нечего — домен требует только имя и телефон.
+        // Пользователя проверяем после ключа идемпотентности: повтор уже созданной брони
+        // обязан вернуть её id, даже если пользователя успели заблокировать. Роль не важна:
+        // записать можно клиента, администратора, барбера и любого другого активного
+        // пользователя. У гостя аккаунта нет, поэтому проверять нечего — домен требует
+        // только имя и телефон.
         if (!isGuestBooking && command.CustomerId is not null)
         {
             var customer = await _users.GetByIdAsync(customerId!.Value, cancellationToken);
 
-            if (customer.IsFailure
-                || customer.Value.Role != UserRole.Customer
-                || !customer.Value.IsActive)
+            if (customer.IsFailure || !customer.Value.IsActive)
             {
                 return new Failure(Error.NotFound(
                     ApiErrorCodes.Booking.CreateCustomerNotFound,
-                    $"Customer '{customerId}' was not found or cannot be booked.",
+                    $"User '{customerId}' was not found or cannot be booked.",
                     customerId));
             }
         }

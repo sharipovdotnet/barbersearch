@@ -944,7 +944,7 @@ public class BookingCreateTests
     }
 
     [Fact]
-    public async Task CreateByBarber_ForAdmin_ReturnsNotFound()
+    public async Task CreateByBarber_ForAdmin_Succeeds()
     {
         var context = CreateContext();
         var admin = User.Create(
@@ -967,9 +967,40 @@ public class BookingCreateTests
             new CreateBookingCommand(request, admin.Id, ConfirmImmediately: true),
             CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal("booking.create.customerNotFound", result.Error.Errors[0].Code);
-        Assert.Empty(context.Bookings.Bookings);
+        Assert.True(result.IsSuccess);
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(admin.Id, booking.UserId);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+    }
+
+    [Fact]
+    public async Task CreateByBarber_ForAnotherBarber_Succeeds()
+    {
+        var context = CreateContext();
+        var barber = User.Create(
+            "barber@example.com",
+            "hash",
+            "Boris",
+            "Barber",
+            UserRole.Barber).Value;
+        context.Users.Add(barber);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "barber-customer-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, barber.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(barber.Id, booking.UserId);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
     }
 
     [Fact]

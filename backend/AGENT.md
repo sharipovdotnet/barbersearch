@@ -2099,11 +2099,12 @@ Read endpoints (added 2026-10-19):
   note, stores a blank note as `null` and rejects more than
   `Constants.MAX_BARBER_NOTE_LENGTH` (1000) characters with `400 booking.barberNote.tooLong`;
   the rule lives in `Booking.AddBarberNote`.
-- **Manual client booking (2026-11-05; guest walk-ins added 2026-11-06, issue #50).** The barber
-  cabinet can create a booking for a registered client **or** for a guest (walk-in) without
-  creating an account. Three `BarberOnly` reads feed the dialog: `GET api/barber/clients?search=`
-  returns at most ten active `Customer` rows matched by email or phone substring (trimmed,
-  3–100 characters; `400 barberClient.search.tooShort`/`.tooLong`); `GET
+- **Manual client booking (2026-11-05; guest walk-ins added 2026-11-06, issue #50; any
+  active role allowed 2026-11-06).** The barber cabinet can create a booking for a registered
+  user of any role **or** for a guest (walk-in) without creating an account. Three
+  `BarberOnly` reads feed the dialog: `GET api/barber/clients?search=` returns at most ten
+  active users matched by email or phone substring (trimmed, 3–100 characters;
+  `400 barberClient.search.tooShort`/`.tooLong`); `GET
   api/barber/booking-options` returns the own profile's active services and salons in the
   same nested shapes as the public card and does **not** require `IsVerified`; `GET
   api/barber/slots?date=&hairServiceId=&salonId=` reuses `GetBarberSlotsQuery` with
@@ -2117,9 +2118,11 @@ Read endpoints (added 2026-10-19):
   `booking.create.customer` (neither supplied), `booking.create.customerAmbiguous` (both
   supplied), `booking.create.guestFirstName` (blank/too long, max 100),
   `booking.create.guestLastName` (too long, max 100; blank → `null`) and
-  `booking.create.guestPhone` (blank/too long, max 32). A registered customer is still validated
-  as an existing active `Customer` (`404 booking.create.customerNotFound`); a guest skips the
-  user lookup and the booking stores `user_id = NULL` plus the trimmed contact snapshot.
+  `booking.create.guestPhone` (blank/too long, max 32). A registered user is still validated
+  as existing and active (`404 booking.create.customerNotFound`), but the role is not
+  checked — a client, an admin, a barber and any other active account can be booked. A
+  guest skips the user lookup and the booking stores `user_id = NULL` plus the trimmed
+  contact snapshot.
   The rest of the pipeline is shared: idempotency key (scoped to the customer, or to
   `(barber, key)` for a guest), start window, advisory lock, service/salon/ownership and overlap
   checks. `Booking.Confirm()` runs before the insert, so the row is **`Confirmed`**, not

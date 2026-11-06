@@ -341,9 +341,9 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             _users.Values.Count(user => user.Role == UserRole.Admin && user.IsActive));
 
     /// <summary>
-    /// Поиск клиентов в памяти с той же семантикой, что у PostgreSQL-репозитория:
-    /// только активные <c>Customer</c>, подстрока без учёта регистра по email и телефону,
-    /// порядок по имени и ограничение выдачи.
+    /// Поиск пользователей в памяти с той же семантикой, что у PostgreSQL-репозитория:
+    /// только активные пользователи любой роли, подстрока без учёта регистра по email
+    /// и телефону, порядок по имени и ограничение выдачи.
     /// </summary>
     public Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> SearchClientsAsync(
         string search,
@@ -353,7 +353,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         var needle = search.Trim();
 
         var rows = _users.Values
-            .Where(user => user.Role == UserRole.Customer && user.IsActive)
+            .Where(user => user.IsActive)
             .Where(user =>
                 user.Email.Contains(needle, StringComparison.OrdinalIgnoreCase)
                 || (user.PhoneNumber?.Contains(

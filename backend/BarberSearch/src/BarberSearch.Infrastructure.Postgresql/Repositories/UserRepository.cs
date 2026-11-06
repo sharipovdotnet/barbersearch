@@ -169,13 +169,14 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
-    /// Поиск активных клиентов по email или телефону для формы ручной записи.
+    /// Поиск активных пользователей по email или телефону для формы ручной записи.
     /// </summary>
     /// <remarks>
-    /// Условие по роли и активности стоит до поиска: барбер не должен находить
-    /// администратора или коллегу. Шаблон строится тем же экранированием, что и в
-    /// админском списке, поэтому «%» и «_» остаются литералами. Телефона может не быть —
-    /// тогда строка совпадает только по email.
+    /// Роль не фильтруется: барбер может записать клиента, администратора, коллегу
+    /// и любого другого активного пользователя. Условие активности стоит до поиска.
+    /// Шаблон строится тем же экранированием, что и в админском списке, поэтому «%»
+    /// и «_» остаются литералами. Телефона может не быть — тогда строка совпадает
+    /// только по email.
     /// </remarks>
     public async Task<Result<IReadOnlyList<BarberClientResponse>, Failure>> SearchClientsAsync(
         string search,
@@ -191,7 +192,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
 
         var rows = await Context.Users
             .AsNoTracking()
-            .Where(user => user.Role == UserRole.Customer && user.IsActive)
+            .Where(user => user.IsActive)
             .Where(user =>
                 EF.Functions.ILike(user.Email, pattern, "\\")
                 || (user.PhoneNumber != null
