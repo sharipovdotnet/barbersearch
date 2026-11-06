@@ -11,6 +11,7 @@ import {
 import { BarberSalonCard } from '@/components/barber/barber-salon-card'
 import { BarberSalonDialog } from '@/components/barber/barber-salon-dialog'
 import { SalonPickerDialog } from '@/components/barber/barber-salon-picker-dialog'
+import { SalonBarbersDialog } from '@/components/barber/salon-barbers-dialog'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button } from '@/components/ui/button'
 import {
@@ -109,6 +110,9 @@ function BarberSalonsScreen({
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editing, setEditing] = useState<EditingSalon | null>(null)
+  const [managingSalon, setManagingSalon] = useState<BarberSalonSummary | null>(
+    null
+  )
 
   function handleAttached() {
     setAnnouncement('Салон добавлен.')
@@ -290,6 +294,10 @@ function BarberSalonsScreen({
                     setAnnouncement(null)
                     setEditing({ salon, focus })
                   }}
+                  onManageBarbers={() => {
+                    setAnnouncement(null)
+                    setManagingSalon(salon)
+                  }}
                 />
               </li>
             ))}
@@ -325,6 +333,13 @@ function BarberSalonsScreen({
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
           onContactsFailed={handleContactsFailed}
+        />
+      )}
+
+      {managingSalon && (
+        <SalonBarbersDialog
+          salon={managingSalon}
+          onClose={() => setManagingSalon(null)}
         />
       )}
     </div>

@@ -46,8 +46,17 @@ _Avoid_: Shop, branch, location
 The User who owns a Salon. It is a link (`Salon.OwnerUserId`), not a role: a Salon has at most
 one owner, the owner is always a Barber with a Barber Profile, and there is no fourth role.
 A Salon with no owner was created by an administrator. The owner can edit the address and
-contacts, but cannot activate, hide or rename the Salon.
+contacts, manage the Salon's barbers (attach and detach other Barbers), but cannot activate,
+hide or rename the Salon.
 _Avoid_: Salon admin, shop owner role
+
+**Salon Barber Composition**:
+The set of Barber Salon links that belong to one Salon. The Salon Owner reads it, searches
+candidates by name or email, attaches another Barber Profile (the first Salon of that profile
+becomes primary) and detaches one. The owner's own link cannot be removed: it is created with
+the Salon and keeps ownership working. The list includes unverified and disabled profiles so
+the owner can remove them; public visibility still requires an active, verified profile.
+_Avoid_: Salon staff, team, employees
 
 **Salon Moderation Status**:
 The state of a Salon before and after an administrator's review: Pending → Active | Rejected.

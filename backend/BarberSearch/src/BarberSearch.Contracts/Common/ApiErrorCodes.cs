@@ -762,6 +762,26 @@ public static class ApiErrorCodes
         /// Попытка включить салон, который не прошёл модерацию; <c>409</c>.
         /// </summary>
         public const string ActivationNotApproved = "salon.activation.notApproved";
+
+        /// <summary>
+        /// Барбер с выключенным профилем не может быть прикреплён к салону; <c>409</c>.
+        /// </summary>
+        public const string BarberInactive = "salon.barbers.inactive";
+
+        /// <summary>
+        /// Попытка убрать владельца салона из его же салона; <c>409</c>.
+        /// </summary>
+        public const string BarberOwnerImmutable = "salon.barbers.owner";
+
+        /// <summary>
+        /// Поиск барбера для прикрепления короче трёх символов; <c>400</c>.
+        /// </summary>
+        public const string BarberSearchTooShort = "salon.barbers.search.tooShort";
+
+        /// <summary>
+        /// Поиск барбера для прикрепления длиннее ста символов; <c>400</c>.
+        /// </summary>
+        public const string BarberSearchTooLong = "salon.barbers.search.tooLong";
     }
 
     /// <summary>

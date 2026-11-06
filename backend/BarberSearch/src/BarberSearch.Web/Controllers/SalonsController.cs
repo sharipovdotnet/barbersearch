@@ -1,15 +1,21 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Salons.ActivateSalon;
+using BarberSearch.Application.Salons.AddSalonBarber;
 using BarberSearch.Application.Salons.Admin.ApproveSalon;
 using BarberSearch.Application.Salons.Admin.RejectSalon;
 using BarberSearch.Application.Salons.CreateOwnSalon;
 using BarberSearch.Application.Salons.CreateSalon;
 using BarberSearch.Application.Salons.DeactivateSalon;
+using BarberSearch.Application.Salons.GetSalonBarbers;
 using BarberSearch.Application.Salons.GetSalonDirectory;
+using BarberSearch.Application.Salons.RemoveSalonBarber;
+using BarberSearch.Application.Salons.SearchSalonBarberCandidates;
 using BarberSearch.Application.Salons.UpdateSalonContactInfo;
 using BarberSearch.Application.Salons.UpdateSalonLocation;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Salons.AddSalonBarber;
 using BarberSearch.Contracts.Salons.CreateSalon;
+using BarberSearch.Contracts.Salons.GetSalonBarbers;
 using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Contracts.Salons.RejectSalon;
 using BarberSearch.Contracts.Salons.UpdateSalonContactInfo;
@@ -34,6 +40,12 @@ namespace BarberSearch.Web.Controllers;
 /// Создание: администратор — <c>POST /api/salons</c> (сразу активный салон), барбер —
 /// <c>POST /api/salons/own</c> (салон уходит на модерацию). Адрес и контакты правят
 /// администратор или владелец; активация и модерация — только администратор.
+/// </para>
+/// <para>
+/// Состав салона: владелец (или администратор) читает прикреплённых барберов, ищет
+/// кандидатов по имени/email и прикрепляет или открепляет их. Привязка — та же строка
+/// <c>barber_salons</c>, что и у выбора салона самим барбером; владельца салона убрать
+/// нельзя.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -136,6 +148,101 @@ public class SalonsController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UpdateSalonContactInfoCommand(salonId, request.PhoneNumber, request.WebsiteUrl),
+            cancellationToken));
+
+    /// <summary>
+    /// Возвращает барберов, прикреплённых к салону.
+    /// </summary>
+    /// <remarks>
+    /// Доступно администратору и владельцу салона; чужой салон — <c>403 auth.forbidden</c>,
+    /// аноним — <c>401</c>. Ответ — все привязки, включая выключенные профили и
+    /// неподтверждённых мастеров: владелец управляет составом и до публикации.
+    /// <c>userId</c> позволяет экрану отличить владельца салона.
+    /// </remarks>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpGet("{salonId:guid}/barbers")]
+    public async Task<ActionResult<IReadOnlyList<SalonBarberResponse>>> GetBarbers(
+        Guid salonId,
+        [FromServices] IQueryHandler<IReadOnlyList<SalonBarberResponse>, GetSalonBarbersQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetSalonBarbersQuery(salonId),
+            cancellationToken));
+
+    /// <summary>
+    /// Ищет активных барберов, ещё не прикреплённых к салону, по имени или email.
+    /// </summary>
+    /// <remarks>
+    /// Доступно администратору и владельцу салона. Строка короче трёх символов —
+    /// <c>400 salon.barbers.search.tooShort</c>, длиннее ста — <c>400
+    /// salon.barbers.search.tooLong</c>. Ответ ограничен десятью строками, пагинации нет:
+    /// это подсказка формы. Уже прикреплённые профили не возвращаются.
+    /// </remarks>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="search">Имя или email барбера.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpGet("{salonId:guid}/barber-candidates")]
+    public async Task<ActionResult<IReadOnlyList<SalonBarberResponse>>> SearchBarberCandidates(
+        Guid salonId,
+        [FromQuery] string? search,
+        [FromServices] IQueryHandler<IReadOnlyList<SalonBarberResponse>, SearchSalonBarberCandidatesQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new SearchSalonBarberCandidatesQuery(salonId, search),
+            cancellationToken));
+
+    /// <summary>
+    /// Прикрепляет барбера к салону.
+    /// </summary>
+    /// <remarks>
+    /// Доступно администратору и владельцу салона; чужой салон — <c>403 auth.forbidden</c>.
+    /// Профиль должен существовать (<c>404 barberProfile.notFound</c>) и быть активным
+    /// (<c>409 salon.barbers.inactive</c>); повторная привязка — <c>409</c>
+    /// <c>barberProfile.addSalon.duplicate</c>. Первый салон профиля становится основным.
+    /// Ответ — <c>204</c>.
+    /// </remarks>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="request">Прикрепляемый профиль барбера.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpPost("{salonId:guid}/barbers")]
+    public async Task<ActionResult> AddBarber(
+        Guid salonId,
+        [FromBody] AddSalonBarberRequest request,
+        [FromServices] ICommandHandler<AddSalonBarberCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new AddSalonBarberCommand(salonId, request.BarberProfileId),
+            cancellationToken));
+
+    /// <summary>
+    /// Открепляет барбера от салона.
+    /// </summary>
+    /// <remarks>
+    /// Доступно администратору и владельцу салона. Владельца салона убрать нельзя —
+    /// <c>409 salon.barbers.owner</c>; отсутствующая привязка — <c>404
+    /// barberProfile.removeSalon.notFound</c>. Расписание пары (барбер, салон) уходит
+    /// вместе с привязкой; прошлые записи клиентов остаются историей.
+    /// </remarks>
+    /// <param name="salonId">Идентификатор салона.</param>
+    /// <param name="barberProfileId">Идентификатор открепляемого профиля.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpDelete("{salonId:guid}/barbers/{barberProfileId:guid}")]
+    public async Task<ActionResult> RemoveBarber(
+        Guid salonId,
+        Guid barberProfileId,
+        [FromServices] ICommandHandler<RemoveSalonBarberCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new RemoveSalonBarberCommand(salonId, barberProfileId),
             cancellationToken));
 
     /// <summary>

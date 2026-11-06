@@ -11,19 +11,23 @@ import {
  * Карточка привязанного салона в «Моих салонах».
  *
  * Статус модерации — словом, а не только цветом: барбер должен понимать, почему
- * салона нет в поиске. Правка доступна только владельцу (`ownerUserId`), в том числе
- * для салона на проверке; у салона, созданного администратором, владельца нет,
- * и кнопок правки нет. Активации здесь нет — видимостью управляет администратор.
+ * салона нет в поиске. Правка и состав доступны только владельцу (`ownerUserId`),
+ * в том числе для салона на проверке; у салона, созданного администратором,
+ * владельца нет, и кнопок управления нет. Активации здесь нет — видимостью
+ * управляет администратор.
  */
 export function BarberSalonCard({
   salon,
   canEdit,
   onEdit,
+  onManageBarbers,
 }: {
   salon: BarberSalonSummary
   /** `ownerUserId === user.id`: чужой салон правит только администратор. */
   canEdit: boolean
   onEdit: (focus: 'location' | 'contacts') => void
+  /** Состав салона: владелец прикрепляет и открепляет других барберов. */
+  onManageBarbers: () => void
 }) {
   return (
     <Card>
@@ -63,6 +67,15 @@ export function BarberSalonCard({
 
         {canEdit && (
           <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-8"
+              onClick={onManageBarbers}
+            >
+              Барберы салона
+            </Button>
             <Button
               type="button"
               variant="outline"

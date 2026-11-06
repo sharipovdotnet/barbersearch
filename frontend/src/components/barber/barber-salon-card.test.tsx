@@ -31,7 +31,14 @@ const BASE: BarberSalonSummary = {
  */
 describe('BarberSalonCard', () => {
   it('одобренный салон показывает статус и действия правки без активации', () => {
-    render(<BarberSalonCard salon={BASE} canEdit onEdit={() => {}} />)
+    render(
+      <BarberSalonCard
+        salon={BASE}
+        canEdit
+        onEdit={() => {}}
+        onManageBarbers={() => {}}
+      />
+    )
 
     expect(screen.getByText('Одобрен')).toBeInTheDocument()
     expect(screen.getByText('Основной')).toBeInTheDocument()
@@ -41,6 +48,9 @@ describe('BarberSalonCard', () => {
       screen.queryByText('Салон появится в поиске после проверки администратором.')
     ).not.toBeInTheDocument()
 
+    expect(
+      screen.getByRole('button', { name: 'Барберы салона' })
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Изменить адрес' })
     ).toBeInTheDocument()
@@ -58,6 +68,7 @@ describe('BarberSalonCard', () => {
         salon={{ ...BASE, moderationStatus: 'Pending', rejectionReason: null }}
         canEdit
         onEdit={() => {}}
+        onManageBarbers={() => {}}
       />
     )
 
@@ -83,6 +94,7 @@ describe('BarberSalonCard', () => {
         }}
         canEdit={false}
         onEdit={() => {}}
+        onManageBarbers={() => {}}
       />
     )
 
@@ -100,10 +112,14 @@ describe('BarberSalonCard', () => {
         salon={{ ...BASE, ownerUserId: null }}
         canEdit={false}
         onEdit={() => {}}
+        onManageBarbers={() => {}}
       />
     )
 
     expect(screen.getByText('Одобрен')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Барберы салона' })
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Изменить адрес' })
     ).not.toBeInTheDocument()
@@ -116,7 +132,14 @@ describe('BarberSalonCard', () => {
     const user = userEvent.setup()
     const onEdit = vi.fn()
 
-    render(<BarberSalonCard salon={BASE} canEdit onEdit={onEdit} />)
+    render(
+      <BarberSalonCard
+        salon={BASE}
+        canEdit
+        onEdit={onEdit}
+        onManageBarbers={() => {}}
+      />
+    )
 
     const card = screen
       .getByText(BASE.name)
@@ -130,5 +153,23 @@ describe('BarberSalonCard', () => {
     )
 
     expect(onEdit.mock.calls).toStrictEqual([['location'], ['contacts']])
+  })
+
+  it('кнопка состава салона передаёт управление родителю', async () => {
+    const user = userEvent.setup()
+    const onManageBarbers = vi.fn()
+
+    render(
+      <BarberSalonCard
+        salon={BASE}
+        canEdit
+        onEdit={() => {}}
+        onManageBarbers={onManageBarbers}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Барберы салона' }))
+
+    expect(onManageBarbers).toHaveBeenCalledTimes(1)
   })
 })
