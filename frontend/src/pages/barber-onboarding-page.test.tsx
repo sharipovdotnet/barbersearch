@@ -157,7 +157,7 @@ describe('BarberOnboardingPage', () => {
     await fillMinimalForm(user)
     await submitForm()
 
-    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
+    expect(await screen.findByText('Добавьте место приёма')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Выбрать салон' })
     ).toBeInTheDocument()
@@ -216,7 +216,7 @@ describe('BarberOnboardingPage', () => {
       grade: 'SeniorBarber',
       bio: 'Стрижки и борода.',
     })
-    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
+    expect(await screen.findByText('Добавьте место приёма')).toBeInTheDocument()
   })
 
   it('заявка без «О себе»: описание в профиле остаётся редактируемым', async () => {
@@ -372,7 +372,7 @@ describe('BarberOnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Повторить' }))
 
     // Профиль уже создан: после успешного продления остаётся шаг салона.
-    expect(await screen.findByText('Добавьте салон')).toBeInTheDocument()
+    expect(await screen.findByText('Добавьте место приёма')).toBeInTheDocument()
     expect(refreshAttempts).toBe(2)
     expect(createCalls()).toBe(1)
   })

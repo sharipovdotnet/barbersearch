@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using BarberSearch.Application.Privacy;
 using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
@@ -46,6 +48,33 @@ public sealed class TestApp : IAsyncDisposable
     /// Ключ подписи JWT для тестового хоста: не короче 32 символов.
     /// </summary>
     public const string SigningKey = "barbersearch-integration-tests-signing-key-2026";
+
+    /// <summary>
+    /// JSON-настройки тестового клиента: enum'ы уходят именами, как их ждёт сервер
+    /// (<c>JsonStringEnumConverter(allowIntegerValues: false)</c>, R-23).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="JsonSerializerDefaults.Web"/> сам по себе сериализует enum числом, а сервер
+    /// числа запрещает. Поэтому запросы с доменными enum'ами (<c>CreateSalonRequest.Kind</c>)
+    /// отправляются через <see cref="PostJsonAsync"/>, а не через <c>PostAsJsonAsync</c>.
+    /// </remarks>
+    public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    /// <summary>
+    /// POST с телом, сериализованным как у настоящего клиента: enum'ы — строками.
+    /// </summary>
+    public static Task<HttpResponseMessage> PostJsonAsync(
+        HttpClient client,
+        string url,
+        object body)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return client.PostAsync(url, JsonContent.Create(body, options: JsonOptions));
+    }
 
     private readonly WebApplicationFactory<Program> _factory;
 

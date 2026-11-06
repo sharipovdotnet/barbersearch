@@ -338,6 +338,7 @@ public class BarberSearchTests
             null,
             null,
             null,
+            null,
             []);
 
         repository.AddSearchItem(item);

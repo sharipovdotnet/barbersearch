@@ -1,6 +1,7 @@
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { PlaceKind } from '@/lib/place-kind'
 import { isCreatedId, isBarberSalonSummaryList } from '@/lib/response-guards'
 import type { SalonInput } from '@/lib/salon-form'
 import type { SalonModerationStatus } from '@/lib/salon-moderation'
@@ -21,6 +22,10 @@ export type BarberSalonSummary = {
   city: string
   address: string
   timeZoneId: string
+  /** Тип места; от него зависят бейдж и подпись в «Моих салонах». */
+  kind: PlaceKind
+  /** `false` — скрытое место: в каталог не попадает и не проходит модерацию. */
+  isListed: boolean
   isPrimary: boolean
   country: string
   postalCode: string | null

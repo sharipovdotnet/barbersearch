@@ -17,6 +17,8 @@ namespace BarberSearch.Contracts.Salons.Admin;
 /// <para>
 /// Статус модерации и <c>isActive</c> — разные вещи: <c>active</c> в фильтре каталога —
 /// это <c>isActive &amp;&amp; moderationStatus == Active</c>, <c>pending</c> — очередь проверки.
+/// <c>kind</c> и <c>isListed</c> добавлены в #54: скрытое место активно, но в каталог
+/// не входит и модерации не требует, поэтому админская строка обязана это показывать.
 /// </para>
 /// </remarks>
 /// <param name="Id">Идентификатор салона.</param>
@@ -31,6 +33,11 @@ namespace BarberSearch.Contracts.Salons.Admin;
 /// <param name="PhoneNumber">Телефон; <c>null</c>, если его нет.</param>
 /// <param name="WebsiteUrl">Сайт; <c>null</c>, если его нет.</param>
 /// <param name="IsActive">Виден ли салон в поиске и на карточках.</param>
+/// <param name="Kind">Вид места приёма.</param>
+/// <param name="IsListed">
+/// Показывается ли место в публичном каталоге; у скрытого места администратору нужен бейдж
+/// «Не в каталоге», иначе непонятно, почему активная строка нигде не видна.
+/// </param>
 /// <param name="ModerationStatus">Состояние проверки салона администратором.</param>
 /// <param name="RejectionReason">Причина отказа; <c>null</c>, если салон не отклонён.</param>
 /// <param name="ReviewedAt">Когда принято решение; <c>null</c>, если салон ещё не проверяли.</param>
@@ -53,6 +60,8 @@ public record AdminSalonResponse(
     string? PhoneNumber,
     string? WebsiteUrl,
     bool IsActive,
+    PlaceKind Kind,
+    bool IsListed,
     SalonModerationStatus ModerationStatus,
     string? RejectionReason,
     DateTimeOffset? ReviewedAt,

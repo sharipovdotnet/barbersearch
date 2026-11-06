@@ -10,6 +10,7 @@ import {
 } from '@/lib/barber-profile-labels'
 import type { BarberProfile, BarberProfileSalon } from '@/lib/catalog'
 import { formatScheduleTime } from '@/lib/format'
+import { PLACE_KIND_LABELS } from '@/lib/place-kind'
 
 /**
  * Салоны мастера и его недельное расписание.
@@ -59,6 +60,15 @@ function SalonItem({ salon }: { salon: BarberProfileSalon }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium break-words">{salon.name}</h3>
+        <Badge variant="outline">{PLACE_KIND_LABELS[salon.kind]}</Badge>
+        {/*
+          Публичная карточка отдаёт только `kind`, без `isListed`: `Home` и
+          `Mobile` по правилам домена в каталог не попадают никогда, поэтому
+          бейдж ставится по типу.
+        */}
+        {(salon.kind === 'Home' || salon.kind === 'Mobile') && (
+          <Badge variant="secondary">Не в каталоге</Badge>
+        )}
         {salon.isPrimary && <Badge variant="secondary">Основной салон</Badge>}
       </div>
 

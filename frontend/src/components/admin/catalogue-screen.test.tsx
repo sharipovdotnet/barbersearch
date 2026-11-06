@@ -36,6 +36,8 @@ const PENDING_SALON: AdminSalon = {
   websiteUrl: null,
   isActive: false,
   moderationStatus: 'Pending',
+  kind: 'Salon',
+  isListed: true,
   rejectionReason: null,
   reviewedAt: null,
   ownerEmail: OWNER_EMAIL,

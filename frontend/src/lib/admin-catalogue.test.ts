@@ -208,6 +208,8 @@ describe('createSalon', () => {
     postalCode: '190000',
     phoneNumber: '+78120000000',
     websiteUrl: null,
+    kind: 'Salon' as const,
+    isListed: true,
   }
 
   it('отправляет все поля формы одним POST', async () => {

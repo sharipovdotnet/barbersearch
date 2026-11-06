@@ -25,6 +25,8 @@ const SALON: BarberSalonSummary = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
+  isListed: true,
   isPrimary: true,
   country: 'Russia',
   postalCode: '620000',

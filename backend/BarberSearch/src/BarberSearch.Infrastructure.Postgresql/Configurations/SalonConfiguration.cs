@@ -47,6 +47,21 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
                 "ck_salons_rejection_reason",
                 FormattableString.Invariant(
                     $"rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND {Constants.MAX_SALON_REJECTION_REASON_LENGTH}"));
+            // Тип места: известные значения перечисления и правило видимости. Скрытым
+            // (is_listed = false) может быть только кабинет, дом и выезд: барбершоп и студия
+            // аренды кресел существуют, чтобы быть в каталоге. Ограничение — последняя линия
+            // защиты: те же правила проверяет домен (salon.kind.unknown / salon.isListed.kind).
+            table.HasCheckConstraint(
+                "ck_salons_kind",
+                CheckConstraintSql.EnumIn<PlaceKind>("kind"));
+            table.HasCheckConstraint(
+                "ck_salons_listed_kind",
+                "NOT is_listed OR "
+                + CheckConstraintSql.EnumIn<PlaceKind>(
+                    "kind",
+                    PlaceKind.Salon,
+                    PlaceKind.RentalStudio,
+                    PlaceKind.SoloStudio));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_salons");
@@ -75,6 +90,16 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
             .HasColumnName("website_url")
             .HasMaxLength(Constants.MAX_URL_LENGTH);
         builder.Property(x => x.IsActive).HasColumnName("is_active");
+
+        // Тип места хранится smallint: значений мало, а bigint здесь не нужен. Default 1
+        // (Salon) и true описывают все существующие и админские строки — backfill не нужен.
+        builder.Property(x => x.Kind)
+            .HasColumnName("kind")
+            .HasConversion<short>()
+            .HasDefaultValue(PlaceKind.Salon);
+        builder.Property(x => x.IsListed)
+            .HasColumnName("is_listed")
+            .HasDefaultValue(true);
 
         // Владелец — связь, а не роль: у админского салона owner_user_id = NULL.
         // Удаление аккаунта владельца не удаляет салон, а обнуляет владельца.

@@ -83,6 +83,25 @@ describe('validateSalonForm', () => {
     expect(validateSalonForm(validForm({ phoneNumber: '1'.repeat(33) })))
       .toMatchObject({ phoneNumber: 'Не длиннее 32 символов.' })
   })
+
+  it('не даёт скрыть барбершоп и показать дом в каталоге', () => {
+    expect(
+      validateSalonForm(validForm({ kind: 'Salon', isListed: false }))
+    ).toMatchObject({
+      isListed: 'Барбершоп и студию нельзя скрыть из каталога.',
+    })
+    expect(
+      validateSalonForm(validForm({ kind: 'RentalStudio', isListed: false }))
+    ).toMatchObject({
+      isListed: 'Барбершоп и студию нельзя скрыть из каталога.',
+    })
+    expect(
+      validateSalonForm(validForm({ kind: 'Home', isListed: true }))
+    ).toMatchObject({ isListed: 'Для этого типа места каталог недоступен.' })
+    expect(
+      validateSalonForm(validForm({ kind: 'SoloStudio', isListed: false }))
+    ).toStrictEqual({})
+  })
 })
 
 describe('salonFormValues', () => {
@@ -105,6 +124,8 @@ describe('salonFormValues', () => {
       longitude: '',
       phoneNumber: '',
       websiteUrl: '',
+      kind: 'Salon',
+      isListed: true,
     })
   })
 
@@ -130,6 +151,31 @@ describe('salonFormValues', () => {
       phoneNumber: '+70000000009',
       websiteUrl: '',
     })
+  })
+
+  it('берёт тип и видимость из источника и не показывает скрытое место', () => {
+    expect(
+      salonFormValues({
+        name: 'Кабинет',
+        address: 'ул. Мира, 2',
+        city: 'Москва',
+        timeZoneId: 'Europe/Moscow',
+        kind: 'SoloStudio',
+        isListed: false,
+      })
+    ).toMatchObject({ kind: 'SoloStudio', isListed: false })
+
+    // Дом в каталоге не показывается даже при ошибочном флаге в ответе.
+    expect(
+      salonFormValues({
+        name: 'Дом',
+        address: 'ул. Мира, 2',
+        city: 'Москва',
+        timeZoneId: 'Europe/Moscow',
+        kind: 'Home',
+        isListed: true,
+      })
+    ).toMatchObject({ kind: 'Home', isListed: false })
   })
 })
 
@@ -162,6 +208,8 @@ describe('тела запросов', () => {
 
     expect(salonCreateInput(values)).toStrictEqual({
       name: 'Новый салон',
+      kind: 'Salon',
+      isListed: true,
       address: 'ул. Мира, 2',
       city: 'Москва',
       country: 'Россия',
@@ -172,6 +220,22 @@ describe('тела запросов', () => {
       phoneNumber: '+79990000000',
       websiteUrl: null,
     })
+  })
+
+  it('отправляет тип места и флаг каталога, нормализуя Home/Mobile', () => {
+    expect(
+      salonCreateInput(
+        validForm({ kind: 'SoloStudio', isListed: false })
+      )
+    ).toMatchObject({ kind: 'SoloStudio', isListed: false })
+
+    expect(
+      salonCreateInput(validForm({ kind: 'Home', isListed: true }))
+    ).toMatchObject({ kind: 'Home', isListed: false })
+
+    expect(
+      salonCreateInput(validForm({ kind: 'Mobile', isListed: true }))
+    ).toMatchObject({ kind: 'Mobile', isListed: false })
   })
 })
 

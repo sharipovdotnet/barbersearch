@@ -13,6 +13,8 @@ const BASE: BarberSalonSummary = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
+  isListed: true,
   isPrimary: true,
   country: 'Russia',
   postalCode: '620000',
@@ -41,6 +43,7 @@ describe('BarberSalonCard', () => {
     )
 
     expect(screen.getByText('Одобрен')).toBeInTheDocument()
+    expect(screen.getByText('Барбершоп')).toBeInTheDocument()
     expect(screen.getByText('Основной')).toBeInTheDocument()
     expect(screen.getByText(/Екатеринбург/)).toBeInTheDocument()
     expect(screen.getByText(/ул. Ленина, 1/)).toBeInTheDocument()
@@ -82,6 +85,29 @@ describe('BarberSalonCard', () => {
     expect(
       screen.getByRole('button', { name: 'Изменить адрес' })
     ).toBeEnabled()
+  })
+
+  it('скрытое место показывает тип и «Не в каталоге» вместо статуса проверки', () => {
+    render(
+      <BarberSalonCard
+        salon={{
+          ...BASE,
+          kind: 'Home',
+          isListed: false,
+          moderationStatus: 'Pending',
+        }}
+        canEdit
+        onEdit={() => {}}
+        onManageBarbers={() => {}}
+      />
+    )
+
+    expect(screen.getByText('На дому')).toBeInTheDocument()
+    expect(screen.getByText('Не в каталоге')).toBeInTheDocument()
+    expect(screen.queryByText('На проверке')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Салон появится в поиске после проверки администратором.')
+    ).not.toBeInTheDocument()
   })
 
   it('отклонённый салон показывает причину отказа', () => {

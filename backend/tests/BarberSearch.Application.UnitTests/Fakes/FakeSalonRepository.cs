@@ -175,7 +175,9 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
         LastDirectorySearch = search;
 
         IEnumerable<Salon> rows = _salons.Values.Where(salon =>
-            salon.IsActive && salon.ModerationStatus == SalonModerationStatus.Active);
+            salon.IsActive
+            && salon.IsListed
+            && salon.ModerationStatus == SalonModerationStatus.Active);
 
         if (city is not null)
         {
@@ -198,7 +200,8 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
                 salon.Name,
                 salon.City,
                 salon.Address,
-                salon.TimeZoneId))
+                salon.TimeZoneId,
+                salon.Kind))
             .ToList();
 
         return Task.FromResult<Result<IReadOnlyList<SalonDirectoryItemResponse>, Failure>>(

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isAdminSalonRow,
   isAdminUser,
   isBarberBooking,
+  isBarberBookingOptions,
+  isBarberSalonSummary,
+  isBarberSearchItem,
   isBooking,
+  isSalonDirectoryItem,
 } from '@/lib/response-guards'
 
 /**
@@ -126,5 +131,127 @@ describe('isBooking / isBarberBooking, причина отмены', () => {
     expect(isBarberBooking({ ...BARBER_BOOKING, cancellationReason: {} })).toBe(
       false
     )
+  })
+})
+
+const PROFILE_SALON = {
+  id: '88888888-8888-4888-8888-888888888888',
+  salonId: '99999999-9999-4999-8999-999999999999',
+  name: 'Кабинет на Ленина',
+  address: 'ул. Ленина, 1',
+  city: 'Екатеринбург',
+  country: 'Россия',
+  timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'SoloStudio',
+  isPrimary: true,
+  workingSchedules: [],
+}
+
+const SEARCH_ITEM = {
+  id: '11111111-1111-4111-8111-111111111111',
+  displayName: 'Тимур Барберов',
+  grade: 'SeniorBarber',
+  yearsOfExperience: 8,
+  languages: ['Ru'],
+  rating: null,
+  reviewsCount: 0,
+  isVerified: true,
+  primarySalonId: '99999999-9999-4999-8999-999999999999',
+  primarySalonName: 'На дому',
+  primaryPlaceKind: 'Home',
+  city: 'Москва',
+  additionalServices: [],
+}
+
+const ADMIN_SALON = {
+  id: '22222222-2222-4222-8222-222222222222',
+  name: 'Барбершоп на Ленина',
+  address: 'ул. Ленина, 1',
+  city: 'Екатеринбург',
+  postalCode: null,
+  country: 'Россия',
+  timeZoneId: 'Asia/Yekaterinburg',
+  latitude: 56.8389,
+  longitude: 60.6057,
+  phoneNumber: null,
+  websiteUrl: null,
+  isActive: true,
+  moderationStatus: 'Active',
+  kind: 'Salon',
+  isListed: true,
+  rejectionReason: null,
+  reviewedAt: null,
+  ownerEmail: null,
+  usageCount: 1,
+}
+
+const SUMMARY = {
+  salonId: '99999999-9999-4999-8999-999999999999',
+  name: 'Кабинет на Ленина',
+  city: 'Екатеринбург',
+  address: 'ул. Ленина, 1',
+  timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'SoloStudio',
+  isListed: false,
+  isPrimary: true,
+  country: 'Россия',
+  postalCode: null,
+  latitude: 56.8389,
+  longitude: 60.6057,
+  phoneNumber: null,
+  websiteUrl: null,
+  ownerUserId: null,
+  moderationStatus: 'Active',
+  rejectionReason: null,
+}
+
+const PICKER_ITEM = {
+  id: '33333333-3333-4333-8333-333333333333',
+  name: 'Барбершоп на Ленина',
+  city: 'Екатеринбург',
+  address: 'ул. Ленина, 1',
+  timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
+}
+
+describe('kind места в guard-ах', () => {
+  it('принимает известный kind во всех контрактах с местом', () => {
+    expect(
+      isBarberBookingOptions({ services: [], salons: [PROFILE_SALON] })
+    ).toBe(true)
+    expect(isBarberSearchItem(SEARCH_ITEM)).toBe(true)
+    expect(
+      isBarberSearchItem({ ...SEARCH_ITEM, primaryPlaceKind: null })
+    ).toBe(true)
+    expect(isAdminSalonRow(ADMIN_SALON)).toBe(true)
+    expect(isBarberSalonSummary(SUMMARY)).toBe(true)
+    expect(isSalonDirectoryItem(PICKER_ITEM)).toBe(true)
+  })
+
+  it('отвергает неизвестный kind: молчаливого прочерка нет', () => {
+    expect(
+      isBarberBookingOptions({
+        services: [],
+        salons: [{ ...PROFILE_SALON, kind: 'Penthouse' }],
+      })
+    ).toBe(false)
+    expect(
+      isBarberSearchItem({ ...SEARCH_ITEM, primaryPlaceKind: 'Penthouse' })
+    ).toBe(false)
+    expect(isAdminSalonRow({ ...ADMIN_SALON, kind: 4 })).toBe(false)
+    expect(isBarberSalonSummary({ ...SUMMARY, kind: 'Penthouse' })).toBe(false)
+    expect(isSalonDirectoryItem({ ...PICKER_ITEM, kind: 'Penthouse' })).toBe(
+      false
+    )
+  })
+
+  it('требует isListed у владельческого списка и админской строки', () => {
+    const { isListed: _summaryListed, ...summaryWithoutListed } = SUMMARY
+    const { isListed: _adminListed, ...adminWithoutListed } = ADMIN_SALON
+
+    expect(_summaryListed).toBe(false)
+    expect(_adminListed).toBe(true)
+    expect(isBarberSalonSummary(summaryWithoutListed)).toBe(false)
+    expect(isAdminSalonRow(adminWithoutListed)).toBe(false)
   })
 })

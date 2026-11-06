@@ -275,6 +275,8 @@ public class AuditTrailTests
         Assert.Equal("Best Cuts", values.GetProperty("name").GetString());
         Assert.Equal("Moscow", values.GetProperty("city").GetString());
         Assert.True(values.GetProperty("isActive").GetBoolean());
+        Assert.Equal("Salon", values.GetProperty("kind").GetString());
+        Assert.True(values.GetProperty("isListed").GetBoolean());
         Assert.Equal(55.7558, values.GetProperty("latitude").GetDouble());
         Assert.Equal(37.6173, values.GetProperty("longitude").GetDouble());
 

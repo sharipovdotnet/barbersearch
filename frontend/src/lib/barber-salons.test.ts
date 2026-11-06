@@ -25,6 +25,8 @@ const SUMMARY = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
+  isListed: true,
   isPrimary: true,
   country: 'Russia',
   postalCode: '620000',
@@ -100,6 +102,8 @@ describe('createOwnSalon', () => {
     postalCode: null,
     phoneNumber: '+70000000055',
     websiteUrl: 'https://e2e-salon.example',
+    kind: 'Salon' as const,
+    isListed: true,
   }
 
   it('отправляет POST /api/salons/own с CSRF, cookie и полным телом', async () => {

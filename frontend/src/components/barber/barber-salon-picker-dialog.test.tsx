@@ -18,6 +18,7 @@ const SALON = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
 }
 
 function renderDialog(hasSalons = false) {

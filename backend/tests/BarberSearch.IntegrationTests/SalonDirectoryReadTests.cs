@@ -19,7 +19,7 @@ public sealed class SalonDirectoryReadTests
     private readonly PostgresFixture _database;
 
     private static readonly string[] DIRECTORY_FIELDS =
-        ["id", "name", "city", "address", "timeZoneId"];
+        ["id", "name", "city", "address", "timeZoneId", "kind"];
 
     public SalonDirectoryReadTests(PostgresFixture database)
     {
@@ -66,6 +66,7 @@ public sealed class SalonDirectoryReadTests
         Assert.Equal("Berlin", first.GetProperty("city").GetString());
         Assert.Equal("Teststrasse 2", first.GetProperty("address").GetString());
         Assert.Equal("Europe/Berlin", first.GetProperty("timeZoneId").GetString());
+        Assert.Equal("Salon", first.GetProperty("kind").GetString());
         Assert.Equal(
             DIRECTORY_FIELDS,
             first.EnumerateObject().Select(property => property.Name));

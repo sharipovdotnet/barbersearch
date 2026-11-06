@@ -11,6 +11,7 @@ import {
   formatReviewsCount,
   getInitials,
 } from '@/lib/format'
+import { placeKindCaption } from '@/lib/place-kind'
 
 /**
  * Шапка публичной карточки.
@@ -22,7 +23,7 @@ export function BarberHero({ profile }: { profile: BarberProfile }) {
   const primarySalon =
     profile.salons.find((salon) => salon.isPrimary) ?? profile.salons[0] ?? null
   const location = primarySalon
-    ? [primarySalon.name, primarySalon.city].filter(Boolean).join(' · ')
+    ? placeKindCaption(primarySalon.kind, primarySalon.name, primarySalon.city)
     : 'Салон не указан'
 
   return (

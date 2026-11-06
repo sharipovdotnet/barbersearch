@@ -254,11 +254,11 @@ function OnboardingScreen({
       {stage === 'salon' && profileId !== null && (
         <Card>
           <CardHeader>
-            <CardTitle>Добавьте салон</CardTitle>
+            <CardTitle>Добавьте место приёма</CardTitle>
             <CardDescription>
-              Расписание и запись ведутся по паре «барбер — салон». Выберите салон
-              из каталога или пропустите шаг — кабинет откроется и без него, но
-              расписание будет пустым.
+              Расписание и запись ведутся по паре «барбер — место приёма». Выберите
+              место из каталога или пропустите шаг — кабинет откроется и без него,
+              но расписание будет пустым.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

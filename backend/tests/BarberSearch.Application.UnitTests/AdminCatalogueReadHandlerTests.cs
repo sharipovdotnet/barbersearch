@@ -201,6 +201,8 @@ public class AdminCatalogueReadHandlerTests
             "+78120000000",
             "https://nord.example/",
             IsActive: true,
+            Kind: PlaceKind.Salon,
+            IsListed: true,
             ModerationStatus: SalonModerationStatus.Active,
             RejectionReason: null,
             ReviewedAt: null,

@@ -41,8 +41,26 @@ _Avoid_: Level, rank, tier
 ## Places
 
 **Salon**:
-A physical place that opens and closes in one time zone, with an address and coordinates.
+A place where a Barber receives Customers, with an address, coordinates and one time zone that
+it opens and closes in. A barbershop is one kind of Salon; a chair-rental studio, a solo cabinet,
+a home and a mobile service are the others (see Place Kind).
 _Avoid_: Shop, branch, location
+
+**Place Kind**:
+The kind of a Salon: Salon (a barbershop), RentalStudio (a studio that rents chairs to other
+Barbers), SoloStudio (one master's cabinet), Home (reception at a residential address) or Mobile
+(the Barber travels to the Customer, so the Salon's Address is the service area). It does not
+decide where the Salon is visible — that is IsListed.
+
+_Avoid_: Venue type, place type, category
+
+**Listed Place**:
+A Salon (`IsListed = true`) that appears in the public catalogue and therefore passes moderation
+before it is published. Only a barbershop or a rental studio is always listed; a solo cabinet may
+be listed by the Barber's choice, and a Home or a Mobile place never is. An unlisted Salon skips
+moderation and is reachable only from the Barber's verified profile, but still has an address and
+a time zone, so booking, slots and the weekly schedule work as usual.
+_Avoid_: Hidden place, private salon, shadow place
 
 **Salon Owner**:
 The User who owns a Salon. It is a link (`Salon.OwnerUserId`), not a role: a Salon has at most
@@ -63,14 +81,15 @@ _Avoid_: Salon staff, team, employees
 **Salon Moderation Status**:
 The state of a Salon before and after an administrator's review: Pending → Active | Rejected.
 It is not IsActive (visibility): the Salon is publicly visible only when it is both active and
-IsActive. Salons created by an administrator start Active; a Salon created by its Barber starts
-Pending. Rejected means the administrator declined it with a reason; the owner cannot resubmit
-in this slice.
+IsActive. Salons created by an administrator start Active; a listed Salon created by its Barber
+starts Pending. Rejected means the administrator declined it with a reason; the owner cannot
+resubmit in this slice. An unlisted Salon never reaches this review: it is created Active with no
+ReviewedAt, because it is not in the catalogue.
 _Avoid_: Approval flag, publication status
 
 **Barber Salon**:
-The fact that one Barber works in one Salon, together with that Barber's weekly schedule at that
-Salon and whether it is his primary Salon.
+The placement of one Barber at one Salon, together with that Barber's weekly schedule there and
+whether it is his primary Salon.
 _Avoid_: Workplace, employment
 
 **Primary Salon**:

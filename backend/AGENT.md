@@ -395,8 +395,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-06 (срез issue-46): domain **231**, application **440**,
-infrastructure **116**, integration **148** — всего **935**, все зелёные. История прогонов по срезам и
+Актуальный baseline на 2026-11-06 (срез issue-54): domain **278**, application **493**,
+infrastructure **122**, integration **164** — всего **1057**, все зелёные. История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
 Use the §5.2 command (`dotnet test … -p:BaseOutputPath=<temp>`) first; the reflection runner is
@@ -483,6 +483,11 @@ Specialization (AR)          — standalone, no child collection
 
 AR = `AggregateRoot`, which derives from `Entity`.
 
+`Salon` — это место приёма, а не обязательно барбершоп: у него есть вид (`Salon.Kind`,
+`PlaceKind`) и отдельный флаг каталога (`Salon.IsListed`, §7.3/§7.4). Связь «барбер × место ×
+расписание» не меняется: `BarberSalon`, `WorkingSchedule` и `Booking.SalonId` про тип места
+не знают, а `Booking.SalonId` остаётся обязательным.
+
 **Cross-aggregate navigation properties: zero.** A child entity carries a navigation only to
 its own aggregate root (`PortfolioPhoto.BarberProfile`, `TimeOff.BarberProfile`,
 `FavoriteBarber.User`, `BarberSalon.BarberProfile`, `WorkingSchedule.BarberSalon`,
@@ -531,7 +536,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
-| `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`) |
+| `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`); `Kind` is a defined `PlaceKind` value (`salon.kind.unknown` otherwise); `IsListed` is set only by the two factories, is always `true` for `Salon`/`RentalStudio` and may be `false` only for `SoloStudio`/`Home`/`Mobile` (`salon.isListed.kind` otherwise); `SubmitByOwner(isListed: false)` creates an `Active`/`IsActive` place with no `ReviewedAt`/`ReviewedByUserId` — an unlisted place is not moderated |
 | `HairService` | non-empty name, known category, duration `1..1440` |
 | `Specialization` | non-empty name |
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
@@ -558,6 +563,15 @@ All persisted enums have **explicit numeric values** (§10.10).
   read predicate is `IsActive && ModerationStatus == Active`. `Salon.Create` (admin path) starts
   `Active` with `IsActive = true`; `Salon.SubmitByOwner` starts `Pending` with `IsActive = false`.
   Historical rows are backfilled by the column default `2` (Active), owner `NULL`.
+- `PlaceKind`: `Salon=1, RentalStudio=2, SoloStudio=3, Home=4, Mobile=5` — вид места приёма
+  (`Salon.Kind`, column `kind smallint NOT NULL DEFAULT 1`). `Salon` — обычный барбершоп,
+  `RentalStudio` — студия, сдающая кресла, `SoloStudio` — кабинет одного мастера, `Home` —
+  приём на дому, `Mobile` — выезд к клиенту (в `Address` — зона обслуживания, `City` — база).
+  Тип задаётся только при создании, переходов нет. Скрытое место — это не отдельное значение
+  enum, а флаг `Salon.IsListed`: кабинет бывает и публичным, и скрытым. JSON принимает только
+  имена (`allowIntegerValues: false`, R-23); значение вне enum, дошедшее до домена, —
+  `400 salon.kind.unknown`. `Salon`/`RentalStudio` обязаны быть в каталоге, `Home`/`Mobile` —
+  не могут (`400 salon.isListed.kind`).
 - `UserRole`: `Customer=1, Barber=2, Admin=3`.
 - `Language`/`PaymentMethod` in `BarberProfile.Languages`/`PaymentMethods` are checked element by
   element with `Enum.IsDefined` in `Create`/`UpdateProfile`: an unknown number is rejected
@@ -667,22 +681,23 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 19 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 257 domain + 472 application + 119 infrastructure + 158 integration (1006 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 278 domain + 493 application + 122 infrastructure + 164 integration (1057 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 113 обработчиков (81 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 35 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишется `ModerationStatus`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
+| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
 | Web | ✅ 25 контроллеров / 123 endpoints (115 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (25):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (26):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
 `DropRedundantBarberProfileIndexes`, `AddRefreshTokenExpiresAtIndex`,
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
-`AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`.
+`AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
+`AddSalonPlaceKind`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -702,6 +717,16 @@ so it requires that no guest rows exist.
 `rejection_reason` (`varchar(500)`, check `NULL OR 1..500`), `reviewed_at`,
 `reviewed_by_user_id` (FK `users`, `SET NULL`, index). No backfill: the default `2` and `NULL`
 owner describe every existing and admin-created row, and no data changes.
+
+**`AddSalonPlaceKind` (2026-11-06, issue-54).** Adds `salons.kind` (`smallint NOT NULL DEFAULT 1`)
+with check `ck_salons_kind` (`kind IN (1,2,3,4,5)`) and `salons.is_listed`
+(`boolean NOT NULL DEFAULT true`) with check `ck_salons_listed_kind`
+(`NOT is_listed OR kind IN (1,2,3)`). No backfill: the defaults `1`/`true` describe every
+existing and admin-created row (a barbershop that is listed), so no data changes. No new
+indexes — the catalogue filter is `is_active AND is_listed AND moderation_status = 2`; an index
+for it is a separate decision (§15.2), and the current query relies on the existing
+`ix_salons_city_is_active` only when `city` is supplied (otherwise it may scan sequentially).
+`Down` drops both checks and both columns.
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -971,6 +996,20 @@ Suggested order:
     читает прикреплённых барберов, ищет кандидатов по имени/email, прикрепляет и открепляет их
     (`GET/POST/DELETE api/salons/{id}/barbers`, `GET .../barber-candidates`); привязка — та же
     строка `barber_salons`, первый салон профиля становится основным, владельца убрать нельзя.
+11. **Place kind and unlisted places** — **decided 2026-11-06 and implemented (issue-54):**
+    место приёма имеет тип `Salon.Kind` (`PlaceKind`: `Salon`, `RentalStudio`, `SoloStudio`,
+    `Home`, `Mobile`) и отдельный флаг `Salon.IsListed`, **не** выводимый из типа. Скрытыми
+    (`isListed = false`) могут быть только `SoloStudio`/`Home`/`Mobile`; `Salon`/`RentalStudio`
+    обязаны быть в каталоге (`salon.isListed.kind`). Публичное место барбера по-прежнему
+    `Pending` до одобрения; скрытое сразу `Active`/`IsActive`, без `ReviewedAt` и
+    `ReviewedByUserId` — оно не публикуется, поэтому очередь модерации ему не нужна, а качество
+    закрывает верификация профиля барбера. Публичные чтения **не менялись**: предикат
+    `IsActive && ModerationStatus == Active` уже пропускает скрытое место, поэтому карточка,
+    поиск по городу, слоты и бронь работают сразу; отдельный фильтр `IsListed` есть только
+    у каталога `GET api/salons`. `Booking.SalonId` остаётся обязательным: у `Home` в `Address`
+    адрес приёма, у `Mobile` — зона обслуживания, `City` — база; `Address` не делаем nullable.
+    Выезд с онлайн-записью (адрес клиента в `Booking`) — отдельный срез, как и перевод скрытого
+    места в публичное (нужна повторная модерация).
 
 ---
 
@@ -1718,8 +1757,8 @@ Conventions:
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
 - Enums travel as JSON strings only (`Web/Common/JsonSettings`, registered from `Program.cs` with
-  `JsonStringEnumConverter(allowIntegerValues: false)`), so `Grade`, `Language`, `PaymentMethod`
-  and `UserRole` are readable in OpenAPI and in the request bodies; integer values such as
+  `JsonStringEnumConverter(allowIntegerValues: false)`), so `Grade`, `Language`, `PaymentMethod`,
+  `PlaceKind` and `UserRole` are readable in OpenAPI and in the request bodies; integer values such as
   `"paymentMethods": [999]` are rejected with `JsonException` before the handler (R-23), and the
   domain additionally checks every collection element with `Enum.IsDefined`.
 - `UseExceptionHandler()` + `AddProblemDetails()` cover what the controllers do not catch.
@@ -1968,6 +2007,9 @@ Read endpoints (added 2026-10-19):
   without `EXPLAIN` evidence. The response is
   `PagedResponse<BarberSearchItemResponse>` with
   `items` and an opaque base64url `nextCursor`; `pageSize` defaults to 20 and is capped at 100.
+  Since issue-54 each item also carries `primaryPlaceKind` — the `PlaceKind` of the same primary
+  active salon that produced `primarySalonName`/`city`, or `null` when the barber has no active
+  place — so the result row can say «Кабинет», «На дому» or «Выезд».
   A broken cursor or an out-of-range page size is `400`, not `500`.
 - **Additional-service suggestions (2026-11-06, issue-53).** `GET api/barbers/additional-services`
   is an anonymous `reads`-limited `IReadOnlyList<string>`: `SelectMany(p => p.AdditionalServices)`
@@ -1985,10 +2027,12 @@ Read endpoints (added 2026-10-19):
   overrides it. There is still no read by id.
 - **Salon directory and «My salons» (2026-11-06, issue-47).** `GET api/salons?city=&search=` is the
   anonymous `reads`-limited selection catalogue for the barber cabinet: a bare
-  `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`) without
+  `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`, `kind`) without
   pagination — the same «dictionary, not a pager» exception as the two public catalogues above.
   Since issue-48 the predicate is `IsActive && ModerationStatus == Active` (a `Pending`/`Rejected`
-  salon is not a selection candidate); `city` is an exact trimmed match, `search` is `ILIKE` over
+  salon is not a selection candidate); since issue-54 it also requires `IsListed`, so a hidden
+  place is never a «куда примкнуть» candidate (it is still visible from the barber card).
+  `city` is an exact trimmed match, `search` is `ILIKE` over
   name **and** address with `%`, `_` and `\` escaped; both filters are trimmed, empty means no
   filter, and more than 100 characters is `400 salon.directory.city` /
   `salon.directory.search`. Order is city, name, id.
@@ -1997,11 +2041,15 @@ Read endpoints (added 2026-10-19):
   `PUT location`/`PUT contact-info` are `[Authorize]` with the ownership check inside the
   handlers (§17.8), and `POST own` is `BarberOnly`.
   `GET api/barber-profiles/{id}/salons` is the owner/admin read behind «Мои салоны»: all links,
-  no `is_active`/moderation filter (`Pending` and `Rejected` salons must appear), ordered primary
+  no `is_active`/moderation/`is_listed` filter (`Pending`, `Rejected` and hidden places must
+  appear), ordered primary
   first then by name, returning `BarberSalonSummaryResponse` (`salonId`, `name`, `city`,
   `address`, `timeZoneId`, `isPrimary`, the full edit fields — `country`, `postalCode`,
   `latitude`, `longitude`, `phoneNumber`, `websiteUrl`, `ownerUserId`, `moderationStatus`,
-  `rejectionReason`). The edit fields exist for the owner's pre-filled form; `ownerUserId` is
+  `rejectionReason`, and since issue-54 `kind` + `isListed`). `kind` labels the card, and
+  `isListed = false` replaces «На проверке» with «Не в каталоге» — otherwise an active hidden
+  place and a place waiting for moderation would look identical. The edit fields exist for the
+  owner's pre-filled form; `ownerUserId` is
   `null` for an admin-created salon, so the cabinet hides the two owner `PUT`s there. It works
   for an unverified profile, like the schedule read; ownership is
   `ICurrentUser.EnsureCanManage(profile.UserId)`, so a foreign barber gets `403` and an unknown
@@ -2010,10 +2058,16 @@ Read endpoints (added 2026-10-19):
   (`Salon.OwnerUserId`), **not a fourth role**: a `Barber` with a profile creates his own salon
   through `POST api/salons/own` (`BarberOnly`, CSRF, `CreateOwnSalonHandler`). The profile comes
   from the `barber_profile_id` claim (`TryGetBarberProfileId`), the body never carries a profile
-  or owner; a barber without a profile gets `403 barberProfile.notFound`. One transaction creates
-  the `Pending` salon, inserts it, links it to the profile with `isPrimary = profile.Salons.Count
+  or owner; a barber without a profile gets `403 barberProfile.notFound`. Since issue-54 the body
+  also carries `kind` (enum name) and `isListed` (bool), both optional on the server with the
+  pre-#54 defaults `Salon`/`true`; the admin `POST api/salons` takes the same two optional fields.
+  One transaction creates
+  the salon — `Pending`/inactive when `isListed` is `true`, `Active`/`IsActive` without a review
+  when it is `false` — inserts it, links it to the profile with `isPrimary = profile.Salons.Count
   == 0` and saves the profile; the response is `201 { id }`. The public directory, search, slots,
-  booking options and the barber card all require `ModerationStatus == Active` as well.
+  booking options and the barber card all require `ModerationStatus == Active` as well; an
+  unlisted place satisfies it, so those reads work without a query change — only the directory
+  additionally requires `IsListed`.
   Admin decisions: `POST api/salons/{id}/approval` and `POST api/salons/{id}/rejection`
   (`AdminOnly`, both transactional, `Approve`/`Reject` domain methods) — approval makes the salon
   visible and recordable, rejection keeps it hidden and stores a trimmed reason 1..500 chars
@@ -2027,10 +2081,15 @@ Read endpoints (added 2026-10-19):
   `hidden` = `!IsActive && Active`, `pending` = `Pending`, `all` = everything. Hair services and
   specializations still reject `pending` with `400 admin.catalogue.status` because they have no
   moderation. `AdminSalonResponse` gained `moderationStatus`, `rejectionReason`, `reviewedAt` and
-  `ownerEmail` (left join `users`, nullable for admin-created rows); `CountInactiveAsync` counts
+  `ownerEmail` (left join `users`, nullable for admin-created rows); since issue-54 it also carries
+  `kind` and `isListed`, so a hidden active place can be shown with the «Не в каталоге» badge —
+  otherwise the administrator would not understand why an active row is in no catalogue.
+  `CountInactiveAsync` counts
   only `!IsActive && Active`, so a `Pending` salon no longer inflates «Выключенные салоны».
   **Audit:** the `Salon` allowlist gained `ModerationStatus`, so an approval/rejection is visible
-  as `salon.updated`; `OwnerUserId` and `RejectionReason` are deliberately **not** audited
+  as `salon.updated`; since issue-54 it also contains `Kind`/`IsListed` — both are set only at
+  creation and land in the `values` of `salon.created`. `OwnerUserId` and `RejectionReason` are
+  deliberately **not** audited
   (owner is not a useful diff, and the reason is the administrator's text, not a row change).
 - **Salon barber composition (2026-11-06).** Four owner/admin endpoints on `SalonsController`
   (`[Authorize]`, ownership checked in the handler with `EnsureCanManageSalon`):
@@ -2054,6 +2113,9 @@ Read endpoints (added 2026-10-19):
   nested records; no domain entity is serialized. Each service carries
   `barberServiceId` (`barber_services.id`, the value `POST api/bookings` expects) and
   `hairServiceId` (`hair_services.id`); the old ambiguous `id` field was renamed by R-20.
+  Since issue-54 each nested salon also carries `kind`, so the card labels the place («Кабинет»,
+  «На дому», «Выезд») instead of showing only a barbershop name; a hidden place appears here
+  exactly like a listed one, because the card does not filter `IsListed`.
 - **`GET api/barbers/{id}/slots?date=&hairServiceId=&salonId=`** — `date` is required. Without
   `salonId` the primary active salon is used; without `hairServiceId` the grid step is
   `Constants.DEFAULT_SLOT_DURATION_MINUTES` (30 minutes), otherwise the duration of that barber

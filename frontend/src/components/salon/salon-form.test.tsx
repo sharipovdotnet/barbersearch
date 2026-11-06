@@ -1,11 +1,13 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { SalonDialogForm } from '@/components/salon/salon-form'
 import type { AdminSalon } from '@/lib/admin-catalogue'
 import type { SalonFormSalon } from '@/lib/salon-form'
 import { recordRequests } from '@/test/msw/requests'
+import { server } from '@/test/msw/server'
 
 const ADMIN_SALON: AdminSalon = {
   id: '9e400000-0000-4000-8000-000000000001',
@@ -21,6 +23,8 @@ const ADMIN_SALON: AdminSalon = {
   websiteUrl: null,
   isActive: true,
   moderationStatus: 'Active',
+  kind: 'Salon',
+  isListed: true,
   rejectionReason: null,
   reviewedAt: null,
   ownerEmail: null,
@@ -151,5 +155,136 @@ describe('SalonDialogForm: режимы', () => {
     )
 
     expect(requests).toStrictEqual([])
+  })
+})
+
+/** Заполнить обязательные поля формы, не трогая тип места. */
+async function fillMinimalSalonForm(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement
+) {
+  await user.type(within(dialog).getByLabelText('Название'), 'Место приёма')
+  await user.type(within(dialog).getByLabelText('Адрес'), 'ул. Ленина, 1')
+  await user.type(within(dialog).getByLabelText('Город'), 'Екатеринбург')
+  await user.type(within(dialog).getByLabelText('Страна'), 'Россия')
+  await user.type(within(dialog).getByLabelText('Широта'), '56.8389')
+  await user.type(within(dialog).getByLabelText('Долгота'), '60.6057')
+}
+
+describe('SalonDialogForm: тип места', () => {
+  it('по умолчанию барбершоп, а показ в каталоге включён', () => {
+    renderForm('owner', 'create')
+
+    const dialog = screen.getByRole('dialog')
+    const salonRadio = within(dialog).getByRole('radio', {
+      name: /Барбершоп/,
+    })
+    const listed = within(dialog).getByRole('checkbox', {
+      name: 'Показывать в каталоге',
+    })
+
+    expect(salonRadio).toBeChecked()
+    expect(listed).toBeChecked()
+    expect(listed).toBeEnabled()
+  })
+
+  it('выбор «На дому» выключает и блокирует каталог, не теряя поля', async () => {
+    const user = userEvent.setup()
+
+    renderForm('owner', 'create')
+
+    const dialog = screen.getByRole('dialog')
+
+    await user.type(within(dialog).getByLabelText('Название'), 'Дом на Ленина')
+    await user.click(within(dialog).getByRole('radio', { name: /На дому/ }))
+
+    expect(within(dialog).getByLabelText('Название')).toHaveValue(
+      'Дом на Ленина'
+    )
+
+    const listed = within(dialog).getByRole('checkbox', {
+      name: 'Показывать в каталоге',
+    })
+
+    expect(listed).not.toBeChecked()
+    expect(listed).toHaveAttribute('aria-disabled', 'true')
+    expect(
+      within(dialog).getByText(/Скрытое место не попадает в каталог/)
+    ).toBeInTheDocument()
+  })
+
+  it('скрытое место уходит с kind и isListed=false и без проверки', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+
+    server.use(
+      http.post('/api/salons/own', async ({ request }) => {
+        bodies.push(await request.json())
+
+        return HttpResponse.json(
+          { id: '22222222-2222-4222-8222-222222222222' },
+          { status: 201 }
+        )
+      })
+    )
+
+    renderForm('owner', 'create')
+
+    const dialog = screen.getByRole('dialog')
+
+    await fillMinimalSalonForm(user, dialog)
+    await user.click(within(dialog).getByRole('radio', { name: /На дому/ }))
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Создать место' })
+    )
+
+    await waitFor(() => {
+      expect(bodies).toHaveLength(1)
+    })
+
+    expect(bodies[0]).toMatchObject({ kind: 'Home', isListed: false })
+  })
+
+  it('кабинет можно оставить в каталоге, студию — тоже', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+
+    server.use(
+      http.post('/api/salons/own', async ({ request }) => {
+        bodies.push(await request.json())
+
+        return HttpResponse.json(
+          { id: '22222222-2222-4222-8222-222222222222' },
+          { status: 201 }
+        )
+      })
+    )
+
+    renderForm('owner', 'create')
+
+    const dialog = screen.getByRole('dialog')
+
+    await fillMinimalSalonForm(user, dialog)
+    await user.click(within(dialog).getByRole('radio', { name: /Кабинет/ }))
+
+    const listed = within(dialog).getByRole('checkbox', {
+      name: 'Показывать в каталоге',
+    })
+
+    expect(listed).not.toBeChecked()
+    await user.click(listed)
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Отправить на проверку' })
+    )
+
+    await waitFor(() => {
+      expect(bodies).toHaveLength(1)
+    })
+
+    expect(bodies[0]).toMatchObject({
+      kind: 'SoloStudio',
+      isListed: true,
+    })
   })
 })

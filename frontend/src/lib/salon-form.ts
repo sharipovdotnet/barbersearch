@@ -1,5 +1,11 @@
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
+import {
+  defaultIsListed,
+  isListedAllowed,
+  isPlaceKind,
+  type PlaceKind,
+} from '@/lib/place-kind'
 
 /**
  * Поля формы салона, её валидация и тела запросов.
@@ -24,6 +30,10 @@ export type SalonFormValues = {
   longitude: string
   phoneNumber: string
   websiteUrl: string
+  /** Тип места: влияет на подписи и на доступность каталога. */
+  kind: PlaceKind
+  /** «Показывать в каталоге»; у `Home`/`Mobile` всегда `false`. */
+  isListed: boolean
 }
 
 export type SalonFormErrors = Partial<Record<keyof SalonFormValues, string>>
@@ -46,6 +56,10 @@ export type SalonFormSalon = {
   longitude?: number | null
   phoneNumber?: string | null
   websiteUrl?: string | null
+  /** Тип места; `null`/отсутствие — старое место по умолчанию барбершоп. */
+  kind?: PlaceKind | null
+  /** Скрытость места; отсутствие — значение по умолчанию для типа. */
+  isListed?: boolean | null
 }
 
 export type SalonLocationInput = {
@@ -66,6 +80,10 @@ export type SalonContactInput = {
 export type SalonInput = SalonLocationInput &
   SalonContactInput & {
     name: string
+    /** Тип места уходит строкой — имя значения enum в API. */
+    kind: PlaceKind
+    /** Скрытое место не попадает в каталог; у `Home`/`Mobile` всегда `false`. */
+    isListed: boolean
   }
 
 export const MAX_PHONE_LENGTH = 32
@@ -111,6 +129,8 @@ export function emptySalonForm(): SalonFormValues {
     longitude: '',
     phoneNumber: '',
     websiteUrl: '',
+    kind: 'Salon',
+    isListed: defaultIsListed('Salon'),
   }
 }
 
@@ -118,6 +138,13 @@ export function emptySalonForm(): SalonFormValues {
 export function salonFormValues(
   salon: SalonFormSalon | null | undefined
 ): SalonFormValues {
+  const kind = isPlaceKind(salon?.kind) ? salon.kind : 'Salon'
+  // Скрытое место не может быть «показано», даже если источник пришёл с флагом.
+  const isListed =
+    isListedAllowed(kind) && typeof salon?.isListed === 'boolean'
+      ? salon.isListed
+      : defaultIsListed(kind)
+
   return {
     name: salon?.name ?? '',
     address: salon?.address ?? '',
@@ -129,6 +156,8 @@ export function salonFormValues(
     longitude: salon?.longitude != null ? String(salon.longitude) : '',
     phoneNumber: salon?.phoneNumber ?? '',
     websiteUrl: salon?.websiteUrl ?? '',
+    kind,
+    isListed,
   }
 }
 
@@ -188,6 +217,17 @@ export function validateSalonForm(values: SalonFormValues): SalonFormErrors {
     errors.phoneNumber = `Не длиннее ${MAX_PHONE_LENGTH} символов.`
   }
 
+  if (!isListedAllowed(values.kind) && values.isListed) {
+    errors.isListed = 'Для этого типа места каталог недоступен.'
+  }
+
+  if (
+    (values.kind === 'Salon' || values.kind === 'RentalStudio') &&
+    !values.isListed
+  ) {
+    errors.isListed = 'Барбершоп и студию нельзя скрыть из каталога.'
+  }
+
   return errors
 }
 
@@ -215,6 +255,10 @@ export function salonContactInput(values: SalonFormValues): SalonContactInput {
 export function salonCreateInput(values: SalonFormValues): SalonInput {
   return {
     name: values.name.trim(),
+    kind: values.kind,
+    // Домен запрещает показывать Home/Mobile в каталоге, поэтому флаг
+    // нормализуется здесь, а не отправляется как есть.
+    isListed: isListedAllowed(values.kind) ? values.isListed : false,
     ...salonLocationInput(values),
     ...salonContactInput(values),
   }
@@ -249,6 +293,7 @@ export type SalonField =
   | 'country'
   | 'timeZoneId'
   | 'websiteUrl'
+  | 'isListed'
 
 const SALON_FIELD_MESSAGES: Readonly<
   Record<SalonField, { codes: readonly string[]; message: string }>
@@ -268,6 +313,10 @@ const SALON_FIELD_MESSAGES: Readonly<
   websiteUrl: {
     codes: ['salon.websiteUrl'],
     message: 'Сайт должен быть адресом http(s) не длиннее 2048 символов.',
+  },
+  isListed: {
+    codes: ['salon.isListed.kind'],
+    message: 'Барбершоп и студию нельзя скрыть из каталога.',
   },
 }
 
@@ -347,6 +396,14 @@ export function describeSalonSaveError(
 
   if (cause.hasCode('salon.city') || cause.hasCode('salon.city.invalid')) {
     return 'Город не может быть пустым.'
+  }
+
+  if (cause.hasCode('salon.isListed.kind')) {
+    return 'Барбершоп и студию нельзя скрыть из каталога.'
+  }
+
+  if (cause.hasCode('salon.kind.unknown')) {
+    return 'Неизвестный тип места. Обновите страницу и попробуйте ещё раз.'
   }
 
   if (cause.status === 429) {

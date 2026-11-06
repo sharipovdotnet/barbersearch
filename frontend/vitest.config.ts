@@ -23,6 +23,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    // 70 jsdom-файлов делят CPU: медленный ответ MSW не должен выглядеть как
+    // зависший тест. Обычные тесты этот лимит не замедляет.
+    testTimeout: 15_000,
     // Глобальные `describe`/`it` требуют расширения `types` в `tsconfig.app.json`;
     // импортируем их из `vitest` явно (AGENT.md §10.2).
     globals: false,

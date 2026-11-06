@@ -9,6 +9,7 @@ import {
 } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldError,
   FieldGroup,
@@ -31,6 +33,14 @@ import {
   updateSalonLocation,
 } from '@/lib/admin-catalogue'
 import { createOwnSalon } from '@/lib/barber-salons'
+import {
+  defaultIsListed,
+  isListedAllowed,
+  PLACE_KIND_HINTS,
+  PLACE_KIND_LABELS,
+  PLACE_KIND_ORDER,
+  type PlaceKind,
+} from '@/lib/place-kind'
 import {
   describeSalonSaveError,
   salonContactInput,
@@ -96,6 +106,23 @@ export function SalonDialogForm({
     setFormError(null)
   }, [])
 
+  /**
+   * Смена типа места.
+   *
+   * Остальные поля не трогаем: барбер уже мог заполнить адрес и контакты.
+   * Флаг каталога возвращается к значению по умолчанию для нового типа, потому что
+   * для `Home`/`Mobile` он всегда `false`, а для барбершопа — всегда `true`.
+   */
+  function selectKind(kind: PlaceKind) {
+    setForm((current) => ({
+      ...current,
+      kind,
+      isListed: defaultIsListed(kind),
+    }))
+    setErrors((current) => ({ ...current, isListed: undefined }))
+    setFormError(null)
+  }
+
   function update<K extends keyof SalonFormValues>(
     key: K,
     value: SalonFormValues[K]
@@ -123,14 +150,20 @@ export function SalonDialogForm({
 
     try {
       if (mode === 'create') {
+        const input = salonCreateInput(form)
+
         if (scope === 'owner') {
-          await createOwnSalon(salonCreateInput(form))
-          onSaved('Салон отправлен на проверку.')
+          await createOwnSalon(input)
+          onSaved(
+            input.isListed
+              ? 'Салон отправлен на проверку.'
+              : 'Место приёма создано.'
+          )
           return
         }
 
-        await createSalon(salonCreateInput(form))
-        onSaved('Салон создан')
+        await createSalon(input)
+        onSaved(input.isListed ? 'Салон создан' : 'Место приёма создано')
         return
       }
 
@@ -183,6 +216,82 @@ export function SalonDialogForm({
           </DialogHeader>
 
           <FieldGroup className="grid min-h-0 gap-4 overflow-y-auto sm:grid-cols-6">
+            {isEdit ? (
+              <Field className="sm:col-span-6">
+                <FieldLabel>Тип места</FieldLabel>
+                <FieldDescription id="salon-kind-readonly">
+                  {PLACE_KIND_LABELS[form.kind]} ·{' '}
+                  {form.isListed ? 'в каталоге' : 'не в каталоге'}. Тип места
+                  задаётся при создании.
+                </FieldDescription>
+              </Field>
+            ) : (
+              <>
+                <fieldset className="min-w-0 sm:col-span-6">
+                  <legend className="text-sm font-medium">
+                    Что это за место?
+                  </legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {PLACE_KIND_ORDER.map((kind) => (
+                      <label
+                        key={kind}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors focus-within:ring-3 focus-within:ring-ring/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <input
+                          type="radio"
+                          name="place-kind"
+                          value={kind}
+                          checked={form.kind === kind}
+                          disabled={isPending}
+                          className="mt-1 size-4 shrink-0 accent-primary"
+                          onChange={() => selectKind(kind)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block font-medium">
+                            {PLACE_KIND_LABELS[kind]}
+                          </span>
+                          <span className="mt-0.5 block text-sm break-words text-muted-foreground">
+                            {PLACE_KIND_HINTS[kind]}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <Field
+                  orientation="horizontal"
+                  className="sm:col-span-6"
+                  data-invalid={Boolean(errors.isListed)}
+                >
+                  <Checkbox
+                    id="salon-listed"
+                    checked={form.isListed}
+                    disabled={isPending || !isListedAllowed(form.kind)}
+                    aria-invalid={Boolean(errors.isListed)}
+                    aria-describedby={
+                      errors.isListed
+                        ? 'salon-listed-hint salon-listed-error'
+                        : 'salon-listed-hint'
+                    }
+                    onCheckedChange={(checked) => update('isListed', checked)}
+                  />
+                  <FieldContent>
+                    <FieldLabel htmlFor="salon-listed" className="font-normal">
+                      Показывать в каталоге
+                    </FieldLabel>
+                    <FieldDescription id="salon-listed-hint">
+                      Скрытое место не попадает в каталог и не требует проверки,
+                      но остаётся доступным для записи с вашей карточки.
+                    </FieldDescription>
+                    <FieldError id="salon-listed-error">
+                      {errors.isListed}
+                    </FieldError>
+                  </FieldContent>
+                </Field>
+              </>
+            )}
+
             <Field className="sm:col-span-6">
               <FieldLabel htmlFor="salon-name">Название</FieldLabel>
               <Input
@@ -436,7 +545,7 @@ export function SalonDialogForm({
                   className="animate-spin"
                 />
               )}
-              {submitLabelFor(scope, mode)}
+              {submitLabelFor(scope, mode, form.isListed)}
             </Button>
           </DialogFooter>
         </form>
@@ -497,17 +606,25 @@ function titleFor(scope: SalonScope, mode: SalonFormMode): string {
 function descriptionFor(scope: SalonScope, mode: SalonFormMode): ReactNode {
   if (scope === 'owner') {
     return mode === 'create'
-      ? 'Салоны барбера проверяет администратор: после одобрения салон появится в поиске.'
-      : 'Измените адрес и контакты. Название и владельца изменить нельзя.'
+      ? 'Публичное место проверит администратор, и оно появится в поиске после одобрения. Скрытое место не проходит проверку и доступно для записи сразу.'
+      : 'Измените адрес и контакты. Название, тип места и владельца изменить нельзя.'
   }
 
   return 'Выключенный салон исчезает из поиска и с карточек, но связи барберов сохраняются.'
 }
 
-function submitLabelFor(scope: SalonScope, mode: SalonFormMode): string {
+function submitLabelFor(
+  scope: SalonScope,
+  mode: SalonFormMode,
+  isListed: boolean
+): string {
   if (mode === 'edit') {
     return 'Сохранить'
   }
 
-  return scope === 'owner' ? 'Отправить на проверку' : 'Создать'
+  if (scope === 'admin') {
+    return 'Создать'
+  }
+
+  return isListed ? 'Отправить на проверку' : 'Создать место'
 }

@@ -279,7 +279,8 @@ public sealed class SalonBarberManagementTests
 
     private static async Task<Guid> CreateOwnSalonAsync(TestApp app, string name)
     {
-        using var response = await app.Client.PostAsJsonAsync(
+        using var response = await TestApp.PostJsonAsync(
+            app.Client,
             "api/salons/own",
             new CreateSalonRequest(
                 name,

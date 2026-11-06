@@ -87,6 +87,8 @@ public class CreateOwnSalonHandlerTests
 
         var salon = Assert.Single(salons.Salons);
         Assert.Equal(result.Value, salon.Id);
+        Assert.Equal(PlaceKind.Salon, salon.Kind);
+        Assert.True(salon.IsListed);
         Assert.Equal(SalonModerationStatus.Pending, salon.ModerationStatus);
         Assert.False(salon.IsActive);
         Assert.Equal(ownerUserId, salon.OwnerUserId);
@@ -130,6 +132,100 @@ public class CreateOwnSalonHandlerTests
 
         var first = Assert.Single(profile.Salons, link => link.SalonId == firstSalonId);
         Assert.True(first.IsPrimary);
+    }
+
+    [Fact]
+    public async Task Handle_UnlistedPlace_PassesKindAndListedAndLinksInOneTransaction()
+    {
+        var ownerUserId = Guid.CreateVersion7();
+        var profile = CreateProfile(ownerUserId);
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+
+        var salons = new FakeSalonRepository();
+        var unitOfWork = new FakeUnitOfWork(salons);
+
+        salons.AddBehavior = _ =>
+        {
+            Assert.True(unitOfWork.IsInTransaction);
+            return UnitResult.Success<Failure>();
+        };
+        profiles.UpdateBehavior = _ =>
+        {
+            Assert.True(unitOfWork.IsInTransaction);
+            return UnitResult.Success<Failure>();
+        };
+
+        var handler = CreateHandler(
+            salons,
+            profiles,
+            unitOfWork,
+            new FakeCurrentUser(Guid.CreateVersion7(), barberProfileId: profile.Id));
+
+        var result = await handler.Handle(
+            new CreateOwnSalonCommand(NewRequest("Home Place") with
+            {
+                Kind = PlaceKind.Home,
+                IsListed = false
+            }),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        // Скрытое место не публикуется и не ждёт модерации: домен создаёт его сразу активным,
+        // решение администратора не записывается.
+        var salon = Assert.Single(salons.Salons);
+        Assert.Equal(PlaceKind.Home, salon.Kind);
+        Assert.False(salon.IsListed);
+        Assert.Equal(SalonModerationStatus.Active, salon.ModerationStatus);
+        Assert.True(salon.IsActive);
+        Assert.Null(salon.ReviewedAt);
+        Assert.Null(salon.ReviewedByUserId);
+        Assert.Equal(ownerUserId, salon.OwnerUserId);
+
+        var link = Assert.Single(profile.Salons);
+        Assert.Equal(salon.Id, link.SalonId);
+        Assert.True(link.IsPrimary);
+
+        Assert.Equal(1, salons.AddCalls);
+        Assert.Equal(1, profiles.UpdateCallCount);
+        Assert.Equal(1, unitOfWork.CommitCount);
+        Assert.Equal(0, unitOfWork.RollbackCount);
+        Assert.False(unitOfWork.IsInTransaction);
+    }
+
+    [Fact]
+    public async Task Handle_ListedHome_ReturnsDomainListedKindErrorAndPersistsNothing()
+    {
+        var profile = CreateProfile(Guid.CreateVersion7());
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+
+        var salons = new FakeSalonRepository();
+        var unitOfWork = new FakeUnitOfWork(salons);
+        var handler = CreateHandler(
+            salons,
+            profiles,
+            unitOfWork,
+            new FakeCurrentUser(Guid.CreateVersion7(), barberProfileId: profile.Id));
+
+        var result = await handler.Handle(
+            new CreateOwnSalonCommand(NewRequest("Home Place") with
+            {
+                Kind = PlaceKind.Home,
+                IsListed = true
+            }),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("salon.isListed.kind", result.Error.Errors[0].Code);
+        Assert.Equal(0, salons.AddCalls);
+        Assert.Equal(0, profiles.UpdateCallCount);
+        Assert.Equal(0, unitOfWork.CommitCount);
+        Assert.Equal(1, unitOfWork.RollbackCount);
+        Assert.Empty(salons.Salons);
+        Assert.Empty(profile.Salons);
     }
 
     [Fact]

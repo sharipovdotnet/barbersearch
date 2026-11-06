@@ -25,6 +25,7 @@ import {
   type BarberSlots as BarberSlotsData,
 } from '@/lib/barber-slots'
 import { formatSalonDate } from '@/lib/format'
+import { PLACE_KIND_LABELS } from '@/lib/place-kind'
 
 const SELECT_CLASSES =
   'h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 md:text-sm'
@@ -79,8 +80,25 @@ export function BarberSlots({ profile }: { profile: BarberProfile }) {
   const salons = profile.salons
   const initialSalon = salons.find((salon) => salon.isPrimary) ?? salons[0]
 
+  // Барбер ещё не указал место приёма: записываться некуда, и `/slots` не
+  // запрашивается. Секция остаётся на месте, чтобы клиент понимал причину,
+  // а не видел молча пропавший блок.
   if (!initialSalon) {
-    return null
+    return (
+      <section aria-labelledby="barber-slots-heading">
+        <Card>
+          <BarberSectionHeading id="barber-slots-heading">
+            Свободное время
+          </BarberSectionHeading>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Барбер пока не указал место приёма. Онлайн-запись появится, когда
+              место будет добавлено.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    )
   }
 
   return (
@@ -251,7 +269,7 @@ function BarberSlotsSection({
                 >
                   {salons.map((item) => (
                     <option key={item.id} value={item.salonId}>
-                      {item.name}
+                      {item.name} · {PLACE_KIND_LABELS[item.kind]}
                     </option>
                   ))}
                 </select>

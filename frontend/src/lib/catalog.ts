@@ -6,6 +6,7 @@ import type {
   PaymentMethod,
   ServiceCategory,
 } from '@/lib/barber-profile-labels'
+import type { PlaceKind } from '@/lib/place-kind'
 import { isBarberProfile } from '@/lib/response-guards'
 
 /**
@@ -50,6 +51,8 @@ export type BarberProfileSalon = {
   city: string
   country: string
   timeZoneId: string
+  /** Что это за место: барбершоп, студия, кабинет, дом или выезд. */
+  kind: PlaceKind
   isPrimary: boolean
   workingSchedules: WorkingSchedule[]
 }

@@ -3,6 +3,7 @@ import { ApiError, apiRequest } from '@/lib/api'
 import type { ServiceCategory } from '@/lib/barber-profile-labels'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { PlaceKind } from '@/lib/place-kind'
 import type {
   SalonContactInput,
   SalonInput,
@@ -152,6 +153,10 @@ export type AdminSalon = {
   websiteUrl: string | null
   isActive: boolean
   moderationStatus: SalonModerationStatus
+  /** Тип места: строка каталога показывает его рядом с названием. */
+  kind: PlaceKind
+  /** `false` — место скрыто из каталога и не проходило модерацию. */
+  isListed: boolean
   /** Причина отказа; `null` у салона не в статусе `Rejected`. */
   rejectionReason: string | null
   /** Когда администратор принял решение; `null` у салона, не проходившего проверку. */

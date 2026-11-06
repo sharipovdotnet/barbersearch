@@ -514,7 +514,8 @@ public sealed class AdminAuditCoverageTests
 
     private static async Task<Guid> CreateSalonAsync(TestApp app, string name)
     {
-        using var response = await app.Client.PostAsJsonAsync(
+        using var response = await TestApp.PostJsonAsync(
+            app.Client,
             "api/salons",
             new CreateSalonRequest(
                 name,

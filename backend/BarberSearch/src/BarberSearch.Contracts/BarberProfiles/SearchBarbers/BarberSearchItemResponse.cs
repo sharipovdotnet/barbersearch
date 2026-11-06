@@ -1,4 +1,5 @@
 using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.Salons;
 
 namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 
@@ -21,6 +22,10 @@ namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 /// <param name="PrimarySalonId">Основной активный салон либо <c>null</c>, если его нет.</param>
 /// <param name="PrimarySalonName">Название основного активного салона либо <c>null</c>.</param>
 /// <param name="City">Город основного активного салона либо <c>null</c>.</param>
+/// <param name="PrimaryPlaceKind">
+/// Вид места основного активного салона либо <c>null</c>, если места нет: выдача подписывает
+/// «Кабинет», «На дому», «Выезд» вместо одного названия барбершопа.
+/// </param>
 /// <param name="AdditionalServices">
 /// Дополнительные услуги барбера: карточка показывает, чем ещё он занимается,
 /// а найденный фильтр виден прямо в выдаче.
@@ -37,4 +42,5 @@ public record BarberSearchItemResponse(
     Guid? PrimarySalonId,
     string? PrimarySalonName,
     string? City,
+    PlaceKind? PrimaryPlaceKind,
     IReadOnlyList<string> AdditionalServices);

@@ -179,7 +179,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     salon.WebsiteUrl,
                     salon.OwnerUserId,
                     salon.ModerationStatus,
-                    salon.RejectionReason))
+                    salon.RejectionReason,
+                    salon.Kind,
+                    salon.IsListed))
             .ToListAsync(cancellationToken);
 
         return rows;
@@ -444,6 +446,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 null,
                 null,
                 null,
+                null,
                 profile.AdditionalServices.ToList()))
             .ToListAsync(cancellationToken);
 
@@ -468,7 +471,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 link.BarberProfileId,
                 link.SalonId,
                 salon.Name,
-                salon.City
+                salon.City,
+                salon.Kind
             }).ToListAsync(cancellationToken);
 
         var primarySalons = salons
@@ -481,7 +485,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 {
                     PrimarySalonId = salon.SalonId,
                     PrimarySalonName = salon.Name,
-                    City = salon.City
+                    City = salon.City,
+                    PrimaryPlaceKind = salon.Kind
                 }
                 : row)
             .ToList();
@@ -1279,6 +1284,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     salon.City,
                     salon.Country,
                     salon.TimeZoneId,
+                    salon.Kind,
                     link.IsPrimary,
                     [.. link.WorkingSchedules
                         .OrderBy(schedule => schedule.DayOfWeek)

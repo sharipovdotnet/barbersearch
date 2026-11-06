@@ -15,6 +15,7 @@ const SALON = {
   city: 'Екатеринбург',
   address: 'ул. Ленина, 1',
   timeZoneId: 'Asia/Yekaterinburg',
+  kind: 'Salon',
 }
 
 describe('salonDirectoryUrl', () => {
@@ -73,6 +74,19 @@ describe('fetchSalonDirectory', () => {
     await expect(fetchSalonDirectory({ search: 'Fa' })).rejects.toBeInstanceOf(
       ApiError
     )
+  })
+
+  it('неизвестный kind — ApiError с русским текстом, а не пустая строка', async () => {
+    server.use(
+      http.get('/api/salons', () =>
+        HttpResponse.json([{ ...SALON, kind: 'Penthouse' }])
+      )
+    )
+
+    await expect(fetchSalonDirectory()).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Сервер вернул неожиданный ответ.',
+    })
   })
 
   it('не отправляет короткий поиск сам по себе — это забота экрана', () => {
