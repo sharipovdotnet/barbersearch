@@ -52,4 +52,9 @@ export const handlers = [
   http.post('/api/auth/login/cookie', () => noContent()),
   http.post('/api/auth/logout', () => noContent()),
   http.post('/api/auth/refresh', () => noContent()),
+  // Онбординг читает заявку «Стать барбером» перед формой профиля. Без заявки
+  // (роль выдана администратором вручную) имя и опыт остаются редактируемыми.
+  http.get('/api/barber-requests/mine', () =>
+    HttpResponse.json({ request: null })
+  ),
 ]

@@ -6,7 +6,10 @@ import {
   BarberCabinetSkeleton,
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
-import { BarberProfileForm } from '@/components/barber/barber-profile-form'
+import {
+  BarberProfileForm,
+  type BarberProfilePrefill,
+} from '@/components/barber/barber-profile-form'
 import { SalonPickerDialog } from '@/components/barber/barber-salon-picker-dialog'
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionUnavailable } from '@/components/session-unavailable'
@@ -18,7 +21,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useMyBarberRequest } from '@/hooks/use-my-barber-request'
 import { useSession } from '@/hooks/use-session'
+import type { BarberRequest } from '@/lib/barber-requests'
 import {
   BARBER_CABINET_PATH,
   BARBER_ONBOARDING_PATH,
@@ -38,6 +43,11 @@ import { refreshSession } from '@/lib/session-refresh'
  * честно говорит `null`: клиент продлевает сессию (`refreshSession`), повторяет проверку
  * (`retrySession`) и только затем переходит в кабинет. Форма после создания не
  * возвращается — профиль уже есть.
+ *
+ * Имя, опыт и «О себе» заявитель уже написал в заявке `barber_requests`, поэтому шаг
+ * читает свою заявку (`GET /api/barber-requests/mine`) и передаёт её значения в форму
+ * готовыми и только для чтения. Запрос уходит только на шаге формы, то есть после
+ * гейтов: аноним и клиент его не делают.
  */
 
 type OnboardingStage =
@@ -226,21 +236,10 @@ function OnboardingScreen({
       </header>
 
       {stage === 'form' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Данные профиля</CardTitle>
-            <CardDescription>
-              Это увидит клиент в вашей карточке. Обязательны только имя, опыт и
-              хотя бы один язык — остальное можно оставить пустым.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BarberProfileForm
-              onCreated={onCreated}
-              onAlreadyExists={onAlreadyExists}
-            />
-          </CardContent>
-        </Card>
+        <ProfileFormCard
+          onCreated={onCreated}
+          onAlreadyExists={onAlreadyExists}
+        />
       )}
 
       {stage === 'refreshing' && (
@@ -367,5 +366,105 @@ function OnboardingScreen({
         </Card>
       )}
     </div>
+  )
+}
+
+/** Одобренная заявка даёт имя, опыт и «О себе»; остальные статусы — нет. */
+function toPrefill(request: BarberRequest | null): BarberProfilePrefill | null {
+  if (request === null || request.status !== 'Approved') {
+    return null
+  }
+
+  return {
+    displayName: request.displayName,
+    yearsOfExperience: request.yearsOfExperience,
+    bio: request.about,
+  }
+}
+
+/**
+ * Форма поверх заявки: читает её и передаёт заполненные поля готовыми.
+ *
+ * Пока заявка читается, форма не рендерится: иначе поля успели бы показаться
+ * редактируемыми и только потом перерисоваться в `readOnly`. Ошибка чтения тоже
+ * закрывает форму — профиль создался бы без данных заявки, а редактировать их
+ * после `201` негде.
+ */
+function ProfileFormCard({
+  onCreated,
+  onAlreadyExists,
+}: {
+  onCreated: (id: string) => void
+  onAlreadyExists: () => void
+}) {
+  const mine = useMyBarberRequest()
+
+  // Сессия закончилась: гейт входа выше, карточке нечего добавить.
+  if (mine.requiresSignIn) {
+    return null
+  }
+
+  if (mine.status === 'loading' || mine.status === 'idle') {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Данные профиля</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p role="status" className="text-sm text-muted-foreground">
+            Проверяем заявку…
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (mine.status === 'error') {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Данные профиля</CardTitle>
+          <CardDescription>
+            Имя, опыт и «О себе» берутся из одобренной заявки, поэтому без неё
+            профиль не создать.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p role="alert" className="text-sm text-destructive">
+            {mine.error ?? 'Не удалось проверить заявку.'}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 sm:h-8"
+            onClick={mine.reload}
+          >
+            Повторить
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const prefill = toPrefill(mine.request)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Данные профиля</CardTitle>
+        <CardDescription>
+          {prefill
+            ? 'Данные из одобренной заявки уже заполнены и не редактируются. Выберите языки — остальное можно оставить пустым.'
+            : 'Это увидит клиент в вашей карточке. Обязательны только имя, опыт и хотя бы один язык — остальное можно оставить пустым.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <BarberProfileForm
+          onCreated={onCreated}
+          onAlreadyExists={onAlreadyExists}
+          prefill={prefill}
+        />
+      </CardContent>
+    </Card>
   )
 }
