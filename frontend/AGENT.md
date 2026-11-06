@@ -347,6 +347,7 @@ frontend/                              ← workspace root, NOT the git root
         ├── reviews.ts                 ← public review DTO, page size 10, fetch
         ├── router.ts                  ← History API store: pathname + location
         ├── salon-barbers.ts           ← salon composition DTO, list/search/attach/detach, error copy
+        ├── sign-in-destination.ts     ← role-aware landing after sign-in (§6.2)
         ├── sign-in-errors.ts          ← sign-in ProblemDetails → Russian copy (§9.5)
         └── utils.ts                   ← `export { cn } from "cn"`
     └── test/                          ← unit-test infrastructure (§15)
@@ -589,7 +590,11 @@ successful `signIn` clears `terminal`.
    on the screen.
 4. **Sign in** — `signIn(credentials)` from `HeaderAuth` → `LoginDialog`:
    `GET /api/auth/csrf` → `POST /api/auth/login/cookie` (204) → `GET /api/auth/me` → set user.
-   `rememberMe` sets the `barbersearch.remember` hint, `rememberMe: false` clears it, and a
+   `signIn` returns that user, and the dialog picks the landing by role: `Barber` → `/barber`,
+   `Admin` → `/admin`, `Customer` → `/account`; an explicit `redirectTo` (a gate's page, a
+   booking panel's `null`) wins, and `/account` or a foreign closed area falls back to the role's
+   own section (`lib/sign-in-destination.ts`). `rememberMe` sets the
+   `barbersearch.remember` hint, `rememberMe: false` clears it, and a
    successful sign-in resets the sticky terminal refresh state.
 5. **Sign out** — CSRF → `POST /api/auth/logout` (204); the provider clears the hint and the
    local user in `finally`, even if the request fails. The cookie itself is cleared by the API
@@ -1579,7 +1584,7 @@ change to `ui/**`.
 |---|---|
 | Landing page | ✅ hero, how-it-works, real barber search (city, date, language, specialization, service), footer; the search talks to the API |
 | Search form | ✅ city, date, language, specialization and service; submit reloads the list, filters live in React state, not in the URL |
-| Cookie sign-in | ✅ CSRF → login → `/auth/me` (one retry on a stale token); session context; header states; «Запомнить меня» sets the restore hint |
+| Cookie sign-in | ✅ CSRF → login → `/auth/me` (one retry on a stale token); session context; header states; «Запомнить меня» sets the restore hint; after sign-in the role opens its own section (`Barber` → `/barber`, `Admin` → `/admin`, `Customer` → `/account`), while an explicit `redirectTo` and the booking panel's `null` are honored |
 | Sign-out | ✅ CSRF → logout (one retry on a stale token); local state and the hint cleared in `finally` |
 | Session bootstrap | ✅ `/auth/me` on mount; loading skeleton; `401` → anonymous; with the «Запомнить меня» hint one silent refresh restores the session; a network/`5xx` failure or a `transient` refresh → `unavailable`, never anonymous |
 | Session unavailable / retry | ✅ fourth status; `SessionUnavailable` card on `/account`, `/account/reviews`, `/barber`, `/admin`, `/register`, a compact retry block in the booking panel and `SessionRetryButton` in the header; `retrySession` is single-flight (StrictMode and a double click give one request), `200` → authenticated, `401` → anonymous, another failure → `unavailable` again |

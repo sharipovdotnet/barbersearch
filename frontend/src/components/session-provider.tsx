@@ -187,22 +187,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const signIn = useCallback(async (credentials: SignInCredentials) => {
-    const currentUser = await signInRequest(credentials)
+  const signIn = useCallback(
+    async (credentials: SignInCredentials): Promise<SessionUser> => {
+      const currentUser = await signInRequest(credentials)
 
-    resetSessionRefresh()
-    sessionDeadRef.current = false
+      resetSessionRefresh()
+      sessionDeadRef.current = false
 
-    if (credentials.rememberMe) {
-      markRememberedSession()
-    } else {
-      // Снимаем чужую старую подсказку, иначе bootstrap восстановит «незапомненную» сессию.
-      clearRememberHint()
-    }
+      if (credentials.rememberMe) {
+        markRememberedSession()
+      } else {
+        // Снимаем чужую старую подсказку, иначе bootstrap восстановит «незапомненную» сессию.
+        clearRememberHint()
+      }
 
-    setUser(currentUser)
-    setStatus('authenticated')
-  }, [])
+      setUser(currentUser)
+      setStatus('authenticated')
+
+      // Роль нужна экрану входа, чтобы выбрать кабинет; отдаём того же пользователя,
+      // которого только что подтвердил `/auth/me`, без второго запроса.
+      return currentUser
+    },
+    []
+  )
 
   const signOut = useCallback(async () => {
     try {

@@ -49,7 +49,7 @@ function sessionValue(
   return {
     status,
     user,
-    signIn: async () => {},
+    signIn: async () => BARBER_WITHOUT_PROFILE,
     signOut: async () => {},
     retrySession,
   }

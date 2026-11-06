@@ -29,7 +29,7 @@ test.describe('онбординг барбера', () => {
       page.getByText('Войдите, чтобы увидеть записи клиентов')
     ).toBeVisible()
 
-    // Вход именно из гейта кабинета: диалог шапки вернул бы в `/account`.
+    // Вход из гейта кабинета: после входа барбер остаётся в `/barber`.
     await page.getByRole('main').getByRole('button', { name: 'Войти' }).click()
     await expect(login.dialog).toBeVisible()
     await login.signInAs('newBarber')

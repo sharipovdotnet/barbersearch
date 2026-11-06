@@ -44,7 +44,7 @@ function sessionValue(): SessionContextValue {
   return {
     status: 'authenticated',
     user: CUSTOMER,
-    signIn: async () => {},
+    signIn: async () => CUSTOMER,
     signOut: async () => {},
     retrySession: () => {},
   }
