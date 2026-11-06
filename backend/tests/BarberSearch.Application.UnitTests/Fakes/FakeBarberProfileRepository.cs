@@ -370,6 +370,16 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             Result.Success<IReadOnlyList<BarberSearchItemResponse>, Failure>(result));
     }
 
+    /// <summary>
+    /// Подсказки фильтра «дополнительные услуги», которые вернёт фейк.
+    /// </summary>
+    public IReadOnlyList<string> AdditionalServices { get; set; } = [];
+
+    public Task<Result<IReadOnlyList<string>, Failure>> GetAdditionalServicesAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(
+            Result.Success<IReadOnlyList<string>, Failure>(AdditionalServices));
+
     public Task<Result<BarberProfileResponse, Failure>> GetCardByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)

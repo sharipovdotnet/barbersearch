@@ -86,7 +86,8 @@ public class BarberProfileNarrowReadTests
             PaymentMethods: [],
             CommunicationFormat: [],
             Goodies: [],
-            LatePolicy: "10 minutes");
+            LatePolicy: "10 minutes",
+            AdditionalServices: []);
 
         var result = await handler.Handle(
             new UpdateBarberProfileCommand(profile.Id, request),

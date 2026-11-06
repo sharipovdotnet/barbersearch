@@ -31,7 +31,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 
 | Path | Screen |
 |---|---|
-| `/` | landing page: real barber search by city, date, language, specialization and service, how it works, account CTA |
+| `/` | landing page: real barber search by city, date, language, specialization, service and additional-service substring, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
@@ -100,26 +100,33 @@ admin read without a pager.
 
 ## Barber search
 
-The landing calls `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=&cursor=&pageSize=`
+The landing calls `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=&additionalService=&cursor=&pageSize=`
 (anonymous, 120 requests per minute per IP). The filters are a **city** (trimmed and compared
 exactly, case-sensitive), an optional **date** — the barber has a working day on that weekday —
-one **language** (an enum name such as `Ru`), one **specialization** and one **hair service**;
-empty values are not sent at all. Results are ordered `rating DESC NULLS LAST, id`; `pageSize`
-is 12 and the next page is fetched with the opaque `nextCursor` from the previous response.
-There is no text search, and the card shows no price or service tags because the search DTO has
-neither.
+one **language** (an enum name such as `Ru`), one **specialization**, one **hair service** and one
+**additional service** — a free-text substring matched case-insensitively against any element of
+the barber's `additionalServices` list (`%` and `_` are literals); empty values are not sent at
+all. Results are ordered `rating DESC NULLS LAST, id`; `pageSize` is 12 and the next page is
+fetched with the opaque `nextCursor` from the previous response. There is no name/email text
+search, and the card shows no price tags because the search DTO has none; it does show the
+additional-service badges.
 
 The language select always lists the six known languages. The specialization and service selects
 come from `GET /api/specializations` and `GET /api/hair-services` (anonymous, active rows only,
 bare arrays, no pagination): an empty catalogue hides its select instead of showing a dead list.
 While they load the selects are disabled with «Загрузка…»; if the load fails they stay disabled
 and the form shows a Russian `role="alert"` with «Повторить» — city, date, language and «Найти»
-keep working. Only «Найти» sends a request; filters live in React state, not in the URL.
+keep working. The additional-service field is an input with a `<datalist>` fed by
+`GET /api/barbers/additional-services` (distinct values of active and verified barbers, up to 100,
+ordered by value); that request is best-effort — if it fails the field simply has no suggestions
+and still filters by whatever the visitor types. Only «Найти» sends a request; filters live in
+React state, not in the URL.
 
 - `src/lib/barber-search.ts` — filters, `emptyBarberSearchFilters`/`normalizeBarberSearchFilters`, `BarberSearchItem`, `searchBarbers()`.
 - `src/hooks/use-barber-search.ts` — pages, abort of stale requests, retry, load-more state.
 - `src/hooks/use-search-catalogs.ts` — parallel catalogue read, abort on unmount, retry.
 - `src/lib/specializations.ts`, `src/lib/hair-services.ts` — catalogue types and requests.
+- `src/lib/additional-services.ts` — suggestions for the additional-service input.
 - `src/components/home/` — hero/search form, results grid, cards and the account CTA.
 
 ## Barber profile
@@ -127,9 +134,9 @@ keep working. Only «Найти» sends a request; filters live in React state, 
 `/barbers/{id}` calls `GET /api/barbers/{id}` (anonymous, 120 requests per minute per IP; `404`
 for a missing, hidden or unconfirmed profile, `400` for an empty GUID). The page shows the name,
 Russian grade, «Проверен» badge, rating or «Пока нет отзывов», experience, bio, languages,
-certificates, achievements, comfort and communication lists, services with price and duration,
-specializations, salons with addresses and the weekly schedule, payment methods and the late
-policy. Empty blocks are hidden instead of rendering an empty heading.
+certificates, achievements, comfort and communication lists, additional services, services with
+price and duration, specializations, salons with addresses and the weekly schedule, payment
+methods and the late policy. Empty blocks are hidden instead of rendering an empty heading.
 
 «Свободное время» sits under the hero and calls `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=`
 (anonymous, 120 requests per minute per IP). `date` is the **salon-local** `YYYY-MM-DD` and is

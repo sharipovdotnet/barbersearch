@@ -34,6 +34,7 @@ export type BarberProfileDraft = {
   paymentMethods: PaymentMethod[]
   communicationFormat: string[]
   goodies: string[]
+  additionalServices: string[]
   latePolicy: string | null
 }
 

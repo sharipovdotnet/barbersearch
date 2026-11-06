@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.BarberProfiles.GetAdditionalServices;
 using BarberSearch.Application.BarberProfiles.GetBarberProfile;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
@@ -49,6 +50,10 @@ public class BarbersController : ApiController
     /// Язык общения именем enum (<c>Ru</c>, <c>en</c>). Пустая строка означает «без фильтра»,
     /// неизвестное значение — <c>400</c> с кодом <c>barberSearch.language.invalid</c>.
     /// </param>
+    /// <param name="additionalService">
+    /// Подстрока дополнительной услуги (регистронезависимая). Пустая строка означает
+    /// «без фильтра»; совпадение ищется в любом элементе списка барбера.
+    /// </param>
     /// <param name="cursor">Непрозрачный курсор следующей страницы из предыдущего ответа.</param>
     /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
     /// <param name="handler">Обработчик запроса.</param>
@@ -62,6 +67,7 @@ public class BarbersController : ApiController
         [FromQuery] Guid? hairServiceId,
         [FromQuery] DateOnly? date,
         [FromQuery] string? language,
+        [FromQuery] string? additionalService,
         [FromQuery] string? cursor,
         [FromQuery] int? pageSize,
         [FromServices] IQueryHandler<PagedResponse<BarberSearchItemResponse>, SearchBarbersQuery> handler,
@@ -74,7 +80,29 @@ public class BarbersController : ApiController
                 date,
                 language,
                 cursor,
-                pageSize),
+                pageSize,
+                additionalService),
+            cancellationToken));
+
+    /// <summary>
+    /// Возвращает подсказки фильтра «дополнительные услуги».
+    /// </summary>
+    /// <remarks>
+    /// Анонимное действие с лимитом <c>reads</c> 120/мин на IP. Отдаются различные значения
+    /// дополнительных услуг активных и подтверждённых профилей, до 100 строк, по алфавиту.
+    /// Это подсказки свободного поля, а не справочник: фильтр поиска принимает подстроку,
+    /// поэтому значение из ответа — лишь удобный пример, а не обязательный выбор.
+    /// </remarks>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.ReadsPolicyName)]
+    [HttpGet("additional-services")]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetAdditionalServices(
+        [FromServices] IQueryHandler<IReadOnlyList<string>, GetAdditionalServicesQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetAdditionalServicesQuery(),
             cancellationToken));
 
     /// <summary>

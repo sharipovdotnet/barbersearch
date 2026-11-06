@@ -521,6 +521,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `YearsOfExperience` | `1..70` (`Constants.MIN/MAX_YEARS_OF_EXPERIENCE`) |
 | `BarberProfile.Rating` | `null` ⟺ `ReviewsCount == 0`; otherwise `1.00..5.00`, rounded to 2 decimals |
 | `BarberProfile.Languages` / `PaymentMethods` | every element is defined in `Language`/`PaymentMethod`; unknown values are rejected (R-23) |
+| `BarberProfile.AdditionalServices` | normalized on write: every entry is trimmed, blank entries are dropped and case-insensitive duplicates collapse to the first occurrence; the order is kept. No upper bound, like the other free-text profile lists |
 | `BarberProfile.PortfolioPhotos` | at most 10 items; `Url` is an absolute `http`/`https` URI with a host, no `userinfo`, trimmed, ≤ 2048 chars; `ThumbnailUrl` — same rule, optional (blank → `null`); `Description` ≤ 2000 |
 | `BarberProfile.TimeOffs` | `EndAt > StartAt`, intervals do not overlap (touching is allowed) |
 | `BarberProfile.Salons` | unique `SalonId`; at most one `IsPrimary` |
@@ -1112,7 +1113,7 @@ Ordered by impact on this domain, not by how interesting the work is.
 
 ### 15.1 The hot path
 
-1. **Search** — `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=` — read-heavy,
+1. **Search** — `GET /api/barbers?city=&specializationId=&hairServiceId=&date=&language=&additionalService=` — read-heavy,
    the bulk of all traffic, fired on every filter change.
 2. **Slot lookup** — `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=` — computed from
    `WorkingSchedule` (now per salon) and `TimeOff`, minus existing `Booking` rows.
@@ -1946,7 +1947,12 @@ Read endpoints (added 2026-10-19):
 - **`GET api/barbers`** — filters `city` (exact, trimmed), `specializationId`, `hairServiceId`
   (the `hair_services.id` catalogue row, not the barber's offer; EXISTS over the link tables,
   so a profile row is never duplicated), `date` (the barber has a non-day-off
-  schedule for that weekday in at least one active salon; exact free time is `/slots`) and
+  schedule for that weekday in at least one active salon; exact free time is `/slots`),
+  `additionalService` (trimmed substring, matched case-insensitively against **any** element of
+  the profile's `additional_services` text[] — `profile.AdditionalServices.Any(s =>
+  EF.Functions.ILike(s, pattern, "\\"))` translates to `EXISTS (SELECT 1 FROM
+  unnest(additional_services) … ILIKE … ESCAPE '\')`; `%` and `_` from the client are literals;
+  blank means no filter) and
   `language` (one value, enum name without case (`Ru`, `ru`); numeric forms are rejected.
   `profile.Languages.Contains(language)` translates to `languages @> ARRAY[…]` on `integer[]`,
   served by the GIN index `ix_barber_profiles_languages`. An unknown value is
@@ -1956,10 +1962,19 @@ Read endpoints (added 2026-10-19):
   is_verified`, migration `AddSearchKeysetIndex`). Since R-38 it is the only search index on
   `barber_profiles`: `ix_barber_profiles_search` and
   `ix_barber_profiles_is_active_is_verified_rating` were dropped by
-  `DropRedundantBarberProfileIndexes`. The response is
+  `DropRedundantBarberProfileIndexes`. `additional_services` deliberately has no index: the
+  substring filter is an `unnest` scan over the already-visible set, and an array GIN index serves
+  only exact containment (`@>`, `= ANY`), so it would not be used; per §15.2 no index is added
+  without `EXPLAIN` evidence. The response is
   `PagedResponse<BarberSearchItemResponse>` with
   `items` and an opaque base64url `nextCursor`; `pageSize` defaults to 20 and is capped at 100.
   A broken cursor or an out-of-range page size is `400`, not `500`.
+- **Additional-service suggestions (2026-11-06, issue-53).** `GET api/barbers/additional-services`
+  is an anonymous `reads`-limited `IReadOnlyList<string>`: `SelectMany(p => p.AdditionalServices)`
+  becomes `JOIN LATERAL unnest(additional_services)`, `DISTINCT` collapses equal values of
+  different barbers, the order is by value and `Take(100)` caps the hint list. The predicate is
+  the search visibility (`is_active AND is_verified`), so a suggestion is always present in some
+  result. It is a hint for a free-text field, not a dictionary: the filter accepts any substring.
 - **Public catalogues (2026-10-31, issue-29).** `GET api/specializations` and
   `GET api/hair-services` are anonymous, `reads`-limited lists of active rows — a bare JSON array
   without pagination (`200 []` for an empty catalogue), ordered by name and by category+name

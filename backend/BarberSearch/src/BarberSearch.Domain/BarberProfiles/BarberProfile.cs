@@ -31,6 +31,7 @@ public class BarberProfile : AggregateRoot
     private List<string> _goodies = [];
     private List<string> _achievements = [];
     private List<string> _communicationFormat = [];
+    private List<string> _additionalServices = [];
 
     /// <summary>
     /// Публичный код ошибки <see cref="FindSalon"/>: салона с таким идентификатором нет в профиле.
@@ -83,6 +84,19 @@ public class BarberProfile : AggregateRoot
     public IReadOnlyCollection<string> Goodies
         => _goodies.AsReadOnly();
 
+    /// <summary>
+    /// Дополнительные услуги: свободные строки, которые барбер заполняет сам
+    /// («Бритьё головы», «Камуфляж седины»). Это не прайс: услуга из справочника
+    /// живёт отдельной сущностью <c>BarberService</c> с ценой и длительностью.
+    /// </summary>
+    /// <remarks>
+    /// Значения нормализуются при записи — обрезаются пробелы, пустые строки
+    /// отбрасываются, повторы без учёта регистра схлопываются. Список — ключ поиска
+    /// на витрине, поэтому поле не должно содержать «шум».
+    /// </remarks>
+    public IReadOnlyCollection<string> AdditionalServices
+        => _additionalServices.AsReadOnly();
+
     // Отношение к опозданиям, например, «Жду максимум 10 минут»
     public string LatePolicy { get; private set; } = string.Empty;
 
@@ -132,7 +146,8 @@ public class BarberProfile : AggregateRoot
         List<string>? communicationFormat,
         List<string>? goodies,
         string? latePolicy,
-        Grade grade = Grade.None)
+        Grade grade = Grade.None,
+        List<string>? additionalServices = null)
     {
         if (!Enum.IsDefined(grade))
         {
@@ -166,6 +181,7 @@ public class BarberProfile : AggregateRoot
             _paymentMethods = paymentMethods ?? [],
             _communicationFormat = communicationFormat ?? [],
             _goodies = goodies ?? [],
+            _additionalServices = NormalizeAdditionalServices(additionalServices),
             LatePolicy = latePolicy ?? string.Empty,
             Grade = grade,
             // null = отзывов ещё нет. Ноль в этом поле больше не пишется: это второе
@@ -191,7 +207,8 @@ public class BarberProfile : AggregateRoot
         List<PaymentMethod>? paymentMethods,
         List<string>? communicationFormat,
         List<string>? goodies,
-        string? latePolicy)
+        string? latePolicy,
+        List<string>? additionalServices)
     {
         var inputResult = ValidateInput(
             displayName,
@@ -216,6 +233,7 @@ public class BarberProfile : AggregateRoot
         Replace(_paymentMethods, paymentMethods);
         Replace(_communicationFormat, communicationFormat);
         Replace(_goodies, goodies);
+        Replace(_additionalServices, NormalizeAdditionalServices(additionalServices));
 
         MarkUpdated();
 
@@ -740,6 +758,43 @@ public class BarberProfile : AggregateRoot
                     invalidField));
             }
         }
+    }
+
+    /// <summary>
+    /// Нормализует дополнительные услуги: обрезает пробелы, отбрасывает пустые строки
+    /// и схлопывает повторы без учёта регистра. Порядок первого вхождения сохраняется.
+    /// </summary>
+    /// <remarks>
+    /// Пустое значение не является ошибкой: список необязательный, а <c>null</c>
+    /// и пустая коллекция означают одно и то же — «дополнительных услуг нет».
+    /// </remarks>
+    private static List<string> NormalizeAdditionalServices(IEnumerable<string>? values)
+    {
+        var normalized = new List<string>();
+
+        if (values is null)
+        {
+            return normalized;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var trimmed = value.Trim();
+
+            if (seen.Add(trimmed))
+            {
+                normalized.Add(trimmed);
+            }
+        }
+
+        return normalized;
     }
 
     /// <summary>

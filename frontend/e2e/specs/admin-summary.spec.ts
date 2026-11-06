@@ -70,11 +70,13 @@ test.describe('админка: сводка', () => {
     ).toBeVisible()
 
     // Отзывы: вкладка «На модерации» — ровно столько строк, сколько в сводке.
+    // На широком экране split-view сам открывает первую карточку и добавляет её id
+    // в адрес, поэтому проверяем раздел, а не точный URL без карточки.
     await summary.queueLink.click()
 
     const reviews = new AdminReviewsPage(page)
 
-    await expect(page).toHaveURL(/\/admin\/reviews$/)
+    await expect(page).toHaveURL(/\/admin\/reviews(?:\/|$)/)
     await expect(reviews.rows).toHaveCount(pendingReviews)
 
     // Барберы: очередь «На проверке» открыта по умолчанию и показывает профиль.

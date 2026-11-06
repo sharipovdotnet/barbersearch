@@ -7,17 +7,23 @@ using Xunit;
 namespace BarberSearch.IntegrationTests;
 
 /// <summary>
-/// Фильтры поиска: язык, а также его сочетания с городом, специализацией и услугой.
+/// Фильтры поиска: язык и подстрока дополнительной услуги, а также сочетания с городом,
+/// специализацией и услугой.
 /// </summary>
 /// <remarks>
 /// Язык — один, передаётся именем enum без учёта регистра; неизвестное значение даёт
-/// <c>400</c> с проектным кодом, а пустое — отсутствие фильтра. Комбинации проверяются
+/// <c>400</c> с проектным кодом, а пустое — отсутствие фильтра. Дополнительные услуги —
+/// свободные строки, поэтому фильтр ищет подстроку без учёта регистра в любом элементе
+/// списка и не трактует <c>%</c> как шаблон. Комбинации проверяются
 /// на одном профиле с реальными связями: город, специализация и услуга строятся доменными
 /// фабриками, а не SQL-вставками.
 /// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed class SearchFiltersTests
 {
+    private static readonly string[] ExpectedAdditionalServices =
+        ["Бритьё головы", "Камуфляж седины", "Уход за бородой"];
+
     private readonly PostgresFixture _database;
 
     public SearchFiltersTests(PostgresFixture database)
@@ -51,6 +57,65 @@ public sealed class SearchFiltersTests
 
         await AssertInvalidLanguageAsync(app.Client, "api/barbers?language=xx");
         await AssertInvalidLanguageAsync(app.Client, "api/barbers?language=1");
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Additional_service_filter_matches_any_substring_case_insensitively()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+
+        var beard = await data.CreateBarberProfileAsync(
+            "Beard Barber",
+            additionalServices: ["Оформление бороды", "Бритьё головы"]);
+        var head = await data.CreateBarberProfileAsync(
+            "Head Barber",
+            additionalServices: ["Бритьё головы"]);
+        var plain = await data.CreateBarberProfileAsync("Plain Barber");
+
+        Assert.Equal(
+            new[] { beard.Id },
+            await ReadIdsAsync(app.Client, AdditionalServiceUrl("бород")));
+        Assert.Equal(
+            new[] { beard.Id },
+            await ReadIdsAsync(app.Client, AdditionalServiceUrl("БОРОД")));
+        Assert.Equal(
+            new[] { beard.Id, head.Id },
+            await ReadIdsAsync(app.Client, AdditionalServiceUrl("БРИТЬЁ")));
+        Assert.Empty(
+            await ReadIdsAsync(app.Client, AdditionalServiceUrl("массаж")));
+
+        // `%` — литерал, а не шаблон: без экранирования фильтр нашёл бы все профили.
+        Assert.Empty(
+            await ReadIdsAsync(app.Client, AdditionalServiceUrl("100%")));
+
+        Assert.Equal(
+            new[] { beard.Id, head.Id, plain.Id },
+            await ReadIdsAsync(app.Client, "api/barbers?additionalService="));
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Additional_services_endpoint_returns_distinct_values()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+
+        await data.CreateBarberProfileAsync(
+            "First Barber",
+            additionalServices: ["Уход за бородой", "Бритьё головы"]);
+        await data.CreateBarberProfileAsync(
+            "Second Barber",
+            additionalServices: ["Бритьё головы", "Камуфляж седины"]);
+        await data.CreateBarberProfileAsync("Third Barber");
+
+        using var response = await app.Client.GetAsync("api/barbers/additional-services");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync();
+        var values = JsonSerializer.Deserialize<List<string>>(body);
+
+        Assert.NotNull(values);
+        Assert.Equal(ExpectedAdditionalServices, values);
     }
 
     [Fact(Timeout = 180_000)]
@@ -107,6 +172,9 @@ public sealed class SearchFiltersTests
                 + $"&specializationId={specialization.Id}"
                 + $"&hairServiceId={hairService.Id}"));
     }
+
+    private static string AdditionalServiceUrl(string term)
+        => $"api/barbers?additionalService={Uri.EscapeDataString(term)}";
 
     private static async Task<List<Guid>> ReadIdsAsync(HttpClient client, string url)
     {

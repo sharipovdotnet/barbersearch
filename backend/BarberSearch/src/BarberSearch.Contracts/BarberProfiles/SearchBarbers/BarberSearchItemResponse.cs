@@ -21,6 +21,10 @@ namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 /// <param name="PrimarySalonId">Основной активный салон либо <c>null</c>, если его нет.</param>
 /// <param name="PrimarySalonName">Название основного активного салона либо <c>null</c>.</param>
 /// <param name="City">Город основного активного салона либо <c>null</c>.</param>
+/// <param name="AdditionalServices">
+/// Дополнительные услуги барбера: карточка показывает, чем ещё он занимается,
+/// а найденный фильтр виден прямо в выдаче.
+/// </param>
 public record BarberSearchItemResponse(
     Guid Id,
     string DisplayName,
@@ -32,4 +36,5 @@ public record BarberSearchItemResponse(
     bool IsVerified,
     Guid? PrimarySalonId,
     string? PrimarySalonName,
-    string? City);
+    string? City,
+    IReadOnlyList<string> AdditionalServices);

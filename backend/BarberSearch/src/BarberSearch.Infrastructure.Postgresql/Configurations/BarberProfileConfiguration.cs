@@ -102,6 +102,14 @@ public class BarberProfileConfiguration : IEntityTypeConfiguration<BarberProfile
             .HasColumnName("goodies")
             .IsRequired();
 
+        // Дополнительные услуги — тот же text[], что и остальные строковые списки профиля.
+        // GIN-индекса по массиву нет намеренно: фильтр витрины ищет подстроку через
+        // `EXISTS (SELECT 1 FROM unnest(...) WHERE value ILIKE ...)`, а array GIN ускоряет
+        // только точное совпадение и в этом плане не участвует (backend/AGENT.md §15.2).
+        builder.Property(x => x.AdditionalServices)
+            .HasColumnName("additional_services")
+            .IsRequired();
+
         // У пользователя не может быть двух профилей барбера.
         builder.HasIndex(x => x.UserId)
             .IsUnique()

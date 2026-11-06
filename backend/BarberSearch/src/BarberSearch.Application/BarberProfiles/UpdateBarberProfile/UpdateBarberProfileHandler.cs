@@ -63,7 +63,8 @@ public class UpdateBarberProfileHandler : ICommandHandler<UpdateBarberProfileCom
             paymentMethods: request.PaymentMethods,
             communicationFormat: request.CommunicationFormat,
             goodies: request.Goodies,
-            latePolicy: request.LatePolicy);
+            latePolicy: request.LatePolicy,
+            additionalServices: request.AdditionalServices);
         if (updated.IsFailure)
         {
             return updated.Error;

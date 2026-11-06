@@ -246,6 +246,19 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Различные дополнительные услуги видимых барберов — подсказки фильтра витрины.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания и без загрузки профилей: <c>unnest</c> по массиву
+    /// <c>additional_services</c> плюс <c>DISTINCT</c>. Предикат видимости тот же, что
+    /// у поиска (<c>is_active</c> и <c>is_verified</c>), иначе подсказка предлагала бы
+    /// значение, которого нет в выдаче. Порядок — по значению, лимит — 100 строк.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<string>, Failure>> GetAdditionalServicesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Карточка активного и подтверждённого барбера: профиль, услуги, салоны и специализации.
     /// </summary>
     /// <remarks>

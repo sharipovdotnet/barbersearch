@@ -203,7 +203,8 @@ function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
   const hasNewFilters =
     filters.language !== '' ||
     filters.specializationId !== '' ||
-    filters.hairServiceId !== ''
+    filters.hairServiceId !== '' ||
+    filters.additionalService.trim() !== ''
 
   let title = 'Барберов пока нет'
   let text = 'Пока никто не подтверждён. Загляните позже.'
@@ -219,7 +220,8 @@ function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
       'Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.'
   } else if (hasNewFilters) {
     title = 'С такими фильтрами никого не нашли'
-    text = 'Попробуйте другой язык, специализацию или услугу.'
+    text =
+      'Попробуйте другой язык, специализацию, услугу или дополнительную услугу.'
   }
 
   return (
