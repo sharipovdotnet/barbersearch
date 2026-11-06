@@ -84,7 +84,8 @@ public class CreateBarberProfileHandler : ICommandHandler<Guid, CreateBarberProf
             paymentMethods: request.PaymentMethods,
             communicationFormat: request.CommunicationFormat,
             goodies: request.Goodies,
-            latePolicy: request.LatePolicy);
+            latePolicy: request.LatePolicy,
+            grade: request.Grade);
         if (entity.IsFailure)
         {
             return entity.Error;

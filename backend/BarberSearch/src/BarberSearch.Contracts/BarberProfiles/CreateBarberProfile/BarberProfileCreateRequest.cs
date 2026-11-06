@@ -10,8 +10,9 @@ namespace BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 /// а домен получает значения — <c>BarberProfile.Create</c> принимает их явными параметрами,
 /// потому что на слой Contracts он не ссылается. Владелец профиля в запросе не передаётся:
 /// это текущий пользователь из токена, поэтому завести профиль на чужой идентификатор нельзя.
-/// Enum'ы (<see cref="Language"/>, <see cref="PaymentMethod"/>) приходят из домена: это словарь
-/// предметной области, а не деталь транспорта.
+/// Enum'ы (<see cref="Language"/>, <see cref="PaymentMethod"/>, <see cref="Grade"/>) приходят из
+/// домена: это словарь предметной области, а не деталь транспорта. Грейд необязателен: старый
+/// клиент, не приславший его, получает <see cref="Grade.None"/>, как и раньше.
 /// </remarks>
 public record BarberProfileCreateRequest(
     string DisplayName,
@@ -23,4 +24,5 @@ public record BarberProfileCreateRequest(
     List<PaymentMethod> PaymentMethods,
     List<string>? CommunicationFormat,
     List<string>? Goodies,
-    string? LatePolicy);
+    string? LatePolicy,
+    Grade Grade = Grade.None);

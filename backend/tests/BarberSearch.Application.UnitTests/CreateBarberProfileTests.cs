@@ -42,6 +42,27 @@ public class CreateBarberProfileTests
     }
 
     [Fact]
+    public async Task Create_StoresTheGradeFromTheRequest()
+    {
+        var user = CreateBarber();
+        var profiles = new FakeBarberProfileRepository();
+        var users = new FakeUserRepository();
+        users.Add(user);
+        var unitOfWork = new FakeUnitOfWork(profiles, users);
+        var handler = CreateHandler(profiles, users, unitOfWork, new FakeCurrentUser(user.Id));
+
+        var result = await handler.Handle(
+            new CreateBarberProfileCommand(CreateRequest(grade: Grade.ArtDirector)),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var profile = profiles.Find(result.Value);
+        Assert.NotNull(profile);
+        Assert.Equal(Grade.ArtDirector, profile!.Grade);
+    }
+
+    [Fact]
     public async Task Create_WhenUserAlreadyHasProfile_ReturnsConflictAndWritesNothing()
     {
         var existingProfileId = Guid.CreateVersion7();
@@ -191,7 +212,8 @@ public class CreateBarberProfileTests
             NullLogger<CreateBarberProfileHandler>.Instance);
 
     private static BarberProfileCreateRequest CreateRequest(
-        string displayName = "Ivan the Barber")
+        string displayName = "Ivan the Barber",
+        Grade grade = Grade.None)
         => new(
             displayName,
             5,
@@ -202,7 +224,8 @@ public class CreateBarberProfileTests
             [PaymentMethod.Cash],
             ["Chatty"],
             ["Coffee"],
-            "Wait 10 minutes max");
+            "Wait 10 minutes max",
+            grade);
 
     private static User CreateBarber()
         => User.Create(

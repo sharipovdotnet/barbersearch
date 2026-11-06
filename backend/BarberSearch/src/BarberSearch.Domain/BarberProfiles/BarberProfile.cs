@@ -115,6 +115,11 @@ public class BarberProfile : AggregateRoot
     /// Создаёт профиль барбера. Данные приходят значениями, а не записью: запись-контракт
     /// (<c>BarberProfileCreateRequest</c>) живёт в слое Contracts, на который домен не ссылается.
     /// </summary>
+    /// <remarks>
+    /// Грейд приходит при создании и по умолчанию равен <see cref="Grade.None"/>: так профиль,
+    /// созданный старым клиентом или административным сценарием без грейда, не меняет поведение.
+    /// Дальше грейд меняется только через <see cref="ChangeGrade"/>.
+    /// </remarks>
     public static Result<BarberProfile, Failure> Create(
         Guid userId,
         string displayName,
@@ -126,8 +131,17 @@ public class BarberProfile : AggregateRoot
         List<PaymentMethod>? paymentMethods,
         List<string>? communicationFormat,
         List<string>? goodies,
-        string? latePolicy)
+        string? latePolicy,
+        Grade grade = Grade.None)
     {
+        if (!Enum.IsDefined(grade))
+        {
+            return new Failure(Error.Validation(
+                "barberProfile.grade.unknown",
+                $"Unknown barber grade value {(int)grade}.",
+                nameof(grade)));
+        }
+
         var inputResult = ValidateInput(
             displayName,
             yearsOfExperience,
@@ -153,7 +167,7 @@ public class BarberProfile : AggregateRoot
             _communicationFormat = communicationFormat ?? [],
             _goodies = goodies ?? [],
             LatePolicy = latePolicy ?? string.Empty,
-            Grade = Grade.None,
+            Grade = grade,
             // null = отзывов ещё нет. Ноль в этом поле больше не пишется: это второе
             // представление «нет отзывов» в одном и том же поле.
             Rating = null,

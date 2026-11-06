@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api'
+import type { BarberGrade } from '@/lib/barber-grade'
 import type { Language, PaymentMethod } from '@/lib/barber-profile-labels'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -8,8 +9,9 @@ import { isCreatedId } from '@/lib/response-guards'
  * Создание профиля барбера.
  *
  * Контракт `POST /api/barber-profiles` закрыт политикой `BarberOnly`, профиль всегда
- * принадлежит текущему пользователю: `userId`, грейд, рейтинг и подтверждение в теле
- * не передаются — их назначает сервер. Владелец профиля появляется в claim только
+ * принадлежит текущему пользователю: `userId`, рейтинг и подтверждение в теле
+ * не передаются — их назначает сервер. Грейд барбер выбирает сам при создании;
+ * администратор может изменить его позже. Владелец профиля появляется в claim только
  * в следующем выданном токене, поэтому экран после `201` продлевает сессию.
  */
 
@@ -24,6 +26,7 @@ export const BARBER_PROFILE_LATE_POLICY_MAX = 500
 export type BarberProfileDraft = {
   displayName: string
   yearsOfExperience: number
+  grade: BarberGrade
   bio: string | null
   languages: Language[]
   certificatesAndTraining: string[]
@@ -49,6 +52,7 @@ export async function createBarberProfile(
 export type BarberProfileField =
   | 'displayName'
   | 'yearsOfExperience'
+  | 'grade'
   | 'languages'
   | 'paymentMethods'
 
@@ -82,6 +86,11 @@ const FIELD_ERRORS: readonly {
     code: 'barberProfile.yearsOfExperience',
     field: 'yearsOfExperience',
     message: 'Опыт — от 1 до 70 лет.',
+  },
+  {
+    code: 'barberProfile.grade.unknown',
+    field: 'grade',
+    message: 'Выберите грейд из списка.',
   },
   {
     code: 'barberProfile.languages.unknown',

@@ -547,7 +547,9 @@ All persisted enums have **explicit numeric values** (§10.10).
   `Confirm` (Pending→Confirmed), `Complete` (Confirmed→Completed), `Cancel`
   (Pending|Confirmed→Cancelled), `MarkNoShow` (Confirmed→NoShow).
 - `ServiceCategory`: `Haircut=1, Beard=2, Coloring=3, Styling=4, HairTreatment=5, Other=99`.
-- `Grade`: `None=0, Intern=1 … BarbershopOwner=10`.
+- `Grade`: `None=0, Intern=1 … BarbershopOwner=10`. The barber picks one of the assigned grades
+  when the profile is created (`POST api/barber-profiles`, `grade` optional and defaulting to
+  `None` for old clients); the administrator can change it later.
 - `Language`: `Ru=1, En=2, De=3, Kg=4, Tj=5, Uz=6`.
 - `PaymentMethod`: `Cash=1, Card=2, DigitalWallet=3, Sbp=4, BankTransfer=5`.
 - `SalonModerationStatus`: `Pending=1, Active=2, Rejected=3` — the administrator's review of a
@@ -928,7 +930,8 @@ Suggested order:
 4. **CQRS:** separate read models, or just handlers over a single DbContext?
 5. **Auth** — **decided 2026-10-19 and implemented (§17):** cookie для браузера + JWT для
    мобильного/внешнего клиента, роли `UserRole`, политики `AdminOnly` / `BarberOnly` /
-   `VerifiedEmail`; `Grade` и `IsVerified` меняет только администратор.
+   `VerifiedEmail`; `IsVerified` меняет только администратор, а `Grade` барбер выбирает при
+   создании профиля (администратор может изменить его позже).
 6. **Domain events:** introduce an event-collecting `AggregateRoot`, or skip them?
    **Decided 2026-10-24 (R-34):** аудит изменений реализован отдельно, таблицей `audit_log`,
    а не доменными событиями: строка аудита пишется в `RepositoryBase.SaveChangesAsync` из
@@ -2625,7 +2628,9 @@ salon.activation.notApproved`). Это сознательно: «включит�
 следующем входе или refresh, который перевыпускает access-токен: набор claims фиксируется в
 момент выпуска — это ограничение JWT, а не дефект. При этом сама связь в БД актуальна сразу,
 и `409 barberProfile.create.alreadyExists` защищает от второго профиля, даже если клиент
-опирается на устаревший claim.
+опирается на устаревший claim. Грейд приходит в том же `POST`: поле необязательное и по
+умолчанию равно `None` (старые клиенты не ломаются), а неизвестное значение отклоняется
+доменом как `400 barberProfile.grade.unknown`.
 
 Охват: 30 обработчиков профиля барбера и его детей, 5 обработчиков броней, `UpdateReview`,
 3 обработчика пользователей, плюс публичный каталог салонов (`GetSalonDirectoryHandler`) и
