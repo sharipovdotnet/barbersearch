@@ -4,6 +4,8 @@ import { X } from 'lucide-react'
 import { SignInGate } from '@/components/account/account-gates'
 import { BarberBookingDialog } from '@/components/barber/barber-booking-dialog'
 import { BarberCabinetNav } from '@/components/barber/barber-cabinet-nav'
+import { BarberCabinetViewTabs } from '@/components/barber/barber-cabinet-view-tabs'
+import { BarberDay } from '@/components/barber/barber-day'
 import { CabinetBookingList } from '@/components/barber/cabinet-booking-list'
 import type { RowHandle } from '@/components/barber/cabinet-booking-row'
 import {
@@ -18,11 +20,19 @@ import {
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberNoteDialog } from '@/components/barber/barber-note-dialog'
+import { RefreshStatus } from '@/components/refresh-status'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useBarberBookings } from '@/hooks/use-barber-bookings'
+import { useBarberDay } from '@/hooks/use-barber-day'
 import { useNow } from '@/hooks/use-now'
 import { useSession } from '@/hooks/use-session'
+import { localDateKey, type DayGap } from '@/lib/barber-day'
+import {
+  BARBER_CABINET_PANEL_ID,
+  barberViewTabId,
+  type BarberCabinetView,
+} from '@/lib/barber-cabinet-view'
 import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
 import type {
   BarberBooking,
@@ -33,9 +43,14 @@ import { describeBarberBookingsChange } from '@/lib/booking-changes'
 /**
  * Кабинет барбера.
  *
- * Экран отвечает на один вопрос — «что у меня с записями клиентов» — и не пытается
- * быть расписанием: две вкладки, строки и пять действий. Список монтируется только
- * после проверок сессии, роли и привязанного профиля, поэтому лишних `403` нет.
+ * Экран отвечает на один вопрос — «кто придёт сегодня и что у меня в ближайший
+ * час» — и не пытается быть расписанием: три вкладки, строки и пять действий.
+ * «Сегодня» собирается из первых страниц двух существующих списков (§3.2), поэтому
+ * отдельного эндпоинта и второго контроллера пагинации здесь нет: переключение
+ * «Сегодня → Ближайшие» не делает ни одного запроса.
+ *
+ * Список монтируется только после проверок сессии, роли и привязанного профиля,
+ * поэтому лишних `403` нет.
  */
 export function BarberCabinetPage() {
   const { status, user } = useSession()
@@ -105,33 +120,54 @@ function BarberBookingsScreen({
 }: {
   barberProfileId: string
 }) {
-  const [scope, setScope] = useState<BarberBookingScope>('upcoming')
-  const bookings = useBarberBookings(scope)
+  const [view, setView] = useState<BarberCabinetView>('day')
+  // Оба контроллера живут, пока открыт кабинет: два `GET` при монтировании и ни
+  // одного при переключении вкладок.
+  const upcoming = useBarberBookings('upcoming')
+  const past = useBarberBookings('past')
+  const day = useBarberDay(upcoming, past)
   const now = useNow()
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<BarberBooking | null>(null)
   const [actionTarget, setActionTarget] = useState<BarberActionTarget | null>(
     null
   )
-  // Сколько строк показала история: до первого её открытия предлагать нечего.
-  const [knownPastCount, setKnownPastCount] = useState<number | null>(null)
+  // Диалог записи управляется страницей: окно дня открывает его с готовым временем,
+  // а кнопка в шапке — с пустой формой.
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogDate, setDialogDate] = useState<string | undefined>(undefined)
+  const [dialogStartAt, setDialogStartAt] = useState<string | undefined>(
+    undefined
+  )
 
   const headingRef = useRef<HTMLHeadingElement>(null)
   const rowHandles = useRef(new Map<string, RowHandle>())
   // Куда вернуть фокус после мутации: id строки и её кнопка.
   const pendingFocus = useRef<PendingFocus | null>(null)
 
-  const refreshBookings = bookings.refresh
-  const isRefreshing = bookings.isRefreshing
-  const refreshError = bookings.refreshError
-  const updatedAt = bookings.updatedAt
+  const list = view === 'upcoming' ? upcoming : past
+  const isDay = view === 'day'
+  // Действия идут в тот контроллер, который сейчас на экране: у дня он прячет
+  // маршрутизацию по id и перечитывание второго списка.
+  const actions = isDay ? day : list
+  const items = isDay ? day.items : list.items
+  const isReady = isDay ? day.status === 'ready' : list.status === 'ready'
+  const requiresSignIn = isDay
+    ? day.requiresSignIn
+    : list.requiresSignIn
+  const isMutating = upcoming.isMutating || past.isMutating
 
-  // Тихое обновление страницы. Баннер — только в «Ближайших»: в истории
-  // появившаяся строка не «новая запись», а завершённый визит.
+  const refreshActive = isDay ? day.refresh : list.refresh
+  const isRefreshing = isDay ? day.isRefreshing : list.isRefreshing
+  const refreshError = isDay ? day.refreshError : list.refreshError
+  const updatedAt = isDay ? day.updatedAt : list.updatedAt
+
+  // Тихое обновление текущей вкладки. Баннер — только там, где новая запись
+  // действительно новость: в истории появившаяся строка — завершённый визит.
   const handleRefresh = useCallback(async () => {
-    const change = await refreshBookings()
+    const change = await refreshActive()
 
-    if (change === null || scope !== 'upcoming') {
+    if (change === null || view === 'past') {
       return
     }
 
@@ -140,18 +176,18 @@ function BarberBookingsScreen({
     if (message !== null) {
       setAnnouncement(message)
     }
-  }, [refreshBookings, scope])
+  }, [refreshActive, view])
 
   // Пока открыт диалог действия или идёт мутация, список не трогаем: строка
   // под руками не должна менять статус из-за ответа, прочитанного до коммита.
   useAutoRefresh({
     enabled:
-      scope === 'upcoming' &&
-      bookings.status === 'ready' &&
-      !bookings.requiresSignIn &&
+      view !== 'past' &&
+      isReady &&
+      !requiresSignIn &&
       noteTarget === null &&
       actionTarget === null &&
-      !bookings.isMutating,
+      !isMutating,
     onRefresh: handleRefresh,
   })
 
@@ -162,15 +198,6 @@ function BarberBookingsScreen({
       rowHandles.current.delete(id)
     }
   }, [])
-
-  useEffect(() => {
-    if (scope !== 'past' || bookings.status !== 'ready') {
-      return
-    }
-
-    // oxlint-disable-next-line react/set-state-in-effect -- история нужна пустым «Ближайшим»
-    setKnownPastCount(bookings.items.length)
-  }, [scope, bookings.status, bookings.items.length])
 
   useEffect(() => {
     const pending = pendingFocus.current
@@ -203,13 +230,13 @@ function BarberBookingsScreen({
 
       headingRef.current?.focus()
     })
-  }, [bookings.items])
+  }, [items])
 
   /** Следующая строка после удаляемой: до мутации список ещё содержит её. */
   function nextRowId(id: string): string | null {
-    const index = bookings.items.findIndex((booking) => booking.id === id)
+    const index = items.findIndex((booking) => booking.id === id)
 
-    return index >= 0 ? (bookings.items[index + 1]?.id ?? null) : null
+    return index >= 0 ? (items[index + 1]?.id ?? null) : null
   }
 
   function finishTerminal(nextId: string | null, message: string) {
@@ -219,7 +246,7 @@ function BarberBookingsScreen({
   }
 
   async function handleConfirm(id: string) {
-    await bookings.confirm(id)
+    await actions.confirm(id)
     pendingFocus.current = { id, target: 'afterConfirm' }
     setAnnouncement('Запись подтверждена.')
   }
@@ -227,7 +254,7 @@ function BarberBookingsScreen({
   async function handleComplete(id: string) {
     const nextId = nextRowId(id)
 
-    await bookings.complete(id)
+    await actions.complete(id)
     finishTerminal(nextId, 'Визит завершён.')
   }
 
@@ -237,11 +264,11 @@ function BarberBookingsScreen({
     reason?: string
   ): Promise<void> {
     if (kind === 'cancel') {
-      await bookings.cancel(id, reason ?? '')
+      await actions.cancel(id, reason ?? '')
       return
     }
 
-    await bookings.markNoShow(id)
+    await actions.markNoShow(id)
   }
 
   function handleActionDone(
@@ -257,27 +284,68 @@ function BarberBookingsScreen({
   }
 
   async function handleSaveNote(id: string, note: string) {
-    await bookings.saveNote(id, note)
+    await actions.saveNote(id, note)
     pendingFocus.current = { id, target: 'note' }
     setAnnouncement('Заметка сохранена.')
   }
 
   /**
    * Новая запись всегда попадает в «Ближайшие»: если барбер смотрел историю,
-   * переключаем вкладку, иначе просто перечитываем первую страницу.
+   * возвращаемся на «Сегодня» — это вид по умолчанию, и строка сразу на месте.
    */
   function handleClientCreated(clientName: string) {
     setAnnouncement(`Клиент записан: ${clientName}.`)
 
-    if (scope === 'upcoming') {
-      bookings.reload()
-    } else {
-      setScope('upcoming')
+    if (view === 'day') {
+      day.reload()
+      return
+    }
+
+    if (view === 'past') {
+      setView('day')
+    }
+
+    upcoming.reload()
+  }
+
+  /** Окно дня: диалог открывается с датой дня и началом окна. */
+  function handleFillGap(gap: DayGap) {
+    setDialogDate(localDateKey(now))
+    setDialogStartAt(gap.startAt)
+    setDialogOpen(true)
+  }
+
+  /** Пустой день: тот же диалог, но без желаемого времени. */
+  function handleCreateFromEmpty() {
+    setDialogDate(localDateKey(now))
+    setDialogStartAt(undefined)
+    setDialogOpen(true)
+  }
+
+  function handleDialogOpenChange(next: boolean) {
+    setDialogOpen(next)
+
+    // Закрытие забывает «желаемое время»: кнопка в шапке открывает пустую форму.
+    if (!next) {
+      setDialogDate(undefined)
+      setDialogStartAt(undefined)
     }
   }
 
-  const hasPastItems =
-    scope === 'past' ? bookings.items.length > 0 : (knownPastCount ?? 0) > 0
+  function handleViewChange(next: BarberCabinetView) {
+    // День собирается из первых страниц: страница, оставленная в соседней вкладке,
+    // иначе молча потеряла бы начало списка. Запроса нет — данные уже в кэше.
+    if (next === 'day') {
+      upcoming.goFirst()
+      past.goFirst()
+    }
+
+    setView(next)
+    setAnnouncement(null)
+  }
+
+  const listScope: BarberBookingScope =
+    view === 'past' ? 'past' : 'upcoming'
 
   return (
     <div className="space-y-5">
@@ -291,6 +359,10 @@ function BarberBookingsScreen({
         </p>
         <BarberBookingDialog
           barberProfileId={barberProfileId}
+          initialDate={dialogDate}
+          preferredStartAt={dialogStartAt}
+          open={dialogOpen}
+          onOpenChange={handleDialogOpenChange}
           onCreated={handleClientCreated}
         />
       </div>
@@ -312,53 +384,98 @@ function BarberBookingsScreen({
         </div>
       )}
 
-      {bookings.requiresSignIn ? (
+      {requiresSignIn ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
             title="Сессия истекла"
             description="Войдите снова, чтобы увидеть записи клиентов: cookie-сессия закончилась, пока страница была открыта."
             redirectTo={BARBER_CABINET_PATH}
-            onSignedIn={bookings.reload}
+            onSignedIn={actions.reload}
           />
         </div>
       ) : (
-        <CabinetBookingList
-          scope={scope}
-          items={bookings.items}
-          status={bookings.status}
-          error={bookings.error}
-          pageIndex={bookings.pageIndex}
-          offset={bookings.offset}
-          hasPrev={bookings.hasPrev}
-          hasNext={bookings.hasNext}
-          isLoadingPage={bookings.isLoadingPage}
-          pageError={bookings.pageError}
-          now={now}
-          hasPastItems={hasPastItems}
-          headingRef={headingRef}
-          updatedAt={updatedAt}
-          isRefreshing={isRefreshing}
-          refreshError={refreshError}
-          onRefresh={handleRefresh}
-          onScopeChange={(next) => {
-            setScope(next)
-            setAnnouncement(null)
-          }}
-          onRetry={bookings.reload}
-          onPrev={bookings.goPrev}
-          onNext={bookings.goNext}
-          onReload={bookings.reload}
-          onConfirm={handleConfirm}
-          onComplete={handleComplete}
-          onOpenCancel={(booking) =>
-            setActionTarget({ booking, kind: 'cancel' })
-          }
-          onOpenNoShow={(booking) =>
-            setActionTarget({ booking, kind: 'noShow' })
-          }
-          onOpenNote={setNoteTarget}
-          registerRow={registerRow}
-        />
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <BarberCabinetViewTabs
+              view={view}
+              onChange={handleViewChange}
+            />
+            <RefreshStatus
+              updatedAt={updatedAt}
+              isRefreshing={isRefreshing}
+              onRefresh={() => {
+                void handleRefresh()
+              }}
+            />
+          </div>
+
+          {refreshError && (
+            <p role="alert" className="text-sm text-destructive">
+              {refreshError}
+            </p>
+          )}
+
+          <div
+            id={BARBER_CABINET_PANEL_ID}
+            role="tabpanel"
+            aria-labelledby={barberViewTabId(view)}
+            aria-busy={
+              isDay ? day.status === 'loading' : list.status === 'loading'
+            }
+          >
+            {isDay ? (
+              <BarberDay
+                day={day}
+                now={now}
+                headingRef={headingRef}
+                onFillGap={handleFillGap}
+                onCreate={handleCreateFromEmpty}
+                onConfirm={handleConfirm}
+                onComplete={handleComplete}
+                onOpenCancel={(booking) =>
+                  setActionTarget({ booking, kind: 'cancel' })
+                }
+                onOpenNoShow={(booking) =>
+                  setActionTarget({ booking, kind: 'noShow' })
+                }
+                onOpenNote={setNoteTarget}
+                onReload={day.reload}
+                registerRow={registerRow}
+              />
+            ) : (
+              <CabinetBookingList
+                view={listScope}
+                items={list.items}
+                status={list.status}
+                error={list.error}
+                pageIndex={list.pageIndex}
+                offset={list.offset}
+                hasPrev={list.hasPrev}
+                hasNext={list.hasNext}
+                isLoadingPage={list.isLoadingPage}
+                pageError={list.pageError}
+                now={now}
+                hasPastItems={past.items.length > 0}
+                headingRef={headingRef}
+                onRetry={list.reload}
+                onPrev={list.goPrev}
+                onNext={list.goNext}
+                onReload={list.reload}
+                onOpenPast={() => handleViewChange('past')}
+                onConfirm={handleConfirm}
+                onComplete={handleComplete}
+                onOpenCancel={(booking) =>
+                  setActionTarget({ booking, kind: 'cancel' })
+                }
+                onOpenNoShow={(booking) =>
+                  setActionTarget({ booking, kind: 'noShow' })
+                }
+                onOpenNote={setNoteTarget}
+                registerRow={registerRow}
+              />
+            )}
+          </div>
+        </>
       )}
 
       <BarberNoteDialog
@@ -372,7 +489,7 @@ function BarberBookingsScreen({
         onClose={() => setActionTarget(null)}
         onConfirm={handleActionConfirm}
         onDone={handleActionDone}
-        onReload={bookings.reload}
+        onReload={actions.reload}
       />
     </div>
   )

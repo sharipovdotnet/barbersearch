@@ -158,15 +158,22 @@ test.describe('axe: кабинет клиента', () => {
 test.describe('axe: кабинет барбера', () => {
   test.use({ storageState: storageStatePath('barber') })
 
-  test('/barber: вкладки, строки и пагинатор', async ({ page }) => {
+  test('/barber: лента дня, вкладки и строки', async ({ page }) => {
     const cabinet = new CabinetPage(page)
 
     await cabinet.goto()
-    await cabinet.waitForUpcoming()
     await expect(cabinet.heading).toBeVisible()
     await expect(cabinet.tablist).toBeVisible()
+    await expect(cabinet.dayHeading).toBeVisible()
 
-    await expectNoBlockingViolations(page, '/barber', test.info())
+    await expectNoBlockingViolations(page, '/barber (сегодня)', test.info())
+
+    await cabinet.waitForUpcoming()
+    await expectNoBlockingViolations(
+      page,
+      '/barber (ближайшие)',
+      test.info()
+    )
   })
 
   test('/barber: диалог записи клиента', async ({ page }) => {

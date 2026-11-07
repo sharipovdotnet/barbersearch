@@ -45,6 +45,8 @@ export type BarberBookingsController = {
   isMutating: boolean
   goPrev: () => void
   goNext: () => void
+  /** Первая страница без запроса: лента дня всегда читает первый документ. */
+  goFirst: () => void
   confirm: (id: string) => Promise<void>
   complete: (id: string) => Promise<void>
   markNoShow: (id: string) => Promise<void>
@@ -123,6 +125,7 @@ export function useBarberBookings(
     updatedAt,
     goPrev,
     goNext,
+    goFirst,
     replaceItem,
     removeItem,
   } = usePagedList<BarberBooking>({
@@ -299,6 +302,7 @@ export function useBarberBookings(
     isMutating: pendingMutations > 0,
     goPrev,
     goNext,
+    goFirst,
     confirm,
     complete,
     markNoShow,

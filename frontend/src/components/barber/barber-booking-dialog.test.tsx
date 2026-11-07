@@ -46,6 +46,16 @@ const SLOT = {
   endAt: '2026-11-05T07:30:00Z',
 }
 
+/** Слот по UTC-часам: Москва — UTC+3, поэтому 07:00Z показывается как «10:00». */
+function slot(hours: number, minutes = 0): { startAt: string; endAt: string } {
+  const start = new Date(Date.UTC(2026, 10, 5, hours, minutes, 0))
+
+  return {
+    startAt: start.toISOString(),
+    endAt: new Date(start.getTime() + 30 * 60_000).toISOString(),
+  }
+}
+
 const SLOTS = {
   barberProfileId: PROFILE_ID,
   salonId: SALON.salonId,
@@ -258,5 +268,126 @@ describe('BarberBookingDialog', () => {
 
     await waitFor(() => expect(slotsRequests).toBeGreaterThan(before))
     expect(onCreated).not.toHaveBeenCalled()
+  })
+})
+
+describe('BarberBookingDialog: предвыбор времени из окна дня', () => {
+  const DAY_SLOTS = {
+    ...SLOTS,
+    slots: [slot(7, 0), slot(7, 30), slot(8, 0)],
+  }
+
+  function useSlotHandlers() {
+    server.use(
+      http.get('/api/barber/booking-options', () =>
+        HttpResponse.json({ services: [SERVICE], salons: [SALON] })
+      ),
+      http.get('/api/barber/clients', () => HttpResponse.json([CLIENT])),
+      http.get('/api/barber/slots', () => HttpResponse.json(DAY_SLOTS))
+    )
+  }
+
+  async function openWithPreferred(preferredStartAt?: string) {
+    const user = userEvent.setup()
+
+    render(
+      <BarberBookingDialog
+        barberProfileId={PROFILE_ID}
+        preferredStartAt={preferredStartAt}
+        onCreated={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Записать клиента' }))
+    await screen.findByRole('dialog')
+
+    return user
+  }
+
+  it('выбирает слот, совпадающий с началом окна', async () => {
+    useSlotHandlers()
+
+    const user = await openWithPreferred(slot(7, 30).startAt)
+
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Услуга' }),
+      SERVICE.barberServiceId
+    )
+
+    expect(await screen.findByRole('radio', { name: '10:30' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '10:00' })).not.toBeChecked()
+  })
+
+  it('без точного совпадения берёт ближайший слот не раньше окна', async () => {
+    useSlotHandlers()
+
+    // 07:40Z между 10:30 и 11:00 по Москве: ближайший будущий — 11:00.
+    const user = await openWithPreferred(
+      new Date(Date.UTC(2026, 10, 5, 7, 40, 0)).toISOString()
+    )
+
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Услуга' }),
+      SERVICE.barberServiceId
+    )
+
+    expect(await screen.findByRole('radio', { name: '11:00' })).toBeChecked()
+  })
+
+  it('без желаемого времени ничего не выбрано', async () => {
+    useSlotHandlers()
+
+    const user = await openWithPreferred()
+
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Услуга' }),
+      SERVICE.barberServiceId
+    )
+
+    await screen.findByRole('radio', { name: '10:00' })
+    expect(screen.getByRole('radio', { name: '10:00' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: '11:00' })).not.toBeChecked()
+  })
+
+  it('смена услуги пересчитывает предвыбор на новой сетке', async () => {
+    const SECOND_SERVICE = {
+      ...SERVICE,
+      barberServiceId: '88888888-8888-4888-8888-888888888888',
+      hairServiceId: '99999999-9999-4999-8999-999999999999',
+      name: 'Борода',
+    }
+
+    server.use(
+      http.get('/api/barber/booking-options', () =>
+        HttpResponse.json({ services: [SERVICE, SECOND_SERVICE], salons: [SALON] })
+      ),
+      http.get('/api/barber/clients', () => HttpResponse.json([CLIENT])),
+      http.get('/api/barber/slots', ({ request }) => {
+        const hairServiceId = new URL(request.url).searchParams.get(
+          'hairServiceId'
+        )
+
+        return HttpResponse.json(
+          hairServiceId === SECOND_SERVICE.hairServiceId
+            ? { ...DAY_SLOTS, slots: [slot(7, 45), slot(8, 15)] }
+            : DAY_SLOTS
+        )
+      })
+    )
+
+    const user = await openWithPreferred(slot(7, 30).startAt)
+
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Услуга' }),
+      SERVICE.barberServiceId
+    )
+    expect(await screen.findByRole('radio', { name: '10:30' })).toBeChecked()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Услуга' }),
+      SECOND_SERVICE.barberServiceId
+    )
+
+    expect(await screen.findByRole('radio', { name: '10:45' })).toBeChecked()
   })
 })

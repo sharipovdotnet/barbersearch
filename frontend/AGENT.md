@@ -50,12 +50,11 @@
 > an informational cookie notice on the first visit; registration requires a separate consent
 > checkbox, and the consent is now provable: the backend stores the policy edition, the server UTC
 > time and the IP, the admin card shows the record, and the policy describes it.
-> Verified on 2026-11-06 after the place-kind slice: `npm run lint` — 0 warnings /
-> 0 errors (357 files, 116 rules); `npm test` — 569 tests in 70 files, green (plain and
-> `--maxWorkers=4`);
-> `npm run build` — success, 2497 modules, entry `index-*.js` 339.13 kB (gzip 109.93 kB);
-> lazy `admin-page` 217.87 kB (gzip 44.28 kB), `barber-cabinet-page` 42.86 kB (gzip 11.52 kB),
-> `barber-page` 32.73 kB (gzip 8.69 kB), `privacy-page` 29.43 kB (gzip 7.57 kB),
+> Verified on 2026-11-07 after the barber day-feed slice: `npm run lint` — 0 warnings /
+> 0 errors (369 files, 116 rules); `npm test` — 612 tests in 73 files, green;
+> `npm run build` — success, 2502 modules, entry `index-*.js` 339.21 kB (gzip 109.95 kB);
+> lazy `admin-page` 217.87 kB (gzip 44.27 kB), `barber-cabinet-page` 52.49 kB (gzip 13.86 kB),
+> `barber-page` 32.73 kB (gzip 8.68 kB), `privacy-page` 29.43 kB (gzip 7.57 kB),
 > `account-page` 28.27 kB (gzip 8.82 kB), `barber-schedule-page` 22.60 kB (gzip 6.34 kB),
 > shared `salon-form-*.js` 20.51 kB (gzip 6.30 kB), `barber-salons-page` 20.36 kB (gzip 5.72 kB),
 > `barber-onboarding-page` 19.96 kB (gzip 6.07 kB),
@@ -66,10 +65,12 @@
 > the shared `paging-*.js` 7.12 kB (gzip 2.64 kB),
 > `use-my-barber-request-*.js` 2.50 kB (gzip 1.18 kB) and `barber-slots-*.js` 0.83 kB (gzip 0.47 kB);
 > CSS 84.98 kB (gzip 14.55 kB). Local Node 24.12.0, npm 11.21.1; CI uses Node 24.
-> The E2E suite was rerun after the place-kind slice on 2026-11-06: 215 passed, 3 skipped,
-> 0 failed in 4.2 min with 2 workers. `barber-onboarding-mutations` now expects «Добавьте место
-> приёма», and `barber-salons-mutations` runs `serial`: its attach and create tests update the
-> same barber profile and under `fullyParallel` raced into a legitimate `409 ...concurrencyConflict`.
+> The E2E suite was rerun after the day-feed slice on 2026-11-07: 221 passed, 3 skipped,
+> 0 failed in 3.4 min with 2 workers. The new scenes are the read-only day feed
+> (`barber-day.spec.ts`, desktop and mobile), its 320 px axe scan and the day-feed mutation
+> scene in `barber-cabinet-mutations` (that file is now `serial`: both scenes count the same
+> upcoming rows). `barber-onboarding-mutations` now expects «Добавьте место приёма» and the
+> day feed's empty state, and `barber-salons-mutations` still runs `serial`.
 > The same suite is green in `frontend-e2e` CI.
 > A full run on 2026-11-04 was not green in one pass:
 > 174 passed, 3 mobile admin catalogue/summary checks failed and 14 dependent mutation tests did
@@ -433,18 +434,18 @@ npm run test:e2e:ui        # UI mode
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-11-06:**
+**Verification snapshot, 2026-11-07:**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 357 files, 116 rules
-npm test      → 569 tests in 70 files, green (plain and `--maxWorkers=4`)
-npm run build → tsc -b + vite build OK, 2497 modules,
-                dist/assets/index-*.js            339.13 kB (gzip 109.93 kB)
+npm run lint  → 0 warnings, 0 errors, 369 files, 116 rules
+npm test      → 612 tests in 73 files, green
+npm run build → tsc -b + vite build OK, 2502 modules,
+                dist/assets/index-*.js            339.21 kB (gzip 109.95 kB)
                 dist/assets/csrf-*.js             149.80 kB (gzip  51.51 kB)  shared
                 dist/assets/router-*.js             9.97 kB (gzip   3.79 kB)  shared
-                dist/assets/admin-page-*.js       217.87 kB (gzip  44.28 kB)  lazy
-                dist/assets/barber-cabinet-page-*.js 42.86 kB (gzip 11.52 kB) lazy
-                dist/assets/barber-page-*.js       32.73 kB (gzip   8.69 kB)  lazy
+                dist/assets/admin-page-*.js       217.87 kB (gzip  44.27 kB)  lazy
+                dist/assets/barber-cabinet-page-*.js 52.49 kB (gzip 13.86 kB) lazy
+                dist/assets/barber-page-*.js       32.73 kB (gzip   8.68 kB)  lazy
                 dist/assets/privacy-page-*.js      29.43 kB (gzip   7.57 kB)  lazy
                 dist/assets/account-page-*.js      28.27 kB (gzip   8.82 kB)  lazy
                 dist/assets/barber-schedule-page-*.js 22.60 kB (gzip 6.34 kB) lazy
@@ -455,7 +456,7 @@ npm run build → tsc -b + vite build OK, 2497 modules,
                 dist/assets/account-reviews-page-*.js 16.74 kB (gzip 5.39 kB) lazy
                 dist/assets/register-page-*.js     11.58 kB (gzip   3.97 kB)  lazy
                 dist/assets/account-security-page-*.js 8.92 kB (gzip 3.15 kB) lazy
-                dist/assets/account-profile-page-*.js 7.85 kB (gzip 2.91 kB) lazy
+                dist/assets/account-profile-page-*.js 7.85 kB (gzip 2.92 kB) lazy
                 dist/assets/paging-*.js             7.12 kB (gzip   2.64 kB)  shared
                 dist/assets/barber-salon-picker-dialog-*.js 6.46 kB (gzip 2.63 kB) shared
                 dist/assets/account-shell-*.js      6.34 kB (gzip   2.67 kB)  shared
@@ -468,7 +469,7 @@ npm run build → tsc -b + vite build OK, 2497 modules,
                 dist/assets/use-auto-refresh-*.js   0.59 kB (gzip   0.36 kB)  shared
                 dist/assets/barber-slots-*.js       0.83 kB (gzip   0.47 kB)  shared
                 dist/assets/index-*.css            84.98 kB (gzip  14.55 kB)
-npm run test:e2e → 215 passed, 3 skipped, 0 failed (2026-11-06, 2 workers)
+npm run test:e2e → 221 passed, 3 skipped, 0 failed (2026-11-07, 2 workers, CI)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -1617,7 +1618,7 @@ change to `ui/**`.
 | Silent session refresh | ✅ one transparent retry after `401` (single-flight per tab + `navigator.locks`), `auth.csrf.invalid` retried once, `terminal` → anonymous, `transient` (`429`/`0`/`5xx`) keeps the session; `RememberMe` governs restoration after a browser restart; password reset — ❌ |
 | Login validation & errors | ✅ client validation + code-based Russian error mapping |
 | Personal cabinet | ✅ `/account` for **every role** (customer, barber, admin): one shell with the identity block and the rail «Записи · Отзывы · Профиль · Безопасность» (a 2×2 labelled grid below `lg`), a role link to `/barber` or `/admin`, and no `RoleGate`. `GET api/users/me` is a self-only read (`[Authorize]`, id from the `sub` claim) with first/last name, phone, avatar URL, role, both verification flags and `lastLoginAt`; it feeds the shell through context and a module cache keyed by user id. `/account` keeps the two server lists from `GET /api/bookings?scope=upcoming\|past` (twenty rows, shared pager, lazy history, cancellation, review dialog); «Предстоящие» перечитываются сами раз в 30 секунд (`useAutoRefresh` + `refreshPage`), поэтому подтверждение и отмена от барбера приходят баннером без перезагрузки, а «История» по-прежнему грузится при открытии вкладки; a cancelled visit in «История» shows the barber's `cancellationReason` (or «Причина отмены не указана» for a customer cancellation / a pre-#44 row); an empty «Предстоящие» is one invitation card, not the old hero/empty-list duplicate. `/account/profile` edits first name, last name and phone through `PUT api/users/{id}/profile` with CSRF (email read-only, `avatarUrl` sent back unchanged, dirty-only save, server codes mapped to fields, `role="status"` on success). `/account/security` reuses `ChangePasswordDialog`, adds sign-out and shows the email-verification and last-login state; no active-device list is invented. `/account/reviews` is unchanged apart from living in the shell |
-| Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), «Ближайшие»/«История» from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action. «Ближайшие» перечитываются сами раз в 30 секунд, пока вкладка видима: новая запись появляется с баннером «Новая запись: …», отменённая клиентом — «Запись отменена: …»; в шапке списка стоят «Обновлено в …» и «Обновить». Cancellation opens an `alertdialog` with a **required** «Причина отмены» textarea (500 characters, client-side guard + server `booking.cancel.reasonRequired`/`reasonTooLong`), and a cancelled row in «История» shows the reason. The «Записать клиента» dialog switches between a **registered** client (`GET /api/barber/clients`, 300 ms debounce, 3+ characters) and a **new person without an account** (name required, last name optional, phone required; no email, no account created), loads the barber's own active services/salons (`GET /api/barber/booking-options`), picks a salon-local date and free slot (`GET /api/barber/slots`, no public-visibility requirement), and sends `POST /api/barber/bookings` with CSRF and an idempotency key; the booking is created **`Confirmed`** and the list reloads (or switches to «Ближайшие» when the history tab was open). `409` overlap and `400` start-window/`404` service-or-salon reload the slots, `404 booking.create.customerNotFound` explains that the user is gone; the dialog cannot be closed while the request is pending |
+| Barber cabinet | ✅ `/barber`: gates (anonymous, customer, admin, unlinked profile), three tabs on one `tablist` — «Сегодня» (default), «Ближайшие», «История» — from `GET /api/barber/bookings`, confirm/complete/no-show/cancel/note with CSRF, local row updates, shared cursor pager (twenty rows, cached pages, «Назад» without a request), loading/empty/error/next-page-error states, empty-page policy after an action. «Сегодня» is derived, not a third request: `useBarberDay` merges the **first pages** of the two existing controllers (`scope=upcoming` + `scope=past`, both mounted once on the page) filtered by the browser-local date, and shows the day top to bottom with the free windows between visits (≥ 20 minutes, no working hours — that needs a per-salon schedule), the header «3 записи · 2 окна», the next client («Следующий клиент через 40 минут» / «в 18:30» / «Идёт визит до 15:30»), «Показаны первые 20 записей дня.» when the day truncates, and «Не удалось обновить часть записей.» with «Повторить» when one scope fails. A window is a card («свободно 45 мин» + «Занять…» with the time in the accessible name) that opens the same «Записать клиента» dialog with `initialDate`/`preferredStartAt`; the nearest slot is pre-selected once a service is chosen, and manual choice always wins. Terminal actions route to the controller that owns the row and reload the other list, so a completed visit moves from «Ближайшие» to «История» without a manual refresh. Switching tabs therefore makes **no** request and keeps each list's page and cache; entering «Сегодня» only calls `goFirst()` on both controllers (a pure state change), because the day is built from the first documents and a page left open in a neighbouring tab must not hide the beginning of the day. «Ближайшие» перечитываются сами раз в 30 секунд, пока вкладка видима, а на «Сегодня» тик перечитывает оба списка и объявляет новый день диффом по объединению (строка, уехавшая из «Ближайших» в «Историю», не объявляется ни новой, ни исчезнувшей): новая запись появляется с баннером «Новая запись: …», отменённая клиентом — «Запись отменена: …»; в шапке списка стоят «Обновлено в …» и «Обновить». Cancellation opens an `alertdialog` with a **required** «Причина отмены» textarea (500 characters, client-side guard + server `booking.cancel.reasonRequired`/`reasonTooLong`), and a cancelled row in «История» shows the reason. The «Записать клиента» dialog switches between a **registered** client (`GET /api/barber/clients`, 300 ms debounce, 3+ characters) and a **new person without an account** (name required, last name optional, phone required; no email, no account created), loads the barber's own active services/salons (`GET /api/barber/booking-options`), picks a salon-local date and free slot (`GET /api/barber/slots`, no public-visibility requirement), and sends `POST /api/barber/bookings` with CSRF and an idempotency key; the booking is created **`Confirmed`** and the day reloads (or the screen returns from «История» to «Сегодня»). `409` overlap and `400` start-window/`404` service-or-salon reload the slots, `404 booking.create.customerNotFound` explains that the user is gone; the dialog cannot be closed while the request is pending |
 | Barber onboarding | ✅ `/barber/onboarding`: the missing-profile gate on `/barber`, `/barber/schedule` and `/barber/salons` links here instead of «обратитесь к администратору». One form for every field of `BarberProfileCreateRequest` (name 1..120, experience 1..70, grade — one of the ten assigned grades, at least one language, payment methods and four one-per-line lists optional, bio 2000, late policy 500), Russian client and server errors, a retry for `429`/network/`5xx`, one `POST /api/barber-profiles` with CSRF, then `refreshSession()` → `retrySession()` and the «Добавьте место приёма» step (`SalonPickerDialog` with the id from the `201`; «Пропустить» → `/barber`, so the step never blocks the cabinet); `409 alreadyExists` ends in the cabinet without an error, a `terminal` refresh shows «Профиль создан, войдите снова», a `transient` one «Повторить» (refresh only). Gates: anonymous, non-`Barber`, an existing profile (redirect from the form stage only). Axe is covered inside `barber-onboarding-mutations.spec.ts` at 1280 and 320 |
 | Barber schedule | ✅ `/barber/schedule`: the same gates, a salon selector, the seven-day template with one bulk `PUT` per salon, date exceptions (`PUT`/`DELETE` by date), profile-wide time offs (`POST`/`DELETE`), native date/time inputs, dirty-only save, per-card and page-level Russian errors, `role="status"` announcements and a re-read after every write. Time is salon-local; time offs are converted to UTC for the API. Axe is covered by `barber-schedule.spec.ts` |
 | Barber salons | ✅ `/barber/salons`: linked places from `GET /api/barber-profiles/{id}/salons` (name, city, address, primary badge, time zone, type badge «Барбершоп»/«Студия»/«Кабинет»/«На дому»/«Выезд», moderation badge «Одобрен»/«На проверке»/«Отклонён» + rejection reason) with the empty state «Салон не добавлен. Без салона расписание и запись не работают.»; a hidden place (`isListed = false`) shows «Не в каталоге» instead of the moderation badge, and «Салон появится в поиске после проверки администратором» is rendered only for a listed `Pending` place; «Создать салон» opens the shared `SalonDialogForm` (place-kind radio group «Что это за место?» with the five one-line hints, and the «Показывать в каталоге» checkbox — on by default for `Salon`/`RentalStudio`, off for `SoloStudio`, disabled for `Home`/`Mobile`; changing the type keeps the entered fields) and sends `POST /api/salons/own` with `kind` and `isListed` (CSRF, owner from the claim, name is fixed after creation, coordinates typed by hand with the «скопируйте из карт» hint) → `201`, re-read, «На проверке» card with «Салон появится в поиске после проверки администратором» for a listed place, or «Место приёма создано» for a hidden one; the owner edits address and contacts through two independent `PUT`s on a form pre-filled from the summary, allowed for pending/rejected salons, and the actions exist only when `ownerUserId` is the current user (an admin-created linked salon has none); the type and the catalogue flag are read-only on edit (the domain has no transitions in this slice); no activation, hide or resubmit (no resend endpoint). «Добавить салон» opens the shared `SalonPickerDialog` (300 ms debounce, 2+ characters, optional city, `fieldset`/`legend` radio list, skeleton/empty/error with «Повторить», cancelled request on new input or close), the first salon is forced primary, `POST` → re-read → `role="status"` «Салон добавлен.», dialog closes; `409`/`404` keep it open, show Russian copy and re-read the list; `403`/`429`/network mapped to Russian; the router does not change and «Настроить расписание» links to `/barber/schedule`. The same picker is the post-`201` onboarding step |
@@ -1642,7 +1643,7 @@ change to `ui/**`.
 | Design system | ✅ tokens + 12 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 569 tests in 70 files: the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 612 tests in 73 files: the day-feed suites (the three-tab `tablist` and its keys, `isSameLocalDay`/`mergeDayBookings`/`findDayGaps`/`findNextBooking`, `formatGapsCount`, the `useBarberDay` controller: two reads on mount, routed actions, the second list reloaded after a terminal action, `401` from either list and the partial-error split, the day feed itself: row/window order, the header counters, «Занять» with its window, the empty-day CTA and the three header states, and the dialog pre-selection from `preferredStartAt` with a service change), the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ❌ hardcoded Russian; no framework |
 | API typing | ✅ hand-written types + strict response guards |
@@ -1696,7 +1697,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32), 569 tests in 70 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 612 tests in 73 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -1711,7 +1712,18 @@ remaining numbers do not shift.
 error), search append, sign-in (validation, wrong credentials, session survives reload),
 `/account/reviews` paging and its 401 gate, `/account` — two server tabs («Предстоящие»/«История»
 twenty rows, «Дальше»/«Назад», no «Показать ещё», hero from the first row, cancellation moves the
-row to history), `/barber` tabs and the empty-page-after-action policy, `/barber/schedule`
+row to history), `/barber` tabs and the empty-page-after-action policy, the barber day feed
+(`barber-day.spec.ts`, desktop and mobile, read-only: `/barber` opens on «Сегодня», the tablist has
+three tabs, each tab swaps the single `tabpanel`, arrows/Home/End move the selection, and
+«Сегодня ↔ Ближайшие» makes no `/api/barber/bookings` request, plus axe and zero horizontal
+scroll), the day-feed mutation scene inside `barber-cabinet-mutations.spec.ts` (mutations project,
+after the list scene: three guest visits created through the API — a started one, one two and a
+half hours later and one tomorrow; the day shows the first two with a window between them and not
+the tomorrow one, «Завершить» keeps the row with «Завершена» and announces «Визит завершён.», a
+window opens the dialog with the day and one pre-selected slot, «Ближайшие» shows tomorrow,
+switching back makes no request, plus axe; guests are cancelled in `finally` because the API has no
+booking delete. The file is `serial`: both scenes count the same upcoming rows), 320 px coverage of
+the day feed in `a11y-narrow.spec.ts`, `/barber/schedule`
 (the seven-day week from the API, both cabinet links, local 09:00–18:00 time inputs and the axe
 scan on desktop, mobile and 320 px), `/admin/reviews` and
 `/admin/users` paging, filters and URL-held selection, `/admin/catalogue` (three tabs, `?tab=` in
@@ -1762,8 +1774,8 @@ seeded email — the body carries `consentVersion`, the server answers `409 user
 enabled and does not navigate to `/account`. The onboarding mutation spec (`barber-onboarding-mutations.spec.ts`,
 mutations project, last) signs a profile-less `Barber` in through the gate, follows the CTA to
 `/barber/onboarding`, scans it with axe at 1280 and 320 (plus zero horizontal overflow), submits
-the form and ends on `/barber` with «Ближайших записей нет.» — the empty list proves the refreshed
-claim reached the API. Last fully green run (2026-11-03): 188 passed,
+the form and ends on `/barber` with the day feed's empty state «На сегодня записей нет.» — the empty
+list proves the refreshed claim reached the API. Last fully green run (2026-11-07): 221 passed,
 3 skipped. A 2026-11-04 full run after reseeding reached 174 passed, 3 failed in mobile admin
 catalogue/summary checks and 14 dependent mutation tests did not run; the three failures pass
 alone, as do the account cancellation and the barber required-reason mutation specs. The new
@@ -2311,6 +2323,22 @@ a «Свободное время» section explaining why booking is unavailabl
 приёма»; the picker is unchanged. Unit tests grew to 569 in 70 files; the E2E scenario from
 the issue was not added in this slice.
 
+**Completed 2026-11-07:** the barber day feed — `/barber` opens on the third tab «Сегодня»
+instead of «Ближайшие» (D1). The day is **derived**, not a new read (D2): `useBarberDay` merges
+the first pages of the two controllers that were already there (`scope=upcoming` and
+`scope=past`, both mounted once at the screen level, so switching tabs sends no request) and
+filters them by the browser-local calendar date (`lib/barber-day.ts`: `isSameLocalDay`,
+`mergeDayBookings` — dedupe by `id` with `upcoming` winning, `findDayGaps`, `findNextBooking`).
+The feed shows rows and the free windows between visits (≥ 20 minutes; working hours are out of
+scope, D3), the header «3 записи · 2 окна», the next client, «Показаны первые 20 записей дня.»
+(D7) and a partial-failure banner. A window card opens the existing «Записать клиента» dialog
+with `initialDate` and `preferredStartAt`; the nearest slot is pre-selected after a service is
+chosen and a manual pick always wins. One `tablist` for the three views
+(`barber-cabinet-view-tabs.tsx`) with arrows/Home/End and roving `tabIndex`, one `tabpanel`, and
+`CabinetBookingList` lost its own tabs. Terminal actions route to the owning controller and
+reload the other list, so a completed visit moves to «История» without a manual refresh. No new
+dependency, no backend change, no schema change.
+
 Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
@@ -2341,6 +2369,11 @@ do not shift.
     not audited, and `BarberProfile` children are out of the allowlist. Retention, export and
     partitioning remain separate decisions, and the summary deliberately has no charts, periods
     or trends: the API stores no aggregate history.
+13. **Day feed (remaining)** — the «Сегодня» tab is built (§13). Out of that slice on purpose:
+    working hours in the feed (they need a per-salon weekly template with date exceptions and
+    time offs, i.e. a separate decision about which salon zone the day belongs to), a week or a
+    month view, drag-and-drop and visit rescheduling, columns per salon, and counters from the
+    API (the list contract still has no `total`).
 
 ---
 

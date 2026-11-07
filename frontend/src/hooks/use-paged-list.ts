@@ -65,6 +65,11 @@ export type PagedList<T> = {
   updatedAt: number | null
   goPrev: () => void
   goNext: () => void
+  /**
+   * Первая страница без запроса: данные уже в кэше, меняется только номер.
+   * Нужно экрану, который читает первый документ списка из другого вида.
+   */
+  goFirst: () => void
   /** Правка строки — на всех закэшированных страницах. */
   replaceItem: (id: string, next: T) => void
   /** Удаление строки — на всех закэшированных страницах. */
@@ -336,6 +341,34 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     })
   }, [])
 
+  /**
+   * Первая страница без запроса.
+   *
+   * Экран, который читает первый документ списка из другого вида (лента дня
+   * собирается из первых страниц), не должен видеть страницу, оставленную
+   * пользователем в соседней вкладке. Кэш остаётся: «Дальше» из первой страницы
+   * по-прежнему не ходит в сеть.
+   */
+  const goFirst = useCallback(() => {
+    versionRef.current += 1
+    abortRef.current?.abort()
+    pendingRef.current = false
+
+    setState((previous) => {
+      if (previous.pageIndex === 0) {
+        return previous
+      }
+
+      return {
+        ...previous,
+        pageIndex: 0,
+        isLoadingPage: false,
+        isRefreshing: false,
+        pageError: null,
+      }
+    })
+  }, [])
+
   const reload = useCallback(() => {
     if (!enabled) {
       return
@@ -544,6 +577,7 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     updatedAt: state.updatedAt,
     goPrev,
     goNext,
+    goFirst,
     replaceItem,
     removeItem,
   }
