@@ -347,6 +347,50 @@ export async function cancelGuestBookings(
 }
 
 /**
+ * Отмена записей с меткой прогона в имени гостя — уборка спека переноса.
+ *
+ * Импорт создаёт записи из интерфейса, поэтому их id тесту неизвестны: после
+ * прогона находим их в «Ближайших» барбера по фамилии и отменяем. Контекст
+ * запросов идёт из браузерной сессии (`page.request`): отдельный контекст с
+ * файлом `storageState` к этому моменту уже протух бы, потому что браузер
+ * ротировал refresh-cookie. `404` и `409` терпим — строку могли отменить раньше.
+ */
+export async function cancelBookingsByGuestName(
+  request: APIRequestContext,
+  fragment: string
+): Promise<void> {
+  const token = await csrfToken(request)
+  const list = await request.get(
+    '/api/barber/bookings?scope=upcoming&pageSize=20'
+  )
+
+  expect(list.status(), 'GET /api/barber/bookings').toBe(200)
+
+  const body = (await list.json()) as {
+    items: { id: string; customer: { displayName: string } }[]
+  }
+
+  for (const booking of body.items) {
+    if (!booking.customer.displayName.includes(fragment)) {
+      continue
+    }
+
+    const response = await request.post(
+      `/api/bookings/${booking.id}/cancellation`,
+      {
+        headers: { 'X-CSRF-TOKEN': token },
+        data: { reason: 'E2E: уборка фикстур переноса записей' },
+      }
+    )
+
+    expect(
+      [204, 404, 409],
+      `POST /api/bookings/{id}/cancellation: ${response.status()}`
+    ).toContain(response.status())
+  }
+}
+
+/**
  * Запись на будущее для восстановления «Ближайших» после терминального действия.
  *
  * Слот, который освобождает тест, лежит в будущем относительно seed, поэтому

@@ -27,7 +27,10 @@ if ($database -ne 'barbersearch_e2e') {
     throw "refusing to seed database '$database': only barbersearch_e2e is allowed (README, E2E)"
 }
 
-$psql = (Get-Command psql -ErrorAction SilentlyContinue)?.Source
+# `?.` есть только в PowerShell 7, а `npm run test:e2e:seed` на Windows запускает
+# `powershell.exe` 5.1 — поэтому ветка через переменную, а не null-conditional.
+$psqlCommand = Get-Command psql -ErrorAction SilentlyContinue
+$psql = if ($psqlCommand) { $psqlCommand.Source } else { $null }
 if (-not $psql) {
     $candidate = 'C:\Program Files\PostgreSQL\16\bin\psql.exe'
     if (Test-Path $candidate) {
