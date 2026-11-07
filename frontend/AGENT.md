@@ -71,6 +71,9 @@
 > scene in `barber-cabinet-mutations` (that file is now `serial`: both scenes count the same
 > upcoming rows). `barber-onboarding-mutations` now expects «Добавьте место приёма» and the
 > day feed's empty state, and `barber-salons-mutations` still runs `serial`.
+> The import slice added `barber-import-mutations.spec.ts` (paste → preview → create, axe at
+> 1280 and 320, cleanup by guest name), so the next full run of `frontend-e2e` in CI was
+> 222 passed, 3 skipped, 0 failed.
 > The same suite is green in `frontend-e2e` CI.
 > A full run on 2026-11-04 was not green in one pass:
 > 174 passed, 3 mobile admin catalogue/summary checks failed and 14 dependent mutation tests did
@@ -469,7 +472,7 @@ npm run build → tsc -b + vite build OK, 2502 modules,
                 dist/assets/use-auto-refresh-*.js   0.59 kB (gzip   0.36 kB)  shared
                 dist/assets/barber-slots-*.js       0.83 kB (gzip   0.47 kB)  shared
                 dist/assets/index-*.css            84.98 kB (gzip  14.55 kB)
-npm run test:e2e → 221 passed, 3 skipped, 0 failed (2026-11-07, 2 workers, CI)
+npm run test:e2e → 222 passed, 3 skipped, 0 failed (2026-11-07, 2 workers, CI)
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -1776,7 +1779,7 @@ enabled and does not navigate to `/account`. The onboarding mutation spec (`barb
 mutations project, last) signs a profile-less `Barber` in through the gate, follows the CTA to
 `/barber/onboarding`, scans it with axe at 1280 and 320 (plus zero horizontal overflow), submits
 the form and ends on `/barber` with the day feed's empty state «На сегодня записей нет.» — the empty
-list proves the refreshed claim reached the API. Last fully green run (2026-11-07): 221 passed,
+list proves the refreshed claim reached the API. Last fully green run (2026-11-07): 222 passed,
 3 skipped. A 2026-11-04 full run after reseeding reached 174 passed, 3 failed in mobile admin
 catalogue/summary checks and 14 dependent mutation tests did not run; the three failures pass
 alone, as do the account cancellation and the barber required-reason mutation specs. The new
