@@ -41,6 +41,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
+| `/barber/import` | «Перенести записи»: paste a list from Google Docs or a spreadsheet (up to 50 lines, tab/semicolon/pipe separated), line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes, preview summary, sequential guest bookings with progress, partial success, `409` → nearest free slots, retry of failed rows |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -381,8 +382,8 @@ keeps its own role gates and `/account` no longer turns a barber away.
   day helpers (`isSameLocalDay`, `mergeDayBookings`, `findDayGaps`, `findNextBooking`);
   `barber-cabinet-view.ts` — the tab union and labels; `barber-booking-create.ts`/
   `barber-booking-options.ts`/`barber-clients.ts` — the manual booking transport;
-  `src/lib/barber-cabinet-path.ts` — the `/barber`, `/barber/schedule` and `/barber/salons` path
-  helpers.
+  `src/lib/barber-cabinet-path.ts` — the `/barber`, `/barber/schedule`, `/barber/salons` and
+  `/barber/import` path helpers.
 
 ### My salons
 
@@ -502,6 +503,44 @@ future time offs.
 Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabinet-nav.tsx`,
 `barber-week-schedule.tsx`, `barber-schedule-exceptions.tsx`, `barber-time-offs.tsx`,
 `src/hooks/use-barber-schedule.ts`, `src/lib/barber-schedule.ts`.
+
+### Import from Google Docs
+
+`/barber/import` переносит старый журнал барбера одним вечером: вставка текста, проверка и
+создание пачки. Экран открывается из кабинета ссылкой «Перенести записи из Google Docs»,
+живёт в своём lazy-чанке, повторяет гейты кабинета (сессия, роль `Barber`, привязанный
+профиль) и показывает `BarberCabinetNav active="bookings"`. Состояние шагов — только в
+памяти: вставленный текст не попадает ни в URL, ни в `localStorage`.
+
+- **Paste.** Одно `textarea` с примером, лимит 50 строк и 10 000 символов, кнопки
+  «Разобрать» и «Очистить», строка про персональные данные со ссылкой на `/privacy`.
+- **Parse.** `src/lib/import-parse.ts` — чистые функции без сети: телефон ищется первым
+  (десять или одиннадцать цифр → `+7…`), затем дата (`DD.MM`, `DD/MM`, `D месяц`,
+  `сегодня/завтра/послезавтра`, день недели; без года — текущий, прошедшая больше чем на
+  сутки — следующий), затем время (`14:00`, `9:05`, `14-00`; точка — не разделитель, поэтому
+  `14.05` остаётся датой), услуга (точное, с начала, внутри; самое длинное совпадение) и
+  салон (по названию или городу, иначе основной). Строка-заголовок («12 ноября») задаёт дату
+  следующим, шапка таблицы и пустые строки пропускаются. Ошибки строк — `noDate`/`badDate`,
+  `noTime`/`badTime`, `noPhone`/`badPhone`, `noName`, `noService`/`ambiguousService`, `past`,
+  `duplicate`.
+- **Preview.** Таблица на десктопе (`caption` «Разобранные записи») и карточки до `sm`;
+  подсветка `bg-destructive/5`, `aria-invalid` и `aria-describedby` на поле, селект услуги и
+  салона, поля даты, времени, имени и телефона правят строку на месте. Сводка «Готово 7 из
+  10 · 2 без услуги · 1 в прошлом» уводит фокус в первую проблемную строку.
+- **Create.** Последовательные `POST /api/barber/bookings` по одной строке: гость
+  (`customerId: null`), ключ идемпотентности создаётся при разборе и переживает повтор.
+  `409 booking.add.overlap` даёт «Время занято.» и три ближайших слота (`GET
+  /api/barber/slots`, `own: true`), `400 booking.create.startAt.inPast` — «Время уже прошло.»,
+  `429` и сеть останавливают пачку с «Продолжить» (`429` — через минуту), `401` поднимает
+  `SignInGate` и продолжает с текущей строки.
+- **Report.** «Перенесено 7 из 10 записей.», список неудачных строк с причиной,
+  «Повторить неудачные» (те же ключи) и «Открыть записи» → `/barber`.
+- **States.** Скелетон и гейты кабинета, ошибка загрузки услуг и салонов с «Повторить»,
+  `role="status"` на сводке, прогрессе и отчёте, `role="alert"` на остановке пачки.
+
+Files: `src/pages/barber-import-page.tsx`, `src/components/barber/import-form.tsx`,
+`import-preview.tsx`, `import-result.tsx`, `src/hooks/use-barber-import.ts`,
+`src/lib/import-parse.ts`, `src/lib/salon-time.ts`, `src/lib/barber-cabinet-path.ts`.
 
 ## Booking
 
