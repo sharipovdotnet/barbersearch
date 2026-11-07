@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { X } from 'lucide-react'
 
 import { SignInGate } from '@/components/account/account-gates'
@@ -33,7 +33,8 @@ import {
   barberViewTabId,
   type BarberCabinetView,
 } from '@/lib/barber-cabinet-view'
-import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
+import { BARBER_CABINET_PATH, BARBER_IMPORT_PATH } from '@/lib/barber-cabinet-path'
+import { isPlainClick, navigate } from '@/lib/router'
 import type {
   BarberBooking,
   BarberBookingScope,
@@ -357,14 +358,29 @@ function BarberBookingsScreen({
           Клиент звонит или приходит в салон? Запишите его сами — запись сразу
           подтверждена.
         </p>
-        <BarberBookingDialog
-          barberProfileId={barberProfileId}
-          initialDate={dialogDate}
-          preferredStartAt={dialogStartAt}
-          open={dialogOpen}
-          onOpenChange={handleDialogOpenChange}
-          onCreated={handleClientCreated}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <BarberBookingDialog
+            barberProfileId={barberProfileId}
+            initialDate={dialogDate}
+            preferredStartAt={dialogStartAt}
+            open={dialogOpen}
+            onOpenChange={handleDialogOpenChange}
+            onCreated={handleClientCreated}
+          />
+          {/* Старый журнал барбера: перенос одним вечером (§9.5). */}
+          <a
+            href={BARBER_IMPORT_PATH}
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:h-8"
+            onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+              if (isPlainClick(event)) {
+                event.preventDefault()
+                navigate(BARBER_IMPORT_PATH)
+              }
+            }}
+          >
+            Перенести записи из Google Docs
+          </a>
+        </div>
       </div>
 
       {announcement && (

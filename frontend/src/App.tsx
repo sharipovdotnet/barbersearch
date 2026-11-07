@@ -14,6 +14,7 @@ import { isAdminPath } from '@/lib/admin-path'
 import { isBecomeABarberPath } from '@/lib/barber-request-path'
 import {
   isBarberCabinetPath,
+  isBarberImportPath,
   isBarberOnboardingPath,
   isBarberSalonsPath,
   isBarberSchedulePath,
@@ -85,6 +86,12 @@ const BarberOnboardingPage = lazy(() =>
   })),
 )
 
+const BarberImportPage = lazy(() =>
+  import('@/pages/barber-import-page').then((module) => ({
+    default: module.BarberImportPage,
+  })),
+)
+
 const RegisterPage = lazy(() =>
   import('@/pages/register-page').then((module) => ({
     default: module.RegisterPage,
@@ -128,6 +135,7 @@ function App() {
   const isBarberSchedule = isBarberSchedulePath(pathname)
   const isBarberSalons = isBarberSalonsPath(pathname)
   const isBarberOnboarding = isBarberOnboardingPath(pathname)
+  const isBarberImport = isBarberImportPath(pathname)
   const pageKey = isRegister
     ? 'register'
     : isPrivacy
@@ -144,17 +152,19 @@ function App() {
                 ? 'account-security'
                 : isBarberOnboarding
                   ? 'barber-onboarding'
-                  : isBarberSchedule
-                    ? 'barber-schedule'
-                    : isBarberSalons
-                      ? 'barber-salons'
-                      : isBarberCabinet
-                        ? 'barber-cabinet'
-                        : pathname === '/account'
-                          ? 'account'
-                          : barberId !== null
-                            ? `barber:${barberId}`
-                            : 'home'
+                  : isBarberImport
+                    ? 'barber-import'
+                    : isBarberSchedule
+                      ? 'barber-schedule'
+                      : isBarberSalons
+                        ? 'barber-salons'
+                        : isBarberCabinet
+                          ? 'barber-cabinet'
+                          : pathname === '/account'
+                            ? 'account'
+                            : barberId !== null
+                              ? `barber:${barberId}`
+                              : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -199,6 +209,8 @@ function App() {
               <AccountSecurityPage />
             ) : isBarberOnboarding ? (
               <BarberOnboardingPage />
+            ) : isBarberImport ? (
+              <BarberImportPage />
             ) : isBarberSchedule ? (
               <BarberSchedulePage />
             ) : isBarberSalons ? (
