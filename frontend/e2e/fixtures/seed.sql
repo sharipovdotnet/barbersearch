@@ -38,6 +38,8 @@
 --                               типу и автору (+ salon/hair_service/specialization/booking)
 --   24 брони e2e-bookings       `/admin/bookings` на 2026-09-12 UTC: две страницы
 --                               (20 + 4) и все пять статусов
+--   e2e-barber                  2 уведомления (одно непрочитанное): бейдж «1» и
+--                               страница `/barber/notifications`; настройки 08:00/30
 
 \set ON_ERROR_STOP on
 SET TIME ZONE 'UTC';
@@ -1012,6 +1014,68 @@ VALUES
      'booking.updated', 'booking',
      '9e900000-0000-4000-8000-000000000024'::uuid,
      '{"changes":{"status":{"from":"Confirmed","to":"NoShow"}}}'::jsonb);
+
+-- 8. Напоминания барбера (§8): ровно два уведомления — одно непрочитанное и одно
+--    прочитанное. Бейдж колокольчика показывает «1», страница — обе строки.
+--
+--    Строки — снимок: `barber_notifications` не имеет FK на `bookings`, поэтому
+--    `booking_id` детерминирован и не обязан существовать; `service_name`, `salon_name`
+--    и `salon_time_zone_id` — ровно то, что увидит барбер в строке (§8.4).
+--
+--    Времена считаются от «сегодня» в поясе салона (Europe/Moscow): напоминание
+--    создано в 13:30, визит — в 14:00; дайджест создан в 08:00, первая запись — в 10:00.
+--    `relativeDayLabel` показывает «Сегодня» независимо от дня прогона, а «Через
+--    30 минут запись» берётся из `lead_minutes = 30`.
+--
+--    Идемпотентность: удаляются только строки этого барбера и его настройки, затем
+--    вставляются заново; настройки совпадают с серверными дефолтами (08:00/30),
+--    поэтому мутирующий спек с `leadMinutes = 60` откатывается пересевом.
+DELETE FROM barber_notifications
+WHERE user_id = '9e000000-0000-4000-8000-000000000002';
+
+DELETE FROM barber_notification_settings
+WHERE user_id = '9e000000-0000-4000-8000-000000000002';
+
+INSERT INTO barber_notification_settings
+    (user_id, is_enabled, digest_enabled, digest_time, lead_minutes,
+     telegram_chat_id, telegram_linked_at, telegram_link_code_hash,
+     telegram_link_code_expires_at, updated_at)
+VALUES
+    ('9e000000-0000-4000-8000-000000000002', true, true, TIME '08:00', 30,
+     NULL, NULL, NULL, NULL, now());
+
+INSERT INTO barber_notifications
+    (id, user_id, kind, booking_id, start_at, service_name, salon_name,
+     salon_time_zone_id, bookings_count, digest_local_date, read_at, delivery,
+     delivery_attempts, next_attempt_at, last_error, created_at, updated_at)
+VALUES
+    -- Upcoming, непрочитанное: «Через 30 минут запись» →
+    -- «14:00 · стрижка · «Барбершоп на Ленина»».
+    ('9ea00000-0000-4000-8000-000000000001',
+     '9e000000-0000-4000-8000-000000000002', 1,
+     md5('e2e-barber-notification-booking')::uuid,
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '14:00')
+         AT TIME ZONE 'Europe/Moscow',
+     'стрижка', 'Барбершоп на Ленина', 'Europe/Moscow',
+     NULL, NULL, NULL, 2, 0, NULL, NULL,
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '13:30')
+         AT TIME ZONE 'Europe/Moscow',
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '13:30')
+         AT TIME ZONE 'Europe/Moscow'),
+    -- Digest, прочитанное: «Сегодня 4 записи» → «Первая в 10:00».
+    ('9ea00000-0000-4000-8000-000000000002',
+     '9e000000-0000-4000-8000-000000000002', 2, NULL,
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '10:00')
+         AT TIME ZONE 'Europe/Moscow',
+     NULL, NULL, 'Europe/Moscow', 4,
+     (now() AT TIME ZONE 'Europe/Moscow')::date,
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '08:05')
+         AT TIME ZONE 'Europe/Moscow',
+     2, 0, NULL, NULL,
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '08:00')
+         AT TIME ZONE 'Europe/Moscow',
+     (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') + TIME '08:00')
+         AT TIME ZONE 'Europe/Moscow');
 
 COMMIT;
 

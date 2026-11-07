@@ -6,6 +6,7 @@ using BarberSearch.Domain.BarberSpecializations;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.Notifications;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.RefreshTokens;
 using BarberSearch.Domain.Reviews;
@@ -15,6 +16,7 @@ using BarberSearch.Domain.TimeOffs;
 using BarberSearch.Domain.Users;
 using BarberSearch.Domain.WorkingSchedules;
 using BarberSearch.Infrastructure.Postgresql.Audit;
+using BarberSearch.Infrastructure.Postgresql.Telegram;
 using Microsoft.EntityFrameworkCore;
 
 namespace BarberSearch.Infrastructure.Postgresql;
@@ -48,6 +50,14 @@ public class ApplicationDbContext : DbContext
 
     // Аутентификация
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    // Уведомления барберу
+    public DbSet<BarberNotification> BarberNotifications => Set<BarberNotification>();
+    public DbSet<BarberNotificationSettings> BarberNotificationSettings =>
+        Set<BarberNotificationSettings>();
+
+    // Идемпотентность вебхука Telegram (инфраструктурная таблица)
+    public DbSet<TelegramUpdate> TelegramUpdates => Set<TelegramUpdate>();
 
     // Аудит
     public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();

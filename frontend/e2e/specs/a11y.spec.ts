@@ -10,6 +10,7 @@ import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
 import { AccountSecurityPage } from '../pages/account-security-page'
+import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { LandingPage } from '../pages/landing-page'
 import { MyReviewsPage } from '../pages/my-reviews-page'
@@ -185,6 +186,20 @@ test.describe('axe: кабинет барбера', () => {
     await expect(cabinet.bookingDialog).toBeVisible()
 
     await expectNoBlockingViolations(page, '/barber (запись клиента)', test.info())
+  })
+
+  test('/barber/notifications: настройки и строки инбокса', async ({ page }) => {
+    const notifications = new BarberNotificationsPage(page)
+
+    await notifications.goto()
+    // Настройки и обе строки уже загружены: скан не должен попасть на скелетон.
+    await notifications.waitForReady()
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/notifications',
+      test.info()
+    )
   })
 
   test('/barber/salons: карточки и открытый диалог каталога', async ({ page }) => {

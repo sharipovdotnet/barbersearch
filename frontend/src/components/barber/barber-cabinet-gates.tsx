@@ -1,4 +1,4 @@
-import { CalendarCheck, ShieldAlert, UserX } from 'lucide-react'
+import { Bell, CalendarCheck, ShieldAlert, UserX } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -9,8 +9,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BARBER_ONBOARDING_PATH } from '@/lib/barber-cabinet-path'
-import { navigate } from '@/lib/router'
+import { useUnreadNotifications } from '@/hooks/use-unread-notifications'
+import {
+  BARBER_NOTIFICATIONS_PATH,
+  BARBER_ONBOARDING_PATH,
+} from '@/lib/barber-cabinet-path'
+import { isPlainClick, navigate } from '@/lib/router'
 
 /**
  * Гейты кабинета барбера.
@@ -148,21 +152,67 @@ export function BarberCabinetSkeleton() {
 
 const SKELETON_KEYS = ['barber-skeleton-1', 'barber-skeleton-2', 'barber-skeleton-3']
 
+/**
+ * Колокольчик уведомлений: вход в инбокс со всех страниц кабинета.
+ *
+ * Отдельный пункт навигации не заводится (§8.1): четвёртая подпись не влезает в
+ * 320 px. Кнопка 44×44, поэтому на узком экране она не сжимается, а заголовок рядом
+ * переносится. Счётчик читается своим хуком; пока он неизвестен или упал, бейджа нет
+ * и остаётся только имя «Уведомления».
+ */
+export function BarberUnreadBell() {
+  const { count } = useUnreadNotifications()
+  const hasUnread = count !== null && count > 0
+  const label =
+    count === null ? 'Уведомления' : `Уведомления, непрочитанных: ${count}`
+
+  return (
+    <>
+      <a
+        href={BARBER_NOTIFICATIONS_PATH}
+        aria-label={label}
+        className="relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        onClick={(event) => {
+          if (isPlainClick(event)) {
+            event.preventDefault()
+            navigate(BARBER_NOTIFICATIONS_PATH)
+          }
+        }}
+      >
+        <Bell className="size-5" aria-hidden />
+        {hasUnread && (
+          <span
+            aria-hidden
+            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs leading-none font-medium text-primary-foreground tabular-nums"
+          >
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </a>
+      {/* Смена счётчика объявляется отдельно: aria-label ссылки меняется молча. */}
+      <span aria-live="polite" className="sr-only">
+        {count === null ? '' : `Непрочитанных уведомлений: ${count}`}
+      </span>
+    </>
+  )
+}
+
 /** Заголовок экрана: один `h1` и подпись, общие для скелетона и списка. */
 export function BarberCabinetHeading() {
   return (
-    <header className="flex items-center gap-3">
-      <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+    <header className="flex items-start gap-3">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
         <CalendarCheck className="size-5 text-muted-foreground" aria-hidden />
       </div>
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+      <div className="min-w-0 flex-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
           Кабинет барбера
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Записи клиентов: подтверждение, завершение и заметки.
         </p>
       </div>
+      <BarberUnreadBell />
     </header>
   )
 }

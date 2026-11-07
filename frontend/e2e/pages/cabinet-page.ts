@@ -27,6 +27,16 @@ export class CabinetPage {
     return this.page.getByRole('heading', { name: 'Кабинет барбера', level: 1 })
   }
 
+  /**
+   * Колокольчик уведомлений в заголовке кабинета (§8.1).
+   *
+   * Имя меняется вместе со счётчиком: «Уведомления, непрочитанных: 1»; при нуле
+   * бейджа нет, а имя остаётся «Уведомления, непрочитанных: 0».
+   */
+  get notificationsBell(): Locator {
+    return this.page.getByRole('link', { name: /^Уведомления/ })
+  }
+
   get tablist(): Locator {
     return this.page.getByRole('tablist', { name: 'Какие записи показать' })
   }

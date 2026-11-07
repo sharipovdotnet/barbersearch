@@ -128,6 +128,29 @@ public class RateLimitSettingsTests
     }
 
     [Fact]
+    public void WritePartition_DoesNotLimitEndpointMarkedAsSkipRateLimit()
+    {
+        using var limiter = PartitionedRateLimiter.Create<HttpContext, string>(
+            RateLimitSettings.WritePartition);
+
+        var context = CreateContext(HttpMethods.Post);
+        context.SetEndpoint(new Endpoint(
+            _ => Task.CompletedTask,
+            new EndpointMetadataCollection(new SkipRateLimitAttribute()),
+            "telegram-webhook"));
+
+        // Вебхук Telegram обязан отвечать 200 на ретраи Bot API: 429 потерял бы
+        // обновление привязки. Маркер исключает только это действие, не POST целиком.
+        Assert.Equal("no-limit", RateLimitSettings.WritePartition(context).PartitionKey);
+
+        for (var attempt = 1; attempt <= 100; attempt++)
+        {
+            using var lease = limiter.AttemptAcquire(context);
+            Assert.True(lease.IsAcquired, $"Запрос вебхука {attempt} не должен ограничиваться.");
+        }
+    }
+
+    [Fact]
     public void AuthPartition_LimitsTenAttemptsPerMinutePerIp()
     {
         using var limiter = PartitionedRateLimiter.Create<HttpContext, string>(

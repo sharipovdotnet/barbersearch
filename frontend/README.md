@@ -42,6 +42,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
 | `/barber/import` | «Перенести записи»: paste a list from Google Docs or a spreadsheet (up to 50 lines, tab/semicolon/pipe separated), line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes, preview summary, sequential guest bookings with progress, partial success, `409` → nearest free slots, retry of failed rows |
+| `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -541,6 +542,39 @@ Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabin
 Files: `src/pages/barber-import-page.tsx`, `src/components/barber/import-form.tsx`,
 `import-preview.tsx`, `import-result.tsx`, `src/hooks/use-barber-import.ts`,
 `src/lib/import-parse.ts`, `src/lib/salon-time.ts`, `src/lib/barber-cabinet-path.ts`.
+
+### Notifications
+
+`/barber/notifications` is the reminder inbox. It is a utility screen, not a fourth navigation
+item: the entry is the 44×44 bell in the cabinet heading (`aria-label` «Уведомления,
+непрочитанных: N», badge hidden at zero), and the unread counter polls once a minute and on
+tab focus; a failed counter request just hides the badge.
+
+The inbox is the **source of truth**: `barber_notifications` rows exist for every due visit and
+for the morning digest, are kept for 180 days and stay readable when delivery is off. The page
+reads `GET /api/barber/notifications` through the shared pager (twenty rows, «Уведомлений пока
+нет.», «Назад» without a request); «Upcoming» shows the visit time in the salon zone, service and
+salon («14:00 · стрижка · «Барбершоп на Ленина»»), a digest shows «Сегодня 4 записи» / «Первая в
+10:00». A row marks itself read and opens `/barber`; «Прочитать все» is one idempotent `read-all`
+and a quiet reload, disabled at zero unread.
+
+Settings sit above the list: «Присылать напоминания» and «Утренний дайджест» switches, an
+`<input type="time" step="900">` for 06:00–12:00 and the 15/30/60 lead select. Each change saves
+one `PUT` after a 500 ms debounce, a `400 notificationSettings.*` lands on its field, and the
+saved value survives a reload.
+
+Telegram is an **optional delivery channel** on top of the same rows, off without
+`Telegram:BotToken`/`BotUsername`: `botConfigured: false` renders «Telegram не настроен.
+Уведомления будут видны только здесь.» and a disabled «Подключить», so the feature needs no
+external service or consent to work. With a configured bot, «Подключить» issues a one-time code
+and a `t.me` deep link; the client never receives `chatId`.
+
+Files: `src/pages/barber-notifications-page.tsx`, `src/hooks/use-barber-notifications.ts`,
+`use-unread-notifications.ts`, `use-notification-settings.ts`, `src/lib/barber-notifications.ts`,
+`src/components/barber/barber-cabinet-gates.tsx` (`BarberUnreadBell`). E2E:
+`e2e/specs/barber-notifications.spec.ts` (bell, both rows, settings and the disabled Telegram
+block) and `barber-notifications-mutations.spec.ts` (read-all with the badge gone, idempotent
+repeat, `leadMinutes = 60` surviving a reload); the axe matrix scans the route at 1280 and 320.
 
 ## Booking
 
@@ -1337,6 +1371,13 @@ barberProfile.create.alreadyExists` instead of the form. Because the barber has 
 changes none of the admin counters. The onboarding spec signs in through the dialog rather than
 reusing `storageState`: creating the profile rotates the refresh token, and a stored state would
 carry an already rotated one.
+For the reminder inbox it adds exactly **two `barber_notifications` rows for `e2e-barber`** — an
+unread `Upcoming` (14:00 in `Europe/Moscow`, «стрижка», «Барбершоп на Ленина») and a read `Digest`
+(four bookings, first at 10:00) — plus `barber_notification_settings` at the server defaults
+(08:00, 30 minutes). The times are built from «today» in the salon zone, so the row label reads
+«Сегодня» on any run day, and the badge is exactly `1`. The section deletes and re-inserts only
+this barber's rows, so a reseed restores the unread state and `leadMinutes = 30` after the
+mutating scenes.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

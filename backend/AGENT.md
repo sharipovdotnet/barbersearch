@@ -146,7 +146,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 25 controllers: 24 доменных (115 endpoints) + AuthController (8 actions)
+            ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (8 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -675,21 +675,21 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-06; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-07; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 19 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 278 domain + 493 application + 122 infrastructure + 164 integration (1057 total); unit-проекты зелёные локально (2026-11-06), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 113 обработчиков (81 command + 32 query), 10 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 35 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 18 конфигураций, 10 репозиториев, `IUnitOfWork`, 18 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
-| Web | ✅ 25 контроллеров / 123 endpoints (115 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Domain | ✅ 23 типа; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 327 domain + 551 application + 131 infrastructure + 175 integration (1184 total); unit-проекты зелёные локально (2026-11-07), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 125 обработчиков (90 command + 35 query), 14 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 36 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 21 конфигурация, 14 репозиториев, `IUnitOfWork`, 21 таблица; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
+| Web | ✅ 28 контроллеров / 133 endpoints (125 доменных + 8 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50) и `ReminderDispatchService` (воркер напоминаний); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (26):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (28):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -697,7 +697,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddAdminReviewPublishedIndex`, `AddMyReviewsIndex`, `AddAdminAuditKeysetIndex`,
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
-`AddSalonPlaceKind`.
+`AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -727,6 +727,74 @@ indexes — the catalogue filter is `is_active AND is_listed AND moderation_stat
 for it is a separate decision (§15.2), and the current query relies on the existing
 `ix_salons_city_is_active` only when `city` is supplied (otherwise it may scan sequentially).
 `Down` drops both checks and both columns.
+
+**`AddBarberNotifications` (2026-11-07, вариант C — напоминания барберу).** Три таблицы:
+`barber_notifications` — инбокс барбера (снимок времени, услуги, салона и пояса; `kind` 1/2;
+`delivery` 0..3 с `delivery_attempts` 0..5 и `next_attempt_at`; `digest_local_date`; `read_at`);
+`barber_notification_settings` — одна строка на барбера (`user_id` — PK, FK `users`
+`ON DELETE CASCADE`; флаги, `digest_time`, `lead_minutes`, `telegram_chat_id`,
+`telegram_linked_at`, SHA-256 кода привязки и его срок); `telegram_updates` — `update_id` (PK)
+и `received_at` для идемпотентности вебхука. Индексы: `ix_barber_notifications_user_created`
+(`user_id`, `created_at DESC` — инбокс), `ux_barber_notifications_upcoming` (unique `booking_id`
+`WHERE kind = 1`), `ux_barber_notifications_digest` (unique `(user_id, digest_local_date)`
+`WHERE kind = 2`), `ix_barber_notifications_delivery` (`next_attempt_at`, `created_at`
+`WHERE delivery IN (0, 3)` — пачка доставки) и два частичных уникальных индекса настроек — по
+`telegram_chat_id` и по хешу кода. Дедупликацию держат уникальные индексы плюс
+`ON CONFLICT DO NOTHING` в `TryAddAsync`: повторный тик и второй инстанс дублей не создают.
+`Down` удаляет три таблицы и индекс броней.
+
+**Напоминания (вариант C).** Инбокс — обязательный и единственный источник правды, Telegram —
+необязательный канал доставки (D1). API: `GET api/barber/notifications?cursor=&pageSize=`
+(200, `PagedResponse<BarberNotificationResponse>`, порядок `created_at DESC, id DESC`, 20 по
+умолчанию; битый курсор — 400 `notification.cursor.invalid`, размер вне 1..100 — 400
+`notification.list.pageSize`), `POST api/barber/notifications/{id:guid}/read` (204; чужое и
+неизвестное — 404 `notification.notFound`), `POST .../read-all` (204, идемпотентно),
+`GET .../unread-count` (200 `{ count }`), `POST .../telegram/link` (200
+`{ code, deepLink, expiresAt }`; 409 `notification.telegram.alreadyLinked` /
+`notification.telegram.notConfigured`), `POST .../telegram/unlink` (204),
+`GET api/barber/notification-settings` (200; создаёт настройки по умолчанию при первом чтении),
+`PUT api/barber/notification-settings` (200 с нормализованным состоянием; 400
+`notificationSettings.leadMinutes` / `notificationSettings.digestTime`) и
+`POST api/telegram/webhook` (200, см. ниже). Все маршруты, кроме вебхука, — под `BarberOnly`:
+аноним получает 401, клиент и администратор — 403 `auth.forbidden`; cookie-мутации требуют
+`X-CSRF-TOKEN`. Контракты и таблица маршрутов — §16.
+
+**Воркер `ReminderDispatchService`** (`Web/Notifications`, по образцу
+`RefreshTokenCleanupService`): `PeriodicTimer` 60 секунд и первый тик сразу при старте, чтобы
+рестарт не откладывал напоминание; создание, доставка и суточная уборка идут каждый в своём
+scope через `IServiceScopeFactory`, ошибка шага логируется и не убивает цикл. Одна строка
+`LogInformation` на тик — `created/sent/skipped/failed` — и ничего на каждую бронь.
+`Reminders:Enabled=false` (значение по умолчанию в `appsettings.json`, решение D8) выключает
+воркер целиком: он только ждёт тики, не создаёт строк и не отправляет сообщений. Без
+`Telegram:BotToken` воркер не падает: доставка пропускается, уведомления остаются `Pending`
+в инбоксе, предупреждение пишется один раз. Пачка доставки забирается `FOR UPDATE SKIP LOCKED`
+с арендой в `next_attempt_at`, поэтому несколько инстансов не отправляют одно и то же;
+повторы — 1/5/15 минут, максимум 5 попыток, `400`/`403` от Telegram — `Skipped` и
+`UnlinkTelegram()`.
+
+**Telegram — необязательный канал.** Код привязки — 32 символа base32, в базе только SHA-256,
+срок 10 минут; ссылка `https://t.me/{bot}?start={code}`. Вебхук `POST api/telegram/webhook`
+анонимный, без CSRF (`SkipCookieAntiforgery`) и без лимита записи (`SkipRateLimit`): у Telegram
+нет cookie, а `429` означал бы потерянное обновление. Заголовок
+`X-Telegram-Bot-Api-Secret-Token` сравнивается с `Telegram:WebhookSecret` за постоянное время;
+неверный секрет — 403, при верном ответ всегда 200 (Telegram ретраит не-2xx), повтор гасит
+`telegram_updates.update_id`. Текст собирается в `NotificationMessages` и содержит только
+время, услугу, салон и ссылку `App:PublicUrl` + `/barber/notifications`: имени, телефона и
+заметок клиента в нём нет (152-ФЗ, D3), поэтому Политика конфиденциальности не менялась и
+Telegram в `/privacy` не значится (`PrivacyPolicy.Version` не поднималась).
+
+**Ретенция — 180 дней** (`Reminders:RetentionDays`): раз в сутки воркер удаляет строки старше
+порога, инбокс не растёт вечно; выключение напоминаний историю не удаляет.
+
+**Индекс `ix_bookings_status_start_at`** (`status`, `start_at` `WHERE status IN (1,2)`) добавлен
+по спецификации, хотя в базе уже есть `ix_bookings_status_start_at_id` (`status`,
+`start_at DESC`, `id`) из `AddAdminBookingsStatusIndex`: новый — более узкий вариант для чтения
+только по статусу и диапазону. `EXPLAIN (ANALYZE, BUFFERS)` на 100 001 брони
+(`frontend/verification/variant-c-explain.txt`) показал, что запрос напоминания идёт по
+`ix_bookings_barber_profile_id_start_at_active` (0.6 мс, 15 buffers), а новый индекс выигрывает
+только у широкого status-first диапазона; для узкого окна — `ix_bookings_start_at_id`. Индекс
+оставлен, потому что его требует спецификация, но по назначению он дублирует старый; удалять
+его или нет — отдельное решение (§15.2).
 
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
@@ -1173,6 +1241,7 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `bookings` | GiST/btree on `(salon_id, start_at)` | Slots are per (barber, salon) — the salon is part of the key now |
 | `bookings` | `(start_at DESC, id)` | Administrator's bookings in the unfiltered page: `GET api/bookings` scope `all` without a `userId` filter and the first page of `GET api/admin/bookings` when no status is chosen. The status-filtered admin page is served by the next row |
 | `bookings` | `(status, start_at DESC, id)` — `ix_bookings_status_start_at_id` (issue-39) | The admin bookings list with a status filter: the filter column first, then the exact keyset order, so a rare status is an `Index Scan` without `Sort` instead of a bitmap scan plus a sort over the whole table |
+| `bookings` | `(status, start_at) WHERE status IN (1,2)` — partial, `ix_bookings_status_start_at` (2026-11-07) | Reminder scan of confirmed visits. A narrower **duplicate** of the row above: it serves only a status-first range, while the per-barber reminder query is served by `(barber_profile_id, start_at)` — see the paragraph below |
 | `bookings` | `(user_id, start_at)` | The customer's list (`GET api/bookings`) in every scope and both cursor directions (issue-36): filter by `user_id`, then an ordered scan of `start_at` in either direction. No new migration was needed |
 | `working_schedules` | `UNIQUE (barber_salon_id, day_of_week)` | §9.7 + §12.7 — the schedule belongs to the (barber, salon) pair |
 | `schedule_overrides` | `UNIQUE (barber_salon_id, date)` | One date exception per (barber, salon); the slot lookup reads it by this index |
@@ -1187,6 +1256,10 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `barber_requests` | `UNIQUE (user_id) WHERE status = 1` — `ux_barber_requests_pending_user` | One active request per user (issue-46): the precheck covers the common case, the index closes the race; both surface as `409 barberRequest.create.alreadyPending`, never `500` |
 | `barber_requests` | `(created_at, id)` — `ix_barber_requests_created_at_id` | Admin queue in both directions: `created_at ASC, id` (pending, FIFO) and `created_at DESC, id` (all) — one btree scanned forward or backward |
 | `barber_requests` | `(user_id, created_at DESC, id DESC)` — `ix_barber_requests_user_id_created_at` | `GET api/barber-requests/mine`: filter by applicant and read the latest row; the leading `user_id` also serves the FK cascade on account deletion |
+| `barber_notifications` | `UNIQUE (booking_id) WHERE kind = 1` — `ux_barber_notifications_upcoming` | One reminder per visit: a repeated tick and a second instance cannot insert a duplicate (`ON CONFLICT DO NOTHING`) |
+| `barber_notifications` | `UNIQUE (user_id, digest_local_date) WHERE kind = 2` — `ux_barber_notifications_digest` | One digest per barber per local day (D5) |
+| `barber_notifications` | `(next_attempt_at, created_at) WHERE delivery IN (0,3)` — `ix_barber_notifications_delivery` | Delivery batch: pending rows plus the retries that are due; `FOR UPDATE SKIP LOCKED` claims a batch without blocking another instance |
+| `barber_notifications` | `(user_id, created_at DESC)` — `ix_barber_notifications_user_created` | Inbox: recipient first, then the `created_at DESC, id DESC` order |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -1288,6 +1361,22 @@ index entries, not a full scan. The existing `ix_audit_log_entity_type_entity_id
 history (`entity_type = … AND entity_id = …`), not the `occurred_at DESC, id` order, so it would
 still need a sort for a type-only filter. Evidence: `frontend/verification/issue-41-explain.txt`
 and the reproducible `issue-41-explain.sql`.
+
+**Reminder scan (2026-11-07, variant C).** The upcoming query — status, barber, window — is served
+by the pre-existing partial `ix_bookings_barber_profile_id_start_at_active`
+(`barber_profile_id, start_at`), not by the new `ix_bookings_status_start_at`
+(`status, start_at WHERE status IN (1,2)`). On 100 001 bookings (88 001 `Confirmed` spread over 90
+days, one target booking inside the next hour) the plan is five index scans: 0.614 ms, 15 shared
+buffers, no `Seq Scan`, no `Sort`. A wider status-first range
+(`status = 2` over 30 days, measured as a count — not what the handler asks for) does use the new
+partial index as an `Index Only Scan` (8.6 ms, 117 buffers, 2 heap fetches), and a narrow global
+60-minute scan prefers the existing `ix_bookings_start_at_id` (41 rows, 0.13 ms). The handler
+deliberately scans **per barber** (one settings row at a time, a barber's lead window checked in
+the handler) instead of one global booking query. The new index therefore **duplicates the purpose
+of `ix_bookings_status_start_at_id`** (`status, start_at DESC, id` from
+`AddAdminBookingsStatusIndex`); it is kept because the spec of this slice requires it, and
+dropping either index — or the per-barber scan — is a separate decision with its own measurement.
+Evidence: `frontend/verification/variant-c-explain.txt`.
 
 **Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
 `ux_users_email` therefore compares without case. `User.Create` normalizes the address with
@@ -1646,7 +1735,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**25 controllers, 123 endpoints: 115 domain + 8 auth** — one endpoint per Application operation,
+**28 controllers, 133 endpoints: 125 domain + 8 auth** — one endpoint per Application operation,
 plus the eight `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
@@ -1662,10 +1751,13 @@ child entity:
 | `SalonsController` | `api/salons` | 13 (1 public directory + 1 barber self-create + 2 owner/admin edits + 4 salon-barber composition + 2 activation + 2 moderation) |
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
-| `BarbersController` | `api/barbers` | 3 (search, card, slots) |
+| `BarbersController` | `api/barbers` | 4 (search, card, slots, additional-service suggestions) |
 | `BookingsController` | `api/bookings` | 7 (6 write + list) |
 | `BarberBookingsController` | `api/barber/bookings` | 2 (list + manual client booking) |
 | `BarberBookingSetupController` | `api/barber` | 3 (client search, booking options, own slots) |
+| `BarberNotificationsController` | `api/barber/notifications` | 6 (inbox page, mark read, read-all, unread count, Telegram link, Telegram unlink) |
+| `BarberNotificationSettingsController` | `api/barber/notification-settings` | 2 (read, replace) |
+| `TelegramWebhookController` | `api/telegram/webhook` | 1 (anonymous webhook: secret header, no CSRF, no rate limit) |
 | `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
@@ -2229,6 +2321,77 @@ Read endpoints (added 2026-10-19):
   `Pending`; the response is `201 { id }`. The call is a cookie mutation and needs
   `X-CSRF-TOKEN`. Booking creation is still deliberately not audited, and the guest fields are
   therefore not in the audit allowlist either.
+- **Напоминания барберу (2026-11-07, вариант C).** Инбокс и настройки закрыты `BarberOnly`
+  (аноним — `401`, клиент и админ — `403 auth.forbidden`), получатель всегда берётся из сессии,
+  поэтому параметра с идентификатором барбера нет и чужой инбокс запросить нечем; `{id}`
+  ограничен `{id:guid}`, иначе `read-all` и `unread-count` разбирались бы как идентификатор.
+  `GET api/barber/notifications?cursor=&pageSize=` — `PagedResponse<BarberNotificationResponse>`
+  (`id`, `kind`, `createdAt`, `readAt`, `bookingId`, `startAt`, `serviceName`, `salonName`,
+  `salonTimeZoneId`, `bookingsCount`, `delivery`), порядок `created_at DESC, id DESC` (тик
+  создаёт несколько строк в одну секунду, поэтому второй ключ обязателен), непрозрачный курсор
+  `(created_at, id)` с меткой `barber.notifications`; `pageSize` — 20 по умолчанию и 100
+  максимум, битый/чужой курсор — `400 notification.cursor.invalid`, размер —
+  `400 notification.list.pageSize`. `POST …/{id:guid}/read` и `…/read-all` отвечают `204`
+  (`read-all` — один `ExecuteUpdate` и идемпотентен), чужое и неизвестное уведомление дают один
+  и тот же `404 notification.notFound`; `GET …/unread-count` — `200 { count }` без усечения
+  «99+» (усечение — дело клиента, и оно должно совпадать в бейдже и `aria-label`).
+  `GET api/barber/notification-settings` создаёт строку по умолчанию при первом чтении
+  (`isEnabled`, `digestEnabled`, `08:00`, `30`) и отвечает `NotificationSettingsResponse`
+  (`isEnabled`, `digestEnabled`, `digestTime` строкой `HH:mm`, `leadMinutes`, `telegramLinked`,
+  `telegramLinkedAt`, `botConfigured`); `chatId` наружу не отдаётся, а `botConfigured` —
+  состояние сервера, а не настройка барбера. `PUT` принимает те же четыре поля, создаёт
+  настройки, если чтения ещё не было, и отвечает `200` полным состоянием, а не `204`: клиенту
+  нужны нормализованные значения и второй запрос ему не нужен. Ошибки полей — `400
+  notificationSettings.leadMinutes` / `notificationSettings.digestTime`; `PUT` — cookie-мутация
+  и требует `X-CSRF-TOKEN`. `POST …/telegram/link` выдаёт `{ code, deepLink, expiresAt }`:
+  32 символа base32, в базе только SHA-256, срок 10 минут, ссылка
+  `https://t.me/{bot}?start={code}`; уже привязанный чат — `409
+  notification.telegram.alreadyLinked`, ненастроенный бот — `409
+  notification.telegram.notConfigured`. `POST …/telegram/unlink` — `204` и идемпотентно.
+  `POST api/telegram/webhook` — единственный анонимный маршрут среза: `[AllowAnonymous]`,
+  `[SkipCookieAntiforgery]`, `[SkipRateLimit]` (у Telegram нет cookie, а `429` означал бы
+  потерянное обновление). Заголовок `X-Telegram-Bot-Api-Secret-Token` сравнивается с
+  `Telegram:WebhookSecret` за постоянное время; неверный или пустой секрет — `403`, при верном
+  ответ всегда `200`, даже если код истёк или чат уже привязан (Telegram ретраит не-`2xx`).
+  Идемпотентность держит `telegram_updates` (`update_id` PK), поэтому один апдейт можно принять
+  сколько угодно раз. В отличие от спецификации бот **отвечает** «Код устарел. Получите новый в
+  кабинете.»: молчание оставляло бы барбера без объяснения, а ответ ничего не меняет.
+  Воркер `Web/Notifications/ReminderDispatchService` — `PeriodicTimer` 60 с, первый тик сразу
+  при старте, шаги в отдельных scope, одна строка `LogInformation` на тик; при
+  `Reminders:Enabled=false` он только ждёт тики, без `Telegram:BotToken` доставка пропускается и
+  строки остаются `Pending`, пачка захватывается `FOR UPDATE SKIP LOCKED`, повторы — 1/5/15
+  минут и максимум пять попыток, `400`/`403` от Bot API — `Skipped` + отвязка чата; уборка
+  старше `Reminders:RetentionDays` (180) идёт не чаще раза в сутки.
+
+**Конфигурация напоминаний (2026-11-07, вариант C).** Секции читаются синглтонами в
+композиционном корне `Program.cs` (`GetSection(...).Get<T>()`); Application не знает ни
+`IConfiguration`, ни `IOptions`, а отсутствие ключей не роняет старт — но и не валидируется:
+проверки в `StartupSettings` для этих секций нет.
+
+| Ключ | По умолчанию | Смысл |
+|---|---|---|
+| `Reminders:Enabled` | `false` | воркер напоминаний: `false` — ни строк, ни сообщений (D8); в тестах включается конфигурацией, а не кодом |
+| `Reminders:BatchSize` | `100` | размер пачки доставки за тик |
+| `Reminders:RetentionDays` | `180` | ретенция инбокса в днях |
+| `Telegram:BotToken` | `""` | токен Bot API; пустой — канал не настроен, HTTP-запрос не выполняется |
+| `Telegram:BotUsername` | `""` | имя бота без `@` для `t.me/{bot}?start=…`; `botConfigured` = заданы и токен, и имя |
+| `Telegram:WebhookSecret` | `""` | ожидаемый `X-Telegram-Bot-Api-Secret-Token`; пустой — вебхук отвечает `403` на всё |
+| `App:PublicUrl` | `""` | публичный корень ссылок в тексте; пустой — относительная ссылка `/barber/notifications` |
+
+Один раз после деплоя — `setWebhook` с тем же секретом, что в конфигурации (без него Telegram
+не знает адрес, а `Telegram:WebhookSecret` не с чем сравнивать):
+
+```bash
+curl "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" -d "url=$PUBLIC_URL/api/telegram/webhook" -d "secret_token=$WEBHOOK_SECRET"
+```
+
+**152-ФЗ.** Уведомление хранит только услугу, салон, время и снимок пояса — это не ПДн клиента;
+в тексте Telegram нет ни имени, ни телефона, ни заметок (D3), поэтому Политика
+конфиденциальности **не менялась** (`PrivacyPolicy.Version` не поднималась) и Telegram не
+значится в `/privacy` как канал или получатель. Чтобы добавить его туда, версию политики нужно
+поднимать синхронно с `lib/legal.ts` на фронте, иначе регистрация начнёт отвечать `400
+auth.register.consentVersion`; это отдельный юридический срез.
+
 - **`GET api/reviews?barberProfileId=`** — `barberProfileId` is required; only published reviews are
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.
@@ -2299,7 +2462,7 @@ Deliberately absent:
 
 Health checks are **not** controllers: `/health/live` and `/health/ready` are mapped in
 `Program.cs` via `MapHealthChecks` / `Deployment/HealthCheckExtensions` (see §15.8 and
-`DEPLOY.md`). They do not change the 114-endpoint controller surface.
+`DEPLOY.md`). They do not change the 133-endpoint controller surface.
 
 Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
 `hairServiceId`/`date` (the parameter was then named `serviceId`; renamed by R-20), two pages
@@ -2413,6 +2576,19 @@ activity of the barber service and takes the price from it.
 "RefreshTokens": {
   "CleanupIntervalMinutes": 60
 },
+"Reminders": {
+  "Enabled": false,
+  "BatchSize": 100,
+  "RetentionDays": 180
+},
+"Telegram": {
+  "BotToken": "",
+  "BotUsername": "",
+  "WebhookSecret": ""
+},
+"App": {
+  "PublicUrl": ""
+},
 "AllowedHosts": "localhost;127.0.0.1"
 ```
 
@@ -2456,6 +2632,13 @@ cookie-scope). В `appsettings.json` только `localhost;127.0.0.1`; на д
 остаётся 15 минут. `RefreshTokens:CleanupIntervalMinutes` — 1..1440 (60 по умолчанию): интервал
 фоновой уборки истёкших refresh-токенов (R-50, §17.9); меняет только частоту запуска, не границу
 удаления. Полный список переменных, томов и команд — `DEPLOY.md` §1–§5.
+
+`Reminders`, `Telegram` и `App` — секции среза напоминаний (вариант C): воркер, необязательный
+канал доставки и публичный адрес ссылок в тексте. Значения по умолчанию (`Enabled=false`,
+`BatchSize=100`, `RetentionDays=180`, пустые `BotToken`/`BotUsername`/`WebhookSecret`/
+`PublicUrl`), смысл каждого ключа, команда `setWebhook` и позиция по 152-ФЗ — §16. В отличие от
+`Auth` и `DataProtection`, эти секции не проверяются `StartupSettings`: отсутствие ключей даёт
+значения по умолчанию и не роняет старт (воркер выключен, Telegram не настроен).
 
 `JwtTokenIssuer` берёт «сейчас» из singleton'а `TimeProvider` и заполняет из него и `exp`, и
 `iat` (раньше `iat` оставался системным); `AuthController` считает оттуда же `ExpiresUtc` обеих
@@ -2503,8 +2686,9 @@ cookie и остаток refresh-срока в `TokenResponse`. Бизнес-«�
   `SecurityStamp` не меняются; на незаблокированном — перехеширование при необходимости,
   `ResetFailedLogin()` и `RecordLogin()`. Неактивный аккаунт по-прежнему `auth.login.inactive`.
   `auth.login.lockedOut` отдаётся только при верном пароле, поэтому существование адреса
-  перебором не выяснить; уведомление владельцу и rate limit по email не реализованы (в проекте нет
-  канала уведомлений; распределённый перебор останавливает блокировка аккаунта, лимит по IP
+  перебором не выяснить; уведомление владельцу и rate limit по email не реализованы (канала email в
+  проекте нет, а Telegram-уведомления барберу из варианта C — не про владельца салона;
+  распределённый перебор останавливает блокировка аккаунта, лимит по IP
   остаётся).
 - Rate limiting — `Web/Deployment/RateLimitSettings` (R-22). Auth-политика `auth` — 10 попыток
   в минуту на IP: login/register/refresh/logout/change-password. IP берётся из

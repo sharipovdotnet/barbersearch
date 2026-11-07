@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Bookings;
+using BarberSearch.Application.Common;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Domain.Common;
 using CSharpFunctionalExtensions;
@@ -221,19 +222,12 @@ public sealed class GetBarberSlotsHandler
     /// Переводит локальное время салона в UTC. Несуществующее время (дыра перехода
     /// на летнее время) возвращает <c>null</c>.
     /// </summary>
+    /// <remarks>
+    /// Общий разбор пояса и перевода времени живёт в <see cref="SalonTimeZone"/>:
+    /// те же правила нужны напоминаниям барберу, и второй копии быть не должно.
+    /// </remarks>
     private static DateTimeOffset? ToUtc(DateTime local, TimeZoneInfo timeZone)
-    {
-        var unspecified = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
-
-        if (timeZone.IsInvalidTime(unspecified))
-        {
-            return null;
-        }
-
-        var utc = TimeZoneInfo.ConvertTimeToUtc(unspecified, timeZone);
-
-        return new DateTimeOffset(utc);
-    }
+        => SalonTimeZone.ToUtc(local, timeZone);
 
     /// <summary>
     /// Разрешает часовой пояс салона: сначала как системный идентификатор (IANA на Linux,
@@ -241,23 +235,5 @@ public sealed class GetBarberSlotsHandler
     /// конвертацию в IANA. Неразрешимый пояс возвращает <c>false</c>, а не исключение.
     /// </summary>
     private static bool TryResolveTimeZone(string timeZoneId, out TimeZoneInfo timeZone)
-    {
-        var candidate = timeZoneId.Trim();
-
-        if (TimeZoneInfo.TryFindSystemTimeZoneById(candidate, out var found))
-        {
-            timeZone = found!;
-            return true;
-        }
-
-        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(candidate, out var ianaId)
-            && TimeZoneInfo.TryFindSystemTimeZoneById(ianaId, out found))
-        {
-            timeZone = found!;
-            return true;
-        }
-
-        timeZone = null!;
-        return false;
-    }
+        => SalonTimeZone.TryResolve(timeZoneId, out timeZone);
 }

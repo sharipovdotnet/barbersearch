@@ -15,6 +15,7 @@ import { isBecomeABarberPath } from '@/lib/barber-request-path'
 import {
   isBarberCabinetPath,
   isBarberImportPath,
+  isBarberNotificationsPath,
   isBarberOnboardingPath,
   isBarberSalonsPath,
   isBarberSchedulePath,
@@ -25,9 +26,10 @@ import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
 import { HomePage } from '@/pages/home-page'
 
-// Админка, кабинет, отзывы автора, карточка барбера, регистрация, «Стать барбером» и
-// Политика — отдельные чанки: витрине не нужен код экранов, закрытых ролью, а профиль,
-// регистрация и юридический текст не должны удорожать первую загрузку (§12.2).
+// Админка, кабинет, уведомления, отзывы автора, карточка барбера, регистрация,
+// «Стать барбером» и Политика — отдельные чанки: витрине не нужен код экранов,
+// закрытых ролью, а профиль, регистрация и юридический текст не должны удорожать
+// первую загрузку (§12.2).
 const AdminPage = lazy(() =>
   import('@/pages/admin-page').then((module) => ({ default: module.AdminPage })),
 )
@@ -92,6 +94,12 @@ const BarberImportPage = lazy(() =>
   })),
 )
 
+const BarberNotificationsPage = lazy(() =>
+  import('@/pages/barber-notifications-page').then((module) => ({
+    default: module.BarberNotificationsPage,
+  })),
+)
+
 const RegisterPage = lazy(() =>
   import('@/pages/register-page').then((module) => ({
     default: module.RegisterPage,
@@ -136,6 +144,7 @@ function App() {
   const isBarberSalons = isBarberSalonsPath(pathname)
   const isBarberOnboarding = isBarberOnboardingPath(pathname)
   const isBarberImport = isBarberImportPath(pathname)
+  const isBarberNotifications = isBarberNotificationsPath(pathname)
   const pageKey = isRegister
     ? 'register'
     : isPrivacy
@@ -154,17 +163,19 @@ function App() {
                   ? 'barber-onboarding'
                   : isBarberImport
                     ? 'barber-import'
-                    : isBarberSchedule
-                      ? 'barber-schedule'
-                      : isBarberSalons
-                        ? 'barber-salons'
-                        : isBarberCabinet
-                          ? 'barber-cabinet'
-                          : pathname === '/account'
-                            ? 'account'
-                            : barberId !== null
-                              ? `barber:${barberId}`
-                              : 'home'
+                    : isBarberNotifications
+                      ? 'barber-notifications'
+                      : isBarberSchedule
+                        ? 'barber-schedule'
+                        : isBarberSalons
+                          ? 'barber-salons'
+                          : isBarberCabinet
+                            ? 'barber-cabinet'
+                            : pathname === '/account'
+                              ? 'account'
+                              : barberId !== null
+                                ? `barber:${barberId}`
+                                : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -211,6 +222,8 @@ function App() {
               <BarberOnboardingPage />
             ) : isBarberImport ? (
               <BarberImportPage />
+            ) : isBarberNotifications ? (
+              <BarberNotificationsPage />
             ) : isBarberSchedule ? (
               <BarberSchedulePage />
             ) : isBarberSalons ? (

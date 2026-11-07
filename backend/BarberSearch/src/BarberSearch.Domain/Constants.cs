@@ -101,4 +101,44 @@ public static class Constants
     // Бронь обслуживает одну услугу, поэтому её длительность не может превышать верхнюю
     // границу длительности услуги (см. MAX_DURATION_MINUTES).
     public const int MAX_BOOKING_DURATION_MINUTES = 24 * 60;
+
+    // Уведомления барберу. Снимки услуги и салона — короткие подписи для текста напоминания,
+    // их пределы совпадают с varchar-колонками, поэтому домен обязан отклонить длинную строку
+    // раньше, чем её отвергнет схема. Пояс — идентификатор IANA, а не произвольный текст.
+    public const int MAX_NOTIFICATION_SERVICE_NAME_LENGTH = 200;
+    public const int MAX_NOTIFICATION_SALON_NAME_LENGTH = 200;
+    public const int MAX_NOTIFICATION_TIME_ZONE_ID_LENGTH = 100;
+
+    // Текст последней ошибки доставки — диагностика без ПДн, а не сообщение пользователю.
+    public const int MAX_NOTIFICATION_LAST_ERROR_LENGTH = 500;
+
+    // Предел попыток доставки: на пятой неудаче уведомление окончательно Failed.
+    public const int MAX_NOTIFICATION_DELIVERY_ATTEMPTS = 5;
+
+    // Напоминание о визите создаётся за 15, 30 или 60 минут до начала — выбора «через 45 минут»
+    // нет, поэтому проверяется принадлежность множеству, а не диапазону.
+    public const int MIN_NOTIFICATION_LEAD_MINUTES = 15;
+    public const int DEFAULT_NOTIFICATION_LEAD_MINUTES = 30;
+    public const int MAX_NOTIFICATION_LEAD_MINUTES = 60;
+
+    // Утренний дайджест: локальное время салона от 06:00 до 12:00 включительно, шаг 15 минут.
+    // До первой стрижки остаётся время, а «после полудня» уже не утро.
+    public const int MIN_NOTIFICATION_DIGEST_HOUR = 6;
+    public const int MAX_NOTIFICATION_DIGEST_HOUR = 12;
+    public const int NOTIFICATION_DIGEST_TIME_STEP_MINUTES = 15;
+
+    // Окно срабатывания дайджеста: тик воркера раз в минуту обязан попасть в одну минуту,
+    // поэтому окно ровно минута и сравнивается полуинтервалом [DigestTime, DigestTime + 1 мин).
+    public const int NOTIFICATION_DIGEST_WINDOW_MINUTES = 1;
+
+    // Ретенция инбокса: строки старше 180 дней удаляются суточной уборкой, чтобы таблица
+    // не росла бесконечно. Те же значения — значения по умолчанию у RemindersOptions.
+    public const int NOTIFICATION_RETENTION_DAYS = 180;
+
+    // Размер пачки доставки по умолчанию: один тик не должен держать транзакцию на всю очередь.
+    public const int NOTIFICATION_BATCH_SIZE = 100;
+
+    // Срок жизни кода привязки Telegram и длина самого кода (base32, 32 символа).
+    public const int TELEGRAM_LINK_CODE_LIFETIME_MINUTES = 10;
+    public const int TELEGRAM_LINK_CODE_LENGTH = 32;
 }

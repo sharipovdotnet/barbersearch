@@ -15,6 +15,17 @@ export const testUser = {
   isEmailVerified: true,
 } as const
 
+/** Настройки напоминаний по умолчанию: те же значения создаёт сервер. */
+export const notificationSettings = {
+  isEnabled: true,
+  digestEnabled: true,
+  digestTime: '08:00',
+  leadMinutes: 30,
+  telegramLinked: false,
+  telegramLinkedAt: null,
+  botConfigured: true,
+} as const
+
 /** ProblemDetails, который проходит строгий гард `isProblemDetails` из `lib/api.ts`. */
 export function problemDetails(
   status: number,
@@ -56,5 +67,16 @@ export const handlers = [
   // (роль выдана администратором вручную) имя и опыт остаются редактируемыми.
   http.get('/api/barber-requests/mine', () =>
     HttpResponse.json({ request: null })
+  ),
+  // Колокольчик уведомлений живёт в заголовке кабинета, поэтому его счётчик
+  // запрашивается на каждой странице кабинета. По умолчанию — непрочитанных нет.
+  http.get('/api/barber/notifications/unread-count', () =>
+    HttpResponse.json({ count: 0 })
+  ),
+  http.get('/api/barber/notifications', () =>
+    HttpResponse.json({ items: [], nextCursor: null })
+  ),
+  http.get('/api/barber/notification-settings', () =>
+    HttpResponse.json(notificationSettings)
   ),
 ]

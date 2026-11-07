@@ -44,6 +44,14 @@ import type {
 } from '@/lib/barber-requests'
 import type { BarberBooking } from '@/lib/barber-bookings'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
+import type {
+  BarberNotification,
+  BarberNotificationDelivery,
+  BarberNotificationKind,
+  NotificationLeadMinutes,
+  NotificationSettings,
+  TelegramLink,
+} from '@/lib/barber-notifications'
 import type { BarberClient } from '@/lib/barber-clients'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { DayOfWeek, Language, PaymentMethod, ServiceCategory } from '@/lib/barber-profile-labels'
@@ -204,6 +212,25 @@ const BARBER_REQUEST_STATUSES: readonly BarberRequestStatus[] = [
   'Rejected',
 ]
 
+const BARBER_NOTIFICATION_KINDS: readonly BarberNotificationKind[] = [
+  'Upcoming',
+  'Digest',
+]
+
+const BARBER_NOTIFICATION_DELIVERIES: readonly BarberNotificationDelivery[] = [
+  'Pending',
+  'Sent',
+  'Skipped',
+  'Failed',
+]
+
+const NOTIFICATION_LEAD_MINUTES: readonly NotificationLeadMinutes[] = [
+  15, 30, 60,
+]
+
+/** `HH:mm`, а не `TimeOnly`-сериализация `08:00:00`: так значение уже готово для input. */
+const DIGEST_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+
 const isBookingStatus = isOneOf(BOOKING_STATUSES)
 const isBarberGrade = isOneOf(BARBER_GRADES)
 const isLanguage = isOneOf(LANGUAGES)
@@ -212,6 +239,23 @@ const isServiceCategory = isOneOf(SERVICE_CATEGORIES)
 const isDayOfWeek = isOneOf(DAYS_OF_WEEK)
 const isUserRole = isOneOf(USER_ROLES)
 const isBarberRequestStatus = isOneOf(BARBER_REQUEST_STATUSES)
+const isBarberNotificationKind = isOneOf(BARBER_NOTIFICATION_KINDS)
+const isBarberNotificationDelivery = isOneOf(BARBER_NOTIFICATION_DELIVERIES)
+
+/** Только 15/30/60: домен не принимает другие значения, и селект их не предлагает. */
+function isNotificationLeadMinutes(
+  value: unknown
+): value is NotificationLeadMinutes {
+  return (
+    typeof value === 'number' &&
+    NOTIFICATION_LEAD_MINUTES.includes(value as NotificationLeadMinutes)
+  )
+}
+
+/** `HH:mm` с ведущими нулями; `8:00` и `08:00:00` — битый контракт. */
+function isDigestTime(value: unknown): value is string {
+  return typeof value === 'string' && DIGEST_TIME_PATTERN.test(value)
+}
 
 /** `{ id }` после регистрации, создания брони, отзыва и пользователя. */
 export function isCreatedId(value: unknown): value is { id: string } {
@@ -1117,6 +1161,90 @@ export function isAdminBarberRequest(
 }
 
 export const isAdminBarberRequestPage = isPageOf(isAdminBarberRequest)
+
+/**
+ * Строка инбокса напоминаний.
+ *
+ * `kind` и `delivery` — только известные имена: новый серверный статус должен стать
+ * ошибкой экрана, а не сломанной строкой (§9.1). Инварианты домена проверяются тем же
+ * guard'ом: у `Upcoming` обязательны `bookingId` и `startAt`, у `Digest` —
+ * `bookingsCount` и `startAt` (начало первой записи дня), `bookingId` при этом `null`.
+ * `readAt` — `null` или строка; формат дат не разбирается.
+ */
+export function isBarberNotification(
+  value: unknown
+): value is BarberNotification {
+  if (
+    !isRecord(value) ||
+    !isBarberNotificationKind(value.kind) ||
+    !isBarberNotificationDelivery(value.delivery) ||
+    !isString(value.createdAt) ||
+    !isNullableString(value.readAt) ||
+    !isNullableString(value.serviceName) ||
+    !isNullableString(value.salonName) ||
+    !isNullableString(value.salonTimeZoneId) ||
+    !isNullable(isNonEmptyString)(value.bookingId)
+  ) {
+    return false
+  }
+
+  if (value.kind === 'Upcoming') {
+    return (
+      isNonEmptyString(value.bookingId) &&
+      isNonEmptyString(value.startAt) &&
+      value.bookingsCount === null
+    )
+  }
+
+  return (
+    value.bookingId === null &&
+    isNonEmptyString(value.startAt) &&
+    isNonNegativeInteger(value.bookingsCount)
+  )
+}
+
+export const isBarberNotificationPage = isPageOf(isBarberNotification)
+
+/** `GET api/barber/notifications/unread-count`: целое не меньше нуля. */
+export function isUnreadNotificationsPayload(
+  value: unknown
+): value is { count: number } {
+  return isRecord(value) && isNonNegativeInteger(value.count)
+}
+
+/**
+ * `NotificationSettingsResponse`.
+ *
+ * `digestTime` — готовая строка `HH:mm`, `leadMinutes` — одно из трёх значений домена.
+ * `telegramLinkedAt` может быть `null`. Поля `chatId` в контракте нет: клиент получает
+ * только `telegramLinked` и `botConfigured`, а лишние поля ответа guard игнорирует
+ * по общему правилу (§9.1).
+ */
+export function isNotificationSettings(
+  value: unknown
+): value is NotificationSettings {
+  return (
+    isRecord(value) &&
+    isBoolean(value.isEnabled) &&
+    isBoolean(value.digestEnabled) &&
+    isDigestTime(value.digestTime) &&
+    isNotificationLeadMinutes(value.leadMinutes) &&
+    isBoolean(value.telegramLinked) &&
+    isNullableString(value.telegramLinkedAt) &&
+    isBoolean(value.botConfigured)
+  )
+}
+
+/** Ответ `POST api/barber/notifications/telegram/link`. */
+export function isTelegramLink(value: unknown): value is TelegramLink {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.code) &&
+    isNonEmptyString(value.deepLink) &&
+    isString(value.expiresAt)
+  )
+}
+
 
 
 
