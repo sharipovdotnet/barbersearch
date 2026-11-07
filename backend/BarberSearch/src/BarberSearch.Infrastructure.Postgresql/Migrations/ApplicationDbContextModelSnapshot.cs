@@ -476,6 +476,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasIndex("SalonId", "StartAt")
                         .HasDatabaseName("ix_bookings_salon_id_start_at");
 
+                    b.HasIndex("Status", "StartAt")
+                        .HasDatabaseName("ix_bookings_status_start_at")
+                        .HasFilter("status IN (1, 2)");
+
                     b.HasIndex("UserId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ux_bookings_user_id_idempotency_key");
@@ -600,6 +604,179 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                             t.HasCheckConstraint("ck_hair_services_default_duration_minutes", "default_duration_minutes BETWEEN 1 AND 1440");
 
                             t.HasCheckConstraint("ck_hair_services_name", "char_length(btrim(name)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.Notifications.BarberNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<int?>("BookingsCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("bookings_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<short>("Delivery")
+                        .HasColumnType("smallint")
+                        .HasColumnName("delivery");
+
+                    b.Property<int>("DeliveryAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_attempts");
+
+                    b.Property<DateOnly?>("DigestLocalDate")
+                        .HasColumnType("date")
+                        .HasColumnName("digest_local_date");
+
+                    b.Property<short>("Kind")
+                        .HasColumnType("smallint")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<string>("SalonName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("salon_name");
+
+                    b.Property<string>("SalonTimeZoneId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("salon_time_zone_id");
+
+                    b.Property<string>("ServiceName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("service_name");
+
+                    b.Property<DateTimeOffset?>("StartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("start_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_barber_notifications");
+
+                    b.HasIndex("BookingId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_barber_notifications_upcoming")
+                        .HasFilter("kind = 1");
+
+                    b.HasIndex("NextAttemptAt", "CreatedAt")
+                        .HasDatabaseName("ix_barber_notifications_delivery")
+                        .HasFilter("delivery IN (0, 3)");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_barber_notifications_user_created");
+
+                    b.HasIndex("UserId", "DigestLocalDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_barber_notifications_digest")
+                        .HasFilter("kind = 2");
+
+                    b.ToTable("barber_notifications", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_barber_notifications_delivery", "delivery IN (0, 1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_barber_notifications_delivery_attempts", "delivery_attempts BETWEEN 0 AND 5");
+
+                            t.HasCheckConstraint("ck_barber_notifications_kind", "kind IN (1, 2)");
+
+                            t.HasCheckConstraint("ck_barber_notifications_shape", "(kind = 1 AND booking_id IS NOT NULL AND start_at IS NOT NULL)\nOR (kind = 2 AND bookings_count IS NOT NULL AND digest_local_date IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.Notifications.BarberNotificationSettings", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("DigestEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("digest_enabled");
+
+                    b.Property<TimeOnly>("DigestTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("digest_time");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<int>("LeadMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("lead_minutes");
+
+                    b.Property<long?>("TelegramChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_chat_id");
+
+                    b.Property<DateTimeOffset?>("TelegramLinkCodeExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("telegram_link_code_expires_at");
+
+                    b.Property<string>("TelegramLinkCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("telegram_link_code_hash");
+
+                    b.Property<DateTimeOffset?>("TelegramLinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("telegram_linked_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_barber_notification_settings");
+
+                    b.HasIndex("TelegramChatId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_barber_notification_settings_telegram_chat_id")
+                        .HasFilter("telegram_chat_id IS NOT NULL");
+
+                    b.HasIndex("TelegramLinkCodeHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_barber_notification_settings_telegram_link_code_hash")
+                        .HasFilter("telegram_link_code_hash IS NOT NULL");
+
+                    b.ToTable("barber_notification_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_barber_notification_settings_digest_time", "digest_time >= TIME '06:00:00' AND digest_time <= TIME '12:00:00' AND date_part('minute', digest_time)::int % 15 = 0 AND date_part('second', digest_time) = 0");
+
+                            t.HasCheckConstraint("ck_barber_notification_settings_lead_minutes", "lead_minutes IN (15, 30, 60)");
+
+                            t.HasCheckConstraint("ck_barber_notification_settings_telegram_code", "(telegram_link_code_hash IS NULL) = (telegram_link_code_expires_at IS NULL) AND (telegram_link_code_hash IS NULL OR char_length(telegram_link_code_hash) = 64)");
                         });
                 });
 
@@ -1327,6 +1504,22 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.ToTable("audit_log", (string)null);
                 });
 
+            modelBuilder.Entity("BarberSearch.Infrastructure.Postgresql.Telegram.TelegramUpdate", b =>
+                {
+                    b.Property<long>("UpdateId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("update_id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.HasKey("UpdateId")
+                        .HasName("pk_telegram_updates");
+
+                    b.ToTable("telegram_updates", (string)null);
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.BarberProfiles.BarberProfile", b =>
                 {
                     b.OwnsOne("BarberSearch.Domain.BarberProfiles.ValueObjects.DisplayName", "DisplayName", b1 =>
@@ -1503,6 +1696,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_favorite_barbers_users_user_id");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.Notifications.BarberNotificationSettings", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_barber_notification_settings_users_user_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.PortfolioPhotos.PortfolioPhoto", b =>

@@ -133,6 +133,16 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.HasIndex(x => new { x.SalonId, x.StartAt })
             .HasDatabaseName("ix_bookings_salon_id_start_at");
 
+        // Поиск подтверждённых визитов в ближайшем окне (напоминания): статус и начало.
+        // Частичный индекс по активным статусам: отменённые, завершённые и неявившиеся
+        // строки напоминание не порождают и в индексе не нужны.
+        builder.HasIndex(x => new { x.Status, x.StartAt })
+            .HasFilter(CheckConstraintSql.EnumIn(
+                "status",
+                BookingStatus.Pending,
+                BookingStatus.Confirmed))
+            .HasDatabaseName("ix_bookings_status_start_at");
+
         // Список броней клиента; гостевые строки сюда не попадают (user_id = NULL).
         builder.HasIndex(x => new { x.UserId, x.StartAt })
             .HasDatabaseName("ix_bookings_user_id_start_at");

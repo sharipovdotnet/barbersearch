@@ -9,6 +9,7 @@ import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
+import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { ProfilePage } from '../pages/profile-page'
 
@@ -187,6 +188,61 @@ test.describe('axe: 320 px, расписание барбера', () => {
       '/barber/salons + диалог @320',
       test.info()
     )
+  })
+})
+
+test.describe('axe: 320 px, уведомления барбера', () => {
+  test.use({ storageState: storageStatePath('barber') })
+
+  test('инбокс не расширяет страницу, колокольчик не сжимается', async ({
+    page,
+  }) => {
+    const notifications = new BarberNotificationsPage(page)
+
+    await notifications.goto()
+    await notifications.waitForReady()
+
+    // Настройки, две строки и длинные «стрижка · «Барбершоп на Ленина»» переносятся,
+    // а не дают горизонтальный скролл.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/notifications @320',
+      test.info()
+    )
+
+    // Вход в инбокс — колокольчик 44×44 в заголовке кабинета (§8.1): на 320 px он
+    // не сжимается, переносится заголовок рядом.
+    const cabinet = new CabinetPage(page)
+
+    await cabinet.goto()
+
+    const bell = cabinet.notificationsBell
+
+    await expect(bell).toBeVisible()
+    // Счётчик здесь не проверяется: проект narrow-320 не зависит от mutations и может
+    // пересечься с «Прочитать все». Важно, что ссылка и её имя на месте.
+    await expect(bell).toHaveAttribute('aria-label', /^Уведомления/)
+
+    const box = await bell.boundingBox()
+
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+    const cabinetOverflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(cabinetOverflow).toBeLessThanOrEqual(0)
   })
 })
 

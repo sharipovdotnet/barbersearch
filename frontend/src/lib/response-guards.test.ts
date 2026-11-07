@@ -5,10 +5,15 @@ import {
   isAdminUser,
   isBarberBooking,
   isBarberBookingOptions,
+  isBarberNotification,
+  isBarberNotificationPage,
   isBarberSalonSummary,
   isBarberSearchItem,
   isBooking,
+  isNotificationSettings,
   isSalonDirectoryItem,
+  isTelegramLink,
+  isUnreadNotificationsPayload,
 } from '@/lib/response-guards'
 
 /**
@@ -253,5 +258,153 @@ describe('kind места в guard-ах', () => {
     expect(_adminListed).toBe(true)
     expect(isBarberSalonSummary(summaryWithoutListed)).toBe(false)
     expect(isAdminSalonRow(adminWithoutListed)).toBe(false)
+  })
+})
+
+const UPCOMING_NOTIFICATION = {
+  id: '11111111-1111-4111-8111-111111111111',
+  kind: 'Upcoming',
+  createdAt: '2026-11-07T09:02:00Z',
+  readAt: null,
+  bookingId: '22222222-2222-4222-8222-222222222222',
+  startAt: '2026-11-07T09:00:00Z',
+  serviceName: 'стрижка',
+  salonName: 'Барбершоп на Ленина',
+  salonTimeZoneId: 'Asia/Yekaterinburg',
+  bookingsCount: null,
+  delivery: 'Sent',
+}
+
+const DIGEST_NOTIFICATION = {
+  id: '33333333-3333-4333-8333-333333333333',
+  kind: 'Digest',
+  createdAt: '2026-11-07T03:00:00Z',
+  readAt: '2026-11-07T04:00:00Z',
+  bookingId: null,
+  startAt: '2026-11-07T05:00:00Z',
+  serviceName: 'стрижка',
+  salonName: 'Барбершоп на Ленина',
+  salonTimeZoneId: 'Asia/Yekaterinburg',
+  bookingsCount: 4,
+  delivery: 'Pending',
+}
+
+describe('guard-ы уведомлений', () => {
+  it('принимает напоминание о визите и утренний дайджест', () => {
+    expect(isBarberNotification(UPCOMING_NOTIFICATION)).toBe(true)
+    expect(isBarberNotification(DIGEST_NOTIFICATION)).toBe(true)
+    expect(
+      isBarberNotificationPage({
+        items: [UPCOMING_NOTIFICATION, DIGEST_NOTIFICATION],
+        nextCursor: 'cursor-2',
+        extra: 'поле игнорируется',
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает неизвестные kind и delivery', () => {
+    expect(
+      isBarberNotification({ ...UPCOMING_NOTIFICATION, kind: 'Reminder' })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...UPCOMING_NOTIFICATION, delivery: 'Unknown' })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...UPCOMING_NOTIFICATION, delivery: 1 })
+    ).toBe(false)
+  })
+
+  it('соблюдает инварианты вида: у визита есть бронь, у дайджеста — счётчик', () => {
+    expect(
+      isBarberNotification({ ...UPCOMING_NOTIFICATION, bookingId: null })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...UPCOMING_NOTIFICATION, bookingsCount: 0 })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...DIGEST_NOTIFICATION, bookingId: UPCOMING_NOTIFICATION.bookingId })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...DIGEST_NOTIFICATION, bookingsCount: null })
+    ).toBe(false)
+    expect(
+      isBarberNotification({ ...DIGEST_NOTIFICATION, bookingsCount: -1 })
+    ).toBe(false)
+  })
+
+  it('отвергает битую страницу и не-скалярные поля', () => {
+    expect(
+      isBarberNotificationPage({
+        items: [{ ...UPCOMING_NOTIFICATION, startAt: { iso: '2026-11-07' } }],
+        nextCursor: null,
+      })
+    ).toBe(false)
+    expect(
+      isBarberNotificationPage({
+        items: [UPCOMING_NOTIFICATION],
+        nextCursor: 2,
+      })
+    ).toBe(false)
+  })
+
+  it('принимает счётчик непрочитанных и отвергает дробное или отрицательное', () => {
+    expect(isUnreadNotificationsPayload({ count: 0 })).toBe(true)
+    expect(isUnreadNotificationsPayload({ count: 3 })).toBe(true)
+    expect(isUnreadNotificationsPayload({ count: -1 })).toBe(false)
+    expect(isUnreadNotificationsPayload({ count: 1.5 })).toBe(false)
+    expect(isUnreadNotificationsPayload({ count: '3' })).toBe(false)
+    expect(isUnreadNotificationsPayload({})).toBe(false)
+  })
+
+  it('принимает настройки с digestTime HH:mm и только 15/30/60', () => {
+    const settings = {
+      isEnabled: true,
+      digestEnabled: true,
+      digestTime: '08:00',
+      leadMinutes: 30,
+      telegramLinked: false,
+      telegramLinkedAt: null,
+      botConfigured: true,
+    }
+
+    expect(isNotificationSettings(settings)).toBe(true)
+    expect(isNotificationSettings({ ...settings, leadMinutes: 60 })).toBe(true)
+    expect(
+      isNotificationSettings({
+        ...settings,
+        telegramLinked: true,
+        telegramLinkedAt: '2026-11-07T09:00:00Z',
+      })
+    ).toBe(true)
+    expect(isNotificationSettings({ ...settings, leadMinutes: 45 })).toBe(false)
+    expect(isNotificationSettings({ ...settings, digestTime: '08:00:00' })).toBe(
+      false
+    )
+    expect(isNotificationSettings({ ...settings, digestTime: '8:00' })).toBe(
+      false
+    )
+    expect(isNotificationSettings({ ...settings, botConfigured: 'yes' })).toBe(
+      false
+    )
+    const { botConfigured: _bot, ...withoutBot } = settings
+    expect(_bot).toBe(true)
+    expect(isNotificationSettings(withoutBot)).toBe(false)
+  })
+
+  it('принимает ответ привязки Telegram и отвергает пустой код', () => {
+    expect(
+      isTelegramLink({
+        code: 'ABCDEF',
+        deepLink: 'https://t.me/barbersearch_bot?start=ABCDEF',
+        expiresAt: '2026-11-07T09:10:00Z',
+      })
+    ).toBe(true)
+    expect(
+      isTelegramLink({
+        code: '',
+        deepLink: 'https://t.me/barbersearch_bot?start=',
+        expiresAt: '2026-11-07T09:10:00Z',
+      })
+    ).toBe(false)
   })
 })

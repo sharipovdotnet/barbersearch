@@ -1,8 +1,10 @@
 using System.Globalization;
+using BarberSearch.Application.Notifications;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
+using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -37,6 +39,31 @@ try
 
     // Композиционный корень: PostgreSQL и репозитории подключаются через DependencyInjection слоя Web.
     builder.Services.AddProgramDependencies(startup.PostgresConnectionString);
+
+    // Настройки напоминаний читаются один раз и живут синглтоном: Application не знает
+    // ни про IConfiguration, ни про IOptions. Пустые секции дают значения по умолчанию
+    // (воркер выключен, Telegram не настроен), поэтому отсутствие ключей не роняет старт.
+    builder.Services.AddSingleton(
+        builder.Configuration.GetSection(RemindersOptions.SECTION).Get<RemindersOptions>()
+        ?? new RemindersOptions());
+    builder.Services.AddSingleton(
+        builder.Configuration.GetSection(TelegramOptions.SECTION).Get<TelegramOptions>()
+        ?? new TelegramOptions());
+    builder.Services.AddSingleton(
+        builder.Configuration.GetSection(AppOptions.SECTION).Get<AppOptions>()
+        ?? new AppOptions());
+
+    // Telegram — единственный внешний HTTP-канал напоминаний; отдельного NuGet-пакета нет.
+    builder.Services.AddHttpClient(
+        TelegramSender.HTTP_CLIENT_NAME,
+        client => client.Timeout = TelegramSender.REQUEST_TIMEOUT);
+    builder.Services.AddSingleton<ITelegramSender, TelegramSender>();
+
+    // Воркер напоминаний. Конкретный тип — синглтон, а хост получает его же через фабрику:
+    // интеграционный тест вызывает RunTickAsync у того же экземпляра, не создавая второй
+    // фоновый сервис (тот же приём, что у RefreshTokenCleanupService).
+    builder.Services.AddSingleton<ReminderDispatchService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ReminderDispatchService>());
 
     // Ключи Data Protection лежат на постоянном томе и общие для всех инстансов.
     builder.Services.AddPersistentDataProtection(startup.DataProtection);

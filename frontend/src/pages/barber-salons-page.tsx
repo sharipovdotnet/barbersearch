@@ -7,6 +7,7 @@ import {
   BarberCabinetSkeleton,
   BarberProfileMissingGate,
   BarberRoleGate,
+  BarberUnreadBell,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberSalonCard } from '@/components/barber/barber-salon-card'
 import { BarberSalonDialog } from '@/components/barber/barber-salon-dialog'
@@ -138,11 +139,11 @@ function BarberSalonsScreen({
     <div className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
             <MapPin className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
               Мои салоны
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -152,29 +153,32 @@ function BarberSalonsScreen({
           </div>
         </div>
 
-        {status === 'ready' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              className="h-11 gap-2 sm:h-8"
-              onClick={() => {
-                setAnnouncement(null)
-                setIsCreateOpen(true)
-              }}
-            >
-              <Plus data-icon="inline-start" aria-hidden />
-              Создать салон
-            </Button>
-            {salons.length > 0 && (
-              <SalonPickerDialog
-                barberProfileId={barberProfileId}
-                hasSalons={salons.length > 0}
-                onAttached={handleAttached}
-                onStale={reload}
-              />
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <BarberUnreadBell />
+          {status === 'ready' && (
+            <>
+              <Button
+                type="button"
+                className="h-11 gap-2 sm:h-8"
+                onClick={() => {
+                  setAnnouncement(null)
+                  setIsCreateOpen(true)
+                }}
+              >
+                <Plus data-icon="inline-start" aria-hidden />
+                Создать салон
+              </Button>
+              {salons.length > 0 && (
+                <SalonPickerDialog
+                  barberProfileId={barberProfileId}
+                  hasSalons={salons.length > 0}
+                  onAttached={handleAttached}
+                  onStale={reload}
+                />
+              )}
+            </>
+          )}
+        </div>
       </header>
 
       <BarberCabinetNav active="salons" />

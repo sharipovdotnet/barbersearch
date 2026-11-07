@@ -4,8 +4,8 @@
  * Отдельный модуль по образцу `account-path.ts`: шапка и страница должны одинаково
  * понимать, что считается кабинетом, а не сравнивать строки в JSX. У кабинета три
  * раздела — записи клиентов, расписание и салоны — и отдельные адреса онбординга
- * (профиль создаётся до того, как кабинет станет доступен) и переноса записей
- * (шаг из списка записей, а не четвёртый раздел навигации).
+ * (профиль создаётся до того, как кабинет станет доступен), переноса записей (шаг
+ * из списка записей) и уведомлений (утилита, а не четвёртый пункт навигации).
  */
 
 export const BARBER_CABINET_PATH = '/barber'
@@ -13,6 +13,7 @@ export const BARBER_SCHEDULE_PATH = '/barber/schedule'
 export const BARBER_SALONS_PATH = '/barber/salons'
 export const BARBER_ONBOARDING_PATH = '/barber/onboarding'
 export const BARBER_IMPORT_PATH = '/barber/import'
+export const BARBER_NOTIFICATIONS_PATH = '/barber/notifications'
 
 /**
  * Ровно `/barber` или `/barber/schedule`; прочие вложенные пути не открывают кабинет.
@@ -47,4 +48,15 @@ export function isBarberOnboardingPath(pathname: string): boolean {
  */
 export function isBarberImportPath(pathname: string): boolean {
   return pathname === BARBER_IMPORT_PATH
+}
+
+/**
+ * Ровно `/barber/notifications` — инбокс напоминаний.
+ *
+ * Не раздел навигации: вход — колокольчик в заголовке кабинета (§8.1). Проверка стоит
+ * рядом с расписанием и салонами, до общего `isBarberCabinetPath`, чтобы вложенные
+ * пути не открывали кабинет записей.
+ */
+export function isBarberNotificationsPath(pathname: string): boolean {
+  return pathname === BARBER_NOTIFICATIONS_PATH
 }

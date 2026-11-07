@@ -7,6 +7,7 @@ import {
   BarberCabinetSkeleton,
   BarberProfileMissingGate,
   BarberRoleGate,
+  BarberUnreadBell,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberScheduleExceptions } from '@/components/barber/barber-schedule-exceptions'
 import { BarberTimeOffs } from '@/components/barber/barber-time-offs'
@@ -111,12 +112,12 @@ function BarberScheduleScreen({
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+      <header className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
           <CalendarClock className="size-5 text-muted-foreground" aria-hidden />
         </div>
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
             Расписание
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -124,6 +125,7 @@ function BarberScheduleScreen({
             свободное время.
           </p>
         </div>
+        <BarberUnreadBell />
       </header>
 
       <BarberCabinetNav active="schedule" />

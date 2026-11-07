@@ -1038,6 +1038,108 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Уведомления барберу: инбокс, настройки и канал Telegram.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Коды ошибок валидации полей живут в домене (<c>notification.create.*</c> и
+    /// <c>notificationSettings.leadMinutes</c>/<c>notificationSettings.digestTime</c>) и в реестр
+    /// не дублируются (AGENT.md §10.7): это ошибки правила, родившегося в агрегате.
+    /// Здесь — коды операций Application: «не найдено», конфликт привязки и два исхода
+    /// отправки в Telegram, на которые опирается обработчик доставки.
+    /// </para>
+    /// <para>
+    /// Курсор инбокса держит собственный код <c>notification.cursor.invalid</c>
+    /// в <c>BarberNotificationCursor</c>, как и остальные курсоры.
+    /// </para>
+    /// </remarks>
+    public static class Notification
+    {
+        /// <summary>
+        /// Уведомления с указанным идентификатором нет либо оно принадлежит другому барберу; <c>404</c>.
+        /// </summary>
+        /// <remarks>
+        /// Ответ намеренно не различает «нет такого уведомления» и «это чужое уведомление»:
+        /// проверка существования чужого инбокса была бы утечкой.
+        /// </remarks>
+        public const string NotFound = "notification.notFound";
+
+        /// <summary>
+        /// Телеграм-чат уже привязан к настройкам; повторная привязка не поддерживается; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Смена чата — отдельный срез: сначала нужно отвязать текущий (<c>POST .../telegram/unlink</c>).
+        /// </remarks>
+        public const string TelegramAlreadyLinked = "notification.telegram.alreadyLinked";
+
+        /// <summary>
+        /// Бот Telegram не настроен на сервере (нет токена или имени); <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Защитный код: интерфейс не показывает рабочую кнопку «Подключить» при
+        /// <c>botConfigured: false</c>. Если запрос всё же пришёл, сервер отвечает конфликтом,
+        /// а не выдаёт ссылку на несуществующего бота.
+        /// </remarks>
+        public const string TelegramNotConfigured = "notification.telegram.notConfigured";
+
+        /// <summary>
+        /// Telegram отклонил чат (бот заблокирован, чат не найден); повторы бессмысленны.
+        /// </summary>
+        /// <remarks>
+        /// Возвращает реализация <c>ITelegramSender</c> на <c>400</c>/<c>403</c> Bot API.
+        /// Обработчик доставки переводит уведомление в <c>Skipped</c> и вызывает
+        /// <c>UnlinkTelegram()</c>, чтобы не долбить мёртвый чат.
+        /// </remarks>
+        public const string TelegramChatUnavailable = "notification.telegram.chatUnavailable";
+
+        /// <summary>
+        /// Временная ошибка отправки (сеть, таймаут, <c>429</c>, <c>5xx</c>); попытка повторяется.
+        /// </summary>
+        public const string TelegramSendFailed = "notification.telegram.send";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы инбокса; полный код — <c>notification.list.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "notification.list";
+
+        /// <summary>
+        /// Префикс кодов сохранения уведомления; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        /// <remarks>
+        /// Вставка идёт <c>ON CONFLICT DO NOTHING</c>, поэтому уникальность здесь не ошибка,
+        /// а штатный ответ «строка уже есть». Префикс нужен для остальных ошибок сохранения
+        /// (CHECK, NOT NULL) и для единообразия с другими репозиториями.
+        /// </remarks>
+        public const string UpdatePrefix = "notification.update";
+    }
+
+    /// <summary>
+    /// Настройки напоминаний барбера.
+    /// </summary>
+    /// <remarks>
+    /// Коды операций сохранения настроек. Ошибки правил (<c>notificationSettings.leadMinutes</c>
+    /// и <c>notificationSettings.digestTime</c>) родились в домене и здесь не дублируются.
+    /// </remarks>
+    public static class NotificationSettings
+    {
+        /// <summary>
+        /// Префикс кодов создания настроек; гонка первого чтения даёт
+        /// <c>notificationSettings.add.uniqueViolation</c>.
+        /// </summary>
+        public const string AddPrefix = "notificationSettings.add";
+
+        /// <summary>
+        /// Гонка двух первых чтений: строку уже создал параллельный запрос; <c>409</c>.
+        /// </summary>
+        public const string AddUniqueViolation = AddPrefix + ".uniqueViolation";
+
+        /// <summary>
+        /// Префикс кодов обновления настроек; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        public const string UpdatePrefix = "notificationSettings.update";
+    }
+
+    /// <summary>
     /// Суффикс нарушения уникальности; <c>409</c>.
     /// </summary>
     /// <param name="codePrefix">Префикс операции, например <c>booking.add</c>.</param>

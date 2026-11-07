@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Privacy;
 using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
@@ -10,10 +11,13 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using BarberSearch.Web.Auth;
+using BarberSearch.Web.Notifications;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -95,30 +99,90 @@ public sealed class TestApp : IAsyncDisposable
     public IServiceProvider Services => _factory.Services;
 
     /// <summary>
+    /// Новый клиент того же тестового хоста без заголовков <see cref="Client"/>.
+    /// </summary>
+    /// <remarks>
+    /// Нужен анонимным запросам (вебхук Telegram) после того, как основной клиент вошёл
+    /// под Bearer: заголовок <c>Authorization</c> принадлежит клиенту, а не хосту.
+    /// </remarks>
+    public HttpClient CreateClient()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("https://localhost")
+        });
+        client.Timeout = TimeSpan.FromSeconds(60);
+
+        return client;
+    }
+
+    /// <summary>
     /// Очищает базу и поднимает новый хост с собственной конфигурацией.
     /// </summary>
-    public static async Task<TestApp> StartAsync(PostgresFixture database)
+    /// <remarks>
+    /// <paramref name="configuration"/> задаёт переменные окружения до создания хоста:
+    /// minimal hosting читает конфигурацию в <c>WebApplication.CreateBuilder</c>, поэтому
+    /// <c>Reminders__Enabled</c> и <c>Telegram__*</c> должны быть видны уже там. Переменные
+    /// восстанавливаются сразу после старта — конфигурация к этому моменту снята в память.
+    /// <para>
+    /// <paramref name="timeProvider"/> и <paramref name="telegramSender"/> заменяют
+    /// регистрации Web: тестам нужно двигать «сейчас» и перехватывать сообщения, не
+    /// отправляя их в настоящий Telegram.
+    /// </para>
+    /// </remarks>
+    public static async Task<TestApp> StartAsync(
+        PostgresFixture database,
+        IReadOnlyDictionary<string, string?>? configuration = null,
+        TimeProvider? timeProvider = null,
+        ITelegramSender? telegramSender = null)
     {
         ArgumentNullException.ThrowIfNull(database);
 
         await database.ResetAsync();
 
-        var factory = new IntegrationWebApplicationFactory();
+        var previousEnvironment = new Dictionary<string, string?>(StringComparer.Ordinal);
 
-        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        if (configuration is not null)
         {
-            AllowAutoRedirect = false,
-            BaseAddress = new Uri("http://localhost")
-        });
-        client.Timeout = TimeSpan.FromSeconds(60);
+            foreach (var (name, value) in configuration)
+            {
+                previousEnvironment[name] = Environment.GetEnvironmentVariable(name);
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
 
-        // R-50: стартовая уборка refresh-токенов идёт параллельно запуску хоста. Ждём её
-        // завершения, иначе DELETE может забрать строки, засеянные тестом, раньше, чем тест
-        // вызовет CleanupOnceAsync, и проверка счётчика станет флейкой.
-        var cleanup = factory.Services.GetRequiredService<RefreshTokenCleanupService>();
-        await cleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+        try
+        {
+            var factory = new IntegrationWebApplicationFactory(timeProvider, telegramSender);
 
-        return new TestApp(factory, client);
+            var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                BaseAddress = new Uri("http://localhost")
+            });
+            client.Timeout = TimeSpan.FromSeconds(60);
+
+            // R-50: стартовая уборка refresh-токенов идёт параллельно запуску хоста. Ждём её
+            // завершения, иначе DELETE может забрать строки, засеянные тестом, раньше, чем тест
+            // вызовет CleanupOnceAsync, и проверка счётчика станет флейкой.
+            var cleanup = factory.Services.GetRequiredService<RefreshTokenCleanupService>();
+            await cleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
+            // Тот же порядок для воркера напоминаний: стартовый тик не должен гоняться
+            // с настройками, которые тест сидирует сразу после старта.
+            var reminders = factory.Services.GetRequiredService<ReminderDispatchService>();
+            await reminders.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
+            return new TestApp(factory, client);
+        }
+        finally
+        {
+            foreach (var (name, value) in previousEnvironment)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
     }
 
     /// <summary>
@@ -126,6 +190,17 @@ public sealed class TestApp : IAsyncDisposable
     /// </summary>
     private sealed class IntegrationWebApplicationFactory : WebApplicationFactory<Program>
     {
+        private readonly TimeProvider? _timeProvider;
+        private readonly ITelegramSender? _telegramSender;
+
+        public IntegrationWebApplicationFactory(
+            TimeProvider? timeProvider,
+            ITelegramSender? telegramSender)
+        {
+            _timeProvider = timeProvider;
+            _telegramSender = telegramSender;
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             ArgumentNullException.ThrowIfNull(builder);
@@ -135,6 +210,23 @@ public sealed class TestApp : IAsyncDisposable
             // EventLog на Windows падает в песочнице на первой же warning-записи (AGENT.md §5.2).
             // ClearProviders убирает и его, и консоль: вывод тестов остаётся чистым.
             builder.ConfigureLogging(logging => logging.ClearProviders());
+
+            // ConfigureTestServices выполняется после регистраций приложения, поэтому
+            // RemoveAll действительно снимает настоящие TimeProvider и ITelegramSender.
+            builder.ConfigureTestServices(services =>
+            {
+                if (_timeProvider is not null)
+                {
+                    services.RemoveAll<TimeProvider>();
+                    services.AddSingleton(_timeProvider);
+                }
+
+                if (_telegramSender is not null)
+                {
+                    services.RemoveAll<ITelegramSender>();
+                    services.AddSingleton(_telegramSender);
+                }
+            });
         }
     }
 

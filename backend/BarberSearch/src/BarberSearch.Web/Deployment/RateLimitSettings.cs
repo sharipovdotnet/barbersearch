@@ -153,7 +153,11 @@ public static class RateLimitSettings
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!IsWriteMethod(context.Request.Method))
+        // Явный маркер снимает лимит с одного действия (вебхук Telegram). Глобальный
+        // лимитер не отключается атрибутом endpoint'а, поэтому решение принимается здесь,
+        // по метаданным уже выбранного endpoint'а.
+        if (!IsWriteMethod(context.Request.Method)
+            || context.GetEndpoint()?.Metadata.GetMetadata<SkipRateLimitAttribute>() is not null)
         {
             return RateLimitPartition.GetNoLimiter(NoLimitPartitionKey);
         }
