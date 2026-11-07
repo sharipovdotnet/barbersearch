@@ -46,8 +46,11 @@ export class BarberImportPage {
     return this.page.getByRole('button', { name: /Показать пример|Скрыть пример/ })
   }
 
+  /** Ссылка на политику внутри формы: в подвале такая же, поэтому скоуп — форма. */
   get privacyLink(): Locator {
-    return this.page.getByRole('link', { name: 'Политика обработки данных' })
+    return this.page
+      .locator('form')
+      .getByRole('link', { name: 'Политика обработки данных' })
   }
 
   /** Сводка предпросмотра: «Готово 2 из 2». */
