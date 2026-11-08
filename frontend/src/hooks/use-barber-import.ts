@@ -152,6 +152,35 @@ export type BarberImportController = {
 
 const FALLBACK_FAILURE = 'Не удалось создать запись.'
 
+/**
+ * Текст отказа одной строки.
+ *
+ * Коды окна и длительности важнее `overlap`: «Обновите свободное время» не
+ * лечит запись, которую сервер не примет из-за 90-дневного предела или
+ * слишком длинной услуги.
+ */
+function createFailureText(cause: unknown, isOverlap: boolean): string {
+  if (cause instanceof ApiError) {
+    if (cause.hasCode('booking.create.startAt.inPast')) {
+      return 'Время уже прошло.'
+    }
+
+    if (cause.hasCode('booking.create.startAt.tooFar')) {
+      return 'Слишком далеко: запись можно создать не более чем на 90 дней вперёд.'
+    }
+
+    if (cause.hasCode('booking.create.period.tooLong')) {
+      return 'Слишком длинное событие.'
+    }
+  }
+
+  if (isOverlap) {
+    return 'Время занято.'
+  }
+
+  return describeBarberBookingCreateFailure(cause, FALLBACK_FAILURE).message
+}
+
 const RATE_LIMIT_TEXT = 'Слишком много запросов. Продолжим через минуту.'
 const NETWORK_TEXT = 'Связь пропала. Продолжить с этой строки.'
 const SIGN_IN_TEXT = 'Сессия истекла — войдите снова.'
@@ -519,20 +548,29 @@ export function useBarberImport(barberProfileId: string): BarberImportController
   const setAllIncluded = useCallback(
     (included: boolean) => {
       const next = new Set<number>()
+      let truncated = false
 
       if (included) {
         for (const row of rowsRef.current) {
+          if (row.status === 'created') {
+            continue
+          }
+
           if (next.size >= IMPORT_MAX_ROWS) {
+            // «Выбрать все» тоже упирается в предел: 51-я строка не влезает.
+            truncated = true
             break
           }
 
-          if (row.status !== 'created') {
-            next.add(row.draft.line)
-          }
+          next.add(row.draft.line)
         }
       }
 
       applyIncluded(next)
+
+      if (truncated) {
+        setSelectionNotice(SELECTION_LIMIT_TEXT)
+      }
     },
     [applyIncluded]
   )
@@ -936,12 +974,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
 
           const isOverlap =
             cause instanceof ApiError && cause.hasCode('booking.add.overlap')
-          const failureMessage =
-            cause instanceof ApiError && cause.hasCode('booking.create.startAt.inPast')
-              ? 'Время уже прошло.'
-              : isOverlap
-                ? 'Время занято.'
-                : describeBarberBookingCreateFailure(cause, FALLBACK_FAILURE).message
+          const failureMessage = createFailureText(cause, isOverlap)
 
           done += 1
           commit(
@@ -1016,8 +1049,8 @@ export function useBarberImport(barberProfileId: string): BarberImportController
     await send(lines)
   }, [commit, send, sendableLines])
 
-  const retryRow = useCallback(
-    async (line: number) => {
+  const retryLine = useCallback(
+    async (line: number, toPreview: boolean) => {
       const row = rowsRef.current.find((item) => item.draft.line === line)
 
       if (
@@ -1036,15 +1069,29 @@ export function useBarberImport(barberProfileId: string): BarberImportController
             : item
         )
       )
-      setStage('preview')
+
+      if (toPreview) {
+        setStage('preview')
+      }
+
       await send([line])
     },
     [commit, send]
   )
 
+  const retryRow = useCallback(
+    async (line: number) => {
+      await retryLine(line, true)
+    },
+    [retryLine]
+  )
+
   /**
    * Подстановка ближайшего слота: время строки меняется на слот, длительность
    * события сбрасывается — иначе она может не влезть в предложенный слот.
+   *
+   * Из отчёта строка повторяется на месте: возврат в предпросмотр перехватил бы
+   * фокус и показал бы отчёт дважды.
    */
   const applySlot = useCallback(
     async (line: number, slot: BarberSlot) => {
@@ -1063,14 +1110,16 @@ export function useBarberImport(barberProfileId: string): BarberImportController
         useEventTime: false,
         eventDurationMinutes: null,
       })
-      await retryRow(line)
+      await retryLine(line, stage !== 'result')
     },
-    [options, retryRow, updateRow]
+    [options, retryLine, stage, updateRow]
   )
 
+  // «Перенести ещё» — только календарь: у текста нет частичного выбора,
+  // и кнопка в его отчёте лишь повторяла бы уже отправленное.
   const canContinue = useMemo(
-    () => rows.some((row) => row.status !== 'created'),
-    [rows]
+    () => source === 'ics' && rows.some((row) => row.status !== 'created'),
+    [rows, source]
   )
 
   /**
@@ -1091,6 +1140,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
     }
 
     applyIncluded(next)
+    setProgress(null)
     setStage('preview')
   }, [applyIncluded])
 
@@ -1101,6 +1151,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
    * и те правки, с которыми пришёл к отчёту.
    */
   const reviewRows = useCallback(() => {
+    setProgress(null)
     setStage('preview')
   }, [])
 

@@ -156,7 +156,6 @@ export function IcsImportForm({
             id={FILE_ID}
             type="file"
             accept=".ics,text/calendar,application/ics"
-            aria-label="Файл календаря"
             aria-invalid={hasError}
             aria-describedby={describedBy}
             // `display:none` сделал бы input недостижимым с клавиатуры, поэтому

@@ -358,6 +358,72 @@ describe('useBarberImport: отправка', () => {
     expect(hook.result.current.canContinue).toBe(false)
   })
 
+  it('400 tooFar и period.tooLong получают свои тексты, а не «Обновите свободное время»', async () => {
+    const calls: BookingCall[] = []
+
+    server.use(
+      bookingHandler(calls, (_call, index) =>
+        index === 0
+          ? HttpResponse.json(
+              problemDetails(400, {
+                errorCodes: ['booking.create.startAt.tooFar'],
+              }),
+              { status: 400 }
+            )
+          : HttpResponse.json(
+              problemDetails(400, {
+                errorCodes: ['booking.create.period.tooLong'],
+              }),
+              { status: 400 }
+            )
+      )
+    )
+
+    const hook = await renderImport()
+
+    parseText(
+      hook,
+      'завтра\n10:00 Иван стрижка +79990001122\n11:00 Пётр борода +79990003344'
+    )
+
+    await act(async () => {
+      await hook.result.current.createRows()
+    })
+
+    expect(hook.result.current.rows[0].failure).toBe(
+      'Слишком далеко: запись можно создать не более чем на 90 дней вперёд.'
+    )
+    expect(hook.result.current.rows[1].failure).toBe('Слишком длинное событие.')
+
+    for (const row of hook.result.current.rows) {
+      expect(row.failure).not.toContain('Обновите свободное время')
+    }
+  })
+
+  it('текстовый импорт с упавшей строкой не предлагает «Перенести ещё»', async () => {
+    server.use(
+      bookingHandler([], () =>
+        HttpResponse.json(
+          problemDetails(400, {
+            errorCodes: ['booking.create.startAt.inPast'],
+          }),
+          { status: 400 }
+        )
+      )
+    )
+
+    const hook = await renderImport()
+
+    parseText(hook, 'завтра\n10:00 Иван стрижка +79990001122')
+
+    await act(async () => {
+      await hook.result.current.createRows()
+    })
+
+    expect(hook.result.current.rows[0].status).toBe('failed')
+    expect(hook.result.current.canContinue).toBe(false)
+  })
+
   it('повтор неудачной строки идёт с тем же ключом идемпотентности', async () => {
     const calls: BookingCall[] = []
 
@@ -673,6 +739,17 @@ describe('useBarberImport: файл календаря', () => {
     ).toBe(true)
   })
 
+  it('календарь с не созданной строкой предлагает «Перенести ещё»', async () => {
+    const hook = await renderImport()
+
+    await parseCalendar(hook)
+
+    expect(
+      hook.result.current.rows.some((row) => row.status !== 'created')
+    ).toBe(true)
+    expect(hook.result.current.canContinue).toBe(true)
+  })
+
   it('до createRows в сеть не уходит ни одной брони', async () => {
     const calls: BookingCall[] = []
 
@@ -751,6 +828,30 @@ describe('useBarberImport: файл календаря', () => {
 
     expect(hook.result.current.summary.selected).toBe(50)
     expect(hook.result.current.rows[50].included).toBe(true)
+
+    act(() => {
+      hook.result.current.setAllIncluded(false)
+    })
+
+    expect(hook.result.current.summary.selected).toBe(0)
+    expect(hook.result.current.selectionNotice).toBeNull()
+
+    act(() => {
+      hook.result.current.setAllIncluded(true)
+    })
+
+    // «Выбрать все» тоже упирается в предел: 51-я строка не выбирается,
+    // и предупреждение объясняет, почему.
+    expect(hook.result.current.summary.selected).toBe(50)
+    expect(hook.result.current.selectionNotice).toBe(
+      'За один раз — не больше 50 записей.'
+    )
+
+    act(() => {
+      hook.result.current.toggleRow(first.draft.line)
+    })
+
+    expect(hook.result.current.selectionNotice).toBeNull()
   })
 
   it('updateRow правит телефон строки без ошибок и сохраняет остальное', async () => {
@@ -804,6 +905,11 @@ describe('useBarberImport: файл календаря', () => {
       endAt: '2026-11-20T08:00:00.000Z',
     }
     let ivanFailed = false
+    let secondStarted = false
+    let releaseSecond: () => void = () => {}
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve
+    })
 
     server.use(
       http.post(BOOKINGS_PATH, async ({ request }) => {
@@ -828,6 +934,13 @@ describe('useBarberImport: файл календаря', () => {
             problemDetails(409, { errorCodes: ['booking.add.overlap'] }),
             { status: 409 }
           )
+        }
+
+        // Второй POST Ивана держим открытым: пока он в полёте, отчёт обязан
+        // остаться на экране, иначе фокус успевает перескочить в предпросмотр.
+        if (body.guestFirstName === 'Иван' && ivanFailed) {
+          secondStarted = true
+          await secondGate
         }
 
         return created(`booking-${calls.length}`)
@@ -868,8 +981,22 @@ describe('useBarberImport: файл календаря', () => {
     expect(failed.overlap).toBe(true)
     expect(failed.slots).toStrictEqual([slot])
 
+    let applyPromise: Promise<void> = Promise.resolve()
+
+    act(() => {
+      applyPromise = hook.result.current.applySlot(failed.draft.line, slot)
+    })
+
+    await waitFor(() => {
+      expect(secondStarted).toBe(true)
+    })
+
+    // Подстановка слота из отчёта не должна возвращать на предпросмотр.
+    expect(hook.result.current.stage).toBe('result')
+
     await act(async () => {
-      await hook.result.current.applySlot(failed.draft.line, slot)
+      releaseSecond()
+      await applyPromise
     })
 
     const patched = findRow(hook, 'Иван')
@@ -912,12 +1039,15 @@ describe('useBarberImport: файл календаря', () => {
     expect(hook.result.current.summary.created).toBe(2)
     expect(findRow(hook, 'Иван').status).toBe('created')
     expect(hook.result.current.canContinue).toBe(true)
+    expect(hook.result.current.progress).toStrictEqual({ done: 2, total: 2 })
 
     act(() => {
       hook.result.current.continueImport()
     })
 
     expect(hook.result.current.stage).toBe('preview')
+    // Прогресс закончившейся пачки не должен переезжать в следующий предпросмотр.
+    expect(hook.result.current.progress).toBeNull()
 
     const createdRows = hook.result.current.rows.filter(
       (row) => row.status === 'created'
@@ -959,11 +1089,14 @@ describe('useBarberImport: файл календаря', () => {
       status: row.status,
     }))
 
+    expect(hook.result.current.progress).toStrictEqual({ done: 2, total: 2 })
+
     act(() => {
       hook.result.current.reviewRows()
     })
 
     expect(hook.result.current.stage).toBe('preview')
+    expect(hook.result.current.progress).toBeNull()
     expect(
       hook.result.current.rows.map((row) => ({
         line: row.draft.line,

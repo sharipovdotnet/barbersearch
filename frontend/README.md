@@ -506,7 +506,7 @@ Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabin
 `barber-week-schedule.tsx`, `barber-schedule-exceptions.tsx`, `barber-time-offs.tsx`,
 `src/hooks/use-barber-schedule.ts`, `src/lib/barber-schedule.ts`.
 
-### Import from Google Docs
+### Import from Google Docs and calendars
 
 `/barber/import` переносит старый журнал барбера одним вечером: файл календаря или
 вставленный текст, проверка и создание пачки. Экран открывается из кабинета ссылкой

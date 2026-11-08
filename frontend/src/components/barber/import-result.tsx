@@ -160,6 +160,11 @@ export function ImportResult({
   const headingRef = useRef<HTMLHeadingElement>(null)
   const failed = rows.filter((row) => row.status === 'failed')
   const selected = rows.filter((row) => row.included).length
+  // После «Перенести ещё» созданные строки прошлой пачки сняты с выбора: отчёт
+  // календаря говорит о текущей пачке, а не о кумулятивном `summary.created`.
+  const createdNow = rows.filter(
+    (row) => row.included && row.status === 'created'
+  ).length
   const attention = rows.filter(
     (row) =>
       row.included
@@ -168,7 +173,7 @@ export function ImportResult({
   ).length
   const report =
     source === 'ics'
-      ? `Перенесено ${summary.created} из ${selected} выбранных записей.`
+      ? `Перенесено ${createdNow} из ${selected} выбранных записей.`
       : `Перенесено ${summary.created} из ${summary.total} записей.`
 
   useEffect(() => {

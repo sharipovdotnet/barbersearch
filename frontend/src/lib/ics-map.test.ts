@@ -193,6 +193,49 @@ describe('mapIcsOccurrences: услуга и имя', () => {
   })
 })
 
+describe('mapIcsOccurrences: имя из подписи DESCRIPTION', () => {
+  it('вырезает телефон из строки «Клиент:» и оставляет имя и фамилию', () => {
+    const [draft] = mapIcsOccurrences(
+      [
+        occurrence({
+          description: 'Клиент: Иван Петров, тел. +7 999 123-45-67',
+        }),
+      ],
+      options()
+    )
+
+    expect(draft.phone).toBe('+79991234567')
+    expect(draft.firstName).toBe('Иван')
+    expect(draft.lastName).toBe('Петров')
+  })
+
+  it('оставляет одно имя без фамилии', () => {
+    const [draft] = mapIcsOccurrences(
+      [occurrence({ description: 'Имя: Анна' })],
+      options()
+    )
+
+    expect(draft.firstName).toBe('Анна')
+    expect(draft.lastName).toBeNull()
+  })
+
+  it('понимает английские подписи Client и Name', () => {
+    const [client] = mapIcsOccurrences(
+      [occurrence({ description: 'Client: John Smith' })],
+      options()
+    )
+    const [name] = mapIcsOccurrences(
+      [occurrence({ description: 'Name: John Smith' })],
+      options()
+    )
+
+    expect(client.firstName).toBe('John')
+    expect(client.lastName).toBe('Smith')
+    expect(name.firstName).toBe('John')
+    expect(name.lastName).toBe('Smith')
+  })
+})
+
 describe('mapIcsOccurrences: телефон', () => {
   it('берёт телефон из DESCRIPTION и подсказывает проверить', () => {
     const [draft] = mapIcsOccurrences(

@@ -292,7 +292,7 @@ const NAME_TIME = /(?<!\d)\d{1,2}[:.]\d{2}(?!\d)/g
 const NAME_RELATIVE =
   /(?<!\p{L})(?:послезавтра|завтра|сегодня)(?!\p{L})/giu
 const NAME_STOP_WORDS =
-  /(?<!\p{L})(?:appointment|booking|клиентка|клиент|запись|в|на|к|для)(?!\p{L})/giu
+  /(?<!\p{L})(?:appointment|booking|клиентка|клиент|запись|телефон|тел|phone|в|на|к|для)(?!\p{L})/giu
 
 /**
  * Остаток `SUMMARY` перед `splitName`: время, даты, относительные слова, ссылки и
@@ -316,10 +316,29 @@ function cleanNameText(value: string): string {
 const NAME_LABEL =
   /(?<!\p{L})(?:клиент|имя|client|name)\s*[:\-–—]\s*([^\n]+)/iu
 
+/**
+ * Остаток строки с подписью: всё, что после метки, чистится так же, как `SUMMARY`.
+ *
+ * Телефон вырезается первым и по индексам `findPhone`, а не регуляркой: в
+ * «Клиент: Иван Петров, тел. +7…» иначе «тел» осталось бы фамилией. Остальные
+ * шумовые токены (ссылки, даты, время, служебные слова) убирает `cleanNameText`.
+ */
+function cleanLabeledName(value: string): string {
+  let cleaned = value
+  let phone = findPhone(cleaned)
+
+  while (phone !== null) {
+    cleaned = removeRange(cleaned, phone.start, phone.end)
+    phone = findPhone(cleaned)
+  }
+
+  return collapse(cleanNameText(cleaned))
+}
+
 function findLabeledName(description: string): string | null {
   const match = NAME_LABEL.exec(description)
 
-  return match === null ? null : match[1].trim()
+  return match === null ? null : cleanLabeledName(match[1])
 }
 
 // ---------------------------------------------------------------------------

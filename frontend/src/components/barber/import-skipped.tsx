@@ -1,5 +1,6 @@
 import { formatEventsCount, formatShortDay } from '@/lib/format'
 import type { IcsSkippedEvent, IcsSkippedReason } from '@/lib/ics-parse'
+import { salonDateFromInstant } from '@/lib/salon-time'
 
 /**
  * «Пропущено N событий»: сводка причин и первые 50 событий списком.
@@ -83,12 +84,16 @@ function reasonLabel(reason: IcsSkippedReason): string {
   return copy.kind === 'fixed' ? copy.text : copy.forms[0]
 }
 
-function eventDate(event: IcsSkippedEvent): string {
+function eventDate(event: IcsSkippedEvent, timeZoneId: string): string {
   if (event.startAt === null) {
     return '—'
   }
 
-  return formatShortDay(`${event.startAt.slice(0, 10)}T00:00:00Z`, 'UTC')
+  // Календарный день — в поясе салона: вечерний UTC-инстант может быть уже
+  // следующим днём по часам салона, и `slice(0, 10)` показал бы вчера.
+  const date = salonDateFromInstant(event.startAt, timeZoneId)
+
+  return formatShortDay(`${date}T00:00:00Z`, 'UTC')
 }
 
 function eventSummary(event: IcsSkippedEvent): string {
@@ -97,7 +102,14 @@ function eventSummary(event: IcsSkippedEvent): string {
   return summary === '' ? '—' : summary
 }
 
-export function ImportSkipped({ skipped }: { skipped: IcsSkippedEvent[] }) {
+export function ImportSkipped({
+  skipped,
+  timeZoneId,
+}: {
+  skipped: IcsSkippedEvent[]
+  /** Пояс основного салона: даты пропущенных событий показываются в нём. */
+  timeZoneId: string
+}) {
   if (skipped.length === 0) {
     return null
   }
@@ -130,7 +142,7 @@ export function ImportSkipped({ skipped }: { skipped: IcsSkippedEvent[] }) {
         <ul className="space-y-1 border-t pt-2 text-muted-foreground break-words">
           {shown.map((event, index) => (
             <li key={`${event.startAt ?? 'none'}:${event.summary}:${index}`}>
-              <span className="text-foreground">{eventDate(event)}</span>
+              <span className="text-foreground">{eventDate(event, timeZoneId)}</span>
               {' · '}
               {eventSummary(event)}
               {' · '}

@@ -104,6 +104,12 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
   const hasSalons =
     state.options !== null && state.options.salons.length > 0
   const isReady = state.optionsStatus === 'ready' && hasSalons
+  // Дата пропущенного события — в поясе основного салона; пока опции не
+  // загружены, остаётся UTC, чтобы блок не мигал чужим днём.
+  const skippedTimeZoneId =
+    state.options?.salons.find((salon) => salon.isPrimary)?.timeZoneId
+    ?? state.options?.salons[0]?.timeZoneId
+    ?? 'UTC'
 
   return (
     <div className="space-y-5">
@@ -229,7 +235,10 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
                   />
 
                   {state.skipped.length > 0 && (
-                    <ImportSkipped skipped={state.skipped} />
+                    <ImportSkipped
+                      skipped={state.skipped}
+                      timeZoneId={skippedTimeZoneId}
+                    />
                   )}
                 </>
               ) : (
@@ -253,7 +262,10 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
             ) : (
               <>
                 {state.skipped.length > 0 && (
-                  <ImportSkipped skipped={state.skipped} />
+                  <ImportSkipped
+                    skipped={state.skipped}
+                    timeZoneId={skippedTimeZoneId}
+                  />
                 )}
 
                 <ImportPreview

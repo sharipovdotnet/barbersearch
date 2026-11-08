@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures/test'
+import type { Page, TestInfo } from '@playwright/test'
 
 import { storageStatePath } from '../fixtures/accounts'
 import { cancelBookingsByGuestName } from '../fixtures/api'
@@ -121,6 +122,28 @@ function buildCalendar(): string {
 
 const CALENDAR = buildCalendar()
 
+/** axe и горизонтальный скролл на 1280 и 320: один и тот же гейт для трёх шагов. */
+async function scanAtBothWidths(
+  page: Page,
+  screen: string,
+  testInfo: TestInfo
+): Promise<void> {
+  await expectNoBlockingViolations(page, screen, testInfo)
+
+  await page.setViewportSize({ width: 320, height: 800 })
+
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth
+  )
+
+  expect(overflow).toBeLessThanOrEqual(0)
+  await expectNoBlockingViolations(page, `${screen} @320`, testInfo)
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+}
+
 test.use({ storageState: storageStatePath('barber') })
 
 test.describe('перенос из календаря', () => {
@@ -192,24 +215,7 @@ test.describe('перенос из календаря', () => {
       await expect(page.getByText(FILE_NAME)).toBeVisible()
 
       // 5. axe на 1280 и 320: форма с выбранным файлом не расширяет страницу.
-      await expectNoBlockingViolations(page, '/barber/import (файл)', testInfo)
-
-      await page.setViewportSize({ width: 320, height: 800 })
-
-      const overflow = await page.evaluate(
-        () =>
-          document.documentElement.scrollWidth -
-          document.documentElement.clientWidth
-      )
-
-      expect(overflow).toBeLessThanOrEqual(0)
-      await expectNoBlockingViolations(
-        page,
-        '/barber/import (файл) @320',
-        testInfo
-      )
-
-      await page.setViewportSize({ width: 1280, height: 900 })
+      await scanAtBothWidths(page, '/barber/import (файл)', testInfo)
 
       // 6. Разбор: услуга вырезана из SUMMARY, имя осталось; два события
       //    пропущены с причинами.
@@ -231,7 +237,11 @@ test.describe('перенос из календаря', () => {
       await expect(page.getByText('1 прошедшее', { exact: true })).toBeVisible()
       await expect(page.getByText('1 на весь день', { exact: true })).toBeVisible()
 
-      // 7. Создание: точная подпись кнопки считается `formatBookingsCount`.
+      // 7. Предпросмотр не должен ломать axe и ширину ни на одной из двух
+      //    проверяемых ширин.
+      await scanAtBothWidths(page, '/barber/import (предпросмотр)', testInfo)
+
+      // 8. Создание: точная подпись кнопки считается `formatBookingsCount`.
       await expect(screen.createButton).toHaveText('Создать 1 запись')
       await screen.createButton.click()
 
@@ -239,12 +249,15 @@ test.describe('перенос из календаря', () => {
         'Перенесено 1 из 1 выбранных записей.'
       )
 
+      // 9. Отчёт тоже проверяется на обеих ширинах.
+      await scanAtBothWidths(page, '/barber/import (отчёт)', testInfo)
+
       await screen.openBookingsButton.click()
       await expect(page).toHaveURL(/\/barber$/)
       await cabinet.openTab('Ближайшие')
       await expect(cabinet.panel.getByText(GUEST_FULL_NAME)).toBeVisible()
 
-      // 8. Тот же файл ещё раз: ключ по UID возвращает ту же запись.
+      // 10. Тот же файл ещё раз: ключ по UID возвращает ту же запись.
       await screen.goto()
       await expect(screen.heading).toBeVisible()
       await expect(screen.calendarSource).toBeChecked()
@@ -263,7 +276,7 @@ test.describe('перенос из календаря', () => {
       await cabinet.openTab('Ближайшие')
       await expect(cabinet.panel.getByText(GUEST_FULL_NAME)).toHaveCount(1)
     } finally {
-      // 9. Уборка: отменить созданное, иначе следующая сцена увидит лишнюю строку.
+      // 11. Уборка: отменить созданное, иначе следующая сцена увидит лишнюю строку.
       await cancelBookingsByGuestName(page.request, GUEST_LAST_NAME)
     }
   })

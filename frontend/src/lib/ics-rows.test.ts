@@ -20,6 +20,10 @@ import type { BarberProfileSalon, BarberProfileService } from '@/lib/catalog'
 
 const NOW = Date.parse('2026-11-08T15:00:00Z')
 const TODAY = '2026-11-08'
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+/** Верхняя граница окна с часовым запасом: `now + 90 дней − 1 час`. */
+const FAR_BOUNDARY_MS = NOW + 90 * DAY_MS - HOUR_MS
 
 const leninSalon: BarberProfileSalon = {
   id: 'profile-salon-s1',
@@ -232,6 +236,40 @@ describe('recomputeImportRows: время ICS-строки', () => {
     )
 
     expect(next.startAt).toBe('2027-03-01T10:00:00.000Z')
+    expect(next.issues).toStrictEqual(['tooFar'])
+  })
+
+  it('начало ровно на границе 90 дней минус час — ещё не tooFar', () => {
+    const boundary = new Date(FAR_BOUNDARY_MS).toISOString()
+    const [next] = recomputeImportRows(
+      [
+        icsRow({
+          eventStartAt: boundary,
+          eventEndAt: null,
+          date: '2027-02-06',
+        }),
+      ],
+      options
+    )
+
+    expect(next.startAt).toBe(boundary)
+    expect(next.issues).toStrictEqual([])
+  })
+
+  it('начало на миллисекунду позже границы — tooFar', () => {
+    const boundary = new Date(FAR_BOUNDARY_MS + 1).toISOString()
+    const [next] = recomputeImportRows(
+      [
+        icsRow({
+          eventStartAt: boundary,
+          eventEndAt: null,
+          date: '2027-02-06',
+        }),
+      ],
+      options
+    )
+
+    expect(next.startAt).toBe(boundary)
     expect(next.issues).toStrictEqual(['tooFar'])
   })
 
