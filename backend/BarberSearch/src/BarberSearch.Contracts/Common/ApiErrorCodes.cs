@@ -83,6 +83,44 @@ public static class ApiErrorCodes
         /// согласия с новой. Пользователь обновляет страницу и подтверждает согласие снова.
         /// </remarks>
         public const string RegisterConsentVersion = "auth.register.consentVersion";
+
+        /// <summary>
+        /// Ссылка подтверждения email недействительна, истекла или уже использована; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Один код на все причины: неизвестный, просроченный, использованный и отозванный
+        /// токен для клиента неразличимы — иначе перебором можно было бы выяснить, какие
+        /// строки существуют.
+        /// </remarks>
+        public const string EmailVerificationInvalid = "auth.emailVerification.invalid";
+
+        /// <summary>
+        /// Письмо подтверждения уже отправлено, повторная отправка — раньше чем через 60 секунд;
+        /// <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код от <see cref="EmailVerificationInvalid"/>: клиент показывает
+        /// «письмо уже отправлено» и кнопку с обратным отсчётом, а не ошибку ссылки.
+        /// </remarks>
+        public const string EmailVerificationCooldown = "auth.emailVerification.cooldown";
+
+        /// <summary>
+        /// Отправка писем не настроена на сервере; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// В маппере ошибок нет <c>503</c> и отдельного <c>ErrorType</c>, поэтому
+        /// «почта не настроена» — конфликт состояния сервера, а не ошибка клиента.
+        /// </remarks>
+        public const string EmailVerificationUnavailable = "auth.emailVerification.unavailable";
+
+        /// <summary>
+        /// Письмо не удалось отправить (SMTP недоступен, таймаут, отказ сервера); <c>500</c>.
+        /// </summary>
+        /// <remarks>
+        /// Сбой транспорта, а не бизнес-правило: токен к этому моменту уже сохранён, и
+        /// повторная отправка возможна после кулдауна.
+        /// </remarks>
+        public const string EmailVerificationSendFailed = "auth.emailVerification.sendFailed";
     }
 
     /// <summary>

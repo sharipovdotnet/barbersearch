@@ -234,8 +234,10 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
  * Форма самостоятельной регистрации клиента.
  *
  * Регистрация только создаёт аккаунт: после `201` форма сама входит тем же паролем и
- * уводит в `/account`. Если авто-вход не удался, повторять регистрацию нельзя — второй
- * запрос получил бы `409`, поэтому форма заменяется карточкой успеха со входом.
+ * уводит в `/account/security?verification=sent` — на карточку подтверждения адреса,
+ * где сервер уже отправил письмо. Если авто-вход не удался, повторять регистрацию
+ * нельзя — второй запрос получил бы `409`, поэтому форма заменяется карточкой успеха
+ * со входом.
  */
 export function RegisterForm() {
   const { t } = useI18n()
@@ -342,7 +344,7 @@ export function RegisterForm() {
         password: trimmed.password,
         rememberMe: false,
       })
-      navigate('/account')
+      navigate('/account/security?verification=sent')
     } catch {
       // Карточка успеха вместо ошибки: аккаунт создан, осталось войти вручную.
       setIsPending(false)

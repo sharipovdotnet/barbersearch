@@ -4,6 +4,7 @@ using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.BarberSpecializations;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.EmailVerifications;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Notifications;
@@ -50,6 +51,9 @@ public class ApplicationDbContext : DbContext
 
     // Аутентификация
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    // Подтверждение адреса электронной почты
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     // Уведомления барберу
     public DbSet<BarberNotification> BarberNotifications => Set<BarberNotification>();

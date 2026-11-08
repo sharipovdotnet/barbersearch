@@ -63,6 +63,10 @@ export const handlers = [
   http.post('/api/auth/login/cookie', () => noContent()),
   http.post('/api/auth/logout', () => noContent()),
   http.post('/api/auth/refresh', () => noContent()),
+  // Подтверждение адреса: по умолчанию оба запроса успешны. Сценарии отказа
+  // (`400 invalid`, `409 cooldown`, `429`) собираются в тестах через `server.use`.
+  http.post('/api/auth/email-verification', () => noContent()),
+  http.post('/api/auth/email-verification/confirm', () => noContent()),
   // Онбординг читает заявку «Стать барбером» перед формой профиля. Без заявки
   // (роль выдана администратором вручную) имя и опыт остаются редактируемыми.
   http.get('/api/barber-requests/mine', () =>

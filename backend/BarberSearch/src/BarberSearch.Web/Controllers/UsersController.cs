@@ -161,8 +161,9 @@ public class UsersController : ApiController
         => ToActionResult(await handler.Handle(new DeactivateUserCommand(userId), cancellationToken));
 
     /// <summary>
-    /// Помечает email подтверждённым. Пока только администратор: самостоятельное подтверждение
-    /// появится вместе с письмом-ссылкой.
+    /// Помечает email подтверждённым вручную. Только администратор: это обход, когда письмо
+    /// не дошло. Самостоятельное подтверждение — ссылкой из письма
+    /// (<c>POST api/auth/email-verification/confirm</c>).
     /// </summary>
     [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     [HttpPost("{userId:guid}/email-verification")]

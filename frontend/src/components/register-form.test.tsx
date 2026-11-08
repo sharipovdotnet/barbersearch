@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { RegisterForm } from '@/components/register-form'
 import { SessionProvider } from '@/components/session-provider'
@@ -30,6 +30,10 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Пароль'), 'correct-horse-1')
   await user.type(screen.getByLabelText('Повтор пароля'), 'correct-horse-1')
 }
+
+beforeEach(() => {
+  window.history.replaceState(null, '', '/register')
+})
 
 describe('RegisterForm', () => {
   it('без согласия на обработку данных показывает ошибку и не создаёт аккаунт', async () => {
@@ -171,5 +175,29 @@ describe('RegisterForm', () => {
     expect(
       await screen.findByText('Отметьте согласие на обработку персональных данных.')
     ).toBeInTheDocument()
+  })
+
+  it('после 201 и авто-входа ведёт в безопасность с отметкой об отправке письма', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.post('/api/auth/register', () =>
+        HttpResponse.json(
+          { id: '33333333-3333-4333-8333-333333333333' },
+          { status: 201 }
+        )
+      ),
+      http.get('/api/auth/me', () => HttpResponse.json(testUser))
+    )
+
+    renderForm()
+    await fillValidForm(user)
+    await user.click(screen.getByRole('checkbox', { name: /Я согласен/ }))
+    await user.click(screen.getByRole('button', { name: 'Зарегистрироваться' }))
+
+    await waitFor(() =>
+      expect(window.location.pathname).toBe('/account/security')
+    )
+    expect(window.location.search).toBe('?verification=sent')
   })
 })
