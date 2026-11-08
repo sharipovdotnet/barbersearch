@@ -7,6 +7,7 @@ import {
   type BarberCabinetView,
 } from '@/lib/barber-cabinet-view'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 /**
  * Один `tablist` на три вкладки.
@@ -22,6 +23,7 @@ export function BarberCabinetViewTabs({
   view: BarberCabinetView
   onChange: (view: BarberCabinetView) => void
 }) {
+  const { t } = useI18n()
   const refs = useRef<Record<BarberCabinetView, HTMLButtonElement | null>>({
     day: null,
     upcoming: null,
@@ -60,7 +62,7 @@ export function BarberCabinetViewTabs({
   return (
     <div
       role="tablist"
-      aria-label="Какие записи показать"
+      aria-label={t('Какие записи показать')}
       className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
     >
       {BARBER_CABINET_VIEWS.map((item) => {
@@ -87,7 +89,7 @@ export function BarberCabinetViewTabs({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {item.label}
+            {t(item.label)}
           </button>
         )
       })}

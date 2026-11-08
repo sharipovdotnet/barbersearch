@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { fetchAdditionalServices } from '@/lib/additional-services'
+import { t } from '@/i18n'
 import { describeApiFailure } from '@/lib/errors'
 import {
   fetchHairServices,
@@ -33,7 +34,6 @@ type CatalogsState = {
 }
 
 const CATALOGS_FALLBACK = 'Не удалось загрузить фильтры.'
-
 const EMPTY: CatalogsState = {
   status: 'loading',
   specializations: [],
@@ -90,7 +90,7 @@ export function useSearchCatalogs(): SearchCatalogsController {
           specializations: [],
           hairServices: [],
           additionalServices: [],
-          error: describeApiFailure(cause, CATALOGS_FALLBACK),
+          error: describeApiFailure(cause, t(CATALOGS_FALLBACK)),
         })
       })
 

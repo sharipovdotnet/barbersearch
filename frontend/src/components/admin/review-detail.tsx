@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useI18n } from '@/i18n'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type { AdminTab } from '@/lib/admin-path'
 import {
@@ -48,12 +49,16 @@ export function ReviewDetail({
   onHide: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const isPending = pendingAction !== null
   const summary =
     review.barber.rating === null
-      ? 'У барбера пока нет опубликованных отзывов.'
-      : `Сейчас у барбера ${formatRating(review.barber.rating)}, ${formatReviewsCount(review.barber.reviewsCount)}.`
+      ? t('У барбера пока нет опубликованных отзывов.')
+      : t('Сейчас у барбера {rating}, {reviews}.', {
+          rating: formatRating(review.barber.rating),
+          reviews: formatReviewsCount(review.barber.reviewsCount),
+        })
 
   return (
     <section
@@ -63,7 +68,7 @@ export function ReviewDetail({
       className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
     >
       <h2 id="review-detail-title" className="sr-only">
-        Отзыв
+        {t('Отзыв')}
       </h2>
 
       <div className="space-y-5 p-4 pb-32 sm:p-5 lg:pb-5">
@@ -75,10 +80,10 @@ export function ReviewDetail({
             onClick={onBack}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden />
-            Назад
+            {t('Назад')}
           </Button>
           <span className="ml-auto text-xs text-muted-foreground">
-            {tab === 'pending' ? 'На модерации' : 'Опубликован'}
+            {tab === 'pending' ? t('На модерации') : t('Опубликован')}
           </span>
         </div>
 
@@ -101,7 +106,7 @@ export function ReviewDetail({
               ))}
             </div>
             <p className="text-xs text-muted-foreground tabular-nums">
-              {review.rating} из 5
+              {t('{rating} из 5', { rating: review.rating })}
             </p>
           </div>
         </div>
@@ -112,31 +117,31 @@ export function ReviewDetail({
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Клиент поставил оценку без комментария.
+            {t('Клиент поставил оценку без комментария.')}
           </p>
         )}
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-          <ContextItem label="Барбер">
+          <ContextItem label={t('Барбер')}>
             <span className="flex flex-wrap items-center gap-1.5">
               {review.barber.displayName}
               {!review.barber.isVerified && (
-                <Badge variant="outline">Не подтверждён</Badge>
+                <Badge variant="outline">{t('Не подтверждён')}</Badge>
               )}
               {!review.barber.isActive && (
-                <Badge variant="outline">Скрыт из поиска</Badge>
+                <Badge variant="outline">{t('Скрыт из поиска')}</Badge>
               )}
             </span>
           </ContextItem>
 
-          <ContextItem label="Клиент">
+          <ContextItem label={t('Клиент')}>
             <span className="block">{review.customer.fullName}</span>
             <span className="block break-all text-xs text-muted-foreground">
               {review.customer.email}
             </span>
           </ContextItem>
 
-          <ContextItem label="Визит">
+          <ContextItem label={t('Визит')}>
             <span className="block">
               {review.visit.serviceName} · {review.visit.salonName}
             </span>
@@ -146,7 +151,7 @@ export function ReviewDetail({
             </span>
           </ContextItem>
 
-          <ContextItem label="Отзыв оставлен">
+          <ContextItem label={t('Отзыв оставлен')}>
             <span className="block">{formatDateTime(review.createdAt)}</span>
           </ContextItem>
         </dl>
@@ -154,8 +159,8 @@ export function ReviewDetail({
         <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
           {summary}{' '}
           {tab === 'pending'
-            ? 'После публикации рейтинг пересчитается.'
-            : 'После скрытия рейтинг пересчитается.'}
+            ? t('После публикации рейтинг пересчитается.')
+            : t('После скрытия рейтинг пересчитается.')}
         </div>
       </div>
 
@@ -180,10 +185,10 @@ export function ReviewDetail({
                     aria-hidden
                     className="animate-spin"
                   />
-                  Публикуем…
+                  {t('Публикуем…')}
                 </>
               ) : (
-                'Опубликовать'
+                t('Опубликовать')
               )}
             </Button>
             <Button
@@ -192,7 +197,7 @@ export function ReviewDetail({
               disabled={isPending}
               onClick={onSkip}
             >
-              Пропустить
+              {t('Пропустить')}
             </Button>
           </div>
         ) : (
@@ -209,10 +214,10 @@ export function ReviewDetail({
                   aria-hidden
                   className="animate-spin"
                 />
-                Скрываем…
+                {t('Скрываем…')}
               </>
             ) : (
-              'Скрыть отзыв'
+              t('Скрыть отзыв')
             )}
           </Button>
         )}
@@ -221,10 +226,11 @@ export function ReviewDetail({
       <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Скрыть отзыв?</DialogTitle>
+            <DialogTitle>{t('Скрыть отзыв?')}</DialogTitle>
             <DialogDescription>
-              Отзыв исчезнет с карточки барбера, рейтинг пересчитается. Вернуть
-              отзыв можно в любой момент — он появится в очереди модерации.
+              {t(
+                'Отзыв исчезнет с карточки барбера, рейтинг пересчитается. Вернуть отзыв можно в любой момент — он появится в очереди модерации.'
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -233,7 +239,7 @@ export function ReviewDetail({
               onClick={() => setIsConfirmOpen(false)}
               disabled={isPending}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               variant="destructive"
@@ -243,7 +249,7 @@ export function ReviewDetail({
                 onHide()
               }}
             >
-              Скрыть отзыв
+              {t('Скрыть отзыв')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,6 +18,7 @@ import { SummaryScreen } from '@/components/admin/summary-screen'
 import { UsersScreen } from '@/components/admin/users-screen'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import {
   isAdminPath,
   parseAdminPath,
@@ -82,8 +83,9 @@ export function AdminPage() {
   const { pathname, search } = splitLocation(location)
   const route = parseAdminPath(pathname, search)
   const { status, user } = useSession()
+  const { locale, t } = useI18n()
   const tab = route.kind === 'reviews' ? route.tab : 'pending'
-  const title = titleFor(route)
+  const title = t(titleFor(route))
 
   // `/admin` — тот же экран, но канонический адрес ведёт на очередь отзывов.
   useEffect(() => {
@@ -104,7 +106,7 @@ export function AdminPage() {
     document.head.append(meta)
 
     return () => meta.remove()
-  }, [title])
+  }, [title, locale])
 
   if (status === 'loading') {
     return <AdminPageSkeleton />

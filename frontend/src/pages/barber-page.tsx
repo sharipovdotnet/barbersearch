@@ -19,6 +19,7 @@ import { useBarberProfile } from '@/hooks/use-barber-profile'
 import { PAYMENT_METHOD_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberProfile } from '@/lib/catalog'
 import { goToSection, isPlainClick } from '@/lib/router'
+import { useI18n } from '@/i18n'
 
 /**
  * Публичная карточка барбера.
@@ -29,14 +30,15 @@ import { goToSection, isPlainClick } from '@/lib/router'
  * профиля (загрузка, ошибка, скрытый профиль) живут в `use-barber-profile`.
  */
 export function BarberPage({ id }: { id: string }) {
+  const { t, locale } = useI18n()
   const { profile, status, error, retry } = useBarberProfile(id)
   const title = profile
     ? `${profile.displayName} — BarberSearch`
-    : 'Барбер — BarberSearch'
+    : t('Барбер — BarberSearch')
 
   useEffect(() => {
     document.title = title
-  }, [title])
+  }, [title, locale])
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -53,7 +55,7 @@ export function BarberPage({ id }: { id: string }) {
         }}
       >
         <ArrowLeft className="size-4" aria-hidden />
-        К поиску барберов
+        {t('К поиску барберов')}
       </a>
 
       {status === 'loading' && <BarberProfileSkeleton />}
@@ -62,7 +64,7 @@ export function BarberPage({ id }: { id: string }) {
 
       {status === 'error' && (
         <BarberProfileError
-          message={error ?? 'Попробуйте ещё раз.'}
+          message={error ?? t('Попробуйте ещё раз.')}
           onRetry={retry}
         />
       )}
@@ -91,6 +93,7 @@ export function BarberPage({ id }: { id: string }) {
 
 /** Оплата и правило опозданий; при пустых данных колонки нет вовсе. */
 function BarberTerms({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
   const hasPayments = profile.paymentMethods.length > 0
   const latePolicy = profile.latePolicy.trim()
 
@@ -99,18 +102,18 @@ function BarberTerms({ profile }: { profile: BarberProfile }) {
   }
 
   return (
-    <aside aria-label="Условия" className="space-y-6">
+    <aside aria-label={t('Условия')} className="space-y-6">
       {hasPayments && (
         <Card>
           <CardContent className="space-y-3">
             <h2 className="font-heading text-base leading-snug font-medium tracking-tight">
-              Оплата
+              {t('Оплата')}
             </h2>
             <ul className="flex flex-wrap gap-2">
               {profile.paymentMethods.map((method) => (
                 <li key={method}>
                   <Badge variant="secondary">
-                    {PAYMENT_METHOD_LABELS[method]}
+                    {t(PAYMENT_METHOD_LABELS[method])}
                   </Badge>
                 </li>
               ))}
@@ -123,10 +126,10 @@ function BarberTerms({ profile }: { profile: BarberProfile }) {
         <Card>
           <CardContent className="space-y-3">
             <h2 className="font-heading text-base leading-snug font-medium tracking-tight">
-              Правила визита
+              {t('Правила визита')}
             </h2>
             <p className="text-sm leading-relaxed break-words">
-              Опоздания: {latePolicy}
+              {t('Опоздания:')} {latePolicy}
             </p>
           </CardContent>
         </Card>

@@ -26,6 +26,7 @@ import {
 } from '@/lib/barber-slots'
 import { formatSalonDate } from '@/lib/format'
 import { PLACE_KIND_LABELS } from '@/lib/place-kind'
+import { tp, t, useI18n } from '@/i18n'
 
 const SELECT_CLASSES =
   'h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 md:text-sm'
@@ -43,30 +44,19 @@ type SlotSelection = {
 
 /** «5 слотов», «1 слот», «2 слота» — объявление для `aria-live`. */
 function slotsCountLabel(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-
-  if (mod10 === 1 && mod100 !== 11) {
-    return `${count} слот`
-  }
-
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} слота`
-  }
-
-  return `${count} слотов`
+  return tp('slots', count)
 }
 
 function resultMessage(slots: BarberSlotsData): string {
   if (!slots.isWorkingDay) {
-    return 'В этот день барбер не работает.'
+    return t('В этот день барбер не работает.')
   }
 
   if (slots.slots.length === 0) {
-    return 'Свободного времени на этот день нет.'
+    return t('Свободного времени на этот день нет.')
   }
 
-  return `Свободно ${slotsCountLabel(slots.slots.length)}`
+  return t('Свободно {value}', { value: slotsCountLabel(slots.slots.length) })
 }
 
 /**
@@ -77,6 +67,7 @@ function resultMessage(slots: BarberSlotsData): string {
  * панель с подтверждением остаётся, а список слотов перезапрашивается.
  */
 export function BarberSlots({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
   const salons = profile.salons
   const initialSalon = salons.find((salon) => salon.isPrimary) ?? salons[0]
 
@@ -88,12 +79,13 @@ export function BarberSlots({ profile }: { profile: BarberProfile }) {
       <section aria-labelledby="barber-slots-heading">
         <Card>
           <BarberSectionHeading id="barber-slots-heading">
-            Свободное время
+            {t('Свободное время')}
           </BarberSectionHeading>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Барбер пока не указал место приёма. Онлайн-запись появится, когда
-              место будет добавлено.
+              {t(
+                'Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.'
+              )}
             </p>
           </CardContent>
         </Card>
@@ -119,6 +111,7 @@ function BarberSlotsSection({
   salons: BarberProfileSalon[]
   initialSalonId: string
 }) {
+  const { t } = useI18n()
   const services = profile.services.filter((service) => service.isActive)
   const [salonId, setSalonId] = useState(initialSalonId)
   const [hairServiceId, setHairServiceId] = useState<string | null>(null)
@@ -151,9 +144,9 @@ function BarberSlotsSection({
   let liveMessage = ''
 
   if (!isDateValid) {
-    liveMessage = 'Выберите дату.'
+    liveMessage = t('Выберите дату.')
   } else if (status === 'loading') {
-    liveMessage = 'Загружаем свободное время…'
+    liveMessage = t('Загружаем свободное время…')
   } else if (status === 'ready' && slots !== null) {
     liveMessage = resultMessage(slots)
   }
@@ -220,13 +213,13 @@ function BarberSlotsSection({
     <section aria-labelledby="barber-slots-heading">
       <Card>
         <BarberSectionHeading id="barber-slots-heading">
-          Свободное время
+          {t('Свободное время')}
         </BarberSectionHeading>
 
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="slots-date">Дата</Label>
+              <Label htmlFor="slots-date">{t('Дата')}</Label>
               <Input
                 id="slots-date"
                 type="date"
@@ -239,14 +232,14 @@ function BarberSlotsSection({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="slots-service">Услуга</Label>
+              <Label htmlFor="slots-service">{t('Услуга')}</Label>
               <select
                 id="slots-service"
                 value={hairServiceId ?? ''}
                 className={SELECT_CLASSES}
                 onChange={(event) => handleServiceChange(event.target.value)}
               >
-                <option value="">Любая услуга</option>
+                <option value="">{t('Любая услуга')}</option>
                 {services.map((service) => (
                   <option
                     key={service.barberServiceId}
@@ -260,7 +253,7 @@ function BarberSlotsSection({
 
             {salons.length > 1 ? (
               <div className="space-y-1.5">
-                <Label htmlFor="slots-salon">Салон</Label>
+                <Label htmlFor="slots-salon">{t('Салон')}</Label>
                 <select
                   id="slots-salon"
                   value={salon.salonId}
@@ -269,14 +262,16 @@ function BarberSlotsSection({
                 >
                   {salons.map((item) => (
                     <option key={item.id} value={item.salonId}>
-                      {item.name} · {PLACE_KIND_LABELS[item.kind]}
+                      {item.name} · {t(PLACE_KIND_LABELS[item.kind])}
                     </option>
                   ))}
                 </select>
               </div>
             ) : (
               <div className="space-y-1.5">
-                <p className="text-sm leading-snug font-medium">Салон</p>
+                <p className="text-sm leading-snug font-medium">
+                  {t('Салон')}
+                </p>
                 <p className="flex h-11 items-center text-sm text-muted-foreground sm:h-9">
                   {salon.name}
                 </p>
@@ -317,7 +312,7 @@ function BarberSlotsSection({
 
               {status === 'ready' && slots !== null && !isSelectable && (
                 <p className="text-sm text-muted-foreground">
-                  Выберите услугу, чтобы записаться.
+                  {t('Выберите услугу, чтобы записаться.')}
                 </p>
               )}
 
@@ -327,7 +322,7 @@ function BarberSlotsSection({
                   profile={profile}
                   slots={selection.snapshot}
                   slot={selection.slot}
-                  serviceName={selectedService?.name ?? 'Услуга'}
+                  serviceName={selectedService?.name ?? t('Услуга')}
                   price={selectedService?.price ?? null}
                   onBooked={reload}
                   onConflict={reload}
@@ -336,11 +331,13 @@ function BarberSlotsSection({
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Выберите дату.</p>
+            <p className="text-sm text-muted-foreground">
+              {t('Выберите дату.')}
+            </p>
           )}
 
           <p className="text-sm text-muted-foreground">
-            Время — местное для салона.
+            {t('Время — местное для салона.')}
           </p>
         </CardContent>
       </Card>
@@ -367,6 +364,8 @@ function SlotsError({
   message: string | null
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div
       role="alert"
@@ -374,7 +373,7 @@ function SlotsError({
     >
       <p className="flex items-start gap-2 text-sm text-muted-foreground">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-        <span>{message ?? 'Не удалось загрузить свободное время.'}</span>
+        <span>{message ?? t('Не удалось загрузить свободное время.')}</span>
       </p>
       <Button
         type="button"
@@ -382,7 +381,7 @@ function SlotsError({
         className="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

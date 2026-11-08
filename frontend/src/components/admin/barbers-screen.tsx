@@ -23,6 +23,7 @@ import { useAdminBarber } from '@/hooks/use-admin-barber'
 import { useAdminBarberList } from '@/hooks/use-admin-barber-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { t, useI18n } from '@/i18n'
 import {
   ADMIN_BARBER_SEARCH_MAX_LENGTH,
   ADMIN_BARBER_STATUS_LABELS,
@@ -82,6 +83,7 @@ export function BarbersScreen({
   barberId: string | null
   status: AdminBarberStatusFilter
 }) {
+  const { t } = useI18n()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
 
@@ -319,7 +321,7 @@ export function BarbersScreen({
     <div className="space-y-5">
       {isMobileDetail && (
         <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-          Барберы
+          {t('Барберы')}
         </h1>
       )}
 
@@ -331,18 +333,21 @@ export function BarbersScreen({
               tabIndex={-1}
               className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              Барберы
+              {t('Барберы')}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Подтвердите профиль, присвойте грейд или уберите барбера из поиска.
-              Пока профиль не подтверждён, он не появляется в выдаче.
+              {t(
+                'Подтвердите профиль, присвойте грейд или уберите барбера из поиска. Пока профиль не подтверждён, он не появляется в выдаче.'
+              )}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {list.updatedAt !== null && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Обновлено в {formatClockTime(new Date(list.updatedAt))}
+                {t('Обновлено в {time}', {
+                  time: formatClockTime(new Date(list.updatedAt)),
+                })}
               </span>
             )}
             <Button
@@ -361,7 +366,7 @@ export function BarbersScreen({
               ) : (
                 <RefreshCw data-icon="inline-start" aria-hidden />
               )}
-              {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+              {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
           </div>
         </header>
@@ -395,7 +400,7 @@ export function BarbersScreen({
             )}
             <button
               type="button"
-              aria-label="Скрыть сообщение"
+              aria-label={t('Скрыть сообщение')}
               className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               onClick={() => setAnnouncement(null)}
             >
@@ -409,7 +414,7 @@ export function BarbersScreen({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div
             role="group"
-            aria-label="Каких барберов показать"
+            aria-label={t('Каких барберов показать')}
             className="inline-flex items-center gap-0.5 self-start rounded-lg bg-muted p-0.5"
           >
             {FILTERS.map((item) => {
@@ -428,7 +433,7 @@ export function BarbersScreen({
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {ADMIN_BARBER_STATUS_LABELS[item]}
+                  {t(ADMIN_BARBER_STATUS_LABELS[item])}
                 </button>
               )
             })}
@@ -436,7 +441,7 @@ export function BarbersScreen({
 
           <div className="relative w-full sm:max-w-xs">
             <label htmlFor="barbers-search" className="sr-only">
-              Поиск по имени или email
+              {t('Поиск по имени или email')}
             </label>
             <Search
               className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -447,14 +452,14 @@ export function BarbersScreen({
               type="search"
               value={searchInput}
               maxLength={ADMIN_BARBER_SEARCH_MAX_LENGTH}
-              placeholder="Имя или email"
+              placeholder={t('Имя или email')}
               className="h-11 pr-9 pl-8 sm:h-8"
               onChange={(event) => setSearchInput(event.target.value)}
             />
             {searchInput !== '' && (
               <button
                 type="button"
-                aria-label="Очистить поиск"
+                aria-label={t('Очистить поиск')}
                 className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 onClick={() => {
                   setSearchInput('')
@@ -469,14 +474,16 @@ export function BarbersScreen({
       )}
 
       <p role="status" className="sr-only">
-        {list.status === 'ready' ? `Показано ${list.items.length}` : ''}
+        {list.status === 'ready'
+          ? t('Показано {count}', { count: list.items.length })
+          : ''}
       </p>
 
       {list.status === 'loading' && <BarbersSkeleton />}
 
       {list.status === 'error' && (
         <BarbersError
-          message={list.error ?? 'Не удалось загрузить барберов.'}
+          message={list.error ?? t('Не удалось загрузить барберов.')}
           onRetry={list.reload}
         />
       )}
@@ -512,7 +519,7 @@ export function BarbersScreen({
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                В загруженной странице нет барберов.
+                {t('В загруженной странице нет барберов.')}
               </p>
             )}
           </div>
@@ -573,9 +580,9 @@ function announcementFor(
   switch (kind) {
     case 'verify':
       return {
-        text: `Профиль «${name}» подтверждён и появился в поиске.`,
+        text: t('Профиль «{name}» подтверждён и появился в поиске.', { name }),
         undo: {
-          label: 'Снять подтверждение',
+          label: t('Снять подтверждение'),
           action: 'unverify',
           barberId: target.id,
           barberName: name,
@@ -583,9 +590,11 @@ function announcementFor(
       }
     case 'unverify':
       return {
-        text: `Подтверждение снято: профиль «${name}» больше не в поиске.`,
+        text: t('Подтверждение снято: профиль «{name}» больше не в поиске.', {
+          name,
+        }),
         undo: {
-          label: 'Подтвердить снова',
+          label: t('Подтвердить снова'),
           action: 'verify',
           barberId: target.id,
           barberName: name,
@@ -593,9 +602,9 @@ function announcementFor(
       }
     case 'hide':
       return {
-        text: `Профиль «${name}» скрыт из поиска.`,
+        text: t('Профиль «{name}» скрыт из поиска.', { name }),
         undo: {
-          label: 'Вернуть в поиск',
+          label: t('Вернуть в поиск'),
           action: 'show',
           barberId: target.id,
           barberName: name,
@@ -603,9 +612,9 @@ function announcementFor(
       }
     case 'show':
       return {
-        text: `Профиль «${name}» снова в поиске.`,
+        text: t('Профиль «{name}» снова в поиске.', { name }),
         undo: {
-          label: 'Скрыть из поиска',
+          label: t('Скрыть из поиска'),
           action: 'hide',
           barberId: target.id,
           barberName: name,
@@ -614,8 +623,10 @@ function announcementFor(
     case 'grade':
       return {
         text: grade
-          ? `Грейд изменён: «${BARBER_GRADE_LABELS[grade]}».`
-          : 'Грейд изменён.',
+          ? t('Грейд изменён: «{grade}».', {
+              grade: t(BARBER_GRADE_LABELS[grade]),
+            })
+          : t('Грейд изменён.'),
       }
   }
 }
@@ -666,10 +677,13 @@ function matchesBarberFilter(
   return true
 }
 
-function BarbersSkeleton() {  return (
+function BarbersSkeleton() {
+  const { t } = useI18n()
+
+  return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем барберов…
+        {t('Загружаем барберов…')}
       </p>
       <Skeleton className="h-4 w-32" aria-hidden />
       <Skeleton className="h-96 rounded-xl" aria-hidden />
@@ -684,13 +698,15 @@ function BarbersError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить барберов</p>
+        <p className="font-medium">{t('Не удалось загрузить барберов')}</p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
@@ -701,7 +717,7 @@ function BarbersError({
         className="h-11 sm:h-7"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -716,6 +732,8 @@ function BarbersEmpty({
   search: string
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
+
   if (search !== '') {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -723,10 +741,12 @@ function BarbersEmpty({
           <Search className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Ничего не найдено</p>
+          <p className="font-medium">{t('Ничего не найдено')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            По запросу «{search}» нет ни имени, ни email. Попробуйте другую
-            строку.
+            {t(
+              'По запросу «{search}» нет ни имени, ни email. Попробуйте другую строку.',
+              { search }
+            )}
           </p>
         </div>
       </div>
@@ -740,10 +760,11 @@ function BarbersEmpty({
           <Users className="size-4 text-success" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Очередь проверки пуста</p>
+          <p className="font-medium">{t('Очередь проверки пуста')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Все профили подтверждены. Новые появятся здесь, когда барберы
-            зарегистрируются.
+            {t(
+              'Все профили подтверждены. Новые появятся здесь, когда барберы зарегистрируются.'
+            )}
           </p>
         </div>
         <Button
@@ -752,7 +773,7 @@ function BarbersEmpty({
           className="h-11 sm:h-7"
           onClick={onRefresh}
         >
-          Обновить
+          {t('Обновить')}
         </Button>
       </div>
     )
@@ -765,12 +786,18 @@ function BarbersEmpty({
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {status === 'hidden' ? 'Скрытых профилей нет' : 'Барберов пока нет'}
+          {status === 'hidden'
+            ? t('Скрытых профилей нет')
+            : t('Барберов пока нет')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {status === 'hidden'
-            ? 'Никто не убран из поиска: все профили либо подтверждены, либо ждут проверки.'
-            : 'Профили появятся здесь, как только барберы их создадут.'}
+            ? t(
+                'Никто не убран из поиска: все профили либо подтверждены, либо ждут проверки.'
+              )
+            : t(
+                'Профили появятся здесь, как только барберы их создадут.'
+              )}
         </p>
       </div>
     </div>

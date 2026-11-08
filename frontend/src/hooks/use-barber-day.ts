@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 
 import type { BarberBookingsController } from '@/hooks/use-barber-bookings'
 import { useNow } from '@/hooks/use-now'
+import { t } from '@/i18n'
 import {
   findDayGaps,
   findNextBooking,
@@ -127,10 +128,9 @@ export function useBarberDay(
 
   const error =
     status === 'error'
-      ? (upcoming.error ?? past.error ?? DAY_FALLBACK)
+      ? (upcoming.error ?? past.error ?? t(DAY_FALLBACK))
       : null
-  const partialError =
-    hasFailed && items.length > 0 ? PARTIAL_ERROR : null
+  const partialError = hasFailed && items.length > 0 ? t(PARTIAL_ERROR) : null
 
   const retryFailed = useCallback(() => {
     if (upcoming.status === 'error') {

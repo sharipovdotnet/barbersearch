@@ -1,3 +1,4 @@
+import { getLocale, t } from '@/i18n'
 import { formatEventsCount, formatShortDay } from '@/lib/format'
 import type { IcsSkippedEvent, IcsSkippedReason } from '@/lib/ics-parse'
 import { salonDateFromInstant } from '@/lib/salon-time'
@@ -53,13 +54,26 @@ const REASON_ORDER: readonly IcsSkippedReason[] = [
   'invalid',
 ]
 
-const pluralRules = new Intl.PluralRules('ru')
+const pluralRules = new Map<string, Intl.PluralRules>()
+
+function pluralRulesFor(locale: string): Intl.PluralRules {
+  const cached = pluralRules.get(locale)
+
+  if (cached) {
+    return cached
+  }
+
+  const created = new Intl.PluralRules(locale)
+  pluralRules.set(locale, created)
+
+  return created
+}
 
 function adjectiveForm(
   count: number,
   forms: readonly [string, string, string]
 ): string {
-  const category = pluralRules.select(count)
+  const category = pluralRulesFor(getLocale()).select(count)
 
   if (category === 'one') {
     return forms[0]
@@ -71,17 +85,19 @@ function adjectiveForm(
 /** «2 прошедших», «1 на весь день» — строка сводки по причине. */
 function reasonCountText(count: number, reason: IcsSkippedReason): string {
   const copy = REASON_COPY[reason]
+  const source =
+    copy.kind === 'fixed'
+      ? `{count} ${copy.text}`
+      : `{count} ${adjectiveForm(count, copy.forms)}`
 
-  return copy.kind === 'fixed'
-    ? `${count} ${copy.text}`
-    : `${count} ${adjectiveForm(count, copy.forms)}`
+  return t(source, { count })
 }
 
 /** Причина одного события: та же формулировка, но без числа. */
 function reasonLabel(reason: IcsSkippedReason): string {
   const copy = REASON_COPY[reason]
 
-  return copy.kind === 'fixed' ? copy.text : copy.forms[0]
+  return t(copy.kind === 'fixed' ? copy.text : copy.forms[0])
 }
 
 function eventDate(event: IcsSkippedEvent, timeZoneId: string): string {
@@ -127,7 +143,7 @@ export function ImportSkipped({
   return (
     <details className="rounded-xl border bg-card px-3 py-2 text-sm">
       <summary className="flex min-h-11 cursor-pointer items-center rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:min-h-0 sm:py-1">
-        Пропущено {formatEventsCount(skipped.length)}
+        {t('Пропущено {count}', { count: formatEventsCount(skipped.length) })}
       </summary>
 
       <div className="mt-2 space-y-3">
@@ -152,7 +168,9 @@ export function ImportSkipped({
         </ul>
 
         {rest > 0 && (
-          <p className="text-muted-foreground">и ещё {rest}</p>
+          <p className="text-muted-foreground">
+            {t('и ещё {count}', { count: rest })}
+          </p>
         )}
       </div>
     </details>

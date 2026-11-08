@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '@/lib/api'
 import { createBooking, type CreateBookingInput } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
+import { t } from '@/i18n'
 
 export type CreateBookingStatus = 'idle' | 'pending' | 'success' | 'error'
 
@@ -57,17 +58,21 @@ const FALLBACK = 'Не удалось записаться.'
  */
 function classifyFailure(error: unknown): BookingFailure {
   if (!(error instanceof ApiError)) {
-    return { message: FALLBACK, kind: 'fatal', code: null }
+    return { message: t(FALLBACK), kind: 'fatal', code: null }
   }
 
   if (error.status === 401) {
-    return { message: 'Сессия истекла — войдите снова.', kind: 'signIn', code: null }
+    return {
+      message: t('Сессия истекла — войдите снова.'),
+      kind: 'signIn',
+      code: null,
+    }
   }
 
   if (error.status === 409) {
     if (error.hasCode('booking.add.overlap')) {
       return {
-        message: 'Это время только что заняли. Выберите другое.',
+        message: t('Это время только что заняли. Выберите другое.'),
         kind: 'refresh',
         code: 'booking.add.overlap',
       }
@@ -75,7 +80,7 @@ function classifyFailure(error: unknown): BookingFailure {
 
     if (error.hasCode('booking.add.lockTimeout')) {
       return {
-        message: 'Не удалось занять время, попробуйте ещё раз.',
+        message: t('Не удалось занять время, попробуйте ещё раз.'),
         kind: 'retry',
         code: 'booking.add.lockTimeout',
       }
@@ -84,19 +89,19 @@ function classifyFailure(error: unknown): BookingFailure {
     if (error.hasCode('booking.create.idempotencyKeyConflict')) {
       // Повтор с тем же ключом снова упрётся в конфликт — панель выдаст новый ключ.
       return {
-        message: FALLBACK,
+        message: t(FALLBACK),
         kind: 'fatal',
         code: 'booking.create.idempotencyKeyConflict',
       }
     }
 
-    return { message: FALLBACK, kind: 'retry', code: null }
+    return { message: t(FALLBACK), kind: 'retry', code: null }
   }
 
   if (error.status === 400) {
     if (error.hasCode('booking.create.startAt.inPast')) {
       return {
-        message: 'Это время уже прошло. Обновите свободное время.',
+        message: t('Это время уже прошло. Обновите свободное время.'),
         kind: 'refresh',
         code: 'booking.create.startAt.inPast',
       }
@@ -104,19 +109,23 @@ function classifyFailure(error: unknown): BookingFailure {
 
     if (error.hasCode('booking.create.startAt.tooFar')) {
       return {
-        message: 'Это время слишком далеко. Обновите свободное время.',
+        message: t('Это время слишком далеко. Обновите свободное время.'),
         kind: 'refresh',
         code: 'booking.create.startAt.tooFar',
       }
     }
 
     // period/idempotencyKey/price — повторять ту же попытку бессмысленно.
-    return { message: FALLBACK, kind: 'fatal', code: error.codes[0] ?? null }
+    return {
+      message: t(FALLBACK),
+      kind: 'fatal',
+      code: error.codes[0] ?? null,
+    }
   }
 
   if (error.status === 404) {
     return {
-      message: 'Эта услуга или салон больше недоступны.',
+      message: t('Эта услуга или салон больше недоступны.'),
       kind: 'unavailable',
       code: error.codes[0] ?? null,
     }

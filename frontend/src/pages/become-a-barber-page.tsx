@@ -34,6 +34,7 @@ import type { BarberRequest } from '@/lib/barber-requests'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 /**
  * Публичная страница «Стать барбером».
@@ -45,21 +46,23 @@ import { cn } from '@/lib/utils'
  * дёргает `/barber-requests/mine` ни для кого, кроме клиента.
  */
 export function BecomeABarberPage() {
+  const { t, locale } = useI18n()
   const { status, user } = useSession()
 
   useEffect(() => {
-    document.title = 'Стать барбером — BarberSearch'
-  }, [])
+    document.title = t('Стать барбером — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-10">
       <header className="mb-6">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
-          Стать барбером
+          {t('Стать барбером')}
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Заявка на роль барбера: администратор проверит её и откроет кабинет
-          с записями клиентов.
+          {t(
+            'Заявка на роль барбера: администратор проверит её и откроет кабинет с записями клиентов.'
+          )}
         </p>
       </header>
 
@@ -80,28 +83,35 @@ export function BecomeABarberPage() {
  * посетителя и на упавшем API.
  */
 function AnonymousIntro() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <h2 className="font-heading text-xl font-semibold tracking-tight">
-            Что даёт статус барбера
+            {t('Что даёт статус барбера')}
           </h2>
           <CardDescription>
-            Профиль в поиске, собственные записи и расписание. Роль выдаёт
-            администратор после проверки заявки.
+            {t(
+              'Профиль в поиске, собственные записи и расписание. Роль выдаёт администратор после проверки заявки.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="space-y-3 text-sm">
             <Benefit icon={UserRound}>
-              Публичный профиль с услугами и ценами — вас найдут в поиске.
+              {t(
+                'Публичный профиль с услугами и ценами — вас найдут в поиске.'
+              )}
             </Benefit>
             <Benefit icon={CalendarDays}>
-              Записи клиентов: подтверждение, завершение и заметки в кабинете.
+              {t(
+                'Записи клиентов: подтверждение, завершение и заметки в кабинете.'
+              )}
             </Benefit>
             <Benefit icon={Scissors}>
-              Своё расписание: рабочие дни, исключения и отпуска.
+              {t('Своё расписание: рабочие дни, исключения и отпуска.')}
             </Benefit>
           </ul>
         </CardContent>
@@ -109,7 +119,7 @@ function AnonymousIntro() {
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <LoginDialog
-          trigger="Войти"
+          trigger={t('Войти')}
           variant="default"
           size="lg"
           className="h-11 w-full sm:w-auto"
@@ -130,14 +140,15 @@ function AnonymousIntro() {
             navigate(REGISTER_PATH)
           }}
         >
-          Зарегистрироваться
+          {t('Зарегистрироваться')}
           <ArrowRight data-icon="inline-end" aria-hidden />
         </a>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Заявку может подать только клиент: администратор проверяет её и только
-        потом меняет роль.
+        {t(
+          'Заявку может подать только клиент: администратор проверяет её и только потом меняет роль.'
+        )}
       </p>
     </div>
   )
@@ -157,6 +168,7 @@ function SignedIn({ user }: { user: SessionUser }) {
 
 /** Клиент: своя заявка или форма. Запрос уходит только отсюда. */
 function CustomerSection() {
+  const { t } = useI18n()
   const mine = useMyBarberRequest()
   const [isReapplying, setIsReapplying] = useState(false)
   const [created, setCreated] = useState<BarberRequest | null>(null)
@@ -166,8 +178,10 @@ function CustomerSection() {
   if (mine.requiresSignIn) {
     return (
       <SignInGate
-        title="Сессия истекла"
-        description="Войдите снова, чтобы проверить заявку: cookie-сессия закончилась, пока страница была открыта."
+        title={t('Сессия истекла')}
+        description={t(
+          'Войдите снова, чтобы проверить заявку: cookie-сессия закончилась, пока страница была открыта.'
+        )}
         redirectTo={BECOME_A_BARBER_PATH}
         onSignedIn={mine.reload}
       />
@@ -177,7 +191,7 @@ function CustomerSection() {
   if (mine.status === 'loading' || mine.status === 'idle') {
     return (
       <div role="status" aria-live="polite" aria-busy="true">
-        <span className="sr-only">Загружаем заявку…</span>
+        <span className="sr-only">{t('Загружаем заявку…')}</span>
         <BarberRequestStatusSkeleton />
       </div>
     )
@@ -186,7 +200,7 @@ function CustomerSection() {
   if (mine.status === 'error') {
     return (
       <BarberRequestError
-        message={mine.error ?? 'Не удалось проверить заявку.'}
+        message={mine.error ?? t('Не удалось проверить заявку.')}
         onRetry={mine.reload}
       />
     )
@@ -194,7 +208,10 @@ function CustomerSection() {
 
   if (created) {
     return (
-      <BarberRequestStatus request={created} heading="Заявка отправлена" />
+      <BarberRequestStatus
+        request={created}
+        heading={t('Заявка отправлена')}
+      />
     )
   }
 
@@ -212,11 +229,12 @@ function CustomerSection() {
       <Card>
         <CardHeader>
           <h2 className="font-heading text-xl font-semibold tracking-tight">
-            Заявка на роль барбера
+            {t('Заявка на роль барбера')}
           </h2>
           <CardDescription>
-            Несколько полей о вас — администратор проверит заявку и откроет кабинет.
-            Пока решение не принято, вы остаётесь клиентом.
+            {t(
+              'Несколько полей о вас — администратор проверит заявку и откроет кабинет. Пока решение не принято, вы остаётесь клиентом.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -229,6 +247,7 @@ function CustomerSection() {
 
 /** Барбер: заявка ему больше не нужна, ему нужна рабочая зона. */
 function BarberIntro({ barberProfileId }: { barberProfileId: string | null }) {
+  const { t } = useI18n()
   const needsProfile = barberProfileId === null
 
   return (
@@ -238,12 +257,16 @@ function BarberIntro({ barberProfileId }: { barberProfileId: string | null }) {
           <CircleCheck className="size-5 text-success" aria-hidden />
         </div>
         <h2 className="font-heading text-xl font-semibold tracking-tight">
-          Вы уже барбер
+          {t('Вы уже барбер')}
         </h2>
         <CardDescription>
           {needsProfile
-            ? 'Роль выдана. Осталось создать профиль барбера — без него клиенты не увидят вас в поиске.'
-            : 'Роль выдана, профиль создан. Записи клиентов и расписание — в кабинете барбера.'}
+            ? t(
+                'Роль выдана. Осталось создать профиль барбера — без него клиенты не увидят вас в поиске.'
+              )
+            : t(
+                'Роль выдана, профиль создан. Записи клиентов и расписание — в кабинете барбера.'
+              )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -253,7 +276,9 @@ function BarberIntro({ barberProfileId }: { barberProfileId: string | null }) {
             navigate(needsProfile ? BARBER_ONBOARDING_PATH : BARBER_CABINET_PATH)
           }}
         >
-          {needsProfile ? 'Создать профиль барбера' : 'Открыть кабинет барбера'}
+          {needsProfile
+            ? t('Создать профиль барбера')
+            : t('Открыть кабинет барбера')}
         </Button>
       </CardContent>
     </Card>
@@ -262,6 +287,8 @@ function BarberIntro({ barberProfileId }: { barberProfileId: string | null }) {
 
 /** Администратор: раздел заявок живёт в админке, а не здесь. */
 function AdminIntro() {
+  const { t } = useI18n()
+
   return (
     <Card>
       <CardHeader>
@@ -269,11 +296,12 @@ function AdminIntro() {
           <ShieldCheck className="size-5 text-muted-foreground" aria-hidden />
         </div>
         <h2 className="font-heading text-xl font-semibold tracking-tight">
-          Вы администратор
+          {t('Вы администратор')}
         </h2>
         <CardDescription>
-          Заявки клиентов разбираются в разделе администрирования: очередь,
-          карточка заявителя, одобрение и отказ с причиной.
+          {t(
+            'Заявки клиентов разбираются в разделе администрирования: очередь, карточка заявителя, одобрение и отказ с причиной.'
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -283,7 +311,7 @@ function AdminIntro() {
             navigate('/admin/barber-requests')
           }}
         >
-          Открыть заявки
+          {t('Открыть заявки')}
         </Button>
       </CardContent>
     </Card>
@@ -307,9 +335,11 @@ function Benefit({
 
 /** Скелетон страницы: заголовок уже нарисован, ждёт только карточка. */
 function PageSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div role="status" aria-live="polite" aria-busy="true">
-      <span className="sr-only">Проверяем сессию…</span>
+      <span className="sr-only">{t('Проверяем сессию…')}</span>
       <div className="space-y-3" aria-hidden>
         <Skeleton className="h-40 rounded-xl" />
         <Skeleton className="h-11 w-40" />

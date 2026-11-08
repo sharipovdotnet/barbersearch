@@ -5,6 +5,7 @@ import { HomeCta } from '@/components/home/home-cta'
 import { HomeHero } from '@/components/home/home-hero'
 import { HowItWorks } from '@/components/home/how-it-works'
 import { useBarberSearch } from '@/hooks/use-barber-search'
+import { useI18n } from '@/i18n'
 import {
   emptyBarberSearchFilters,
   normalizeBarberSearchFilters,
@@ -22,12 +23,15 @@ const INITIAL_FILTERS: BarberSearchFilters = emptyBarberSearchFilters()
  * Фильтры живут в состоянии, а не в URL: шаринг ссылки на поиск — отдельная задача.
  */
 export function HomePage() {
+  const { t, locale } = useI18n()
   const search = useBarberSearch()
   const [filters, setFilters] = useState<BarberSearchFilters>(INITIAL_FILTERS)
 
   useEffect(() => {
-    document.title = 'BarberSearch — поиск барберов и запись'
+    document.title = t('BarberSearch — поиск барберов и запись')
+  }, [t, locale])
 
+  useEffect(() => {
     const target = window.location.hash.replace('#', '')
     if (target) {
       scrollToSection(target)

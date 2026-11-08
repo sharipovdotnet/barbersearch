@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { AdminUserRole } from '@/lib/admin-users'
 import { ADMIN_USER_ROLE_LABELS } from '@/lib/admin-users'
@@ -169,7 +170,7 @@ export const ADMIN_AUDIT_ACTOR_MAX_LENGTH = 100
 export function formatAuditAction(action: string): string {
   const tail = action.slice(action.lastIndexOf('.') + 1)
 
-  return ADMIN_AUDIT_ACTION_LABELS[tail] ?? tail
+  return t(ADMIN_AUDIT_ACTION_LABELS[tail] ?? tail)
 }
 
 /**
@@ -189,29 +190,29 @@ export function formatAuditValue(
   }
 
   if (typeof value === 'boolean') {
-    return value ? 'Да' : 'Нет'
+    return value ? t('Да') : t('Нет')
   }
 
   if (value === '[redacted]') {
-    return 'скрыто'
+    return t('скрыто')
   }
 
   if (field === 'role') {
-    return ADMIN_USER_ROLE_LABELS[value as AdminUserRole] ?? String(value)
+    return t(ADMIN_USER_ROLE_LABELS[value as AdminUserRole] ?? String(value))
   }
 
   if (field === 'grade') {
-    return BARBER_GRADE_LABELS[value as BarberGrade] ?? String(value)
+    return t(BARBER_GRADE_LABELS[value as BarberGrade] ?? String(value))
   }
 
   // Проверяемый каст: обе функции сами возвращают исходную строку для
   // неизвестного значения, поэтому приведение типа здесь безопасно.
   if (field === 'status' && typeof value === 'string') {
-    return bookingStatusLabel(value as BookingStatus)
+    return t(bookingStatusLabel(value as BookingStatus))
   }
 
   if (field === 'category' && typeof value === 'string') {
-    return SERVICE_CATEGORY_LABELS[value as ServiceCategory] ?? value
+    return t(SERVICE_CATEGORY_LABELS[value as ServiceCategory] ?? value)
   }
 
   return String(value)
@@ -275,19 +276,19 @@ export function describeAdminAuditError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.hasCode('admin.audit.cursor.invalid')) {
-    return 'Список устарел. Обновите и начните с первой страницы.'
+    return t('Список устарел. Обновите и начните с первой страницы.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
   return describeApiFailure(cause, fallback)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useBarberBookingOptions } from '@/hooks/use-barber-booking-options'
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { createBarberBooking } from '@/lib/barber-booking-create'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
@@ -162,20 +163,20 @@ const FALLBACK_FAILURE = 'Не удалось создать запись.'
 function createFailureText(cause: unknown, isOverlap: boolean): string {
   if (cause instanceof ApiError) {
     if (cause.hasCode('booking.create.startAt.inPast')) {
-      return 'Время уже прошло.'
+      return t('Время уже прошло.')
     }
 
     if (cause.hasCode('booking.create.startAt.tooFar')) {
-      return 'Слишком далеко: запись можно создать не более чем на 90 дней вперёд.'
+      return t('Слишком далеко: запись можно создать не более чем на 90 дней вперёд.')
     }
 
     if (cause.hasCode('booking.create.period.tooLong')) {
-      return 'Слишком длинное событие.'
+      return t('Слишком длинное событие.')
     }
   }
 
   if (isOverlap) {
-    return 'Время занято.'
+    return t('Время занято.')
   }
 
   return describeBarberBookingCreateFailure(cause, FALLBACK_FAILURE).message
@@ -186,7 +187,7 @@ const NETWORK_TEXT = 'Связь пропала. Продолжить с это�
 const SIGN_IN_TEXT = 'Сессия истекла — войдите снова.'
 
 const TEXT_EMPTY = 'Вставьте хотя бы одну строку.'
-const TEXT_TOO_MANY = `Слишком много строк: максимум ${IMPORT_MAX_ROWS}.`
+const TEXT_TOO_MANY = 'Слишком много строк: максимум {max}.'
 const TEXT_UNPARSED =
   'Не удалось разобрать ни одной строки. Проверьте, что в каждой есть время и имя.'
 
@@ -454,17 +455,17 @@ export function useBarberImport(barberProfileId: string): BarberImportController
     const result = parseImportText(text, parseOptions)
 
     if (result.failure === 'empty') {
-      setFailure(TEXT_EMPTY)
+      setFailure(t(TEXT_EMPTY))
       return
     }
 
     if (result.failure === 'tooManyRows') {
-      setFailure(TEXT_TOO_MANY)
+      setFailure(t(TEXT_TOO_MANY, { max: IMPORT_MAX_ROWS }))
       return
     }
 
     if (result.rows.every((row) => row.time === null)) {
-      setFailure(TEXT_UNPARSED)
+      setFailure(t(TEXT_UNPARSED))
       return
     }
 
@@ -531,7 +532,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
       if (!row.included) {
         if (next.size >= IMPORT_MAX_ROWS) {
           // 51-я галочка не ставится: выбор остаётся прежним.
-          setSelectionNotice(SELECTION_LIMIT_TEXT)
+          setSelectionNotice(t(SELECTION_LIMIT_TEXT))
           return
         }
 
@@ -569,7 +570,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
       applyIncluded(next)
 
       if (truncated) {
-        setSelectionNotice(SELECTION_LIMIT_TEXT)
+        setSelectionNotice(t(SELECTION_LIMIT_TEXT))
       }
     },
     [applyIncluded]
@@ -741,13 +742,13 @@ export function useBarberImport(barberProfileId: string): BarberImportController
         }
 
         if (decoded.failure !== null) {
-          setFailure(FAILURE_TEXT[decoded.failure])
+          setFailure(t(FAILURE_TEXT[decoded.failure]))
           return
         }
 
         if (!(await loadIcsParser())) {
           if (isCurrent()) {
-            setFailure(CHUNK_FAILURE)
+            setFailure(t(CHUNK_FAILURE))
           }
 
           return
@@ -764,7 +765,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
         }
 
         if (parsed.failure !== null) {
-          setFailure(FAILURE_TEXT[parsed.failure])
+          setFailure(t(FAILURE_TEXT[parsed.failure]))
 
           // Пустой период объясняется только списком пропущенных: иначе барбер
           // не поймёт, куда делись события.
@@ -805,7 +806,7 @@ export function useBarberImport(barberProfileId: string): BarberImportController
         // Сюда попадают `file.arrayBuffer()`, пустой `UID` и прочие неожиданные
         // ошибки: показываем чтение, а не «файл повреждён».
         if (isCurrent()) {
-          setFailure(READ_FAILURE)
+          setFailure(t(READ_FAILURE))
         }
       } finally {
         if (isCurrent()) {
@@ -1205,19 +1206,19 @@ export function useBarberImport(barberProfileId: string): BarberImportController
  */
 function describeStop(error: unknown): ImportPause {
   if (!(error instanceof ApiError)) {
-    return { kind: 'network', message: NETWORK_TEXT }
+    return { kind: 'network', message: t(NETWORK_TEXT) }
   }
 
   if (error.status === 429) {
-    return { kind: 'rateLimit', message: RATE_LIMIT_TEXT }
+    return { kind: 'rateLimit', message: t(RATE_LIMIT_TEXT) }
   }
 
   if (error.status === 0 || error.status >= 500) {
-    return { kind: 'network', message: NETWORK_TEXT }
+    return { kind: 'network', message: t(NETWORK_TEXT) }
   }
 
   if (error.status === 401) {
-    return { kind: 'signIn', message: SIGN_IN_TEXT }
+    return { kind: 'signIn', message: t(SIGN_IN_TEXT) }
   }
 
   if (error.status === 403 || error.status === 404) {

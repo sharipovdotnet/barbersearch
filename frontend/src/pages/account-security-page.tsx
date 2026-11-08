@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import type { SessionUser } from '@/lib/auth'
 import { formatDateTime } from '@/lib/format'
 import { navigate } from '@/lib/router'
@@ -36,21 +37,27 @@ import { navigate } from '@/lib/router'
  * остальные сессии входа.
  */
 export function AccountSecurityPage() {
+  const { locale, t } = useI18n()
+
   useEffect(() => {
-    document.title = 'Безопасность — BarberSearch'
-  }, [])
+    document.title = t('Безопасность — BarberSearch')
+  }, [locale, t])
 
   return (
     <AccountAccess
-      title="Войдите, чтобы открыть настройки безопасности"
-      description="Смена пароля и выход доступны после входа. Вход по email и паролю."
+      title={t('Войдите, чтобы открыть настройки безопасности')}
+      description={t(
+        'Смена пароля и выход доступны после входа. Вход по email и паролю.'
+      )}
     >
       {(user) => (
         <AccountShell
           user={user}
           section="security"
-          title="Безопасность"
-          description="Пароль, вход и подтверждение адреса. Остальные настройки аккаунта — в профиле."
+          title={t('Безопасность')}
+          description={t(
+            'Пароль, вход и подтверждение адреса. Остальные настройки аккаунта — в профиле.'
+          )}
         >
           <SecurityScreen user={user} />
         </AccountShell>
@@ -60,6 +67,7 @@ export function AccountSecurityPage() {
 }
 
 function SecurityScreen({ user }: { user: SessionUser }) {
+  const { t } = useI18n()
   const { signOut } = useSession()
   const profileState = useAccountProfile()
   const profile = profileState.profile
@@ -79,7 +87,7 @@ function SecurityScreen({ user }: { user: SessionUser }) {
       navigate('/')
     } catch {
       setSignOutError(
-        'Не удалось выйти. Проверьте соединение и попробуйте снова.'
+        t('Не удалось выйти. Проверьте соединение и попробуйте снова.')
       )
       setIsSigningOut(false)
     }
@@ -95,7 +103,7 @@ function SecurityScreen({ user }: { user: SessionUser }) {
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => setAnnouncement(null)}
           >
@@ -108,11 +116,12 @@ function SecurityScreen({ user }: { user: SessionUser }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="size-4 text-muted-foreground" aria-hidden />
-            Пароль
+            {t('Пароль')}
           </CardTitle>
           <CardDescription>
-            Пароль от 12 символов. После смены остальные сессии входа завершатся —
-            здесь вы останетесь.
+            {t(
+              'Пароль от 12 символов. После смены остальные сессии входа завершатся — здесь вы останетесь.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardFooter>
@@ -121,7 +130,7 @@ function SecurityScreen({ user }: { user: SessionUser }) {
             className="h-11 sm:h-8"
             onClick={() => setIsPasswordOpen(true)}
           >
-            Сменить пароль
+            {t('Сменить пароль')}
           </Button>
         </CardFooter>
       </Card>
@@ -130,17 +139,18 @@ function SecurityScreen({ user }: { user: SessionUser }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <LogOut className="size-4 text-muted-foreground" aria-hidden />
-            Вход в аккаунт
+            {t('Вход в аккаунт')}
           </CardTitle>
           <CardDescription>
-            Вы вошли в этом браузере. Выйти можно здесь; смена пароля завершает
-            остальные сессии.
+            {t(
+              'Вы вошли в этом браузере. Выйти можно здесь; смена пароля завершает остальные сессии.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           {profile?.lastLoginAt && (
             <p className="text-muted-foreground">
-              Последний вход:{' '}
+              {t('Последний вход:')}{' '}
               <time dateTime={profile.lastLoginAt}>
                 {formatDateTime(profile.lastLoginAt)}
               </time>
@@ -160,7 +170,7 @@ function SecurityScreen({ user }: { user: SessionUser }) {
             onClick={() => void handleSignOut()}
           >
             <LogOut data-icon="inline-start" aria-hidden />
-            {isSigningOut ? 'Выходим…' : 'Выйти'}
+            {isSigningOut ? t('Выходим…') : t('Выйти')}
           </Button>
         </CardFooter>
       </Card>
@@ -173,17 +183,21 @@ function SecurityScreen({ user }: { user: SessionUser }) {
             ) : (
               <MailWarning className="size-4 text-warning" aria-hidden />
             )}
-            Подтверждение email
+            {t('Подтверждение email')}
           </CardTitle>
           <CardDescription>
             {isEmailVerified
-              ? 'Адрес подтверждён: на него можно получать письма о записях.'
-              : 'Адрес пока не подтверждён. Письмо с подтверждением появится вместе с отдельным сценарием — пароль и вход это не ограничивает.'}
+              ? t(
+                  'Адрес подтверждён: на него можно получать письма о записях.'
+                )
+              : t(
+                  'Адрес пока не подтверждён. Письмо с подтверждением появится вместе с отдельным сценарием — пароль и вход это не ограничивает.'
+                )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm">
-            <span className="text-muted-foreground">Адрес: </span>
+            <span className="text-muted-foreground">{t('Адрес:')} </span>
             {profile?.email ?? user.email}
           </p>
         </CardContent>
@@ -194,7 +208,9 @@ function SecurityScreen({ user }: { user: SessionUser }) {
         onOpenChange={setIsPasswordOpen}
         onSuccess={() =>
           setAnnouncement(
-            'Пароль изменён. Остальные сессии входа завершены — здесь вы остались.'
+            t(
+              'Пароль изменён. Остальные сессии входа завершены — здесь вы остались.'
+            )
           )
         }
       />

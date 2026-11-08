@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePagedList } from '@/hooks/use-paged-list'
+import { useI18n } from '@/i18n'
 import type { BarberProfile } from '@/lib/catalog'
 import {
   formatRating,
@@ -34,6 +35,7 @@ const PAGE_FALLBACK = 'Не удалось загрузить следующие
  * нет запроса — и нет случайной ошибки сети.
  */
 export function BarberReviews({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
   const sectionRef = useRef<HTMLElement>(null)
   const primarySalon =
     profile.salons.find((salon) => salon.isPrimary) ?? profile.salons[0]
@@ -46,12 +48,14 @@ export function BarberReviews({ profile }: { profile: BarberProfile }) {
     >
       <Card>
         <BarberSectionHeading id="barber-reviews-heading">
-          Отзывы
+          {t('Отзывы')}
         </BarberSectionHeading>
 
         {profile.reviewsCount === 0 ? (
           <CardContent>
-            <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
+            <p className="text-sm text-muted-foreground">
+              {t('Пока нет отзывов.')}
+            </p>
           </CardContent>
         ) : (
           <BarberReviewsList
@@ -81,6 +85,7 @@ function BarberReviewsList({
   timeZone?: string
   sectionRef: RefObject<HTMLElement | null>
 }) {
+  const { t } = useI18n()
   const listRef = useRef<HTMLUListElement>(null)
 
   const fetchPage = useCallback(
@@ -114,13 +119,13 @@ function BarberReviewsList({
   // Диапазон объявляет пагинатор: второй такой же озвучки на экране быть не должно.
   const liveMessage =
     status === 'loading'
-      ? 'Загружаем отзывы…'
+      ? t('Загружаем отзывы…')
       : status === 'error'
         ? ''
         : items.length === 0
           ? isEmpty
-            ? 'Пока нет отзывов.'
-            : 'На этой странице отзывов нет.'
+            ? t('Пока нет отзывов.')
+            : t('На этой странице отзывов нет.')
           : ''
 
   return (
@@ -140,16 +145,21 @@ function BarberReviewsList({
       {status === 'loading' && <ReviewsSkeleton />}
 
       {status === 'error' && (
-        <ReviewsError message={error ?? REVIEWS_FALLBACK} onRetry={reload} />
+        <ReviewsError
+          message={error ?? t(REVIEWS_FALLBACK)}
+          onRetry={reload}
+        />
       )}
 
       {isEmpty && (
-        <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
+        <p className="text-sm text-muted-foreground">
+          {t('Пока нет отзывов.')}
+        </p>
       )}
 
       {status === 'ready' && items.length === 0 && pageIndex > 0 && (
         <p className="text-sm text-muted-foreground">
-          На этой странице отзывов нет.
+          {t('На этой странице отзывов нет.')}
         </p>
       )}
 
@@ -158,7 +168,7 @@ function BarberReviewsList({
           key={pageIndex}
           ref={listRef}
           tabIndex={-1}
-          aria-label="Отзывы барбера"
+          aria-label={t('Отзывы барбера')}
           className="scroll-mt-20 divide-y rounded-lg motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           {items.map((review) => (
@@ -168,7 +178,7 @@ function BarberReviewsList({
       )}
 
       <ListPager
-        label="Страницы отзывов"
+        label={t('Страницы отзывов')}
         rangeLabel={
           items.length === 0
             ? ''
@@ -189,6 +199,7 @@ function BarberReviewsList({
 }
 
 function ReviewCard({ review, timeZone }: { review: Review; timeZone?: string }) {
+  const { t } = useI18n()
   const hasText = review.text !== null && review.text.trim() !== ''
 
   return (
@@ -211,7 +222,9 @@ function ReviewCard({ review, timeZone }: { review: Review; timeZone?: string })
           {review.text}
         </p>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">Без комментария.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t('Без комментария.')}
+        </p>
       )}
     </li>
   )
@@ -243,6 +256,8 @@ function ReviewsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div
@@ -255,7 +270,7 @@ function ReviewsError({
         />
         <div className="space-y-0.5">
           <p className="font-medium text-foreground">
-            Не удалось загрузить отзывы.
+            {t('Не удалось загрузить отзывы.')}
           </p>
           <p>{message}</p>
         </div>
@@ -266,7 +281,7 @@ function ReviewsError({
         className="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

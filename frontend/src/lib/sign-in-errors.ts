@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 
 /**
@@ -9,32 +10,34 @@ import { ApiError } from '@/lib/api'
  */
 export function describeSignInError(error: unknown): string {
   if (!(error instanceof ApiError)) {
-    return 'Не удалось войти. Попробуйте ещё раз.'
+    return t('Не удалось войти. Попробуйте ещё раз.')
   }
 
   if (error.status === 0) {
-    return 'Нет связи с сервером. Проверьте подключение и повторите попытку.'
+    return t('Нет связи с сервером. Проверьте подключение и повторите попытку.')
   }
 
   if (error.status === 429) {
-    return 'Слишком много попыток входа. Подождите минуту и повторите.'
+    return t('Слишком много попыток входа. Подождите минуту и повторите.')
   }
 
   if (error.hasCode('auth.login.lockedOut')) {
-    return 'Слишком много неудачных попыток. Вход временно заблокирован — попробуйте позже.'
+    return t(
+      'Слишком много неудачных попыток. Вход временно заблокирован — попробуйте позже.'
+    )
   }
 
   if (error.hasCode('auth.login.inactive')) {
-    return 'Аккаунт деактивирован. Восстановить доступ поможет поддержка.'
+    return t('Аккаунт деактивирован. Восстановить доступ поможет поддержка.')
   }
 
   if (error.hasCode('auth.csrf.invalid')) {
-    return 'Сессия устарела. Закройте окно и попробуйте снова.'
+    return t('Сессия устарела. Закройте окно и попробуйте снова.')
   }
 
   if (error.hasCode('auth.login.invalidCredentials') || error.status === 401) {
-    return 'Неверный email или пароль.'
+    return t('Неверный email или пароль.')
   }
 
-  return 'Не удалось войти. Попробуйте ещё раз.'
+  return t('Не удалось войти. Попробуйте ещё раз.')
 }

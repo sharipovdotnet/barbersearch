@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import type { ImportRow, ImportSummary } from '@/hooks/use-barber-import'
+import { t } from '@/i18n'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
 import {
   formatBookingsCount,
@@ -68,7 +69,7 @@ function hasIssue(draft: ImportDraft, issue: ImportIssue): boolean {
 function eventLabel(draft: ImportDraft): string {
   const summary = (draft.eventSummary ?? draft.raw).trim()
 
-  return summary === '' ? 'Без названия' : summary
+  return summary === '' ? t('Без названия') : summary
 }
 
 function overlapPartnerName(draft: ImportDraft): string {
@@ -81,11 +82,11 @@ function stateText(
   includedLines: ReadonlySet<number>
 ): string {
   if (row.status === 'creating') {
-    return 'Создаём…'
+    return t('Создаём…')
   }
 
   if (row.status === 'created') {
-    return 'Создано'
+    return t('Создано')
   }
 
   if (row.status === 'failed' && row.failure !== null) {
@@ -95,7 +96,7 @@ function stateText(
   const first = row.draft.issues[0]
 
   if (first === undefined) {
-    return 'Готово'
+    return t('Готово')
   }
 
   if (first === 'overlap') {
@@ -106,11 +107,13 @@ function stateText(
     )
 
     return partner === null
-      ? ISSUE_TEXT.overlap
-      : `Пересекается с записью «${overlapPartnerName(partner)}»`
+      ? t(ISSUE_TEXT.overlap)
+      : t('Пересекается с записью «{name}»', {
+          name: overlapPartnerName(partner),
+        })
   }
 
-  return ISSUE_TEXT[first]
+  return t(ISSUE_TEXT[first])
 }
 
 function dateLabel(date: string | null): string {
@@ -143,7 +146,7 @@ function icsWhenLabel(draft: ImportDraft, timeZoneId: string): string {
 
   return endDate === draft.date
     ? `${day}, ${start}–${end}`
-    : `${day}, ${start} до ${end} следующего дня`
+    : t('{day}, {start} до {end} следующего дня', { day, start, end })
 }
 
 /**
@@ -163,40 +166,48 @@ function hintLines(
   for (const hint of draft.hints) {
     switch (hint) {
       case 'personal':
-        lines.push('Похоже на личное событие')
+        lines.push(t('Похоже на личное событие'))
         break
       case 'free':
-        lines.push('Событие отмечено как «свободно»')
+        lines.push(t('Событие отмечено как «свободно»'))
         break
       case 'tentative':
-        lines.push('Предварительная запись')
+        lines.push(t('Предварительная запись'))
         break
       case 'noContact':
-        lines.push('Нет телефона и услуги — проверьте')
+        lines.push(t('Нет телефона и услуги — проверьте'))
         break
       case 'salonFallback':
-        lines.push('Салон не найден — выбран основной')
+        lines.push(t('Салон не найден — выбран основной'))
         break
       case 'timeZoneConverted':
         if (draft.sourceTimeZone !== null) {
-          lines.push(`Время пересчитано из ${draft.sourceTimeZone}`)
+          lines.push(
+            t('Время пересчитано из {zone}', { zone: draft.sourceTimeZone })
+          )
         }
         break
       case 'durationMismatch':
         if (draft.eventDurationMinutes !== null && service !== undefined) {
           lines.push(
-            `Длительность ${draft.eventDurationMinutes} мин из календаря, услуга ${service.durationMinutes} мин`
+            t(
+              'Длительность {event} мин из календаря, услуга {service} мин',
+              {
+                event: draft.eventDurationMinutes,
+                service: service.durationMinutes,
+              }
+            )
           )
         }
         break
       case 'phoneFromDescription':
-        lines.push('Телефон найден в описании — проверьте')
+        lines.push(t('Телефон найден в описании — проверьте'))
         break
       case 'nameTruncated':
-        lines.push('Имя сокращено до 100 символов')
+        lines.push(t('Имя сокращено до 100 символов'))
         break
       case 'phoneTruncated':
-        lines.push('Телефон сокращён до 32 символов')
+        lines.push(t('Телефон сокращён до 32 символов'))
         break
     }
   }
@@ -219,7 +230,10 @@ function summaryParts(
     const parts: SummaryPart[] = [
       {
         key: 'ready',
-        text: `Готово ${summary.ready} из ${summary.total}`,
+        text: t('Готово {ready} из {total}', {
+          ready: summary.ready,
+          total: summary.total,
+        }),
         issue: null,
       },
     ]
@@ -227,7 +241,7 @@ function summaryParts(
     if (summary.missingService > 0) {
       parts.push({
         key: 'service',
-        text: `${summary.missingService} без услуги`,
+        text: t('{count} без услуги', { count: summary.missingService }),
         issue: 'noService',
       })
     }
@@ -235,7 +249,7 @@ function summaryParts(
     if (summary.past > 0) {
       parts.push({
         key: 'past',
-        text: `${summary.past} в прошлом`,
+        text: t('{count} в прошлом', { count: summary.past }),
         issue: 'past',
       })
     }
@@ -246,7 +260,10 @@ function summaryParts(
   const parts: SummaryPart[] = [
     {
       key: 'selected',
-      text: `Выбрано ${summary.selected} из ${summary.total}`,
+      text: t('Выбрано {selected} из {total}', {
+        selected: summary.selected,
+        total: summary.total,
+      }),
       issue: null,
     },
   ]
@@ -254,7 +271,7 @@ function summaryParts(
   if (summary.ready > 0) {
     parts.push({
       key: 'ready',
-      text: `Готово ${summary.ready}`,
+      text: t('Готово {count}', { count: summary.ready }),
       issue: null,
     })
   }
@@ -262,7 +279,7 @@ function summaryParts(
   if (summary.missingService > 0) {
     parts.push({
       key: 'service',
-      text: `${summary.missingService} без услуги`,
+      text: t('{count} без услуги', { count: summary.missingService }),
       issue: 'noService',
     })
   }
@@ -270,7 +287,7 @@ function summaryParts(
   if (summary.missingPhone > 0) {
     parts.push({
       key: 'phone',
-      text: `${summary.missingPhone} без телефона`,
+      text: t('{count} без телефона', { count: summary.missingPhone }),
       issue: 'noPhone',
     })
   }
@@ -351,7 +368,7 @@ function ServiceField({
         })
       }}
     >
-      <option value="">Выберите услугу</option>
+      <option value="">{t('Выберите услугу')}</option>
       {ordered.map((service) => (
         <option key={service.barberServiceId} value={service.barberServiceId}>
           {service.name}
@@ -411,7 +428,7 @@ function WhenFields({
       {needsDate && (
         <Input
           type="date"
-          aria-label={`Дата, строка ${draft.line}`}
+          aria-label={t('Дата, строка {line}', { line: draft.line })}
           aria-invalid={dateInvalid}
           aria-describedby={describedBy}
           value={draft.date ?? ''}
@@ -424,7 +441,7 @@ function WhenFields({
       {needsTime && (
         <Input
           type="time"
-          aria-label={`Время, строка ${draft.line}`}
+          aria-label={t('Время, строка {line}', { line: draft.line })}
           aria-invalid={timeInvalid}
           aria-describedby={describedBy}
           value={draft.time ?? ''}
@@ -455,7 +472,7 @@ function NameField({
 
   return (
     <Input
-      aria-label={`Имя, строка ${draft.line}`}
+      aria-label={t('Имя, строка {line}', { line: draft.line })}
       aria-invalid={hasIssue(draft, 'noName')}
       aria-describedby={describedBy}
       value={draft.firstName ?? ''}
@@ -483,7 +500,7 @@ function PhoneCell({
     <PhoneField
       draft={draft}
       onUpdate={onUpdate}
-      label={`Телефон, строка ${draft.line}`}
+      label={t('Телефон, строка {line}', { line: draft.line })}
       describedBy={describedBy}
       invalid={invalid}
     />
@@ -512,7 +529,7 @@ function ServiceCell({
     <ServiceField
       draft={draft}
       options={options}
-      label={`Услуга, строка ${draft.line}`}
+      label={t('Услуга, строка {line}', { line: draft.line })}
       describedBy={describedBy}
       invalid={invalid}
       onUpdate={onUpdate}
@@ -535,7 +552,7 @@ function SalonCell({
 
   return (
     <select
-      aria-label={`Салон, строка ${draft.line}`}
+      aria-label={t('Салон, строка {line}', { line: draft.line })}
       aria-describedby={describedBy}
       value={draft.salonId ?? ''}
       className="h-11 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-8"
@@ -652,7 +669,7 @@ export function ImportPreview({
   return (
     <section aria-labelledby="import-preview-title" className="space-y-4">
       <h3 id="import-preview-title" className="sr-only">
-        Проверка записей
+        {t('Проверка записей')}
       </h3>
 
       <p
@@ -696,7 +713,7 @@ export function ImportPreview({
               onToggleAll(true)
             }}
           >
-            Выбрать все
+            {t('Выбрать все')}
           </Button>
           <Button
             type="button"
@@ -708,7 +725,7 @@ export function ImportPreview({
               onToggleAll(false)
             }}
           >
-            Снять все
+            {t('Снять все')}
           </Button>
         </div>
       )}
@@ -722,12 +739,12 @@ export function ImportPreview({
       {isWide ? (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
-            <caption className="sr-only">Разобранные записи</caption>
+            <caption className="sr-only">{t('Разобранные записи')}</caption>
             <thead>
               <tr className="border-b text-left text-muted-foreground">
                 {isIcs && (
                   <th scope="col" className="sr-only">
-                    Перенести
+                    {t('Перенести')}
                   </th>
                 )}
                 {COLUMNS.map((column) => (
@@ -736,7 +753,7 @@ export function ImportPreview({
                     scope="col"
                     className="py-2 pr-2 font-medium whitespace-nowrap"
                   >
-                    {column}
+                    {t(column)}
                   </th>
                 ))}
               </tr>
@@ -770,7 +787,9 @@ export function ImportPreview({
                         <Checkbox
                           checked={row.included}
                           disabled={row.status === 'created'}
-                          aria-label={`Перенести событие «${eventLabel(row.draft)}»`}
+                          aria-label={t('Перенести событие «{name}»', {
+                            name: eventLabel(row.draft),
+                          })}
                           onCheckedChange={() => {
                             onToggle(row.draft.line)
                           }}
@@ -857,7 +876,7 @@ export function ImportPreview({
                             toggleEditing(row.draft.line)
                           }}
                         >
-                          Изменить
+                          {t('Изменить')}
                         </Button>
                       )}
                     </td>
@@ -896,14 +915,18 @@ export function ImportPreview({
                       className="mt-0.5"
                       checked={row.included}
                       disabled={row.status === 'created'}
-                      aria-label={`Перенести событие «${eventLabel(row.draft)}»`}
+                      aria-label={t('Перенести событие «{name}»', {
+                        name: eventLabel(row.draft),
+                      })}
                       onCheckedChange={() => {
                         onToggle(row.draft.line)
                       }}
                     />
                   )}
                   <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
-                    <p className="text-sm font-medium">Строка {row.draft.line}</p>
+                    <p className="text-sm font-medium">
+                      {t('Строка {line}', { line: row.draft.line })}
+                    </p>
                     <div className="text-right">
                       <span
                         id={errorId}
@@ -927,7 +950,7 @@ export function ImportPreview({
                             toggleEditing(row.draft.line)
                           }}
                         >
-                          Изменить
+                          {t('Изменить')}
                         </Button>
                       )}
                     </div>
@@ -935,7 +958,7 @@ export function ImportPreview({
                 </div>
                 {isIcs && <HintList lines={hints} />}
                 <dl className="grid grid-cols-[5.5rem_1fr] items-start gap-x-3 gap-y-2 text-sm">
-                  <dt className="text-muted-foreground">Когда</dt>
+                  <dt className="text-muted-foreground">{t('Когда')}</dt>
                   <dd>
                     <WhenFields
                       draft={row.draft}
@@ -947,7 +970,7 @@ export function ImportPreview({
                       expanded={expanded}
                     />
                   </dd>
-                  <dt className="text-muted-foreground">Клиент</dt>
+                  <dt className="text-muted-foreground">{t('Клиент')}</dt>
                   <dd>
                     <NameField
                       draft={row.draft}
@@ -957,7 +980,7 @@ export function ImportPreview({
                       expanded={expanded}
                     />
                   </dd>
-                  <dt className="text-muted-foreground">Телефон</dt>
+                  <dt className="text-muted-foreground">{t('Телефон')}</dt>
                   <dd>
                     <PhoneCell
                       draft={row.draft}
@@ -967,7 +990,7 @@ export function ImportPreview({
                       expanded={expanded}
                     />
                   </dd>
-                  <dt className="text-muted-foreground">Услуга</dt>
+                  <dt className="text-muted-foreground">{t('Услуга')}</dt>
                   <dd>
                     <ServiceCell
                       draft={row.draft}
@@ -977,7 +1000,7 @@ export function ImportPreview({
                       expanded={expanded}
                     />
                   </dd>
-                  <dt className="text-muted-foreground">Салон</dt>
+                  <dt className="text-muted-foreground">{t('Салон')}</dt>
                   <dd>
                     <SalonCell
                       draft={row.draft}
@@ -987,7 +1010,7 @@ export function ImportPreview({
                       expanded={expanded}
                     />
                   </dd>
-                  <dt className="text-muted-foreground">Цена</dt>
+                  <dt className="text-muted-foreground">{t('Цена')}</dt>
                   <dd>
                     <PriceCell
                       draft={row.draft}
@@ -1005,7 +1028,10 @@ export function ImportPreview({
 
       {progress !== null && (
         <p role="status" className="text-sm text-muted-foreground">
-          Обработано {progress.done} из {progress.total}…
+          {t('Обработано {done} из {total}…', {
+            done: progress.done,
+            total: progress.total,
+          })}
         </p>
       )}
 
@@ -1018,7 +1044,9 @@ export function ImportPreview({
           disabled={isRunning || summary.ready === 0}
           onClick={onCreate}
         >
-          {`Создать ${formatBookingsCount(summary.ready)}`}
+          {t('Создать {count}', {
+            count: formatBookingsCount(summary.ready),
+          })}
         </Button>
         <Button
           type="button"
@@ -1028,11 +1056,11 @@ export function ImportPreview({
           disabled={isRunning}
           onClick={onBack}
         >
-          {isIcs ? 'Изменить файл' : 'Изменить список'}
+          {isIcs ? t('Изменить файл') : t('Изменить список')}
         </Button>
         {isIcs && (
           <p className="w-full text-xs text-muted-foreground sm:w-auto">
-            Правки строк при возврате к файлу потеряются.
+            {t('Правки строк при возврате к файлу потеряются.')}
           </p>
         )}
       </div>

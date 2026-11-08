@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import type { ImportRow, ImportSummary } from '@/hooks/use-barber-import'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
 import type { BarberSlot } from '@/lib/barber-slots'
+import { getLocale, t, tp } from '@/i18n'
 import { formatShortDay, formatTime } from '@/lib/format'
 import type { ImportSource } from '@/lib/import-parse'
 
@@ -19,27 +20,20 @@ import type { ImportSource } from '@/lib/import-parse'
  * возвращает в предпросмотр без повторного чтения файла.
  */
 
-const pluralRules = new Intl.PluralRules('ru')
-
-/** «1 строка» / «2 строки» / «5 строк». */
-function rowsWord(count: number): string {
-  const category = pluralRules.select(count)
-
-  if (category === 'one') {
-    return 'строка'
-  }
-
-  return category === 'few' ? 'строки' : 'строк'
-}
-
 function attentionText(count: number): string {
-  const verb = count === 1 ? 'требует' : 'требуют'
+  const rows = tp('rows', count)
+  const singular = new Intl.PluralRules(getLocale()).select(count) === 'one'
 
-  return `${count} ${rowsWord(count)} ${verb} внимания.`
+  return singular
+    ? t('{rows} требует внимания.', { rows })
+    : t('{rows} требуют внимания.', { rows })
 }
 
 function moment(date: string | null, time: string | null): string {
-  const day = date === null ? 'без даты' : formatShortDay(`${date}T00:00:00Z`, 'UTC')
+  const day =
+    date === null
+      ? t('без даты')
+      : formatShortDay(`${date}T00:00:00Z`, 'UTC')
 
   return time === null ? day : `${day}, ${time}`
 }
@@ -60,7 +54,7 @@ function SlotChoices({
   if (row.slotsStatus === 'loading') {
     return (
       <p role="status" className="text-sm text-muted-foreground">
-        Ищем свободное время…
+        {t('Ищем свободное время…')}
       </p>
     )
   }
@@ -68,7 +62,7 @@ function SlotChoices({
   if (row.slotsStatus === 'error') {
     return (
       <p role="alert" className="text-sm text-destructive">
-        Не удалось загрузить свободное время.{' '}
+        {t('Не удалось загрузить свободное время.')}{' '}
         <button
           type="button"
           className="underline underline-offset-2"
@@ -76,7 +70,7 @@ function SlotChoices({
             onLoadSlots(row.draft.line)
           }}
         >
-          Повторить
+          {t('Повторить')}
         </button>
       </p>
     )
@@ -93,7 +87,7 @@ function SlotChoices({
           onLoadSlots(row.draft.line)
         }}
       >
-        Ближайшее время
+        {t('Ближайшее время')}
       </Button>
     )
   }
@@ -101,14 +95,16 @@ function SlotChoices({
   if (row.slots.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Свободного времени в этот день нет.
+        {t('Свободного времени в этот день нет.')}
       </p>
     )
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Ближайшее:</span>
+      <span className="text-sm text-muted-foreground">
+        {t('Ближайшее:')}
+      </span>
       {row.slots.map((slot) => (
         <Button
           key={slot.startAt}
@@ -173,8 +169,14 @@ export function ImportResult({
   ).length
   const report =
     source === 'ics'
-      ? `Перенесено ${createdNow} из ${selected} выбранных записей.`
-      : `Перенесено ${summary.created} из ${summary.total} записей.`
+      ? t('Перенесено {created} из {selected} выбранных записей.', {
+          created: createdNow,
+          selected,
+        })
+      : t('Перенесено {created} из {total} записей.', {
+          created: summary.created,
+          total: summary.total,
+        })
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true })
@@ -188,7 +190,7 @@ export function ImportResult({
         tabIndex={-1}
         className="text-lg font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
-        Отчёт о переносе
+        {t('Отчёт о переносе')}
       </h3>
 
       <p role="status" className="text-base">
@@ -197,7 +199,7 @@ export function ImportResult({
 
       {source === 'ics' && (
         <p className="text-sm text-muted-foreground">
-          Повторная загрузка этого файла не создаст дублей.
+          {t('Повторная загрузка этого файла не создаст дублей.')}
         </p>
       )}
 
@@ -212,14 +214,16 @@ export function ImportResult({
             disabled={isRunning}
             onClick={onReview}
           >
-            Проверить строки
+            {t('Проверить строки')}
           </Button>
         </div>
       )}
 
       {failed.length > 0 && (
         <div className="rounded-xl border bg-card p-4">
-          <h4 className="mb-2 text-sm font-medium">Не удалось создать</h4>
+          <h4 className="mb-2 text-sm font-medium">
+            {t('Не удалось создать')}
+          </h4>
           <ul className="space-y-3">
             {failed.map((row) => (
               <li
@@ -228,10 +232,10 @@ export function ImportResult({
               >
                 <p className="text-sm">
                   <span className="text-muted-foreground">
-                    Строка {row.draft.line}
+                    {t('Строка {line}', { line: row.draft.line })}
                   </span>
                   {' · '}
-                  {row.draft.firstName ?? 'Без имени'}
+                  {row.draft.firstName ?? t('Без имени')}
                   {' · '}
                   {moment(row.draft.date, row.draft.time)}
                 </p>
@@ -260,7 +264,7 @@ export function ImportResult({
             disabled={isRunning}
             onClick={onRetryFailed}
           >
-            Повторить неудачные
+            {t('Повторить неудачные')}
           </Button>
         )}
         {canContinue && (
@@ -272,7 +276,7 @@ export function ImportResult({
             disabled={isRunning}
             onClick={onContinue}
           >
-            Перенести ещё
+            {t('Перенести ещё')}
           </Button>
         )}
         <Button
@@ -283,7 +287,7 @@ export function ImportResult({
           disabled={isRunning}
           onClick={onOpenBookings}
         >
-          Открыть записи
+          {t('Открыть записи')}
         </Button>
       </div>
     </section>

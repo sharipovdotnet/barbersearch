@@ -20,6 +20,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { t, useI18n } from '@/i18n'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate } from '@/lib/router'
 import { signInDestination } from '@/lib/sign-in-destination'
@@ -40,15 +41,17 @@ function validate(email: string, password: string): LoginErrors {
   const errors: LoginErrors = {}
 
   if (!email) {
-    errors.email = 'Введите email.'
+    errors.email = t('Введите email.')
   } else if (!EMAIL_PATTERN.test(email)) {
-    errors.email = 'Похоже, в адресе опечатка.'
+    errors.email = t('Похоже, в адресе опечатка.')
   }
 
   if (!password) {
-    errors.password = 'Введите пароль.'
+    errors.password = t('Введите пароль.')
   } else if (password.length > MAX_PASSWORD_LENGTH) {
-    errors.password = `Максимум ${MAX_PASSWORD_LENGTH} символов.`
+    errors.password = t('Максимум {count} символов.', {
+      count: MAX_PASSWORD_LENGTH,
+    })
   }
 
   return errors
@@ -61,6 +64,7 @@ function LoginForm({
   onSuccess: (user: SessionUser) => void
   onRegister: () => void
 }) {
+  const { t } = useI18n()
   const { signIn } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -129,7 +133,7 @@ function LoginForm({
         </Field>
 
         <Field data-invalid={Boolean(errors.password)}>
-          <FieldLabel htmlFor="login-password">Пароль</FieldLabel>
+          <FieldLabel htmlFor="login-password">{t('Пароль')}</FieldLabel>
           <Input
             id="login-password"
             name="password"
@@ -161,7 +165,7 @@ function LoginForm({
             htmlFor="login-remember"
             className="font-normal text-muted-foreground"
           >
-            Запомнить меня
+            {t('Запомнить меня')}
           </FieldLabel>
         </Field>
       </FieldGroup>
@@ -173,7 +177,7 @@ function LoginForm({
       )}
 
       <p className="text-center text-sm text-muted-foreground">
-        Нет аккаунта?{' '}
+        {t('Нет аккаунта?')}{' '}
         <a
           href={REGISTER_PATH}
           className="rounded-sm font-medium text-foreground underline underline-offset-4 hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -187,7 +191,7 @@ function LoginForm({
             onRegister()
           }}
         >
-          Зарегистрироваться
+          {t('Зарегистрироваться')}
         </a>
       </p>
 
@@ -200,7 +204,7 @@ function LoginForm({
               className="animate-spin"
             />
           )}
-          {isPending ? 'Входим…' : 'Войти'}
+          {isPending ? t('Входим…') : t('Войти')}
         </Button>
       </DialogFooter>
     </form>
@@ -229,6 +233,7 @@ function LoginDialog({
   /** Дополнительное действие после успешного входа, например повторный запрос данных. */
   onSignedIn?: () => void
 }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -237,15 +242,17 @@ function LoginDialog({
         {trigger ?? (
           <>
             <LogIn data-icon="inline-start" aria-hidden />
-            Войти
+            {t('Войти')}
           </>
         )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Вход в BarberSearch</DialogTitle>
+          <DialogTitle>{t('Вход в BarberSearch')}</DialogTitle>
           <DialogDescription>
-            Войдите, чтобы записываться к барберам и управлять бронированиями.
+            {t(
+              'Войдите, чтобы записываться к барберам и управлять бронированиями.'
+            )}
           </DialogDescription>
         </DialogHeader>
         <LoginForm

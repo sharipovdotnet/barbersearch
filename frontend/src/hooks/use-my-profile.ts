@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
+import { useI18n } from '@/i18n'
 import {
   fetchMyProfile,
   updateMyProfile,
@@ -31,6 +32,7 @@ function readCache(userId: string): MyProfile | null {
 }
 
 export function useMyProfile(userId: string) {
+  const { t } = useI18n()
   const [state, setState] = useState<ProfileState>(() => {
     const cached = readCache(userId)
 
@@ -80,12 +82,12 @@ export function useMyProfile(userId: string) {
         status: 'error',
         profile: readCache(userId),
         error: requiresSignIn
-          ? 'Сессия истекла: войдите снова, чтобы увидеть профиль.'
+          ? t('Сессия истекла: войдите снова, чтобы увидеть профиль.')
           : describeApiFailure(error, 'Не удалось загрузить профиль.'),
         requiresSignIn,
       })
     }
-  }, [userId])
+  }, [t, userId])
 
   useEffect(() => {
     if (readCache(userId)) {

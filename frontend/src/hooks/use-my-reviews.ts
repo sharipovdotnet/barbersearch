@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import { usePagedList, type PagedList } from '@/hooks/use-paged-list'
+import { useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   deleteMyReview,
@@ -30,6 +31,8 @@ const PAGE_FALLBACK = 'Не удалось загрузить следующие
  * пагинацию.
  */
 export function useMyReviews(): MyReviewsController {
+  const { t } = useI18n()
+
   // Смена идентичности `fetchPage` заставила бы хук перезагрузить первую страницу
   // и сбросить кэш, а зависимостей у списка нет.
   const fetchPage = useCallback(
@@ -41,8 +44,8 @@ export function useMyReviews(): MyReviewsController {
   const list = usePagedList<MyReview>({
     getId: (review) => review.id,
     fetchPage,
-    fallback: LIST_FALLBACK,
-    pageFallback: PAGE_FALLBACK,
+    fallback: t(LIST_FALLBACK),
+    pageFallback: t(PAGE_FALLBACK),
     requiresAuth: true,
   })
 

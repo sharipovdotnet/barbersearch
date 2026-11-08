@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import {
   createSpecialization,
   describeAdminCatalogueError,
@@ -42,6 +43,7 @@ export function SpecializationDialog({
   onClose: () => void
   onSaved: (message: string) => void
 }) {
+  const { t } = useI18n()
   const [name, setName] = useState(specialization?.name ?? '')
   const [description, setDescription] = useState(
     specialization?.description ?? ''
@@ -56,7 +58,7 @@ export function SpecializationDialog({
     const trimmedName = name.trim()
 
     if (trimmedName === '') {
-      setNameError('Введите название специализации.')
+      setNameError(t('Введите название специализации.'))
       return
     }
 
@@ -72,18 +74,18 @@ export function SpecializationDialog({
     try {
       if (mode === 'create') {
         await createSpecialization(payload)
-        onSaved('Специализация создана')
+        onSaved(t('Специализация создана'))
       } else if (specialization) {
         await renameSpecialization(specialization.id, payload)
-        onSaved('Специализация переименована')
+        onSaved(t('Специализация переименована'))
       }
     } catch (cause) {
       setFormError(
         describeAdminCatalogueError(
           cause,
           mode === 'create'
-            ? 'Не удалось создать специализацию. Попробуйте ещё раз.'
-            : 'Не удалось переименовать специализацию. Попробуйте ещё раз.'
+            ? t('Не удалось создать специализацию. Попробуйте ещё раз.')
+            : t('Не удалось переименовать специализацию. Попробуйте ещё раз.')
         )
       )
     } finally {
@@ -109,18 +111,21 @@ export function SpecializationDialog({
         >
           <DialogHeader>
             <DialogTitle>
-              {mode === 'create' ? 'Новая специализация' : 'Правка специализации'}
+              {mode === 'create'
+                ? t('Новая специализация')
+                : t('Правка специализации')}
             </DialogTitle>
             <DialogDescription>
-              Специализация — тег барбера: выключенная строка остаётся на карточках тех,
-              кто её указал.
+              {t(
+                'Специализация — тег барбера: выключенная строка остаётся на карточках тех, кто её указал.'
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <FieldGroup>
             <Field data-invalid={Boolean(nameError)}>
               <FieldLabel htmlFor="catalogue-specialization-name">
-                Название
+                {t('Название')}
               </FieldLabel>
               <Input
                 id="catalogue-specialization-name"
@@ -144,7 +149,7 @@ export function SpecializationDialog({
 
             <Field>
               <FieldLabel htmlFor="catalogue-specialization-description">
-                Описание
+                {t('Описание')}
               </FieldLabel>
               <Textarea
                 id="catalogue-specialization-description"
@@ -171,7 +176,7 @@ export function SpecializationDialog({
               disabled={isPending}
               onClick={onClose}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="submit"
@@ -182,7 +187,7 @@ export function SpecializationDialog({
               {isPending && (
                 <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
               )}
-              {mode === 'create' ? 'Создать' : 'Сохранить'}
+              {mode === 'create' ? t('Создать') : t('Сохранить')}
             </Button>
           </DialogFooter>
         </form>

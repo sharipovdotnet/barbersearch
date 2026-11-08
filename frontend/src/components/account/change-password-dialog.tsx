@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   changePassword,
@@ -38,21 +39,25 @@ function validate(values: Record<PasswordField, string>): PasswordErrors {
   const errors: PasswordErrors = {}
 
   if (!values.current) {
-    errors.current = 'Введите текущий пароль.'
+    errors.current = t('Введите текущий пароль.')
   }
 
   if (!values.next) {
-    errors.next = 'Введите новый пароль.'
+    errors.next = t('Введите новый пароль.')
   } else if (values.next.length < MIN_PASSWORD_LENGTH) {
-    errors.next = `Минимум ${MIN_PASSWORD_LENGTH} символов.`
+    errors.next = t('Минимум {count} символов.', {
+      count: MIN_PASSWORD_LENGTH,
+    })
   } else if (values.next.length > MAX_PASSWORD_LENGTH) {
-    errors.next = `Максимум ${MAX_PASSWORD_LENGTH} символов.`
+    errors.next = t('Максимум {count} символов.', {
+      count: MAX_PASSWORD_LENGTH,
+    })
   } else if (values.next === values.current) {
-    errors.next = 'Новый пароль должен отличаться от текущего.'
+    errors.next = t('Новый пароль должен отличаться от текущего.')
   }
 
   if (values.confirm !== values.next) {
-    errors.confirm = 'Пароли не совпадают.'
+    errors.confirm = t('Пароли не совпадают.')
   }
 
   return errors
@@ -64,26 +69,39 @@ function describePasswordError(error: unknown): {
 } {
   if (error instanceof ApiError) {
     if (error.hasCode('auth.changePassword.invalidCurrentPassword')) {
-      return { field: 'current', message: 'Текущий пароль неверный.' }
+      return { field: 'current', message: t('Текущий пароль неверный.') }
     }
 
     if (error.hasCode('auth.password.tooShort')) {
-      return { field: 'next', message: `Минимум ${MIN_PASSWORD_LENGTH} символов.` }
+      return {
+        field: 'next',
+        message: t('Минимум {count} символов.', {
+          count: MIN_PASSWORD_LENGTH,
+        }),
+      }
     }
 
     if (error.hasCode('auth.password.tooLong')) {
       return {
         field: 'next',
-        message: `Максимум ${MAX_PASSWORD_LENGTH} символов.`,
+        message: t('Максимум {count} символов.', {
+          count: MAX_PASSWORD_LENGTH,
+        }),
       }
     }
 
     if (error.hasCode('auth.password.common')) {
-      return { field: 'next', message: 'Этот пароль слишком распространён.' }
+      return {
+        field: 'next',
+        message: t('Этот пароль слишком распространён.'),
+      }
     }
 
     if (error.hasCode('auth.password.equalsEmail')) {
-      return { field: 'next', message: 'Пароль не должен совпадать с email.' }
+      return {
+        field: 'next',
+        message: t('Пароль не должен совпадать с email.'),
+      }
     }
   }
 
@@ -126,6 +144,7 @@ function PasswordForm({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useI18n()
   const [values, setValues] = useState(EMPTY)
   const [errors, setErrors] = useState<PasswordErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -171,17 +190,20 @@ function PasswordForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Смена пароля</DialogTitle>
+        <DialogTitle>{t('Смена пароля')}</DialogTitle>
         <DialogDescription>
-          Пароль от 12 символов. После смены остальные сессии входа завершатся —
-          здесь вы останетесь.
+          {t(
+            'Пароль от 12 символов. После смены остальные сессии входа завершатся — здесь вы останетесь.'
+          )}
         </DialogDescription>
       </DialogHeader>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         <FieldGroup>
           <Field data-invalid={Boolean(errors.current)}>
-            <FieldLabel htmlFor="password-current">Текущий пароль</FieldLabel>
+            <FieldLabel htmlFor="password-current">
+              {t('Текущий пароль')}
+            </FieldLabel>
             <Input
               id="password-current"
               name="current"
@@ -197,7 +219,7 @@ function PasswordForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.next)}>
-            <FieldLabel htmlFor="password-new">Новый пароль</FieldLabel>
+            <FieldLabel htmlFor="password-new">{t('Новый пароль')}</FieldLabel>
             <Input
               id="password-new"
               name="newPassword"
@@ -213,7 +235,9 @@ function PasswordForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.confirm)}>
-            <FieldLabel htmlFor="password-confirm">Повторите пароль</FieldLabel>
+            <FieldLabel htmlFor="password-confirm">
+              {t('Повторите пароль')}
+            </FieldLabel>
             <Input
               id="password-confirm"
               name="confirmPassword"
@@ -242,7 +266,7 @@ function PasswordForm({
             onClick={onClose}
             disabled={isPending}
           >
-            Отмена
+            {t('Отмена')}
           </Button>
           <Button type="submit" disabled={isPending}>
             {isPending && (
@@ -252,7 +276,7 @@ function PasswordForm({
                 className="animate-spin"
               />
             )}
-            {isPending ? 'Сохраняем…' : 'Сменить пароль'}
+            {isPending ? t('Сохраняем…') : t('Сменить пароль')}
           </Button>
         </DialogFooter>
       </form>

@@ -15,6 +15,7 @@ import {
   BARBER_ONBOARDING_PATH,
 } from '@/lib/barber-cabinet-path'
 import { isPlainClick, navigate } from '@/lib/router'
+import { useI18n } from '@/i18n'
 
 /**
  * Гейты кабинета барбера.
@@ -26,6 +27,7 @@ import { isPlainClick, navigate } from '@/lib/router'
 
 /** Роль не Barber: честно говорим, что экран не для этой роли. */
 export function BarberRoleGate({ role }: { role: string }) {
+  const { t } = useI18n()
   const isAdmin = role === 'Admin'
 
   return (
@@ -36,12 +38,16 @@ export function BarberRoleGate({ role }: { role: string }) {
             <ShieldAlert className="size-5 text-muted-foreground" aria-hidden />
           </div>
           <CardTitle>
-            {isAdmin ? 'Вы администратор' : 'Это кабинет барбера'}
+            {isAdmin ? t('Вы администратор') : t('Это кабинет барбера')}
           </CardTitle>
           <CardDescription>
             {isAdmin
-              ? 'Модерация отзывов, барберы и пользователи — в отдельном разделе администрирования.'
-              : 'Записи клиентов видит барбер со своим профилем. Ваши записи и отзывы — в кабинете клиента.'}
+              ? t(
+                  'Модерация отзывов, барберы и пользователи — в отдельном разделе администрирования.'
+                )
+              : t(
+                  'Записи клиентов видит барбер со своим профилем. Ваши записи и отзывы — в кабинете клиента.'
+                )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
@@ -53,7 +59,7 @@ export function BarberRoleGate({ role }: { role: string }) {
                 navigate('/admin')
               }}
             >
-              Открыть администрирование
+              {t('Открыть администрирование')}
             </Button>
           ) : (
             <Button
@@ -63,7 +69,7 @@ export function BarberRoleGate({ role }: { role: string }) {
                 navigate('/account')
               }}
             >
-              Мои записи
+              {t('Мои записи')}
             </Button>
           )}
           <Button
@@ -74,7 +80,7 @@ export function BarberRoleGate({ role }: { role: string }) {
               navigate('/')
             }}
           >
-            На главную
+            {t('На главную')}
           </Button>
         </CardContent>
       </Card>
@@ -87,6 +93,8 @@ export function BarberRoleGate({ role }: { role: string }) {
  * профиль создаётся здесь же, на `/barber/onboarding`.
  */
 export function BarberProfileMissingGate() {
+  const { t } = useI18n()
+
   return (
     <div className="mx-auto w-full max-w-md">
       <Card>
@@ -94,10 +102,11 @@ export function BarberProfileMissingGate() {
           <div className="flex size-10 items-center justify-center rounded-full bg-muted">
             <UserX className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <CardTitle>Профиль ещё не создан</CardTitle>
+          <CardTitle>{t('Профиль ещё не создан')}</CardTitle>
           <CardDescription>
-            Записи клиентов приходят только для профиля, связанного с вашим
-            аккаунтом. Заполните его сами — это займёт пару минут.
+            {t(
+              'Записи клиентов приходят только для профиля, связанного с вашим аккаунтом. Заполните его сами — это займёт пару минут.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
@@ -108,7 +117,7 @@ export function BarberProfileMissingGate() {
               navigate(BARBER_ONBOARDING_PATH)
             }}
           >
-            Создать профиль барбера
+            {t('Создать профиль барбера')}
           </Button>
           <Button
             variant="outline"
@@ -118,7 +127,7 @@ export function BarberProfileMissingGate() {
               navigate('/')
             }}
           >
-            На главную
+            {t('На главную')}
           </Button>
         </CardContent>
       </Card>
@@ -161,10 +170,13 @@ const SKELETON_KEYS = ['barber-skeleton-1', 'barber-skeleton-2', 'barber-skeleto
  * и остаётся только имя «Уведомления».
  */
 export function BarberUnreadBell() {
+  const { t } = useI18n()
   const { count } = useUnreadNotifications()
   const hasUnread = count !== null && count > 0
   const label =
-    count === null ? 'Уведомления' : `Уведомления, непрочитанных: ${count}`
+    count === null
+      ? t('Уведомления')
+      : t('Уведомления, непрочитанных: {count}', { count })
 
   return (
     <>
@@ -191,7 +203,9 @@ export function BarberUnreadBell() {
       </a>
       {/* Смена счётчика объявляется отдельно: aria-label ссылки меняется молча. */}
       <span aria-live="polite" className="sr-only">
-        {count === null ? '' : `Непрочитанных уведомлений: ${count}`}
+        {count === null
+          ? ''
+          : t('Непрочитанных уведомлений: {count}', { count })}
       </span>
     </>
   )
@@ -199,6 +213,8 @@ export function BarberUnreadBell() {
 
 /** Заголовок экрана: один `h1` и подпись, общие для скелетона и списка. */
 export function BarberCabinetHeading() {
+  const { t } = useI18n()
+
   return (
     <header className="flex items-start gap-3">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -206,10 +222,10 @@ export function BarberCabinetHeading() {
       </div>
       <div className="min-w-0 flex-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
-          Кабинет барбера
+          {t('Кабинет барбера')}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Записи клиентов: подтверждение, завершение и заметки.
+          {t('Записи клиентов: подтверждение, завершение и заметки.')}
         </p>
       </div>
       <BarberUnreadBell />

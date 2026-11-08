@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BarberSearchStatus } from '@/hooks/use-barber-search'
+import { tp, useI18n } from '@/i18n'
 import type { BarberSearchFilters, BarberSearchItem } from '@/lib/barber-search'
 
 type BarberResultsProps = {
@@ -27,18 +28,7 @@ const SKELETON_KEYS = Array.from(
 
 /** «Показан 1 барбер», «Показаны 2 барбера», «Показаны 5 барберов». */
 function shownLabel(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-
-  if (mod10 === 1 && mod100 !== 11) {
-    return `Показан ${count} барбер`
-  }
-
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `Показаны ${count} барбера`
-  }
-
-  return `Показаны ${count} барберов`
+  return tp('shownBarbers', count)
 }
 
 /**
@@ -58,14 +48,15 @@ export function BarberResults({
   onRetry,
   onLoadMore,
 }: BarberResultsProps) {
+  const { t } = useI18n()
   const isEmpty = status === 'ready' && items.length === 0
   const liveMessage =
     status === 'loading'
-      ? 'Загружаем барберов…'
+      ? t('Загружаем барберов…')
       : status === 'error'
         ? ''
         : items.length === 0
-          ? 'Барберы не найдены.'
+          ? t('Барберы не найдены.')
           : shownLabel(items.length)
 
   return (
@@ -78,10 +69,10 @@ export function BarberResults({
         id="barbers-heading"
         className="font-heading text-2xl font-semibold tracking-tight"
       >
-        Барберы рядом
+        {t('Барберы рядом')}
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Подтверждённые барберы с рейтингом, стажем, языками и салоном.
+        {t('Подтверждённые барберы с рейтингом, стажем, языками и салоном.')}
       </p>
 
       <Separator className="my-6" />
@@ -94,7 +85,7 @@ export function BarberResults({
 
       {status === 'error' && (
         <BarberResultsError
-          message={error ?? 'Не удалось загрузить барберов.'}
+          message={error ?? t('Не удалось загрузить барберов.')}
           onRetry={onRetry}
         />
       )}
@@ -135,7 +126,7 @@ export function BarberResults({
                     className="animate-spin"
                   />
                 )}
-                {isLoadingMore ? 'Загружаем…' : 'Показать ещё'}
+                {isLoadingMore ? t('Загружаем…') : t('Показать ещё')}
               </Button>
             </div>
           )}
@@ -177,13 +168,15 @@ function BarberResultsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить барберов.</p>
+        <p className="font-medium">{t('Не удалось загрузить барберов.')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -192,13 +185,14 @@ function BarberResultsError({
         </p>
       </div>
       <Button variant="outline" className="h-11 sm:h-10" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
 }
 
 function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
+  const { t } = useI18n()
   const city = filters.city.trim()
   const hasNewFilters =
     filters.language !== '' ||
@@ -206,22 +200,23 @@ function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
     filters.hairServiceId !== '' ||
     filters.additionalService.trim() !== ''
 
-  let title = 'Барберов пока нет'
-  let text = 'Пока никто не подтверждён. Загляните позже.'
+  let title = t('Барберов пока нет')
+  let text = t('Пока никто не подтверждён. Загляните позже.')
 
   // Город и дата понятнее пользователю, поэтому подсказка про них приоритетнее.
   if (city !== '') {
-    title = 'В этом городе никого не нашли'
-    text =
-      'Проверьте написание — город учитывается точно, например «Москва».'
+    title = t('В этом городе никого не нашли')
+    text = t('Проверьте написание — город учитывается точно, например «Москва».')
   } else if (filters.date !== '') {
-    title = 'На выбранную дату никого не нашли'
-    text =
+    title = t('На выбранную дату никого не нашли')
+    text = t(
       'Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.'
+    )
   } else if (hasNewFilters) {
-    title = 'С такими фильтрами никого не нашли'
-    text =
+    title = t('С такими фильтрами никого не нашли')
+    text = t(
       'Попробуйте другой язык, специализацию, услугу или дополнительную услугу.'
+    )
   }
 
   return (
@@ -231,7 +226,9 @@ function BarberResultsEmpty({ filters }: { filters: BarberSearchFilters }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">{title}</p>
-        <p className="mx-auto max-w-sm text-sm text-muted-foreground">{text}</p>
+        <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+          {text}
+        </p>
       </div>
     </div>
   )

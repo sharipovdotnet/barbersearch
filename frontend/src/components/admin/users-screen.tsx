@@ -24,6 +24,7 @@ import { useAdminUser } from '@/hooks/use-admin-user'
 import { useAdminUserList } from '@/hooks/use-admin-user-list'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useSession } from '@/hooks/use-session'
+import { t, useI18n } from '@/i18n'
 import {
   ADMIN_USER_ROLE_FILTER_LABELS,
   ADMIN_USER_ROLE_LABELS,
@@ -93,6 +94,7 @@ type Announcement = {
  * лимит. Счётчиков на фильтрах нет — API не отдаёт общее число.
  */
 export function UsersScreen({ userId }: { userId: string | null }) {
+  const { t } = useI18n()
   const [statusFilter, setStatusFilter] = useState<AdminUserStatusFilter>('all')
   const [roleFilter, setRoleFilter] = useState<AdminUserRoleFilter>('all')
   const [searchInput, setSearchInput] = useState('')
@@ -325,7 +327,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
     <div className="space-y-5">
       {isMobileDetail && (
         <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-          Пользователи
+          {t('Пользователи')}
         </h1>
       )}
 
@@ -337,18 +339,21 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               tabIndex={-1}
               className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              Пользователи
+              {t('Пользователи')}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Роли, доступ и подтверждения. Смена роли и блокировка завершают все
-              сессии пользователя, записи и отзывы при этом сохраняются.
+              {t(
+                'Роли, доступ и подтверждения. Смена роли и блокировка завершают все сессии пользователя, записи и отзывы при этом сохраняются.'
+              )}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {list.updatedAt !== null && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Обновлено в {formatClockTime(new Date(list.updatedAt))}
+                {t('Обновлено в {time}', {
+                  time: formatClockTime(new Date(list.updatedAt)),
+                })}
               </span>
             )}
             <Button
@@ -367,7 +372,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               ) : (
                 <RefreshCw data-icon="inline-start" aria-hidden />
               )}
-              {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+              {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
             <CreateUserDialog onCreated={list.refresh} />
           </div>
@@ -402,7 +407,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
             )}
             <button
               type="button"
-              aria-label="Скрыть сообщение"
+              aria-label={t('Скрыть сообщение')}
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:size-auto sm:p-1"
               onClick={() => setAnnouncement(null)}
             >
@@ -415,13 +420,13 @@ export function UsersScreen({ userId }: { userId: string | null }) {
       {!isMobileDetail && (
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedFilter
-            label="Статус пользователей"
+            label={t('Статус пользователей')}
             value={statusFilter}
             options={STATUS_FILTERS}
             onChange={handleStatusFilterChange}
           />
           <SegmentedFilter
-            label="Роль пользователей"
+            label={t('Роль пользователей')}
             value={roleFilter}
             options={ROLE_FILTERS}
             onChange={handleRoleFilterChange}
@@ -429,7 +434,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
 
           <div className="relative w-full sm:ml-auto sm:w-64">
             <label htmlFor="users-search" className="sr-only">
-              Поиск по имени или email
+              {t('Поиск по имени или email')}
             </label>
             <Search
               className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -440,14 +445,14 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               type="search"
               value={searchInput}
               maxLength={ADMIN_USER_SEARCH_MAX_LENGTH}
-              placeholder="Имя или email"
+              placeholder={t('Имя или email')}
               className="h-11 pr-11 pl-8 sm:h-8 sm:pr-9"
               onChange={(event) => setSearchInput(event.target.value)}
             />
             {searchInput !== '' && (
               <button
                 type="button"
-                aria-label="Очистить поиск"
+                aria-label={t('Очистить поиск')}
                 className="absolute top-1/2 right-1 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:right-1.5 sm:size-auto sm:p-1"
                 onClick={resetSearch}
               >
@@ -459,14 +464,16 @@ export function UsersScreen({ userId }: { userId: string | null }) {
       )}
 
       <p role="status" className="sr-only">
-        {list.status === 'ready' ? `Показано ${list.items.length}` : ''}
+        {list.status === 'ready'
+          ? t('Показано {count}', { count: list.items.length })
+          : ''}
       </p>
 
       {list.status === 'loading' && <UsersSkeleton />}
 
       {list.status === 'error' && (
         <UsersError
-          message={list.error ?? 'Не удалось загрузить пользователей.'}
+          message={list.error ?? t('Не удалось загрузить пользователей.')}
           onRetry={list.reload}
         />
       )}
@@ -504,7 +511,7 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                В загруженной странице нет пользователей.
+                {t('В загруженной странице нет пользователей.')}
               </p>
             )}
           </div>
@@ -581,17 +588,21 @@ function announcementFor(
 
   switch (kind) {
     case 'role': {
-      const label = role ? ADMIN_USER_ROLE_LABELS[role] : ''
+      const label = role ? t(ADMIN_USER_ROLE_LABELS[role]) : ''
       const undoRole =
         previousRole && previousRole !== role ? previousRole : null
 
       return {
         text: role
-          ? `Роль изменена: «${label}». Все сессии пользователя завершены.`
-          : 'Роль изменена.',
+          ? t('Роль изменена: «{role}». Все сессии пользователя завершены.', {
+              role: label,
+            })
+          : t('Роль изменена.'),
         undo: undoRole
           ? {
-              label: `Вернуть роль «${ADMIN_USER_ROLE_LABELS[undoRole]}»`,
+              label: t('Вернуть роль «{role}»', {
+                role: t(ADMIN_USER_ROLE_LABELS[undoRole]),
+              }),
               action: 'role',
               userId: target.id,
               userName: name,
@@ -602,9 +613,11 @@ function announcementFor(
     }
     case 'block':
       return {
-        text: `Доступ заблокирован: «${name}». Все сессии завершены.`,
+        text: t('Доступ заблокирован: «{name}». Все сессии завершены.', {
+          name,
+        }),
         undo: {
-          label: 'Разблокировать',
+          label: t('Разблокировать'),
           action: 'unblock',
           userId: target.id,
           userName: name,
@@ -612,18 +625,18 @@ function announcementFor(
       }
     case 'unblock':
       return {
-        text: `Доступ восстановлен: «${name}».`,
+        text: t('Доступ восстановлен: «{name}».', { name }),
         undo: {
-          label: 'Заблокировать',
+          label: t('Заблокировать'),
           action: 'block',
           userId: target.id,
           userName: name,
         },
       }
     case 'verifyEmail':
-      return { text: `Email подтверждён: «${name}».` }
+      return { text: t('Email подтверждён: «{name}».', { name }) }
     case 'verifyPhone':
-      return { text: `Телефон подтверждён: «${name}».` }
+      return { text: t('Телефон подтверждён: «{name}».', { name }) }
   }
 }
 
@@ -689,6 +702,8 @@ function SegmentedFilter<T extends string>({
   options: readonly { value: T; label: string }[]
   onChange: (value: T) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div
       role="group"
@@ -711,7 +726,7 @@ function SegmentedFilter<T extends string>({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {item.label}
+            {t(item.label)}
           </button>
         )
       })}
@@ -720,10 +735,12 @@ function SegmentedFilter<T extends string>({
 }
 
 function UsersSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем пользователей…
+        {t('Загружаем пользователей…')}
       </p>
       <Skeleton className="h-4 w-32" aria-hidden />
       <Skeleton className="h-96 rounded-xl" aria-hidden />
@@ -738,13 +755,17 @@ function UsersError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить пользователей</p>
+        <p className="font-medium">
+          {t('Не удалось загрузить пользователей')}
+        </p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
@@ -755,7 +776,7 @@ function UsersError({
         className="h-11 sm:h-7"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -772,6 +793,8 @@ function UsersEmpty({
   search: string
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
+
   if (search !== '') {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -779,10 +802,12 @@ function UsersEmpty({
           <Search className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Ничего не найдено</p>
+          <p className="font-medium">{t('Ничего не найдено')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            По запросу «{search}» нет ни имени, ни email. Попробуйте другую
-            строку.
+            {t(
+              'По запросу «{search}» нет ни имени, ни email. Попробуйте другую строку.',
+              { search }
+            )}
           </p>
         </div>
       </div>
@@ -796,10 +821,12 @@ function UsersEmpty({
           <Inbox className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">С этой ролью пусто</p>
+          <p className="font-medium">{t('С этой ролью пусто')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Пользователей с ролью «{ADMIN_USER_ROLE_LABELS[role]}» по текущему
-            статусу нет. Смените фильтр или обновите список.
+            {t(
+              'Пользователей с ролью «{role}» по текущему статусу нет. Смените фильтр или обновите список.',
+              { role: t(ADMIN_USER_ROLE_LABELS[role]) }
+            )}
           </p>
         </div>
       </div>
@@ -813,9 +840,11 @@ function UsersEmpty({
           <Users className="size-4 text-success" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Заблокированных нет</p>
+          <p className="font-medium">{t('Заблокированных нет')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Доступ никому не закрыт: все пользователи могут войти в сервис.
+            {t(
+              'Доступ никому не закрыт: все пользователи могут войти в сервис.'
+            )}
           </p>
         </div>
         <Button
@@ -824,7 +853,7 @@ function UsersEmpty({
           className="h-11 sm:h-7"
           onClick={onRefresh}
         >
-          Обновить
+          {t('Обновить')}
         </Button>
       </div>
     )
@@ -837,9 +866,11 @@ function UsersEmpty({
           <Users className="size-4 text-success" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Все email подтверждены</p>
+          <p className="font-medium">{t('Все email подтверждены')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Неподтверждённых адресов нет. Новые появятся здесь после регистрации.
+            {t(
+              'Неподтверждённых адресов нет. Новые появятся здесь после регистрации.'
+            )}
           </p>
         </div>
       </div>
@@ -853,10 +884,11 @@ function UsersEmpty({
           <Inbox className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Активных пользователей нет</p>
+          <p className="font-medium">{t('Активных пользователей нет')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Похоже, все аккаунты заблокированы. Проверьте фильтр
-            «Заблокированные».
+            {t(
+              'Похоже, все аккаунты заблокированы. Проверьте фильтр «Заблокированные».'
+            )}
           </p>
         </div>
       </div>
@@ -869,10 +901,11 @@ function UsersEmpty({
         <Users className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Пользователей пока нет</p>
+        <p className="font-medium">{t('Пользователей пока нет')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Здесь появятся все зарегистрированные аккаунты. Создать первого можно
-          кнопкой «Создать пользователя».
+          {t(
+            'Здесь появятся все зарегистрированные аккаунты. Создать первого можно кнопкой «Создать пользователя».'
+          )}
         </p>
       </div>
     </div>

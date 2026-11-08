@@ -3,6 +3,7 @@ import { useState, type MouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import { IMPORT_MAX_TEXT_LENGTH } from '@/lib/import-parse'
 import { isPlainClick, navigate } from '@/lib/router'
 
@@ -41,6 +42,7 @@ export function ImportForm({
   onParse: () => void
   onClear: () => void
 }) {
+  const { t } = useI18n()
   const [showExample, setShowExample] = useState(false)
 
   const describedBy =
@@ -56,7 +58,7 @@ export function ImportForm({
       }}
     >
       <Field data-invalid={failure === null ? undefined : true}>
-        <FieldLabel htmlFor={TEXT_ID}>Список записей</FieldLabel>
+        <FieldLabel htmlFor={TEXT_ID}>{t('Список записей')}</FieldLabel>
         <Textarea
           id={TEXT_ID}
           name="import-text"
@@ -75,7 +77,7 @@ export function ImportForm({
         />
         <FieldError id={ERROR_ID}>{failure}</FieldError>
         <p id={HINT_ID} className="text-sm text-muted-foreground">
-          До 50 строк и 10 000 символов.
+          {t('До 50 строк и 10 000 символов.')}
         </p>
       </Field>
 
@@ -91,7 +93,7 @@ export function ImportForm({
             setShowExample((previous) => !previous)
           }}
         >
-          {showExample ? 'Скрыть пример' : 'Показать пример'}
+          {showExample ? t('Скрыть пример') : t('Показать пример')}
         </Button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -101,7 +103,7 @@ export function ImportForm({
             className="h-11 sm:h-8"
             disabled={text.trim() === ''}
           >
-            Разобрать
+            {t('Разобрать')}
           </Button>
           <Button
             type="button"
@@ -111,7 +113,7 @@ export function ImportForm({
             disabled={text === ''}
             onClick={onClear}
           >
-            Очистить
+            {t('Очистить')}
           </Button>
         </div>
       </div>
@@ -122,8 +124,9 @@ export function ImportForm({
           className="rounded-lg border bg-muted/40 px-3 py-2 text-sm"
         >
           <p className="mb-2 text-muted-foreground">
-            Строка с датой задаёт дату следующим — документ можно вставлять как
-            есть.
+            {t(
+              'Строка с датой задаёт дату следующим — документ можно вставлять как есть.'
+            )}
           </p>
           <pre className="font-mono text-xs whitespace-pre-wrap text-foreground">
             {EXAMPLE}
@@ -132,8 +135,9 @@ export function ImportForm({
       )}
 
       <p className="text-sm text-muted-foreground">
-        Данные клиентов сохранятся в сервисе и будут видны только вам. Не
-        вставляйте лишнее: email, адреса, заметки.{' '}
+        {t(
+          'Данные клиентов сохранятся в сервисе и будут видны только вам. Не вставляйте лишнее: email, адреса, заметки.'
+        )}{' '}
         <a
           href="/privacy"
           className="underline underline-offset-2 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -144,7 +148,7 @@ export function ImportForm({
             }
           }}
         >
-          Политика обработки данных
+          {t('Политика обработки данных')}
         </a>
         .
       </p>

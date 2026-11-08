@@ -1,6 +1,7 @@
 import { Loader2, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { formatClockTime } from '@/lib/format'
 
 /**
@@ -23,11 +24,15 @@ export function RefreshStatus({
   isRefreshing: boolean
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
       {updatedAt !== null && (
         <p className="text-xs text-muted-foreground tabular-nums">
-          Обновлено в {formatClockTime(new Date(updatedAt))}
+          {t('Обновлено в {time}', {
+            time: formatClockTime(new Date(updatedAt)),
+          })}
         </p>
       )}
 
@@ -43,7 +48,7 @@ export function RefreshStatus({
         ) : (
           <RefreshCw data-icon="inline-start" aria-hidden />
         )}
-        {isRefreshing ? 'Обновляем…' : 'Обновить'}
+        {isRefreshing ? t('Обновляем…') : t('Обновить')}
       </Button>
     </div>
   )

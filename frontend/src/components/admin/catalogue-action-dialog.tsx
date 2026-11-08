@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { t, tp, useI18n } from '@/i18n'
 import {
   ADMIN_CATALOGUE_ENTITY_LABELS,
   type CatalogueTab,
@@ -44,7 +45,8 @@ export function CatalogueActionDialog({
   onClose: () => void
   onConfirm: () => void
 }) {
-  const entity = ADMIN_CATALOGUE_ENTITY_LABELS[tab].toLowerCase()
+  const { t } = useI18n()
+  const entity = t(ADMIN_CATALOGUE_ENTITY_LABELS[tab]).toLowerCase()
   const isDeactivation = row.isActive
 
   return (
@@ -63,7 +65,9 @@ export function CatalogueActionDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {isDeactivation ? 'Выключить' : 'Включить'} {entity}?
+            {isDeactivation
+              ? t('Выключить {entity}?', { entity })
+              : t('Включить {entity}?', { entity })}
           </DialogTitle>
           <DialogDescription>{row.name}</DialogDescription>
         </DialogHeader>
@@ -71,7 +75,7 @@ export function CatalogueActionDialog({
         <p className="text-sm text-muted-foreground">
           {isDeactivation
             ? deactivationConsequence(tab, row.usageCount)
-            : 'Строка снова появится в фильтрах и на карточках.'}
+            : t('Строка снова появится в фильтрах и на карточках.')}
         </p>
 
         {error && (
@@ -88,7 +92,7 @@ export function CatalogueActionDialog({
             disabled={isPending}
             onClick={onClose}
           >
-            Отмена
+            {t('Отмена')}
           </Button>
           <Button
             type="button"
@@ -101,7 +105,7 @@ export function CatalogueActionDialog({
             {isPending && (
               <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
             )}
-            {isDeactivation ? 'Выключить' : 'Включить'}
+            {isDeactivation ? t('Выключить') : t('Включить')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -109,29 +113,26 @@ export function CatalogueActionDialog({
   )
 }
 
-/** «1 барбер» / «2 барбера» / «13 барберов». */
+/** «1 барбер» / «2 барбера» / «13 барберов» / «1 barber» / «2 barbers». */
 function barbers(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-
-  if (mod10 === 1 && mod100 !== 11) {
-    return `${count} барбер`
-  }
-
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} барбера`
-  }
-
-  return `${count} барберов`
+  return tp('barbers', count)
 }
 
 function deactivationConsequence(tab: CatalogueTab, usageCount: number): string {
   switch (tab) {
     case 'services':
-      return `Услуга исчезнет из фильтров и поиска, но останется в истории записей. Сейчас её используют ${barbers(usageCount)}.`
+      return t(
+        'Услуга исчезнет из фильтров и поиска, но останется в истории записей. Сейчас её используют {barbers}.',
+        { barbers: barbers(usageCount) }
+      )
     case 'specializations':
-      return 'Специализация исчезнет из фильтров витрины. Она останется на карточках барберов, которые её указали.'
+      return t(
+        'Специализация исчезнет из фильтров витрины. Она останется на карточках барберов, которые её указали.'
+      )
     case 'salons':
-      return `Салон исчезнет из поиска и с карточек. Барберы, которые работают только здесь, могут перестать показываться. Сейчас здесь работают ${barbers(usageCount)}.`
+      return t(
+        'Салон исчезнет из поиска и с карточек. Барберы, которые работают только здесь, могут перестать показываться. Сейчас здесь работают {barbers}.',
+        { barbers: barbers(usageCount) }
+      )
   }
 }

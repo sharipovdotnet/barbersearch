@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { t } from '@/i18n'
 import { navigate } from '@/lib/router'
 
 type AppErrorBoundaryProps = {
@@ -46,18 +47,19 @@ export class AppErrorBoundary extends Component<
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center gap-4 px-4 py-10 text-center">
         <h1 className="text-xl font-semibold tracking-tight">
-          Страница не открылась
+          {t('Страница не открылась')}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Что-то сломалось при отображении этого раздела. Ваши данные не
-          пострадали — обновите страницу или вернитесь на главную.
+          {t(
+            'Что-то сломалось при отображении этого раздела. Ваши данные не пострадали — обновите страницу или вернитесь на главную.'
+          )}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button onClick={() => window.location.reload()}>
-            Обновить страницу
+            {t('Обновить страницу')}
           </Button>
           <Button variant="ghost" onClick={this.handleGoHome}>
-            На главную
+            {t('На главную')}
           </Button>
         </div>
       </div>

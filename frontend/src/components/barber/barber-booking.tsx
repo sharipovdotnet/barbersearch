@@ -15,6 +15,7 @@ import type { BarberSlot } from '@/lib/barber-slots'
 import { formatPrice, formatSalonDate, formatTime } from '@/lib/format'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 /** UI-лимит комментария: в БД `text`, серверного ограничения нет. */
 const MAX_NOTE_LENGTH = 500
@@ -57,6 +58,7 @@ export function BarberBooking({
   onConflict,
   onClear,
 }: BarberBookingProps) {
+  const { t } = useI18n()
   const { status: sessionStatus } = useSession()
   const booking = useCreateBooking()
   const [note, setNote] = useState('')
@@ -74,7 +76,7 @@ export function BarberBooking({
 
   const venue =
     profile.salons.find((salon) => salon.salonId === slots.salonId)?.name ??
-    'Салон'
+    t('Салон')
   const isPending = booking.status === 'pending'
   const isSuccess = booking.status === 'success'
   const isError = booking.status === 'error'
@@ -162,7 +164,7 @@ export function BarberBooking({
       className="space-y-4 rounded-xl border border-border bg-muted/20 p-4"
     >
       <h3 id={headingId} className="text-sm font-medium">
-        Запись на приём
+        {t('Запись на приём')}
       </h3>
 
       <BookingSummary
@@ -178,7 +180,7 @@ export function BarberBooking({
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-9 w-full rounded-lg sm:w-44" />
           <p role="status" className="sr-only">
-            Проверяем вход…
+            {t('Проверяем вход…')}
           </p>
         </div>
       )}
@@ -186,9 +188,13 @@ export function BarberBooking({
       {sessionStatus === 'unavailable' && (
         <div className="space-y-3 border-t border-border pt-4">
           <div className="space-y-1">
-            <p className="text-sm font-medium">Не удалось проверить сессию</p>
+            <p className="text-sm font-medium">
+              {t('Не удалось проверить сессию')}
+            </p>
             <p className="text-sm text-muted-foreground">
-              Сервер не ответил. Проверьте подключение и повторите попытку.
+              {t(
+                'Сервер не ответил. Проверьте подключение и повторите попытку.'
+              )}
             </p>
           </div>
           <SessionRetryButton />
@@ -205,8 +211,8 @@ export function BarberBooking({
               className="text-sm text-muted-foreground outline-none"
             >
               {needsSignIn
-                ? (booking.error ?? 'Сессия истекла — войдите снова.')
-                : 'Войдите, чтобы подтвердить запись'}
+                ? (booking.error ?? t('Сессия истекла — войдите снова.'))
+                : t('Войдите, чтобы подтвердить запись')}
             </p>
             <LoginDialog
               variant="default"
@@ -235,7 +241,7 @@ export function BarberBooking({
                 className="mt-0.5 size-4 shrink-0 text-destructive"
                 aria-hidden
               />
-              <span>{booking.error ?? 'Не удалось записаться.'}</span>
+              <span>{booking.error ?? t('Не удалось записаться.')}</span>
             </div>
           )}
 
@@ -247,11 +253,11 @@ export function BarberBooking({
               className="space-y-3 outline-none"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium">Заявка отправлена</p>
+                <p className="text-sm font-medium">{t('Заявка отправлена')}</p>
                 <BookingStatusBadge status="Pending" />
               </div>
               <p className="text-sm text-muted-foreground">
-                Барбер подтвердит запись — она появится в «Моих записях».
+                {t('Барбер подтвердит запись — она появится в «Моих записях».')}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <a
@@ -269,7 +275,7 @@ export function BarberBooking({
                     navigate('/account')
                   }}
                 >
-                  Мои записи
+                  {t('Мои записи')}
                 </a>
                 <Button
                   type="button"
@@ -277,14 +283,16 @@ export function BarberBooking({
                   className="h-11 w-full sm:h-9 sm:w-auto"
                   onClick={onClear}
                 >
-                  Записаться ещё раз
+                  {t('Записаться ещё раз')}
                 </Button>
               </div>
             </div>
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label htmlFor={noteId}>Комментарий (необязательно)</Label>
+                <Label htmlFor={noteId}>
+                  {t('Комментарий (необязательно)')}
+                </Label>
                 <Textarea
                   id={noteId}
                   name="customerNote"
@@ -297,7 +305,9 @@ export function BarberBooking({
                   id={noteHintId}
                   className="text-xs text-muted-foreground tabular-nums"
                 >
-                  Осталось {MAX_NOTE_LENGTH - note.length}
+                  {t('Осталось {count}', {
+                    count: MAX_NOTE_LENGTH - note.length,
+                  })}
                 </p>
               </div>
 
@@ -316,10 +326,10 @@ export function BarberBooking({
                       />
                     )}
                     {isPending
-                      ? 'Отправляем…'
+                      ? t('Отправляем…')
                       : isRetryable
-                        ? 'Повторить'
-                        : 'Записаться'}
+                        ? t('Повторить')
+                        : t('Записаться')}
                   </Button>
                 )}
 
@@ -329,7 +339,7 @@ export function BarberBooking({
                     className="h-11 w-full sm:h-9 sm:w-auto"
                     onClick={handleNewKeyRetry}
                   >
-                    Попробовать снова
+                    {t('Попробовать снова')}
                   </Button>
                 )}
 
@@ -340,7 +350,7 @@ export function BarberBooking({
                     className="h-11 w-full sm:h-9 sm:w-auto"
                     onClick={onClear}
                   >
-                    Обновить свободное время
+                    {t('Обновить свободное время')}
                   </Button>
                 ) : (
                   <Button
@@ -349,7 +359,7 @@ export function BarberBooking({
                     className="h-11 w-full sm:h-9 sm:w-auto"
                     onClick={onClear}
                   >
-                    Выбрать другое время
+                    {t('Выбрать другое время')}
                   </Button>
                 )}
               </div>
@@ -375,6 +385,8 @@ function BookingSummary({
   venue: string
   price: number | null
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-1">
       <p className="text-sm font-medium">
@@ -388,7 +400,9 @@ function BookingSummary({
         {serviceName} · {venue}
       </p>
       <p className="text-sm tabular-nums">
-        {price === null ? 'Цена — уточняйте в салоне.' : formatPrice(price)}
+        {price === null
+          ? t('Цена — уточняйте в салоне.')
+          : formatPrice(price)}
       </p>
     </div>
   )

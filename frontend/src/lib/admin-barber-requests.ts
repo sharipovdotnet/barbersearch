@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -143,7 +144,7 @@ export function describeAdminBarberRequestListError(
   fallback = 'Не удалось загрузить заявки.'
 ): string {
   if (error instanceof ApiError && error.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   return describeApiFailure(error, fallback)
@@ -153,11 +154,11 @@ export function describeAdminBarberRequestListError(
 export function describeAdminBarberRequestDetailError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('barberRequest.notFound')) {
-      return 'Заявка не найдена. Возможно, ссылка устарела.'
+      return t('Заявка не найдена. Возможно, ссылка устарела.')
     }
   }
 
@@ -190,38 +191,42 @@ export function describeAdminBarberRequestActionError(
 ): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('barberRequest.notFound')) {
-      return 'Заявка больше не существует. Обновите список.'
+      return t('Заявка больше не существует. Обновите список.')
     }
 
     if (error.hasCode('barberRequest.review.invalidApplicant')) {
-      return 'Роль заявителя уже изменилась — заявку нельзя одобрить автоматически. Обновите список.'
+      return t(
+        'Роль заявителя уже изменилась — заявку нельзя одобрить автоматически. Обновите список.'
+      )
     }
 
     if (error.hasCode('barberRequest.review.invalidStatus') || error.status === 409) {
-      return 'Заявку уже рассмотрели. Обновите список.'
+      return t('Заявку уже рассмотрели. Обновите список.')
     }
 
     if (error.hasCode('barberRequest.rejection.reasonRequired')) {
-      return 'Укажите причину отказа.'
+      return t('Укажите причину отказа.')
     }
 
     if (error.hasCode('barberRequest.rejection.reasonTooLong')) {
-      return `Слишком длинная причина — максимум ${BARBER_REQUEST_REJECTION_MAX_LENGTH} символов.`
+      return t('Слишком длинная причина — максимум {max} символов.', {
+        max: BARBER_REQUEST_REJECTION_MAX_LENGTH,
+      })
     }
 
     if (error.hasCode('auth.csrf.invalid')) {
-      return 'Сессия устарела. Обновите страницу и повторите действие.'
+      return t('Сессия устарела. Обновите страницу и повторите действие.')
     }
   }
 
   return describeApiFailure(
     error,
     action === 'approve'
-      ? 'Не удалось одобрить заявку. Попробуйте ещё раз.'
-      : 'Не удалось отклонить заявку. Попробуйте ещё раз.'
+      ? t('Не удалось одобрить заявку. Попробуйте ещё раз.')
+      : t('Не удалось отклонить заявку. Попробуйте ещё раз.')
   )
 }

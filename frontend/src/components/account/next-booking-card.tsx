@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator'
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { StatusTimeline } from '@/components/account/status-timeline'
 import type { BookingView } from '@/components/account/booking-view'
+import { useI18n } from '@/i18n'
 import { downloadBookingCalendar } from '@/lib/calendar'
 import {
   formatCountdown,
@@ -46,6 +47,7 @@ export function NextBookingCard({
   now: number
   onRequestCancel: () => void
 }) {
+  const { t } = useI18n()
   const { booking } = view
   const timeZone = view.timeZoneId
   const relative = relativeDayLabel(booking.startAt, now, timeZone)
@@ -56,9 +58,10 @@ export function NextBookingCard({
 
   // «Сегодня» без времени бесполезно, а «через 1 день» дублирует «Завтра»:
   // показываем либо обратный отсчёт, либо календарную дату.
+  const todayLabel = t('Сегодня')
   const dateLine = relative
-    ? relative === 'Сегодня' && countdown
-      ? `Сегодня · ${countdown}`
+    ? relative === todayLabel && countdown
+      ? `${relative} · ${countdown}`
       : `${relative}, ${formatShortDay(booking.startAt, timeZone)}`
     : formatLongDay(booking.startAt, timeZone)
 
@@ -67,10 +70,10 @@ export function NextBookingCard({
       id: booking.id,
       title: `${view.serviceName} — ${view.barberName}`,
       description: [
-        `Запись в BarberSearch.`,
-        `Услуга: ${view.serviceName}.`,
-        `Мастер: ${view.barberName}.`,
-        `Салон: ${address}.`,
+        t('Запись в BarberSearch.'),
+        t('Услуга: {name}.', { name: view.serviceName }),
+        t('Мастер: {name}.', { name: view.barberName }),
+        t('Салон: {address}.', { address }),
       ].join(' '),
       location: [view.salonCity, address].filter(Boolean).join(', '),
       startAt: booking.startAt,
@@ -84,7 +87,7 @@ export function NextBookingCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
             <CalendarClock className="size-3.5" aria-hidden />
-            Ближайшая запись
+            {t('Ближайшая запись')}
           </span>
           <BookingStatusBadge status={booking.status} />
         </div>
@@ -122,7 +125,9 @@ export function NextBookingCard({
             <p className="font-heading text-lg font-medium tabular-nums">
               {formatPrice(booking.price)}
             </p>
-            <p className="text-xs text-muted-foreground">оплата в салоне</p>
+            <p className="text-xs text-muted-foreground">
+              {t('оплата в салоне')}
+            </p>
           </div>
         </div>
 
@@ -139,7 +144,9 @@ export function NextBookingCard({
                   aria-hidden
                 />
                 <span>
-                  <span className="text-muted-foreground">Барбер: </span>
+                  <span className="text-muted-foreground">
+                    {t('Барбер:')}{' '}
+                  </span>
                   {booking.barberNote}
                 </span>
               </p>
@@ -151,7 +158,7 @@ export function NextBookingCard({
                   aria-hidden
                 />
                 <span>
-                  <span className="text-muted-foreground">Вы: </span>
+                  <span className="text-muted-foreground">{t('Вы:')} </span>
                   {booking.customerNote}
                 </span>
               </p>
@@ -164,15 +171,15 @@ export function NextBookingCard({
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={onRequestCancel}>
             <X data-icon="inline-start" aria-hidden />
-            Отменить
+            {t('Отменить')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleAddToCalendar}>
             <CalendarPlus data-icon="inline-start" aria-hidden />
-            В календарь
+            {t('В календарь')}
           </Button>
         </div>
         <p className="hidden text-xs text-muted-foreground sm:block">
-          Отмена доступна до начала визита
+          {t('Отмена доступна до начала визита')}
         </p>
       </CardFooter>
     </Card>

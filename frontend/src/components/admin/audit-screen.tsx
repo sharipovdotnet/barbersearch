@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminAuditList } from '@/hooks/use-admin-audit-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_AUDIT_ACTOR_MAX_LENGTH,
   ADMIN_AUDIT_ENTITY_LABELS,
@@ -28,6 +29,7 @@ import { formatPageRange } from '@/lib/paging'
  * поясе браузера — это разные правила, и подпись фильтра говорит об этом прямо.
  */
 export function AuditScreen() {
+  const { t } = useI18n()
   const [entityType, setEntityType] = useState<AdminAuditEntityType>('all')
   const [actorInput, setActorInput] = useState('')
   const [actor, setActor] = useState('')
@@ -92,17 +94,19 @@ export function AuditScreen() {
             tabIndex={-1}
             className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Журнал
+            {t('Журнал')}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            История изменений, которую пишет сервер. Записи не редактируются.
+            {t('История изменений, которую пишет сервер. Записи не редактируются.')}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {list.updatedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              Обновлено в {formatClockTime(new Date(list.updatedAt))}
+              {t('Обновлено в {time}', {
+                time: formatClockTime(new Date(list.updatedAt)),
+              })}
             </span>
           )}
           <Button
@@ -123,7 +127,7 @@ export function AuditScreen() {
             ) : (
               <RefreshCw data-icon="inline-start" aria-hidden />
             )}
-            {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+            {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
           </Button>
         </div>
       </header>
@@ -132,7 +136,7 @@ export function AuditScreen() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[10rem_minmax(0,1fr)_10rem_10rem]">
           <div className="flex min-w-0 flex-col justify-end gap-1">
             <label htmlFor="audit-entity-type" className="text-sm font-medium">
-              Тип сущности
+              {t('Тип сущности')}
             </label>
             <select
               id="audit-entity-type"
@@ -144,7 +148,7 @@ export function AuditScreen() {
             >
               {ADMIN_AUDIT_ENTITY_TYPES.map((value) => (
                 <option key={value} value={value}>
-                  {ADMIN_AUDIT_ENTITY_LABELS[value]}
+                  {t(ADMIN_AUDIT_ENTITY_LABELS[value])}
                 </option>
               ))}
             </select>
@@ -152,7 +156,7 @@ export function AuditScreen() {
 
           <div className="flex min-w-0 flex-col justify-end gap-1">
             <label htmlFor="audit-actor" className="text-sm font-medium">
-              Авторская электронная почта
+              {t('Авторская электронная почта')}
             </label>
             <Input
               id="audit-actor"
@@ -167,7 +171,7 @@ export function AuditScreen() {
 
           <div className="flex min-w-0 flex-col justify-end gap-1">
             <label htmlFor="audit-from" className="text-sm font-medium">
-              С даты
+              {t('С даты')}
             </label>
             <Input
               id="audit-from"
@@ -181,7 +185,7 @@ export function AuditScreen() {
 
           <div className="flex min-w-0 flex-col justify-end gap-1">
             <label htmlFor="audit-to" className="text-sm font-medium">
-              По дату
+              {t('По дату')}
             </label>
             <Input
               id="audit-to"
@@ -196,7 +200,7 @@ export function AuditScreen() {
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p id="audit-dates-hint" className="text-xs text-muted-foreground">
-            Даты — в UTC, границы включают обе даты.
+            {t('Даты — в UTC, границы включают обе даты.')}
           </p>
           {isFiltered && (
             <Button
@@ -206,7 +210,7 @@ export function AuditScreen() {
               className="h-11 sm:h-8"
               onClick={resetFilters}
             >
-              Сбросить фильтры
+              {t('Сбросить фильтры')}
             </Button>
           )}
         </div>
@@ -223,7 +227,7 @@ export function AuditScreen() {
 
         {list.status === 'error' && (
           <AuditError
-            message={list.error ?? 'Не удалось загрузить журнал.'}
+            message={list.error ?? t('Не удалось загрузить журнал.')}
             onRetry={list.reload}
           />
         )}
@@ -232,14 +236,14 @@ export function AuditScreen() {
 
         {list.status === 'ready' && list.items.length > 0 && (
           <div className="space-y-3">
-            <ul aria-label="Записи журнала" className="space-y-2">
+            <ul aria-label={t('Записи журнала')} className="space-y-2">
               {list.items.map((entry) => (
                 <AuditEntry key={entry.id} entry={entry} />
               ))}
             </ul>
 
             <ListPager
-              label="Страницы журнала"
+              label={t('Страницы журнала')}
               rangeLabel={formatPageRange(list.offset, list.items.length)}
               hasPrev={list.hasPrev}
               hasNext={list.hasNext}
@@ -258,10 +262,12 @@ export function AuditScreen() {
 }
 
 function AuditSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-2" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем журнал…
+        {t('Загружаем журнал…')}
       </p>
       <Skeleton className="h-16 rounded-xl" aria-hidden />
       <Skeleton className="h-16 rounded-xl" aria-hidden />
@@ -278,19 +284,21 @@ function AuditError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить журнал</p>
+        <p className="font-medium">{t('Не удалось загрузить журнал')}</p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -303,6 +311,8 @@ function AuditError({
  * выборка под фильтром — нормальный ответ, а не повод править историю.
  */
 function AuditEmpty({ isFiltered }: { isFiltered: boolean }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
@@ -314,12 +324,14 @@ function AuditEmpty({ isFiltered }: { isFiltered: boolean }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {isFiltered ? 'Ничего не найдено' : 'Журнал пуст'}
+          {isFiltered ? t('Ничего не найдено') : t('Журнал пуст')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {isFiltered
-            ? 'Под выбранные фильтры записей нет.'
-            : 'Сервер ещё не записал ни одного изменения. Новые записи появятся здесь автоматически.'}
+            ? t('Под выбранные фильтры записей нет.')
+            : t(
+                'Сервер ещё не записал ни одного изменения. Новые записи появятся здесь автоматически.'
+              )}
         </p>
       </div>
     </div>

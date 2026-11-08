@@ -4,6 +4,9 @@
  * `nextCursor` — непрозрачная строка из ответа: клиент передаёт её обратно как есть
  * и не разбирает. `null` означает, что следующей страницы нет.
  */
+
+import { t } from '@/i18n'
+
 export type Page<T> = {
   items: T[]
   nextCursor: string | null
@@ -24,10 +27,12 @@ export function formatPageRange(
   total?: number
 ): string {
   if (count <= 0) {
-    return total === undefined ? '' : `0 из ${total}`
+    return total === undefined ? '' : t('0 из {total}', { total })
   }
 
   const range = `${offset + 1}${RANGE_DASH}${offset + count}`
 
-  return total === undefined ? range : `${range} из ${total}`
+  return total === undefined
+    ? range
+    : t('{range} из {total}', { range, total })
 }

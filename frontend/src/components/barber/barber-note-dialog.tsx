@@ -18,6 +18,7 @@ import {
   type BarberActionFailure,
 } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
+import { useI18n } from '@/i18n'
 
 /** Предел сервера (`MAX_BARBER_NOTE_LENGTH`); клиент повторяет его для счётчика. */
 const MAX_NOTE_LENGTH = 1000
@@ -69,6 +70,7 @@ function BarberNoteForm({
   onClose: () => void
   onSave: (id: string, note: string) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [note, setNote] = useState(booking.barberNote ?? '')
   const [isPending, setIsPending] = useState(false)
   const [failure, setFailure] = useState<BarberActionFailure | null>(null)
@@ -88,7 +90,7 @@ function BarberNoteForm({
       onClose()
     } catch (cause) {
       setFailure(
-        describeBarberBookingFailure(cause, 'Не удалось сохранить заметку.')
+        describeBarberBookingFailure(cause, t('Не удалось сохранить заметку.'))
       )
     } finally {
       setIsPending(false)
@@ -98,7 +100,7 @@ function BarberNoteForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Заметка к записи</DialogTitle>
+        <DialogTitle>{t('Заметка к записи')}</DialogTitle>
         <DialogDescription>
           {formatDateTime(booking.startAt, booking.salon.timeZoneId)} ·{' '}
           {booking.customer.displayName}
@@ -107,9 +109,9 @@ function BarberNoteForm({
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="barber-note">
-          Заметка{' '}
+          {t('Заметка')}{' '}
           <span className="font-normal text-muted-foreground">
-            — видит только барбер
+            {t('— видит только барбер')}
           </span>
         </Label>
         <Textarea
@@ -118,7 +120,7 @@ function BarberNoteForm({
           value={note}
           maxLength={MAX_NOTE_LENGTH}
           disabled={isPending}
-          placeholder="Что запомнить о визите"
+          placeholder={t('Что запомнить о визите')}
           onChange={(event) => {
             setNote(event.target.value)
             setFailure(null)
@@ -130,7 +132,7 @@ function BarberNoteForm({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Пустое поле очистит заметку. Клиент её не увидит.
+        {t('Пустое поле очистит заметку. Клиент её не увидит.')}
       </p>
 
       {failure && (
@@ -147,7 +149,7 @@ function BarberNoteForm({
           onClick={onClose}
           disabled={isPending}
         >
-          Отмена
+          {t('Отмена')}
         </Button>
         <Button
           type="button"
@@ -159,7 +161,7 @@ function BarberNoteForm({
           {isPending && (
             <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
           )}
-          {isPending ? 'Сохраняем…' : 'Сохранить'}
+          {isPending ? t('Сохраняем…') : t('Сохранить')}
         </Button>
       </DialogFooter>
     </>

@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n'
 import { navigate, usePathname } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
@@ -24,14 +25,15 @@ const SECTIONS = [
  */
 export function AdminRail() {
   const pathname = usePathname()
+  const { t } = useI18n()
 
   return (
     <nav
-      aria-label="Разделы администрирования"
+      aria-label={t('Разделы администрирования')}
       className="lg:sticky lg:top-20 lg:border-r lg:border-border lg:pr-4"
     >
       <p className="mb-2 hidden px-3 text-xs font-medium tracking-wide text-muted-foreground uppercase lg:block">
-        Разделы
+        {t('Разделы')}
       </p>
       <ul className="flex gap-1 overflow-x-auto lg:flex-col">
         {SECTIONS.map((section) => {
@@ -54,7 +56,7 @@ export function AdminRail() {
                   navigate(section.href)
                 }}
               >
-                {section.label}
+                {t(section.label)}
               </a>
             </li>
           )

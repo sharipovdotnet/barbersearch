@@ -19,6 +19,7 @@ import {
 } from '@/components/account/account-profile-context'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useMyProfile } from '@/hooks/use-my-profile'
+import { useI18n } from '@/i18n'
 import {
   ACCOUNT_PATH,
   ACCOUNT_PROFILE_PATH,
@@ -156,6 +157,7 @@ function AccountIdentity({
   user: SessionUser
   profile: AccountProfileValue['profile']
 }) {
+  const { t } = useI18n()
   const role = profile?.role ?? (user.role as MyProfileRole)
   const displayName = profile ? profileDisplayName(profile) : user.email
   const email = profile?.email ?? user.email
@@ -180,13 +182,13 @@ function AccountIdentity({
           </p>
         )}
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {ACCOUNT_ROLE_LABELS[role] ?? role}
+          {t(ACCOUNT_ROLE_LABELS[role] ?? role)}
         </p>
 
         {!isEmailVerified && (
           <p className="mt-1.5 flex items-center gap-1 text-xs text-warning">
             <MailWarning className="size-3 shrink-0" aria-hidden />
-            Email не подтверждён
+            {t('Email не подтверждён')}
           </p>
         )}
       </div>
@@ -195,8 +197,10 @@ function AccountIdentity({
 }
 
 function AccountNav({ section }: { section: AccountSection }) {
+  const { t } = useI18n()
+
   return (
-    <nav aria-label="Разделы кабинета" className="mt-4">
+    <nav aria-label={t('Разделы кабинета')} className="mt-4">
       <ul className="grid grid-cols-2 gap-1 lg:grid-cols-1">
         {SECTIONS.map((item) => {
           const Icon = item.icon
@@ -221,7 +225,7 @@ function AccountNav({ section }: { section: AccountSection }) {
                 }}
               >
                 <Icon className="size-4 shrink-0" aria-hidden />
-                {item.label}
+                {t(item.label)}
               </a>
             </li>
           )
@@ -232,13 +236,15 @@ function AccountNav({ section }: { section: AccountSection }) {
 }
 
 function AccountWorkLink({ role }: { role: string }) {
+  const { t } = useI18n()
+
   if (role !== 'Barber' && role !== 'Admin') {
     return null
   }
 
   const isBarber = role === 'Barber'
   const href = isBarber ? BARBER_CABINET_PATH : '/admin'
-  const label = isBarber ? 'Кабинет барбера' : 'Администрирование'
+  const label = t(isBarber ? 'Кабинет барбера' : 'Администрирование')
   const Icon = isBarber ? Scissors : ShieldCheck
 
   return (

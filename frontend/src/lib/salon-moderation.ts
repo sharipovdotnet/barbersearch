@@ -6,6 +6,8 @@
  * тип — строковый союз, а не число.
  */
 
+import { t } from '@/i18n'
+
 export type SalonModerationStatus = 'Pending' | 'Active' | 'Rejected'
 
 export const SALON_MODERATION_STATUSES: readonly SalonModerationStatus[] = [
@@ -40,11 +42,13 @@ export function validateSalonRejectionReason(reason: string): string | null {
   const trimmed = reason.trim()
 
   if (trimmed === '') {
-    return 'Укажите причину отказа.'
+    return t('Укажите причину отказа.')
   }
 
   if (trimmed.length > SALON_REJECTION_MAX_LENGTH) {
-    return `Слишком длинная причина — максимум ${SALON_REJECTION_MAX_LENGTH} символов.`
+    return t('Слишком длинная причина — максимум {max} символов.', {
+      max: SALON_REJECTION_MAX_LENGTH,
+    })
   }
 
   return null

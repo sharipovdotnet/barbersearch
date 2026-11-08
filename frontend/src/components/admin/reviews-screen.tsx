@@ -21,6 +21,7 @@ import { useAdminReviewList } from '@/hooks/use-admin-review-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useNow } from '@/hooks/use-now'
+import { useI18n } from '@/i18n'
 import {
   describeAdminReviewActionError,
   hideReview,
@@ -62,6 +63,7 @@ export function ReviewsScreen({
   tab: AdminTab
   reviewId: string | null
 }) {
+  const { t } = useI18n()
   const list = useAdminReviewList(tab)
   const listItem =
     reviewId === null
@@ -182,9 +184,9 @@ export function ReviewsScreen({
       await publishReview(target.id)
       selectAfterRemoval(target)
       setAnnouncement({
-        text: 'Отзыв опубликован. Рейтинг барбера пересчитан.',
+        text: t('Отзыв опубликован. Рейтинг барбера пересчитан.'),
         undo: {
-          label: 'Скрыть отзыв',
+          label: t('Скрыть отзыв'),
           action: 'hide',
           reviewId: target.id,
         },
@@ -198,7 +200,7 @@ export function ReviewsScreen({
 
       if (isReviewGone(cause)) {
         selectAfterRemoval(target)
-        setAnnouncement({ text: 'Этот отзыв уже не в очереди.' })
+        setAnnouncement({ text: t('Этот отзыв уже не в очереди.') })
         return
       }
 
@@ -223,9 +225,9 @@ export function ReviewsScreen({
       await hideReview(target.id)
       selectAfterRemoval(target)
       setAnnouncement({
-        text: 'Отзыв скрыт. Он снова в очереди модерации.',
+        text: t('Отзыв скрыт. Он снова в очереди модерации.'),
         undo: {
-          label: 'Опубликовать снова',
+          label: t('Опубликовать снова'),
           action: 'publish',
           reviewId: target.id,
         },
@@ -239,7 +241,7 @@ export function ReviewsScreen({
 
       if (isReviewGone(cause)) {
         selectAfterRemoval(target)
-        setAnnouncement({ text: 'Этот отзыв уже не в очереди.' })
+        setAnnouncement({ text: t('Этот отзыв уже не в очереди.') })
         return
       }
 
@@ -272,8 +274,8 @@ export function ReviewsScreen({
       setAnnouncement({
         text:
           action === 'publish'
-            ? 'Отзыв снова опубликован.'
-            : 'Отзыв снова скрыт и вернулся в очередь.',
+            ? t('Отзыв снова опубликован.')
+            : t('Отзыв снова скрыт и вернулся в очередь.'),
       })
       list.refresh()
     } catch (cause) {
@@ -283,7 +285,7 @@ export function ReviewsScreen({
       }
 
       if (isReviewGone(cause)) {
-        setAnnouncement({ text: 'Этот отзыв уже не в очереди.' })
+        setAnnouncement({ text: t('Этот отзыв уже не в очереди.') })
         return
       }
 
@@ -314,7 +316,7 @@ export function ReviewsScreen({
     }
 
     setAnnouncement({
-      text: 'Это последний отзыв в загруженной очереди.',
+      text: t('Это последний отзыв в загруженной очереди.'),
     })
   }
 
@@ -357,7 +359,7 @@ export function ReviewsScreen({
     <div className="space-y-5">
       {isMobileDetail && (
         <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-          Отзывы
+          {t('Отзывы')}
         </h1>
       )}
 
@@ -369,19 +371,25 @@ export function ReviewsScreen({
               tabIndex={-1}
               className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              Отзывы
+              {t('Отзывы')}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               {tab === 'pending'
-                ? 'Скрытые отзывы ждут решения. Пока отзыв скрыт, он не влияет на рейтинг барбера.'
-                : 'Опубликованные отзывы можно скрыть: он исчезнет с карточки барбера и вернётся на модерацию.'}
+                ? t(
+                    'Скрытые отзывы ждут решения. Пока отзыв скрыт, он не влияет на рейтинг барбера.'
+                  )
+                : t(
+                    'Опубликованные отзывы можно скрыть: он исчезнет с карточки барбера и вернётся на модерацию.'
+                  )}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {list.updatedAt !== null && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Обновлено в {formatClockTime(new Date(list.updatedAt))}
+                {t('Обновлено в {time}', {
+                  time: formatClockTime(new Date(list.updatedAt)),
+                })}
               </span>
             )}
             <Button
@@ -396,7 +404,7 @@ export function ReviewsScreen({
               ) : (
                 <RefreshCw data-icon="inline-start" aria-hidden />
               )}
-              {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+              {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
           </div>
         </header>
@@ -429,7 +437,7 @@ export function ReviewsScreen({
             )}
             <button
               type="button"
-              aria-label="Скрыть сообщение"
+              aria-label={t('Скрыть сообщение')}
               className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               onClick={() => setAnnouncement(null)}
             >
@@ -459,7 +467,7 @@ export function ReviewsScreen({
 
       {list.status === 'error' && (
         <ReviewsError
-          message={list.error ?? 'Не удалось загрузить отзывы.'}
+          message={list.error ?? t('Не удалось загрузить отзывы.')}
           onRetry={list.reload}
         />
       )}
@@ -507,7 +515,7 @@ export function ReviewsScreen({
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                В загруженной очереди нет отзывов.
+                {t('В загруженной очереди нет отзывов.')}
               </p>
             )}
           </div>
@@ -542,7 +550,7 @@ export function ReviewsScreen({
                     onClick={handleBack}
                   >
                     <ArrowLeft data-icon="inline-start" aria-hidden />
-                    Назад
+                    {t('Назад')}
                   </Button>
                 )}
                 <DetailState
@@ -561,6 +569,8 @@ export function ReviewsScreen({
 }
 
 function ReviewsSkeleton({ detailOnly = false }: { detailOnly?: boolean }) {
+  const { t } = useI18n()
+
   return (
     <div
       className={cn(
@@ -570,7 +580,7 @@ function ReviewsSkeleton({ detailOnly = false }: { detailOnly?: boolean }) {
       aria-busy="true"
     >
       <p role="status" className="sr-only">
-        Загружаем отзывы…
+        {t('Загружаем отзывы…')}
       </p>
       {!detailOnly && (
         <div className="space-y-2" aria-hidden>
@@ -594,19 +604,21 @@ function ReviewsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить отзывы</p>
+        <p className="font-medium">{t('Не удалось загрузить отзывы')}</p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-7" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -622,6 +634,7 @@ function ReviewsEmpty({
   onGoPending: () => void
 }) {
   const isPending = tab === 'pending'
+  const { t } = useI18n()
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -634,12 +647,18 @@ function ReviewsEmpty({
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {isPending ? 'Очередь пуста' : 'Опубликованных отзывов пока нет'}
+          {isPending
+            ? t('Очередь пуста')
+            : t('Опубликованных отзывов пока нет')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {isPending
-            ? 'Все отзывы проверены. Новые появятся здесь, как только клиенты их оставят.'
-            : 'Когда отзыв опубликуют, он появится здесь — и его можно будет скрыть.'}
+            ? t(
+                'Все отзывы проверены. Новые появятся здесь, как только клиенты их оставят.'
+              )
+            : t(
+                'Когда отзыв опубликуют, он появится здесь — и его можно будет скрыть.'
+              )}
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -650,7 +669,7 @@ function ReviewsEmpty({
             className="h-11 sm:h-7"
             onClick={onRefresh}
           >
-            Обновить
+            {t('Обновить')}
           </Button>
         ) : (
           <Button
@@ -659,7 +678,7 @@ function ReviewsEmpty({
             className="h-11 sm:h-7"
             onClick={onGoPending}
           >
-            К очереди
+            {t('К очереди')}
           </Button>
         )}
       </div>
@@ -678,6 +697,8 @@ function DetailState({
   error: string | null
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   if (!hasSelection) {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -685,9 +706,11 @@ function DetailState({
           <Inbox className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Выберите отзыв</p>
+          <p className="font-medium">{t('Выберите отзыв')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Слева очередь: откройте строку, чтобы прочитать текст и контекст визита.
+            {t(
+              'Слева очередь: откройте строку, чтобы прочитать текст и контекст визита.'
+            )}
           </p>
         </div>
       </div>
@@ -701,10 +724,11 @@ function DetailState({
           <CheckCircle2 className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Этот отзыв уже разобрали</p>
+          <p className="font-medium">{t('Этот отзыв уже разобрали')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Возможно, его опубликовал другой администратор. Вернитесь к очереди —
-            она обновится.
+            {t(
+              'Возможно, его опубликовал другой администратор. Вернитесь к очереди — она обновится.'
+            )}
           </p>
         </div>
         <Button
@@ -715,7 +739,7 @@ function DetailState({
             navigate(reviewsPath('pending'))
           }}
         >
-          К очереди
+          {t('К очереди')}
         </Button>
       </div>
     )
@@ -728,13 +752,13 @@ function DetailState({
           <TriangleAlert className="size-4 text-destructive" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить отзыв</p>
+          <p className="font-medium">{t('Не удалось загрузить отзыв')}</p>
           <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
-            {error ?? 'Попробуйте ещё раз.'}
+            {error ?? t('Попробуйте ещё раз.')}
           </p>
         </div>
         <Button size="sm" variant="outline" className="h-11 sm:h-7" onClick={onRetry}>
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -743,7 +767,7 @@ function DetailState({
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем отзыв…
+        {t('Загружаем отзыв…')}
       </p>
       <Skeleton className="h-12 w-40" aria-hidden />
       <Skeleton className="h-6 w-80" aria-hidden />

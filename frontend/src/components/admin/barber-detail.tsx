@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import type {
   AdminBarberAction,
   AdminBarberDetail,
@@ -56,6 +57,8 @@ export function BarberDetail({
   onShow: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <section
       id="barber-detail"
@@ -72,7 +75,7 @@ export function BarberDetail({
             onClick={onBack}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden />
-            Назад
+            {t('Назад')}
           </Button>
           <BarberStatusBadge barber={barber} className="ml-auto" />
         </div>
@@ -95,7 +98,7 @@ export function BarberDetail({
               {barber.email}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {BARBER_GRADE_LABELS[barber.grade]}
+              {t(BARBER_GRADE_LABELS[barber.grade])}
             </p>
           </div>
         </div>
@@ -106,18 +109,18 @@ export function BarberDetail({
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Барбер не заполнил описание о себе.
+            {t('Барбер не заполнил описание о себе.')}
           </p>
         )}
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-          <ContextItem label="Стаж">
+          <ContextItem label={t('Стаж')}>
             {formatExperience(barber.yearsOfExperience)}
           </ContextItem>
 
-          <ContextItem label="Рейтинг">
+          <ContextItem label={t('Рейтинг')}>
             {barber.rating === null ? (
-              'Опубликованных отзывов нет'
+              t('Опубликованных отзывов нет')
             ) : (
               <span className="inline-flex items-center gap-1.5 tabular-nums">
                 <Star className="size-3.5 fill-current" aria-hidden />
@@ -129,15 +132,15 @@ export function BarberDetail({
             )}
           </ContextItem>
 
-          <ContextItem label="Телефон">
-            {barber.phoneNumber ?? 'Не указан'}
+          <ContextItem label={t('Телефон')}>
+            {barber.phoneNumber ?? t('Не указан')}
           </ContextItem>
 
-          <ContextItem label="Профиль создан">
+          <ContextItem label={t('Профиль создан')}>
             {formatDateTime(barber.createdAt)}
           </ContextItem>
 
-          <ContextItem label="Обновлён">
+          <ContextItem label={t('Обновлён')}>
             {formatDateTime(barber.updatedAt)}
           </ContextItem>
         </dl>
@@ -192,6 +195,7 @@ function BarberActions({
   })
   const [confirm, setConfirm] = useState<'hide' | 'unverify' | null>(null)
   const isPending = pendingAction !== null
+  const { t } = useI18n()
 
   // Черновик грейда живёт до ответа сервера: после перечитывания карточки
   // `barber.grade` меняется, и выбор снова берётся из данных, а не из памяти формы.
@@ -206,7 +210,7 @@ function BarberActions({
       className="space-y-4 border-t pt-4"
     >
       <h3 id="barber-actions-title" className="text-sm font-medium">
-        Действия
+        {t('Действия')}
       </h3>
 
       {actionError && (
@@ -218,8 +222,8 @@ function BarberActions({
       <div className="space-y-2">
         <p className="text-sm">
           {barber.isVerified
-            ? 'Профиль подтверждён и участвует в поиске.'
-            : 'Профиль ждёт проверки и в поиске не показывается.'}
+            ? t('Профиль подтверждён и участвует в поиске.')
+            : t('Профиль ждёт проверки и в поиске не показывается.')}
         </p>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -237,10 +241,10 @@ function BarberActions({
                     aria-hidden
                     className="animate-spin"
                   />
-                  Снимаем…
+                  {t('Снимаем…')}
                 </>
               ) : (
-                'Снять подтверждение'
+                t('Снять подтверждение')
               )}
             </Button>
           ) : (
@@ -256,27 +260,31 @@ function BarberActions({
                     aria-hidden
                     className="animate-spin"
                   />
-                  Подтверждаем…
+                  {t('Подтверждаем…')}
                 </>
               ) : (
-                'Подтвердить'
+                t('Подтвердить', { context: 'verify' })
               )}
             </Button>
           )}
 
           <p className="text-xs text-muted-foreground sm:max-w-xs">
             {barber.isVerified
-              ? 'Снятие подтверждения уберёт профиль из поиска и записи.'
+              ? t('Снятие подтверждения уберёт профиль из поиска и записи.')
               : barber.isActive
-                ? 'Профиль появится в поиске и станет доступен для записи. Отменить это можно в любой момент.'
-                : 'Сначала верните профиль в поиск: подтверждение скрытого профиля домен не разрешает.'}
+                ? t(
+                    'Профиль появится в поиске и станет доступен для записи. Отменить это можно в любой момент.'
+                  )
+                : t(
+                    'Сначала верните профиль в поиск: подтверждение скрытого профиля домен не разрешает.'
+                  )}
           </p>
         </div>
       </div>
 
       <div className="space-y-2 border-t pt-3">
         <label htmlFor="barber-grade" className="text-sm font-medium">
-          Грейд
+          {t('Грейд')}
         </label>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
@@ -293,7 +301,7 @@ function BarberActions({
           >
             {BARBER_GRADES.map((value) => (
               <option key={value} value={value}>
-                {BARBER_GRADE_LABELS[value]}
+                {t(BARBER_GRADE_LABELS[value])}
               </option>
             ))}
           </select>
@@ -311,22 +319,25 @@ function BarberActions({
                   aria-hidden
                   className="animate-spin"
                 />
-                Сохраняем…
+                {t('Сохраняем…')}
               </>
             ) : (
-              'Сохранить грейд'
+              t('Сохранить грейд')
             )}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Грейд видят клиенты в карточке барбера. Барбер выбирает его при создании
-          профиля, здесь его можно изменить.
+          {t(
+            'Грейд видят клиенты в карточке барбера. Барбер выбирает его при создании профиля, здесь его можно изменить.'
+          )}
         </p>
       </div>
 
       <div className="space-y-2 border-t pt-3">
         <p className="text-sm font-medium">
-          {barber.isActive ? 'Профиль виден в поиске' : 'Профиль скрыт из поиска'}
+          {barber.isActive
+            ? t('Профиль виден в поиске')
+            : t('Профиль скрыт из поиска')}
         </p>
         <Button
           variant={barber.isActive ? 'destructive' : 'outline'}
@@ -341,7 +352,7 @@ function BarberActions({
                 aria-hidden
                 className="animate-spin"
               />
-              Скрываем…
+              {t('Скрываем…')}
             </>
           ) : pendingAction === 'show' ? (
             <>
@@ -350,18 +361,22 @@ function BarberActions({
                 aria-hidden
                 className="animate-spin"
               />
-              Возвращаем…
+              {t('Возвращаем…')}
             </>
           ) : barber.isActive ? (
-            'Скрыть из поиска'
+            t('Скрыть из поиска')
           ) : (
-            'Вернуть в поиск'
+            t('Вернуть в поиск')
           )}
         </Button>
         <p className="text-xs text-muted-foreground">
           {barber.isActive
-            ? 'Профиль исчезнет из поиска, но останется в системе: записи и отзывы сохранятся.'
-            : 'Профиль снова появится в поиске, если он подтверждён; неподтверждённый останется в очереди проверки.'}
+            ? t(
+                'Профиль исчезнет из поиска, но останется в системе: записи и отзывы сохранятся.'
+              )
+            : t(
+                'Профиль снова появится в поиске, если он подтверждён; неподтверждённый останется в очереди проверки.'
+              )}
         </p>
       </div>
 
@@ -377,13 +392,17 @@ function BarberActions({
           <DialogHeader>
             <DialogTitle>
               {confirm === 'hide'
-                ? 'Скрыть барбера из поиска?'
-                : 'Снять подтверждение?'}
+                ? t('Скрыть барбера из поиска?')
+                : t('Снять подтверждение?')}
             </DialogTitle>
             <DialogDescription>
               {confirm === 'hide'
-                ? 'Профиль исчезнет из поиска и станет недоступен для записи. Записи и отзывы сохранятся, вернуть профиль можно в любой момент.'
-                : 'Профиль исчезнет из поиска и станет недоступен для записи, пока вы не подтвердите его снова.'}
+                ? t(
+                    'Профиль исчезнет из поиска и станет недоступен для записи. Записи и отзывы сохранятся, вернуть профиль можно в любой момент.'
+                  )
+                : t(
+                    'Профиль исчезнет из поиска и станет недоступен для записи, пока вы не подтвердите его снова.'
+                  )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -392,7 +411,7 @@ function BarberActions({
               disabled={isPending}
               onClick={() => setConfirm(null)}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               variant="destructive"
@@ -408,7 +427,9 @@ function BarberActions({
                 }
               }}
             >
-              {confirm === 'hide' ? 'Скрыть из поиска' : 'Снять подтверждение'}
+              {confirm === 'hide'
+                ? t('Скрыть из поиска')
+                : t('Снять подтверждение')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -419,54 +440,57 @@ function BarberActions({
 
 /** Чек-лист готовности: шесть пунктов, по которым видно, чего не хватает. */
 function ReadinessChecklist({ barber }: { barber: AdminBarberDetail }) {
+  const { t } = useI18n()
   const items = [
     {
       key: 'profile',
-      label: 'Профиль заполнен',
+      label: t('Профиль заполнен'),
       value: barber.readiness.isProfileFilled
-        ? 'Описание и опыт есть'
-        : 'Нет описания или опыта',
+        ? t('Описание и опыт есть')
+        : t('Нет описания или опыта'),
       isDone: barber.readiness.isProfileFilled,
     },
     {
       key: 'email',
-      label: 'Email подтверждён',
-      value: barber.readiness.isEmailVerified ? 'Подтверждён' : 'Не подтверждён',
+      label: t('Email подтверждён'),
+      value: barber.readiness.isEmailVerified
+        ? t('Подтверждён')
+        : t('Не подтверждён'),
       isDone: barber.readiness.isEmailVerified,
     },
     {
       key: 'services',
-      label: 'Услуги',
+      label: t('Услуги'),
       value:
         barber.readiness.servicesCount === 0
-          ? 'Ни одной услуги'
+          ? t('Ни одной услуги')
           : String(barber.readiness.servicesCount),
       isDone: barber.readiness.servicesCount > 0,
     },
     {
       key: 'salons',
-      label: 'Салоны',
+      label: t('Салоны'),
       value:
         barber.readiness.salonsCount === 0
-          ? 'Не привязан ни к одному салону'
+          ? t('Не привязан ни к одному салону')
           : String(barber.readiness.salonsCount),
       isDone: barber.readiness.salonsCount > 0,
     },
     {
       key: 'schedule',
-      label: 'Расписание',
+      label: t('Расписание'),
       value:
         barber.readiness.scheduleDaysCount === 0
-          ? 'Рабочих дней нет'
+          ? t('Рабочих дней нет')
           : formatDaysCount(barber.readiness.scheduleDaysCount),
       isDone: barber.readiness.scheduleDaysCount > 0,
     },
     {
       key: 'photos',
-      label: 'Фото в портфолио',
+      label: t('Фото в портфолио'),
       value:
         barber.readiness.photosCount === 0
-          ? 'Портфолио пустое'
+          ? t('Портфолио пустое')
           : String(barber.readiness.photosCount),
       isDone: barber.readiness.photosCount > 0,
     },
@@ -477,13 +501,13 @@ function ReadinessChecklist({ barber }: { barber: AdminBarberDetail }) {
   return (
     <div className="rounded-lg border bg-muted/40 p-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-medium">Готовность профиля</h3>
+        <h3 className="text-sm font-medium">{t('Готовность профиля')}</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {done} из {items.length}
+          {t('{done} из {total}', { done, total: items.length })}
         </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Подсказка, а не блокировка: подтвердить профиль можно и с минусами.
+        {t('Подсказка, а не блокировка: подтвердить профиль можно и с минусами.')}
       </p>
 
       <ul className="mt-3 space-y-1.5">
@@ -503,7 +527,7 @@ function ReadinessChecklist({ barber }: { barber: AdminBarberDetail }) {
             <span className="min-w-0 flex-1">
               {item.label}
               <span className="sr-only">
-                {item.isDone ? ': готово' : ': не готово'}
+                {item.isDone ? t(': готово') : t(': не готово')}
               </span>
             </span>
             <span className="text-right text-xs text-muted-foreground">
@@ -518,16 +542,19 @@ function ReadinessChecklist({ barber }: { barber: AdminBarberDetail }) {
 
 /** Заглушка правой колонки, пока барбер не выбран. */
 export function BarberDetailPlaceholder() {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <Star className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Выберите барбера</p>
+        <p className="font-medium">{t('Выберите барбера')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Слева список: откройте строку, чтобы увидеть контакты и готовность
-          профиля.
+          {t(
+            'Слева список: откройте строку, чтобы увидеть контакты и готовность профиля.'
+          )}
         </p>
       </div>
     </div>
@@ -546,6 +573,8 @@ export function BarberDetailState({
   onRetry: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
+
   if (status === 'notFound') {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -553,10 +582,11 @@ export function BarberDetailState({
           <Circle className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Профиль не найден</p>
+          <p className="font-medium">{t('Профиль не найден')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные
-            профили.
+            {t(
+              'Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные профили.'
+            )}
           </p>
         </div>
         <Button
@@ -565,7 +595,7 @@ export function BarberDetailState({
           className="h-11 sm:h-7"
           onClick={onBack}
         >
-          К списку
+          {t('К списку')}
         </Button>
       </div>
     )
@@ -575,12 +605,12 @@ export function BarberDetailState({
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить профиль</p>
+          <p className="font-medium">{t('Не удалось загрузить профиль')}</p>
           <p
             role="alert"
             className="mx-auto max-w-sm text-sm text-muted-foreground"
           >
-            {error ?? 'Попробуйте ещё раз.'}
+            {error ?? t('Попробуйте ещё раз.')}
           </p>
         </div>
         <Button
@@ -589,7 +619,7 @@ export function BarberDetailState({
           className="h-11 sm:h-7"
           onClick={onRetry}
         >
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -598,7 +628,7 @@ export function BarberDetailState({
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем профиль барбера…
+        {t('Загружаем профиль барбера…')}
       </p>
       <Skeleton className="h-12 w-40" aria-hidden />
       <Skeleton className="h-6 w-60" aria-hidden />

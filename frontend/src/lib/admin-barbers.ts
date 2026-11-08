@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
@@ -130,7 +131,7 @@ export function describeAdminBarberListError(
   fallback = 'Не удалось загрузить барберов.'
 ): string {
   if (error instanceof ApiError && error.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   return describeApiFailure(error, fallback)
@@ -140,11 +141,11 @@ export function describeAdminBarberListError(
 export function describeAdminBarberDetailError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('barberProfile.notFound')) {
-      return 'Профиль не найден. Возможно, ссылка устарела.'
+      return t('Профиль не найден. Возможно, ссылка устарела.')
     }
   }
 
@@ -211,32 +212,34 @@ export function describeAdminBarberActionError(
 ): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('barberProfile.notFound')) {
-      return 'Профиль больше не существует. Обновите список.'
+      return t('Профиль больше не существует. Обновите список.')
     }
 
     if (error.hasCode('barberProfile.verify.inactive')) {
-      return 'Нельзя подтвердить профиль, скрытый из поиска. Сначала верните его в поиск.'
+      return t(
+        'Нельзя подтвердить профиль, скрытый из поиска. Сначала верните его в поиск.'
+      )
     }
 
     if (error.hasCode('auth.csrf.invalid')) {
-      return 'Сессия устарела. Обновите страницу и повторите действие.'
+      return t('Сессия устарела. Обновите страницу и повторите действие.')
     }
   }
 
   switch (action) {
     case 'verify':
-      return 'Не удалось подтвердить профиль. Попробуйте ещё раз.'
+      return t('Не удалось подтвердить профиль. Попробуйте ещё раз.')
     case 'unverify':
-      return 'Не удалось снять подтверждение. Попробуйте ещё раз.'
+      return t('Не удалось снять подтверждение. Попробуйте ещё раз.')
     case 'grade':
-      return 'Не удалось изменить грейд. Попробуйте ещё раз.'
+      return t('Не удалось изменить грейд. Попробуйте ещё раз.')
     case 'hide':
-      return 'Не удалось скрыть профиль из поиска. Попробуйте ещё раз.'
+      return t('Не удалось скрыть профиль из поиска. Попробуйте ещё раз.')
     case 'show':
-      return 'Не удалось вернуть профиль в поиск. Попробуйте ещё раз.'
+      return t('Не удалось вернуть профиль в поиск. Попробуйте ещё раз.')
   }
 }

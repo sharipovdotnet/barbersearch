@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { CSRF_HEADER, fetchCsrfToken, mutateWithCsrf } from '@/lib/csrf'
 import { isCreatedId, isSessionUser } from '@/lib/response-guards'
@@ -65,7 +66,7 @@ export async function signIn(
 
   const user = await fetchSession()
   if (!user) {
-    throw new ApiError(401, null, 'Сервер не подтвердил вход.')
+    throw new ApiError(401, null, t('Сервер не подтвердил вход.'))
   }
 
   return user

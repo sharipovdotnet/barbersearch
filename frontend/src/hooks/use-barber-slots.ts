@@ -7,6 +7,7 @@ import {
   type BarberSlots,
 } from '@/lib/barber-slots'
 import { describeApiFailure } from '@/lib/errors'
+import { t } from '@/i18n'
 
 export type BarberSlotsStatus = 'loading' | 'ready' | 'error' | 'unavailable'
 
@@ -104,19 +105,34 @@ export function useBarberSlots(params: SlotsParams): BarberSlotsController {
         }
 
         if (cause instanceof ApiError && cause.status === 404) {
-          setState({ key, slots: null, status: 'unavailable', error: SLOTS_NOT_FOUND })
+          setState({
+            key,
+            slots: null,
+            status: 'unavailable',
+            error: t(SLOTS_NOT_FOUND),
+          })
           return
         }
 
         if (cause instanceof ApiError && cause.status === 409) {
-          setState({ key, slots: null, status: 'unavailable', error: SLOTS_TIME_ZONE })
+          setState({
+            key,
+            slots: null,
+            status: 'unavailable',
+            error: t(SLOTS_TIME_ZONE),
+          })
           return
         }
 
         // 400 в этот срез попасть не должен; если пришёл — это не сетевая ошибка,
         // повторять запрос бессмысленно, а английский `detail` не показываем.
         if (cause instanceof ApiError && cause.status === 400) {
-          setState({ key, slots: null, status: 'unavailable', error: SLOTS_NOT_FOUND })
+          setState({
+            key,
+            slots: null,
+            status: 'unavailable',
+            error: t(SLOTS_NOT_FOUND),
+          })
           return
         }
 

@@ -23,6 +23,7 @@ import { useAdminBooking } from '@/hooks/use-admin-booking'
 import { useAdminBookingsList } from '@/hooks/use-admin-bookings-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_BOOKING_STATUS_FILTERS,
   ADMIN_BOOKING_STATUS_FILTER_LABELS,
@@ -54,6 +55,7 @@ import { cn } from '@/lib/utils'
  * живут в карточке и подтверждаются диалогом.
  */
 export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
+  const { t } = useI18n()
   const [statusFilter, setStatusFilter] =
     useState<AdminBookingStatusFilter>('all')
   const [searchInput, setSearchInput] = useState('')
@@ -158,7 +160,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
     <div className="space-y-5">
       {isMobileDetail && (
         <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-          Брони
+          {t('Брони')}
         </h1>
       )}
 
@@ -170,17 +172,19 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
               tabIndex={-1}
               className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              Брони
+              {t('Брони')}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Все записи клиентов. Время показано в поясе салона.
+              {t('Все записи клиентов. Время показано в поясе салона.')}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {list.updatedAt !== null && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Обновлено в {formatClockTime(new Date(list.updatedAt))}
+                {t('Обновлено в {time}', {
+                  time: formatClockTime(new Date(list.updatedAt)),
+                })}
               </span>
             )}
             <Button
@@ -203,7 +207,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
               ) : (
                 <RefreshCw data-icon="inline-start" aria-hidden />
               )}
-              {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+              {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
           </div>
         </header>
@@ -214,7 +218,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
             <div className="flex min-w-0 flex-col justify-end gap-1">
               <label htmlFor="bookings-search" className="text-sm font-medium">
-                Клиент или номер брони
+                {t('Клиент или номер брони')}
               </label>
               <div className="relative">
                 <Search
@@ -226,14 +230,14 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
                   type="search"
                   value={searchInput}
                   maxLength={ADMIN_BOOKINGS_SEARCH_MAX_LENGTH}
-                  placeholder="email клиента или id брони"
+                  placeholder={t('email клиента или id брони')}
                   className="h-11 pr-11 pl-8"
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
                 {searchInput !== '' && (
                   <button
                     type="button"
-                    aria-label="Очистить поиск"
+                    aria-label={t('Очистить поиск')}
                     className="absolute top-1/2 right-1 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:right-1.5 sm:size-auto sm:p-1"
                     onClick={() => {
                       setSearchInput('')
@@ -248,7 +252,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 
             <div className="flex min-w-0 flex-col justify-end gap-1">
               <label htmlFor="bookings-status" className="text-sm font-medium">
-                Статус
+                {t('Статус')}
               </label>
               <select
                 id="bookings-status"
@@ -262,7 +266,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
               >
                 {ADMIN_BOOKING_STATUS_FILTERS.map((value) => (
                   <option key={value} value={value}>
-                    {ADMIN_BOOKING_STATUS_FILTER_LABELS[value]}
+                    {t(ADMIN_BOOKING_STATUS_FILTER_LABELS[value])}
                   </option>
                 ))}
               </select>
@@ -271,8 +275,9 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              Поиск по email клиента или точному номеру брони. Фильтры не
-              попадают в адрес страницы.
+              {t(
+                'Поиск по email клиента или точному номеру брони. Фильтры не попадают в адрес страницы.'
+              )}
             </p>
             {isFiltered && (
               <Button
@@ -282,7 +287,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
                 className="h-11 sm:h-8"
                 onClick={resetFilters}
               >
-                Сбросить фильтры
+                {t('Сбросить фильтры')}
               </Button>
             )}
           </div>
@@ -300,7 +305,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 
         {list.status === 'error' && (
           <BookingsError
-            message={list.error ?? 'Не удалось загрузить брони.'}
+            message={list.error ?? t('Не удалось загрузить брони.')}
             onRetry={list.reload}
           />
         )}
@@ -325,7 +330,7 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
                   )}
 
                   <ListPager
-                    label="Страницы броней"
+                    label={t('Страницы броней')}
                     rangeLabel={formatPageRange(list.offset, list.items.length)}
                     hasPrev={list.hasPrev}
                     hasNext={list.hasNext}
@@ -389,9 +394,11 @@ function BookingsTable({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <table className="w-full table-fixed text-sm">
-      <caption className="sr-only">Список броней</caption>
+      <caption className="sr-only">{t('Список броней')}</caption>
       <thead>
         <tr className="text-left">
           {TABLE_COLUMNS.map((column) => (
@@ -400,7 +407,7 @@ function BookingsTable({
               scope="col"
               className="border-b px-2 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
             >
-              {column}
+              {t(column)}
             </th>
           ))}
         </tr>
@@ -477,8 +484,10 @@ function BookingCards({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
+  const { t } = useI18n()
+
   return (
-    <ul aria-label="Список броней" className="space-y-3">
+    <ul aria-label={t('Список броней')} className="space-y-3">
       {items.map((booking) => {
         const isSelected = booking.id === selectedId
         const customerName = getAdminBookingCustomerName(booking.customer)
@@ -511,7 +520,9 @@ function BookingCards({
 
               <dl className="mt-3 grid gap-2 text-sm">
                 <div className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">Клиент</dt>
+                  <dt className="text-xs text-muted-foreground">
+                    {t('Клиент')}
+                  </dt>
                   <dd>
                     <span className="block break-words font-medium">
                       {customerName}
@@ -522,15 +533,19 @@ function BookingCards({
                   </dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">Барбер</dt>
+                  <dt className="text-xs text-muted-foreground">
+                    {t('Барбер')}
+                  </dt>
                   <dd className="break-words">{booking.barber.displayName}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">Услуга</dt>
+                  <dt className="text-xs text-muted-foreground">
+                    {t('Услуга')}
+                  </dt>
                   <dd className="break-words">{booking.service.name}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">Цена</dt>
+                  <dt className="text-xs text-muted-foreground">{t('Цена')}</dt>
                   <dd className="tabular-nums">{formatPrice(booking.price)}</dd>
                 </div>
               </dl>
@@ -544,6 +559,8 @@ function BookingCards({
 
 /** Статус строки словом: цвет — только поддержка, поэтому перенос разрешён. */
 function BookingStatusText({ status }: { status: AdminBookingStatus }) {
+  const { t } = useI18n()
+
   return (
     <span
       className={cn(
@@ -552,7 +569,7 @@ function BookingStatusText({ status }: { status: AdminBookingStatus }) {
       )}
     >
       <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-      {bookingStatusLabel(status)}
+      {t(bookingStatusLabel(status))}
     </span>
   )
 }
@@ -567,10 +584,12 @@ const TABLE_COLUMNS = [
 ] as const
 
 function BookingsSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем брони…
+        {t('Загружаем брони…')}
       </p>
       <Skeleton className="h-8 w-full" aria-hidden />
       <Skeleton className="h-14 w-full" aria-hidden />
@@ -587,13 +606,15 @@ function BookingsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить брони</p>
+        <p className="font-medium">{t('Не удалось загрузить брони')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -602,7 +623,7 @@ function BookingsError({
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -615,6 +636,8 @@ function BookingsError({
  * число в пустом состоянии только путало бы.
  */
 function BookingsEmpty({ isFiltered }: { isFiltered: boolean }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
@@ -626,12 +649,16 @@ function BookingsEmpty({ isFiltered }: { isFiltered: boolean }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {isFiltered ? 'Ничего не найдено' : 'Броней нет'}
+          {isFiltered ? t('Ничего не найдено') : t('Броней нет')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {isFiltered
-            ? 'Под выбранные фильтры записей нет. Измените поиск или статус.'
-            : 'Здесь появятся записи клиентов. Новые брони придут автоматически.'}
+            ? t(
+                'Под выбранные фильтры записей нет. Измените поиск или статус.'
+              )
+            : t(
+                'Здесь появятся записи клиентов. Новые брони придут автоматически.'
+              )}
         </p>
       </div>
     </div>

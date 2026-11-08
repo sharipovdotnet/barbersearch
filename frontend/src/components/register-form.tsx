@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useSession } from '@/hooks/use-session'
+import { getLocale, localeTag, t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   MAX_PASSWORD_LENGTH,
@@ -32,11 +33,13 @@ import { isPlainClick, navigate } from '@/lib/router'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** Подпись редакции для отметки согласия: та же дата, что в Политике. */
-const POLICY_DATE_LABEL = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-}).format(new Date(`${PRIVACY_POLICY_DATE}T00:00:00Z`))
+function policyDateLabel(): string {
+  return new Intl.DateTimeFormat(localeTag(getLocale()), {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(`${PRIVACY_POLICY_DATE}T00:00:00Z`))
+}
 
 // Верхняя граница адреса — из серверного валидатора (3..254).
 const MAX_EMAIL_LENGTH = 254
@@ -47,8 +50,8 @@ const FIRST_NAME_ERROR = 'Введите имя.'
 const LAST_NAME_ERROR = 'Введите фамилию.'
 const EMAIL_ERROR = 'Проверьте email: нужен адрес вида name@example.com.'
 const PASSWORD_REQUIRED_ERROR = 'Введите пароль.'
-const PASSWORD_SHORT_ERROR = `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов.`
-const PASSWORD_LONG_ERROR = `Пароль должен быть не длиннее ${MAX_PASSWORD_LENGTH} символов.`
+const PASSWORD_SHORT_ERROR = 'Пароль должен быть не короче {count} символов.'
+const PASSWORD_LONG_ERROR = 'Пароль должен быть не длиннее {count} символов.'
 const PASSWORD_COMMON_ERROR = 'Этот пароль слишком распространён. Выберите другой.'
 const PASSWORD_EQUALS_EMAIL_ERROR = 'Пароль не должен совпадать с email.'
 const PASSWORD_EQUALS_NAME_ERROR =
@@ -118,33 +121,33 @@ function validate(values: RegisterValues): RegisterErrors {
   const { password } = values
 
   if (!firstName) {
-    errors.firstName = FIRST_NAME_ERROR
+    errors.firstName = t(FIRST_NAME_ERROR)
   }
 
   if (!lastName) {
-    errors.lastName = LAST_NAME_ERROR
+    errors.lastName = t(LAST_NAME_ERROR)
   }
 
   if (!email) {
-    errors.email = 'Введите email.'
+    errors.email = t('Введите email.')
   } else if (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)) {
-    errors.email = EMAIL_ERROR
+    errors.email = t(EMAIL_ERROR)
   }
 
   if (!password) {
-    errors.password = PASSWORD_REQUIRED_ERROR
+    errors.password = t(PASSWORD_REQUIRED_ERROR)
   } else if (password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = PASSWORD_SHORT_ERROR
+    errors.password = t(PASSWORD_SHORT_ERROR, { count: MIN_PASSWORD_LENGTH })
   } else if (password.length > MAX_PASSWORD_LENGTH) {
-    errors.password = PASSWORD_LONG_ERROR
+    errors.password = t(PASSWORD_LONG_ERROR, { count: MAX_PASSWORD_LENGTH })
   } else if (password === email || password === emailLocalPart(email)) {
-    errors.password = PASSWORD_EQUALS_EMAIL_ERROR
+    errors.password = t(PASSWORD_EQUALS_EMAIL_ERROR)
   } else if (password === firstName || password === lastName) {
-    errors.password = PASSWORD_EQUALS_NAME_ERROR
+    errors.password = t(PASSWORD_EQUALS_NAME_ERROR)
   }
 
   if (values.passwordRepeat !== password) {
-    errors.passwordRepeat = PASSWORD_REPEAT_ERROR
+    errors.passwordRepeat = t(PASSWORD_REPEAT_ERROR)
   }
 
   // Согласие — отдельное основание обработки (ч. 1 ст. 9 152-ФЗ): без отметки
@@ -170,7 +173,7 @@ type RegisterFailure = {
  */
 function describeRegisterFailure(error: unknown): RegisterFailure {
   if (!(error instanceof ApiError)) {
-    return { fields: {}, form: FALLBACK_ERROR }
+    return { fields: {}, form: t(FALLBACK_ERROR) }
   }
 
   if (error.status === 0) {
@@ -178,11 +181,11 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
   }
 
   if (error.status === 429) {
-    return { fields: {}, form: RATE_LIMIT_ERROR }
+    return { fields: {}, form: t(RATE_LIMIT_ERROR) }
   }
 
   if (error.hasCode('user.create.emailTaken')) {
-    return { fields: {}, form: EMAIL_TAKEN_ERROR }
+    return { fields: {}, form: t(EMAIL_TAKEN_ERROR) }
   }
 
   const fields: RegisterErrors = {}
@@ -193,15 +196,20 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
     const passwordMessage = PASSWORD_CODE_MESSAGES[code]
 
     if (passwordMessage) {
-      fields.password = passwordMessage
+      fields.password = t(passwordMessage, {
+        count:
+          code === 'auth.password.tooLong'
+            ? MAX_PASSWORD_LENGTH
+            : MIN_PASSWORD_LENGTH,
+      })
     } else if (code === 'user.email') {
-      fields.email = EMAIL_ERROR
+      fields.email = t(EMAIL_ERROR)
     } else if (code === 'user.firstName') {
-      fields.firstName = FIRST_NAME_ERROR
+      fields.firstName = t(FIRST_NAME_ERROR)
     } else if (code === 'user.lastName') {
-      fields.lastName = LAST_NAME_ERROR
+      fields.lastName = t(LAST_NAME_ERROR)
     } else if (code === 'auth.register.consentRequired') {
-      fields.consent = CONSENT_REQUIRED_ERROR
+      fields.consent = t(CONSENT_REQUIRED_ERROR)
     } else if (code === 'auth.register.consentVersion') {
       // Сервер авторитетен: старая открытая форма подписала другую редакцию Политики.
       isPolicyOutdated = true
@@ -215,9 +223,9 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
   return {
     fields,
     form: isPolicyOutdated
-      ? CONSENT_VERSION_ERROR
+      ? t(CONSENT_VERSION_ERROR)
       : hasUnknownCode || !hasFieldErrors
-        ? FALLBACK_ERROR
+        ? t(FALLBACK_ERROR)
         : null,
   }
 }
@@ -230,6 +238,7 @@ function describeRegisterFailure(error: unknown): RegisterFailure {
  * запрос получил бы `409`, поэтому форма заменяется карточкой успеха со входом.
  */
 export function RegisterForm() {
+  const { t } = useI18n()
   const { signIn } = useSession()
 
   const [firstName, setFirstName] = useState('')
@@ -354,7 +363,7 @@ export function RegisterForm() {
       <FieldGroup>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={Boolean(errors.firstName)}>
-            <FieldLabel htmlFor="register-first-name">Имя</FieldLabel>
+            <FieldLabel htmlFor="register-first-name">{t('Имя')}</FieldLabel>
             <Input
               ref={firstNameRef}
               id="register-first-name"
@@ -379,7 +388,7 @@ export function RegisterForm() {
           </Field>
 
           <Field data-invalid={Boolean(errors.lastName)}>
-            <FieldLabel htmlFor="register-last-name">Фамилия</FieldLabel>
+            <FieldLabel htmlFor="register-last-name">{t('Фамилия')}</FieldLabel>
             <Input
               ref={lastNameRef}
               id="register-last-name"
@@ -429,7 +438,7 @@ export function RegisterForm() {
         </Field>
 
         <Field data-invalid={Boolean(errors.password)}>
-          <FieldLabel htmlFor="register-password">Пароль</FieldLabel>
+          <FieldLabel htmlFor="register-password">{t('Пароль')}</FieldLabel>
           <Input
             ref={passwordRef}
             id="register-password"
@@ -454,15 +463,17 @@ export function RegisterForm() {
             id="register-password-hint"
             className="text-sm text-muted-foreground"
           >
-            Минимум {MIN_PASSWORD_LENGTH} символов. Не должен совпадать с email,
-            именем или фамилией.
+            {t(
+              'Минимум {count} символов. Не должен совпадать с email, именем или фамилией.',
+              { count: MIN_PASSWORD_LENGTH }
+            )}
           </p>
           <FieldError id="register-password-error">{errors.password}</FieldError>
         </Field>
 
         <Field data-invalid={Boolean(errors.passwordRepeat)}>
           <FieldLabel htmlFor="register-password-repeat">
-            Повтор пароля
+            {t('Повтор пароля')}
           </FieldLabel>
           <Input
             ref={passwordRepeatRef}
@@ -511,11 +522,12 @@ export function RegisterForm() {
           />
           <FieldContent>
             <FieldLabel htmlFor="register-consent" className="font-normal">
-              Я согласен на обработку персональных данных
+              {t('Я согласен на обработку персональных данных')}
             </FieldLabel>
             <FieldDescription id="register-consent-hint">
-              Для регистрации и использования аккаунта, оформления и сопровождения
-              записей. Условия — в{' '}
+              {t(
+                'Для регистрации и использования аккаунта, оформления и сопровождения записей. Условия — в'
+              )}{' '}
               <a
                 href={PRIVACY_PATH}
                 onClick={(event) => {
@@ -528,9 +540,9 @@ export function RegisterForm() {
                   navigate(PRIVACY_PATH)
                 }}
               >
-                Политике обработки персональных данных
+                {t('Политике обработки персональных данных')}
               </a>{' '}
-              (редакция от {POLICY_DATE_LABEL}).
+              {t('(редакция от {date}).', { date: policyDateLabel() })}
             </FieldDescription>
             <FieldError id="register-consent-error">{errors.consent}</FieldError>
           </FieldContent>
@@ -556,7 +568,7 @@ export function RegisterForm() {
             className="animate-spin"
           />
         )}
-        {isPending ? 'Создаём аккаунт…' : 'Зарегистрироваться'}
+        {isPending ? t('Создаём аккаунт…') : t('Зарегистрироваться')}
       </Button>
     </form>
   )
@@ -569,17 +581,20 @@ export function RegisterForm() {
  * карточка успеха и обычный диалог входа.
  */
 function RegistrationCreated() {
+  const { t } = useI18n()
+
   return (
     <div role="status" className="flex flex-col gap-4">
       <div className="space-y-1">
-        <p className="font-heading text-lg font-medium">Аккаунт создан</p>
+        <p className="font-heading text-lg font-medium">{t('Аккаунт создан')}</p>
         <p className="text-sm text-muted-foreground">
-          Автоматический вход не удался, но аккаунт уже существует — повторно
-          регистрироваться не нужно. Войдите с тем же email и паролем.
+          {t(
+            'Автоматический вход не удался, но аккаунт уже существует — повторно регистрироваться не нужно. Войдите с тем же email и паролем.'
+          )}
         </p>
       </div>
       <LoginDialog
-        trigger="Войти"
+        trigger={t('Войти')}
         variant="default"
         size="lg"
         className="h-11 w-full sm:h-8"

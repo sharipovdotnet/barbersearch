@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_CATALOGUE_ACTIVITY_LABELS,
   ADMIN_CATALOGUE_CAPTIONS,
@@ -58,20 +59,22 @@ export function HairServiceTable({
   rows,
   ...handlers
 }: { rows: AdminHairService[] } & RowHandlers) {
+  const { t } = useI18n()
+
   return (
     <CatalogueTable
       rows={rows}
       tab="services"
       columns={[
-        { id: 'name', label: 'Название', render: (row) => row.name },
+        { id: 'name', label: t('Название'), render: (row) => row.name },
         {
           id: 'category',
-          label: 'Категория',
-          render: (row) => SERVICE_CATEGORY_LABELS[row.category],
+          label: t('Категория'),
+          render: (row) => t(SERVICE_CATEGORY_LABELS[row.category]),
         },
         {
           id: 'duration',
-          label: 'Длительность',
+          label: t('Длительность'),
           render: (row) => formatDuration(row.defaultDurationMinutes),
         },
       ]}
@@ -84,15 +87,17 @@ export function SpecializationTable({
   rows,
   ...handlers
 }: { rows: AdminSpecialization[] } & RowHandlers) {
+  const { t } = useI18n()
+
   return (
     <CatalogueTable
       rows={rows}
       tab="specializations"
       columns={[
-        { id: 'name', label: 'Название', render: (row) => row.name },
+        { id: 'name', label: t('Название'), render: (row) => row.name },
         {
           id: 'description',
-          label: 'Описание',
+          label: t('Описание'),
           render: (row) => (
             <span className="line-clamp-2 text-muted-foreground">
               {row.description ?? '—'}
@@ -109,6 +114,8 @@ export function SalonTable({
   rows,
   ...handlers
 }: { rows: AdminSalon[] } & RowHandlers) {
+  const { t } = useI18n()
+
   return (
     <CatalogueTable
       rows={rows}
@@ -116,7 +123,7 @@ export function SalonTable({
       columns={[
         {
           id: 'name',
-          label: 'Название',
+          label: t('Название'),
           // Email владельца — единственное персональное поле строки, и только в
           // админском чтении: по нему администратор находит салон барбера.
           render: (row) => (
@@ -130,10 +137,10 @@ export function SalonTable({
             </span>
           ),
         },
-        { id: 'city', label: 'Город', render: (row) => row.city },
+        { id: 'city', label: t('Город'), render: (row) => row.city },
         {
           id: 'address',
-          label: 'Адрес',
+          label: t('Адрес'),
           // Телефон — контакт салона: отдельной колонки нет, но правится он в том же
           // диалоге, и строке нужен видимый признак, что правка применилась.
           render: (row) => (
@@ -149,7 +156,7 @@ export function SalonTable({
         },
         {
           id: 'timeZoneId',
-          label: 'Часовой пояс',
+          label: t('Часовой пояс'),
           render: (row) => <span className="tabular-nums">{row.timeZoneId}</span>,
         },
       ]}
@@ -172,6 +179,7 @@ function CatalogueTable<T extends CatalogueRow>({
   tab: CatalogueTab
   columns: Column<T>[]
 } & RowHandlers) {
+  const { t } = useI18n()
   const handlers = {
     tab,
     pendingRowId,
@@ -184,7 +192,7 @@ function CatalogueTable<T extends CatalogueRow>({
   return (
     <>
       <table className="hidden w-full text-sm lg:table">
-        <caption className="sr-only">{ADMIN_CATALOGUE_CAPTIONS[tab]}</caption>
+        <caption className="sr-only">{t(ADMIN_CATALOGUE_CAPTIONS[tab])}</caption>
         <thead>
           <tr className="text-left">
             {columns.map((column) => (
@@ -200,16 +208,16 @@ function CatalogueTable<T extends CatalogueRow>({
               scope="col"
               className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
             >
-              Барберы
+              {t('Барберы')}
             </th>
             <th
               scope="col"
               className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
             >
-              Статус
+              {t('Статус')}
             </th>
             <th scope="col" className="border-b px-3 py-2">
-              <span className="sr-only">Действия</span>
+              <span className="sr-only">{t('Действия')}</span>
             </th>
           </tr>
         </thead>
@@ -258,7 +266,7 @@ function CatalogueTable<T extends CatalogueRow>({
                 </div>
               ))}
               <div>
-                <dt className="text-xs text-muted-foreground">Барберы</dt>
+                <dt className="text-xs text-muted-foreground">{t('Барберы')}</dt>
                 <dd className="tabular-nums">{row.usageCount}</dd>
               </div>
             </dl>
@@ -281,20 +289,22 @@ function StatusBadge({
   tab: CatalogueTab
   row: CatalogueRow
 }) {
+  const { t } = useI18n()
+
   if (tab === 'salons' && row.moderationStatus) {
     const moderation = row.moderationStatus
 
     return (
       <div className="flex flex-wrap items-center gap-1">
         <Badge variant={moderationVariant(moderation)}>
-          {SALON_MODERATION_LABELS[moderation]}
+          {t(SALON_MODERATION_LABELS[moderation])}
         </Badge>
         {/* Видимость — отдельный флаг: «Одобрен» и «Выключен» могут стоять рядом. */}
         {moderation === 'Active' && (
           <Badge variant={row.isActive ? 'secondary' : 'outline'}>
             {row.isActive
-              ? ADMIN_CATALOGUE_ACTIVITY_LABELS.salons.active
-              : ADMIN_CATALOGUE_ACTIVITY_LABELS.salons.hidden}
+              ? t(ADMIN_CATALOGUE_ACTIVITY_LABELS.salons.active)
+              : t(ADMIN_CATALOGUE_ACTIVITY_LABELS.salons.hidden)}
           </Badge>
         )}
       </div>
@@ -305,7 +315,7 @@ function StatusBadge({
 
   return (
     <Badge variant={row.isActive ? 'secondary' : 'outline'}>
-      {row.isActive ? labels.active : labels.hidden}
+      {row.isActive ? t(labels.active) : t(labels.hidden)}
     </Badge>
   )
 }
@@ -332,6 +342,7 @@ function RowActions({
   onToggle,
   onModerate,
 }: RowActionsProps & { row: CatalogueRow; tab: CatalogueTab }) {
+  const { t } = useI18n()
   const isPending = pendingRowId === row.id
   // Ровно одно действие в полёте: остальные кнопки таблицы ждут, чтобы не запускать
   // второй запрос по той же строке.
@@ -355,7 +366,7 @@ function RowActions({
         disabled={isBusy}
         onClick={() => onEdit(row.id)}
       >
-        Изменить
+        {t('Изменить')}
       </Button>
       {canToggle && (
         <Button
@@ -375,7 +386,7 @@ function RowActions({
           ) : (
             <Eye data-icon="inline-start" aria-hidden />
           )}
-          {row.isActive ? 'Выключить' : 'Включить'}
+          {row.isActive ? t('Выключить') : t('Включить')}
         </Button>
       )}
       {isAwaitingReview && onModerate && (
@@ -388,7 +399,7 @@ function RowActions({
             disabled={isBusy}
             onClick={() => onModerate(row.id, 'approve')}
           >
-            Одобрить
+            {t('Одобрить')}
           </Button>
           <Button
             id={`catalogue-${tab}-${row.id}-reject`}
@@ -399,7 +410,7 @@ function RowActions({
             disabled={isBusy}
             onClick={() => onModerate(row.id, 'reject')}
           >
-            Отклонить
+            {t('Отклонить')}
           </Button>
         </>
       )}

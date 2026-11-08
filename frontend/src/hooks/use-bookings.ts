@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { usePagedList, type PagedList } from '@/hooks/use-paged-list'
+import { useI18n } from '@/i18n'
 import {
   cancelBooking as cancelBookingRequest,
   fetchBookings,
@@ -52,6 +53,7 @@ export function useCustomerBookings({
 }: {
   historyEnabled: boolean
 }): CustomerBookingsController {
+  const { t } = useI18n()
   const fetchUpcomingPage = useCallback(
     (cursor: string | null, signal: AbortSignal) =>
       fetchBookings('upcoming', cursor, signal),
@@ -67,16 +69,16 @@ export function useCustomerBookings({
   const upcoming = usePagedList<Booking>({
     getId: getBookingId,
     fetchPage: fetchUpcomingPage,
-    fallback: LIST_FALLBACK,
-    pageFallback: PAGE_FALLBACK,
+    fallback: t(LIST_FALLBACK),
+    pageFallback: t(PAGE_FALLBACK),
     requiresAuth: true,
   })
 
   const history = usePagedList<Booking>({
     getId: getBookingId,
     fetchPage: fetchHistoryPage,
-    fallback: LIST_FALLBACK,
-    pageFallback: PAGE_FALLBACK,
+    fallback: t(LIST_FALLBACK),
+    pageFallback: t(PAGE_FALLBACK),
     requiresAuth: true,
     enabled: historyEnabled,
   })

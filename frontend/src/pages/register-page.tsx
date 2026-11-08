@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import { ACCOUNT_PATH } from '@/lib/account-path'
 import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
 import { navigate } from '@/lib/router'
@@ -25,11 +26,12 @@ import { navigate } from '@/lib/router'
  * данных; вошедшему пользователю показывается гейт, а не форма.
  */
 export function RegisterPage() {
+  const { locale, t } = useI18n()
   const { status, user } = useSession()
 
   useEffect(() => {
-    document.title = 'Регистрация — BarberSearch'
-  }, [])
+    document.title = t('Регистрация — BarberSearch')
+  }, [locale, t])
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-8 sm:py-10">
@@ -43,10 +45,10 @@ export function RegisterPage() {
           <Card>
             <CardHeader>
               <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                Регистрация
+                {t('Регистрация')}
               </h1>
               <CardDescription>
-                Создайте аккаунт, чтобы записываться к барберам.
+                {t('Создайте аккаунт, чтобы записываться к барберам.')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -55,9 +57,9 @@ export function RegisterPage() {
           </Card>
 
           <div className="flex flex-wrap items-center justify-center gap-1 text-sm text-muted-foreground">
-            <span>Уже есть аккаунт?</span>
+            <span>{t('Уже есть аккаунт?')}</span>
             <LoginDialog
-              trigger="Войти"
+              trigger={t('Войти')}
               variant="ghost"
               size="sm"
               className="h-11 px-2 sm:h-8"
@@ -79,12 +81,13 @@ export function RegisterPage() {
  * в его раздел, чем показывать форму, которая всё равно создаст чужой аккаунт.
  */
 function AlreadySignedInGate({ role }: { role: string }) {
+  const { t } = useI18n()
   const action =
     role === 'Barber'
-      ? { label: 'Кабинет барбера', path: BARBER_CABINET_PATH }
+      ? { label: t('Кабинет барбера'), path: BARBER_CABINET_PATH }
       : role === 'Admin'
-        ? { label: 'Администрирование', path: '/admin' }
-        : { label: 'Мои записи', path: ACCOUNT_PATH }
+        ? { label: t('Администрирование'), path: '/admin' }
+        : { label: t('Мои записи'), path: ACCOUNT_PATH }
 
   return (
     <Card>
@@ -93,11 +96,12 @@ function AlreadySignedInGate({ role }: { role: string }) {
           <CircleCheck className="size-5 text-muted-foreground" aria-hidden />
         </div>
         <h1 className="font-heading text-2xl font-semibold tracking-tight">
-          Вы уже вошли
+          {t('Вы уже вошли')}
         </h1>
         <CardDescription>
-          Регистрация нужна только тем, у кого нет аккаунта. Продолжите в своём
-          разделе — создавать второй аккаунт не нужно.
+          {t(
+            'Регистрация нужна только тем, у кого нет аккаунта. Продолжите в своём разделе — создавать второй аккаунт не нужно.'
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -116,9 +120,11 @@ function AlreadySignedInGate({ role }: { role: string }) {
 
 /** Скелетон повторяет силуэт карточки, чтобы загрузка не прыгала вёрсткой. */
 function RegisterSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div role="status" aria-live="polite">
-      <span className="sr-only">Загружаем страницу…</span>
+      <span className="sr-only">{t('Загружаем страницу…')}</span>
       <Card className="gap-6" aria-hidden>
         <CardContent className="space-y-2">
           <Skeleton className="h-8 w-40" />

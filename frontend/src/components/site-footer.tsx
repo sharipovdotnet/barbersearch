@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 
 import { COOKIES_SECTION_ID, openCookiesSection, PRIVACY_PATH } from '@/lib/legal'
+import { useI18n } from '@/i18n'
 import { isPlainClick, navigate } from '@/lib/router'
 
 /**
@@ -18,11 +19,13 @@ const CURRENT_YEAR = new Date().getFullYear()
  * показывается лишь в разработке: в production он только путал бы.
  */
 export function SiteFooter() {
+  const { t } = useI18n()
+
   return (
     <footer className="border-t">
       <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <nav
-          aria-label="Правовая информация"
+          aria-label={t('Правовая информация')}
           className="flex flex-wrap items-center gap-x-4 gap-y-2"
         >
           <a
@@ -30,7 +33,7 @@ export function SiteFooter() {
             className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={handlePolicyLink}
           >
-            Политика обработки данных
+            {t('Политика обработки данных')}
           </a>
           <a
             href={`${PRIVACY_PATH}#${COOKIES_SECTION_ID}`}

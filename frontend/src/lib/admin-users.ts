@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -177,11 +178,11 @@ export function describeAdminUserListError(
 ): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.hasCode('admin.users.cursor.invalid')) {
-      return 'Список устарел. Обновите его и продолжите с начала.'
+      return t('Список устарел. Обновите его и продолжите с начала.')
     }
   }
 
@@ -192,11 +193,11 @@ export function describeAdminUserListError(
 export function describeAdminUserDetailError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('admin.users.notFound')) {
-      return 'Пользователь не найден. Возможно, ссылка устарела.'
+      return t('Пользователь не найден. Возможно, ссылка устарела.')
     }
   }
 
@@ -282,57 +283,61 @@ export function describeAdminUserActionError(
 ): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 401) {
-      return 'Сессия истекла — войдите снова.'
+      return t('Сессия истекла — войдите снова.')
     }
 
     if (error.status === 404 || error.hasCode('admin.users.notFound')) {
-      return 'Пользователь больше не существует. Обновите список.'
+      return t('Пользователь больше не существует. Обновите список.')
     }
 
     if (error.hasCode('user.role.self')) {
-      return 'Нельзя изменить роль своему аккаунту.'
+      return t('Нельзя изменить роль своему аккаунту.')
     }
 
     if (error.hasCode('user.deactivation.self')) {
-      return 'Нельзя заблокировать свой аккаунт.'
+      return t('Нельзя заблокировать свой аккаунт.')
     }
 
     if (error.hasCode('user.admin.last')) {
-      return 'Это последний активный администратор. Сначала назначьте другого, иначе сервис останется без управления.'
+      return t(
+        'Это последний активный администратор. Сначала назначьте другого, иначе сервис останется без управления.'
+      )
     }
 
     if (error.hasCode('user.update.concurrencyConflict')) {
-      return 'Данные пользователя только что изменил кто-то другой. Обновите карточку и повторите.'
+      return t(
+        'Данные пользователя только что изменил кто-то другой. Обновите карточку и повторите.'
+      )
     }
 
     if (error.hasCode('auth.csrf.invalid')) {
-      return 'Сессия устарела. Обновите страницу и повторите действие.'
+      return t('Сессия устарела. Обновите страницу и повторите действие.')
     }
 
     if (error.hasCode('user.markPhoneAsVerified.phoneNumber')) {
-      return 'Нельзя подтвердить телефон: он не указан.'
+      return t('Нельзя подтвердить телефон: он не указан.')
     }
 
     if (error.status === 429) {
-      return 'Слишком много действий подряд. Подождите минуту и повторите.'
+      return t('Слишком много действий подряд. Подождите минуту и повторите.')
     }
   }
 
   switch (action) {
     case 'role':
-      return 'Не удалось изменить роль. Попробуйте ещё раз.'
+      return t('Не удалось изменить роль. Попробуйте ещё раз.')
     case 'block':
-      return 'Не удалось заблокировать пользователя. Попробуйте ещё раз.'
+      return t('Не удалось заблокировать пользователя. Попробуйте ещё раз.')
     case 'unblock':
-      return 'Не удалось разблокировать пользователя. Попробуйте ещё раз.'
+      return t('Не удалось разблокировать пользователя. Попробуйте ещё раз.')
     case 'verifyEmail':
-      return 'Не удалось подтвердить email. Попробуйте ещё раз.'
+      return t('Не удалось подтвердить email. Попробуйте ещё раз.')
     case 'verifyPhone':
-      return 'Не удалось подтвердить телефон. Попробуйте ещё раз.'
+      return t('Не удалось подтвердить телефон. Попробуйте ещё раз.')
   }
 }
 
@@ -344,31 +349,33 @@ function hasPasswordPolicyCode(error: ApiError): boolean {
 /** Ошибка создания: уникальность email и политика пароля — самые частые. */
 export function describeCreateUserError(error: unknown): string {
   if (!(error instanceof ApiError)) {
-    return 'Не удалось создать пользователя. Попробуйте ещё раз.'
+    return t('Не удалось создать пользователя. Попробуйте ещё раз.')
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (error.hasCode('user.add.uniqueViolation')) {
-    return 'Пользователь с таким email уже есть.'
+    return t('Пользователь с таким email уже есть.')
   }
 
   if (error.hasCode('user.email')) {
-    return 'Похоже, в адресе email опечатка.'
+    return t('Похоже, в адресе email опечатка.')
   }
 
   if (hasPasswordPolicyCode(error)) {
-    return 'Пароль не соответствует требованиям безопасности: от 12 до 128 символов.'
+    return t(
+      'Пароль не соответствует требованиям безопасности: от 12 до 128 символов.'
+    )
   }
 
   if (error.hasCode('admin.users.role')) {
-    return 'Выберите роль из списка.'
+    return t('Выберите роль из списка.')
   }
 
   if (error.status === 429) {
-    return 'Слишком много действий подряд. Подождите минуту и повторите.'
+    return t('Слишком много действий подряд. Подождите минуту и повторите.')
   }
 
   return describeApiFailure(

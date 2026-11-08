@@ -11,6 +11,7 @@ import {
 import type { BarberProfile, BarberProfileSalon } from '@/lib/catalog'
 import { formatScheduleTime } from '@/lib/format'
 import { PLACE_KIND_LABELS } from '@/lib/place-kind'
+import { useI18n } from '@/i18n'
 
 /**
  * Салоны мастера и его недельное расписание.
@@ -20,16 +21,20 @@ import { PLACE_KIND_LABELS } from '@/lib/place-kind'
  * а не только цветом.
  */
 export function BarberSalons({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
+
   return (
     <section aria-labelledby="barber-salons-heading">
       <Card>
         <BarberSectionHeading id="barber-salons-heading">
-          Салоны
+          {t('Салоны')}
         </BarberSectionHeading>
 
         <CardContent>
           {profile.salons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Салон не указан.</p>
+            <p className="text-sm text-muted-foreground">
+              {t('Салон не указан.')}
+            </p>
           ) : (
             <ul className="space-y-5">
               {profile.salons.map((salon, index) => (
@@ -47,6 +52,7 @@ export function BarberSalons({ profile }: { profile: BarberProfile }) {
 }
 
 function SalonItem({ salon }: { salon: BarberProfileSalon }) {
+  const { t } = useI18n()
   const address = [salon.address, salon.city, salon.country]
     .filter(Boolean)
     .join(', ')
@@ -60,16 +66,18 @@ function SalonItem({ salon }: { salon: BarberProfileSalon }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium break-words">{salon.name}</h3>
-        <Badge variant="outline">{PLACE_KIND_LABELS[salon.kind]}</Badge>
+        <Badge variant="outline">{t(PLACE_KIND_LABELS[salon.kind])}</Badge>
         {/*
           Публичная карточка отдаёт только `kind`, без `isListed`: `Home` и
           `Mobile` по правилам домена в каталог не попадают никогда, поэтому
           бейдж ставится по типу.
         */}
         {(salon.kind === 'Home' || salon.kind === 'Mobile') && (
-          <Badge variant="secondary">Не в каталоге</Badge>
+          <Badge variant="secondary">{t('Не в каталоге')}</Badge>
         )}
-        {salon.isPrimary && <Badge variant="secondary">Основной салон</Badge>}
+        {salon.isPrimary && (
+          <Badge variant="secondary">{t('Основной салон')}</Badge>
+        )}
       </div>
 
       {address !== '' && (
@@ -81,7 +89,7 @@ function SalonItem({ salon }: { salon: BarberProfileSalon }) {
 
       {schedules.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Расписание пока не заполнено.
+          {t('Расписание пока не заполнено.')}
         </p>
       ) : (
         <dl className="space-y-1 text-sm">
@@ -90,7 +98,7 @@ function SalonItem({ salon }: { salon: BarberProfileSalon }) {
               key={schedule.id}
               className="flex items-baseline justify-between gap-4"
             >
-              <dt>{DAY_OF_WEEK_LABELS[schedule.dayOfWeek]}</dt>
+              <dt>{t(DAY_OF_WEEK_LABELS[schedule.dayOfWeek])}</dt>
               <dd
                 className={
                   schedule.isDayOff
@@ -99,7 +107,7 @@ function SalonItem({ salon }: { salon: BarberProfileSalon }) {
                 }
               >
                 {schedule.isDayOff
-                  ? 'Выходной'
+                  ? t('Выходной')
                   : `${formatScheduleTime(schedule.startTime)}–${formatScheduleTime(schedule.endTime)}`}
               </dd>
             </div>

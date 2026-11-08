@@ -2,6 +2,7 @@ import { Scissors } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useMyBarberRequest } from '@/hooks/use-my-barber-request'
+import { useI18n } from '@/i18n'
 import {
   BARBER_REQUEST_STATUS_LABELS,
   type BarberRequest,
@@ -19,6 +20,7 @@ import { isPlainClick, navigate } from '@/lib/router'
  * `GET /barber-requests/mine`.
  */
 export function BarberRequestCard() {
+  const { t } = useI18n()
   const mine = useMyBarberRequest()
 
   // Сессия закончилась: экран кабинета покажет гейт входа, карточке нечего добавить.
@@ -40,24 +42,24 @@ export function BarberRequestCard() {
             id="barber-request-card-title"
             className="text-sm font-medium"
           >
-            Стать барбером
+            {t('Стать барбером')}
           </h2>
 
           {(mine.status === 'loading' || mine.status === 'idle') && (
             <p role="status" className="text-sm text-muted-foreground">
-              Проверяем заявку…
+              {t('Проверяем заявку…')}
             </p>
           )}
 
           {mine.status === 'error' && (
             <p role="alert" className="text-sm text-muted-foreground">
-              {mine.error ?? 'Не удалось проверить заявку.'}{' '}
+              {mine.error ?? t('Не удалось проверить заявку.')}{' '}
               <button
                 type="button"
                 className="rounded-sm font-medium text-foreground underline underline-offset-4 hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 onClick={mine.reload}
               >
-                Повторить
+                {t('Повторить')}
               </button>
             </p>
           )}
@@ -65,8 +67,9 @@ export function BarberRequestCard() {
           {mine.status === 'ready' && mine.request === null && (
             <>
               <p className="text-sm text-muted-foreground">
-                Принимайте клиентов сами: заявка открывает кабинет барбера после
-                проверки администратором.
+                {t(
+                  'Принимайте клиентов сами: заявка открывает кабинет барбера после проверки администратором.'
+                )}
               </p>
               <Button
                 size="sm"
@@ -75,7 +78,7 @@ export function BarberRequestCard() {
                   navigate(BECOME_A_BARBER_PATH)
                 }}
               >
-                Стать барбером
+                {t('Стать барбером')}
               </Button>
             </>
           )}
@@ -91,15 +94,17 @@ export function BarberRequestCard() {
 
 /** Короткая строка статуса: полная карточка живёт на `/become-a-barber`. */
 function BarberRequestSummary({ request }: { request: BarberRequest }) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-2">
       <p className="text-sm">
         <span className="font-medium">
-          {BARBER_REQUEST_STATUS_LABELS[request.status]}
+          {t(BARBER_REQUEST_STATUS_LABELS[request.status])}
         </span>
         <span className="text-muted-foreground">
           {' '}
-          · подана{' '}
+          {t('· подана')}{' '}
           <time dateTime={request.createdAt}>
             {formatDateTime(request.createdAt)}
           </time>
@@ -108,7 +113,7 @@ function BarberRequestSummary({ request }: { request: BarberRequest }) {
 
       {request.status === 'Rejected' && request.rejectionReason && (
         <p className="text-sm break-words text-muted-foreground">
-          Причина: {request.rejectionReason}
+          {t('Причина: {reason}', { reason: request.rejectionReason })}
         </p>
       )}
 
@@ -124,7 +129,7 @@ function BarberRequestSummary({ request }: { request: BarberRequest }) {
           navigate(BECOME_A_BARBER_PATH)
         }}
       >
-        Подробнее
+        {t('Подробнее')}
       </a>
     </div>
   )

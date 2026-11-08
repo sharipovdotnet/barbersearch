@@ -6,6 +6,7 @@ import { ListPager } from '@/components/list-pager'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PagedListStatus } from '@/hooks/use-paged-list'
+import { useI18n } from '@/i18n'
 import type { MyReview } from '@/lib/my-reviews'
 import { formatPageRange } from '@/lib/paging'
 import { isPlainClick, navigate } from '@/lib/router'
@@ -59,17 +60,18 @@ export function MyReviewsList({
   registerEditButton: (id: string, element: HTMLButtonElement | null) => void
   registerDeleteButton: (id: string, element: HTMLButtonElement | null) => void
 }) {
+  const { t } = useI18n()
   const isLoading = status === 'loading' || status === 'idle'
   const isEmpty = status === 'ready' && items.length === 0 && pageIndex === 0
 
   // Диапазон объявляет пагинатор: дублировать его здесь нельзя, остальные
   // состояния списка остаются в этой живой области.
   const liveMessage = isLoading
-    ? 'Загружаем отзывы…'
+    ? t('Загружаем отзывы…')
     : status === 'error'
       ? ''
       : isEmpty
-        ? 'Пока нет отзывов.'
+        ? t('Пока нет отзывов.')
         : ''
 
   return (
@@ -84,7 +86,7 @@ export function MyReviewsList({
         tabIndex={-1}
         className="scroll-mt-20 rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        Отзывы
+        {t('Отзывы')}
       </h2>
 
       {isLoading && <ReviewsSkeleton />}
@@ -98,16 +100,16 @@ export function MyReviewsList({
             />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">Не удалось загрузить отзывы</p>
+            <p className="font-medium">{t('Не удалось загрузить отзывы')}</p>
             <p
               role="alert"
               className="mx-auto max-w-sm text-sm text-muted-foreground"
             >
-              {error ?? 'Не удалось загрузить отзывы.'}
+              {error ?? t('Не удалось загрузить отзывы.')}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={onRetry}>
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}
@@ -118,9 +120,11 @@ export function MyReviewsList({
             <Star className="size-4 text-muted-foreground" aria-hidden />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">Пока нет отзывов.</p>
+            <p className="font-medium">{t('Пока нет отзывов.')}</p>
             <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-              Отзыв можно оставить в «Моих записях» после завершённого визита.
+              {t(
+                'Отзыв можно оставить в «Моих записях» после завершённого визита.'
+              )}
             </p>
           </div>
           <a
@@ -133,7 +137,7 @@ export function MyReviewsList({
               }
             }}
           >
-            Перейти к записям
+            {t('Перейти к записям')}
           </a>
         </div>
       )}
@@ -154,7 +158,7 @@ export function MyReviewsList({
       )}
 
       <ListPager
-        label="Страницы отзывов"
+        label={t('Страницы отзывов')}
         rangeLabel={
           items.length === 0 ? '' : formatPageRange(offset, items.length)
         }

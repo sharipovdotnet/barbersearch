@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useI18n } from '@/i18n'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
 import { PLACE_KIND_LABELS } from '@/lib/place-kind'
 import {
@@ -30,19 +31,25 @@ export function BarberSalonCard({
   /** Состав салона: владелец прикрепляет и открепляет других барберов. */
   onManageBarbers: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <Card>
       <CardContent className="space-y-2 pt-6">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-medium break-words">{salon.name}</h2>
-          <Badge variant="outline">{PLACE_KIND_LABELS[salon.kind]}</Badge>
-          {salon.isPrimary && <Badge variant="secondary">Основной</Badge>}
+          <Badge variant="outline">
+            {t(PLACE_KIND_LABELS[salon.kind])}
+          </Badge>
+          {salon.isPrimary && (
+            <Badge variant="secondary">{t('Основной')}</Badge>
+          )}
           {salon.isListed ? (
             <Badge variant={moderationVariant(salon.moderationStatus)}>
-              {SALON_MODERATION_LABELS[salon.moderationStatus]}
+              {t(SALON_MODERATION_LABELS[salon.moderationStatus])}
             </Badge>
           ) : (
-            <Badge variant="secondary">Не в каталоге</Badge>
+            <Badge variant="secondary">{t('Не в каталоге')}</Badge>
           )}
         </div>
 
@@ -52,21 +59,21 @@ export function BarberSalonCard({
         </p>
 
         <p className="text-sm text-muted-foreground">
-          Часовой пояс:{' '}
+          {t('Часовой пояс:')}{' '}
           <span className="text-foreground">{salon.timeZoneId}</span>
         </p>
 
         {salon.isListed && salon.moderationStatus === 'Pending' && (
           <p className="text-sm text-muted-foreground">
-            Салон появится в поиске после проверки администратором.
+            {t('Салон появится в поиске после проверки администратором.')}
           </p>
         )}
 
         {salon.moderationStatus === 'Rejected' && (
           <p className="text-sm text-destructive">
-            Причина отказа:{' '}
+            {t('Причина отказа:')}{' '}
             <span className="text-foreground">
-              {salon.rejectionReason ?? 'не указана'}
+              {salon.rejectionReason ?? t('не указана')}
             </span>
           </p>
         )}
@@ -80,7 +87,7 @@ export function BarberSalonCard({
               className="h-11 sm:h-8"
               onClick={onManageBarbers}
             >
-              Барберы салона
+              {t('Барберы салона')}
             </Button>
             <Button
               type="button"
@@ -89,7 +96,7 @@ export function BarberSalonCard({
               className="h-11 sm:h-8"
               onClick={() => onEdit('location')}
             >
-              Изменить адрес
+              {t('Изменить адрес')}
             </Button>
             <Button
               type="button"
@@ -98,7 +105,7 @@ export function BarberSalonCard({
               className="h-11 sm:h-8"
               onClick={() => onEdit('contacts')}
             >
-              Изменить контакты
+              {t('Изменить контакты')}
             </Button>
           </div>
         )}

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { bookingStatusLabel } from '@/lib/booking-status'
 import type { BookingStatus } from '@/lib/bookings'
 import {
@@ -34,7 +35,10 @@ export type BarberBookingChangeRow = BookingChangeRow & {
 
 /** «5 нояб. в 14:00» — момент визита в поясе салона. */
 function moment(iso: string, timeZoneId: string | undefined): string {
-  return `${formatShortDay(iso, timeZoneId)} в ${formatTime(iso, timeZoneId)}`
+  return t('{date} в {time}', {
+    date: formatShortDay(iso, timeZoneId),
+    time: formatTime(iso, timeZoneId),
+  })
 }
 
 /**
@@ -52,10 +56,15 @@ export function describeBarberBookingsChange(
 
   if (firstAdded !== undefined) {
     if (change.added.length === 1) {
-      return `Новая запись: ${formatShortName(firstAdded.customer.displayName)}, ${moment(firstAdded.startAt, firstAdded.salon.timeZoneId)}.`
+      return t('Новая запись: {name}, {when}.', {
+        name: formatShortName(firstAdded.customer.displayName),
+        when: moment(firstAdded.startAt, firstAdded.salon.timeZoneId),
+      })
     }
 
-    return `Появилось ${formatBookingsCount(change.added.length)}.`
+    return t('Появилось {count}.', {
+      count: formatBookingsCount(change.added.length),
+    })
   }
 
   // До начала визита запись из «Ближайших» уводит только отмена.
@@ -66,10 +75,15 @@ export function describeBarberBookingsChange(
 
   if (firstCancelled !== undefined) {
     if (cancelled.length === 1) {
-      return `Запись отменена: ${formatShortName(firstCancelled.customer.displayName)}, ${moment(firstCancelled.startAt, firstCancelled.salon.timeZoneId)}.`
+      return t('Запись отменена: {name}, {when}.', {
+        name: formatShortName(firstCancelled.customer.displayName),
+        when: moment(firstCancelled.startAt, firstCancelled.salon.timeZoneId),
+      })
     }
 
-    return `Отменено ${formatBookingsCount(cancelled.length)}.`
+    return t('Отменено {count}.', {
+      count: formatBookingsCount(cancelled.length),
+    })
   }
 
   return null
@@ -93,10 +107,14 @@ export function describeCustomerBookingsChange<T extends BookingChangeRow>(
 
   if (firstAdded !== undefined) {
     if (change.added.length === 1) {
-      return `Новая запись: ${moment(firstAdded.startAt, timeZoneOf(firstAdded))}.`
+      return t('Новая запись: {when}.', {
+        when: moment(firstAdded.startAt, timeZoneOf(firstAdded)),
+      })
     }
 
-    return `Появилось ${formatBookingsCount(change.added.length)}.`
+    return t('Появилось {count}.', {
+      count: formatBookingsCount(change.added.length),
+    })
   }
 
   // Подтверждение — главная новость клиента; о нём говорим отдельной фразой.
@@ -106,13 +124,18 @@ export function describeCustomerBookingsChange<T extends BookingChangeRow>(
   )
 
   if (confirmed !== undefined) {
-    return `Барбер подтвердил запись на ${moment(confirmed.after.startAt, timeZoneOf(confirmed.after))}.`
+    return t('Барбер подтвердил запись на {when}.', {
+      when: moment(confirmed.after.startAt, timeZoneOf(confirmed.after)),
+    })
   }
 
   const statusChange = change.updated[0]
 
   if (statusChange !== undefined) {
-    return `Запись на ${moment(statusChange.after.startAt, timeZoneOf(statusChange.after))}: ${bookingStatusLabel(statusChange.after.status).toLowerCase()}.`
+    return t('Запись на {when}: {status}.', {
+      when: moment(statusChange.after.startAt, timeZoneOf(statusChange.after)),
+      status: bookingStatusLabel(statusChange.after.status).toLowerCase(),
+    })
   }
 
   // До начала визита из «Предстоящих» запись уводит только отмена.
@@ -123,10 +146,14 @@ export function describeCustomerBookingsChange<T extends BookingChangeRow>(
 
   if (firstCancelled !== undefined) {
     if (cancelled.length === 1) {
-      return `Запись на ${moment(firstCancelled.startAt, timeZoneOf(firstCancelled))} отменена.`
+      return t('Запись на {when} отменена.', {
+        when: moment(firstCancelled.startAt, timeZoneOf(firstCancelled)),
+      })
     }
 
-    return `Отменено ${formatBookingsCount(cancelled.length)}.`
+    return t('Отменено {count}.', {
+      count: formatBookingsCount(cancelled.length),
+    })
   }
 
   return null

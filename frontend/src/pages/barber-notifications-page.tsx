@@ -23,6 +23,7 @@ import {
   type NotificationSettingsController,
 } from '@/hooks/use-notification-settings'
 import { useSession } from '@/hooks/use-session'
+import { t, tp, useI18n } from '@/i18n'
 import {
   BARBER_CABINET_PATH,
   BARBER_NOTIFICATIONS_PATH,
@@ -62,17 +63,18 @@ import { cn } from '@/lib/utils'
  */
 export function BarberNotificationsPage() {
   const { status, user } = useSession()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
-    document.title = 'Уведомления — BarberSearch'
-  }, [])
+    document.title = t('Уведомления — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем уведомления…
+            {t('Загружаем уведомления…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -87,8 +89,10 @@ export function BarberNotificationsPage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы увидеть уведомления"
-            description="Напоминания о записях и утренний дайджест доступны барберу после входа. Вход по email и паролю."
+            title={t('Войдите, чтобы увидеть уведомления')}
+            description={t(
+              'Напоминания о записях и утренний дайджест доступны барберу после входа. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_NOTIFICATIONS_PATH}
           />
         </div>
@@ -114,6 +118,7 @@ export function BarberNotificationsPage() {
 }
 
 function BarberNotificationsScreen() {
+  const { t } = useI18n()
   const notifications = useBarberNotifications()
   const settings = useNotificationSettings()
   const [announcement, setAnnouncement] = useState<string | null>(null)
@@ -132,7 +137,7 @@ function BarberNotificationsScreen() {
     setAnnouncement(null)
 
     if (await notifications.markAllRead()) {
-      setAnnouncement('Все уведомления прочитаны.')
+      setAnnouncement(t('Все уведомления прочитаны.'))
     }
   }
 
@@ -149,12 +154,12 @@ function BarberNotificationsScreen() {
         }}
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Записи клиентов
+        {t('Записи клиентов')}
       </a>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
-          Уведомления
+          {t('Уведомления')}
         </h1>
         <Button
           type="button"
@@ -169,7 +174,7 @@ function BarberNotificationsScreen() {
           {notifications.isMarkingAllRead && (
             <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
           )}
-          Прочитать все
+          {t('Прочитать все')}
         </Button>
       </div>
 
@@ -214,6 +219,7 @@ function NotificationSettingsSection({
     update,
     reload,
   } = controller
+  const { t } = useI18n()
   const [telegramLink, setTelegramLink] = useState<TelegramLink | null>(null)
   const [telegramError, setTelegramError] = useState<string | null>(null)
   const [isTelegramPending, setIsTelegramPending] = useState(false)
@@ -261,12 +267,12 @@ function NotificationSettingsSection({
         id="notifications-settings"
         className="font-heading text-lg font-semibold"
       >
-        Настройки
+        {t('Настройки')}
       </h2>
 
       {status === 'loading' && (
         <div aria-busy="true" className="space-y-2">
-          <span className="sr-only">Загружаем настройки…</span>
+          <span className="sr-only">{t('Загружаем настройки…')}</span>
           <Skeleton className="h-24 w-full rounded-xl" aria-hidden />
         </div>
       )}
@@ -274,7 +280,7 @@ function NotificationSettingsSection({
       {status === 'error' && (
         <div className="space-y-3 rounded-xl border bg-card p-4">
           <p role="alert" className="text-sm text-destructive">
-            {loadError ?? 'Не удалось загрузить настройки.'}
+            {loadError ?? t('Не удалось загрузить настройки.')}
           </p>
           <Button
             type="button"
@@ -283,7 +289,7 @@ function NotificationSettingsSection({
             className="h-11 sm:h-8"
             onClick={reload}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}
@@ -303,7 +309,7 @@ function NotificationSettingsSection({
               onCheckedChange={(checked) => patch({ isEnabled: checked })}
             />
             <Label htmlFor="notifications-enabled">
-              Присылать напоминания
+              {t('Присылать напоминания')}
             </Label>
           </div>
 
@@ -314,7 +320,9 @@ function NotificationSettingsSection({
                 checked={settings.digestEnabled}
                 onCheckedChange={(checked) => patch({ digestEnabled: checked })}
               />
-              <Label htmlFor="notifications-digest">Утренний дайджест</Label>
+              <Label htmlFor="notifications-digest">
+                {t('Утренний дайджест')}
+              </Label>
             </div>
 
             <div className="space-y-1">
@@ -324,7 +332,7 @@ function NotificationSettingsSection({
                 step={900}
                 min="06:00"
                 max="12:00"
-                aria-label="Время утреннего дайджеста"
+                aria-label={t('Время утреннего дайджеста')}
                 value={settings.digestTime}
                 aria-invalid={Boolean(fieldErrors.digestTime)}
                 aria-describedby={
@@ -348,7 +356,7 @@ function NotificationSettingsSection({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="notifications-lead">Напомнить за</Label>
+            <Label htmlFor="notifications-lead">{t('Напомнить за')}</Label>
             <select
               id="notifications-lead"
               value={settings.leadMinutes}
@@ -367,7 +375,7 @@ function NotificationSettingsSection({
             >
               {NOTIFICATION_LEAD_MINUTES.map((minutes) => (
                 <option key={minutes} value={minutes}>
-                  {minutes} минут
+                  {tp('minutes', minutes)}
                 </option>
               ))}
             </select>
@@ -386,7 +394,9 @@ function NotificationSettingsSection({
             {!settings.botConfigured ? (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Telegram не настроен. Уведомления будут видны только здесь.
+                  {t(
+                    'Telegram не настроен. Уведомления будут видны только здесь.'
+                  )}
                 </p>
                 <Button
                   type="button"
@@ -395,14 +405,14 @@ function NotificationSettingsSection({
                   className="h-11 sm:h-8"
                   disabled
                 >
-                  Подключить
+                  {t('Подключить')}
                 </Button>
               </>
             ) : settings.telegramLinked ? (
               <>
                 <p className="text-sm">
                   Telegram:{' '}
-                  <span className="font-medium">Подключён</span>
+                  <span className="font-medium">{t('Подключён')}</span>
                 </p>
                 <Button
                   type="button"
@@ -422,14 +432,16 @@ function NotificationSettingsSection({
                       className="animate-spin"
                     />
                   )}
-                  Отключить
+                  {t('Отключить')}
                 </Button>
               </>
             ) : (
               <>
                 <p className="text-sm">
                   Telegram:{' '}
-                  <span className="text-muted-foreground">не подключён</span>
+                  <span className="text-muted-foreground">
+                    {t('не подключён')}
+                  </span>
                 </p>
                 <Button
                   type="button"
@@ -449,7 +461,7 @@ function NotificationSettingsSection({
                       className="animate-spin"
                     />
                   )}
-                  Подключить
+                  {t('Подключить')}
                 </Button>
               </>
             )}
@@ -457,7 +469,7 @@ function NotificationSettingsSection({
             {telegramLink && !settings.telegramLinked && (
               <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
                 <p className="text-sm break-words">
-                  Код:{' '}
+                  {t('Код:')}{' '}
                   <span className="font-mono text-xs break-all">
                     {telegramLink.code}
                   </span>
@@ -472,7 +484,7 @@ function NotificationSettingsSection({
                       'h-11 sm:h-8'
                     )}
                   >
-                    Открыть Telegram
+                    {t('Открыть Telegram')}
                   </a>
                   <Button
                     type="button"
@@ -481,7 +493,7 @@ function NotificationSettingsSection({
                     className="h-11 sm:h-8"
                     onClick={handleCheckTelegram}
                   >
-                    Проверить
+                    {t('Проверить')}
                   </Button>
                 </div>
               </div>
@@ -496,7 +508,7 @@ function NotificationSettingsSection({
 
           {isSaving && (
             <p role="status" className="sr-only">
-              Сохраняем настройки…
+              {t('Сохраняем настройки…')}
             </p>
           )}
 
@@ -535,15 +547,18 @@ function NotificationsList({
     goPrev,
     goNext,
   } = controller
+  const { t } = useI18n()
   const listRef = useRef<HTMLDivElement>(null)
 
   return (
-    <section aria-label="Уведомления" className="space-y-3">
+    <section aria-label={t('Уведомления')} className="space-y-3">
       {requiresSignIn ? (
         <div className="flex min-h-[35vh] items-center justify-center py-6">
           <SignInGate
-            title="Сессия истекла"
-            description="Войдите снова, чтобы увидеть уведомления: cookie-сессия закончилась, пока страница была открыта."
+            title={t('Сессия истекла')}
+            description={t(
+              'Войдите снова, чтобы увидеть уведомления: cookie-сессия закончилась, пока страница была открыта.'
+            )}
             redirectTo={BARBER_NOTIFICATIONS_PATH}
             onSignedIn={reload}
           />
@@ -558,7 +573,7 @@ function NotificationsList({
           >
             {status === 'loading' && (
               <div className="space-y-2">
-                <span className="sr-only">Загружаем уведомления…</span>
+                <span className="sr-only">{t('Загружаем уведомления…')}</span>
                 {NOTIFICATION_SKELETON_KEYS.map((key) => (
                   <Skeleton
                     key={key}
@@ -572,7 +587,7 @@ function NotificationsList({
             {status === 'error' && (
               <div className="space-y-3 rounded-xl border bg-card p-4">
                 <p role="alert" className="text-sm text-destructive">
-                  {error ?? 'Не удалось загрузить уведомления.'}
+                  {error ?? t('Не удалось загрузить уведомления.')}
                 </p>
                 <Button
                   type="button"
@@ -581,14 +596,14 @@ function NotificationsList({
                   className="h-11 sm:h-8"
                   onClick={reload}
                 >
-                  Повторить
+                  {t('Повторить')}
                 </Button>
               </div>
             )}
 
             {status === 'ready' && items.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Уведомлений пока нет.
+                {t('Уведомлений пока нет.')}
               </p>
             )}
 
@@ -607,7 +622,7 @@ function NotificationsList({
           </div>
 
           <ListPager
-            label="Страницы уведомлений"
+            label={t('Страницы уведомлений')}
             rangeLabel={formatPageRange(offset, items.length)}
             hasPrev={hasPrev}
             hasNext={hasNext}
@@ -639,6 +654,7 @@ function NotificationRow({
   leadMinutes: number
   onOpen: (notification: BarberNotification) => Promise<void>
 }) {
+  const { t } = useI18n()
   const isUnread = notification.readAt === null
 
   return (
@@ -658,7 +674,7 @@ function NotificationRow({
             {isUnread && (
               <span
                 role="img"
-                aria-label="Не прочитано"
+                aria-label={t('Не прочитано')}
                 className="size-1.5 shrink-0 rounded-full bg-primary"
               />
             )}
@@ -671,7 +687,7 @@ function NotificationRow({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-0.5 text-sm text-muted-foreground transition-colors group-hover:text-foreground">
-          Открыть
+          {t('Открыть')}
           <ChevronRight className="size-4" aria-hidden />
         </span>
       </button>
@@ -696,10 +712,14 @@ function notificationTitle(
   leadMinutes: number
 ): string {
   if (notification.kind === 'Upcoming') {
-    return `Через ${leadMinutes} минут запись`
+    return t('Через {minutes} запись', {
+      minutes: tp('minutes', leadMinutes),
+    })
   }
 
-  return `Сегодня ${formatBookingsCount(notification.bookingsCount ?? 0)}`
+  return t('Сегодня {value}', {
+    value: formatBookingsCount(notification.bookingsCount ?? 0),
+  })
 }
 
 function notificationBody(notification: BarberNotification): string {
@@ -708,7 +728,9 @@ function notificationBody(notification: BarberNotification): string {
   if (notification.kind === 'Digest') {
     return notification.startAt === null
       ? ''
-      : `Первая в ${formatTime(notification.startAt, timeZone)}`
+      : t('Первая в {time}', {
+          time: formatTime(notification.startAt, timeZone),
+        })
   }
 
   const time =

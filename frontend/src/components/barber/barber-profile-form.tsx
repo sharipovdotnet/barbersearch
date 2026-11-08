@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   BARBER_GRADE_LABELS,
@@ -197,26 +198,26 @@ function validate(values: FormValues, years: number | null): ProfileErrors {
   const displayName = values.displayName.trim()
 
   if (!displayName) {
-    errors.displayName = DISPLAY_NAME_REQUIRED_ERROR
+    errors.displayName = t(DISPLAY_NAME_REQUIRED_ERROR)
   } else if (displayName.length > BARBER_PROFILE_DISPLAY_NAME_MAX) {
-    errors.displayName = DISPLAY_NAME_TOO_LONG_ERROR
+    errors.displayName = t(DISPLAY_NAME_TOO_LONG_ERROR)
   }
 
   if (years === null) {
-    errors.yearsOfExperience = EXPERIENCE_REQUIRED_ERROR
+    errors.yearsOfExperience = t(EXPERIENCE_REQUIRED_ERROR)
   } else if (
     years < BARBER_PROFILE_EXPERIENCE_MIN ||
     years > BARBER_PROFILE_EXPERIENCE_MAX
   ) {
-    errors.yearsOfExperience = EXPERIENCE_RANGE_ERROR
+    errors.yearsOfExperience = t(EXPERIENCE_RANGE_ERROR)
   }
 
   if (values.languages.length === 0) {
-    errors.languages = LANGUAGES_REQUIRED_ERROR
+    errors.languages = t(LANGUAGES_REQUIRED_ERROR)
   }
 
   if (values.grade === '') {
-    errors.grade = GRADE_REQUIRED_ERROR
+    errors.grade = t(GRADE_REQUIRED_ERROR)
   }
 
   return errors
@@ -268,6 +269,7 @@ export function BarberProfileForm({
   onAlreadyExists,
   prefill = null,
 }: BarberProfileFormProps) {
+  const { t } = useI18n()
   const [values, setValues] = useState<FormValues>(() =>
     toInitialValues(prefill)
   )
@@ -372,7 +374,7 @@ export function BarberProfileForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={Boolean(errors.displayName)}>
             <FieldLabel htmlFor={IDS.displayName}>
-              Как вас представить
+              {t('Как вас представить')}
             </FieldLabel>
             <Input
               id={IDS.displayName}
@@ -395,7 +397,7 @@ export function BarberProfileForm({
             />
             {isDisplayNameLocked && (
               <FieldDescription id={IDS.displayNameLocked}>
-                {LOCKED_HINT}
+                {t(LOCKED_HINT)}
               </FieldDescription>
             )}
             <FieldError id={IDS.displayNameError}>
@@ -404,7 +406,9 @@ export function BarberProfileForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.yearsOfExperience)}>
-            <FieldLabel htmlFor={IDS.yearsOfExperience}>Опыт, лет</FieldLabel>
+            <FieldLabel htmlFor={IDS.yearsOfExperience}>
+              {t('Опыт, лет')}
+            </FieldLabel>
             <Input
               id={IDS.yearsOfExperience}
               name="yearsOfExperience"
@@ -429,7 +433,7 @@ export function BarberProfileForm({
             />
             {isExperienceLocked && (
               <FieldDescription id={IDS.yearsOfExperienceLocked}>
-                {LOCKED_HINT}
+                {t(LOCKED_HINT)}
               </FieldDescription>
             )}
             <FieldError id={IDS.yearsOfExperienceError}>
@@ -439,7 +443,7 @@ export function BarberProfileForm({
         </div>
 
         <Field data-invalid={Boolean(errors.grade)}>
-          <FieldLabel htmlFor={IDS.grade}>Грейд</FieldLabel>
+          <FieldLabel htmlFor={IDS.grade}>{t('Грейд')}</FieldLabel>
           <select
             id={IDS.grade}
             name="grade"
@@ -455,23 +459,24 @@ export function BarberProfileForm({
             className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
           >
             <option value="" disabled>
-              Выберите грейд
+              {t('Выберите грейд')}
             </option>
             {SELECTABLE_GRADES.map((grade) => (
               <option key={grade} value={grade}>
-                {BARBER_GRADE_LABELS[grade]}
+                {t(BARBER_GRADE_LABELS[grade])}
               </option>
             ))}
           </select>
           <FieldDescription>
-            Грейд видят клиенты в карточке. Администратор может изменить его
-            позже.
+            {t(
+              'Грейд видят клиенты в карточке. Администратор может изменить его позже.'
+            )}
           </FieldDescription>
           <FieldError id={IDS.gradeError}>{errors.grade}</FieldError>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor={IDS.bio}>О себе</FieldLabel>
+          <FieldLabel htmlFor={IDS.bio}>{t('О себе')}</FieldLabel>
           <Textarea
             id={IDS.bio}
             name="bio"
@@ -488,11 +493,13 @@ export function BarberProfileForm({
           />
           {isBioLocked ? (
             <FieldDescription id={IDS.bioLocked}>
-              {LOCKED_HINT}
+              {t(LOCKED_HINT)}
             </FieldDescription>
           ) : (
             <FieldDescription>
-              Пара предложений о себе: опыт, подход к работе, фирменная деталь.
+              {t(
+                'Пара предложений о себе: опыт, подход к работе, фирменная деталь.'
+              )}
             </FieldDescription>
           )}
         </Field>
@@ -500,7 +507,7 @@ export function BarberProfileForm({
         <FieldSet
           aria-describedby={errors.languages ? IDS.languagesError : undefined}
         >
-          <FieldLegend>Языки общения</FieldLegend>
+          <FieldLegend>{t('Языки общения')}</FieldLegend>
           <div className="grid gap-3 sm:grid-cols-2">
             {LANGUAGE_ORDER.map((language) => (
               <Field key={language} orientation="horizontal">
@@ -529,7 +536,7 @@ export function BarberProfileForm({
             ))}
           </div>
           <FieldDescription>
-            Клиент увидит языки в карточке. Выберите хотя бы один.
+            {t('Клиент увидит языки в карточке. Выберите хотя бы один.')}
           </FieldDescription>
           <FieldError id={IDS.languagesError}>{errors.languages}</FieldError>
         </FieldSet>
@@ -539,7 +546,7 @@ export function BarberProfileForm({
             errors.paymentMethods ? IDS.paymentMethodsError : undefined
           }
         >
-          <FieldLegend>Способы оплаты</FieldLegend>
+          <FieldLegend>{t('Способы оплаты')}</FieldLegend>
           <div className="grid gap-3 sm:grid-cols-2">
             {PAYMENT_METHOD_ORDER.map((method) => (
               <Field key={method} orientation="horizontal">
@@ -564,13 +571,13 @@ export function BarberProfileForm({
                   htmlFor={`barber-profile-payment-${method}`}
                   className="font-normal"
                 >
-                  {PAYMENT_METHOD_LABELS[method]}
+                  {t(PAYMENT_METHOD_LABELS[method])}
                 </FieldLabel>
               </Field>
             ))}
           </div>
           <FieldDescription>
-            Необязательно: можно оставить пустым и указать позже.
+            {t('Необязательно: можно оставить пустым и указать позже.')}
           </FieldDescription>
           <FieldError id={IDS.paymentMethodsError}>
             {errors.paymentMethods}
@@ -579,8 +586,10 @@ export function BarberProfileForm({
 
         <ListField
           id={IDS.certificates}
-          label="Сертификаты и обучение"
-          description="По одному пункту в строке: курсы, школы, дипломы."
+          label={t('Сертификаты и обучение')}
+          description={t(
+            'По одному пункту в строке: курсы, школы, дипломы.'
+          )}
           value={values.certificates}
           disabled={isPending}
           onChange={(value) => {
@@ -590,8 +599,10 @@ export function BarberProfileForm({
 
         <ListField
           id={IDS.achievements}
-          label="Достижения"
-          description="По одному пункту в строке: конкурсы, стаж, публикации."
+          label={t('Достижения')}
+          description={t(
+            'По одному пункту в строке: конкурсы, стаж, публикации.'
+          )}
           value={values.achievements}
           disabled={isPending}
           onChange={(value) => {
@@ -601,8 +612,10 @@ export function BarberProfileForm({
 
         <ListField
           id={IDS.communicationFormat}
-          label="Формат общения"
-          description="По одному пункту в строке: «Люблю поболтать», «Могу помолчать»."
+          label={t('Формат общения')}
+          description={t(
+            'По одному пункту в строке: «Люблю поболтать», «Могу помолчать».'
+          )}
           value={values.communicationFormat}
           disabled={isPending}
           onChange={(value) => {
@@ -612,8 +625,10 @@ export function BarberProfileForm({
 
         <ListField
           id={IDS.goodies}
-          label="Комфорт в кресле"
-          description="По одному пункту в строке: кофе, музыка, журналы."
+          label={t('Комфорт в кресле')}
+          description={t(
+            'По одному пункту в строке: кофе, музыка, журналы.'
+          )}
           value={values.goodies}
           disabled={isPending}
           onChange={(value) => {
@@ -623,8 +638,10 @@ export function BarberProfileForm({
 
         <ListField
           id={IDS.additionalServices}
-          label="Дополнительные услуги"
-          description="По одному пункту в строке: бритьё головы, камуфляж седины, уход за бородой."
+          label={t('Дополнительные услуги')}
+          description={t(
+            'По одному пункту в строке: бритьё головы, камуфляж седины, уход за бородой.'
+          )}
           value={values.additionalServices}
           disabled={isPending}
           onChange={(value) => {
@@ -633,7 +650,7 @@ export function BarberProfileForm({
         />
 
         <Field>
-          <FieldLabel htmlFor={IDS.latePolicy}>Опоздания</FieldLabel>
+          <FieldLabel htmlFor={IDS.latePolicy}>{t('Опоздания')}</FieldLabel>
           <Textarea
             id={IDS.latePolicy}
             name="latePolicy"
@@ -646,7 +663,7 @@ export function BarberProfileForm({
             }}
           />
           <FieldDescription>
-            Например, «Жду максимум 10 минут». Необязательно.
+            {t('Например, «Жду максимум 10 минут». Необязательно.')}
           </FieldDescription>
         </Field>
       </FieldGroup>
@@ -667,7 +684,7 @@ export function BarberProfileForm({
                 void submit()
               }}
             >
-              Повторить
+              {t('Повторить')}
             </Button>
           )}
         </div>
@@ -686,7 +703,7 @@ export function BarberProfileForm({
             className="animate-spin"
           />
         )}
-        {isPending ? 'Создаём профиль…' : 'Создать профиль'}
+        {isPending ? t('Создаём профиль…') : t('Создать профиль')}
       </Button>
     </form>
   )

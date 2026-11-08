@@ -9,6 +9,7 @@ import { ListPager } from '@/components/list-pager'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PagedListStatus } from '@/hooks/use-paged-list'
+import { useI18n } from '@/i18n'
 import type {
   BarberBooking,
   BarberBookingScope,
@@ -76,14 +77,17 @@ export function CabinetBookingList({
   onOpenNote: (booking: BarberBooking) => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
+  const { t } = useI18n()
   const isLoading = status === 'loading' || status === 'idle'
   const isEmpty = status === 'ready' && items.length === 0
   const emptyTitle =
-    view === 'upcoming' ? 'Ближайших записей нет.' : 'История пуста.'
+    view === 'upcoming'
+      ? t('Ближайших записей нет.')
+      : t('История пуста.')
 
   // Диапазон объявляет пагинатор: второй такой же озвучки на экране быть не должно.
   const liveMessage = isLoading
-    ? 'Загружаем записи…'
+    ? t('Загружаем записи…')
     : isEmpty
       ? emptyTitle
       : ''
@@ -100,7 +104,7 @@ export function CabinetBookingList({
         tabIndex={-1}
         className="scroll-mt-20 rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        {view === 'upcoming' ? 'Ближайшие записи' : 'История записей'}
+        {view === 'upcoming' ? t('Ближайшие записи') : t('История записей')}
       </h2>
 
       {isLoading && <BookingsSkeleton />}
@@ -111,12 +115,12 @@ export function CabinetBookingList({
             <TriangleAlert className="size-4 text-destructive" aria-hidden />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">Не удалось загрузить записи.</p>
+            <p className="font-medium">{t('Не удалось загрузить записи.')}</p>
             <p
               role="alert"
               className="mx-auto max-w-sm text-sm text-muted-foreground"
             >
-              {error ?? 'Не удалось загрузить записи.'}
+              {error ?? t('Не удалось загрузить записи.')}
             </p>
           </div>
           <Button
@@ -125,7 +129,7 @@ export function CabinetBookingList({
             className="h-11 sm:h-8"
             onClick={onRetry}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}
@@ -140,8 +144,12 @@ export function CabinetBookingList({
             {view === 'upcoming' && (
               <p className="mx-auto max-w-sm text-sm text-muted-foreground">
                 {hasPastItems
-                  ? 'Прошлые визиты остались в истории — их можно открыть в соседней вкладке.'
-                  : 'Новые заявки появятся здесь, как только клиент запишется.'}
+                  ? t(
+                      'Прошлые визиты остались в истории — их можно открыть в соседней вкладке.'
+                    )
+                  : t(
+                      'Новые заявки появятся здесь, как только клиент запишется.'
+                    )}
               </p>
             )}
           </div>
@@ -152,7 +160,7 @@ export function CabinetBookingList({
               className="h-11 sm:h-8"
               onClick={onOpenPast}
             >
-              Открыть историю
+              {t('Открыть историю')}
             </Button>
           )}
         </div>
@@ -179,7 +187,7 @@ export function CabinetBookingList({
           </ul>
 
           <ListPager
-            label="Страницы записей"
+            label={t('Страницы записей')}
             rangeLabel={
               items.length === 0 ? '' : formatPageRange(offset, items.length)
             }

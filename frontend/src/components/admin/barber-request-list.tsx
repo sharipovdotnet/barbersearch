@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 
 import { ListPager } from '@/components/list-pager'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import type {
   AdminBarberRequest,
   BarberRequestStatus,
@@ -49,15 +50,19 @@ export function BarberRequestList({
   onPrev: () => void
   onNext: () => void
 }) {
+  const { t } = useI18n()
+
   return (
-    <section aria-label="Заявки" className="space-y-3">
+    <section aria-label={t('Заявки')} className="space-y-3">
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-        <span>Показано {items.length}</span>
+        <span>{t('Показано {count}', { count: items.length })}</span>
         {/* Очередь сервер отдаёт старыми сверху, все заявки — новыми. */}
-        <span>{status === 'pending' ? 'Сначала старые' : 'Сначала новые'}</span>
+        <span>
+          {status === 'pending' ? t('Сначала старые') : t('Сначала новые')}
+        </span>
       </div>
 
-      <ul aria-label="Список заявок" className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
+      <ul aria-label={t('Список заявок')} className="divide-y rounded-xl bg-card ring-1 ring-foreground/10">
         {items.map((request) => {
           const isSelected = request.id === selectedId
 
@@ -102,7 +107,7 @@ export function BarberRequestList({
       </ul>
 
       <ListPager
-        label="Страницы заявок"
+        label={t('Страницы заявок')}
         rangeLabel={items.length === 0 ? '' : formatPageRange(offset, items.length)}
         hasPrev={hasPrev}
         hasNext={hasNext}
@@ -128,6 +133,7 @@ export function BarberRequestStatusBadge({
   status: BarberRequestStatus
   className?: string
 }) {
+  const { t } = useI18n()
   const variant =
     status === 'Approved'
       ? 'secondary'
@@ -137,7 +143,7 @@ export function BarberRequestStatusBadge({
 
   return (
     <Badge variant={variant} className={className}>
-      {ADMIN_BARBER_REQUEST_STATUS_LABELS[status]}
+      {t(ADMIN_BARBER_REQUEST_STATUS_LABELS[status])}
     </Badge>
   )
 }

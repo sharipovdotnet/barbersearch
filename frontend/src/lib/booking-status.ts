@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { BookingStatus } from '@/lib/bookings'
 
 /** Подписи и правила жизненного цикла брони — в одном месте, чтобы не расходились. */
@@ -19,7 +20,7 @@ const STATUS_STYLES: Record<BookingStatus, string> = {
 }
 
 export function bookingStatusLabel(status: BookingStatus): string {
-  return STATUS_LABELS[status] ?? status
+  return t(STATUS_LABELS[status] ?? status)
 }
 
 export function bookingStatusStyle(status: BookingStatus): string {

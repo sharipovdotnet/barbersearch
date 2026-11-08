@@ -1,4 +1,5 @@
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useI18n } from '@/i18n'
 import type { AdminStatisticsSeries } from '@/lib/admin-statistics'
 import { formatStatisticsDay } from '@/lib/admin-statistics'
 import { formatCount } from '@/lib/format'
@@ -15,6 +16,7 @@ import { formatCount } from '@/lib/format'
  */
 export function TrendChart({ series }: { series: AdminStatisticsSeries }) {
   const isWide = useMediaQuery('(min-width: 640px)')
+  const { t } = useI18n()
   const width = isWide ? 640 : 320
   const height = isWide ? 220 : 180
   const padTop = isWide ? 16 : 12
@@ -27,6 +29,7 @@ export function TrendChart({ series }: { series: AdminStatisticsSeries }) {
 
   const points = series.points
   const isDay = series.granularity === 'day'
+  const unit = isDay ? t('дням') : t('неделям')
   const maxValue = Math.max(
     1,
     ...points.map((point) => Math.max(point.created, point.completed))
@@ -62,18 +65,21 @@ export function TrendChart({ series }: { series: AdminStatisticsSeries }) {
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <li className="flex items-center gap-1.5">
           <span className="h-0.5 w-5 bg-chart-2" aria-hidden />
-          Созданные записи
+          {t('Созданные записи')}
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-0.5 w-5 bg-success" aria-hidden />
-          Завершённые визиты
+          {t('Завершённые визиты')}
         </li>
       </ul>
 
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`Записи и визиты по ${isDay ? 'дням' : 'неделям'}: создано ${totalCreated}, завершено ${totalCompleted}. Таблица под графиком.`}
+        aria-label={t(
+          'Записи и визиты по {unit}: создано {created}, завершено {completed}. Таблица под графиком.',
+          { unit, created: totalCreated, completed: totalCompleted }
+        )}
         className="h-auto w-full"
       >
         {[1, 0.5, 0].map((fraction) => {
@@ -137,42 +143,52 @@ export function TrendChart({ series }: { series: AdminStatisticsSeries }) {
       </svg>
 
       <p className="text-sm text-muted-foreground">
-        Создано {formatCount(totalCreated, ['запись', 'записи', 'записей'])},
-        завершено {formatCount(totalCompleted, ['визит', 'визита', 'визитов'])}.
-        Отменено {totalCancelled}, неявки {totalNoShow}.
+        {t(
+          'Создано {created}, завершено {completed}. Отменено {cancelled}, неявки {noShow}.',
+          {
+            created: formatCount(totalCreated, ['запись', 'записи', 'записей']),
+            completed: formatCount(totalCompleted, ['визит', 'визита', 'визитов']),
+            cancelled: totalCancelled,
+            noShow: totalNoShow,
+          }
+        )}
       </p>
 
       <p className="text-xs text-muted-foreground">
         {isDay
-          ? 'Сегодняшний день может быть неполным: записи появляются по мере визитов.'
-          : 'Недели начинаются в понедельник (UTC); первый и последний бакеты могут быть неполными.'}
+          ? t(
+              'Сегодняшний день может быть неполным: записи появляются по мере визитов.'
+            )
+          : t(
+              'Недели начинаются в понедельник (UTC); первый и последний бакеты могут быть неполными.'
+            )}
       </p>
 
       <details className="rounded-lg border">
         <summary className="flex min-h-11 cursor-pointer items-center px-3 py-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          Показать таблицей
+          {t('Показать таблицей')}
         </summary>
         <div className="overflow-x-auto border-t">
           <table className="w-full text-sm">
             <caption className="sr-only">
-              Записи и визиты по {isDay ? 'дням' : 'неделям'}
+              {t('Записи и визиты по {unit}', { unit })}
             </caption>
             <thead>
               <tr className="border-b text-left text-muted-foreground">
                 <th scope="col" className="px-3 py-2 font-medium">
-                  {isDay ? 'День' : 'Неделя с'}
+                  {isDay ? t('День') : t('Неделя с')}
                 </th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Создано
+                  {t('Создано')}
                 </th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Завершено
+                  {t('Завершено')}
                 </th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Отменено
+                  {t('Отменено')}
                 </th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Неявки
+                  {t('Неявки')}
                 </th>
               </tr>
             </thead>

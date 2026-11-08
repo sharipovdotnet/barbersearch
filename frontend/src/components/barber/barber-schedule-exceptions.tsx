@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useI18n } from '@/i18n'
 import {
   addDays,
   todayInTimeZone,
@@ -42,6 +43,7 @@ export function BarberScheduleExceptions({
   salon,
   onChanged,
 }: Props) {
+  const { t } = useI18n()
   const today = todayInTimeZone(salon.timeZoneId)
   const [date, setDate] = useState('')
   const [isDayOff, setIsDayOff] = useState(true)
@@ -72,10 +74,10 @@ export function BarberScheduleExceptions({
 
       setDate('')
       setReason('')
-      onChanged('Исключение добавлено.')
+      onChanged(t('Исключение добавлено.'))
     } catch (cause) {
       setError(
-        describeScheduleError(cause, 'Не удалось добавить исключение.')
+        describeScheduleError(cause, t('Не удалось добавить исключение.'))
       )
     } finally {
       setIsSaving(false)
@@ -96,10 +98,10 @@ export function BarberScheduleExceptions({
         salon.salonId,
         exceptionDate
       )
-      onChanged('Исключение удалено.')
+      onChanged(t('Исключение удалено.'))
     } catch (cause) {
       setError(
-        describeScheduleError(cause, 'Не удалось удалить исключение.')
+        describeScheduleError(cause, t('Не удалось удалить исключение.'))
       )
     } finally {
       setDeleting(null)
@@ -109,17 +111,21 @@ export function BarberScheduleExceptions({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Исключения на даты</CardTitle>
+        <CardTitle>{t('Исключения на даты')}</CardTitle>
         <CardDescription>
-          Выходной или особые часы в конкретный день. Действует только в салоне
-          «{salon.name}»; недельное расписание не меняется.
+          {t(
+            'Выходной или особые часы в конкретный день. Действует только в салоне «{name}»; недельное расписание не меняется.',
+            { name: salon.name }
+          )}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-1.5">
-            <Label htmlFor={`exception-date-${salon.salonId}`}>Дата</Label>
+            <Label htmlFor={`exception-date-${salon.salonId}`}>
+              {t('Дата')}
+            </Label>
             <Input
               id={`exception-date-${salon.salonId}`}
               type="date"
@@ -135,7 +141,9 @@ export function BarberScheduleExceptions({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor={`exception-kind-${salon.salonId}`}>Что в этот день</Label>
+            <Label htmlFor={`exception-kind-${salon.salonId}`}>
+              {t('Что в этот день')}
+            </Label>
             <select
               id={`exception-kind-${salon.salonId}`}
               value={isDayOff ? 'day-off' : 'custom'}
@@ -145,8 +153,8 @@ export function BarberScheduleExceptions({
                 setIsDayOff(event.target.value === 'day-off')
               }}
             >
-              <option value="day-off">Выходной</option>
-              <option value="custom">Свои часы</option>
+              <option value="day-off">{t('Выходной')}</option>
+              <option value="custom">{t('Свои часы')}</option>
             </select>
           </div>
         </div>
@@ -157,7 +165,7 @@ export function BarberScheduleExceptions({
               type="time"
               step={1800}
               value={startTime}
-              aria-label="Начало работы в этот день"
+              aria-label={t('Начало работы в этот день')}
               aria-invalid={hasInvalidHours || undefined}
               className="h-11 w-32 sm:h-8"
               onChange={(event) => {
@@ -170,7 +178,7 @@ export function BarberScheduleExceptions({
               type="time"
               step={1800}
               value={endTime}
-              aria-label="Окончание работы в этот день"
+              aria-label={t('Окончание работы в этот день')}
               aria-invalid={hasInvalidHours || undefined}
               className="h-11 w-32 sm:h-8"
               onChange={(event) => {
@@ -180,7 +188,7 @@ export function BarberScheduleExceptions({
             />
             {hasInvalidHours && (
               <p className="w-full text-xs text-destructive">
-                Конец должен быть позже начала.
+                {t('Конец должен быть позже начала.')}
               </p>
             )}
           </div>
@@ -188,13 +196,14 @@ export function BarberScheduleExceptions({
 
         <div className="space-y-1.5">
           <Label htmlFor={`exception-reason-${salon.salonId}`}>
-            Пометка <span className="text-muted-foreground">(необязательно)</span>
+            {t('Пометка')}{' '}
+            <span className="text-muted-foreground">{t('(необязательно)')}</span>
           </Label>
           <Input
             id={`exception-reason-${salon.salonId}`}
             value={reason}
             maxLength={500}
-            placeholder="Например, личные дела"
+            placeholder={t('Например, личные дела')}
             className="h-11 sm:h-8"
             onChange={(event) => {
               setError(null)
@@ -219,12 +228,12 @@ export function BarberScheduleExceptions({
           }}
         >
           {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
-          Добавить исключение
+          {t('Добавить исключение')}
         </Button>
 
         {salon.exceptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Исключений пока нет.
+            {t('Исключений пока нет.')}
           </p>
         ) : (
           <ul className="divide-y rounded-lg border">
@@ -239,7 +248,7 @@ export function BarberScheduleExceptions({
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {exception.isDayOff
-                      ? 'Выходной'
+                      ? t('Выходной')
                       : `${toTimeInputValue(exception.startTime)}–${toTimeInputValue(exception.endTime)}`}
                     {exception.reason ? ` · ${exception.reason}` : ''}
                   </p>
@@ -251,7 +260,9 @@ export function BarberScheduleExceptions({
                   size="sm"
                   className="h-11 text-destructive hover:text-destructive sm:h-8"
                   disabled={deleting !== null}
-                  aria-label={`Удалить исключение ${formatScheduleDate(exception.date)}`}
+                  aria-label={t('Удалить исключение {date}', {
+                    date: formatScheduleDate(exception.date),
+                  })}
                   onClick={() => {
                     void handleDelete(exception.date)
                   }}
@@ -261,7 +272,7 @@ export function BarberScheduleExceptions({
                   ) : (
                     <Trash2 className="size-4" aria-hidden />
                   )}
-                  Удалить
+                  {t('Удалить')}
                 </Button>
               </li>
             ))}

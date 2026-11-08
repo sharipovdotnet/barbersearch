@@ -17,6 +17,7 @@ npm install
 npm run dev      # http://localhost:5173 (Vite picks the next free port if busy)
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
+npm run check:i18n # catalog coverage: t() keys, JSON conflicts, unwrapped Russian UI
 npm run preview  # serve dist/
 
 npm test           # Vitest unit suite: no API, no browser (see «Testing»)
@@ -26,6 +27,28 @@ npm run test:e2e:install   # once: download Chromium for Playwright
 npm run test:e2e           # Playwright + axe against a real API (see «E2E»)
 npm run test:e2e:ui        # the same in the Playwright UI mode
 ```
+
+## Localization
+
+The interface is available in Russian (default) and English. The `RU`/`EN` switch in the header
+stores the choice in `localStorage` (`barbersearch.locale`) and updates `<html lang>` and the meta
+description. `src/i18n` owns the catalogs; **the key is the Russian source string**, so a missing
+translation falls back to readable Russian instead of a raw key:
+
+```tsx
+const { t } = useI18n()
+t('Мой кабинет')                  // → «Мой кабинет» / «My account»
+t('Салон: {name}', { name })      // placeholders
+tp('reviews', count)              // «1 отзыв» / «2 отзыва» / «1 review» / «2 reviews»
+```
+
+English translations live in `src/i18n/messages/en/*.json`, split by feature area. Dates, numbers,
+prices and plurals are locale-aware in `src/lib/format.ts` (`ru-RU` / `en-GB`, 24-hour time, RUB).
+Native date inputs get their hint from the browser locale, so `ui/input.tsx` overlays a localized
+`DD.MM.YYYY` hint on an empty field; the browser's own calendar popup still follows the browser
+language. `npm run check:i18n` fails when a `t()` key has no English entry, when two catalogs
+translate the same source differently, or (`--strict`) when Russian UI text bypasses `t()`. See
+`src/i18n/README.md` for the glossary and conventions.
 
 ## Routes
 
@@ -1415,6 +1438,13 @@ instead of silently skipping.
 | `mobile-chromium` | 375×812 | the same on a phone, without the axe specs (the gate runs 1280 and 320) |
 | `narrow-320` | 320×800 | `pager-320.spec.ts` and `a11y-narrow.spec.ts` |
 | `mutations-chromium` | 1280×900 | the specs that edit, delete or publish rows, last, once |
+
+### Localization check
+
+`e2e/specs/i18n.spec.ts` switches the landing to English, checks `<html lang>`, the tab title, the
+persisted choice after a reload, the Russian return path and the 320 px layout (no horizontal
+scroll). It needs no authenticated account, so it also runs in isolation with
+`npx playwright test e2e/specs/i18n.spec.ts --project=desktop-chromium --no-deps`.
 
 ### Accessibility gate
 

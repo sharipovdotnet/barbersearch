@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { BarberCard } from '@/components/home/barber-card'
+import { setCurrentLocale } from '@/i18n'
 import type { BarberSearchItem } from '@/lib/barber-search'
 
 const BARBER: BarberSearchItem = {
@@ -71,5 +72,24 @@ describe('BarberCard: тип места', () => {
     )
 
     expect(screen.getByText('Салон не указан')).toBeInTheDocument()
+  })
+
+  it('на английском переводит тип места, грейд и стаж, но не данные API', () => {
+    setCurrentLocale('en')
+
+    render(
+      <BarberCard
+        barber={{ ...BARBER, primaryPlaceKind: 'Home', primarySalonName: 'Дом' }}
+      />
+    )
+
+    expect(
+      screen.getByText('At home in Екатеринбург')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Senior barber')).toBeInTheDocument()
+    expect(screen.getByText(/Experience:/)).toHaveTextContent(
+      'Experience: 8 years'
+    )
+    expect(screen.getByText('No reviews yet')).toBeInTheDocument()
   })
 })

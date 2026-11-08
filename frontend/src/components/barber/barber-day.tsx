@@ -8,6 +8,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BarberDayController } from '@/hooks/use-barber-day'
+import { t } from '@/i18n'
 import type { DayGap } from '@/lib/barber-day'
 import type { BarberBooking } from '@/lib/barber-bookings'
 import {
@@ -67,9 +68,9 @@ export function BarberDay({
   const isLoading = day.status === 'loading'
   const isEmpty = day.status === 'ready' && day.items.length === 0
   const liveMessage = isLoading
-    ? 'Загружаем записи…'
+    ? t('Загружаем записи…')
     : isEmpty
-      ? 'На сегодня записей нет.'
+      ? t('На сегодня записей нет.')
       : ''
 
   const gapByStart = new Map(day.gaps.map((gap) => [gap.endAt, gap]))
@@ -88,7 +89,7 @@ export function BarberDay({
           tabIndex={-1}
           className="scroll-mt-20 rounded-md font-heading text-lg font-semibold tracking-tight focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          Сегодня
+          {t('Сегодня')}
         </h2>
         <p className="text-sm text-muted-foreground">{daySubtitle(day, now)}</p>
         {nextLine !== null && <p className="text-sm">{nextLine}</p>}
@@ -112,7 +113,7 @@ export function BarberDay({
             className="h-11 sm:h-8"
             onClick={day.retryFailed}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}
@@ -125,12 +126,12 @@ export function BarberDay({
             <TriangleAlert className="size-4 text-destructive" aria-hidden />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">Не удалось загрузить записи.</p>
+            <p className="font-medium">{t('Не удалось загрузить записи.')}</p>
             <p
               role="alert"
               className="mx-auto max-w-sm text-sm text-muted-foreground"
             >
-              {day.error ?? 'Не удалось загрузить записи.'}
+              {day.error ?? t('Не удалось загрузить записи.')}
             </p>
           </div>
           <Button
@@ -139,7 +140,7 @@ export function BarberDay({
             className="h-11 sm:h-8"
             onClick={day.retryFailed}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}
@@ -150,9 +151,9 @@ export function BarberDay({
             <CalendarX className="size-4 text-muted-foreground" aria-hidden />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">На сегодня записей нет.</p>
+            <p className="font-medium">{t('На сегодня записей нет.')}</p>
             <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-              Запишите клиента, если он придёт без записи.
+              {t('Запишите клиента, если он придёт без записи.')}
             </p>
           </div>
           <Button
@@ -161,7 +162,7 @@ export function BarberDay({
             className="h-11 sm:h-8"
             onClick={onCreate}
           >
-            Записать клиента
+            {t('Записать клиента')}
           </Button>
         </div>
       )}
@@ -169,7 +170,7 @@ export function BarberDay({
       {day.status === 'ready' && day.items.length > 0 && (
         <div className="space-y-2">
           <ol
-            aria-label="Расписание на сегодня"
+            aria-label={t('Расписание на сегодня')}
             className="divide-y rounded-xl border bg-card"
           >
             {day.items.map((booking) => {
@@ -203,7 +204,7 @@ export function BarberDay({
 
           {day.isTruncated && (
             <p className="text-sm text-muted-foreground">
-              Показаны первые 20 записей дня.
+              {t('Показаны первые 20 записей дня.')}
             </p>
           )}
         </div>
@@ -242,16 +243,20 @@ function describeNext(
   }
 
   if (Date.parse(booking.startAt) <= now) {
-    return `Идёт визит до ${formatTime(booking.endAt, booking.salon.timeZoneId)}`
+    return t('Идёт визит до {time}', {
+      time: formatTime(booking.endAt, booking.salon.timeZoneId),
+    })
   }
 
   const countdown = formatCountdown(booking.startAt, now)
 
   if (countdown !== null) {
-    return `Следующий клиент ${countdown}`
+    return t('Следующий клиент {countdown}', { countdown })
   }
 
-  return `Следующий клиент в ${formatTime(booking.startAt, booking.salon.timeZoneId)}`
+  return t('Следующий клиент в {time}', {
+    time: formatTime(booking.startAt, booking.salon.timeZoneId),
+  })
 }
 
 /**
@@ -277,16 +282,16 @@ function GapRow({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="size-4 shrink-0" aria-hidden />
-          свободно {gap.minutes} мин
+          {t('свободно {minutes} мин', { minutes: gap.minutes })}
         </p>
         <Button
           variant="outline"
           size="sm"
           className="h-11 sm:h-8"
-          aria-label={`Занять время с ${from} до ${to}`}
+          aria-label={t('Занять время с {from} до {to}', { from, to })}
           onClick={() => onFill(gap)}
         >
-          Занять
+          {t('Занять')}
         </Button>
       </div>
     </li>

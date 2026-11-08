@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { goToSection, isPlainClick } from '@/lib/router'
+import { useI18n } from '@/i18n'
 
 /**
  * Состояния страницы барбера.
@@ -14,10 +15,12 @@ import { goToSection, isPlainClick } from '@/lib/router'
  */
 
 export function BarberProfileSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div aria-busy="true" className="mt-6 space-y-6">
       <p role="status" className="sr-only">
-        Загружаем профиль…
+        {t('Загружаем профиль…')}
       </p>
 
       <Card aria-hidden="true">
@@ -49,6 +52,8 @@ export function BarberProfileError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div
       role="alert"
@@ -59,20 +64,22 @@ export function BarberProfileError({
       </div>
       <div className="space-y-1">
         <h1 className="font-heading text-lg font-semibold tracking-tight">
-          Не удалось загрузить профиль барбера.
+          {t('Не удалось загрузить профиль барбера.')}
         </h1>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
       </div>
       <Button variant="outline" className="h-11 sm:h-10" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
 }
 
 export function BarberProfileNotFound() {
+  const { t } = useI18n()
+
   return (
     <div
       role="status"
@@ -83,10 +90,10 @@ export function BarberProfileNotFound() {
       </div>
       <div className="space-y-1">
         <h1 className="font-heading text-lg font-semibold tracking-tight">
-          Барбер не найден
+          {t('Барбер не найден')}
         </h1>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Возможно, профиль скрыт или ссылка устарела.
+          {t('Возможно, профиль скрыт или ссылка устарела.')}
         </p>
       </div>
       <a
@@ -101,7 +108,7 @@ export function BarberProfileNotFound() {
           goToSection('barbers')
         }}
       >
-        Вернуться к поиску
+        {t('Вернуться к поиску')}
       </a>
     </div>
   )

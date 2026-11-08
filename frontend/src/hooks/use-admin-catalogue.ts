@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   describeAdminCatalogueError,
@@ -144,7 +145,7 @@ export function useAdminCatalogueList(
             return
           }
 
-          const message = describeAdminCatalogueError(cause, LIST_FALLBACK)
+          const message = describeAdminCatalogueError(cause, t(LIST_FALLBACK))
           const isUnauthorized = cause instanceof ApiError && cause.status === 401
 
           // Ошибка тихого обновления не стирает уже показанные строки.

@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
 import { LANGUAGE_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberProfile } from '@/lib/catalog'
+import { useI18n } from '@/i18n'
 
 /**
  * «О мастере»: текст, языки и списки, которые барбер заполнил сам.
@@ -11,6 +12,8 @@ import type { BarberProfile } from '@/lib/catalog'
  * секции нет вовсе.
  */
 export function BarberAbout({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
+
   const lists = [
     { key: 'additionalServices', title: 'Дополнительные услуги', items: profile.additionalServices },
     { key: 'certificates', title: 'Сертификаты и обучение', items: profile.certificatesAndTraining },
@@ -32,7 +35,7 @@ export function BarberAbout({ profile }: { profile: BarberProfile }) {
     <section aria-labelledby="barber-about-heading">
       <Card>
         <BarberSectionHeading id="barber-about-heading">
-          О мастере
+          {t('О мастере')}
         </BarberSectionHeading>
 
         <CardContent className="space-y-4">
@@ -45,7 +48,7 @@ export function BarberAbout({ profile }: { profile: BarberProfile }) {
           {profile.languages.length > 0 && (
             <div>
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Языки
+                {t('Языки')}
               </h3>
               <ul className="mt-2 flex flex-wrap gap-2">
                 {profile.languages.map((language) => (
@@ -62,7 +65,7 @@ export function BarberAbout({ profile }: { profile: BarberProfile }) {
           {lists.map((list) => (
             <div key={list.key}>
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {list.title}
+                {t(list.title)}
               </h3>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm marker:text-muted-foreground">
                 {list.items.map((item) => (

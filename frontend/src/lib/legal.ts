@@ -10,6 +10,7 @@
  * домена; дата редакции меняется вместе с любым изменением текста Политики.
  */
 
+import { t } from '@/i18n'
 import { navigate } from '@/lib/router'
 
 /** Адрес Политики: на него ссылаются подвал, форма регистрации и уведомление о cookie. */
@@ -107,6 +108,27 @@ export const COOKIE_REGISTRY: readonly CookieEntry[] = [
     flags: 'Не HttpOnly (читается клиентом), Secure на https, SameSite=Lax, Path=/',
   },
 ]
+
+/**
+ * Назначение cookie на языке интерфейса.
+ *
+ * `t` вызывается при выводе, а не на верхнем уровне модуля: язык выбирается уже
+ * после импорта. Имя cookie — техническая строка и не переводится; атрибуты
+ * переводятся, потому что в них есть пояснения для пользователя.
+ */
+export function cookiePurpose(cookie: CookieEntry): string {
+  return t(cookie.purpose)
+}
+
+/** Срок жизни cookie на языке интерфейса. */
+export function cookieTerm(cookie: CookieEntry): string {
+  return t(cookie.term)
+}
+
+/** Атрибуты cookie: технические флаги плюс пояснение, которое видит пользователь. */
+export function cookieFlags(cookie: CookieEntry): string {
+  return t(cookie.flags)
+}
 
 /** Ровно `/privacy`; вложенные адреса остаются витрине, как и прочий неизвестный путь. */
 export function isPrivacyPath(pathname: string): boolean {

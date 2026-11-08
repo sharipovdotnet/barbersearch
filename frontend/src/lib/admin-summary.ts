@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import { isAdminSummary } from '@/lib/response-guards'
@@ -59,15 +60,15 @@ export function describeAdminSummaryError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
   return describeApiFailure(cause, fallback)

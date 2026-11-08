@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -82,43 +83,43 @@ export function describeSalonBarberError(
   fallback = 'Не удалось изменить состав салона. Попробуйте ещё раз.'
 ): string {
   if (!(error instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (error.hasCode('barberProfile.addSalon.duplicate')) {
-    return 'Этот барбер уже работает в салоне.'
+    return t('Этот барбер уже работает в салоне.')
   }
 
   if (error.hasCode('barberProfile.notFound')) {
-    return 'Барбер не найден — возможно, профиль удалён.'
+    return t('Барбер не найден — возможно, профиль удалён.')
   }
 
   if (error.hasCode('salon.barbers.inactive')) {
-    return 'Профиль барбера выключен: его нельзя прикрепить к салону.'
+    return t('Профиль барбера выключен: его нельзя прикрепить к салону.')
   }
 
   if (error.hasCode('salon.barbers.owner')) {
-    return 'Владельца салона нельзя убрать из его салона.'
+    return t('Владельца салона нельзя убрать из его салона.')
   }
 
   if (error.hasCode('barberProfile.removeSalon.notFound')) {
-    return 'Этот барбер уже не работает в салоне.'
+    return t('Этот барбер уже не работает в салоне.')
   }
 
   if (error.hasCode('salon.notFound') || error.status === 404) {
-    return 'Салон больше не доступен.'
+    return t('Салон больше не доступен.')
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {
-    return 'Нет доступа к салону.'
+    return t('Нет доступа к салону.')
   }
 
   if (error.status === 401) {
-    return 'Сессия истекла — войдите снова.'
+    return t('Сессия истекла — войдите снова.')
   }
 
   if (error.status === 409) {
-    return 'Состав салона изменился. Обновите список и попробуйте снова.'
+    return t('Состав салона изменился. Обновите список и попробуйте снова.')
   }
 
   return describeApiFailure(error, fallback)

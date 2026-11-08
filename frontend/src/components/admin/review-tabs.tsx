@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent } from 'react'
 
+import { useI18n } from '@/i18n'
 import type { AdminTab } from '@/lib/admin-path'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,7 @@ export function ReviewTabs({
     pending: null,
     published: null,
   })
+  const { t } = useI18n()
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -42,7 +44,7 @@ export function ReviewTabs({
   return (
     <div
       role="tablist"
-      aria-label="Какие отзывы показать"
+      aria-label={t('Какие отзывы показать')}
       className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
     >
       {TABS.map((item) => {
@@ -69,7 +71,7 @@ export function ReviewTabs({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {item.label}
+            {t(item.label)}
           </button>
         )
       })}

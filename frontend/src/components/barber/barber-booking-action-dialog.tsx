@@ -18,6 +18,7 @@ import {
   type BarberActionFailure,
 } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
+import { useI18n } from '@/i18n'
 
 export type BarberActionKind = 'cancel' | 'noShow'
 
@@ -95,6 +96,7 @@ function ActionConfirmation({
   onReload: () => void
 }) {
   const { booking, kind } = target
+  const { t } = useI18n()
   const isCancel = kind === 'cancel'
   const [isPending, setIsPending] = useState(false)
   const [reason, setReason] = useState('')
@@ -109,7 +111,7 @@ function ActionConfirmation({
     const trimmedReason = reason.trim()
 
     if (isCancel && trimmedReason === '') {
-      setReasonError('Укажите причину отмены.')
+      setReasonError(t('Укажите причину отмены.'))
       return
     }
 
@@ -126,8 +128,8 @@ function ActionConfirmation({
         describeBarberBookingFailure(
           cause,
           isCancel
-            ? 'Не удалось отменить запись.'
-            : 'Не удалось отметить неявку.'
+            ? t('Не удалось отменить запись.')
+            : t('Не удалось отметить неявку.')
         )
       )
       setIsPending(false)
@@ -138,7 +140,7 @@ function ActionConfirmation({
     <>
       <DialogHeader>
         <DialogTitle>
-          {isCancel ? 'Отменить запись?' : 'Отметить неявку?'}
+          {isCancel ? t('Отменить запись?') : t('Отметить неявку?')}
         </DialogTitle>
         <DialogDescription>
           {formatDateTime(booking.startAt, booking.salon.timeZoneId)} ·{' '}
@@ -153,19 +155,25 @@ function ActionConfirmation({
         />
         <div className="space-y-1">
           <p className="text-sm font-medium text-destructive">
-            {isCancel ? 'Отмена необратима' : 'Неявка необратима'}
+            {isCancel ? t('Отмена необратима') : t('Неявка необратима')}
           </p>
           <p className="text-sm text-foreground/80">
             {isCancel
-              ? 'Слот освободится — время сможет занять другой клиент. Вернуть запись нельзя, придётся записывать заново.'
-              : 'Запись закроется со статусом «Неявка». Вернуть её или завершить визит после этого нельзя.'}
+              ? t(
+                  'Слот освободится — время сможет занять другой клиент. Вернуть запись нельзя, придётся записывать заново.'
+                )
+              : t(
+                  'Запись закроется со статусом «Неявка». Вернуть её или завершить визит после этого нельзя.'
+                )}
           </p>
         </div>
       </div>
 
       {isCancel && (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="cancellation-reason">Причина отмены</Label>
+          <Label htmlFor="cancellation-reason">
+            {t('Причина отмены')}
+          </Label>
           <Textarea
             id="cancellation-reason"
             name="cancellation-reason"
@@ -177,7 +185,7 @@ function ActionConfirmation({
             aria-describedby={
               reasonError !== null ? 'cancellation-reason-error' : undefined
             }
-            placeholder="Например: барбер заболел"
+            placeholder={t('Например: барбер заболел')}
             onChange={(event) => {
               setReason(event.target.value)
               setReasonError(null)
@@ -185,7 +193,7 @@ function ActionConfirmation({
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Клиент увидит причину в истории посещений.
+            {t('Клиент увидит причину в истории посещений.')}
           </p>
           <p className="text-right text-xs text-muted-foreground tabular-nums">
             {reason.length} / {MAX_CANCELLATION_REASON_LENGTH}
@@ -218,7 +226,7 @@ function ActionConfirmation({
                 onClose()
               }}
             >
-              Обновить
+              {t('Обновить')}
             </Button>
           )}
         </div>
@@ -232,7 +240,7 @@ function ActionConfirmation({
           onClick={onClose}
           disabled={isPending}
         >
-          {isCancel ? 'Не отменять' : 'Не отмечать'}
+          {isCancel ? t('Не отменять') : t('Не отмечать')}
         </Button>
         <Button
           type="button"
@@ -250,10 +258,10 @@ function ActionConfirmation({
             />
           )}
           {isPending
-            ? 'Сохраняем…'
+            ? t('Сохраняем…')
             : isCancel
-              ? 'Отменить запись'
-              : 'Отметить неявку'}
+              ? t('Отменить запись')
+              : t('Отметить неявку')}
         </Button>
       </DialogFooter>
     </>

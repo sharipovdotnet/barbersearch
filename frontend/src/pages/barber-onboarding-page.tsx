@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/card'
 import { useMyBarberRequest } from '@/hooks/use-my-barber-request'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import type { BarberRequest } from '@/lib/barber-requests'
 import {
   BARBER_CABINET_PATH,
@@ -59,12 +60,13 @@ type OnboardingStage =
 
 export function BarberOnboardingPage() {
   const { status, user, retrySession } = useSession()
+  const { t, locale } = useI18n()
   const [stage, setStage] = useState<OnboardingStage>('form')
   const [profileId, setProfileId] = useState<string | null>(null)
 
   useEffect(() => {
-    document.title = 'Профиль барбера — BarberSearch'
-  }, [])
+    document.title = t('Профиль барбера — BarberSearch')
+  }, [t, locale])
 
   const hasProfile =
     status === 'authenticated' &&
@@ -145,7 +147,7 @@ export function BarberOnboardingPage() {
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем профиль…
+            {t('Загружаем профиль…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -160,8 +162,10 @@ export function BarberOnboardingPage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы создать профиль барбера"
-            description="Профиль барбера создаётся один раз для вашего аккаунта: имя в карточке, опыт и языки. Вход по email и паролю."
+            title={t('Войдите, чтобы создать профиль барбера')}
+            description={t(
+              'Профиль барбера создаётся один раз для вашего аккаунта: имя в карточке, опыт и языки. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_ONBOARDING_PATH}
           />
         </div>
@@ -193,7 +197,7 @@ export function BarberOnboardingPage() {
         ) : (
           <div className="space-y-5">
             <p role="status" className="sr-only">
-              Открываем кабинет…
+              {t('Открываем кабинет…')}
             </p>
             <BarberCabinetSkeleton />
           </div>
@@ -217,6 +221,7 @@ function OnboardingScreen({
   onAlreadyExists: () => void
   onRetrySession: () => void
 }) {
+  const { t } = useI18n()
   const [salonAdded, setSalonAdded] = useState(false)
 
   return (
@@ -227,10 +232,10 @@ function OnboardingScreen({
         </div>
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Профиль барбера
+            {t('Профиль барбера')}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Заполните профиль, чтобы принимать записи.
+            {t('Заполните профиль, чтобы принимать записи.')}
           </p>
         </div>
       </header>
@@ -246,7 +251,7 @@ function OnboardingScreen({
         <Card>
           <CardContent className="flex items-center gap-2 pt-6 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />
-            <p role="status">Профиль создан. Обновляем сессию…</p>
+            <p role="status">{t('Профиль создан. Обновляем сессию…')}</p>
           </CardContent>
         </Card>
       )}
@@ -254,17 +259,17 @@ function OnboardingScreen({
       {stage === 'salon' && profileId !== null && (
         <Card>
           <CardHeader>
-            <CardTitle>Добавьте место приёма</CardTitle>
+            <CardTitle>{t('Добавьте место приёма')}</CardTitle>
             <CardDescription>
-              Расписание и запись ведутся по паре «барбер — место приёма». Выберите
-              место из каталога или пропустите шаг — кабинет откроется и без него,
-              но расписание будет пустым.
+              {t(
+                'Расписание и запись ведутся по паре «барбер — место приёма». Выберите место из каталога или пропустите шаг — кабинет откроется и без него, но расписание будет пустым.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {salonAdded ? (
               <p role="status" className="text-sm">
-                Салон добавлен.
+                {t('Салон добавлен.')}
               </p>
             ) : null}
 
@@ -276,7 +281,7 @@ function OnboardingScreen({
                   trigger={
                     <>
                       <MapPin data-icon="inline-start" aria-hidden />
-                      Выбрать салон
+                      {t('Выбрать салон')}
                     </>
                   }
                   onAttached={() => {
@@ -293,7 +298,7 @@ function OnboardingScreen({
                   navigate(BARBER_CABINET_PATH)
                 }}
               >
-                Перейти в кабинет
+                {t('Перейти в кабинет')}
               </Button>
 
               {!salonAdded && (
@@ -305,13 +310,13 @@ function OnboardingScreen({
                     navigate(BARBER_CABINET_PATH)
                   }}
                 >
-                  Пропустить
+                  {t('Пропустить')}
                 </Button>
               )}
             </div>
 
             <p className="text-sm text-muted-foreground">
-              Настроить расписание можно позже — в разделе «Расписание».
+              {t('Настроить расписание можно позже — в разделе «Расписание».')}
             </p>
           </CardContent>
         </Card>
@@ -320,15 +325,16 @@ function OnboardingScreen({
       {stage === 'terminal' && (
         <Card>
           <CardHeader>
-            <CardTitle>Профиль создан, войдите снова</CardTitle>
+            <CardTitle>{t('Профиль создан, войдите снова')}</CardTitle>
             <CardDescription>
-              Профиль барбера уже привязан к аккаунту, но сессия в этом браузере
-              закончилась. Войдите — и кабинет откроется.
+              {t(
+                'Профиль барбера уже привязан к аккаунту, но сессия в этом браузере закончилась. Войдите — и кабинет откроется.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <LoginDialog
-              trigger="Войти"
+              trigger={t('Войти')}
               variant="default"
               size="lg"
               className="h-11 w-full sm:h-8 sm:w-auto"
@@ -341,10 +347,13 @@ function OnboardingScreen({
       {stage === 'transient' && (
         <Card>
           <CardHeader>
-            <CardTitle>Профиль создан, но сессия не обновилась</CardTitle>
+            <CardTitle>
+              {t('Профиль создан, но сессия не обновилась')}
+            </CardTitle>
             <CardDescription>
-              Повторять форму не нужно — профиль уже существует. Продлите сессию
-              ещё раз или войдите заново.
+              {t(
+                'Повторять форму не нужно — профиль уже существует. Продлите сессию ещё раз или войдите заново.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-2">
@@ -353,10 +362,10 @@ function OnboardingScreen({
               className="h-11 sm:h-8"
               onClick={onRetrySession}
             >
-              Повторить
+              {t('Повторить')}
             </Button>
             <LoginDialog
-              trigger="Войти"
+              trigger={t('Войти')}
               variant="ghost"
               size="lg"
               className="h-11 sm:h-8"
@@ -397,6 +406,7 @@ function ProfileFormCard({
   onCreated: (id: string) => void
   onAlreadyExists: () => void
 }) {
+  const { t } = useI18n()
   const mine = useMyBarberRequest()
 
   // Сессия закончилась: гейт входа выше, карточке нечего добавить.
@@ -408,11 +418,11 @@ function ProfileFormCard({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Данные профиля</CardTitle>
+          <CardTitle>{t('Данные профиля')}</CardTitle>
         </CardHeader>
         <CardContent>
           <p role="status" className="text-sm text-muted-foreground">
-            Проверяем заявку…
+            {t('Проверяем заявку…')}
           </p>
         </CardContent>
       </Card>
@@ -423,15 +433,16 @@ function ProfileFormCard({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Данные профиля</CardTitle>
+          <CardTitle>{t('Данные профиля')}</CardTitle>
           <CardDescription>
-            Имя, опыт и «О себе» берутся из одобренной заявки, поэтому без неё
-            профиль не создать.
+            {t(
+              'Имя, опыт и «О себе» берутся из одобренной заявки, поэтому без неё профиль не создать.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <p role="alert" className="text-sm text-destructive">
-            {mine.error ?? 'Не удалось проверить заявку.'}
+            {mine.error ?? t('Не удалось проверить заявку.')}
           </p>
           <Button
             type="button"
@@ -439,7 +450,7 @@ function ProfileFormCard({
             className="h-11 sm:h-8"
             onClick={mine.reload}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </CardContent>
       </Card>
@@ -451,11 +462,15 @@ function ProfileFormCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Данные профиля</CardTitle>
+        <CardTitle>{t('Данные профиля')}</CardTitle>
         <CardDescription>
           {prefill
-            ? 'Данные из одобренной заявки уже заполнены и не редактируются. Выберите грейд и языки — остальное можно оставить пустым.'
-            : 'Это увидит клиент в вашей карточке. Обязательны только имя, опыт, грейд и хотя бы один язык — остальное можно оставить пустым.'}
+            ? t(
+                'Данные из одобренной заявки уже заполнены и не редактируются. Выберите грейд и языки — остальное можно оставить пустым.'
+              )
+            : t(
+                'Это увидит клиент в вашей карточке. Обязательны только имя, опыт, грейд и хотя бы один язык — остальное можно оставить пустым.'
+              )}
         </CardDescription>
       </CardHeader>
       <CardContent>

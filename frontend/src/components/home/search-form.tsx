@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSearchCatalogs } from '@/hooks/use-search-catalogs'
+import { useI18n } from '@/i18n'
 import type { BarberSearchFilters } from '@/lib/barber-search'
 import {
   LANGUAGE_LABELS,
@@ -49,6 +50,7 @@ function todayLocal(): string {
  * без них поле остаётся рабочим.
  */
 export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
+  const { t } = useI18n()
   const [city, setCity] = useState('')
   const [date, setDate] = useState('')
   const [language, setLanguage] = useState<Language | ''>('')
@@ -85,13 +87,13 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
     >
       <div className="min-w-0 sm:col-span-2 lg:min-w-56 lg:flex-[2]">
         <Label htmlFor="search-city" className="sr-only">
-          Город салона
+          {t('Город салона')}
         </Label>
         <Input
           id="search-city"
           name="city"
           value={city}
-          placeholder="Москва"
+          placeholder={t('Москва')}
           autoComplete="address-level2"
           className="h-10"
           onChange={(event) => setCity(event.target.value)}
@@ -100,7 +102,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
 
       <div className="min-w-0 lg:min-w-40 lg:flex-[1.2]">
         <Label htmlFor="search-date" className="sr-only">
-          Дата
+          {t('Дата')}
         </Label>
         <Input
           id="search-date"
@@ -115,7 +117,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
 
       <div className="min-w-0 lg:min-w-40 lg:flex-[1.2]">
         <Label htmlFor="search-language" className="sr-only">
-          Язык
+          {t('Язык')}
         </Label>
         <select
           id="search-language"
@@ -124,7 +126,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
           className={SELECT_CLASSES}
           onChange={(event) => setLanguage(event.target.value as Language | '')}
         >
-          <option value="">Любой язык</option>
+          <option value="">{t('Любой язык')}</option>
           {LANGUAGE_VALUES.map((value) => (
             <option key={value} value={value}>
               {LANGUAGE_LABELS[value]}
@@ -136,7 +138,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
       {showSpecializations && (
         <div className="min-w-0 lg:min-w-44 lg:flex-[1.4]">
           <Label htmlFor="search-specialization" className="sr-only">
-            Специализация
+            {t('Специализация')}
           </Label>
           <select
             id="search-specialization"
@@ -147,7 +149,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             onChange={(event) => setSpecializationId(event.target.value)}
           >
             <option value="">
-              {isLoading ? 'Загрузка…' : 'Любая специализация'}
+              {isLoading ? t('Загрузка…') : t('Любая специализация')}
             </option>
             {catalogs.specializations.map((specialization) => (
               <option key={specialization.id} value={specialization.id}>
@@ -161,7 +163,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
       {showHairServices && (
         <div className="min-w-0 lg:min-w-44 lg:flex-[1.4]">
           <Label htmlFor="search-hair-service" className="sr-only">
-            Услуга
+            {t('Услуга')}
           </Label>
           <select
             id="search-hair-service"
@@ -171,7 +173,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             className={SELECT_CLASSES}
             onChange={(event) => setHairServiceId(event.target.value)}
           >
-            <option value="">{isLoading ? 'Загрузка…' : 'Любая услуга'}</option>
+            <option value="">{isLoading ? t('Загрузка…') : t('Любая услуга')}</option>
             {catalogs.hairServices.map((service) => (
               <option key={service.id} value={service.id}>
                 {service.name}
@@ -183,7 +185,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
 
       <div className="min-w-0 lg:min-w-56 lg:flex-[1.6]">
         <Label htmlFor="search-additional-service" className="sr-only">
-          Дополнительная услуга
+          {t('Дополнительная услуга')}
         </Label>
         <Input
           id="search-additional-service"
@@ -191,7 +193,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
           type="search"
           list={ADDITIONAL_SERVICE_LIST_ID}
           value={additionalService}
-          placeholder="Доп. услуга: например, борода"
+          placeholder={t('Доп. услуга: например, борода')}
           autoComplete="off"
           className="h-10"
           onChange={(event) => setAdditionalService(event.target.value)}
@@ -220,7 +222,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
         ) : (
           <Search data-icon="inline-start" aria-hidden />
         )}
-        Найти
+        {t('Найти')}
       </Button>
 
       {catalogs.status === 'error' && (
@@ -229,7 +231,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
           className="flex flex-col gap-2 rounded-lg border border-destructive/30 p-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between lg:basis-full"
         >
           <p className="text-sm text-muted-foreground">
-            {catalogs.error ?? 'Не удалось загрузить фильтры.'}
+            {catalogs.error ?? t('Не удалось загрузить фильтры.')}
           </p>
           <Button
             type="button"
@@ -237,7 +239,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             className="h-11 w-full sm:h-9 sm:w-auto"
             onClick={catalogs.retry}
           >
-            Повторить
+            {t('Повторить')}
           </Button>
         </div>
       )}

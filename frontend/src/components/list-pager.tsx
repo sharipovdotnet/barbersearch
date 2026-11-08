@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Loader2, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, type RefObject } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 
 type ListPagerProps = {
   /** Имя навигации для скринридера: «Страницы отзывов». */
@@ -43,6 +44,8 @@ export function ListPager({
   focusTargetRef,
   scrollTargetRef,
 }: ListPagerProps) {
+  const { t } = useI18n()
+
   // Фокус двигаем только по действию пользователя: первый рендер не должен
   // выдёргивать страницу к списку. Ожидаемый номер страницы защищает от прыжка
   // после смены фильтра или вкладки, когда номер меняет не пагинатор.
@@ -119,13 +122,13 @@ export function ListPager({
           // Имя начинается с видимого слова: голосовое управление и диктовка
           // ищут «Назад», а не «Предыдущая страница» (WCAG 2.5.3). Текст скрыт
           // на узком экране через CSS, но имя одно на обе ширины.
-          aria-label="Назад — предыдущая страница"
+          aria-label={t('Назад — предыдущая страница')}
           className="h-11 w-11 px-0 sm:h-9 sm:w-auto sm:px-3"
           disabled={!hasPrev}
           onClick={handlePrev}
         >
           <ChevronLeft data-icon="inline-start" aria-hidden />
-          <span className="hidden sm:inline">Назад</span>
+          <span className="hidden sm:inline">{t('Назад')}</span>
         </Button>
 
         <p className="min-w-0 truncate text-center text-xs text-muted-foreground tabular-nums">
@@ -137,8 +140,8 @@ export function ListPager({
           variant="secondary"
           aria-label={
             error === null
-              ? 'Дальше — следующая страница'
-              : 'Повторить — загрузить следующую страницу'
+              ? t('Дальше — следующая страница')
+              : t('Повторить — загрузить следующую страницу')
           }
           aria-busy={isLoading}
           className="h-11 w-11 px-0 sm:h-9 sm:w-auto sm:px-3"
@@ -146,7 +149,7 @@ export function ListPager({
           onClick={handleNext}
         >
           <span className="hidden sm:inline">
-            {error === null ? 'Дальше' : 'Повторить'}
+            {error === null ? t('Дальше') : t('Повторить')}
           </span>
           {isLoading ? (
             <Loader2

@@ -1,0 +1,6 @@
+{
+  "0 из {total}": "0 of {total}",
+  "{range} из {total}": "{range} of {total}",
+  "Не удалось загрузить барберов. Обновите страницу и попробуйте снова.": "Could not load barbers. Reload the page and try again.",
+  "Не удалось загрузить фильтры.": "Could not load filters."
+}

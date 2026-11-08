@@ -1,3 +1,4 @@
+import { getLocale, localeTag, t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { DayOfWeek } from '@/lib/barber-profile-labels'
 import { addDays } from '@/lib/barber-slots'
@@ -324,7 +325,7 @@ export function formatScheduleDate(date: string): string {
     return date
   }
 
-  return new Intl.DateTimeFormat('ru-RU', {
+  return new Intl.DateTimeFormat(localeTag(getLocale()), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -337,7 +338,7 @@ export function formatScheduleDate(date: string): string {
 /** «15 ноября 2026» для UTC-инстанта в поясе салона. */
 export function formatZonedDate(iso: string, timeZoneId: string): string {
   try {
-    return new Intl.DateTimeFormat('ru-RU', {
+    return new Intl.DateTimeFormat(localeTag(getLocale()), {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
@@ -374,42 +375,42 @@ export function describeScheduleError(error: unknown, fallback: string): string 
   }
 
   if (error.hasCode('barberSalon.replaceSchedule.days')) {
-    return 'Нужно заполнить все семь дней недели.'
+    return t('Нужно заполнить все семь дней недели.')
   }
 
   if (error.hasCode('barberSalon.replaceSchedule.duplicateDay')) {
-    return 'День недели указан дважды. Обновите страницу и повторите.'
+    return t('День недели указан дважды. Обновите страницу и повторите.')
   }
 
   if (
     error.hasCode('barberSalon.replaceSchedule.timeRange')
     || error.hasCode('barberSalon.setScheduleException.timeRange')
   ) {
-    return 'Конец рабочего дня должен быть позже начала.'
+    return t('Конец рабочего дня должен быть позже начала.')
   }
 
   if (error.hasCode('barberSalon.setScheduleException.reasonTooLong')) {
-    return 'Пометка слишком длинная — максимум 500 символов.'
+    return t('Пометка слишком длинная — максимум 500 символов.')
   }
 
   if (error.hasCode('barberSalon.removeScheduleException.notFound')) {
-    return 'Это исключение уже удалено.'
+    return t('Это исключение уже удалено.')
   }
 
   if (error.hasCode('barberProfile.addTimeOff.overlap')) {
-    return 'Этот период пересекается с другим отпуском.'
+    return t('Этот период пересекается с другим отпуском.')
   }
 
   if (error.hasCode('barberProfile.addTimeOff.period')) {
-    return 'Конец периода должен быть позже начала.'
+    return t('Конец периода должен быть позже начала.')
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {
-    return 'Расписание доступно только владельцу профиля.'
+    return t('Расписание доступно только владельцу профиля.')
   }
 
   if (error.status === 404) {
-    return 'Профиль или салон не найдены. Обновите страницу.'
+    return t('Профиль или салон не найдены. Обновите страницу.')
   }
 
   return describeApiFailure(error, fallback)

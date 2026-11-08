@@ -2,6 +2,7 @@ import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import { isBarberRequest, isMyBarberRequest } from '@/lib/response-guards'
+import { t } from '@/i18n'
 
 /**
  * Заявка клиента на роль барбера: чтение своей заявки и её создание.
@@ -107,7 +108,7 @@ export function describeBarberRequestCreateFailure(
 ): BarberRequestCreateFailure {
   if (!(error instanceof ApiError)) {
     return {
-      message: 'Не удалось отправить заявку. Попробуйте ещё раз.',
+      message: t('Не удалось отправить заявку. Попробуйте ещё раз.'),
       isAlreadyPending: false,
       canRetry: false,
       isForbidden: false,
@@ -116,8 +117,9 @@ export function describeBarberRequestCreateFailure(
 
   if (error.hasCode('barberRequest.create.alreadyPending') || error.status === 409) {
     return {
-      message:
-        'Заявка уже на рассмотрении. Дождитесь решения администратора — статус виден в кабинете.',
+      message: t(
+        'Заявка уже на рассмотрении. Дождитесь решения администратора — статус виден в кабинете.'
+      ),
       isAlreadyPending: true,
       canRetry: false,
       isForbidden: false,
@@ -126,7 +128,7 @@ export function describeBarberRequestCreateFailure(
 
   if (error.hasCode('barberRequest.create.forbidden') || error.status === 403) {
     return {
-      message: 'Заявку может подать только клиент.',
+      message: t('Заявку может подать только клиент.'),
       isAlreadyPending: false,
       canRetry: false,
       isForbidden: true,
@@ -135,7 +137,7 @@ export function describeBarberRequestCreateFailure(
 
   if (error.status === 401) {
     return {
-      message: 'Сессия истекла — войдите снова.',
+      message: t('Сессия истекла — войдите снова.'),
       isAlreadyPending: false,
       canRetry: false,
       isForbidden: false,
@@ -144,7 +146,7 @@ export function describeBarberRequestCreateFailure(
 
   if (error.status === 429) {
     return {
-      message: 'Слишком много запросов. Подождите минуту и повторите.',
+      message: t('Слишком много запросов. Подождите минуту и повторите.'),
       isAlreadyPending: false,
       canRetry: true,
       isForbidden: false,
@@ -161,7 +163,7 @@ export function describeBarberRequestCreateFailure(
   }
 
   return {
-    message: 'Не удалось отправить заявку. Попробуйте ещё раз.',
+    message: t('Не удалось отправить заявку. Попробуйте ещё раз.'),
     isAlreadyPending: false,
     canRetry: true,
     isForbidden: false,
