@@ -13,6 +13,7 @@ import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { BookingsScreen } from '@/components/admin/bookings-screen'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
+import { StatisticsScreen } from '@/components/admin/statistics-screen'
 import { SummaryScreen } from '@/components/admin/summary-screen'
 import { UsersScreen } from '@/components/admin/users-screen'
 import { SessionUnavailable } from '@/components/session-unavailable'
@@ -27,6 +28,7 @@ import { navigate, useLocation } from '@/lib/router'
 
 const ADMIN_TITLES = {
   summary: 'Сводка — администрирование BarberSearch',
+  statistics: 'Статистика — администрирование BarberSearch',
   reviews: 'Отзывы — администрирование BarberSearch',
   barbers: 'Барберы — администрирование BarberSearch',
   catalogue: 'Каталог — администрирование BarberSearch',
@@ -41,6 +43,8 @@ function titleFor(route: AdminRoute): string {
   switch (route.kind) {
     case 'summary':
       return ADMIN_TITLES.summary
+    case 'statistics':
+      return ADMIN_TITLES.statistics
     case 'barbers':
       return ADMIN_TITLES.barbers
     case 'users':
@@ -144,6 +148,15 @@ export function AdminPage() {
     return (
       <AdminShell>
         <SummaryScreen />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'statistics') {
+    // У статистики тоже нет карточки: период и секции живут на одной странице.
+    return (
+      <AdminShell>
+        <StatisticsScreen />
       </AdminShell>
     )
   }

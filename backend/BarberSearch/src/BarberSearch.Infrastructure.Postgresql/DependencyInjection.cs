@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Admin;
 using BarberSearch.Application.Audit;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.BarberRequests;
@@ -89,6 +90,9 @@ public static class DependencyInjection
         services.AddScoped<IReminderSourceRepository, ReminderSourceRepository>();
         services.AddScoped<ITelegramUpdateRepository, TelegramUpdateRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Cross-aggregate чтение админской статистики: отдельный репозиторий, как у сводки.
+        services.AddScoped<IAdminStatisticsRepository, AdminStatisticsRepository>();
 
         return services;
     }

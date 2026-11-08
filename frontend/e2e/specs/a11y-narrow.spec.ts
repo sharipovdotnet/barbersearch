@@ -6,6 +6,7 @@ import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
+import { AdminStatisticsPage } from '../pages/admin-statistics-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
@@ -341,6 +342,28 @@ test.describe('axe: 320 px, админка без выбранной строк�
     expect(overflow).toBeLessThanOrEqual(0)
 
     await expectNoBlockingViolations(page, '/admin/summary @320', test.info())
+  })
+
+  test('статистика: плитки стопкой, без горизонтального скролла', async ({
+    page,
+  }) => {
+    const statistics = new AdminStatisticsPage(page)
+
+    await statistics.goto()
+    await expect(statistics.heading).toBeVisible()
+    await expect(statistics.chart).toHaveCount(1)
+
+    // Плитки на 320 — стопка, таблица лидеров скроллится внутри контейнера,
+    // а страница не должна получить горизонтальный скролл.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/admin/statistics @320', test.info())
   })
 
   test('журнал: строки с фильтром по дате, без горизонтального скролла', async ({

@@ -6,6 +6,7 @@ import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
+import { AdminStatisticsPage } from '../pages/admin-statistics-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
@@ -348,6 +349,25 @@ test.describe('axe: админка', () => {
     await expect(summary.salonsBlock).toBeVisible()
 
     await expectNoBlockingViolations(page, '/admin/summary', test.info())
+  })
+
+  test('/admin/statistics: плитки, график и таблица', async ({ page }) => {
+    const statistics = new AdminStatisticsPage(page)
+
+    await statistics.goto()
+    await expect(statistics.heading).toBeVisible()
+    await expect(statistics.chart).toHaveCount(1)
+
+    // Раскрытая таблица-дубль проверяется отдельным сканом: это тот же экран,
+    // но с ещё одним интерактивным слоем внутри `<details>`.
+    await statistics.tableToggle.click()
+    await expect(statistics.table).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/statistics + таблица',
+      test.info()
+    )
   })
 
   test('/admin/audit: журнал с раскрытым diff', async ({ page }) => {

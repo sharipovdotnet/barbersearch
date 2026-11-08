@@ -24,6 +24,7 @@ export type AdminBarberRequestFilter = 'pending' | 'all'
 
 export type AdminRoute =
   | { kind: 'summary' }
+  | { kind: 'statistics' }
   | { kind: 'reviews'; tab: AdminTab; reviewId: string | null }
   | {
       kind: 'barbers'
@@ -91,6 +92,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
   // builder'а и вложенных путей. `/admin` по-прежнему ведёт на очередь отзывов.
   if (pathname === '/admin/summary') {
     return { kind: 'summary' }
+  }
+
+  // Статистика — точный адрес: карточек и вложенных путей у раздела нет.
+  // Период живёт в `?from=&to=&compare=1` и разбирается экраном.
+  if (pathname === '/admin/statistics') {
+    return { kind: 'statistics' }
   }
 
   if (pathname === '/admin/barbers') {

@@ -684,6 +684,23 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Админская статистика сервиса.
+    /// </summary>
+    /// <remarks>
+    /// У статистики один код ошибки: период. Даты обязательны, формат — <c>yyyy-MM-dd</c>,
+    /// начало не позже конца, длина не больше 366 дней. Мутаций у раздела нет, поэтому
+    /// кодов записи здесь не появляется.
+    /// </remarks>
+    public static class AdminStatistics
+    {
+        /// <summary>
+        /// Период отсутствует, не в формате <c>yyyy-MM-dd</c>, начало позже конца
+        /// или длиннее 366 дней; <c>400</c>.
+        /// </summary>
+        public const string PeriodInvalid = "admin.statistics.period";
+    }
+
+    /// <summary>
     /// Салоны.
     /// </summary>
     public static class Salon

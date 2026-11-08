@@ -217,3 +217,26 @@ describe('isBarberRequestId', () => {
     expect(isBarberRequestId('')).toBe(false)
   })
 })
+
+describe('statistics', () => {
+  it('точный адрес — статистика, а не отзывы', () => {
+    expect(parseAdminPath('/admin/statistics', '')).toStrictEqual({
+      kind: 'statistics',
+    })
+  })
+
+  it('период в query не меняет маршрут', () => {
+    expect(
+      parseAdminPath(
+        '/admin/statistics',
+        '?from=2026-10-10&to=2026-11-08&compare=1'
+      )
+    ).toStrictEqual({ kind: 'statistics' })
+  })
+
+  it('вложенный путь остаётся notFound', () => {
+    expect(parseAdminPath('/admin/statistics/2026', '')).toStrictEqual({
+      kind: 'notFound',
+    })
+  })
+})

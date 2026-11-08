@@ -327,6 +327,143 @@ internal sealed class TestData
     }
 
     /// <summary>
+    /// Создаёт гостевую бронь (walk-in) — без аккаунта клиента.
+    /// </summary>
+    /// <remarks>
+    /// Нужна статистике гостевых записей: у такой строки <c>user_id</c> = <c>NULL</c>,
+    /// а контакт лежит в самой брони. Статус проставляется теми же доменными переходами,
+    /// что и у обычной брони.
+    /// </remarks>
+    public async Task<SeededBooking> CreateGuestBookingAsync(
+        SeededBarber barber,
+        DateTimeOffset startAt,
+        BookingStatus status = BookingStatus.Pending,
+        decimal price = 45m,
+        string guestFirstName = "Гость",
+        string? guestPhone = "+70000000000",
+        int durationMinutes = 30)
+    {
+        ArgumentNullException.ThrowIfNull(barber);
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var booking = Require(Booking.Create(
+            userId: null,
+            barber.Profile.Id,
+            barber.Service.Id,
+            barber.Salon.Id,
+            startAt,
+            startAt.AddMinutes(durationMinutes),
+            price,
+            $"test-guest-booking-{Guid.NewGuid():N}",
+            guestFirstName: guestFirstName,
+            guestPhone: guestPhone));
+
+        switch (status)
+        {
+            case BookingStatus.Pending:
+                break;
+            case BookingStatus.Confirmed:
+                Require(booking.Confirm());
+                break;
+            case BookingStatus.Cancelled:
+                Require(booking.Cancel());
+                break;
+            case BookingStatus.Completed:
+                Require(booking.Confirm());
+                Require(booking.Complete());
+                break;
+            case BookingStatus.NoShow:
+                Require(booking.Confirm());
+                Require(booking.MarkNoShow());
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(status),
+                    status,
+                    "Unsupported seeded booking status.");
+        }
+
+        db.Bookings.Add(booking);
+        await db.SaveChangesAsync();
+
+        return new SeededBooking(booking.Id, booking.StartAt, booking.Status);
+    }
+
+    /// <summary>
+    /// Сдвигает <c>created_at</c> брони: статистика периода считает записи по этой метке,
+    /// а домен ставит её системными часами.
+    /// </summary>
+    /// <remarks>
+    /// Точечный <c>UPDATE</c> не обходит проверки схемы: колонка остаётся
+    /// <c>timestamp with time zone</c>, ограничения статуса и цены не меняются.
+    /// </remarks>
+    public async Task SetBookingCreatedAtAsync(
+        Guid bookingId,
+        DateTimeOffset createdAt)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE bookings
+            SET created_at = {createdAt}, updated_at = {createdAt}
+            WHERE id = {bookingId}
+            """);
+    }
+
+    /// <summary>
+    /// Сдвигает <c>created_at</c> отзыва для проверки периода качества.
+    /// </summary>
+    public async Task SetReviewCreatedAtAsync(
+        Guid reviewId,
+        DateTimeOffset createdAt)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE reviews
+            SET created_at = {createdAt}, updated_at = {createdAt}
+            WHERE id = {reviewId}
+            """);
+    }
+
+    /// <summary>
+    /// Создаёт отзыв по уже существующей завершённой брони.
+    /// </summary>
+    /// <remarks>
+    /// Отличается от <see cref="CreateReviewAsync"/> тем, что не создаёт свою бронь:
+    /// статистике нужен отзыв именно по визиту выбранного периода.
+    /// </remarks>
+    public async Task<Guid> CreateReviewForBookingAsync(
+        Guid bookingId,
+        Guid customerId,
+        int rating = 5,
+        bool published = false)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var booking = await db.Bookings.SingleAsync(
+            row => row.Id == bookingId,
+            CancellationToken.None);
+
+        var review = Require(Review.Create(booking, customerId, rating, "Seeded review"));
+
+        if (published)
+        {
+            Require(review.Publish());
+        }
+
+        db.Reviews.Add(review);
+        await db.SaveChangesAsync();
+
+        return review.Id;
+    }
+
+    /// <summary>
     /// Создаёт заблокированного пользователя — цель для <c>POST api/users/{id}/activation</c>.
     /// </summary>
     public async Task<User> CreateBlockedUserAsync(string email)
