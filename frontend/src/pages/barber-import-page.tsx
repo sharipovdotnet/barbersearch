@@ -12,6 +12,9 @@ import {
 import { ImportForm } from '@/components/barber/import-form'
 import { ImportPreview } from '@/components/barber/import-preview'
 import { ImportResult } from '@/components/barber/import-result'
+import { ImportSkipped } from '@/components/barber/import-skipped'
+import { ImportSourceSwitch } from '@/components/barber/import-source-switch'
+import { IcsImportForm } from '@/components/barber/ics-import-form'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,11 +34,12 @@ import {
 import { isPlainClick, navigate } from '@/lib/router'
 
 /**
- * Перенос старых записей из вставленного списка.
+ * Перенос старых записей из календаря или вставленного списка.
  *
- * Три шага на одной странице, без URL-состояния: вставленный текст — личные данные
- * клиентов, ему нечего делать в адресе и в истории браузера. Гейты те же, что
- * у кабинета: пока сессия, роль и профиль не проверены, запросов нет.
+ * Три шага на одной странице, без URL-состояния: содержимое файла и вставленный
+ * текст — личные данные клиентов, им нечего делать в адресе и в истории браузера.
+ * Гейты те же, что у кабинета: пока сессия, роль и профиль не проверены, запросов
+ * нет. Файл разбирается в браузере, а на сервер уходят только готовые строки.
  */
 export function BarberImportPage() {
   const { status, user } = useSession()
@@ -128,8 +132,8 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
             Перенести записи
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Вставьте список из Google Docs, таблицы или заметок — мы разберём его
-            построчно.
+            Загрузите календарь в формате .ics или вставьте список — покажем, что
+            получится, до создания записей.
           </p>
         </div>
       </header>
@@ -203,13 +207,41 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
           )}
 
           {isReady && state.stage === 'form' && (
-            <ImportForm
-              text={state.text}
-              failure={state.failure}
-              onChange={state.setText}
-              onParse={state.runParse}
-              onClear={state.reset}
-            />
+            <div className="space-y-4">
+              <ImportSourceSwitch
+                value={state.source}
+                onChange={state.setSource}
+              />
+
+              {state.source === 'ics' ? (
+                <>
+                  <IcsImportForm
+                    file={state.file}
+                    periodDays={state.periodDays}
+                    isParsing={state.isParsing}
+                    failure={state.failure}
+                    onFile={state.selectFile}
+                    onPeriod={state.setPeriod}
+                    onParse={() => {
+                      void state.parseFile()
+                    }}
+                    onClear={state.reset}
+                  />
+
+                  {state.skipped.length > 0 && (
+                    <ImportSkipped skipped={state.skipped} />
+                  )}
+                </>
+              ) : (
+                <ImportForm
+                  text={state.text}
+                  failure={state.failure}
+                  onChange={state.setText}
+                  onParse={state.runParse}
+                  onClear={state.reset}
+                />
+              )}
+            </div>
           )}
 
           {state.optionsStatus === 'ready'
@@ -220,13 +252,21 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
               </p>
             ) : (
               <>
+                {state.skipped.length > 0 && (
+                  <ImportSkipped skipped={state.skipped} />
+                )}
+
                 <ImportPreview
                   rows={state.rows}
                   summary={state.summary}
                   options={state.options}
+                  source={state.source}
+                  selectionNotice={state.selectionNotice}
                   isRunning={state.isRunning}
                   progress={state.progress}
                   onUpdate={state.updateRow}
+                  onToggle={state.toggleRow}
+                  onToggleAll={state.setAllIncluded}
                   onCreate={() => {
                     void state.createRows()
                   }}
@@ -256,10 +296,14 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
                   rows={state.rows}
                   summary={state.summary}
                   options={state.options}
+                  source={state.source}
+                  canContinue={state.canContinue}
                   isRunning={state.isRunning}
                   onRetryFailed={() => {
                     void state.retryFailed()
                   }}
+                  onContinue={state.continueImport}
+                  onReview={state.reviewRows}
                   onApplySlot={(line, slot) => {
                     void state.applySlot(line, slot)
                   }}
