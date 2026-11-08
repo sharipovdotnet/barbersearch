@@ -1,5 +1,16 @@
 import { addDays } from '@/lib/barber-slots'
 import type { BarberProfileSalon, BarberProfileService } from '@/lib/catalog'
+import {
+  collapse,
+  findPhone,
+  findSalon,
+  findService,
+  flatten,
+  isImportPhone,
+  normalizeImportPhone,
+  removeRange,
+  splitName,
+} from '@/lib/import-match'
 import { salonDateTimeToUtc } from '@/lib/salon-time'
 
 /**
@@ -15,6 +26,31 @@ import { salonDateTimeToUtc } from '@/lib/salon-time'
 export const IMPORT_MAX_ROWS = 50
 export const IMPORT_MAX_TEXT_LENGTH = 10_000
 
+/** Откуда пришла строка: вставленный список или файл календаря. */
+export type ImportSource = 'text' | 'ics'
+
+/**
+ * Мягкая подсказка строки календаря: не ошибка, поэтому запись не блокирует.
+ *
+ * `personal` — похоже на личное событие, `free` — `TRANSP:TRANSPARENT`,
+ * `tentative` — `STATUS:TENTATIVE`, `noContact` — нет ни телефона, ни услуги,
+ * `salonFallback` — салон не найден и выбран основной, `durationMismatch` —
+ * длительность события отличается от услуги, `timeZoneConverted` — время
+ * пересчитано из другого пояса, `phoneFromDescription` — телефон найден в
+ * описании, `nameTruncated`/`phoneTruncated` — значение обрезано до лимита.
+ */
+export type ImportHint =
+  | 'personal'
+  | 'free'
+  | 'tentative'
+  | 'noContact'
+  | 'salonFallback'
+  | 'durationMismatch'
+  | 'timeZoneConverted'
+  | 'phoneFromDescription'
+  | 'nameTruncated'
+  | 'phoneTruncated'
+
 export type ImportIssue =
   | 'noDate'
   | 'badDate'
@@ -27,6 +63,8 @@ export type ImportIssue =
   | 'ambiguousService'
   | 'past'
   | 'duplicate'
+  | 'overlap'
+  | 'tooFar'
 
 export type ImportDraft = {
   /** Номер строки в исходном тексте, с 1 — для подсказок и фокуса. */
@@ -47,6 +85,28 @@ export type ImportDraft = {
   /** Для выбора при неоднозначности. */
   serviceCandidates: string[]
   issues: ImportIssue[]
+  /** Источник строки: `text` — вставленный список, `ics` — событие календаря. */
+  source: ImportSource
+  /** `UID` события календаря; `null` для текста. Основа ключа идемпотентности. */
+  externalUid: string | null
+  /** `RECURRENCE-ID` вхождения серии в стабильном виде; `null` для одиночного. */
+  recurrenceId: string | null
+  /** Исходный `SUMMARY` события — для подписи и отладки, не для заметки клиента. */
+  eventSummary: string | null
+  /** Абсолютный момент начала события в UTC: правка полей не должна терять инстант. */
+  eventStartAt: string | null
+  /** Абсолютный конец события; `null`, если в календаре его нет. */
+  eventEndAt: string | null
+  /** Длительность события из календаря; сохраняется при сдвиге времени. */
+  eventDurationMinutes: number | null
+  /** `true`, пока строка показывает исходное время события. */
+  useEventTime: boolean
+  /** `TZID` события, `'UTC'` или `null` для floating: нужен для подсказки о пересчёте. */
+  sourceTimeZone: string | null
+  /** Мягкие подсказки календаря: не ошибки, строку не блокируют. */
+  hints: ImportHint[]
+  /** Стартовое состояние галочки; у текста всегда `true`. */
+  defaultIncluded: boolean
 }
 
 export type ImportParseOptions = {
@@ -69,8 +129,6 @@ export type ImportParseResult = {
 const PAST_TOLERANCE_MS = 5 * 60 * 1000
 
 const LINE_BREAK = /\r\n|\r|\n/
-const NON_WORD = /[^\p{L}\p{N}]+/gu
-const SINGLE_NON_WORD = /[^\p{L}\p{N}]/gu
 
 /**
  * Русские месяцы: формы, которые встречаются в журнале.
@@ -162,24 +220,6 @@ const HEADER_WORDS = new Set([
   'записи',
 ])
 
-/** Служебные слова в остатке строки — не часть имени. */
-const NAME_STOP_WORDS = new Set(['клиент', 'клиентка', 'запись', 'в', 'на', 'к', 'для'])
-
-/**
- * Стандартный телефон с группировкой 3-3-2-2.
- *
- * Форматы: `+7 999 123-45-67`, `8 (999) 123-45-67`, `79991234567`, `9991234567`.
- * Границы цифр не дают выхватить телефон из середины более длинного числа.
- */
-const PHONE_PATTERN =
-  /(?<!\d)(?:\+\s?7|[78])?\s*[-(]?\s*\d{3}\s*[)-]?\s*\d{3}\s*[-\s]?\s*\d{2}\s*[-\s]?\s*\d{2}(?!\d)/
-
-/** Пробельная последовательность цифр — второй шанс для нестандартной группировки. */
-const DIGIT_RUN = /\d[\d+()\-\s]*/g
-
-/** Начало телефона: цифр не хватает или их слишком много — «похоже на неполный». */
-const PHONE_START = /(?<!\d)(?:\+\s?7|[78])[\s\-()]*\d[\d\s\-()]*/g
-
 type DateHit = {
   start: number
   end: number
@@ -200,25 +240,6 @@ function normalizeLine(raw: string): string {
     .replace(/[|;\t]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-/**
- * Текст для сравнения: нижний регистр, `ё → е`, знаки — пробелы.
- *
- * Замена посимвольная, поэтому длина совпадает с исходной строкой и найденный
- * фрагмент можно вырезать из оригинала по тем же индексам. `ё → е` нужно только
- * здесь: имя клиента печатается как записано.
- */
-function flatten(value: string): string {
-  return value.toLowerCase().replace(/ё/g, 'е').replace(SINGLE_NON_WORD, ' ')
-}
-
-function collapse(value: string): string {
-  return value.replace(/\s+/g, ' ').trim()
-}
-
-function removeRange(value: string, start: number, end: number): string {
-  return `${value.slice(0, start)} ${value.slice(end)}`
 }
 
 function padTwo(value: number): string {
@@ -396,263 +417,6 @@ function findTime(text: string): TimeHit | null {
   }
 }
 
-/** Нормализация телефона по числу цифр: `8…` и `7…` → `+7…`, десять цифр → `+7…`. */
-function normalizePhone(value: string): string | null {
-  const digits = value.replace(/\D/g, '')
-
-  if (digits.length === 10) {
-    return `+7${digits}`
-  }
-
-  if (digits.length === 11 && (digits[0] === '7' || digits[0] === '8')) {
-    return `+7${digits.slice(1)}`
-  }
-
-  return null
-}
-
-type PhoneHit = {
-  phone: string | null
-  issue: ImportIssue | null
-  /** Токен, который не удалось нормализовать: показываем как есть. */
-  raw: string | null
-  start: number
-  end: number
-}
-
-/**
- * Поиск телефона до разбора времени.
- *
- * Три прохода: строгая маска, затем десятизначная пробельная серия, затем
- * «похоже на неполный». Обратный порядок съел бы время, а без третьего прохода
- * обрезанный номер молча превратился бы в имя.
- */
-function findPhone(text: string): PhoneHit | null {
-  const strict = PHONE_PATTERN.exec(text)
-
-  if (strict !== null) {
-    const phone = normalizePhone(strict[0])
-
-    if (phone !== null) {
-      return {
-        phone,
-        issue: null,
-        raw: null,
-        start: strict.index,
-        end: strict.index + strict[0].length,
-      }
-    }
-  }
-
-  for (const match of text.matchAll(DIGIT_RUN)) {
-    const snippet = match[0].trimEnd()
-    const phone = normalizePhone(snippet)
-
-    if (phone === null) {
-      continue
-    }
-
-    return {
-      phone,
-      issue: null,
-      raw: null,
-      start: match.index,
-      end: match.index + snippet.length,
-    }
-  }
-
-  for (const match of text.matchAll(PHONE_START)) {
-    const snippet = match[0].trimEnd()
-
-    if (snippet.replace(/\D/g, '').length < 7) {
-      continue
-    }
-
-    return {
-      phone: null,
-      issue: 'badPhone',
-      raw: snippet,
-      start: match.index,
-      end: match.index + snippet.length,
-    }
-  }
-
-  return null
-}
-
-type MatchTier = 0 | 1 | 2
-
-type ServiceMatch = {
-  service: BarberProfileService
-  tier: MatchTier
-  start: number
-  length: number
-}
-
-/**
- * Совпадение названия с остатком строки: точное, с начала, внутри.
- *
- * Название услуги превращается в последовательность слов, поэтому «стрижка»
- * находится и в «стрижка бороды», а пунктуация не мешает. Индексы относятся
- * к `flatten`-представлению, длина которого совпадает с оригиналом.
- */
-function matchName(text: string, name: string): { tier: MatchTier; start: number; length: number } | null {
-  const normalized = collapse(flatten(name))
-
-  if (normalized === '') {
-    return null
-  }
-
-  const flat = flatten(text)
-  const words = normalized
-    .split(' ')
-    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])${words.join('[^\\p{L}\\p{N}]+')}(?![\\p{L}\\p{N}])`,
-    'gu'
-  )
-  const match = pattern.exec(flat)
-
-  if (match === null) {
-    return null
-  }
-
-  const before = flat.slice(0, match.index).trim()
-  const after = flat.slice(match.index + match[0].length).trim()
-  const tier: MatchTier = before === '' && after === '' ? 0 : before === '' ? 1 : 2
-
-  return { tier, start: match.index, length: match[0].length }
-}
-
-function pickBest<T>(
-  candidates: readonly { value: T; tier: MatchTier; start: number; length: number }[]
-): { value: T; start: number; length: number } | null {
-  let best: { value: T; start: number; length: number; tier: MatchTier } | null = null
-
-  for (const candidate of candidates) {
-    if (
-      best === null
-      || candidate.tier < best.tier
-      || (candidate.tier === best.tier && candidate.length > best.length)
-    ) {
-      best = candidate
-    }
-  }
-
-  return best === null ? null : { value: best.value, start: best.start, length: best.length }
-}
-
-function findService(
-  text: string,
-  services: readonly BarberProfileService[]
-): { match: ServiceMatch | null; ambiguous: BarberProfileService[] } {
-  const matches: ServiceMatch[] = []
-
-  for (const service of services) {
-    if (!service.isActive) {
-      continue
-    }
-
-    const hit = matchName(text, service.name)
-
-    if (hit !== null) {
-      matches.push({ service, ...hit })
-    }
-  }
-
-  if (matches.length === 0) {
-    return { match: null, ambiguous: [] }
-  }
-
-  const best = pickBest(matches.map((match) => ({
-    value: match,
-    tier: match.tier,
-    start: match.start,
-    length: match.length,
-  })))
-
-  if (best === null) {
-    return { match: null, ambiguous: [] }
-  }
-
-  const tied = matches.filter(
-    (match) => match.tier === best.value.tier && match.length === best.length
-  )
-
-  if (tied.length > 1) {
-    return { match: null, ambiguous: tied.map((match) => match.service) }
-  }
-
-  return { match: best.value, ambiguous: [] }
-}
-
-function findSalon(
-  text: string,
-  salons: readonly BarberProfileSalon[]
-): { salon: BarberProfileSalon; start: number; length: number } | null {
-  const candidates: { value: BarberProfileSalon; tier: MatchTier; start: number; length: number }[] = []
-
-  for (const salon of salons) {
-    for (const name of [salon.name, salon.city]) {
-      if (name.trim() === '') {
-        continue
-      }
-
-      const hit = matchName(text, name)
-
-      if (hit !== null) {
-        candidates.push({ value: salon, ...hit })
-        break
-      }
-    }
-  }
-
-  const best = pickBest(candidates)
-
-  return best === null ? null : { salon: best.value, start: best.start, length: best.length }
-}
-
-/** Нормализованный гость: `+7` и десять цифр. */
-const IMPORT_PHONE = /^\+7\d{10}$/
-
-/** Телефон в том виде, в котором его отправит `POST api/barber/bookings`. */
-export function isImportPhone(value: string): boolean {
-  return IMPORT_PHONE.test(value)
-}
-
-/** Правка телефона из предпросмотра: `8…`, `7…` и десять цифр сводятся к `+7…`. */
-export function normalizeImportPhone(value: string): string | null {
-  const digits = value.replace(/\D/g, '')
-
-  if (digits.length !== 10 && digits.length !== 11) {
-    return null
-  }
-
-  return normalizePhone(digits)
-}
-
-/** Остаток строки → имя и фамилия: пунктуация и служебные слова отбрасываются. */
-function splitName(rest: string): { firstName: string; lastName: string | null } | null {
-  const words = rest
-    .replace(NON_WORD, ' ')
-    .split(' ')
-    .filter((word) => word !== '')
-    .filter((word) => !NAME_STOP_WORDS.has(word.toLowerCase()))
-    .filter((word) => !/^\d+$/.test(word))
-
-  if (words.length === 0) {
-    return null
-  }
-
-  const firstName = words[0]
-
-  if (words.length === 1) {
-    return { firstName, lastName: null }
-  }
-
-  return { firstName, lastName: words[words.length - 1] }
-}
-
 function emptyDraft(line: number, raw: string): ImportDraft {
   return {
     line,
@@ -668,6 +432,17 @@ function emptyDraft(line: number, raw: string): ImportDraft {
     serviceId: null,
     serviceCandidates: [],
     issues: [],
+    source: 'text',
+    externalUid: null,
+    recurrenceId: null,
+    eventSummary: null,
+    eventStartAt: null,
+    eventEndAt: null,
+    eventDurationMinutes: null,
+    useEventTime: true,
+    sourceTimeZone: null,
+    hints: [],
+    defaultIncluded: true,
   }
 }
 
@@ -829,7 +604,12 @@ function parseLine(
   return { kind: 'row', draft }
 }
 
-/** Порядок ошибок задаёт текст в строке предпросмотра: причина важнее следствия. */
+/**
+ * Порядок ошибок задаёт текст в строке предпросмотра: причина важнее следствия.
+ *
+ * `overlap` и `tooFar` — серверные ограничения, поэтому стоят последними: порядок
+ * прежних кодов и тексты текстового импорта от расширения не меняются.
+ */
 const ISSUE_ORDER: readonly ImportIssue[] = [
   'badDate',
   'noDate',
@@ -842,6 +622,8 @@ const ISSUE_ORDER: readonly ImportIssue[] = [
   'noService',
   'past',
   'duplicate',
+  'overlap',
+  'tooFar',
 ]
 
 function sortIssues(issues: readonly ImportIssue[]): ImportIssue[] {
@@ -1071,3 +853,7 @@ export function parseImportText(
 
   return { rows, failure: null }
 }
+
+// Публичный API модуля не менялся: правка телефона в предпросмотре и проверка
+// готовности по-прежнему берутся отсюда, хотя живут в `import-match.ts`.
+export { isImportPhone, normalizeImportPhone }

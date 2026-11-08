@@ -33,6 +33,8 @@ const ISSUE_TEXT: Record<ImportIssue, string> = {
   ambiguousService: 'Услуга неоднозначна — выберите.',
   past: 'Время уже прошло.',
   duplicate: 'Дубль в списке.',
+  overlap: 'Пересекается с записью.',
+  tooFar: 'Слишком далеко: запись можно создать не более чем на 90 дней вперёд.',
 }
 
 const COLUMNS = [

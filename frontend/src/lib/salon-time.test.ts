@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { salonDateTimeToUtc } from '@/lib/salon-time'
+import {
+  salonDateFromInstant,
+  salonDateTimeToUtc,
+  salonTimeFromInstant,
+} from '@/lib/salon-time'
 
 /**
  * Пояс салона — единственное место, где «10:00» становится инстантом.
@@ -47,5 +51,43 @@ describe('salonDateTimeToUtc', () => {
     ['время без минут', '2026-11-12', '10'],
   ])('%s — null', (_title, date, time) => {
     expect(salonDateTimeToUtc(date, time, 'Asia/Yekaterinburg')).toBeNull()
+  })
+})
+
+describe('salonDateFromInstant / salonTimeFromInstant', () => {
+  it('Екатеринбург: инстант показывается по часам салона', () => {
+    const iso = '2026-11-12T05:00:00.000Z'
+
+    expect(salonDateFromInstant(iso, 'Asia/Yekaterinburg')).toBe('2026-11-12')
+    expect(salonTimeFromInstant(iso, 'Asia/Yekaterinburg')).toBe('10:00')
+  })
+
+  it.each([
+    ['лето', '2026-07-15T12:00:00.000Z', '14:00'],
+    ['зима', '2026-12-15T13:00:00.000Z', '14:00'],
+  ])('Берлин, %s: время в поясе салона', (_title, iso, expected) => {
+    expect(salonTimeFromInstant(iso, 'Europe/Berlin')).toBe(expected)
+  })
+
+  it('вечерний инстант — уже следующая дата, полночь не теряется', () => {
+    // 19:00Z + 5 часов — ровно 00:00 13 ноября в Екатеринбурге.
+    const iso = '2026-11-12T19:00:00.000Z'
+
+    expect(salonDateFromInstant(iso, 'Asia/Yekaterinburg')).toBe('2026-11-13')
+    expect(salonTimeFromInstant(iso, 'Asia/Yekaterinburg')).toBe('00:00')
+  })
+
+  it('мусорный пояс — срез ISO, без исключения', () => {
+    const iso = '2026-11-12T05:00:00.000Z'
+
+    expect(salonDateFromInstant(iso, 'Mars/Olympus')).toBe('2026-11-12')
+    expect(salonTimeFromInstant(iso, 'Mars/Olympus')).toBe('05:00')
+    expect(salonDateFromInstant(iso, '')).toBe('2026-11-12')
+    expect(salonTimeFromInstant(iso, '')).toBe('05:00')
+  })
+
+  it('битый инстант — срез ISO, без исключения', () => {
+    expect(salonDateFromInstant('', 'Asia/Yekaterinburg')).toBe('')
+    expect(salonTimeFromInstant('', 'Asia/Yekaterinburg')).toBe('')
   })
 })
