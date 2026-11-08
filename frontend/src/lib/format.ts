@@ -315,6 +315,11 @@ export function formatBookingsCount(count: number): string {
   return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
 }
 
+/** «3 события», «1 событие», «5 событий» — «Пропущено N событий» в импорте. */
+export function formatEventsCount(count: number): string {
+  return `${count} ${plural(count, ['событие', 'события', 'событий'])}`
+}
+
 const numberFormatters = new Map<string, Intl.NumberFormat>()
 
 function numberFormatter(minimum: number, maximum: number): Intl.NumberFormat {

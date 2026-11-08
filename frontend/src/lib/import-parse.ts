@@ -1,6 +1,21 @@
 import { addDays } from '@/lib/barber-slots'
 import type { BarberProfileSalon, BarberProfileService } from '@/lib/catalog'
-import { salonDateTimeToUtc } from '@/lib/salon-time'
+import {
+  collapse,
+  findPhone,
+  findSalon,
+  findService,
+  flatten,
+  isImportPhone,
+  normalizeImportPhone,
+  removeRange,
+  splitName,
+} from '@/lib/import-match'
+import {
+  salonDateFromInstant,
+  salonDateTimeToUtc,
+  salonTimeFromInstant,
+} from '@/lib/salon-time'
 
 /**
  * Разбор вставленного списка записей.
@@ -15,6 +30,31 @@ import { salonDateTimeToUtc } from '@/lib/salon-time'
 export const IMPORT_MAX_ROWS = 50
 export const IMPORT_MAX_TEXT_LENGTH = 10_000
 
+/** Откуда пришла строка: вставленный список или файл календаря. */
+export type ImportSource = 'text' | 'ics'
+
+/**
+ * Мягкая подсказка строки календаря: не ошибка, поэтому запись не блокирует.
+ *
+ * `personal` — похоже на личное событие, `free` — `TRANSP:TRANSPARENT`,
+ * `tentative` — `STATUS:TENTATIVE`, `noContact` — нет ни телефона, ни услуги,
+ * `salonFallback` — салон не найден и выбран основной, `durationMismatch` —
+ * длительность события отличается от услуги, `timeZoneConverted` — время
+ * пересчитано из другого пояса, `phoneFromDescription` — телефон найден в
+ * описании, `nameTruncated`/`phoneTruncated` — значение обрезано до лимита.
+ */
+export type ImportHint =
+  | 'personal'
+  | 'free'
+  | 'tentative'
+  | 'noContact'
+  | 'salonFallback'
+  | 'durationMismatch'
+  | 'timeZoneConverted'
+  | 'phoneFromDescription'
+  | 'nameTruncated'
+  | 'phoneTruncated'
+
 export type ImportIssue =
   | 'noDate'
   | 'badDate'
@@ -27,6 +67,8 @@ export type ImportIssue =
   | 'ambiguousService'
   | 'past'
   | 'duplicate'
+  | 'overlap'
+  | 'tooFar'
 
 export type ImportDraft = {
   /** Номер строки в исходном тексте, с 1 — для подсказок и фокуса. */
@@ -47,6 +89,28 @@ export type ImportDraft = {
   /** Для выбора при неоднозначности. */
   serviceCandidates: string[]
   issues: ImportIssue[]
+  /** Источник строки: `text` — вставленный список, `ics` — событие календаря. */
+  source: ImportSource
+  /** `UID` события календаря; `null` для текста. Основа ключа идемпотентности. */
+  externalUid: string | null
+  /** `RECURRENCE-ID` вхождения серии в стабильном виде; `null` для одиночного. */
+  recurrenceId: string | null
+  /** Исходный `SUMMARY` события — для подписи и отладки, не для заметки клиента. */
+  eventSummary: string | null
+  /** Абсолютный момент начала события в UTC: правка полей не должна терять инстант. */
+  eventStartAt: string | null
+  /** Абсолютный конец события; `null`, если в календаре его нет. */
+  eventEndAt: string | null
+  /** Длительность события из календаря; сохраняется при сдвиге времени. */
+  eventDurationMinutes: number | null
+  /** `true`, пока строка показывает исходное время события. */
+  useEventTime: boolean
+  /** `TZID` события, `'UTC'` или `null` для floating: нужен для подсказки о пересчёте. */
+  sourceTimeZone: string | null
+  /** Мягкие подсказки календаря: не ошибки, строку не блокируют. */
+  hints: ImportHint[]
+  /** Стартовое состояние галочки; у текста всегда `true`. */
+  defaultIncluded: boolean
 }
 
 export type ImportParseOptions = {
@@ -68,9 +132,18 @@ export type ImportParseResult = {
 /** Допуск «ещё не прошло»: запись через пять минут создавать уже поздно. */
 const PAST_TOLERANCE_MS = 5 * 60 * 1000
 
+/**
+ * Жёсткий серверный предел начала: запись дальше 90 дней не создаётся.
+ *
+ * Час запаса нужен потому, что окно разбора — `now + periodDays` эксклюзивно:
+ * событие ровно на границе ещё попадает в файл, но создавать его уже нельзя.
+ */
+const FAR_TOLERANCE_MS = 90 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000
+
+/** Мягкий предел длительности импорта: длиннее — это уже не визит. */
+const MAX_IMPORT_DURATION_MINUTES = 720
+
 const LINE_BREAK = /\r\n|\r|\n/
-const NON_WORD = /[^\p{L}\p{N}]+/gu
-const SINGLE_NON_WORD = /[^\p{L}\p{N}]/gu
 
 /**
  * Русские месяцы: формы, которые встречаются в журнале.
@@ -162,24 +235,6 @@ const HEADER_WORDS = new Set([
   'записи',
 ])
 
-/** Служебные слова в остатке строки — не часть имени. */
-const NAME_STOP_WORDS = new Set(['клиент', 'клиентка', 'запись', 'в', 'на', 'к', 'для'])
-
-/**
- * Стандартный телефон с группировкой 3-3-2-2.
- *
- * Форматы: `+7 999 123-45-67`, `8 (999) 123-45-67`, `79991234567`, `9991234567`.
- * Границы цифр не дают выхватить телефон из середины более длинного числа.
- */
-const PHONE_PATTERN =
-  /(?<!\d)(?:\+\s?7|[78])?\s*[-(]?\s*\d{3}\s*[)-]?\s*\d{3}\s*[-\s]?\s*\d{2}\s*[-\s]?\s*\d{2}(?!\d)/
-
-/** Пробельная последовательность цифр — второй шанс для нестандартной группировки. */
-const DIGIT_RUN = /\d[\d+()\-\s]*/g
-
-/** Начало телефона: цифр не хватает или их слишком много — «похоже на неполный». */
-const PHONE_START = /(?<!\d)(?:\+\s?7|[78])[\s\-()]*\d[\d\s\-()]*/g
-
 type DateHit = {
   start: number
   end: number
@@ -200,25 +255,6 @@ function normalizeLine(raw: string): string {
     .replace(/[|;\t]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-/**
- * Текст для сравнения: нижний регистр, `ё → е`, знаки — пробелы.
- *
- * Замена посимвольная, поэтому длина совпадает с исходной строкой и найденный
- * фрагмент можно вырезать из оригинала по тем же индексам. `ё → е` нужно только
- * здесь: имя клиента печатается как записано.
- */
-function flatten(value: string): string {
-  return value.toLowerCase().replace(/ё/g, 'е').replace(SINGLE_NON_WORD, ' ')
-}
-
-function collapse(value: string): string {
-  return value.replace(/\s+/g, ' ').trim()
-}
-
-function removeRange(value: string, start: number, end: number): string {
-  return `${value.slice(0, start)} ${value.slice(end)}`
 }
 
 function padTwo(value: number): string {
@@ -396,263 +432,6 @@ function findTime(text: string): TimeHit | null {
   }
 }
 
-/** Нормализация телефона по числу цифр: `8…` и `7…` → `+7…`, десять цифр → `+7…`. */
-function normalizePhone(value: string): string | null {
-  const digits = value.replace(/\D/g, '')
-
-  if (digits.length === 10) {
-    return `+7${digits}`
-  }
-
-  if (digits.length === 11 && (digits[0] === '7' || digits[0] === '8')) {
-    return `+7${digits.slice(1)}`
-  }
-
-  return null
-}
-
-type PhoneHit = {
-  phone: string | null
-  issue: ImportIssue | null
-  /** Токен, который не удалось нормализовать: показываем как есть. */
-  raw: string | null
-  start: number
-  end: number
-}
-
-/**
- * Поиск телефона до разбора времени.
- *
- * Три прохода: строгая маска, затем десятизначная пробельная серия, затем
- * «похоже на неполный». Обратный порядок съел бы время, а без третьего прохода
- * обрезанный номер молча превратился бы в имя.
- */
-function findPhone(text: string): PhoneHit | null {
-  const strict = PHONE_PATTERN.exec(text)
-
-  if (strict !== null) {
-    const phone = normalizePhone(strict[0])
-
-    if (phone !== null) {
-      return {
-        phone,
-        issue: null,
-        raw: null,
-        start: strict.index,
-        end: strict.index + strict[0].length,
-      }
-    }
-  }
-
-  for (const match of text.matchAll(DIGIT_RUN)) {
-    const snippet = match[0].trimEnd()
-    const phone = normalizePhone(snippet)
-
-    if (phone === null) {
-      continue
-    }
-
-    return {
-      phone,
-      issue: null,
-      raw: null,
-      start: match.index,
-      end: match.index + snippet.length,
-    }
-  }
-
-  for (const match of text.matchAll(PHONE_START)) {
-    const snippet = match[0].trimEnd()
-
-    if (snippet.replace(/\D/g, '').length < 7) {
-      continue
-    }
-
-    return {
-      phone: null,
-      issue: 'badPhone',
-      raw: snippet,
-      start: match.index,
-      end: match.index + snippet.length,
-    }
-  }
-
-  return null
-}
-
-type MatchTier = 0 | 1 | 2
-
-type ServiceMatch = {
-  service: BarberProfileService
-  tier: MatchTier
-  start: number
-  length: number
-}
-
-/**
- * Совпадение названия с остатком строки: точное, с начала, внутри.
- *
- * Название услуги превращается в последовательность слов, поэтому «стрижка»
- * находится и в «стрижка бороды», а пунктуация не мешает. Индексы относятся
- * к `flatten`-представлению, длина которого совпадает с оригиналом.
- */
-function matchName(text: string, name: string): { tier: MatchTier; start: number; length: number } | null {
-  const normalized = collapse(flatten(name))
-
-  if (normalized === '') {
-    return null
-  }
-
-  const flat = flatten(text)
-  const words = normalized
-    .split(' ')
-    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])${words.join('[^\\p{L}\\p{N}]+')}(?![\\p{L}\\p{N}])`,
-    'gu'
-  )
-  const match = pattern.exec(flat)
-
-  if (match === null) {
-    return null
-  }
-
-  const before = flat.slice(0, match.index).trim()
-  const after = flat.slice(match.index + match[0].length).trim()
-  const tier: MatchTier = before === '' && after === '' ? 0 : before === '' ? 1 : 2
-
-  return { tier, start: match.index, length: match[0].length }
-}
-
-function pickBest<T>(
-  candidates: readonly { value: T; tier: MatchTier; start: number; length: number }[]
-): { value: T; start: number; length: number } | null {
-  let best: { value: T; start: number; length: number; tier: MatchTier } | null = null
-
-  for (const candidate of candidates) {
-    if (
-      best === null
-      || candidate.tier < best.tier
-      || (candidate.tier === best.tier && candidate.length > best.length)
-    ) {
-      best = candidate
-    }
-  }
-
-  return best === null ? null : { value: best.value, start: best.start, length: best.length }
-}
-
-function findService(
-  text: string,
-  services: readonly BarberProfileService[]
-): { match: ServiceMatch | null; ambiguous: BarberProfileService[] } {
-  const matches: ServiceMatch[] = []
-
-  for (const service of services) {
-    if (!service.isActive) {
-      continue
-    }
-
-    const hit = matchName(text, service.name)
-
-    if (hit !== null) {
-      matches.push({ service, ...hit })
-    }
-  }
-
-  if (matches.length === 0) {
-    return { match: null, ambiguous: [] }
-  }
-
-  const best = pickBest(matches.map((match) => ({
-    value: match,
-    tier: match.tier,
-    start: match.start,
-    length: match.length,
-  })))
-
-  if (best === null) {
-    return { match: null, ambiguous: [] }
-  }
-
-  const tied = matches.filter(
-    (match) => match.tier === best.value.tier && match.length === best.length
-  )
-
-  if (tied.length > 1) {
-    return { match: null, ambiguous: tied.map((match) => match.service) }
-  }
-
-  return { match: best.value, ambiguous: [] }
-}
-
-function findSalon(
-  text: string,
-  salons: readonly BarberProfileSalon[]
-): { salon: BarberProfileSalon; start: number; length: number } | null {
-  const candidates: { value: BarberProfileSalon; tier: MatchTier; start: number; length: number }[] = []
-
-  for (const salon of salons) {
-    for (const name of [salon.name, salon.city]) {
-      if (name.trim() === '') {
-        continue
-      }
-
-      const hit = matchName(text, name)
-
-      if (hit !== null) {
-        candidates.push({ value: salon, ...hit })
-        break
-      }
-    }
-  }
-
-  const best = pickBest(candidates)
-
-  return best === null ? null : { salon: best.value, start: best.start, length: best.length }
-}
-
-/** Нормализованный гость: `+7` и десять цифр. */
-const IMPORT_PHONE = /^\+7\d{10}$/
-
-/** Телефон в том виде, в котором его отправит `POST api/barber/bookings`. */
-export function isImportPhone(value: string): boolean {
-  return IMPORT_PHONE.test(value)
-}
-
-/** Правка телефона из предпросмотра: `8…`, `7…` и десять цифр сводятся к `+7…`. */
-export function normalizeImportPhone(value: string): string | null {
-  const digits = value.replace(/\D/g, '')
-
-  if (digits.length !== 10 && digits.length !== 11) {
-    return null
-  }
-
-  return normalizePhone(digits)
-}
-
-/** Остаток строки → имя и фамилия: пунктуация и служебные слова отбрасываются. */
-function splitName(rest: string): { firstName: string; lastName: string | null } | null {
-  const words = rest
-    .replace(NON_WORD, ' ')
-    .split(' ')
-    .filter((word) => word !== '')
-    .filter((word) => !NAME_STOP_WORDS.has(word.toLowerCase()))
-    .filter((word) => !/^\d+$/.test(word))
-
-  if (words.length === 0) {
-    return null
-  }
-
-  const firstName = words[0]
-
-  if (words.length === 1) {
-    return { firstName, lastName: null }
-  }
-
-  return { firstName, lastName: words[words.length - 1] }
-}
-
 function emptyDraft(line: number, raw: string): ImportDraft {
   return {
     line,
@@ -668,6 +447,17 @@ function emptyDraft(line: number, raw: string): ImportDraft {
     serviceId: null,
     serviceCandidates: [],
     issues: [],
+    source: 'text',
+    externalUid: null,
+    recurrenceId: null,
+    eventSummary: null,
+    eventStartAt: null,
+    eventEndAt: null,
+    eventDurationMinutes: null,
+    useEventTime: true,
+    sourceTimeZone: null,
+    hints: [],
+    defaultIncluded: true,
   }
 }
 
@@ -829,7 +619,12 @@ function parseLine(
   return { kind: 'row', draft }
 }
 
-/** Порядок ошибок задаёт текст в строке предпросмотра: причина важнее следствия. */
+/**
+ * Порядок ошибок задаёт текст в строке предпросмотра: причина важнее следствия.
+ *
+ * `overlap` и `tooFar` — серверные ограничения, поэтому стоят последними: порядок
+ * прежних кодов и тексты текстового импорта от расширения не меняются.
+ */
 const ISSUE_ORDER: readonly ImportIssue[] = [
   'badDate',
   'noDate',
@@ -842,6 +637,8 @@ const ISSUE_ORDER: readonly ImportIssue[] = [
   'noService',
   'past',
   'duplicate',
+  'overlap',
+  'tooFar',
 ]
 
 function sortIssues(issues: readonly ImportIssue[]): ImportIssue[] {
@@ -852,14 +649,211 @@ function sortIssues(issues: readonly ImportIssue[]): ImportIssue[] {
   )
 }
 
+/** Итоговая длительность допустима: конец позже начала и не длиннее 12 часов. */
+function isValidImportDuration(minutes: number): boolean {
+  return minutes > 0 && minutes <= MAX_IMPORT_DURATION_MINUTES
+}
+
+function pushIssue(draft: ImportDraft, issue: ImportIssue): void {
+  if (!draft.issues.includes(issue)) {
+    draft.issues.push(issue)
+  }
+}
+
+function addHint(draft: ImportDraft, hint: ImportHint): void {
+  if (!draft.hints.includes(hint)) {
+    draft.hints.push(hint)
+  }
+}
+
+function endFromDuration(startAt: string, durationMinutes: number): string {
+  return new Date(
+    Date.parse(startAt) + durationMinutes * 60_000
+  ).toISOString()
+}
+
+/** Разница между началом и концом в допустимых пределах. */
+function hasValidSpan(startAt: string, endAt: string): boolean {
+  const startMs = Date.parse(startAt)
+  const endMs = Date.parse(endAt)
+
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return false
+  }
+
+  return isValidImportDuration((endMs - startMs) / 60_000)
+}
+
 /**
- * `startAt`/`endAt` и проверка прошлого.
+ * Последний шанс для конца — длительность услуги.
+ *
+ * Сюда попадают, когда ни конец события, ни его длительность не дали интервала.
+ * Нулевая или слишком длинная услуга — `noService`, как у текста: создать такую
+ * запись нельзя, и показывать время нечем.
+ */
+function serviceEndAt(
+  draft: ImportDraft,
+  startAt: string,
+  serviceMinutes: number
+): string | null {
+  if (!isValidImportDuration(serviceMinutes)) {
+    pushIssue(draft, 'noService')
+
+    return null
+  }
+
+  addHint(draft, 'durationMismatch')
+
+  return endFromDuration(startAt, serviceMinutes)
+}
+
+/** Окно сервера: раньше `now + 5 минут` — `past`, дальше 90 дней — `tooFar`. */
+function markIcsWindow(
+  draft: ImportDraft,
+  startAt: string,
+  options: ImportParseOptions
+): void {
+  const startMs = Date.parse(startAt)
+
+  if (startMs < options.now + PAST_TOLERANCE_MS) {
+    pushIssue(draft, 'past')
+  }
+
+  if (startMs > options.now + FAR_TOLERANCE_MS) {
+    pushIssue(draft, 'tooFar')
+  }
+}
+
+/**
+ * Время строки календаря, пока она представляет момент события.
+ *
+ * Абсолютный инстант — источник истины: правка салона меняет только отображение,
+ * поэтому дата и время пересчитываются в поясе выбранного салона. Конец берётся
+ * из `DTEND`, если тот даёт допустимый интервал, иначе из длительности события.
+ */
+function applyIcsEventTiming(
+  draft: ImportDraft,
+  startAt: string,
+  serviceMinutes: number,
+  timeZoneId: string,
+  options: ImportParseOptions
+): void {
+  let endAt: string | null = null
+
+  if (draft.eventEndAt !== null && hasValidSpan(startAt, draft.eventEndAt)) {
+    endAt = draft.eventEndAt
+  } else {
+    const durationMinutes = draft.eventDurationMinutes ?? serviceMinutes
+    const candidate = endFromDuration(startAt, durationMinutes)
+
+    endAt = hasValidSpan(startAt, candidate)
+      ? candidate
+      : serviceEndAt(draft, startAt, serviceMinutes)
+  }
+
+  if (endAt === null) {
+    return
+  }
+
+  draft.startAt = startAt
+  draft.endAt = endAt
+  // Показываем момент в поясе выбранного салона: 10:00Z — это 15:00 в
+  // Екатеринбурге и 11:00 в Берлине, поэтому смена салона меняет дату и время.
+  draft.date = salonDateFromInstant(startAt, timeZoneId)
+  draft.time = salonTimeFromInstant(startAt, timeZoneId)
+  markIcsWindow(draft, startAt, options)
+}
+
+/**
+ * Время строки календаря после правки даты/времени или для floating-события.
+ *
+ * Настенное время пользователя важнее момента: оно пересчитывается в UTC поясом
+ * салона и обратно не переписывается. Длительность события сохраняется, даже
+ * если время сдвинули.
+ */
+function applyIcsWallClockTiming(
+  draft: ImportDraft,
+  timeZoneId: string,
+  serviceMinutes: number,
+  options: ImportParseOptions
+): void {
+  if (draft.date === null || draft.time === null) {
+    return
+  }
+
+  const startAt = salonDateTimeToUtc(draft.date, draft.time, timeZoneId)
+
+  if (startAt === null) {
+    // Весной локального часа не существует: `salonDateTimeToUtc` вернул `null`.
+    pushIssue(draft, 'badTime')
+
+    return
+  }
+
+  const durationMinutes = draft.eventDurationMinutes ?? serviceMinutes
+  const candidate = endFromDuration(startAt, durationMinutes)
+  const endAt = hasValidSpan(startAt, candidate)
+    ? candidate
+    : serviceEndAt(draft, startAt, serviceMinutes)
+
+  if (endAt === null) {
+    return
+  }
+
+  draft.startAt = startAt
+  draft.endAt = endAt
+  markIcsWindow(draft, startAt, options)
+}
+
+/** Время строки календаря: момент события, а после правки времени — настенные часы. */
+function applyIcsTiming(draft: ImportDraft, options: ImportParseOptions): void {
+  if (draft.serviceId === null || draft.salonId === null) {
+    return
+  }
+
+  const service = options.services.find(
+    (item) => item.barberServiceId === draft.serviceId
+  )
+  const salon = options.salons.find((item) => item.salonId === draft.salonId)
+
+  if (service === undefined || salon === undefined) {
+    return
+  }
+
+  if (draft.useEventTime && draft.eventStartAt !== null) {
+    if (Number.isNaN(Date.parse(draft.eventStartAt))) {
+      pushIssue(draft, 'badTime')
+
+      return
+    }
+
+    applyIcsEventTiming(
+      draft,
+      draft.eventStartAt,
+      service.durationMinutes,
+      salon.timeZoneId,
+      options
+    )
+
+    return
+  }
+
+  applyIcsWallClockTiming(
+    draft,
+    salon.timeZoneId,
+    service.durationMinutes,
+    options
+  )
+}
+
+/**
+ * `startAt`/`endAt` и проверка прошлого для вставленного списка.
  *
  * Время переводится в UTC поясом салона: без этого «10:00» в Екатеринбурге стало
  * бы «10:00Z» и на сервер ушла бы другая запись. Нулевая длительность услуги —
  * тоже `noService`: конец визита совпал бы с началом.
  */
-function applyTiming(draft: ImportDraft, options: ImportParseOptions): void {
+function applyTextTiming(draft: ImportDraft, options: ImportParseOptions): void {
   if (draft.date === null || draft.time === null) {
     return
   }
@@ -906,12 +900,27 @@ function applyTiming(draft: ImportDraft, options: ImportParseOptions): void {
   }
 }
 
-/** Дубль внутри пачки: та же пара «время — салон» или «телефон — время». */
-function markDuplicates(rows: ImportDraft[]): void {
+/** Диспетчер: текст считает время настенными часами, календарь — моментом события. */
+function applyTiming(draft: ImportDraft, options: ImportParseOptions): void {
+  if (draft.source === 'ics') {
+    applyIcsTiming(draft, options)
+
+    return
+  }
+
+  applyTextTiming(draft, options)
+}
+
+/** Дубль текста: та же пара «салон — время» или «телефон — время». */
+function markTextDuplicates(rows: readonly ImportDraft[]): void {
   const seen = new Set<string>()
 
   for (const row of rows) {
-    if (row.startAt === null || row.issues.length > 0) {
+    if (
+      row.source === 'ics'
+      || row.startAt === null
+      || row.issues.length > 0
+    ) {
       continue
     }
 
@@ -922,7 +931,7 @@ function markDuplicates(rows: ImportDraft[]): void {
     }
 
     if (slots.some((key) => seen.has(key))) {
-      row.issues.push('duplicate')
+      pushIssue(row, 'duplicate')
       continue
     }
 
@@ -930,6 +939,184 @@ function markDuplicates(rows: ImportDraft[]): void {
       seen.add(key)
     }
   }
+}
+
+/**
+ * Ключи дубля события: идентичность `UID` + `RECURRENCE-ID`, затем время с тем же
+ * телефоном, а без телефона — с тем же именем.
+ */
+function icsDuplicateKeys(row: ImportDraft): string[] {
+  const keys: string[] = []
+
+  if (row.externalUid !== null) {
+    keys.push(`${row.externalUid}\0${row.recurrenceId ?? ''}`)
+  }
+
+  if (row.startAt === null) {
+    return keys
+  }
+
+  const phone = row.phone === null ? null : normalizeImportPhone(row.phone)
+
+  if (phone !== null) {
+    keys.push(`phone\0${row.startAt}\0${phone}`)
+  } else if (row.firstName !== null) {
+    keys.push(`name\0${row.startAt}\0${collapse(flatten(row.firstName))}`)
+  }
+
+  return keys
+}
+
+/**
+ * Дубль события календаря: та же идентичность события или то же время с тем же
+ * телефоном (без телефона — с тем же именем). Вторая по номеру строка получает
+ * `duplicate`.
+ */
+function markIcsDuplicates(rows: readonly ImportDraft[]): void {
+  const seen = new Set<string>()
+  const candidates = rows
+    .filter((row) => row.source === 'ics' && row.issues.length === 0)
+    .sort((left, right) => left.line - right.line)
+
+  for (const row of candidates) {
+    const keys = icsDuplicateKeys(row)
+
+    if (keys.some((key) => seen.has(key))) {
+      pushIssue(row, 'duplicate')
+      continue
+    }
+
+    for (const key of keys) {
+      seen.add(key)
+    }
+  }
+}
+
+function markDuplicates(rows: readonly ImportDraft[]): void {
+  markTextDuplicates(rows)
+  markIcsDuplicates(rows)
+}
+
+/** Интервал строки календаря; у текста и строк без обоих моментов его нет. */
+function icsInterval(row: ImportDraft): { start: number; end: number } | null {
+  if (row.source !== 'ics' || row.startAt === null || row.endAt === null) {
+    return null
+  }
+
+  const start = Date.parse(row.startAt)
+  const end = Date.parse(row.endAt)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return null
+  }
+
+  return { start, end }
+}
+
+/** Полуинтервалы `[start, end)` пересекаются: конец одного позже начала другого. */
+function intervalsIntersect(
+  left: { start: number; end: number },
+  right: { start: number; end: number }
+): boolean {
+  return left.start < right.end && right.start < left.end
+}
+
+/** Порядок строк календаря: по началу, при равенстве — по номеру строки. */
+function compareIcsRows(left: ImportDraft, right: ImportDraft): number {
+  const leftStart = left.startAt === null ? 0 : Date.parse(left.startAt)
+  const rightStart = right.startAt === null ? 0 : Date.parse(right.startAt)
+
+  if (leftStart !== rightStart) {
+    return leftStart - rightStart
+  }
+
+  return left.line - right.line
+}
+
+/**
+ * Пересечения строк календаря: вторая по времени строка получает `overlap`.
+ *
+ * Салон не важен — барбер не может быть в двух местах. Строка с уже найденным
+ * `overlap` остаётся источником конфликта, поэтому третья строка, пересекающая
+ * только вторую, тоже помечается.
+ */
+function markOverlaps(
+  rows: readonly ImportDraft[],
+  included?: ReadonlySet<number>
+): void {
+  const candidates = rows
+    .filter((row) => included === undefined || included.has(row.line))
+    .filter((row) => icsInterval(row) !== null)
+    .sort(compareIcsRows)
+  const earlier: ImportDraft[] = []
+
+  for (const row of candidates) {
+    const interval = icsInterval(row)
+
+    if (interval === null) {
+      continue
+    }
+
+    const overlaps = earlier.some((other) => {
+      const otherInterval = icsInterval(other)
+
+      return otherInterval !== null && intervalsIntersect(otherInterval, interval)
+    })
+
+    if (overlaps) {
+      pushIssue(row, 'overlap')
+    }
+
+    earlier.push(row)
+  }
+}
+
+/**
+ * Партнёр пересечения для подписи «Пересекается с записью «…»».
+ *
+ * Возвращается самая ранняя строка календаря, которая начинается раньше данной
+ * (при равном начале — с меньшим номером) и пересекает её интервал. `included`
+ * ограничивает поиск выбранными строками: снятая галочка снимает конфликт.
+ */
+export function findOverlapPartner(
+  rows: readonly ImportDraft[],
+  line: number,
+  included?: ReadonlySet<number>
+): ImportDraft | null {
+  const target = rows.find((row) => row.line === line)
+  const targetInterval = target === undefined ? null : icsInterval(target)
+
+  if (target === undefined || targetInterval === null) {
+    return null
+  }
+
+  let partner: ImportDraft | null = null
+
+  for (const candidate of rows) {
+    const interval = icsInterval(candidate)
+
+    if (interval === null || candidate.line === line) {
+      continue
+    }
+
+    if (included !== undefined && !included.has(candidate.line)) {
+      continue
+    }
+
+    if (compareIcsRows(candidate, target) >= 0) {
+      continue
+    }
+
+    if (!intervalsIntersect(interval, targetInterval)) {
+      continue
+    }
+
+    if (partner === null || compareIcsRows(candidate, partner) < 0) {
+      partner = candidate
+    }
+  }
+
+  return partner
 }
 
 export type ImportRowPatch = {
@@ -940,6 +1127,10 @@ export type ImportRowPatch = {
   phone?: string | null
   salonId?: string | null
   serviceId?: string | null
+  /** Строка больше не показывает момент события: время считается из даты/времени. */
+  useEventTime?: boolean
+  /** Длительность события; подстановка слота сбрасывает её в `null`. */
+  eventDurationMinutes?: number | null
 }
 
 function deriveIssues(row: ImportDraft): ImportIssue[] {
@@ -978,6 +1169,9 @@ function recomputeRow(row: ImportDraft, options: ImportParseOptions): ImportDraf
     endAt: null,
     serviceCandidates: row.serviceId === null ? row.serviceCandidates : [],
     issues: deriveIssues(row),
+    // Подсказки календаря переживают пересчёт: `durationMismatch` добавляется к ним,
+    // а не заменяет их.
+    hints: [...row.hints],
   }
 
   applyTiming(next, options)
@@ -990,9 +1184,14 @@ export function applyImportRowPatch(
   row: ImportDraft,
   patch: ImportRowPatch
 ): ImportDraft {
+  // Правка даты или времени означает, что строка больше не показывает момент
+  // события: время считается из настенных часов, а не из исходного инстанта.
+  const editsWallClock = patch.date !== undefined || patch.time !== undefined
+
   return {
     ...row,
     ...patch,
+    ...(editsWallClock ? { useEventTime: false } : {}),
     // Правка услуги снимает неоднозначность: кандидаты больше не нужны.
     ...(patch.serviceId === undefined ? {} : { serviceCandidates: [] }),
   }
@@ -1002,16 +1201,19 @@ export function applyImportRowPatch(
  * Пересчёт пачки после правки.
  *
  * Ошибки полей выводятся из значений, поэтому исправленная ячейка сразу гасит
- * свою ошибку, а дубли считаются заново по всей пачке: первая строка пары снова
- * становится готовой.
+ * свою ошибку, а дубли и пересечения считаются заново по всей пачке: первая
+ * строка пары снова становится готовой. `included` ограничивает пересечения
+ * выбранными строками; без него участвуют все.
  */
 export function recomputeImportRows(
   rows: readonly ImportDraft[],
-  options: ImportParseOptions
+  options: ImportParseOptions,
+  included?: ReadonlySet<number>
 ): ImportDraft[] {
   const next = rows.map((row) => recomputeRow(row, options))
 
   markDuplicates(next)
+  markOverlaps(next, included)
 
   for (const row of next) {
     row.issues = sortIssues(row.issues)
@@ -1071,3 +1273,7 @@ export function parseImportText(
 
   return { rows, failure: null }
 }
+
+// Публичный API модуля не менялся: правка телефона в предпросмотре и проверка
+// готовности по-прежнему берутся отсюда, хотя живут в `import-match.ts`.
+export { isImportPhone, normalizeImportPhone }

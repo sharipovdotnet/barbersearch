@@ -199,3 +199,49 @@ export function salonDateTimeToUtc(
 
   return first === null ? null : new Date(first).toISOString()
 }
+
+/**
+ * Обёртка над `wallClock` для импорта из календаря: проверяет инстант до `Intl`.
+ *
+ * `formatToParts` бросает на невалидной дате, а файл — недоверенный ввод. `null`
+ * означает «пояс или дата не прочитались»: вызывающий берёт срез исходного ISO.
+ */
+function salonWallClock(iso: string, timeZoneId: string): number | null {
+  const instant = Date.parse(iso)
+
+  if (Number.isNaN(instant)) {
+    return null
+  }
+
+  try {
+    return wallClock(instant, timeZoneId)
+  } catch {
+    // Защита от исключения `Intl`: решение о срезе ISO принимает вызывающий.
+    return null
+  }
+}
+
+/**
+ * Календарная дата `YYYY-MM-DD` инстанта в поясе салона.
+ *
+ * Событие календаря хранится абсолютным моментом, а строка предпросмотра
+ * показывает дату салона: в поясах восточнее UTC вечерний инстант уже завтра.
+ * Неизвестный пояс не роняет страницу — возвращается дата самого ISO.
+ */
+export function salonDateFromInstant(iso: string, timeZoneId: string): string {
+  const wall = salonWallClock(iso, timeZoneId)
+
+  return wall === null ? iso.slice(0, 10) : new Date(wall).toISOString().slice(0, 10)
+}
+
+/**
+ * Время `HH:mm` инстанта в поясе салона.
+ *
+ * UI показывает минуты без секунд, а правка времени потом пересчитывает момент
+ * из пояса выбранного салона. Неизвестный пояс — срез ISO, как у `salonDateFromInstant`.
+ */
+export function salonTimeFromInstant(iso: string, timeZoneId: string): string {
+  const wall = salonWallClock(iso, timeZoneId)
+
+  return wall === null ? iso.slice(11, 16) : new Date(wall).toISOString().slice(11, 16)
+}

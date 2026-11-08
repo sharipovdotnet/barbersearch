@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCount,
   formatDelta,
+  formatEventsCount,
   formatGapsCount,
   formatNumber,
   formatPercent,
@@ -44,6 +45,17 @@ describe('счётчики сводки', () => {
     [21, '21 окно'],
   ])('formatGapsCount(%i) → «%s»', (count, expected) => {
     expect(formatGapsCount(count)).toBe(expected)
+  })
+
+  it.each([
+    [1, '1 событие'],
+    [2, '2 события'],
+    [4, '4 события'],
+    [5, '5 событий'],
+    [11, '11 событий'],
+    [21, '21 событие'],
+  ])('formatEventsCount(%i) → «%s»', (count, expected) => {
+    expect(formatEventsCount(count)).toBe(expected)
   })
 })
 

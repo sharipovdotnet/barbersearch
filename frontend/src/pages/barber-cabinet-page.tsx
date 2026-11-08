@@ -378,7 +378,7 @@ function BarberBookingsScreen({
               }
             }}
           >
-            Перенести записи из Google Docs
+            Перенести записи
           </a>
         </div>
       </div>

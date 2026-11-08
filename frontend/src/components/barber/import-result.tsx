@@ -5,6 +5,7 @@ import type { ImportRow, ImportSummary } from '@/hooks/use-barber-import'
 import type { BarberBookingOptions } from '@/lib/barber-booking-options'
 import type { BarberSlot } from '@/lib/barber-slots'
 import { formatShortDay, formatTime } from '@/lib/format'
+import type { ImportSource } from '@/lib/import-parse'
 
 /**
  * Шаг 3: отчёт о переносе.
@@ -12,7 +13,30 @@ import { formatShortDay, formatTime } from '@/lib/format'
  * Числа — первое, что видит барбер; ниже только те строки, которые не создались,
  * с причиной и ближайшим свободным временем. Повтор идёт теми же ключами
  * идемпотентности, поэтому уже созданная запись дублем не станет.
+ *
+ * Для календаря отчёт честно говорит, сколько выбрано и сколько строк ещё требуют
+ * внимания: иначе барбер решит, что невыбранные события потерялись. «Перенести ещё»
+ * возвращает в предпросмотр без повторного чтения файла.
  */
+
+const pluralRules = new Intl.PluralRules('ru')
+
+/** «1 строка» / «2 строки» / «5 строк». */
+function rowsWord(count: number): string {
+  const category = pluralRules.select(count)
+
+  if (category === 'one') {
+    return 'строка'
+  }
+
+  return category === 'few' ? 'строки' : 'строк'
+}
+
+function attentionText(count: number): string {
+  const verb = count === 1 ? 'требует' : 'требуют'
+
+  return `${count} ${rowsWord(count)} ${verb} внимания.`
+}
 
 function moment(date: string | null, time: string | null): string {
   const day = date === null ? 'без даты' : formatShortDay(`${date}T00:00:00Z`, 'UTC')
@@ -109,8 +133,12 @@ export function ImportResult({
   rows,
   summary,
   options,
+  source,
+  canContinue,
   isRunning,
   onRetryFailed,
+  onContinue,
+  onReview,
   onApplySlot,
   onLoadSlots,
   onOpenBookings,
@@ -118,14 +146,35 @@ export function ImportResult({
   rows: ImportRow[]
   summary: ImportSummary
   options: BarberBookingOptions
+  source: ImportSource
+  /** Есть не созданные строки: отчёт предлагает «Перенести ещё». */
+  canContinue: boolean
   isRunning: boolean
   onRetryFailed: () => void
+  onContinue: () => void
+  onReview: () => void
   onApplySlot: (line: number, slot: BarberSlot) => void
   onLoadSlots: (line: number) => void
   onOpenBookings: () => void
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const failed = rows.filter((row) => row.status === 'failed')
+  const selected = rows.filter((row) => row.included).length
+  // После «Перенести ещё» созданные строки прошлой пачки сняты с выбора: отчёт
+  // календаря говорит о текущей пачке, а не о кумулятивном `summary.created`.
+  const createdNow = rows.filter(
+    (row) => row.included && row.status === 'created'
+  ).length
+  const attention = rows.filter(
+    (row) =>
+      row.included
+      && row.status !== 'created'
+      && row.draft.issues.length > 0
+  ).length
+  const report =
+    source === 'ics'
+      ? `Перенесено ${createdNow} из ${selected} выбранных записей.`
+      : `Перенесено ${summary.created} из ${summary.total} записей.`
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true })
@@ -143,8 +192,30 @@ export function ImportResult({
       </h3>
 
       <p role="status" className="text-base">
-        {`Перенесено ${summary.created} из ${summary.total} записей.`}
+        {report}
       </p>
+
+      {source === 'ics' && (
+        <p className="text-sm text-muted-foreground">
+          Повторная загрузка этого файла не создаст дублей.
+        </p>
+      )}
+
+      {attention > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm">{attentionText(attention)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 sm:h-8"
+            disabled={isRunning}
+            onClick={onReview}
+          >
+            Проверить строки
+          </Button>
+        </div>
+      )}
 
       {failed.length > 0 && (
         <div className="rounded-xl border bg-card p-4">
@@ -190,6 +261,18 @@ export function ImportResult({
             onClick={onRetryFailed}
           >
             Повторить неудачные
+          </Button>
+        )}
+        {canContinue && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 sm:h-8"
+            disabled={isRunning}
+            onClick={onContinue}
+          >
+            Перенести ещё
           </Button>
         )}
         <Button

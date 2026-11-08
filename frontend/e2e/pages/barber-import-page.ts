@@ -1,11 +1,14 @@
+import { Buffer } from 'node:buffer'
+
 import { expect, type Locator, type Page } from '@playwright/test'
 
 /**
- * `/barber/import` — перенос старых записей из вставленного списка.
+ * `/barber/import` — перенос старых записей из календаря (`.ics`) или списка.
  *
  * Экран живёт тремя шагами на одном адресе: форма, проверка и отчёт. Объект
  * страницы называет каждый шаг своим локатором, чтобы спек читался как путь
- * барбера, а не как набор CSS-селекторов.
+ * барбера, а не как набор CSS-селекторов. Источник переключается нативными
+ * радио: по умолчанию — файл календаря, текст выбирается явно.
  */
 export class BarberImportPage {
   readonly page: Page
@@ -28,6 +31,50 @@ export class BarberImportPage {
 
   get backLink(): Locator {
     return this.page.getByRole('link', { name: '← Записи клиентов' })
+  }
+
+  /** Группа «Откуда перенести»: нативные радио в `fieldset`/`legend`. */
+  get sourceGroup(): Locator {
+    return this.page.getByRole('group', { name: 'Откуда перенести' })
+  }
+
+  get calendarSource(): Locator {
+    return this.page.getByRole('radio', { name: 'Файл календаря', exact: true })
+  }
+
+  get textSource(): Locator {
+    return this.page.getByRole('radio', { name: 'Список текстом', exact: true })
+  }
+
+  /**
+   * Скрытый `input[type=file]` — только по типу, не по имени.
+   *
+   * Поле названо видимым текстом обёртки-`label` («Перетащите .ics сюда или
+   * выберите файл»), а не отдельным `aria-label`: WCAG 2.5.3 требует, чтобы
+   * доступное имя содержало видимый текст. Поэтому имя длинное и составное,
+   * а `getByRole`/`getByLabel` по короткому «Файл календаря» задел бы радио.
+   */
+  get fileInput(): Locator {
+    return this.page.locator('form input[type="file"]')
+  }
+
+  get parseFileButton(): Locator {
+    return this.page.getByRole('button', { name: 'Разобрать файл', exact: true })
+  }
+
+  /** Период разбора календаря: 7 / 30 / 90 дней, по умолчанию 30. */
+  get periodSelect(): Locator {
+    return this.page.getByLabel('Период', { exact: true })
+  }
+
+  /** Сводка календаря: «Выбрано 1 из 1 · Готово 1». */
+  get icsSummary(): Locator {
+    return this.page.getByText(/^Выбрано \d+ из \d+/)
+  }
+
+  /** «Пропущено N событий» — раскрывающийся блок над предпросмотром. */
+  get skipped(): Locator {
+    return this.page.getByText(/^Пропущено \d+ событ/)
   }
 
   get textarea(): Locator {
@@ -94,6 +141,37 @@ export class BarberImportPage {
 
   async paste(text: string): Promise<void> {
     await this.textarea.fill(text)
+  }
+
+  /** Переключение на источник «Список текстом»: без него поля вставки нет. */
+  async selectTextSource(): Promise<void> {
+    await this.textSource.check()
+  }
+
+  async selectCalendarSource(): Promise<void> {
+    await this.calendarSource.check()
+  }
+
+  /**
+   * Кладёт файл в скрытый input: `setInputFiles` не требует видимости поля.
+   *
+   * Имя файла показывает сама форма, поэтому `.ics` передаётся явно, а не
+   * выводится из содержимого.
+   */
+  async uploadCalendar(
+    content: string | Buffer,
+    name: string
+  ): Promise<void> {
+    await this.fileInput.setInputFiles({
+      name,
+      mimeType: 'text/calendar',
+      buffer: typeof content === 'string' ? Buffer.from(content, 'utf8') : content,
+    })
+  }
+
+  async parseCalendar(): Promise<void> {
+    await this.parseFileButton.click()
+    await expect(this.icsSummary).toBeVisible()
   }
 
   async parse(text: string): Promise<void> {
