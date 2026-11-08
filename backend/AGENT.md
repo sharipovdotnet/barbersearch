@@ -1343,6 +1343,25 @@ not the count. The count and the page are two reads without a transaction; publi
 review between them yields `pendingCount > 0` with `oldest = null`, which is a race, not an
 error. Evidence: `frontend/verification/issue-40-explain.txt`.
 
+**Admin statistics (2026-11-08, stage statistics-tab).** `GET api/admin/statistics` is the
+second aggregate read of the admin API. It was measured on `barbersearch_stats_load` — a
+migrated database with **1,200,000 bookings** (85 % completed, 10 % cancelled, 5 % no-show),
+100,000 reviews, 200 profiles and 50 salons — over a **30-day window** inside the loaded range
+(`2026-08-01 … 2026-08-31`), after `VACUUM ANALYZE` and a warm cache. The existing
+`ix_bookings_status_start_at_id` serves the status/start filters; `created_at` has no index.
+Measured execution times of the final queries: overview+statuses combined into one scan
+**459 ms** (two separate scans were 435 + 330 ms), clients **702 ms** after replacing the
+history-wide `min(start_at)` aggregate with `NOT EXISTS` over 300 distinct visitors (it was
+2,020 ms), supply **435 ms**, series **672 ms**, top barbers **281 ms**, top services
+**297 ms**, top cities **274 ms**, reviews quality **35 ms**. Total for a request is therefore
+about **3.1 s**, not the 300–500 ms budget. A trial `ix_bookings_created_at` lowered the series
+to **386 ms** and was dropped after the measurement; no migration was added. The finding and
+the proposed follow-up (a `created_at` index for the series plus a daily rollup table for
+overview/statuses/tops, which is a separate slice and needs an owner decision) are recorded in
+`frontend/verification/statistics-explain.txt` and `statistics-explain-optimized.txt`; the load
+seed is `frontend/verification/statistics-load.sql`. The endpoint stays schema-free, like the
+summary: adding an index silently would change the contract of this slice.
+
 **Audit entity types (2026-11-02, issue-41).** The `entityType` filter grew from three types to
 seven, so the issue-38 decision was re-measured on a migrated copy of the load database with
 **1,000,000 synthetic `audit_log` rows** distributed `user` 40 %, `barber_profile` 15 %, `review`
@@ -1766,6 +1785,7 @@ child entity:
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 | `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
 | `AdminSummaryController` | `api/admin/summary` | 1 (aggregate read, admin only, no parameters) |
+| `AdminStatisticsController` | `api/admin/statistics` | 1 (aggregate read, admin only, required period) |
 | `BarberRequestsController` | `api/barber-requests` | 2 (create + mine) |
 | `AdminBarberRequestsController` | `api/admin/barber-requests` | 4 (list + by id + approve + reject, admin only) |
 
@@ -2045,6 +2065,32 @@ Read endpoints (added 2026-10-19):
   unchanged — `PagedResponse<T>` still has no `total`, because the number is needed by one screen
   and not by the shared pagination contract. No new `ApiErrorCodes` group: a failed read is the
   common `500 internal.database`, and empty queues are `0`/`null`, not an error.
+- **Admin statistics (2026-11-08, stage statistics-tab).** `GET api/admin/statistics` is the
+  second aggregate read of the admin API and the first one with parameters:
+  `?from=2026-10-10&to=2026-11-08&compare=true|false`, `AdminOnly`, one `[HttpGet]`. `from`/`to`
+  arrive as strings so the handler — not model binding — answers `400 admin.statistics.period`
+  for a missing date, a non-`yyyy-MM-dd` format, `from > to` or more than 366 days. The range is
+  inclusive UTC days: SQL uses `start_at >= from 00:00Z AND start_at < (to + 1) 00:00Z`;
+  `compare` is `false` by default and only then is the previous period of the same length
+  exposed in `period.previous` and in the `previous` fields of the overview metrics. The
+  response is typed by section (`overview`, `series`, `statuses`, `clients`, `supply`, `top`,
+  `quality`, `period`, `generatedAt`), not an array of KPI; all money is a number plus
+  `currency: "RUB"` (there is no currency in the domain, and the UI says «оборот», not
+  «выручка»), shares are `0..1` or `null` when the denominator is zero. `reviews` in `quality`
+  is the number of reviews **created** in the period; `publishedShare` is the share of them
+  published now, while `rating`/`distribution` use published reviews only. `noShowRate` also
+  carries `count` so the UI can show absolute numbers when `sample < 10` instead of a
+  percentage over a tiny base. `series` is dense: every day when the period is at most 92 days,
+  otherwise ISO weeks from Monday; the first/last week bucket may be partial and the client
+  labels that. Tops use `INNER JOIN` and `other = total − sum(top)`, so deleted profiles, services
+  or salons fall into «Остальные» and reconciliation holds; the minimum is 3 completed visits.
+  `GetAdminStatisticsHandler` calls the cross-aggregate `IAdminStatisticsRepository` once;
+  the repository runs its queries sequentially (the `DbContext` is not thread-safe), uses
+  `AsNoTracking`-style `SqlQuery<T>` with parameters (no concatenated SQL) and never writes.
+  The service is `TimeProvider`-based for `due`/`closed`/stuck; PII (email, client name, user id)
+  is absent from the response. No mutations, no `audit_log`, no cache on the server; the client
+  holds the period in the URL and reads only on demand. No new schema or index (see §15.2);
+  `no-store` comes from the shared middleware.
 - **Barber requests (2026-11-06, issue-46).** `POST api/barber-requests` (cookie mutation, CSRF;
   any authenticated role but only `Customer`, otherwise `403 barberRequest.create.forbidden`)
   creates a `Pending` request from the current user and answers `201` with

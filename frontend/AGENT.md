@@ -1080,6 +1080,7 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/admin/bookings/{id}` | admin | one booking with the same `AdminBookingResponse` (customer name/email/phone; for a walk-in `customer.id`/`email` are `null`, the name/phone come from the booking, barber, service, salon with `timeZoneId`, price snapshot, both notes, `cancellationReason`, `createdAt`); `404 admin.bookings.notFound`; email and phone are PII and exist **only** in this admin contract — the public `BookingResponse` carries no email and its `userId` is nullable for a guest row |
 | `GET` | `/api/admin/audit?entityType=all\|user\|barber_profile\|review\|salon\|hair_service\|specialization\|booking&actor=&from=&to=&cursor=&pageSize=` | admin | read-only change journal, newest first with keyset `(occurred_at DESC, id)`: `entityType` defaults to `all` (comparison after `Trim`, case-insensitive), `actor` is a trimmed email substring of at most 100 characters with `%`, `_` and `\` escaped, `from`/`to` are inclusive **UTC days**; every entry is `{ id, occurredAt, action, entityType, entityId, actor: { id, email } \| null, changes: [{ field, from, to }] }`; `action` is `{entity}.{created\|updated\|deleted}`, `changes` is the parsed payload with fields sorted by name (creation and deletion: `from = null`), secrets stay `[redacted]`, an unreadable payload is `changes: []`; the author comes from `LEFT JOIN users` and may be `null` (deleted account or a system write); the entity name is **not** resolved; the journal covers seven types — `user`, `barber_profile`, `review`, `salon`, `hair_service`, `specialization` and `booking` (booking rows contain only `Status`/`BarberNote`/`CancellationReason` changes; booking creation is deliberately not audited, and `BarberProfile` children are not covered) — retention and export remain separate; `400 admin.audit.entityType/actor/period/pageSize/cursor.invalid` |
 | `GET` | `/api/admin/summary` | admin | the «what needs attention» aggregate: `{ reviews: { pendingCount, oldest }, barbers: { unverifiedCount }, salons: { inactiveCount } }`; no parameters, no pagination, no `total`; numbers use exactly the section predicates (`is_published = false`, `is_verified = false`, `is_active = false AND moderation_status = 2`) and `oldest` is the first FIFO row of the moderation queue (`null` when empty); a `Pending` salon is not counted as «выключенный»; names only — no customer email or phone; read-only |
+| `GET` | `/api/admin/statistics?from=&to=&compare=true\|false` | admin | the «service statistics» aggregate: `from`/`to` are required `yyyy-MM-dd` UTC days (inclusive, `from <= to`, at most 366 days, otherwise `400 admin.statistics.period`), `compare` defaults to `false` and only then fills `period.previous` and the `previous` fields of the overview; typed sections `overview` (six metrics; `noShowRate` also carries `count` and `sample`), `series` (dense day series up to 92 days, otherwise ISO weeks from Monday; `created` by `created_at`, the rest by `start_at`), `statuses` (`pending`/`confirmed`/`completed`/`cancelled`/`noShow`/`due`/`closed`), `clients` (no user ids or names), `supply` (active/working/idle barbers, new profiles, salons by `PlaceKind`), `top` (barbers/services/cities, minimum 3 completed visits, `other` as the remainder of the period total) and `quality` (published-reviews rating/distribution, new reviews + published share, barber-request and salon moderation with approval rate and median decision hours); money is a number + `currency: "RUB"`, shares are `0..1` or `null`; no PII, no mutations, no `audit_log`, `no-store`; no schema change (`backend/AGENT.md` §15.2 records the measured cost and the proposed rollup) |
 | `PUT` | `/api/users/{id}/role` | admin | change a role; `409 user.role.self` / `user.admin.last` |
 | `POST` / `DELETE` | `/api/users/{id}/activation` | admin | unblock / block; `409 user.deactivation.self` / `user.admin.last` |
 | `POST` | `/api/users/{id}/email-verification`, `/phone-verification` | admin | mark email / phone verified |
@@ -1514,22 +1515,22 @@ contrast on screens outside the axe matrix.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-11-06)
+### 12.1 Current build (2026-11-08)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 340.03 kB | 110.26 kB |
-| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 153.50 kB total | 53.41 kB |
-| `admin-page-*.js` — lazy `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit) | 222.93 kB | 45.58 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 38.82 kB | 10.58 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 32.01 kB | 8.53 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit and React | 340.63 kB | 110.45 kB |
+| `csrf-*.js`, `router-*.js` — shared chunks that `index.html` modulepreloads with the entry | 153.62 kB total | 52.70 kB |
+| `admin-page-*.js` — lazy `/admin/**` (summary, statistics, reviews, barbers, users, barber requests, catalogue, bookings, audit; the statistics slice added the screen, its SVG chart and the typed guard) | 255.09 kB | 52.00 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 52.20 kB | 13.73 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with slots, booking and reviews | 32.73 kB | 8.69 kB |
 | `privacy-page-*.js` — lazy `/privacy` with the policy sections and the cookie registry | 29.43 kB | 7.57 kB |
-| `account-page-*.js` — lazy `/account` with the hero, two server tabs, the request card and the dialogs | 28.23 kB | 8.79 kB |
-| `barber-schedule-page-*.js` — lazy `/barber/schedule` with the week, exceptions and time offs | 22.59 kB | 6.35 kB |
-| `become-a-barber-page-*.js` — lazy `/become-a-barber` with the marketing copy, the request form and the status card | 17.83 kB | 5.34 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.74 kB | 5.39 kB |
-| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 13.88 kB | 4.51 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 11.57 kB | 3.96 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs, the request card and the dialogs | 28.27 kB | 8.82 kB |
+| `barber-schedule-page-*.js` — lazy `/barber/schedule` with the week, exceptions and time offs | 22.67 kB | 6.38 kB |
+| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 19.97 kB | 6.07 kB |
+| `become-a-barber-page-*.js` — lazy `/become-a-barber` with the marketing copy, the request form and the status card | 17.84 kB | 5.35 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 16.74 kB | 5.38 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 11.58 kB | 3.97 kB |
 | `account-security-page-*.js` — lazy `/account/security` with the password and sign-out cards | 8.91 kB | 3.14 kB |
 | `account-profile-page-*.js` — lazy `/account/profile` with the profile form | 7.84 kB | 2.92 kB |
 | `paging-*.js` — shared cursor pager used by the row lists | 7.12 kB | 2.64 kB |
@@ -1669,7 +1670,8 @@ no change to `ui/**`.
 | Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone; for a walk-in — name/phone and «Записан без аккаунта», no email), barber, service, salon, price, both notes, `cancellationReason`, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states, 30-second polling of the list and the open card. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are written to `audit_log`** as `booking.updated` (the `Booking` allowlist records `Status`/`BarberNote`/`CancellationReason`; booking creation is deliberately not audited) |
 | Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить», no timer — refreshed when the tab becomes visible; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. The journal covers seven entity types — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking` (booking rows carry only `Status`/`BarberNote`/`CancellationReason` changes; booking creation is deliberately not audited) — and offers the four new filters with Russian labels «Салон», «Услуга», «Специализация», «Бронь», Russian values for `status`/`category` and «Активность» for `isActive`; retention, export and partitioning remain separate |
 | Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`; a salon waiting for moderation is not «выключенный», the server counts only `!isActive && Active`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить», 30-second polling while the screen is open; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
-| Other admin sections | ✅ all built: summary, reviews, barbers, users, barber requests, the catalogue, the bookings and the journal (§13) |
+| Admin statistics | ✅ `/admin/statistics`: the second rail item and the «service statistics» screen from `GET api/admin/statistics`. Period: presets 7/30/90/365 days, two native date inputs and «Сравнить с прошлым периодом»; the period lives in `?from=&to=&compare=1`, an invalid/too-long URL opens the last 30 UTC days without an error, the server still validates (`400 admin.statistics.period` → «Проверьте период: максимум — 366 дней.»). Header with «Обновлено в …» and the only write-less action «Обновить» (quiet refresh, error as a `role="alert"` line, no auto-refresh). Six overview tiles in one `dl` strip with `divide` lines: completed visits, turnover («по завершённым визитам» — not revenue), average check, new accounts, no-show rate (absolute numbers when `sample < 10`, deltas in п.п.) and stuck bookings (no previous). «Записи»: own SVG line chart (created vs completed) with legend, 3 Y-grid lines, 3–4 X labels, a text summary and a `<details>` table duplicate; status bar with a 100 % SVG strip and legend with numbers; «Закрыто визитов: … из …». «Клиенты» and «Предложение» in two columns on `lg` and stacked on 320; «Лидеры»: barbers/services/cities tables with a minimum of 3 visits, an «Остальные» footer row and the minimum note; «Качество и модерация»: rating/distribution/novel reviews/published share plus request and salon moderation with approval rate and median hours; «Как считаем» is a `<details>` with formulas and the «Оборот — сумма цен завершённых визитов. Это не выручка…» disclaimer. States: skeleton, empty period («За этот период данных нет. Попробуйте расширить период.»), first-page error with «Повторить», refresh error keeping the data, `401` gate, `403`/`429`/`400` Russian texts; one `h1`, section `h2`s, chart `role="img"` with `aria-label`, `aria-busy`, `role="status"` for the quiet refresh, `role="alert"` for errors; 44 px controls and zero horizontal scroll at 320 |
+| Other admin sections | ✅ all built: summary, statistics, reviews, barbers, users, barber requests, the catalogue, the bookings and the journal (§13) |
 | Admin barber requests | ✅ `/admin/barber-requests`: queue (`?status=pending`, oldest first) and all requests (`?status=all`, every request newest first) in one screen, filter in the URL and the card in the path, split-view detail (full screen on mobile) with the applicant (name/email), answers, submission/review dates and the rejection reason; «Одобрить» behind an `alertdialog` that says the role change ends **all** of the applicant's sessions and that the profile is created after signing in again, «Отклонить» behind an `alertdialog` with a **required** reason (≤ 500, empty never sent); after a decision the row is updated locally (queue: removed) and both list and card are silently re-read, with `role="status"`/`role="alert"` feedback, 30-second polling of the queue and the open card, and a `404` on the action removes the row silently; empty states «Заявок нет» / «Заявок с таким статусом нет», no counts — `ListPager` shows the range; `401` gate and `403` text. **Requests are deliberately not audited**: the row keeps `about`/`city` and the decision, and the journal only sees the `user.updated` role change (§9.3) |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with the policy edition and a link to `/privacy`), one `POST /api/auth/register` without CSRF that carries `consentVersion` from `PRIVACY_POLICY_VERSION`, automatic sign-in with the same password and `/account` on success, «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates; `auth.register.consentRequired` maps to the existing checkbox error, `auth.register.consentVersion` to a form-level «Политика обновилась» alert |
 | Стать барбером | ✅ `/become-a-barber`: anonymous marketing copy (what the role gives) with `LoginDialog` and «Зарегистрироваться» and **no request**; loading skeleton and `SessionUnavailable`; `Customer` reads `GET /api/barber-requests/mine` once and gets the form (name 1..120, experience 1..70, city 1..100, «о себе» ≤ 2000, «уже работаю в салоне») or the status card («На рассмотрении» / «Одобрена» with «Войти снова» while the session is still `Customer` / «Отклонена» with the reason and «Подать заявку снова»); `Barber` gets «Вы уже барбер» with `/barber` or `/barber/onboarding`, `Admin` a link to `/admin/barber-requests`; one `POST` with CSRF, `201` replaces the form with «Заявка отправлена», `409 alreadyPending`/`403`/`429`/network mapped to Russian copy with «Повторить» where it helps. The `/account` card reads the same endpoint, is mounted for `Customer` only and never blocks the booking lists (own loading, quiet retry, no `401` UI) |
@@ -1806,7 +1808,14 @@ and the catalogue «Выключенные» filter), the oldest review being th
 opening `#review-detail` with browser «Назад» returning, exactly one `/api/admin/summary` request
 per «Обновить» with no skeleton flash, the read-only guarantees (no «Показать ещё», create,
 delete or edit, no `canvas`, one button) and an injected `401` (`page.route` plus a `204`
-refresh). The registration-consent spec (desktop and mobile) checks the real request on a taken
+refresh). The statistics spec (`statistics.spec.ts`, desktop and mobile) covers the second rail
+item and `aria-current`, the heading and period line, all six tile labels, the chart
+`role="img"`, the status strip, the `<details>` table duplicate, a preset and a custom date each
+making one new `/api/admin/statistics` request with the expected `from`/`to`, `compare=true` in
+the query, exactly one request per «Обновить», the read-only guarantees (no «Показать ещё»,
+create, delete or edit) and the unchanged sections after a refresh; axe adds the route at 1280
+and 320, and the 320 scene also asserts zero horizontal scroll. The registration-consent spec
+(desktop and mobile) checks the real request on a taken
 seeded email — the body carries `consentVersion`, the server answers `409 user.create.emailTaken`
 (not `400 auth.register.consentVersion`) and no user is created — and the injected outdated-edition
 `400`, which shows the Russian «Политика обработки данных обновилась…» alert, keeps the form
@@ -1887,12 +1896,25 @@ block and a malformed `oldest` while accepting `oldest: null` and extra fields, 
 fallback error mapping); `SummaryScreen` (the three blocks with their numbers, `href`s and copy, the
 honest zeros, the `401` gate, the first-page error with «Повторить», the refresh error that keeps
 the blocks, exactly one request per «Обновить» and the «Обновлено в …» label); and the
-`formatProfilesCount`/`formatSalonsCount` plural forms. `BarbersScreen` (the URL filter, a filter
+`formatProfilesCount`/`formatSalonsCount` plural forms; `admin-statistics` (the period URL,
+the strict guard rejecting a fractional counter, a share outside `0..1`, a four-item
+distribution and a day series whose length is not `period.days` while accepting extra fields;
+the `403`/`429`/`400 admin.statistics.period`/fallback error mapping; the URL contract, the
+last-30-days fallback for a broken or too-long period and `formatStatisticsRange`); and
+`StatisticsScreen` (the six tiles with their numbers, the chart `role="img"`, the status strip,
+the «Остальные» footer in all three top tables, the `<details>` table duplicate, a preset and a
+custom date making one new request, compare adding `compare=true` and showing the delta, the
+small-N absolute no-show display, the empty period, the first-page error with «Повторить», the
+`403`/`429`/`400` texts, the `401` gate and exactly one quiet refresh that keeps the sections).
+`formatPercent`/`formatDelta`/`formatCount` and `formatNumber` are covered in `format.test.ts`.
+`BarbersScreen` (the URL filter, a filter
 switch that drops the previous card and opens the first row of the new filter, and an applied
 search that drops the previous card); `admin-path` also covers the `bookings` route, its GUID
 detail and `bookingsPath()`, the `barbers` route with `?status=all|hidden` and `barbersPath()`
-(the status is omitted for the default queue and kept next to a card), and the `summary` route,
-its nested-path `notFound` and the unchanged `/admin` → reviews redirect. Tests are colocated
+(the status is omitted for the default queue and kept next to a card), the `summary` route,
+its nested-path `notFound` and the unchanged `/admin` → reviews redirect, and the `statistics`
+route (the exact path, the period query that does not change the route, and a nested path that
+stays `notFound`). Tests are colocated
 (`*.test.ts(x)`) and compare Russian copy as a whole string, saying in the test title that it is
 copy. The legal slice adds `CookieNotice` (the informational copy, the `/privacy#cookies` link,
 one-click dismissal and the remembered acknowledgement), `PrivacyPage` (heading, revision date,
@@ -2407,6 +2429,33 @@ chosen and a manual pick always wins. One `tablist` for the three views
 reload the other list, so a completed visit moves to «История» without a manual refresh. No new
 dependency, no backend change, no schema change.
 
+**Completed 2026-11-08:** service statistics — `/admin/statistics` closes the last rail gap
+described in the stage prompt. The rail gained the second item, `AdminRoute` knows the exact
+`statistics` path (no builder, no nested entry, `/admin` still redirects to the review queue)
+and the page title is «Статистика — администрирование BarberSearch». The backend added
+`GET api/admin/statistics?from=&to=&compare=` under `AdminOnly`: required `yyyy-MM-dd` UTC days
+(inclusive, at most 366 days, `400 admin.statistics.period`), typed `overview`/`series`/
+`statuses`/`clients`/`supply`/`top`/`quality` sections, `previous` only with `compare=true`,
+dense day/ISO-week series, tops with a minimum of 3 completed visits and `other` as the period
+remainder, shares as `0..1`/`null`, money as `RUB`, no PII and no mutations. One
+`IAdminStatisticsRepository` (cross-aggregate read, like the summary) runs its queries
+sequentially; SQL is parameterised `SqlQuery<T>` with no concatenation. `EXPLAIN (ANALYZE,
+BUFFERS)` on a 1.2M-booking load database (`verification/statistics-load.sql`) measured the
+request at about 3.1 s warm: overview+statuses 459 ms, clients 702 ms after the `NOT EXISTS`
+rewrite (was 2,020 ms), series 672 ms, supply 435 ms, tops 281–297 ms, quality 35 ms; a trial
+`created_at` index lowered the series to 386 ms and was dropped. The 300–500 ms budget is not
+met, so **no migration or rollup was added**; `backend/AGENT.md` §15.2 records the numbers and
+proposes a daily rollup table as a separate owner decision. The screen has the six-tile strip,
+its own SVG chart with a `<details>` table duplicate, the status bar, the clients/supply
+columns, three leader tables, quality/moderation and «Как считаем»; period presets, two native
+dates and compare live in `?from=&to=&compare=1`, a broken URL opens the last 30 UTC days, the
+only action is «Обновить» (quiet refresh, no auto-refresh), and the states cover skeleton,
+empty, first-page error with «Повторить», `401`, `403`, `429` and `400`. No new dependency, no
+`ui/**` change, no migration. Bundle: `admin-page` +32.16 kB raw / +6.42 kB gzip (screen,
+primitives, transport, guard, hook); unit tests grew to 752 in 85 files (27 new: contract,
+guard, error mapping, period URL, screen and formatters) and E2E to 13 statistics scenarios plus
+axe at 1280 and 320.
+
 Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
@@ -2429,14 +2478,16 @@ do not shift.
     test runner (§14 #2, §15) is done, the a11y pass (#34, §11) is done; touch targets and the dark
     theme are still unaudited (§14 #11).
 12. **Admin continuation** — done: the catalogue (#37), the audit journal (#38), admin bookings
-    (#39), the summary (#40) and audit coverage (#41) are built (§13), so all seven rail sections
-    work and the admin area has no unimplemented screen. The bookings screen is the admin-wide
+    (#39), the summary (#40), audit coverage (#41) and service statistics are built (§13), so all
+    eight rail sections work and the admin area has no unimplemented screen. The bookings screen is the admin-wide
     view, not the barber's own list: the cabinet at `/barber` is already done (§13). Admin
     cancellation and no-show reuse the existing `BookingsController` mutations and **are** written
     to `audit_log` as `booking.updated` (status/barber note); creating a booking deliberately is
     not audited, and `BarberProfile` children are out of the allowlist. Retention, export and
-    partitioning remain separate decisions, and the summary deliberately has no charts, periods
-    or trends: the API stores no aggregate history.
+    partitioning remain separate decisions. The summary deliberately has no charts, periods
+    or trends: the API stores no aggregate history. `/admin/statistics` is the separate screen
+    that does have a period, a chart and trends; its 1.2M-row measurement shows the request at
+    ~3.1 s and a daily rollup table remains a separate decision (§16, `backend/AGENT.md` §15.2).
 13. **Day feed (remaining)** — the «Сегодня» tab is built (§13). Out of that slice on purpose:
     working hours in the feed (they need a per-salon weekly template with date exceptions and
     time offs, i.e. a separate decision about which salon zone the day belongs to), a week or a
