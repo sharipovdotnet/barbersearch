@@ -48,6 +48,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions; a salon waiting for moderation is not counted as disabled |
+| `/admin/statistics` | «Статистика сервиса» за период: presets 7/30/90/365 days, two dates, comparison with the previous period; six tiles, an SVG chart with a table duplicate, statuses, clients, supply, three leader tables and quality/moderation; read-only |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden (filter in `?status=all\|hidden`, `pending` by default), search by name or email |
@@ -1138,6 +1139,54 @@ What it does **not** do: no mutations, no charts, periods, trends or comparisons
 KPI tiles, no «Показать ещё», no totals, no export and no audit writes. Customer email and phone
 are not in the contract — only names; the full context stays in `GET /api/admin/reviews`.
 
+## Admin statistics
+
+`/admin/statistics` is the «Статистика» screen and the second rail item, right after «Сводка».
+It answers «what happens over a period» from one typed aggregate read,
+`GET /api/admin/statistics?from=&to=&compare=true|false`, and is `noindex` and `AdminOnly` like
+the rest of the admin. There is no public «in numbers» page and no statistics in the barber
+cabinet.
+
+- `src/lib/admin-statistics.ts` — `AdminStatistics` and the section types,
+  `fetchAdminStatistics` (the required `from`/`to` and `compare=true` only when enabled),
+  `describeAdminStatisticsError` (`403` role, `429` rate limit, `400` period, otherwise the
+  Russian fallback; the English `detail` never reaches the DOM), and the period helpers:
+  `parseStatisticsPeriod`/`resolveStatisticsPeriod` fall back to the last 30 UTC days for a
+  broken or longer-than-366-day URL, `statisticsPath` writes `?from=&to=&compare=1`,
+  `formatStatisticsRange` labels the period.
+- `src/lib/response-guards.ts` — `isAdminStatistics`: all nine sections, non-negative safe
+  integers for counters, shares `0..1`, a five-item distribution, a day series whose length
+  equals `period.days`, and nullable `previous`; extra fields are ignored, a broken body is a
+  screen error.
+- `src/hooks/use-admin-statistics.ts` — one read with an `AbortController` and a request key:
+  `reload` is the first load (skeleton), `refresh` keeps the sections and turns a failure into a
+  `role="alert"` line, changing the period starts a new load, `401` sets `requiresSignIn`, and
+  `updatedAt` is the last success. StrictMode-safe, no auto-refresh.
+- `src/components/admin/statistics-screen.tsx` plus `components/admin/statistics/*`
+  (`stat-section`, `metric-strip`, `trend-chart`, `status-bar`, `top-table`).
+
+What it shows: six tiles in one strip (completed visits, turnover — «по завершённым визитам»,
+not revenue — average check, new accounts, no-show rate with absolute numbers below a sample of
+10, and stuck bookings as a snapshot); «Записи» with a hand-made SVG chart of created vs
+completed visits, a `<details>` table duplicate, the status strip and «Закрыто визитов: … из …»;
+«Клиенты» and «Предложение» in two columns on `lg`; «Лидеры» with barbers/services/cities tables
+(minimum 3 completed visits, an «Остальные» footer and the minimum note); «Качество и
+модерация» with the published-reviews rating, the 1–5 distribution, new reviews and published
+share, and request/salon moderation with the approval rate and median decision hours; «Как
+считаем» with the formulas and the honest turnover disclaimer.
+
+The period is in the URL — `?from=&to=&compare=1` — and dates are inclusive UTC days, at most
+366; presets set 7/30/90/365 days, the two native date inputs allow a custom range. The only
+action is «Обновить» (quiet refresh); there is no auto-refresh, and the states cover the
+skeleton, «За этот период данных нет. Попробуйте расширить период.», the first-page error with
+«Повторить», `401` gate, `403`, `429` and `400` texts.
+
+Performance: measured on a 1.2M-booking load database, the request takes about 3.1 s warm
+(series 672 ms, clients 702 ms after the `NOT EXISTS` rewrite, overview+statuses 459 ms, tops
+281–297 ms); this is above the 300–500 ms budget, so **no migration or rollup was added** —
+`backend/AGENT.md` §15.2 records the numbers and proposes a daily rollup as a separate decision.
+No new dependency, no `ui/**` change, no schema change.
+
 ## Admin audit
 
 `/admin/audit` is the read-only change journal: when, who, what and on which entity changed, with
@@ -1245,6 +1294,17 @@ needs no API and no database, and covers:
   first-page error with «Повторить», the refresh error that keeps the blocks, exactly one request
   per «Обновить» and the «Обновлено в …» label; the `formatProfilesCount`/`formatSalonsCount`
   plural forms are covered directly.
+- `admin-statistics` — the period URL (`from`/`to` always, `compare=true` only when enabled),
+  the strict guard (a fractional counter, a share outside `0..1`, a four-item distribution, a
+  day series of the wrong length and a negative `other` are broken; extra fields are fine), the
+  `403`/`429`/`400 admin.statistics.period`/fallback error mapping, the 30-day fallback for a
+  broken or too-long period and `formatStatisticsRange`. `StatisticsScreen` covers the six tiles
+  with their numbers, the chart `role="img"`, the status strip, the three top tables with
+  «Остальные», the table duplicate, a preset and a custom date each making one new request,
+  compare sending `compare=true` and showing a delta, the small-N absolute no-show display, the
+  empty period, the first-page error with «Повторить», the `403`/`429`/`400` texts, the `401`
+  gate and exactly one quiet refresh that keeps the sections. `formatPercent`, `formatDelta`,
+  `formatCount` and `formatNumber` are covered in `format.test.ts`.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -1257,9 +1317,9 @@ layer below.
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
-admin bookings desk and the admin summary, sign-in, public reviews, the keyboard paths and an axe
-scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest) stays separate and
-fast; E2E never runs inside it.
+admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
+keyboard paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test`
+(Vitest) stays separate and fast; E2E never runs inside it.
 
 ### One-time setup
 

@@ -315,6 +315,106 @@ export function formatBookingsCount(count: number): string {
   return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
 }
 
+const numberFormatters = new Map<string, Intl.NumberFormat>()
+
+function numberFormatter(minimum: number, maximum: number): Intl.NumberFormat {
+  const key = `${minimum}|${maximum}`
+  const cached = numberFormatters.get(key)
+
+  if (cached) {
+    return cached
+  }
+
+  const formatter = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: minimum,
+    maximumFractionDigits: maximum,
+  })
+
+  numberFormatters.set(key, formatter)
+
+  return formatter
+}
+
+/** «12 480» / «26,5» — число в русской типографике. */
+export function formatNumber(value: number, digits = 0): string {
+  return numberFormatter(digits, digits).format(value)
+}
+
+/**
+ * Доля `0..1` → «4,7 %»; `null` — «—», потому что ноль здесь был бы враньём.
+ */
+export function formatPercent(value: number | null, digits = 1): string {
+  if (value === null) {
+    return '—'
+  }
+
+  return numberFormatter(0, digits).format(value * 100) + ' %'
+}
+
+/**
+ * «12,3» — гибкая дробная часть: лишний ноль не печатается.
+ *
+ * Дельты бывают и целыми (`−10 %`), и дробными (`+0,8 п.п.`); фиксированное
+ * число знаков дало бы «−10,0 %» и шум в плитке.
+ */
+function formatFlexible(value: number, maxDigits = 1): string {
+  const key = `flex|${maxDigits}`
+  const cached = numberFormatters.get(key)
+
+  if (cached) {
+    return cached.format(value)
+  }
+
+  const formatter = new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: maxDigits,
+  })
+
+  numberFormatters.set(key, formatter)
+
+  return formatter.format(value)
+}
+
+/**
+ * Дельта к прошлому периоду: проценты для счётчиков и денег, п.п. для долей.
+ *
+ * `null`/`0` в прошлом периоде дают «—»: процент от нулевой базы не определён.
+ * Знак — единственный носитель направления, поэтому он всегда виден текстом,
+ * а не только цветом.
+ */
+export function formatDelta(
+  current: number | null,
+  previous: number | null,
+  kind: 'percent' | 'points' = 'percent'
+): string {
+  if (current === null || previous === null) {
+    return '—'
+  }
+
+  const delta =
+    kind === 'points'
+      ? (current - previous) * 100
+      : previous === 0
+        ? null
+        : ((current - previous) / Math.abs(previous)) * 100
+
+  if (delta === null || !Number.isFinite(delta)) {
+    return '—'
+  }
+
+  const rounded = Math.abs(delta) < 0.05 ? 0 : delta
+  const sign = rounded > 0 ? '+' : rounded < 0 ? '−' : '±'
+
+  return `${sign}${formatFlexible(Math.abs(rounded))} ${kind === 'points' ? 'п.п.' : '%'}`
+}
+
+/** «3 визита»: та же плюрализация, что у остальных счётчиков. */
+export function formatCount(
+  count: number,
+  forms: readonly [string, string, string]
+): string {
+  return `${count} ${plural(count, forms)}`
+}
+
 /** «2 окна», «1 окно», «5 окон» — свободные промежутки в ленте дня. */
 export function formatGapsCount(count: number): string {
   return `${count} ${plural(count, ['окно', 'окна', 'окон'])}`

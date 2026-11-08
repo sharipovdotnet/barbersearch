@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 
 const SECTIONS = [
   { href: '/admin/summary', label: 'Сводка' },
+  { href: '/admin/statistics', label: 'Статистика' },
   { href: '/admin/reviews', label: 'Отзывы' },
   { href: '/admin/barbers', label: 'Барберы' },
   { href: '/admin/users', label: 'Пользователи' },

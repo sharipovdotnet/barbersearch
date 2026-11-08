@@ -20,6 +20,13 @@ import type {
   AdminSummaryOldestReview,
 } from '@/lib/admin-summary'
 import type {
+  AdminStatistics,
+  AdminStatisticsBarberTopRow,
+  AdminStatisticsCityTopRow,
+  AdminStatisticsModeration,
+  AdminStatisticsServiceTopRow,
+} from '@/lib/admin-statistics'
+import type {
   AdminAuditActor,
   AdminAuditChange,
   AdminAuditEntry,
@@ -1089,14 +1096,250 @@ export function isAdminSummary(value: unknown): value is AdminSummary {
   )
 }
 
+function isPercentage(value: unknown): value is number {
+  return isNumber(value) && value >= 0 && value <= 1
+}
+
+function isNullablePercentage(value: unknown): value is number | null {
+  return value === null || isPercentage(value)
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || isNumber(value)
+}
+
+/** Дата контракта — только ISO-день: время и локальные форматы сюда не проходят. */
+function isStatisticsDay(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function isTopOther(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonNegativeInteger(value.visits) &&
+    isNumber(value.turnover) &&
+    value.turnover >= 0
+  )
+}
+
+function isBarberTopRow(value: unknown): value is AdminStatisticsBarberTopRow {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.barberProfileId) &&
+    isString(value.displayName) &&
+    isNonNegativeInteger(value.visits) &&
+    isNumber(value.turnover) &&
+    isNumber(value.averageCheck) &&
+    isNonNegativeInteger(value.noShow) &&
+    (value.rating === null || isNumber(value.rating)) &&
+    isNonNegativeInteger(value.reviewsCount)
+  )
+}
+
+function isServiceTopRow(value: unknown): value is AdminStatisticsServiceTopRow {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.hairServiceId) &&
+    isString(value.name) &&
+    isNonNegativeInteger(value.visits) &&
+    isNumber(value.turnover) &&
+    isNumber(value.averageCheck)
+  )
+}
+
+function isCityTopRow(value: unknown): value is AdminStatisticsCityTopRow {
+  return (
+    isRecord(value) &&
+    isString(value.name) &&
+    isNonNegativeInteger(value.visits) &&
+    isNumber(value.turnover) &&
+    isNumber(value.averageCheck) &&
+    isNonNegativeInteger(value.activeBarbers)
+  )
+}
+
+function isModeration(value: unknown): value is AdminStatisticsModeration {
+  return (
+    isRecord(value) &&
+    isNonNegativeInteger(value.submitted) &&
+    isNonNegativeInteger(value.approved) &&
+    isNonNegativeInteger(value.rejected) &&
+    isNullablePercentage(value.approvalRate) &&
+    isNullableNumber(value.medianDecisionHours)
+  )
+}
+
+/**
+ * Тело админской статистики: все девять секций контракта.
+ *
+ * Guard строгий в том, что читает экран: обязательные поля, конечные числа,
+ * доли `0..1`, пять счётчиков распределения и длина дневного ряда, равная
+ * периоду. Лишние поля сервера игнорируются, поэтому расширение контракта
+ * не ломает экран; битое тело — ошибка экрана, а не «почти числа».
+ */
+export function isAdminStatistics(value: unknown): value is AdminStatistics {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.period) ||
+    !isRecord(value.overview) ||
+    !isRecord(value.series) ||
+    !isRecord(value.statuses) ||
+    !isRecord(value.clients) ||
+    !isRecord(value.supply) ||
+    !isRecord(value.top) ||
+    !isRecord(value.quality)
+  ) {
+    return false
+  }
+
+  const { period, overview, series, statuses, clients, supply, top, quality } =
+    value
+
+  if (
+    !isStatisticsDay(period.from) ||
+    !isStatisticsDay(period.to) ||
+    !isNonNegativeInteger(period.days) ||
+    period.days < 1 ||
+    !isNonEmptyString(period.timeZone) ||
+    !isString(value.generatedAt)
+  ) {
+    return false
+  }
+
+  if (
+    period.previous !== null &&
+    (!isRecord(period.previous) ||
+      !isStatisticsDay(period.previous.from) ||
+      !isStatisticsDay(period.previous.to))
+  ) {
+    return false
+  }
+
+  if (
+    !isRecord(overview.completedVisits) ||
+    !isNonNegativeInteger(overview.completedVisits.value) ||
+    !isNullableNumber(overview.completedVisits.previous) ||
+    !isRecord(overview.turnover) ||
+    !isNumber(overview.turnover.value) ||
+    !isNullableNumber(overview.turnover.previous) ||
+    !isNonEmptyString(overview.turnover.currency) ||
+    !isRecord(overview.averageCheck) ||
+    !isNullableNumber(overview.averageCheck.value) ||
+    !isNullableNumber(overview.averageCheck.previous) ||
+    !isRecord(overview.newAccounts) ||
+    !isNonNegativeInteger(overview.newAccounts.value) ||
+    !isNullableNumber(overview.newAccounts.previous) ||
+    !isRecord(overview.noShowRate) ||
+    !isNullablePercentage(overview.noShowRate.value) ||
+    !isNullablePercentage(overview.noShowRate.previous) ||
+    !isNonNegativeInteger(overview.noShowRate.count) ||
+    !isNonNegativeInteger(overview.noShowRate.sample) ||
+    !isRecord(overview.stuckBookings) ||
+    !isNonNegativeInteger(overview.stuckBookings.value)
+  ) {
+    return false
+  }
+
+  if (
+    (series.granularity !== 'day' && series.granularity !== 'week') ||
+    !Array.isArray(series.points) ||
+    !series.points.every(
+      (point) =>
+        isRecord(point) &&
+        isStatisticsDay(point.date) &&
+        isNonNegativeInteger(point.created) &&
+        isNonNegativeInteger(point.completed) &&
+        isNonNegativeInteger(point.cancelled) &&
+        isNonNegativeInteger(point.noShow)
+    )
+  ) {
+    return false
+  }
+
+  if (series.granularity === 'day' && series.points.length !== period.days) {
+    return false
+  }
+
+  if (
+    !isNonNegativeInteger(statuses.pending) ||
+    !isNonNegativeInteger(statuses.confirmed) ||
+    !isNonNegativeInteger(statuses.completed) ||
+    !isNonNegativeInteger(statuses.cancelled) ||
+    !isNonNegativeInteger(statuses.noShow) ||
+    !isNonNegativeInteger(statuses.due) ||
+    !isNonNegativeInteger(statuses.closed)
+  ) {
+    return false
+  }
+
+  if (
+    !isNonNegativeInteger(clients.withVisit) ||
+    !isNonNegativeInteger(clients.returning) ||
+    !isNonNegativeInteger(clients.firstVisit) ||
+    !isNonNegativeInteger(clients.guestBookings) ||
+    !isNullablePercentage(clients.guestShare) ||
+    !isNullablePercentage(clients.reviewRate)
+  ) {
+    return false
+  }
+
+  if (
+    !isNonNegativeInteger(supply.activeBarbers) ||
+    !isNonNegativeInteger(supply.workingBarbers) ||
+    !isNonNegativeInteger(supply.idleBarbers) ||
+    !isNonNegativeInteger(supply.newProfiles) ||
+    !Array.isArray(supply.salonsByKind) ||
+    !supply.salonsByKind.every(
+      (kind) =>
+        isRecord(kind) &&
+        isNonEmptyString(kind.kind) &&
+        isNonNegativeInteger(kind.listed) &&
+        isNonNegativeInteger(kind.unlisted)
+    )
+  ) {
+    return false
+  }
+
+  if (
+    !isRecord(top.barbers) ||
+    !Array.isArray(top.barbers.rows) ||
+    !top.barbers.rows.every(isBarberTopRow) ||
+    !isTopOther(top.barbers.other) ||
+    !isRecord(top.services) ||
+    !Array.isArray(top.services.rows) ||
+    !top.services.rows.every(isServiceTopRow) ||
+    !isTopOther(top.services.other) ||
+    !isRecord(top.cities) ||
+    !Array.isArray(top.cities.rows) ||
+    !top.cities.rows.every(isCityTopRow) ||
+    !isTopOther(top.cities.other)
+  ) {
+    return false
+  }
+
+  if (
+    !isNullableNumber(quality.rating) ||
+    !isNonNegativeInteger(quality.reviews) ||
+    !Array.isArray(quality.distribution) ||
+    quality.distribution.length !== 5 ||
+    !quality.distribution.every(isNonNegativeInteger) ||
+    !isNullablePercentage(quality.publishedShare) ||
+    !isModeration(quality.requests) ||
+    !isModeration(quality.salons)
+  ) {
+    return false
+  }
+
+  return true
+}
+
 /**
  * Поля заявки «Стать барбером» без проверки контейнера.
  *
  * Общие для своего и админского контракта: админская строка — та же заявка плюс
  * автор решения и заявитель, поэтому поля не дублируются, а дополняются.
  */
-function hasBarberRequestFields(value: Record<string, unknown>): boolean {
-  return (
+function hasBarberRequestFields(value: Record<string, unknown>): boolean {  return (
     isNonEmptyString(value.id) &&
     isBarberRequestStatus(value.status) &&
     isString(value.displayName) &&
