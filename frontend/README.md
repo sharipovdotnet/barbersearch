@@ -41,7 +41,7 @@ npm run test:e2e:ui        # the same in the Playwright UI mode
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
-| `/barber/import` | «Перенести записи»: paste a list from Google Docs or a spreadsheet (up to 50 lines, tab/semicolon/pipe separated), line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes, preview summary, sequential guest bookings with progress, partial success, `409` → nearest free slots, retry of failed rows |
+| `/barber/import` | «Перенести записи»: two sources. A `.ics` calendar file — one file up to 2 MB, parsed in the browser, single and recurring events with `RRULE`/`RDATE`/`EXDATE`, `VTIMEZONE`, a 7/30/90-day window, a per-event preview with edits and selection up to 50, a deterministic idempotency key from the event `UID`, guests-only bookings (`customerId: null`), `409` → nearest free slots and `429` → a one-minute pause. A pasted list from Google Docs or a spreadsheet — up to 50 lines, tab/semicolon/pipe separated, line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes. Both: sequential guest bookings with progress, partial success and retry of failed rows |
 | `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
@@ -508,11 +508,12 @@ Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabin
 
 ### Import from Google Docs
 
-`/barber/import` переносит старый журнал барбера одним вечером: вставка текста, проверка и
-создание пачки. Экран открывается из кабинета ссылкой «Перенести записи из Google Docs»,
-живёт в своём lazy-чанке, повторяет гейты кабинета (сессия, роль `Barber`, привязанный
-профиль) и показывает `BarberCabinetNav active="bookings"`. Состояние шагов — только в
-памяти: вставленный текст не попадает ни в URL, ни в `localStorage`.
+`/barber/import` переносит старый журнал барбера одним вечером: файл календаря или
+вставленный текст, проверка и создание пачки. Экран открывается из кабинета ссылкой
+«Перенести записи», живёт в своём lazy-чанке, повторяет гейты кабинета (сессия, роль
+`Barber`, привязанный профиль) и показывает `BarberCabinetNav active="bookings"`.
+Состояние шагов — только в памяти: ни файл, ни вставленный текст не попадают ни в URL,
+ни в `localStorage`.
 
 - **Paste.** Одно `textarea` с примером, лимит 50 строк и 10 000 символов, кнопки
   «Разобрать» и «Очистить», строка про персональные данные со ссылкой на `/privacy`.
@@ -543,6 +544,42 @@ Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabin
 Files: `src/pages/barber-import-page.tsx`, `src/components/barber/import-form.tsx`,
 `import-preview.tsx`, `import-result.tsx`, `src/hooks/use-barber-import.ts`,
 `src/lib/import-parse.ts`, `src/lib/salon-time.ts`, `src/lib/barber-cabinet-path.ts`.
+
+### Import from calendars
+
+Второй источник того же экрана — файл календаря (`.ics`) из Google Calendar, Apple Calendar,
+Outlook или Яндекс Календаря. Это такой же одноразовый перенос, а не синхронизация: файл
+читается в браузере и превращается в те же строки `ImportDraft`, что и вставленный список.
+
+- **Файл.** Один `.ics` до 2 МБ (лимит проверяется по `file.size` до чтения), drag-and-drop и
+  скрытый, но фокусируемый input с клавиатурным путём; период — `7`/`30`/`90` дней, по
+  умолчанию 30. `src/lib/ics-decode.ts` разбирает BOM/UTF-8/UTF-16, нормализует переводы строк
+  и требует `BEGIN:VCALENDAR`.
+- **Разбор.** `src/lib/ics-parse.ts` лениво (`await import('ical.js')`) раскрывает
+  `RRULE`/`RDATE`/`EXDATE`/`RECURRENCE-ID` и `VTIMEZONE`, сохраняя абсолютный момент события;
+  floating-время читается по поясу салона. `src/lib/ics-map.ts` маппит событие в
+  `ImportDraft` общими с текстовым импортом матчерами (`src/lib/import-match.ts`), а
+  `src/lib/ics-identity.ts` строит ключ идемпотентности.
+- **Пропуски.** All-day, отменённые, прошедшие, вышедшие за выбранный период, слишком длинные
+  (> 12 часов), события с неизвестным часовым поясом и события без `UID` не создаются: они попадают
+  в «Пропущено N событий» с причиной (`allDay`, `cancelled`, `past`, `outsidePeriod`,
+  `tooLong`, `unknownTimeZone`, `noUid`, `invalid`). `TRANSP:TRANSPARENT` не пропускается —
+  строка есть, но галочка снята.
+- **Выбор и отправка.** Предпросмотр тот же, с построчными правками; выбрать можно до 50
+  событий за раз, остальные — «Перенести ещё» без повторного чтения файла. Записи гостевые
+  (`customerId: null`); ключ детерминированный — `UID` + `RECURRENCE-ID` → `ics:` + 32 hex,
+  поэтому повторная загрузка того же файла возвращает уже созданные брони, а не дубли.
+- **Приватность.** Файл не загружается на сервер: `File.arrayBuffer()` → `TextDecoder` →
+  `ical.js` в памяти вкладки. `SUMMARY`/`DESCRIPTION` и телефоны не попадают ни в URL, ни в
+  `localStorage`, ни в `customerNote`. `ical.js@^2.2.1` (MPL-2.0) — единственная новая
+  зависимость, и его чанк скачивается только при разборе календаря.
+- **Ошибки.** `409 booking.add.overlap` — «Время занято.» и три ближайших слота, `429` —
+  пауза на минуту, `401` — `SignInGate`, сеть — «Продолжить с этой строки».
+
+Files: `src/lib/ics-decode.ts`, `ics-parse.ts`, `ics-map.ts`, `ics-identity.ts`,
+`src/lib/import-match.ts`, `src/components/barber/ics-import-form.tsx`, `import-skipped.tsx`,
+`import-source-switch.tsx`; the extended `import-preview.tsx`, `import-result.tsx`,
+`src/hooks/use-barber-import.ts` and `src/pages/barber-import-page.tsx`.
 
 ### Notifications
 
