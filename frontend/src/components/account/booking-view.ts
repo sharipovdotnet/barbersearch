@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Booking } from '@/lib/bookings'
 import {
   findBookingSalon,
@@ -40,9 +41,9 @@ export function buildBookingView(
 
   return {
     booking,
-    barberName: profile?.displayName ?? 'Барбер',
-    serviceName: service?.name ?? 'Услуга',
-    salonName: salon?.name ?? 'Салон',
+    barberName: profile?.displayName ?? t('Барбер'),
+    serviceName: service?.name ?? t('Услуга'),
+    salonName: salon?.name ?? t('Салон'),
     salonAddress: salon?.address ?? '',
     salonCity: salon?.city ?? '',
     timeZoneId: salon?.timeZoneId,

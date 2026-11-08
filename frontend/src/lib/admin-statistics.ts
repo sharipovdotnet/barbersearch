@@ -1,3 +1,4 @@
+import { getLocale, localeTag, t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import { isAdminStatistics } from '@/lib/response-guards'
@@ -202,18 +203,51 @@ export const STATISTICS_PRESETS = [
 const DAY_MS = 24 * 60 * 60 * 1000
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
-const dayMonthFormatter = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'short',
-  timeZone: 'UTC',
-})
+/**
+ * Форматтеры дат периода кэшируются отдельно для каждого языка: месяц в подписи
+ * оси времени и диапазона — часть интерфейса, а не данные из API.
+ */
+const dayMonthFormatters = new Map<string, Intl.DateTimeFormat>()
+const dayMonthYearFormatters = new Map<string, Intl.DateTimeFormat>()
 
-const dayMonthYearFormatter = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
+function dayMonthFormatter(): Intl.DateTimeFormat {
+  const tag = localeTag(getLocale())
+  const cached = dayMonthFormatters.get(tag)
+
+  if (cached) {
+    return cached
+  }
+
+  const created = new Intl.DateTimeFormat(tag, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+
+  dayMonthFormatters.set(tag, created)
+
+  return created
+}
+
+function dayMonthYearFormatter(): Intl.DateTimeFormat {
+  const tag = localeTag(getLocale())
+  const cached = dayMonthYearFormatters.get(tag)
+
+  if (cached) {
+    return cached
+  }
+
+  const created = new Intl.DateTimeFormat(tag, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
+  dayMonthYearFormatters.set(tag, created)
+
+  return created
+}
 
 function parseDay(date: string): Date {
   return new Date(`${date}T00:00:00Z`)
@@ -326,16 +360,16 @@ export function formatStatisticsRange(period: AdminStatisticsPeriod): string {
   const sameYear = from.getUTCFullYear() === to.getUTCFullYear()
 
   const left = sameYear
-    ? dayMonthFormatter.format(from)
-    : withoutYearSuffix(dayMonthYearFormatter.format(from))
-  const right = withoutYearSuffix(dayMonthYearFormatter.format(to))
+    ? dayMonthFormatter().format(from)
+    : withoutYearSuffix(dayMonthYearFormatter().format(from))
+  const right = withoutYearSuffix(dayMonthYearFormatter().format(to))
 
   return `${left} — ${right}`
 }
 
 /** «10 окт.» — подпись оси времени. */
 export function formatStatisticsDay(value: string): string {
-  return dayMonthFormatter.format(parseDay(value))
+  return dayMonthFormatter().format(parseDay(value))
 }
 
 /**
@@ -391,19 +425,19 @@ export function describeAdminStatisticsError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
   if (cause.status === 400 || cause.hasCode('admin.statistics.period')) {
-    return 'Проверьте период: максимум — 366 дней.'
+    return t('Проверьте период: максимум — 366 дней.')
   }
 
   return describeApiFailure(cause, fallback)

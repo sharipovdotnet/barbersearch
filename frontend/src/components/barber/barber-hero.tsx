@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BarberProfile } from '@/lib/catalog'
 import { BARBER_GRADE_LABELS } from '@/lib/barber-grade'
+import { useI18n } from '@/i18n'
 import {
   formatExperience,
   formatRating,
@@ -20,11 +21,12 @@ import { placeKindCaption } from '@/lib/place-kind'
  * а полный адрес и расписание живут в секции салонов.
  */
 export function BarberHero({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
   const primarySalon =
     profile.salons.find((salon) => salon.isPrimary) ?? profile.salons[0] ?? null
   const location = primarySalon
     ? placeKindCaption(primarySalon.kind, primarySalon.name, primarySalon.city)
-    : 'Салон не указан'
+    : t('Салон не указан')
 
   return (
     <Card>
@@ -40,18 +42,22 @@ export function BarberHero({ profile }: { profile: BarberProfile }) {
             <h1 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-balance break-words">
               {profile.displayName}
             </h1>
-            <Badge variant="outline">{BARBER_GRADE_LABELS[profile.grade]}</Badge>
+            <Badge variant="outline">
+              {t(BARBER_GRADE_LABELS[profile.grade])}
+            </Badge>
             {profile.isVerified && (
               <Badge variant="secondary">
                 <BadgeCheck aria-hidden />
-                Проверен
+                {t('Проверен')}
               </Badge>
             )}
           </div>
 
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             {profile.rating === null ? (
-              <span className="text-muted-foreground">Пока нет отзывов</span>
+              <span className="text-muted-foreground">
+                {t('Пока нет отзывов')}
+              </span>
             ) : (
               <>
                 <span className="inline-flex items-center gap-1.5">
@@ -68,7 +74,7 @@ export function BarberHero({ profile }: { profile: BarberProfile }) {
           </p>
 
           <p className="text-sm text-muted-foreground">
-            Стаж: {formatExperience(profile.yearsOfExperience)}
+            {t('Стаж:')} {formatExperience(profile.yearsOfExperience)}
           </p>
 
           <p className="flex items-start gap-1 text-sm text-muted-foreground">

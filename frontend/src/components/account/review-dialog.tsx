@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { createReview } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
@@ -26,23 +27,25 @@ const RATINGS = [1, 2, 3, 4, 5] as const
 function describeReviewError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
-      return 'По этой записи уже есть отзыв — второй оставить нельзя.'
+      return t('По этой записи уже есть отзыв — второй оставить нельзя.')
     }
 
     if (error.status === 403) {
-      return 'Оставить отзыв может только клиент этой записи.'
+      return t('Оставить отзыв может только клиент этой записи.')
     }
 
     if (error.hasCode('review.create.bookingNotCompleted')) {
-      return 'Отзыв можно оставить только после завершённого визита.'
+      return t('Отзыв можно оставить только после завершённого визита.')
     }
 
     if (error.hasCode('review.rating')) {
-      return 'Оценка должна быть от 1 до 5.'
+      return t('Оценка должна быть от 1 до 5.')
     }
 
     if (error.hasCode('review.text.tooLong')) {
-      return `Слишком длинный текст: максимум ${MAX_TEXT_LENGTH} символов.`
+      return t('Слишком длинный текст: максимум {count} символов.', {
+        count: MAX_TEXT_LENGTH,
+      })
     }
   }
 
@@ -85,6 +88,7 @@ function ReviewForm({
   onClose: () => void
   onSubmitted: (view: BookingView) => void
 }) {
+  const { t } = useI18n()
   const [rating, setRating] = useState(0)
   const [text, setText] = useState('')
   const [isPending, setIsPending] = useState(false)
@@ -98,7 +102,7 @@ function ReviewForm({
     }
 
     if (rating === 0) {
-      setError('Поставьте оценку от 1 до 5.')
+      setError(t('Поставьте оценку от 1 до 5.'))
       return
     }
 
@@ -122,7 +126,7 @@ function ReviewForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Отзыв о визите</DialogTitle>
+        <DialogTitle>{t('Отзыв о визите')}</DialogTitle>
         <DialogDescription>
           {formatDateTime(view.booking.startAt, view.timeZoneId)} ·{' '}
           {view.barberName}
@@ -131,7 +135,7 @@ function ReviewForm({
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium">Оценка</legend>
+          <legend className="text-sm font-medium">{t('Оценка')}</legend>
           <div className="flex items-center gap-0.5">
             {RATINGS.map((value) => {
               const isActive = value <= rating
@@ -141,7 +145,7 @@ function ReviewForm({
                   key={value}
                   type="button"
                   aria-pressed={rating === value}
-                  aria-label={`${value} из 5`}
+                  aria-label={t('{rating} из 5', { rating: value })}
                   disabled={isPending}
                   onClick={() => {
                     setRating(value)
@@ -162,16 +166,16 @@ function ReviewForm({
               )
             })}
             <span className="ml-2 text-sm text-muted-foreground tabular-nums">
-              {rating > 0 ? `${rating} / 5` : 'не выбрана'}
+              {rating > 0 ? `${rating} / 5` : t('не выбрана')}
             </span>
           </div>
         </fieldset>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="review-text">
-            Комментарий{' '}
+            {t('Комментарий')}{' '}
             <span className="font-normal text-muted-foreground">
-              — необязательно
+              {t('— необязательно')}
             </span>
           </Label>
           <Textarea
@@ -180,7 +184,7 @@ function ReviewForm({
             value={text}
             maxLength={MAX_TEXT_LENGTH}
             disabled={isPending}
-            placeholder="Что понравилось, что можно улучшить"
+            placeholder={t('Что понравилось, что можно улучшить')}
             onChange={(event) => {
               setText(event.target.value)
               setError(null)
@@ -192,7 +196,9 @@ function ReviewForm({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Отзыв появится на карточке барбера после проверки модератором.
+          {t(
+            'Отзыв появится на карточке барбера после проверки модератором.'
+          )}
         </p>
 
         {error && (
@@ -208,7 +214,7 @@ function ReviewForm({
             onClick={onClose}
             disabled={isPending}
           >
-            Отмена
+            {t('Отмена')}
           </Button>
           <Button type="submit" disabled={isPending}>
             {isPending && (
@@ -218,7 +224,7 @@ function ReviewForm({
                 className="animate-spin"
               />
             )}
-            {isPending ? 'Отправляем…' : 'Отправить отзыв'}
+            {isPending ? t('Отправляем…') : t('Отправить отзыв')}
           </Button>
         </DialogFooter>
       </form>

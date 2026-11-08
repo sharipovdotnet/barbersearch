@@ -6,6 +6,7 @@ import {
   shouldShowCookieNotice,
 } from '@/lib/cookie-notice'
 import { COOKIES_SECTION_ID, openCookiesSection, PRIVACY_PATH } from '@/lib/legal'
+import { useI18n } from '@/i18n'
 import { isPlainClick } from '@/lib/router'
 
 /**
@@ -20,6 +21,7 @@ import { isPlainClick } from '@/lib/router'
  * читать и закрывается навсегда — отметка живёт в собственной cookie.
  */
 export function CookieNotice() {
+  const { t } = useI18n()
   const [isVisible, setIsVisible] = useState(shouldShowCookieNotice)
 
   if (!isVisible) {
@@ -28,14 +30,14 @@ export function CookieNotice() {
 
   return (
     <section
-      aria-label="Уведомление об использовании cookie"
+      aria-label={t('Уведомление об использовании cookie')}
       className="border-b bg-muted/40 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-200"
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <p className="text-sm text-muted-foreground">
-          Используем только необходимые cookie для входа в аккаунт и защиты форм.{' '}
+          {t('Используем только необходимые cookie для входа в аккаунт и защиты форм.')}{' '}
           <span className="hidden sm:inline">
-            Аналитических и рекламных cookie нет.{' '}
+            {t('Аналитических и рекламных cookie нет.')}{' '}
           </span>
           <a
             href={`${PRIVACY_PATH}#${COOKIES_SECTION_ID}`}
@@ -50,7 +52,7 @@ export function CookieNotice() {
               openCookiesSection()
             }}
           >
-            Подробнее о cookie
+            {t('Подробнее о cookie')}
           </a>
         </p>
 
@@ -63,7 +65,7 @@ export function CookieNotice() {
             setIsVisible(false)
           }}
         >
-          Понятно
+          {t('Понятно')}
         </Button>
       </div>
     </section>

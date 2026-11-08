@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { CatalogueTab } from '@/lib/admin-path'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { ServiceCategory } from '@/lib/barber-profile-labels'
@@ -362,22 +363,22 @@ export function describeAdminCatalogueError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.status === 404) {
-    return 'Строка не найдена — обновите список.'
+    return t('Строка не найдена — обновите список.')
   }
 
   if (
     cause.status === 409
     && cause.codes.some((code) => code.endsWith('update.concurrencyConflict'))
   ) {
-    return 'Запись изменили одновременно. Обновите список.'
+    return t('Запись изменили одновременно. Обновите список.')
   }
 
   if (
@@ -385,19 +386,19 @@ export function describeAdminCatalogueError(
     || cause.hasCode('specialization.rename.nameTaken')
     || cause.hasCode('specialization.add.uniqueViolation')
   ) {
-    return 'Специализация с таким названием уже есть.'
+    return t('Специализация с таким названием уже есть.')
   }
 
   if (cause.hasCode('salon.timeZoneId.unknown')) {
-    return 'Неизвестный часовой пояс. Выберите зону из списка.'
+    return t('Неизвестный часовой пояс. Выберите зону из списка.')
   }
 
   if (cause.hasCode('salon.city') || cause.hasCode('salon.city.invalid')) {
-    return 'Город не может быть пустым.'
+    return t('Город не может быть пустым.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много действий подряд. Подождите минуту.'
+    return t('Слишком много действий подряд. Подождите минуту.')
   }
 
   return describeApiFailure(cause, fallback)
@@ -415,34 +416,36 @@ export function describeSalonModerationError(
 ): string {
   if (cause instanceof ApiError) {
     if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (cause.status === 404 || cause.hasCode('salon.notFound')) {
-      return 'Салон больше не существует. Обновите список.'
+      return t('Салон больше не существует. Обновите список.')
     }
 
     if (cause.hasCode('salon.review.invalidStatus') || cause.status === 409) {
-      return 'Салон уже проверили. Обновите список.'
+      return t('Салон уже проверили. Обновите список.')
     }
 
     if (cause.hasCode('salon.reject.reasonRequired')) {
-      return 'Укажите причину отказа.'
+      return t('Укажите причину отказа.')
     }
 
     if (cause.hasCode('salon.reject.reasonTooLong')) {
-      return `Слишком длинная причина — максимум ${SALON_REJECTION_MAX_LENGTH} символов.`
+      return t('Слишком длинная причина — максимум {max} символов.', {
+        max: SALON_REJECTION_MAX_LENGTH,
+      })
     }
 
     if (cause.hasCode('auth.csrf.invalid')) {
-      return 'Сессия устарела. Обновите страницу и повторите действие.'
+      return t('Сессия устарела. Обновите страницу и повторите действие.')
     }
   }
 
   return describeApiFailure(
     cause,
     action === 'approve'
-      ? 'Не удалось одобрить салон. Попробуйте ещё раз.'
-      : 'Не удалось отклонить салон. Попробуйте ещё раз.'
+      ? t('Не удалось одобрить салон. Попробуйте ещё раз.')
+      : t('Не удалось отклонить салон. Попробуйте ещё раз.')
   )
 }

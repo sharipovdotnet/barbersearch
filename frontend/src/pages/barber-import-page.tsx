@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/card'
 import { useBarberImport, type ImportPause } from '@/hooks/use-barber-import'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import {
   BARBER_CABINET_PATH,
   BARBER_IMPORT_PATH,
@@ -43,17 +44,18 @@ import { isPlainClick, navigate } from '@/lib/router'
  */
 export function BarberImportPage() {
   const { status, user } = useSession()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
-    document.title = 'Перенести записи — BarberSearch'
-  }, [])
+    document.title = t('Перенести записи — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем перенос записей…
+            {t('Загружаем перенос записей…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -68,8 +70,10 @@ export function BarberImportPage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы перенести записи"
-            description="Разбор списка и создание записей доступны барберу после входа. Вход по email и паролю."
+            title={t('Войдите, чтобы перенести записи')}
+            description={t(
+              'Разбор списка и создание записей доступны барберу после входа. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_IMPORT_PATH}
           />
         </div>
@@ -98,6 +102,7 @@ export function BarberImportPage() {
 }
 
 function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
+  const { t } = useI18n()
   const state = useBarberImport(barberProfileId)
 
   const isSignInPause = state.pause?.kind === 'signIn'
@@ -126,7 +131,7 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
           }
         }}
       >
-        ← Записи клиентов
+        {t('← Записи клиентов')}
       </a>
 
       <header className="flex items-center gap-3">
@@ -135,11 +140,12 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
         </div>
         <div>
           <h2 className="font-heading text-2xl font-semibold tracking-tight">
-            Перенести записи
+            {t('Перенести записи')}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Загрузите календарь в формате .ics или вставьте список — покажем, что
-            получится, до создания записей.
+            {t(
+              'Загрузите календарь в формате .ics или вставьте список — покажем, что получится, до создания записей.'
+            )}
           </p>
         </div>
       </header>
@@ -147,8 +153,10 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
       {isSignInPause ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
-            title="Сессия истекла"
-            description="Войдите снова, чтобы продолжить с того места, где остановились."
+            title={t('Сессия истекла')}
+            description={t(
+              'Войдите снова, чтобы продолжить с того места, где остановились.'
+            )}
             redirectTo={BARBER_IMPORT_PATH}
             onSignedIn={() => {
               void state.resume()
@@ -159,16 +167,20 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
         <>
           {state.optionsStatus === 'loading' && (
             <p role="status" className="text-sm text-muted-foreground">
-              Загружаем услуги и салоны…
+              {t('Загружаем услуги и салоны…')}
             </p>
           )}
 
           {state.optionsStatus === 'error' && (
             <Card>
               <CardHeader>
-                <CardTitle>Не удалось загрузить услуги и салоны</CardTitle>
+                <CardTitle>
+                  {t('Не удалось загрузить услуги и салоны')}
+                </CardTitle>
                 <CardDescription>
-                  Без прайса и салонов не из чего выбирать при разборе строк.
+                  {t(
+                    'Без прайса и салонов не из чего выбирать при разборе строк.'
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -182,7 +194,7 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
                   className="h-11 sm:h-8"
                   onClick={state.retryOptions}
                 >
-                  Повторить
+                  {t('Повторить')}
                 </Button>
               </CardContent>
             </Card>
@@ -191,10 +203,11 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
           {state.optionsStatus === 'ready' && !hasSalons && (
             <Card>
               <CardHeader>
-                <CardTitle>Нет привязанных салонов</CardTitle>
+                <CardTitle>{t('Нет привязанных салонов')}</CardTitle>
                 <CardDescription>
-                  Перенос создаёт записи в салоне профиля. Добавьте место приёма
-                  — и возвращайтесь сюда.
+                  {t(
+                    'Перенос создаёт записи в салоне профиля. Добавьте место приёма — и возвращайтесь сюда.'
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -206,7 +219,7 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
                     navigate(BARBER_SALONS_PATH)
                   }}
                 >
-                  Открыть салоны
+                  {t('Открыть салоны')}
                 </Button>
               </CardContent>
             </Card>
@@ -257,7 +270,7 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
             && state.stage === 'preview'
             && (state.options === null ? (
               <p role="status" className="text-sm text-muted-foreground">
-                Загружаем услуги и салоны…
+                {t('Загружаем услуги и салоны…')}
               </p>
             ) : (
               <>
@@ -300,7 +313,7 @@ function BarberImportScreen({ barberProfileId }: { barberProfileId: string }) {
             && state.stage === 'result'
             && (state.options === null ? (
               <p role="status" className="text-sm text-muted-foreground">
-                Загружаем услуги и салоны…
+                {t('Загружаем услуги и салоны…')}
               </p>
             ) : (
               <>
@@ -356,6 +369,7 @@ function ImportPauseNotice({
   pause: NonNullable<ImportPause>
   onResume: () => void
 }) {
+  const { t } = useI18n()
   const [seconds, setSeconds] = useState(pause.kind === 'rateLimit' ? 60 : 0)
 
   useEffect(() => {
@@ -386,7 +400,9 @@ function ImportPauseNotice({
           disabled={seconds > 0}
           onClick={onResume}
         >
-          {seconds > 0 ? `Продолжить через ${seconds} с` : 'Продолжить'}
+          {seconds > 0
+            ? t('Продолжить через {seconds} с', { seconds })
+            : t('Продолжить')}
         </Button>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { requestSessionRefresh } from '@/lib/auth'
 import {
@@ -99,7 +100,7 @@ async function withCrossTabLock(
       error: new ApiError(
         0,
         null,
-        'Продление сессии не уложилось во время ожидания.'
+        t('Продление сессии не уложилось во время ожидания.')
       ),
     }
   }
@@ -115,7 +116,7 @@ async function performRefresh(): Promise<RefreshOutcome> {
       if (!(cause instanceof ApiError)) {
         return {
           kind: 'transient',
-          error: new ApiError(0, null, 'Продление сессии не удалось.'),
+          error: new ApiError(0, null, t('Продление сессии не удалось.')),
         }
       }
 

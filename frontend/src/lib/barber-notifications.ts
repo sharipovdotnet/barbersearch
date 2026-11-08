@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -184,7 +185,7 @@ export function describeNotificationSettingsLoadError(
   error: unknown
 ): string {
   if (error instanceof ApiError && error.status === 403) {
-    return 'Настройки доступны только барберу.'
+    return t('Настройки доступны только барберу.')
   }
 
   return describeApiFailure(error, NOTIFICATION_SETTINGS_LOAD_FALLBACK)
@@ -213,15 +214,14 @@ export function describeNotificationSettingsFailure(
     if (error.hasCode('notificationSettings.leadMinutes')) {
       return {
         field: 'leadMinutes',
-        message: 'Напомнить можно за 15, 30 или 60 минут.',
+        message: t('Напомнить можно за 15, 30 или 60 минут.'),
       }
     }
 
     if (error.hasCode('notificationSettings.digestTime')) {
       return {
         field: 'digestTime',
-        message:
-          'Время дайджеста — с 06:00 до 12:00, кратно 15 минутам.',
+        message: t('Время дайджеста — с 06:00 до 12:00, кратно 15 минутам.'),
       }
     }
   }
@@ -247,11 +247,11 @@ export function describeTelegramLinkError(
       error.status === 409 ||
       error.hasCode('notification.telegram.alreadyLinked')
     ) {
-      return 'Telegram уже подключён. Обновите страницу.'
+      return t('Telegram уже подключён. Обновите страницу.')
     }
 
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Подключать Telegram может только барбер.'
+      return t('Подключать Telegram может только барбер.')
     }
   }
 
@@ -263,7 +263,7 @@ export function describeTelegramUnlinkError(
   fallback = 'Не удалось отключить Telegram.'
 ): string {
   if (error instanceof ApiError && error.status === 403) {
-    return 'Отключать Telegram может только барбер.'
+    return t('Отключать Telegram может только барбер.')
   }
 
   return describeApiFailure(error, fallback)

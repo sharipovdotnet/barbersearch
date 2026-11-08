@@ -24,6 +24,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { useBarberSchedule } from '@/hooks/use-barber-schedule'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import { BARBER_SCHEDULE_PATH } from '@/lib/barber-cabinet-path'
 
 /**
@@ -35,17 +36,18 @@ import { BARBER_SCHEDULE_PATH } from '@/lib/barber-cabinet-path'
  */
 export function BarberSchedulePage() {
   const { status, user } = useSession()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
-    document.title = 'Расписание — BarberSearch'
-  }, [])
+    document.title = t('Расписание — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем расписание…
+            {t('Загружаем расписание…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -60,8 +62,10 @@ export function BarberSchedulePage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы настроить расписание"
-            description="Рабочие дни, исключения и отпуска доступны барберу после входа. Вход по email и паролю."
+            title={t('Войдите, чтобы настроить расписание')}
+            description={t(
+              'Рабочие дни, исключения и отпуска доступны барберу после входа. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_SCHEDULE_PATH}
           />
         </div>
@@ -94,6 +98,7 @@ function BarberScheduleScreen({
 }: {
   barberProfileId: string
 }) {
+  const { t } = useI18n()
   const { status, schedule, error, isRefreshing, reload } =
     useBarberSchedule(barberProfileId)
   const [selectedSalonId, setSelectedSalonId] = useState<string | null>(null)
@@ -118,11 +123,12 @@ function BarberScheduleScreen({
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
-            Расписание
+            {t('Расписание')}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Рабочие дни, исключения на даты и отпуска. Клиенты видят только
-            свободное время.
+            {t(
+              'Рабочие дни, исключения на даты и отпуска. Клиенты видят только свободное время.'
+            )}
           </p>
         </div>
         <BarberUnreadBell />
@@ -138,7 +144,7 @@ function BarberScheduleScreen({
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => {
               setAnnouncement(null)
@@ -152,16 +158,18 @@ function BarberScheduleScreen({
       {isRefreshing && (
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" aria-hidden />
-          Обновляем расписание…
+          {t('Обновляем расписание…')}
         </p>
       )}
 
       {status === 'error' && (
         <Card>
           <CardHeader>
-            <CardTitle>Не удалось загрузить расписание</CardTitle>
+            <CardTitle>{t('Не удалось загрузить расписание')}</CardTitle>
             <CardDescription>
-              Сервер не ответил. Проверьте подключение и повторите попытку.
+              {t(
+                'Сервер не ответил. Проверьте подключение и повторите попытку.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -175,7 +183,7 @@ function BarberScheduleScreen({
               className="h-11 sm:h-8"
               onClick={reload}
             >
-              Повторить
+              {t('Повторить')}
             </Button>
           </CardContent>
         </Card>
@@ -191,7 +199,7 @@ function BarberScheduleScreen({
               className="underline underline-offset-2"
               onClick={reload}
             >
-              Повторить
+              {t('Повторить')}
             </button>
           </span>
         </p>
@@ -200,10 +208,11 @@ function BarberScheduleScreen({
       {status === 'ready' && schedule && schedule.salons.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Нет привязанных салонов</CardTitle>
+            <CardTitle>{t('Нет привязанных салонов')}</CardTitle>
             <CardDescription>
-              Расписание задаётся для пары «барбер — салон». Попросите
-              администратора добавить салон в профиль.
+              {t(
+                'Расписание задаётся для пары «барбер — салон». Попросите администратора добавить салон в профиль.'
+              )}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -213,7 +222,7 @@ function BarberScheduleScreen({
         <>
           {schedule.salons.length > 1 ? (
             <div className="max-w-sm space-y-1.5">
-              <Label htmlFor="schedule-salon">Салон</Label>
+              <Label htmlFor="schedule-salon">{t('Салон')}</Label>
               <select
                 id="schedule-salon"
                 value={selectedSalon.salonId}
@@ -226,14 +235,15 @@ function BarberScheduleScreen({
                 {schedule.salons.map((salon) => (
                   <option key={salon.salonId} value={salon.salonId}>
                     {salon.name}
-                    {salon.isPrimary ? ' — основной' : ''}
+                    {salon.isPrimary ? t(' — основной') : ''}
                   </option>
                 ))}
               </select>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Салон: <span className="text-foreground">{selectedSalon.name}</span>
+              {t('Салон:')}{' '}
+              <span className="text-foreground">{selectedSalon.name}</span>
               {selectedSalon.city ? `, ${selectedSalon.city}` : ''}
             </p>
           )}

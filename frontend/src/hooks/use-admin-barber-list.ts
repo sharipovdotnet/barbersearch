@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 
+import { t } from '@/i18n'
 import { usePagedList, type PagedList } from '@/hooks/use-paged-list'
 import {
   describeAdminBarberListError,
@@ -46,8 +47,8 @@ export function useAdminBarberList({
   return usePagedList<AdminBarber>({
     getId: getBarberId,
     fetchPage,
-    fallback: LIST_FALLBACK,
-    pageFallback: PAGE_FALLBACK,
+    fallback: t(LIST_FALLBACK),
+    pageFallback: t(PAGE_FALLBACK),
     requiresAuth: true,
     mapError: describeAdminBarberListError,
   })

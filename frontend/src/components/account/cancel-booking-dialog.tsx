@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { describeApiFailure } from '@/lib/errors'
+import { useI18n } from '@/i18n'
 import { formatDateTime } from '@/lib/format'
 
 /**
@@ -68,6 +69,7 @@ function CancelConfirmation({
   onConfirm: (bookingId: string) => Promise<void>
   onCancelled: (view: BookingView) => void
 }) {
+  const { t } = useI18n()
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -92,7 +94,7 @@ function CancelConfirmation({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Отменить запись?</DialogTitle>
+        <DialogTitle>{t('Отменить запись?')}</DialogTitle>
         <DialogDescription>
           {formatDateTime(view.booking.startAt, view.timeZoneId)} ·{' '}
           {view.barberName}
@@ -105,10 +107,13 @@ function CancelConfirmation({
           aria-hidden
         />
         <div className="space-y-1">
-          <p className="text-sm font-medium text-destructive">Отмена необратима</p>
+          <p className="text-sm font-medium text-destructive">
+            {t('Отмена необратима')}
+          </p>
           <p className="text-sm text-foreground/80">
-            Вернуть запись нельзя — придётся записываться заново. Время может
-            занять другой клиент.
+            {t(
+              'Вернуть запись нельзя — придётся записываться заново. Время может занять другой клиент.'
+            )}
           </p>
         </div>
       </div>
@@ -126,7 +131,7 @@ function CancelConfirmation({
           onClick={onClose}
           disabled={isPending}
         >
-          Не отменять
+          {t('Не отменять')}
         </Button>
         <Button
           type="button"
@@ -137,7 +142,7 @@ function CancelConfirmation({
           {isPending && (
             <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
           )}
-          {isPending ? 'Отменяем…' : 'Отменить запись'}
+          {isPending ? t('Отменяем…') : t('Отменить запись')}
         </Button>
       </DialogFooter>
     </>

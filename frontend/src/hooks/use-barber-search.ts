@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '@/lib/api'
+import { t } from '@/i18n'
 import {
   emptyBarberSearchFilters,
   normalizeBarberSearchFilters,
@@ -38,7 +39,7 @@ function describeSearchFailure(cause: unknown): string {
   // 400 — битый курсор или параметры, то есть ошибка клиента. Английский `detail`
   // наружу не показываем и предлагаем общий безопасный текст.
   if (cause instanceof ApiError && cause.status === 400) {
-    return SEARCH_FALLBACK
+    return t(SEARCH_FALLBACK)
   }
 
   return describeApiFailure(cause, SEARCH_FALLBACK)

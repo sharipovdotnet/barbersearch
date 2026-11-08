@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import { ACCOUNT_PROFILE_PATH } from '@/lib/account-path'
 import { formatDateTime } from '@/lib/format'
 import {
@@ -32,21 +33,27 @@ import {
  * форма не делает собственный запрос.
  */
 export function AccountProfilePage() {
+  const { locale, t } = useI18n()
+
   useEffect(() => {
-    document.title = 'Профиль — BarberSearch'
-  }, [])
+    document.title = t('Профиль — BarberSearch')
+  }, [locale, t])
 
   return (
     <AccountAccess
-      title="Войдите, чтобы открыть профиль"
-      description="Имя, телефон и данные аккаунта доступны после входа. Вход по email и паролю."
+      title={t('Войдите, чтобы открыть профиль')}
+      description={t(
+        'Имя, телефон и данные аккаунта доступны после входа. Вход по email и паролю.'
+      )}
     >
       {(user) => (
         <AccountShell
           user={user}
           section="profile"
-          title="Профиль"
-          description="Имя, телефон и данные аккаунта. Email и пароль меняются в соседних разделах."
+          title={t('Профиль')}
+          description={t(
+            'Имя, телефон и данные аккаунта. Email и пароль меняются в соседних разделах.'
+          )}
         >
           <ProfileScreen />
         </AccountShell>
@@ -56,6 +63,7 @@ export function AccountProfilePage() {
 }
 
 function ProfileScreen() {
+  const { t } = useI18n()
   const state = useAccountProfile()
   const profile = state.profile
 
@@ -63,8 +71,10 @@ function ProfileScreen() {
     return (
       <div className="flex min-h-[45vh] items-center justify-center py-6">
         <SignInGate
-          title="Сессия истекла"
-          description="Войдите снова, чтобы увидеть профиль: cookie-сессия закончилась, пока страница была открыта."
+          title={t('Сессия истекла')}
+          description={t(
+            'Войдите снова, чтобы увидеть профиль: cookie-сессия закончилась, пока страница была открыта.'
+          )}
           redirectTo={ACCOUNT_PROFILE_PATH}
           onSignedIn={state.reload}
         />
@@ -76,7 +86,7 @@ function ProfileScreen() {
     return (
       <div className="space-y-5">
         <p role="status" className="sr-only">
-          Загружаем профиль…
+          {t('Загружаем профиль…')}
         </p>
         <Skeleton className="h-80 rounded-xl" aria-hidden />
         <Skeleton className="h-40 rounded-xl" aria-hidden />
@@ -91,13 +101,13 @@ function ProfileScreen() {
           <TriangleAlert className="size-4 text-destructive" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить профиль</p>
+          <p className="font-medium">{t('Не удалось загрузить профиль')}</p>
           <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
             {state.error}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={state.reload}>
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -116,30 +126,32 @@ function ProfileScreen() {
 }
 
 function AccountDetails({ profile }: { profile: MyProfile }) {
+  const { t } = useI18n()
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Аккаунт</CardTitle>
-        <CardDescription>Служебные данные аккаунта.</CardDescription>
+        <CardTitle>{t('Аккаунт')}</CardTitle>
+        <CardDescription>{t('Служебные данные аккаунта.')}</CardDescription>
       </CardHeader>
 
       <CardContent>
         <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-          <AccountDetail label="Роль">
-            {ACCOUNT_ROLE_LABELS[profile.role]}
+          <AccountDetail label={t('Роль')}>
+            {t(ACCOUNT_ROLE_LABELS[profile.role])}
           </AccountDetail>
-          <AccountDetail label="Аккаунт создан">
+          <AccountDetail label={t('Аккаунт создан')}>
             <time dateTime={profile.createdAt}>
               {formatDateTime(profile.createdAt)}
             </time>
           </AccountDetail>
-          <AccountDetail label="Последний вход">
+          <AccountDetail label={t('Последний вход')}>
             {profile.lastLoginAt ? (
               <time dateTime={profile.lastLoginAt}>
                 {formatDateTime(profile.lastLoginAt)}
               </time>
             ) : (
-              'Ещё не было'
+              t('Ещё не было')
             )}
           </AccountDetail>
         </dl>

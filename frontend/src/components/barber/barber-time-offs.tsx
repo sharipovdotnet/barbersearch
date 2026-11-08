@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useI18n } from '@/i18n'
 import { todayInTimeZone } from '@/lib/barber-slots'
 import {
   addTimeOff,
@@ -42,6 +43,7 @@ export function BarberTimeOffs({
   timeZoneId,
   onChanged,
 }: Props) {
+  const { t } = useI18n()
   const today = todayInTimeZone(timeZoneId)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -70,9 +72,9 @@ export function BarberTimeOffs({
       setFrom('')
       setTo('')
       setReason('')
-      onChanged('Отпуск добавлен.')
+      onChanged(t('Отпуск добавлен.'))
     } catch (cause) {
-      setError(describeScheduleError(cause, 'Не удалось добавить отпуск.'))
+      setError(describeScheduleError(cause, t('Не удалось добавить отпуск.')))
     } finally {
       setIsSaving(false)
     }
@@ -88,9 +90,9 @@ export function BarberTimeOffs({
 
     try {
       await removeTimeOff(barberProfileId, timeOffId)
-      onChanged('Отпуск удалён.')
+      onChanged(t('Отпуск удалён.'))
     } catch (cause) {
-      setError(describeScheduleError(cause, 'Не удалось удалить отпуск.'))
+      setError(describeScheduleError(cause, t('Не удалось удалить отпуск.')))
     } finally {
       setDeleting(null)
     }
@@ -99,10 +101,12 @@ export function BarberTimeOffs({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Отпуска и нерабочие периоды</CardTitle>
+        <CardTitle>{t('Отпуска и нерабочие периоды')}</CardTitle>
         <CardDescription>
-          Период действует во всех салонах и сильнее недельного расписания. Даты — в
-          поясе основного салона{' '}
+          {t(
+            'Период действует во всех салонах и сильнее недельного расписания.'
+          )}{' '}
+          {t('Даты — в поясе основного салона')}{' '}
           <span className="whitespace-nowrap">{timeZoneId}</span>.
         </CardDescription>
       </CardHeader>
@@ -110,7 +114,7 @@ export function BarberTimeOffs({
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="time-off-from">С</Label>
+            <Label htmlFor="time-off-from">{t('С')}</Label>
             <Input
               id="time-off-from"
               type="date"
@@ -125,7 +129,7 @@ export function BarberTimeOffs({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="time-off-to">По</Label>
+            <Label htmlFor="time-off-to">{t('По')}</Label>
             <Input
               id="time-off-to"
               type="date"
@@ -143,19 +147,20 @@ export function BarberTimeOffs({
 
         {isRangeInvalid && (
           <p className="text-sm text-destructive">
-            Конец периода должен быть не раньше начала.
+            {t('Конец периода должен быть не раньше начала.')}
           </p>
         )}
 
         <div className="space-y-1.5">
           <Label htmlFor="time-off-reason">
-            Пометка <span className="text-muted-foreground">(необязательно)</span>
+            {t('Пометка')}{' '}
+            <span className="text-muted-foreground">{t('(необязательно)')}</span>
           </Label>
           <Input
             id="time-off-reason"
             value={reason}
             maxLength={500}
-            placeholder="Например, отпуск"
+            placeholder={t('Например, отпуск')}
             className="h-11 sm:h-8"
             onChange={(event) => {
               setError(null)
@@ -180,11 +185,13 @@ export function BarberTimeOffs({
           }}
         >
           {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
-          Добавить отпуск
+          {t('Добавить отпуск')}
         </Button>
 
         {timeOffs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Отпусков пока нет.</p>
+          <p className="text-sm text-muted-foreground">
+            {t('Отпусков пока нет.')}
+          </p>
         ) : (
           <ul className="divide-y rounded-lg border">
             {timeOffs.map((timeOff) => (
@@ -213,7 +220,13 @@ export function BarberTimeOffs({
                   size="sm"
                   className="h-11 text-destructive hover:text-destructive sm:h-8"
                   disabled={deleting !== null}
-                  aria-label={`Удалить отпуск ${formatTimeOffRange(timeOff.startAt, timeOff.endAt, timeZoneId)}`}
+                  aria-label={t('Удалить отпуск {range}', {
+                    range: formatTimeOffRange(
+                      timeOff.startAt,
+                      timeOff.endAt,
+                      timeZoneId
+                    ),
+                  })}
                   onClick={() => {
                     void handleDelete(timeOff.id)
                   }}
@@ -223,7 +236,7 @@ export function BarberTimeOffs({
                   ) : (
                     <Trash2 className="size-4" aria-hidden />
                   )}
-                  Удалить
+                  {t('Удалить')}
                 </Button>
               </li>
             ))}

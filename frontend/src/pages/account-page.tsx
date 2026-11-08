@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
 import { useCustomerBookings } from '@/hooks/use-bookings'
+import { useI18n } from '@/i18n'
 import { ACCOUNT_PATH } from '@/lib/account-path'
 import { describeCustomerBookingsChange } from '@/lib/booking-changes'
 import type { Booking } from '@/lib/bookings'
@@ -35,21 +36,27 @@ import { formatPageRange } from '@/lib/paging'
  * а их рабочие зоны открываются из каркаса отдельной ссылкой.
  */
 export function AccountPage() {
+  const { locale, t } = useI18n()
+
   useEffect(() => {
-    document.title = 'Мои записи — BarberSearch'
-  }, [])
+    document.title = t('Мои записи — BarberSearch')
+  }, [locale, t])
 
   return (
     <AccountAccess
-      title="Войдите, чтобы увидеть записи"
-      description="Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю."
+      title={t('Войдите, чтобы увидеть записи')}
+      description={t(
+        'Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю.'
+      )}
     >
       {(user) => (
         <AccountShell
           user={user}
           section="bookings"
-          title="Мои записи"
-          description="Ближайший визит, история и отмена — без звонков в салон."
+          title={t('Мои записи')}
+          description={t(
+            'Ближайший визит, история и отмена — без звонков в салон.'
+          )}
         >
           <BookingsCabinet role={user.role} />
         </AccountShell>
@@ -59,6 +66,7 @@ export function AccountPage() {
 }
 
 function BookingsCabinet({ role }: { role: string }) {
+  const { t } = useI18n()
   const [tab, setTab] = useState<BookingsTab>('upcoming')
   // История ленивая: на входе в кабинет грузятся только «Предстоящие».
   const historyEnabled = tab === 'history'
@@ -160,14 +168,18 @@ function BookingsCabinet({ role }: { role: string }) {
 
   function handleCancelled(view: BookingView) {
     setAnnouncement(
-      `Запись на ${formatDateTime(view.booking.startAt, view.timeZoneId)} отменена.`
+      t('Запись на {when} отменена.', {
+        when: formatDateTime(view.booking.startAt, view.timeZoneId),
+      })
     )
   }
 
   function handleReviewed(view: BookingView) {
     setReviewedIds((current) => new Set(current).add(view.booking.id))
     setAnnouncement(
-      'Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.'
+      t(
+        'Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.'
+      )
     )
   }
 
@@ -194,7 +206,7 @@ function BookingsCabinet({ role }: { role: string }) {
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => setAnnouncement(null)}
           >
@@ -206,8 +218,10 @@ function BookingsCabinet({ role }: { role: string }) {
       {requiresSignIn ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
-            title="Сессия истекла"
-            description="Войдите снова, чтобы увидеть свои записи: cookie-сессия закончилась, пока страница была открыта."
+            title={t('Сессия истекла')}
+            description={t(
+              'Войдите снова, чтобы увидеть свои записи: cookie-сессия закончилась, пока страница была открыта.'
+            )}
             redirectTo={ACCOUNT_PATH}
             onSignedIn={handleSignedIn}
           />
@@ -218,7 +232,7 @@ function BookingsCabinet({ role }: { role: string }) {
 
           {upcoming.status === 'error' && (
             <BookingsErrorState
-              message={upcoming.error ?? 'Не удалось загрузить записи.'}
+              message={upcoming.error ?? t('Не удалось загрузить записи.')}
               onRetry={upcoming.reload}
             />
           )}
@@ -235,7 +249,7 @@ function BookingsCabinet({ role }: { role: string }) {
 
           {list.status === 'error' && (
             <BookingsErrorState
-              message={list.error ?? 'Не удалось загрузить записи.'}
+              message={list.error ?? t('Не удалось загрузить записи.')}
               onRetry={list.reload}
             />
           )}
@@ -266,8 +280,9 @@ function BookingsCabinet({ role }: { role: string }) {
 
           {profilesFailed && (
             <p className="text-xs text-muted-foreground">
-              Часть карточек барберов не загрузилась — имена и адреса могут быть
-              неполными.
+              {t(
+                'Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.'
+              )}
             </p>
           )}
         </div>
@@ -291,10 +306,12 @@ function BookingsCabinet({ role }: { role: string }) {
 
 /** Скелетон активной вкладки: строки списка, а не всей страницы. */
 function ListSkeleton() {
+  const { t } = useI18n()
+
   return (
     <>
       <p role="status" className="sr-only">
-        Загружаем записи…
+        {t('Загружаем записи…')}
       </p>
       <div className="space-y-3" aria-hidden>
         <Skeleton className="h-8 w-64 rounded-lg" />

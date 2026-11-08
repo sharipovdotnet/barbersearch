@@ -7,6 +7,8 @@
  * поэтому здесь union, а не `enum`: `erasableSyntaxOnly` запрещает `enum` (§4).
  */
 
+import { t } from '@/i18n'
+
 export type PlaceKind =
   | 'Salon'
   | 'RentalStudio'
@@ -82,16 +84,16 @@ export function placeKindCaption(
   city: string | null
 ): string {
   if (kind === 'Home') {
-    return city ? `На дому в ${city}` : 'На дому'
+    return city ? t('На дому в {city}', { city }) : t('На дому')
   }
 
   if (kind === 'Mobile') {
-    return 'Выезд по городу'
+    return t('Выезд по городу')
   }
 
   const place = [salonName, city].filter(Boolean).join(' · ')
 
   return place
-    ? `${place} · ${PLACE_KIND_LABELS[kind]}`
-    : PLACE_KIND_LABELS[kind]
+    ? `${place} · ${t(PLACE_KIND_LABELS[kind])}`
+    : t(PLACE_KIND_LABELS[kind])
 }

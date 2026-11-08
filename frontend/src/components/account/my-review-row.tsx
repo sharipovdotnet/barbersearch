@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { ReviewStatusBadge } from '@/components/account/review-status-badge'
 import { ReviewStars } from '@/components/review-stars'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import {
   formatDateTime,
   formatPrice,
@@ -31,6 +32,7 @@ export function MyReviewRow({
   registerEditButton: (id: string, element: HTMLButtonElement | null) => void
   registerDeleteButton: (id: string, element: HTMLButtonElement | null) => void
 }) {
+  const { t } = useI18n()
   const { barber, visit } = review
   const hasText = review.text !== null && review.text.trim() !== ''
   const barberHref = `/barbers/${barber.id}`
@@ -86,7 +88,9 @@ export function MyReviewRow({
           {review.text}
         </p>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Без комментария.</p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {t('Без комментария.')}
+        </p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -96,11 +100,11 @@ export function MyReviewRow({
           variant="outline"
           size="sm"
           className="h-11 sm:h-8"
-          aria-label={`Изменить отзыв о визите ${visitLabel}`}
+          aria-label={t('Изменить отзыв о визите {when}', { when: visitLabel })}
           onClick={() => onRequestEdit(review)}
         >
           <Pencil data-icon="inline-start" aria-hidden />
-          Изменить
+          {t('Изменить')}
         </Button>
 
         <Button
@@ -109,11 +113,11 @@ export function MyReviewRow({
           variant="outline"
           size="sm"
           className="h-11 text-muted-foreground hover:text-destructive sm:h-8"
-          aria-label={`Удалить отзыв о визите ${visitLabel}`}
+          aria-label={t('Удалить отзыв о визите {when}', { when: visitLabel })}
           onClick={() => onRequestDelete(review)}
         >
           <Trash2 data-icon="inline-start" aria-hidden />
-          Удалить
+          {t('Удалить')}
         </Button>
       </div>
     </li>

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminStatistics } from '@/hooks/use-admin-statistics'
+import { useI18n } from '@/i18n'
 import {
   STATISTICS_PRESETS,
   formatStatisticsRange,
@@ -56,6 +57,7 @@ import { navigate, useLocation } from '@/lib/router'
  */
 export function StatisticsScreen() {
   const location = useLocation()
+  const { t } = useI18n()
   const [initial] = useState(() => parseStatisticsPeriod(searchOf(location)))
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
@@ -110,17 +112,21 @@ export function StatisticsScreen() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-            Статистика
+            {t('Статистика')}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Что происходит за период: записи, клиенты, предложение и качество.
+            {t(
+              'Что происходит за период: записи, клиенты, предложение и качество.'
+            )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {statistics.updatedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              Обновлено в {formatClockTime(new Date(statistics.updatedAt))}
+              {t('Обновлено в {time}', {
+                time: formatClockTime(new Date(statistics.updatedAt)),
+              })}
             </span>
           )}
           <Button
@@ -139,7 +145,7 @@ export function StatisticsScreen() {
             ) : (
               <RefreshCw data-icon="inline-start" aria-hidden />
             )}
-            {statistics.isRefreshing ? 'Обновляем…' : 'Обновить'}
+            {statistics.isRefreshing ? t('Обновляем…') : t('Обновить')}
           </Button>
         </div>
       </header>
@@ -147,7 +153,7 @@ export function StatisticsScreen() {
       <div className="space-y-3 rounded-xl border p-3 sm:p-4">
         <div
           role="group"
-          aria-label="Пресеты периода"
+          aria-label={t('Пресеты периода')}
           className="flex flex-wrap gap-1"
         >
           {STATISTICS_PRESETS.map((preset) => {
@@ -163,7 +169,7 @@ export function StatisticsScreen() {
                 className="h-11 sm:h-8"
                 onClick={() => applyPreset(preset.days)}
               >
-                {preset.label}
+                {t(preset.label)}
               </Button>
             )
           })}
@@ -172,7 +178,7 @@ export function StatisticsScreen() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[10rem_10rem_minmax(0,1fr)] lg:items-end">
           <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor="statistics-from" className="text-sm font-medium">
-              С даты
+              {t('С даты')}
             </label>
             <Input
               id="statistics-from"
@@ -186,7 +192,7 @@ export function StatisticsScreen() {
 
           <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor="statistics-to" className="text-sm font-medium">
-              По дату
+              {t('По дату')}
             </label>
             <Input
               id="statistics-to"
@@ -207,7 +213,7 @@ export function StatisticsScreen() {
               onChange={(event) => setCompare(event.target.checked)}
             />
             <label htmlFor="statistics-compare" className="text-sm">
-              Сравнить с прошлым периодом
+              {t('Сравнить с прошлым периодом')}
             </label>
           </div>
         </div>
@@ -216,8 +222,9 @@ export function StatisticsScreen() {
           id="statistics-period-hint"
           className="text-xs text-muted-foreground"
         >
-          Даты — по UTC, границы включают обе даты. Максимум — 366 дней.
-          Некорректный адрес открывает последние 30 дней.
+          {t(
+            'Даты — по UTC, границы включают обе даты. Максимум — 366 дней. Некорректный адрес открывает последние 30 дней.'
+          )}
         </p>
       </div>
 
@@ -225,11 +232,11 @@ export function StatisticsScreen() {
         <span className="font-medium text-foreground">
           {formatStatisticsRange(period)}
         </span>{' '}
-        · дни по UTC
+        · {t('дни по UTC')}
         {period.compare && data?.period.previous && (
           <>
             {' '}
-            · сравнение с{' '}
+            · {t('сравнение с')}{' '}
             {formatStatisticsRange({
               from: data.period.previous.from,
               to: data.period.previous.to,
@@ -247,7 +254,7 @@ export function StatisticsScreen() {
 
       {statistics.isRefreshing && (
         <p role="status" className="sr-only">
-          Обновляем статистику…
+          {t('Обновляем статистику…')}
         </p>
       )}
 
@@ -265,8 +272,10 @@ export function StatisticsScreen() {
           <div className="space-y-6">
             <StatSection
               id="statistics-overview"
-              title="Обзор"
-              description="Шесть плиток периода. Дельты — к предыдущему периоду той же длины, если включено сравнение."
+              title={t('Обзор')}
+              description={t(
+                'Шесть плиток периода. Дельты — к предыдущему периоду той же длины, если включено сравнение.'
+              )}
             >
               <OverviewTiles statistics={data} />
             </StatSection>
@@ -277,14 +286,16 @@ export function StatisticsScreen() {
               <>
                 <StatSection
                   id="statistics-bookings"
-                  title="Записи"
-                  description="Записи — по дате создания, визиты — по дате начала. Все дни — UTC."
+                  title={t('Записи')}
+                  description={t(
+                    'Записи — по дате создания, визиты — по дате начала. Все дни — UTC.'
+                  )}
                 >
                   <TrendChart series={data.series} />
 
                   <div className="mt-5 space-y-3">
                     <h3 className="font-heading text-base font-semibold tracking-tight">
-                      Статусы визитов
+                      {t('Статусы визитов')}
                     </h3>
                     <StatusBar statuses={data.statuses} />
                   </div>
@@ -293,16 +304,20 @@ export function StatisticsScreen() {
                 <div className="grid gap-6 lg:grid-cols-2">
                   <StatSection
                     id="statistics-clients"
-                    title="Клиенты"
-                    description="Только агрегаты: ни имён, ни идентификаторов клиентов в ответе нет."
+                    title={t('Клиенты')}
+                    description={t(
+                      'Только агрегаты: ни имён, ни идентификаторов клиентов в ответе нет.'
+                    )}
                   >
                     <ClientsList statistics={data} />
                   </StatSection>
 
                   <StatSection
                     id="statistics-supply"
-                    title="Предложение"
-                    description="Барберы, профили и салоны. Салоны считаются все, включая выключенные."
+                    title={t('Предложение')}
+                    description={t(
+                      'Барберы, профили и салоны. Салоны считаются все, включая выключенные.'
+                    )}
                   >
                     <SupplyList statistics={data} />
                   </StatSection>
@@ -310,13 +325,15 @@ export function StatisticsScreen() {
 
                 <StatSection
                   id="statistics-top"
-                  title="Лидеры"
-                  description="Барберы, услуги и города с минимум тремя завершёнными визитами за период."
+                  title={t('Лидеры')}
+                  description={t(
+                    'Барберы, услуги и города с минимум тремя завершёнными визитами за период.'
+                  )}
                 >
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <h3 className="font-heading text-base font-semibold tracking-tight">
-                        Барберы
+                        {t('Барберы')}
                       </h3>
                       <BarberTopTable
                         rows={data.top.barbers.rows}
@@ -326,7 +343,7 @@ export function StatisticsScreen() {
 
                     <div className="space-y-2">
                       <h3 className="font-heading text-base font-semibold tracking-tight">
-                        Услуги
+                        {t('Услуги')}
                       </h3>
                       <ServiceTopTable
                         rows={data.top.services.rows}
@@ -336,7 +353,7 @@ export function StatisticsScreen() {
 
                     <div className="space-y-2">
                       <h3 className="font-heading text-base font-semibold tracking-tight">
-                        Города
+                        {t('Города')}
                       </h3>
                       <CityTopTable
                         rows={data.top.cities.rows}
@@ -348,8 +365,10 @@ export function StatisticsScreen() {
 
                 <StatSection
                   id="statistics-quality"
-                  title="Качество и модерация"
-                  description="Опубликованные отзывы периода и решения по заявкам. «На сейчас» — для того, что ещё может измениться."
+                  title={t('Качество и модерация')}
+                  description={t(
+                    'Опубликованные отзывы периода и решения по заявкам. «На сейчас» — для того, что ещё может измениться.'
+                  )}
                 >
                   <QualityBlock statistics={data} />
                 </StatSection>
@@ -372,6 +391,7 @@ function searchOf(location: string): string {
 
 function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
   const { overview, period } = statistics
+  const { t } = useI18n()
   const compare = period.previous !== null
 
   const deltaPercent = (current: number | null, previous: number | null) => {
@@ -391,7 +411,7 @@ function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
   const metrics: StatisticsMetric[] = [
     {
       key: 'completedVisits',
-      label: 'Завершённые визиты',
+      label: t('Завершённые визиты'),
       value: formatCount(overview.completedVisits.value, [
         'визит',
         'визита',
@@ -404,14 +424,14 @@ function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
     },
     {
       key: 'turnover',
-      label: 'Оборот',
+      label: t('Оборот'),
       value: formatPrice(overview.turnover.value),
-      hint: 'по завершённым визитам',
+      hint: t('по завершённым визитам'),
       delta: deltaPercent(overview.turnover.value, overview.turnover.previous),
     },
     {
       key: 'averageCheck',
-      label: 'Средний чек',
+      label: t('Средний чек'),
       value:
         overview.averageCheck.value === null
           ? '—'
@@ -423,13 +443,13 @@ function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
     },
     {
       key: 'newAccounts',
-      label: 'Новые аккаунты',
+      label: t('Новые аккаунты'),
       value: formatCount(overview.newAccounts.value, [
         'аккаунт',
         'аккаунта',
         'аккаунтов',
       ]),
-      hint: 'роль в аккаунте текущая',
+      hint: t('роль в аккаунте текущая'),
       delta: deltaPercent(
         overview.newAccounts.value,
         overview.newAccounts.previous
@@ -437,16 +457,19 @@ function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
     },
     {
       key: 'noShowRate',
-      label: 'Неявки',
+      label: t('Неявки'),
       value:
         !hasSample
           ? '—'
           : isSmallSample
-            ? `${formatNumber(noShow.count)} из ${formatNumber(noShow.sample)}`
+            ? t('{count} из {sample}', {
+                count: formatNumber(noShow.count),
+                sample: formatNumber(noShow.sample),
+              })
             : formatPercent(noShow.value),
       hint: hasSample
-        ? `из ${formatNumber(noShow.sample)}`
-        : 'визитов не было',
+        ? t('из {value}', { value: formatNumber(noShow.sample) })
+        : t('визитов не было'),
       delta:
         compare && !isSmallSample && hasSample
           ? noShow.previous === null
@@ -456,13 +479,13 @@ function OverviewTiles({ statistics }: { statistics: AdminStatistics }) {
     },
     {
       key: 'stuckBookings',
-      label: 'Зависшие брони',
+      label: t('Зависшие брони'),
       value: formatCount(overview.stuckBookings.value, [
         'бронь',
         'брони',
         'броней',
       ]),
-      hint: 'активные со стартом в прошлом',
+      hint: t('активные со стартом в прошлом'),
     },
   ]
 
@@ -498,27 +521,33 @@ function DefinitionList({
 
 function ClientsList({ statistics }: { statistics: AdminStatistics }) {
   const clients = statistics.clients
+  const { t } = useI18n()
 
   return (
     <DefinitionList
       items={[
         {
-          label: 'С визитом',
+          label: t('С визитом'),
           value: formatNumber(clients.withVisit),
         },
         {
-          label: 'Вернувшиеся',
+          label: t('Вернувшиеся'),
           value: formatNumber(clients.returning),
-          hint: clients.withVisit === 0 ? undefined : `из ${clients.withVisit}`,
+          hint:
+            clients.withVisit === 0
+              ? undefined
+              : t('из {value}', { value: clients.withVisit }),
         },
         {
-          label: 'Первый визит',
+          label: t('Первый визит'),
           value: formatNumber(clients.firstVisit),
           hint:
-            clients.withVisit === 0 ? undefined : `из ${clients.withVisit}`,
+            clients.withVisit === 0
+              ? undefined
+              : t('из {value}', { value: clients.withVisit }),
         },
         {
-          label: 'Гостевые записи',
+          label: t('Гостевые записи'),
           value: formatNumber(clients.guestBookings),
           hint:
             clients.guestShare === null
@@ -526,7 +555,7 @@ function ClientsList({ statistics }: { statistics: AdminStatistics }) {
               : formatPercent(clients.guestShare, 0),
         },
         {
-          label: 'Доля визитов с отзывом',
+          label: t('Доля визитов с отзывом'),
           value: formatPercent(clients.reviewRate),
         },
       ]}
@@ -536,39 +565,40 @@ function ClientsList({ statistics }: { statistics: AdminStatistics }) {
 
 function SupplyList({ statistics }: { statistics: AdminStatistics }) {
   const supply = statistics.supply
+  const { t } = useI18n()
 
   return (
     <div className="space-y-3">
       <DefinitionList
         items={[
           {
-            label: 'Активные барберы',
+            label: t('Активные барберы'),
             value: formatNumber(supply.activeBarbers),
           },
           {
-            label: 'Работавшие',
+            label: t('Работавшие'),
             value: formatNumber(supply.workingBarbers),
             hint:
               supply.activeBarbers === 0
                 ? undefined
-                : `из ${supply.activeBarbers}`,
+                : t('из {value}', { value: supply.activeBarbers }),
           },
           {
-            label: 'Без визитов',
+            label: t('Без визитов'),
             value: formatNumber(supply.idleBarbers),
           },
           {
-            label: 'Новые профили',
+            label: t('Новые профили'),
             value: formatNumber(supply.newProfiles),
           },
         ]}
       />
 
       <div className="rounded-xl border p-4">
-        <h3 className="text-sm font-medium">Салоны по типу</h3>
+        <h3 className="text-sm font-medium">{t('Салоны по типу')}</h3>
         {supply.salonsByKind.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            Данных о салонах нет.
+            {t('Данных о салонах нет.')}
           </p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
@@ -579,12 +609,15 @@ function SupplyList({ statistics }: { statistics: AdminStatistics }) {
               >
                 <span className="text-muted-foreground">
                   {isPlaceKind(kind.kind)
-                    ? PLACE_KIND_LABELS[kind.kind]
+                    ? t(PLACE_KIND_LABELS[kind.kind])
                     : kind.kind}
                 </span>
                 <span className="tabular-nums">
-                  {formatNumber(kind.listed + kind.unlisted)} · в каталоге{' '}
-                  {formatNumber(kind.listed)}, скрыто {formatNumber(kind.unlisted)}
+                  {t('{total} · в каталоге {listed}, скрыто {unlisted}', {
+                    total: formatNumber(kind.listed + kind.unlisted),
+                    listed: formatNumber(kind.listed),
+                    unlisted: formatNumber(kind.unlisted),
+                  })}
                 </span>
               </li>
             ))}
@@ -598,32 +631,36 @@ function SupplyList({ statistics }: { statistics: AdminStatistics }) {
 function QualityBlock({ statistics }: { statistics: AdminStatistics }) {
   const quality = statistics.quality
   const maxCount = Math.max(1, ...quality.distribution)
+  const { t } = useI18n()
 
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-3">
           <h3 className="font-heading text-base font-semibold tracking-tight">
-            Оценки
+            {t('Оценки')}
           </h3>
           <p className="text-sm">
-            Средняя оценка:{' '}
+            {t('Средняя оценка:')}{' '}
             <span className="font-medium">{formatRating(quality.rating)}</span>
-            {quality.rating !== null && ' из 5'}
+            {quality.rating !== null && ` ${t('из 5')}`}
           </p>
           <p className="text-sm text-muted-foreground">
-            Новых отзывов за период: {formatNumber(quality.reviews)}
+            {t('Новых отзывов за период: {value}', {
+              value: formatNumber(quality.reviews),
+            })}
           </p>
 
           <div>
             <h4 className="text-sm font-medium">
-              Распределение оценок 1–5
+              {t('Распределение оценок 1–5')}
             </h4>
             <p className="mt-1 text-xs text-muted-foreground">
-              Только опубликованные:{' '}
-              {formatNumber(
-                quality.distribution.reduce((sum, count) => sum + count, 0)
-              )}
+              {t('Только опубликованные: {value}', {
+                value: formatNumber(
+                  quality.distribution.reduce((sum, count) => sum + count, 0)
+                ),
+              })}
             </p>
             <ul className="mt-2 space-y-1.5 text-sm">
               {[5, 4, 3, 2, 1].map((rating) => {
@@ -658,23 +695,26 @@ function QualityBlock({ statistics }: { statistics: AdminStatistics }) {
 
         <div className="space-y-3">
           <h3 className="font-heading text-base font-semibold tracking-tight">
-            Отзывы и модерация
+            {t('Отзывы и модерация')}
           </h3>
           <DefinitionList
             items={[
               {
-                label: 'Новые отзывы',
+                label: t('Новые отзывы'),
                 value: formatNumber(quality.reviews),
               },
               {
-                label: 'Опубликованы сейчас',
+                label: t('Опубликованы сейчас'),
                 value: formatPercent(quality.publishedShare),
               },
             ]}
           />
           <div className="grid gap-3 sm:grid-cols-2">
-            <ModerationBlock title="Заявки в барберы" data={quality.requests} />
-            <ModerationBlock title="Салоны" data={quality.salons} />
+            <ModerationBlock
+              title={t('Заявки в барберы')}
+              data={quality.requests}
+            />
+            <ModerationBlock title={t('Салоны')} data={quality.salons} />
           </div>
         </div>
       </div>
@@ -689,25 +729,29 @@ function ModerationBlock({
   title: string
   data: AdminStatisticsModeration
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="rounded-xl border p-4">
       <h4 className="text-sm font-medium">{title}</h4>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">Подано</dt>
+        <dt className="text-muted-foreground">{t('Подано')}</dt>
         <dd className="text-right tabular-nums">{formatNumber(data.submitted)}</dd>
-        <dt className="text-muted-foreground">Одобрено</dt>
+        <dt className="text-muted-foreground">{t('Одобрено')}</dt>
         <dd className="text-right tabular-nums">{formatNumber(data.approved)}</dd>
-        <dt className="text-muted-foreground">Отклонено</dt>
+        <dt className="text-muted-foreground">{t('Отклонено')}</dt>
         <dd className="text-right tabular-nums">{formatNumber(data.rejected)}</dd>
-        <dt className="text-muted-foreground">Доля одобрений</dt>
+        <dt className="text-muted-foreground">{t('Доля одобрений')}</dt>
         <dd className="text-right tabular-nums">
           {formatPercent(data.approvalRate)}
         </dd>
-        <dt className="text-muted-foreground">Медиана решения</dt>
+        <dt className="text-muted-foreground">{t('Медиана решения')}</dt>
         <dd className="text-right tabular-nums">
           {data.medianDecisionHours === null
             ? '—'
-            : `${formatNumber(data.medianDecisionHours, 1)} ч`}
+            : t('{value} ч', {
+                value: formatNumber(data.medianDecisionHours, 1),
+              })}
         </dd>
       </dl>
     </div>
@@ -715,49 +759,55 @@ function ModerationBlock({
 }
 
 function CalculationDetails() {
+  const { t } = useI18n()
+
   return (
     <details className="rounded-xl border">
       <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-        Как считаем
+        {t('Как считаем')}
       </summary>
       <div className="space-y-3 border-t px-4 py-4 text-sm text-muted-foreground">
         <p>
-          Период — UTC-сутки, обе даты включительно; запросы идут в границах
+          {t(
+            'Период — UTC-сутки, обе даты включительно; запросы идут в границах'
+          )}
           <span className="font-mono"> [from 00:00Z, (to + 1) 00:00Z)</span>.
         </p>
         <p>
-          «Завершённые визиты» — брони со статусом «Завершена», у которых начало
-          визита попало в период. «Записи» считаются по дате создания, включая
-          гостевые.
+          {t(
+            '«Завершённые визиты» — брони со статусом «Завершена», у которых начало визита попало в период. «Записи» считаются по дате создания, включая гостевые.'
+          )}
         </p>
         <p className="text-foreground">
-          <span className="font-medium">Оборот</span> — сумма цен завершённых
-          визитов. Это не выручка: платежей в сервисе нет, деньги учитываются по
-          цене-снимку услуги.
+          <span className="font-medium">{t('Оборот')}</span> —{' '}
+          {t(
+            'сумма цен завершённых визитов. Это не выручка: платежей в сервисе нет, деньги учитываются по цене-снимку услуги.'
+          )}
         </p>
         <p>
-          Средний чек — оборот, делённый на завершённые визиты. Неявки — неявки
-          делятся на завершённые плюс неявившиеся; при знаменателе меньше 10
-          показываются абсолютные числа. «—» означает неизвестное, а не ноль.
+          {t(
+            'Средний чек — оборот, делённый на завершённые визиты. Неявки — неявки делятся на завершённые плюс неявившиеся; при знаменателе меньше 10 показываются абсолютные числа. «—» означает неизвестное, а не ноль.'
+          )}
         </p>
         <p>
-          «Вернувшиеся» — клиенты с завершённым визитом до периода; «первый визит» —
-          у кого минимальный завершённый визит попал в период. «Новые аккаунты» —
-          аккаунты, созданные в периоде, а не новые клиенты: роль в аккаунте
-          текущая.
+          {t(
+            '«Вернувшиеся» — клиенты с завершённым визитом до периода; «первый визит» — у кого минимальный завершённый визит попал в период. «Новые аккаунты» — аккаунты, созданные в периоде, а не новые клиенты: роль в аккаунте текущая.'
+          )}
         </p>
         <p>
-          Доля визитов с отзывом — отзывы по завершённым визитам периода, на
-          сейчас: последние дни ещё неполные. Медиана решения — 50-й перцентиль
-          времени от подачи до решения по заявкам, решённым в периоде.
+          {t(
+            'Доля визитов с отзывом — отзывы по завершённым визитам периода, на сейчас: последние дни ещё неполные. Медиана решения — 50-й перцентиль времени от подачи до решения по заявкам, решённым в периоде.'
+          )}
         </p>
         <p>
-          Активные барберы — профили, которые активны и подтверждены. Города — город
-          салона визита; число активных барберов города — на сейчас.
+          {t(
+            'Активные барберы — профили, которые активны и подтверждены. Города — город салона визита; число активных барберов города — на сейчас.'
+          )}
         </p>
         <p>
-          Зависшие брони — снимок: активные брони со стартом в прошлом. Прошлого
-          значения у снимка нет.
+          {t(
+            'Зависшие брони — снимок: активные брони со стартом в прошлом. Прошлого значения у снимка нет.'
+          )}
         </p>
       </div>
     </details>
@@ -765,10 +815,12 @@ function CalculationDetails() {
 }
 
 function StatisticsSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-5" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем статистику…
+        {t('Загружаем статистику…')}
       </p>
       <Skeleton className="h-28 rounded-xl" aria-hidden />
       <Skeleton className="h-80 rounded-xl" aria-hidden />
@@ -781,13 +833,15 @@ function StatisticsSkeleton() {
 }
 
 function StatisticsEmpty() {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <Inbox className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <p className="font-medium">
-        За этот период данных нет. Попробуйте расширить период.
+        {t('За этот период данных нет. Попробуйте расширить период.')}
       </p>
     </div>
   )
@@ -800,13 +854,15 @@ function StatisticsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить статистику</p>
+        <p className="font-medium">{t('Не удалось загрузить статистику')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -815,7 +871,7 @@ function StatisticsError({
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

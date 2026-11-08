@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminSummary } from '@/hooks/use-admin-summary'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useNow } from '@/hooks/use-now'
+import { useI18n } from '@/i18n'
 import type { AdminSummaryOldestReview } from '@/lib/admin-summary'
 import { cataloguePath, reviewsPath } from '@/lib/admin-path'
 import {
@@ -35,6 +36,7 @@ export function SummaryScreen() {
   const summary = useAdminSummary()
   const now = useNow()
   const headingRef = useRef<HTMLHeadingElement | null>(null)
+  const { t } = useI18n()
 
   // Сводка — очередь: пока она открыта, числа должны совпадать с разделами.
   // Ошибка первой загрузки не опрашивается: у неё есть «Повторить».
@@ -62,18 +64,21 @@ export function SummaryScreen() {
             tabIndex={-1}
             className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Сводка
+            {t('Сводка')}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Что требует внимания. Счётчики считает сервер, разделы открываются
-            ссылками.
+            {t(
+              'Что требует внимания. Счётчики считает сервер, разделы открываются ссылками.'
+            )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {summary.updatedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              Обновлено в {formatClockTime(new Date(summary.updatedAt))}
+              {t('Обновлено в {time}', {
+                time: formatClockTime(new Date(summary.updatedAt)),
+              })}
             </span>
           )}
           <Button
@@ -92,7 +97,7 @@ export function SummaryScreen() {
             ) : (
               <RefreshCw data-icon="inline-start" aria-hidden />
             )}
-            {summary.isRefreshing ? 'Обновляем…' : 'Обновить'}
+            {summary.isRefreshing ? t('Обновляем…') : t('Обновить')}
           </Button>
         </div>
       </header>
@@ -136,18 +141,23 @@ function OldestReview({
   now: number
 }) {
   const reviewPath = reviewsPath('pending', review.id)
+  const { t } = useI18n()
 
   return (
     <div className="min-w-0 space-y-1 rounded-lg border p-3 text-sm">
       <p className="break-words">
-        Самый старый{' '}
+        {t('Самый старый')}{' '}
         <span className="font-medium">
           {formatWaitingSince(review.createdAt, now)}
         </span>
       </p>
-      <p>Оценка: {review.rating} из 5</p>
-      <p className="break-words">Клиент: {review.customerDisplayName}</p>
-      <p className="break-words">Барбер: {review.barberDisplayName}</p>
+      <p>{t('Оценка: {value} из 5', { value: review.rating })}</p>
+      <p className="break-words">
+        {t('Клиент: {name}', { name: review.customerDisplayName })}
+      </p>
+      <p className="break-words">
+        {t('Барбер: {name}', { name: review.barberDisplayName })}
+      </p>
       <a
         href={reviewPath}
         className="inline-flex min-h-11 items-center rounded-md py-1.5 font-medium break-words underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-8"
@@ -156,7 +166,7 @@ function OldestReview({
           navigate(reviewPath)
         }}
       >
-        Открыть отзыв
+        {t('Открыть отзыв')}
       </a>
     </div>
   )
@@ -173,6 +183,8 @@ function ReviewsBlock({
   }
   now: number
 }) {
+  const { t } = useI18n()
+
   return (
     <section
       aria-labelledby="summary-reviews-heading"
@@ -183,24 +195,26 @@ function ReviewsBlock({
           id="summary-reviews-heading"
           className="font-heading text-lg font-semibold tracking-tight"
         >
-          Отзывы на модерации
+          {t('Отзывы на модерации')}
         </h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Скрытые отзывы ждут решения. Пока отзыв не опубликован, он не влияет на
-          рейтинг барбера. В эту же очередь попадают и новые отзывы, и скрытые
-          администратором — в домене это один флаг.
+          {t(
+            'Скрытые отзывы ждут решения. Пока отзыв не опубликован, он не влияет на рейтинг барбера. В эту же очередь попадают и новые отзывы, и скрытые администратором — в домене это один флаг.'
+          )}
         </p>
       </div>
 
       {reviews.pendingCount === 0 ? (
-        <p className="text-sm font-medium">Очередь пуста — все отзывы проверены.</p>
+        <p className="text-sm font-medium">
+          {t('Очередь пуста — все отзывы проверены.')}
+        </p>
       ) : (
         <div className="space-y-3">
           <p className="text-sm">
             <span className="font-medium">
               {formatReviewsCount(reviews.pendingCount)}
             </span>{' '}
-            без публикации
+            {t('без публикации')}
           </p>
 
           {reviews.oldest !== null && (
@@ -215,7 +229,7 @@ function ReviewsBlock({
               navigate(reviewsPath('pending'))
             }}
           >
-            К очереди отзывов
+            {t('К очереди отзывов')}
           </a>
         </div>
       )}
@@ -225,6 +239,8 @@ function ReviewsBlock({
 
 /** Блок неподтверждённых барберов: ровно очередь «На проверке». */
 function BarbersBlock({ count }: { count: number }) {
+  const { t } = useI18n()
+
   return (
     <section
       aria-labelledby="summary-barbers-heading"
@@ -235,20 +251,20 @@ function BarbersBlock({ count }: { count: number }) {
           id="summary-barbers-heading"
           className="font-heading text-lg font-semibold tracking-tight"
         >
-          Барберы без подтверждения
+          {t('Барберы без подтверждения')}
         </h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Профиль не появляется в выдаче, пока его не подтвердили.
+          {t('Профиль не появляется в выдаче, пока его не подтвердили.')}
         </p>
       </div>
 
       {count === 0 ? (
-        <p className="text-sm font-medium">Все профили подтверждены.</p>
+        <p className="text-sm font-medium">{t('Все профили подтверждены.')}</p>
       ) : (
         <div className="space-y-3">
           <p className="text-sm">
-            <span className="font-medium">{formatProfilesCount(count)}</span> без
-            подтверждения
+            <span className="font-medium">{formatProfilesCount(count)}</span>{' '}
+            {t('без подтверждения')}
           </p>
           <a
             href="/admin/barbers"
@@ -258,7 +274,7 @@ function BarbersBlock({ count }: { count: number }) {
               navigate('/admin/barbers')
             }}
           >
-            Открыть барберов
+            {t('Открыть барберов')}
           </a>
         </div>
       )}
@@ -268,6 +284,8 @@ function BarbersBlock({ count }: { count: number }) {
 
 /** Блок выключенных салонов: ровно фильтр «Выключенные» каталога. */
 function SalonsBlock({ count }: { count: number }) {
+  const { t } = useI18n()
+
   return (
     <section
       aria-labelledby="summary-salons-heading"
@@ -278,16 +296,17 @@ function SalonsBlock({ count }: { count: number }) {
           id="summary-salons-heading"
           className="font-heading text-lg font-semibold tracking-tight"
         >
-          Выключенные салоны
+          {t('Выключенные салоны')}
         </h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Выключенный салон не участвует в поиске и не показывается клиентам;
-          включается в каталоге.
+          {t(
+            'Выключенный салон не участвует в поиске и не показывается клиентам; включается в каталоге.'
+          )}
         </p>
       </div>
 
       {count === 0 ? (
-        <p className="text-sm font-medium">Выключенных салонов нет.</p>
+        <p className="text-sm font-medium">{t('Выключенных салонов нет.')}</p>
       ) : (
         <div className="space-y-3">
           <p className="text-sm font-medium">{formatSalonsCount(count)}</p>
@@ -299,7 +318,7 @@ function SalonsBlock({ count }: { count: number }) {
               navigate(cataloguePath('salons'))
             }}
           >
-            Открыть каталог салонов
+            {t('Открыть каталог салонов')}
           </a>
         </div>
       )}
@@ -309,10 +328,12 @@ function SalonsBlock({ count }: { count: number }) {
 
 /** Скелетон-силуэт трёх блоков: только первая загрузка. */
 function SummarySkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-5 border-t border-border pt-4" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем сводку…
+        {t('Загружаем сводку…')}
       </p>
       <div className="space-y-3" aria-hidden>
         <Skeleton className="h-5 w-48" />
@@ -339,13 +360,15 @@ function SummaryError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить сводку</p>
+        <p className="font-medium">{t('Не удалось загрузить сводку')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -354,7 +377,7 @@ function SummaryError({
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

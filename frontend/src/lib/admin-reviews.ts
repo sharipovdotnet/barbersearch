@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -108,7 +109,7 @@ export function describeAdminReviewListError(
   fallback = 'Не удалось загрузить отзывы.'
 ): string {
   if (error instanceof ApiError && error.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   return describeApiFailure(error, fallback)
@@ -118,11 +119,11 @@ export function describeAdminReviewListError(
 export function describeAdminReviewDetailError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('review.notFound')) {
-      return 'Этот отзыв уже разобрали.'
+      return t('Этот отзыв уже разобрали.')
     }
   }
 
@@ -136,23 +137,23 @@ export function describeAdminReviewActionError(
 ): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Раздел доступен только администратору.'
+      return t('Раздел доступен только администратору.')
     }
 
     if (error.status === 404 || error.hasCode('review.notFound')) {
-      return 'Этот отзыв уже не в очереди.'
+      return t('Этот отзыв уже не в очереди.')
     }
 
     if (error.hasCode('auth.csrf.invalid')) {
-      return 'Сессия устарела. Обновите страницу и повторите действие.'
+      return t('Сессия устарела. Обновите страницу и повторите действие.')
     }
   }
 
   return describeApiFailure(
     error,
     action === 'publish'
-      ? 'Не удалось опубликовать отзыв. Попробуйте ещё раз.'
-      : 'Не удалось скрыть отзыв. Попробуйте ещё раз.'
+      ? t('Не удалось опубликовать отзыв. Попробуйте ещё раз.')
+      : t('Не удалось скрыть отзыв. Попробуйте ещё раз.')
   )
 }
 

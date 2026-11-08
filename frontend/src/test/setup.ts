@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 
 import { setUnauthorizedHandler } from '@/lib/api'
 import { resetSessionRefresh } from '@/lib/session-refresh'
+import { LOCALE_STORAGE_KEY, setCurrentLocale } from '@/i18n'
 import { server } from '@/test/msw/server'
 
 /**
@@ -62,6 +63,10 @@ afterEach(() => {
   clearCookies()
   resetSessionRefresh()
   setUnauthorizedHandler(null)
+  // Язык — модульное состояние: тест, переключивший его, не должен влиять на соседей.
+  setCurrentLocale('ru')
+  window.localStorage.removeItem(LOCALE_STORAGE_KEY)
+  document.documentElement.lang = 'ru'
 })
 
 afterAll(() => {

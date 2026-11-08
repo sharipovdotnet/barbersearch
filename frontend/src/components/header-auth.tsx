@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react'
 import { LogOut, Scissors, ShieldCheck, UserRound } from 'lucide-react'
 
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionRetryButton } from '@/components/session-unavailable'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -30,6 +31,7 @@ import { navigate, useLocation } from '@/lib/router'
  * средняя кнопка и открытие в новой вкладке.
  */
 export function HeaderAuth() {
+  const { t } = useI18n()
   const { status, user, signOut } = useSession()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const location = useLocation()
@@ -46,7 +48,7 @@ export function HeaderAuth() {
     // у шапки есть кнопка или ссылка с внятным именем.
     return (
       <div role="status">
-        <span className="sr-only">Проверяем сессию…</span>
+        <span className="sr-only">{t('Проверяем сессию…')}</span>
         <Skeleton className="size-7 rounded-full max-sm:size-11" aria-hidden />
       </div>
     )
@@ -94,8 +96,8 @@ export function HeaderAuth() {
             variant="ghost"
             size="icon"
             className="rounded-full max-sm:size-11"
-            aria-label="Меню аккаунта"
-            title="Меню аккаунта"
+            aria-label={t('Меню аккаунта')}
+            title={t('Меню аккаунта')}
           />
         }
       >
@@ -117,7 +119,7 @@ export function HeaderAuth() {
           onClick={(event) => handleNavigate(event, '/account')}
         >
           <UserRound aria-hidden />
-          Мой кабинет
+          {t('Мой кабинет')}
         </DropdownMenuItem>
         {user.role === 'Barber' && (
           <DropdownMenuItem
@@ -127,7 +129,7 @@ export function HeaderAuth() {
             onClick={(event) => handleNavigate(event, BARBER_CABINET_PATH)}
           >
             <Scissors aria-hidden />
-            Кабинет барбера
+            {t('Кабинет барбера')}
           </DropdownMenuItem>
         )}
         {user.role === 'Admin' && (
@@ -138,7 +140,7 @@ export function HeaderAuth() {
             onClick={(event) => handleNavigate(event, '/admin')}
           >
             <ShieldCheck aria-hidden />
-            Администрирование
+            {t('Администрирование')}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
@@ -148,7 +150,7 @@ export function HeaderAuth() {
           onClick={handleSignOut}
         >
           <LogOut aria-hidden />
-          {isSigningOut ? 'Выходим…' : 'Выйти'}
+          {isSigningOut ? t('Выходим…') : t('Выйти')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

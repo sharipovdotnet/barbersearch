@@ -26,6 +26,7 @@ import {
   type BarberRequestField,
   type BarberRequestFormErrors,
 } from '@/lib/barber-request-form'
+import { useI18n } from '@/i18n'
 
 /**
  * Форма заявки «Стать барбером».
@@ -42,6 +43,7 @@ export function BarberRequestForm({
   /** Созданная заявка: родитель показывает её вместо формы. */
   onCreated: (request: BarberRequest) => void
 }) {
+  const { t } = useI18n()
   const [displayName, setDisplayName] = useState('')
   const [yearsOfExperience, setYearsOfExperience] = useState('')
   const [city, setCity] = useState('')
@@ -133,7 +135,7 @@ export function BarberRequestForm({
       <FieldGroup>
         <Field data-invalid={Boolean(errors.displayName)}>
           <FieldLabel htmlFor="barber-request-display-name">
-            Как вас представить
+            {t('Как вас представить')}
           </FieldLabel>
           <Input
             ref={displayNameRef}
@@ -157,7 +159,7 @@ export function BarberRequestForm({
             }}
           />
           <FieldDescription>
-            Имя увидят клиенты в поиске и на карточке барбера.
+            {t('Имя увидят клиенты в поиске и на карточке барбера.')}
           </FieldDescription>
           <FieldError id="barber-request-display-name-error">
             {errors.displayName}
@@ -166,7 +168,9 @@ export function BarberRequestForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={Boolean(errors.yearsOfExperience)}>
-            <FieldLabel htmlFor="barber-request-years">Опыт, лет</FieldLabel>
+            <FieldLabel htmlFor="barber-request-years">
+              {t('Опыт, лет')}
+            </FieldLabel>
             <Input
               ref={yearsRef}
               id="barber-request-years"
@@ -199,7 +203,7 @@ export function BarberRequestForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.city)}>
-            <FieldLabel htmlFor="barber-request-city">Город</FieldLabel>
+            <FieldLabel htmlFor="barber-request-city">{t('Город')}</FieldLabel>
             <Input
               ref={cityRef}
               id="barber-request-city"
@@ -225,7 +229,7 @@ export function BarberRequestForm({
 
         <Field data-invalid={Boolean(errors.about)}>
           <FieldLabel htmlFor="barber-request-about">
-            О себе — необязательно
+            {t('О себе — необязательно')}
           </FieldLabel>
           <Textarea
             ref={aboutRef}
@@ -248,8 +252,10 @@ export function BarberRequestForm({
             }}
           />
           <FieldDescription id="barber-request-about-hint">
-            Опыт, специализации, любимые услуги. До{' '}
-            {BARBER_REQUEST_LIMITS.about} символов.
+            {t(
+              'Опыт, специализации, любимые услуги. До {count} символов.',
+              { count: BARBER_REQUEST_LIMITS.about }
+            )}
           </FieldDescription>
           <FieldError id="barber-request-about-error">{errors.about}</FieldError>
         </Field>
@@ -270,10 +276,12 @@ export function BarberRequestForm({
               htmlFor="barber-request-has-salon"
               className="font-normal"
             >
-              Уже работаю в салоне
+              {t('Уже работаю в салоне')}
             </FieldLabel>
             <FieldDescription>
-              Отметьте, если у вас есть место, где вы принимаете клиентов.
+              {t(
+                'Отметьте, если у вас есть место, где вы принимаете клиентов.'
+              )}
             </FieldDescription>
           </FieldContent>
         </Field>
@@ -293,7 +301,7 @@ export function BarberRequestForm({
                 void submit()
               }}
             >
-              Повторить
+              {t('Повторить')}
             </Button>
           )}
         </div>
@@ -312,7 +320,7 @@ export function BarberRequestForm({
             className="animate-spin"
           />
         )}
-        {isPending ? 'Отправляем…' : 'Отправить заявку'}
+        {isPending ? t('Отправляем…') : t('Отправить заявку')}
       </Button>
     </form>
   )

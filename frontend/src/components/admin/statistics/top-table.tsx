@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { useI18n } from '@/i18n'
 import { barbersPath } from '@/lib/admin-path'
 import type {
   AdminStatisticsBarberTopRow,
@@ -37,9 +38,13 @@ function TopTableShell({
 }
 
 function TopEmpty({ title }: { title: string }) {
+  const { t } = useI18n()
+
   return (
     <p className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-      {title}: пока нет данных — нужно минимум три завершённых визита.
+      {t('{title}: пока нет данных — нужно минимум три завершённых визита.', {
+        title,
+      })}
     </p>
   )
 }
@@ -56,36 +61,38 @@ export function BarberTopTable({
   rows: AdminStatisticsBarberTopRow[]
   other: AdminStatisticsTopOther
 }) {
+  const { t } = useI18n()
+
   if (rows.length === 0) {
-    return <TopEmpty title="Барберы" />
+    return <TopEmpty title={t('Барберы')} />
   }
 
   return (
     <div className="space-y-2">
       <TopTableShell
-        caption="Топ барберов по завершённым визитам"
+        caption={t('Топ барберов по завершённым визитам')}
         head={
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Барбер
+              {t('Барбер')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Визиты
+              {t('Визиты')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Оборот
+              {t('Оборот')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Средний чек
+              {t('Средний чек')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Неявки
+              {t('Неявки')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Рейтинг
+              {t('Рейтинг')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Отзывы
+              {t('Отзывы')}
             </th>
           </tr>
         }
@@ -130,7 +137,7 @@ export function BarberTopTable({
         })}
         <tr className="text-muted-foreground">
           <th scope="row" className="px-3 py-2 text-left font-normal">
-            Остальные
+            {t('Остальные')}
           </th>
           <td className="px-3 py-2 text-right tabular-nums">
             {formatNumber(other.visits)}
@@ -146,7 +153,7 @@ export function BarberTopTable({
           <td className="px-3 py-2 text-right">—</td>
         </tr>
       </TopTableShell>
-      <p className="text-xs text-muted-foreground">{MIN_VISITS_NOTE}</p>
+      <p className="text-xs text-muted-foreground">{t(MIN_VISITS_NOTE)}</p>
     </div>
   )
 }
@@ -159,27 +166,29 @@ export function ServiceTopTable({
   rows: AdminStatisticsServiceTopRow[]
   other: AdminStatisticsTopOther
 }) {
+  const { t } = useI18n()
+
   if (rows.length === 0) {
-    return <TopEmpty title="Услуги" />
+    return <TopEmpty title={t('Услуги')} />
   }
 
   return (
     <div className="space-y-2">
       <TopTableShell
-        caption="Топ услуг по завершённым визитам"
+        caption={t('Топ услуг по завершённым визитам')}
         head={
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Услуга
+              {t('Услуга')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Визиты
+              {t('Визиты')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Оборот
+              {t('Оборот')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Средний чек
+              {t('Средний чек')}
             </th>
           </tr>
         }
@@ -202,7 +211,7 @@ export function ServiceTopTable({
         ))}
         <tr className="text-muted-foreground">
           <th scope="row" className="px-3 py-2 text-left font-normal">
-            Остальные
+            {t('Остальные')}
           </th>
           <td className="px-3 py-2 text-right tabular-nums">
             {formatNumber(other.visits)}
@@ -215,7 +224,7 @@ export function ServiceTopTable({
           </td>
         </tr>
       </TopTableShell>
-      <p className="text-xs text-muted-foreground">{MIN_VISITS_NOTE}</p>
+      <p className="text-xs text-muted-foreground">{t(MIN_VISITS_NOTE)}</p>
     </div>
   )
 }
@@ -228,30 +237,32 @@ export function CityTopTable({
   rows: AdminStatisticsCityTopRow[]
   other: AdminStatisticsTopOther
 }) {
+  const { t } = useI18n()
+
   if (rows.length === 0) {
-    return <TopEmpty title="Города" />
+    return <TopEmpty title={t('Города')} />
   }
 
   return (
     <div className="space-y-2">
       <TopTableShell
-        caption="Топ городов по завершённым визитам"
+        caption={t('Топ городов по завершённым визитам')}
         head={
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Город
+              {t('Город')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Визиты
+              {t('Визиты')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Оборот
+              {t('Оборот')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Средний чек
+              {t('Средний чек')}
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
-              Активные барберы
+              {t('Активные барберы')}
             </th>
           </tr>
         }
@@ -277,7 +288,7 @@ export function CityTopTable({
         ))}
         <tr className="text-muted-foreground">
           <th scope="row" className="px-3 py-2 text-left font-normal">
-            Остальные
+            {t('Остальные')}
           </th>
           <td className="px-3 py-2 text-right tabular-nums">
             {formatNumber(other.visits)}
@@ -291,7 +302,7 @@ export function CityTopTable({
           <td className="px-3 py-2 text-right">—</td>
         </tr>
       </TopTableShell>
-      <p className="text-xs text-muted-foreground">{MIN_VISITS_NOTE}</p>
+      <p className="text-xs text-muted-foreground">{t(MIN_VISITS_NOTE)}</p>
     </div>
   )
 }

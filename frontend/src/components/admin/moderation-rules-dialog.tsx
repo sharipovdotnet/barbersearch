@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { useI18n } from '@/i18n'
 
 const RULES = [
   'Отзыв должен быть о состоявшемся визите, а не о сервисе в целом.',
@@ -19,28 +20,30 @@ const RULES = [
 
 /** Короткая памятка, чтобы решения разных админов не расходились. */
 export function ModerationRulesDialog() {
+  const { t } = useI18n()
+
   return (
     <Dialog>
       <DialogTrigger
         render={<Button variant="ghost" size="sm" className="h-11 sm:h-7" />}
       >
-        Правила модерации
+        {t('Правила модерации')}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Правила модерации</DialogTitle>
+          <DialogTitle>{t('Правила модерации')}</DialogTitle>
           <DialogDescription>
-            Очередь читается человеком: автоматических «токсичных» флагов нет.
+            {t('Очередь читается человеком: автоматических «токсичных» флагов нет.')}
           </DialogDescription>
         </DialogHeader>
         <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
           {RULES.map((rule) => (
-            <li key={rule}>{rule}</li>
+            <li key={rule}>{t(rule)}</li>
           ))}
         </ul>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" size="sm" />}>
-            Понятно
+            {t('Понятно')}
           </DialogClose>
         </DialogFooter>
       </DialogContent>

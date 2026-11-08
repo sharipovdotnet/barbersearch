@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminCatalogueList } from '@/hooks/use-admin-catalogue'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_CATALOGUE_EMPTY,
   ADMIN_CATALOGUE_ENTITY_LABELS,
@@ -57,6 +58,7 @@ import { cn } from '@/lib/utils'
  * которую администратор может включить обратно, а не «первая из двадцати».
  */
 export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
+  const { t } = useI18n()
   const [rawStatusFilter, setRawStatusFilter] =
     useState<AdminCatalogueStatus>('all')
   const [searchInput, setSearchInput] = useState('')
@@ -213,7 +215,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
 
       setToggleId(null)
       setActionError(null)
-      setAnnouncement(toggleAnnouncement(tab, nextActive))
+      setAnnouncement(t(toggleAnnouncement(tab, nextActive)))
       list.refresh()
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
@@ -224,7 +226,9 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
       setActionDialogError(
         describeAdminCatalogueError(
           cause,
-          `Не удалось ${nextActive ? 'включить' : 'выключить'} строку. Попробуйте ещё раз.`
+          nextActive
+            ? t('Не удалось включить строку. Попробуйте ещё раз.')
+            : t('Не удалось выключить строку. Попробуйте ещё раз.')
         )
       )
 
@@ -262,8 +266,12 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
 
       setAnnouncement(
         action === 'approve'
-          ? `Салон «${row.name}» одобрен — он появился в поиске.`
-          : `Салон «${row.name}» отклонён. Владелец увидит причину.`
+          ? t('Салон «{name}» одобрен — он появился в поиске.', {
+              name: row.name,
+            })
+          : t('Салон «{name}» отклонён. Владелец увидит причину.', {
+              name: row.name,
+            })
       )
 
       // В очереди проверки решения больше нет; в «Всех» строка остаётся с новым
@@ -289,7 +297,11 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
         (cause.status === 404 || cause.hasCode('salon.notFound'))
       ) {
         list.removeRow(row.id)
-        setAnnouncement(`Салон «${row.name}» больше не существует — список обновлён.`)
+        setAnnouncement(
+          t('Салон «{name}» больше не существует — список обновлён.', {
+            name: row.name,
+          })
+        )
         list.refresh()
         return null
       }
@@ -333,17 +345,19 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
             tabIndex={-1}
             className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Каталог
+            {t('Каталог')}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Справочники услуг, специализаций и салонов.
+            {t('Справочники услуг, специализаций и салонов.')}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {list.updatedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              Обновлено в {formatClockTime(new Date(list.updatedAt))}
+              {t('Обновлено в {time}', {
+                time: formatClockTime(new Date(list.updatedAt)),
+              })}
             </span>
           )}
           <Button
@@ -358,7 +372,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
             ) : (
               <RefreshCw data-icon="inline-start" aria-hidden />
             )}
-            {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+            {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
           </Button>
           <Button
             size="sm"
@@ -369,7 +383,9 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
             }}
           >
             <Plus data-icon="inline-start" aria-hidden />
-            Создать {ADMIN_CATALOGUE_ENTITY_LABELS[tab].toLowerCase()}
+            {t('Создать {entity}', {
+              entity: t(ADMIN_CATALOGUE_ENTITY_LABELS[tab]).toLowerCase(),
+            })}
           </Button>
         </div>
       </header>
@@ -382,7 +398,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
           <p className="min-w-0 flex-1">{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:size-auto sm:p-1"
             onClick={() => setAnnouncement(null)}
           >
@@ -402,7 +418,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
 
         <div className="relative w-full sm:ml-auto sm:w-64">
           <label htmlFor="catalogue-search" className="sr-only">
-            {ADMIN_CATALOGUE_SEARCH_LABELS[tab]}
+            {t(ADMIN_CATALOGUE_SEARCH_LABELS[tab])}
           </label>
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -413,14 +429,14 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
             type="search"
             value={searchInput}
             maxLength={ADMIN_CATALOGUE_SEARCH_MAX_LENGTH}
-            placeholder={ADMIN_CATALOGUE_SEARCH_LABELS[tab]}
+            placeholder={t(ADMIN_CATALOGUE_SEARCH_LABELS[tab])}
             className="h-11 pr-11 pl-8 sm:h-8 sm:pr-9"
             onChange={(event) => setSearchInput(event.target.value)}
           />
           {searchInput !== '' && (
             <button
               type="button"
-              aria-label="Очистить поиск"
+              aria-label={t('Очистить поиск')}
               className="absolute top-1/2 right-1 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:right-1.5 sm:size-auto sm:p-1"
               onClick={resetSearch}
             >
@@ -446,7 +462,7 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
 
         {list.status === 'error' && (
           <CatalogueError
-            message={list.error ?? 'Не удалось загрузить справочник.'}
+            message={list.error ?? t('Не удалось загрузить справочник.')}
             onRetry={list.reload}
           />
         )}
@@ -678,10 +694,12 @@ function SegmentedStatusFilter({
   statuses: readonly AdminCatalogueStatus[]
   onChange: (value: AdminCatalogueStatus) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div
       role="group"
-      aria-label="Статус строк каталога"
+      aria-label={t('Статус строк каталога')}
       className="flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5"
     >
       {statuses.map((status) => {
@@ -700,7 +718,7 @@ function SegmentedStatusFilter({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {ADMIN_CATALOGUE_STATUS_LABELS[status]}
+            {t(ADMIN_CATALOGUE_STATUS_LABELS[status])}
           </button>
         )
       })}
@@ -709,10 +727,12 @@ function SegmentedStatusFilter({
 }
 
 function CatalogueSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем справочник…
+        {t('Загружаем справочник…')}
       </p>
       <Skeleton className="h-8 w-full" aria-hidden />
       <Skeleton className="h-14 w-full" aria-hidden />
@@ -729,19 +749,21 @@ function CatalogueError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить справочник</p>
+        <p className="font-medium">{t('Не удалось загрузить справочник')}</p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -758,6 +780,8 @@ function CatalogueEmpty({
   isSearching: boolean
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
+
   if (isSearching) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -765,10 +789,12 @@ function CatalogueEmpty({
           <Search className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Ничего не найдено</p>
+          <p className="font-medium">{t('Ничего не найдено')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            В справочнике «{ADMIN_CATALOGUE_TAB_LABELS[tab].toLowerCase()}» нет строки
-            с таким названием. Попробуйте другую строку.
+            {t(
+              'В справочнике «{tab}» нет строки с таким названием. Попробуйте другую строку.',
+              { tab: t(ADMIN_CATALOGUE_TAB_LABELS[tab]).toLowerCase() }
+            )}
           </p>
         </div>
       </div>
@@ -782,13 +808,15 @@ function CatalogueEmpty({
           <Search className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Салоны на проверке</p>
+          <p className="font-medium">{t('Салоны на проверке')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Очередь пуста: новые салоны появятся здесь после создания барберами.
+            {t(
+              'Очередь пуста: новые салоны появятся здесь после создания барберами.'
+            )}
           </p>
         </div>
         <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRefresh}>
-          Обновить
+          {t('Обновить')}
         </Button>
       </div>
     )
@@ -800,13 +828,13 @@ function CatalogueEmpty({
         <Search className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Справочник пуст</p>
+        <p className="font-medium">{t('Справочник пуст')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          {ADMIN_CATALOGUE_EMPTY[tab]}
+          {t(ADMIN_CATALOGUE_EMPTY[tab])}
         </p>
       </div>
       <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={onRefresh}>
-        Обновить
+        {t('Обновить')}
       </Button>
     </div>
   )

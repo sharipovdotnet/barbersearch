@@ -14,6 +14,7 @@ import {
 } from '@/lib/barber-requests'
 import { formatDateTime, formatExperience } from '@/lib/format'
 import { navigate } from '@/lib/router'
+import { useI18n } from '@/i18n'
 
 const DEFAULT_HEADINGS: Record<BarberRequestStatus, string> = {
   Pending: 'Заявка на рассмотрении',
@@ -40,6 +41,7 @@ export function BarberRequestStatus({
   /** Повторная заявка после отказа: домен разрешает одну новую `Pending`. */
   onReapply?: () => void
 }) {
+  const { t } = useI18n()
   const { user } = useSession()
   const StatusIcon = STATUS_ICONS[request.status]
 
@@ -53,7 +55,7 @@ export function BarberRequestStatus({
           />
         </div>
         <h2 className="font-heading text-xl font-semibold tracking-tight">
-          {heading ?? DEFAULT_HEADINGS[request.status]}
+          {heading ?? t(DEFAULT_HEADINGS[request.status])}
         </h2>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -64,25 +66,25 @@ export function BarberRequestStatus({
           className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm font-medium"
         >
           <span aria-hidden className="size-1.5 rounded-full bg-current" />
-          {BARBER_REQUEST_STATUS_LABELS[request.status]}
+          {t(BARBER_REQUEST_STATUS_LABELS[request.status])}
         </p>
 
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <DetailItem label="Имя">{request.displayName}</DetailItem>
-          <DetailItem label="Стаж">
+          <DetailItem label={t('Имя')}>{request.displayName}</DetailItem>
+          <DetailItem label={t('Стаж')}>
             {formatExperience(request.yearsOfExperience)}
           </DetailItem>
-          <DetailItem label="Город">{request.city}</DetailItem>
-          <DetailItem label="Работает в салоне">
-            {request.hasSalon ? 'Да, уже в салоне' : 'Нет, работает сам'}
+          <DetailItem label={t('Город')}>{request.city}</DetailItem>
+          <DetailItem label={t('Работает в салоне')}>
+            {request.hasSalon ? t('Да, уже в салоне') : t('Нет, работает сам')}
           </DetailItem>
-          <DetailItem label="Подана">
+          <DetailItem label={t('Подана')}>
             <time dateTime={request.createdAt}>
               {formatDateTime(request.createdAt)}
             </time>
           </DetailItem>
           {request.reviewedAt && (
-            <DetailItem label="Рассмотрена">
+            <DetailItem label={t('Рассмотрена')}>
               <time dateTime={request.reviewedAt}>
                 {formatDateTime(request.reviewedAt)}
               </time>
@@ -93,7 +95,7 @@ export function BarberRequestStatus({
         {request.about && (
           <div>
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              О себе
+              {t('О себе')}
             </p>
             <p className="mt-1 text-sm break-words whitespace-pre-line">
               {request.about}
@@ -110,10 +112,10 @@ export function BarberRequestStatus({
               id="barber-request-rejection-title"
               className="text-xs font-medium tracking-wide text-destructive uppercase"
             >
-              Причина отказа
+              {t('Причина отказа')}
             </h3>
             <p className="text-sm break-words whitespace-pre-line">
-              {request.rejectionReason ?? 'Причина не указана.'}
+              {request.rejectionReason ?? t('Причина не указана.')}
             </p>
           </section>
         )}
@@ -121,8 +123,9 @@ export function BarberRequestStatus({
         {request.status === 'Rejected' && onReapply && (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Подать заявку можно снова: активная заявка у вас одна, поэтому
-              прошлая и не мешает.
+              {t(
+                'Подать заявку можно снова: активная заявка у вас одна, поэтому прошлая и не мешает.'
+              )}
             </p>
             <Button
               type="button"
@@ -130,7 +133,7 @@ export function BarberRequestStatus({
               className="h-11 sm:h-9"
               onClick={onReapply}
             >
-              Подать заявку снова
+              {t('Подать заявку снова')}
             </Button>
           </div>
         )}
@@ -138,11 +141,12 @@ export function BarberRequestStatus({
         {request.status === 'Approved' && user?.role === 'Customer' && (
           <div className="space-y-2 border-t pt-4">
             <p className="text-sm text-muted-foreground">
-              Роль изменена, но текущая сессия уже недействительна. Войдите снова —
-              после входа вы создадите профиль барбера.
+              {t(
+                'Роль изменена, но текущая сессия уже недействительна. Войдите снова — после входа вы создадите профиль барбера.'
+              )}
             </p>
             <LoginDialog
-              trigger="Войти снова"
+              trigger={t('Войти снова')}
               variant="default"
               size="sm"
               className="h-11 sm:h-9"
@@ -156,7 +160,9 @@ export function BarberRequestStatus({
           user.barberProfileId === null && (
             <div className="space-y-2 border-t pt-4">
               <p className="text-sm text-muted-foreground">
-                Остался один шаг: заполните профиль барбера, чтобы вас нашли клиенты.
+                {t(
+                  'Остался один шаг: заполните профиль барбера, чтобы вас нашли клиенты.'
+                )}
               </p>
               <Button
                 className="h-11 sm:h-9"
@@ -164,7 +170,7 @@ export function BarberRequestStatus({
                   navigate(BARBER_ONBOARDING_PATH)
                 }}
               >
-                Создать профиль барбера
+                {t('Создать профиль барбера')}
               </Button>
             </div>
           )}
@@ -179,7 +185,7 @@ export function BarberRequestStatus({
                   navigate(BARBER_CABINET_PATH)
                 }}
               >
-                Открыть кабинет барбера
+                {t('Открыть кабинет барбера')}
               </Button>
             </div>
           )}
@@ -226,13 +232,15 @@ export function BarberRequestError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-8 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <CircleX className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось проверить заявку</p>
+        <p className="font-medium">{t('Не удалось проверить заявку')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -246,7 +254,7 @@ export function BarberRequestError({
         className="h-11 sm:h-8"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

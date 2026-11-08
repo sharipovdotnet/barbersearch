@@ -14,6 +14,7 @@ import { useAdminBarberRequest } from '@/hooks/use-admin-barber-request'
 import { useAdminBarberRequestList } from '@/hooks/use-admin-barber-request-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_BARBER_REQUEST_FILTER_LABELS,
   ADMIN_BARBER_REQUEST_FILTERS,
@@ -50,6 +51,7 @@ export function BarberRequestsScreen({
   requestId: string | null
   status: AdminBarberRequestFilter
 }) {
+  const { t } = useI18n()
   const list = useAdminBarberRequestList(status)
   const detail = useAdminBarberRequest(requestId)
   const isWide = useMediaQuery('(min-width: 1024px)')
@@ -160,8 +162,13 @@ export function BarberRequestsScreen({
 
       setAnnouncement(
         kind === 'approve'
-          ? `Заявка «${request.displayName}» одобрена: роль барбера выдана, сессии заявителя завершены.`
-          : `Заявка «${request.displayName}» отклонена. Заявитель увидит причину.`
+          ? t(
+              'Заявка «{name}» одобрена: роль барбера выдана, сессии заявителя завершены.',
+              { name: request.displayName }
+            )
+          : t('Заявка «{name}» отклонена. Заявитель увидит причину.', {
+              name: request.displayName,
+            })
       )
 
       if (status === 'pending' && updated.status !== 'Pending') {
@@ -183,7 +190,9 @@ export function BarberRequestsScreen({
       if (isBarberRequestGone(cause)) {
         list.removeItem(request.id)
         setAnnouncement(
-          `Заявка «${request.displayName}» больше не существует — список обновлён.`
+          t('Заявка «{name}» больше не существует — список обновлён.', {
+            name: request.displayName,
+          })
         )
         detail.reload()
         list.refresh()
@@ -216,7 +225,7 @@ export function BarberRequestsScreen({
     <div className="space-y-5">
       {isMobileDetail && (
         <h1 ref={headingRef} tabIndex={-1} className="sr-only">
-          Заявки
+          {t('Заявки')}
         </h1>
       )}
 
@@ -228,18 +237,21 @@ export function BarberRequestsScreen({
               tabIndex={-1}
               className="scroll-mt-20 font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              Заявки
+              {t('Заявки')}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Клиенты просят роль барбера: проверьте заявку и примите решение.
-              Одобрение сразу меняет роль, отказ требует причину.
+              {t(
+                'Клиенты просят роль барбера: проверьте заявку и примите решение. Одобрение сразу меняет роль, отказ требует причину.'
+              )}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {list.updatedAt !== null && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Обновлено в {formatClockTime(new Date(list.updatedAt))}
+                {t('Обновлено в {time}', {
+                  time: formatClockTime(new Date(list.updatedAt)),
+                })}
               </span>
             )}
             <Button
@@ -262,7 +274,7 @@ export function BarberRequestsScreen({
               ) : (
                 <RefreshCw data-icon="inline-start" aria-hidden />
               )}
-              {list.isRefreshing ? 'Обновляем…' : 'Обновить'}
+              {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
           </div>
         </header>
@@ -282,7 +294,7 @@ export function BarberRequestsScreen({
           <p className="min-w-0 flex-1">{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => setAnnouncement(null)}
           >
@@ -294,7 +306,7 @@ export function BarberRequestsScreen({
       {!isMobileDetail && (
         <div
           role="group"
-          aria-label="Какие заявки показать"
+          aria-label={t('Какие заявки показать')}
           className="inline-flex items-center gap-0.5 self-start rounded-lg bg-muted p-0.5"
         >
           {ADMIN_BARBER_REQUEST_FILTERS.map((item) => {
@@ -313,7 +325,7 @@ export function BarberRequestsScreen({
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {ADMIN_BARBER_REQUEST_FILTER_LABELS[item]}
+                {t(ADMIN_BARBER_REQUEST_FILTER_LABELS[item])}
               </button>
             )
           })}
@@ -324,7 +336,7 @@ export function BarberRequestsScreen({
 
       {list.status === 'error' && (
         <RequestsError
-          message={list.error ?? 'Не удалось загрузить заявки.'}
+          message={list.error ?? t('Не удалось загрузить заявки.')}
           onRetry={list.reload}
         />
       )}
@@ -352,7 +364,7 @@ export function BarberRequestsScreen({
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                В загруженной странице нет заявок.
+                {t('В загруженной странице нет заявок.')}
               </p>
             )}
           </div>
@@ -386,10 +398,12 @@ export function BarberRequestsScreen({
 }
 
 function RequestsSkeleton() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем заявки…
+        {t('Загружаем заявки…')}
       </p>
       <Skeleton className="h-4 w-32" aria-hidden />
       <Skeleton className="h-96 rounded-xl" aria-hidden />
@@ -404,13 +418,15 @@ function RequestsError({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить заявки</p>
+        <p className="font-medium">{t('Не удалось загрузить заявки')}</p>
         <p
           role="alert"
           className="mx-auto max-w-sm text-sm text-muted-foreground"
@@ -424,7 +440,7 @@ function RequestsError({
         className="h-11 sm:h-8"
         onClick={onRetry}
       >
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )
@@ -435,6 +451,7 @@ function RequestsError({
  * Счётчиков нет — «всего» сервер не отдаёт.
  */
 function RequestsEmpty({ status }: { status: AdminBarberRequestFilter }) {
+  const { t } = useI18n()
   const isQueue = status === 'pending'
 
   return (
@@ -444,12 +461,14 @@ function RequestsEmpty({ status }: { status: AdminBarberRequestFilter }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {isQueue ? 'Заявок нет' : 'Заявок с таким статусом нет'}
+          {isQueue ? t('Заявок нет') : t('Заявок с таким статусом нет')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {isQueue
-            ? 'Очередь пуста: новые заявки появятся здесь, как только клиенты их подадут.'
-            : 'Попробуйте очередь — она показывает неразобранные заявки.'}
+            ? t(
+                'Очередь пуста: новые заявки появятся здесь, как только клиенты их подадут.'
+              )
+            : t('Попробуйте очередь — она показывает неразобранные заявки.')}
         </p>
       </div>
     </div>

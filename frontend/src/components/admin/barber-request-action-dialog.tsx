@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import {
   BARBER_REQUEST_REJECTION_MAX_LENGTH,
   type AdminBarberRequest,
@@ -44,6 +45,7 @@ export function BarberRequestActionDialog({
   /** `null` — успех; строка — русский текст ошибки, диалог остаётся открытым. */
   onConfirm: (reason: string | null) => Promise<string | null>
 }) {
+  const { t } = useI18n()
   const [reason, setReason] = useState('')
   const [reasonError, setReasonError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -60,13 +62,15 @@ export function BarberRequestActionDialog({
       const trimmed = reason.trim()
 
       if (trimmed === '') {
-        setReasonError('Укажите причину отказа.')
+        setReasonError(t('Укажите причину отказа.'))
         return
       }
 
       if (trimmed.length > BARBER_REQUEST_REJECTION_MAX_LENGTH) {
         setReasonError(
-          `Слишком длинная причина — максимум ${BARBER_REQUEST_REJECTION_MAX_LENGTH} символов.`
+          t('Слишком длинная причина — максимум {max} символов.', {
+            max: BARBER_REQUEST_REJECTION_MAX_LENGTH,
+          })
         )
         return
       }
@@ -101,7 +105,7 @@ export function BarberRequestActionDialog({
       <DialogContent role="alertdialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isApprove ? 'Одобрить заявку?' : 'Отклонить заявку?'}
+            {isApprove ? t('Одобрить заявку?') : t('Отклонить заявку?')}
           </DialogTitle>
           <DialogDescription>
             {request.displayName} · {request.applicant.email}
@@ -115,9 +119,9 @@ export function BarberRequestActionDialog({
               aria-hidden
             />
             <p className="text-sm text-foreground/80">
-              Пользователь получит роль барбера. Смена роли завершит все его сессии —
-              он войдёт заново, и после входа создаст профиль барбера. Пока профиля
-              нет, клиенты его не видят.
+              {t(
+                'Пользователь получит роль барбера. Смена роли завершит все его сессии — он войдёт заново, и после входа создаст профиль барбера. Пока профиля нет, клиенты его не видят.'
+              )}
             </p>
           </div>
         ) : (
@@ -127,7 +131,9 @@ export function BarberRequestActionDialog({
               aria-hidden
             />
             <p className="text-sm text-foreground/80">
-              Заявитель увидит причину в своём статусе и сможет подать новую заявку.
+              {t(
+                'Заявитель увидит причину в своём статусе и сможет подать новую заявку.'
+              )}
             </p>
           </div>
         )}
@@ -135,7 +141,7 @@ export function BarberRequestActionDialog({
         {!isApprove && (
           <Field data-invalid={Boolean(reasonError)}>
             <FieldLabel htmlFor="barber-request-rejection-reason">
-              Причина отказа
+              {t('Причина отказа')}
             </FieldLabel>
             <Textarea
               id="barber-request-rejection-reason"
@@ -157,8 +163,10 @@ export function BarberRequestActionDialog({
               }}
             />
             <FieldDescription id="barber-request-rejection-reason-hint">
-              До {BARBER_REQUEST_REJECTION_MAX_LENGTH} символов. Причина не
-              редактируется после отказа.
+              {t(
+                'До {max} символов. Причина не редактируется после отказа.',
+                { max: BARBER_REQUEST_REJECTION_MAX_LENGTH }
+              )}
             </FieldDescription>
             <FieldError id="barber-request-rejection-reason-error">
               {reasonError}
@@ -180,7 +188,7 @@ export function BarberRequestActionDialog({
             disabled={pending}
             onClick={onClose}
           >
-            Оставить как есть
+            {t('Оставить как есть')}
           </Button>
           <Button
             type="button"
@@ -199,7 +207,7 @@ export function BarberRequestActionDialog({
                 className="animate-spin"
               />
             )}
-            {isApprove ? 'Одобрить' : 'Отклонить'}
+            {isApprove ? t('Одобрить') : t('Отклонить')}
           </Button>
         </DialogFooter>
       </DialogContent>

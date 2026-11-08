@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import type { SessionUser } from '@/lib/auth'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate, usePathname } from '@/lib/router'
@@ -26,16 +27,23 @@ import { cn } from '@/lib/utils'
  * здесь свои данные, а рабочие зоны открываются из каркаса.
  */
 export function AccountAccess({
-  title = 'Войдите в личный кабинет',
-  description = 'Записи, отзывы и настройки профиля доступны после входа. Вход по email и паролю.',
+  title,
+  description,
   children,
 }: {
   title?: string
   description?: string
   children: (user: SessionUser) => ReactNode
 }) {
+  const { t } = useI18n()
   const { status, user } = useSession()
   const pathname = usePathname()
+  const resolvedTitle = title ?? t('Войдите в личный кабинет')
+  const resolvedDescription =
+    description ??
+    t(
+      'Записи, отзывы и настройки профиля доступны после входа. Вход по email и паролю.'
+    )
 
   if (status === 'loading') {
     return (
@@ -57,8 +65,8 @@ export function AccountAccess({
     return (
       <div className="mx-auto flex min-h-[55vh] w-full max-w-5xl items-center justify-center px-4 py-8 sm:py-10">
         <SignInGate
-          title={title}
-          description={description}
+          title={resolvedTitle}
+          description={resolvedDescription}
           redirectTo={pathname}
         />
       </div>
@@ -70,8 +78,8 @@ export function AccountAccess({
 
 /** Экран до входа: объясняет, что даёт кабинет, и даёт единственное действие. */
 export function SignInGate({
-  title = 'Войдите, чтобы увидеть записи',
-  description = 'Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю.',
+  title,
+  description,
   onSignedIn,
   redirectTo = '/account',
 }: {
@@ -82,6 +90,12 @@ export function SignInGate({
   /** Куда вернуться после входа; по умолчанию — «Мои записи». */
   redirectTo?: string
 }) {
+  const { t } = useI18n()
+  const resolvedTitle = title ?? t('Войдите, чтобы увидеть записи')
+  const resolvedDescription =
+    description ??
+    t('Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю.')
+
   return (
     <div className="mx-auto w-full max-w-md">
       <Card>
@@ -89,12 +103,12 @@ export function SignInGate({
           <div className="flex size-10 items-center justify-center rounded-full bg-muted">
             <LogIn className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          <CardTitle>{resolvedTitle}</CardTitle>
+          <CardDescription>{resolvedDescription}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <LoginDialog
-            trigger="Войти"
+            trigger={t('Войти')}
             variant="default"
             size="lg"
             className="w-full"
@@ -111,7 +125,7 @@ export function SignInGate({
               }
             }}
           >
-            Зарегистрироваться
+            {t('Зарегистрироваться')}
           </a>
           <Button
             variant="ghost"
@@ -120,7 +134,7 @@ export function SignInGate({
               navigate('/')
             }}
           >
-            Вернуться к поиску
+            {t('Вернуться к поиску')}
           </Button>
         </CardContent>
       </Card>
@@ -130,10 +144,12 @@ export function SignInGate({
 
 /** Скелетон каркаса: рейл и заголовок не прыгают после загрузки. */
 export function AccountSkeleton() {
+  const { t } = useI18n()
+
   return (
     <>
       <p role="status" className="sr-only">
-        Загружаем кабинет…
+        {t('Загружаем кабинет…')}
       </p>
       <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
         <div className="space-y-4">
@@ -175,19 +191,21 @@ export function BookingsErrorState({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
         <TriangleAlert className="size-4 text-destructive" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Не удалось загрузить записи</p>
+        <p className="font-medium">{t('Не удалось загрузить записи')}</p>
         <p role="alert" className="mx-auto max-w-sm text-sm text-muted-foreground">
           {message}
         </p>
       </div>
       <Button size="sm" variant="outline" onClick={onRetry}>
-        Повторить
+        {t('Повторить')}
       </Button>
     </div>
   )

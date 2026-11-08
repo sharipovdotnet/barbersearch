@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   createHairService,
@@ -60,6 +61,7 @@ export function HairServiceDialog({
   onClose: () => void
   onSaved: (message: string) => void
 }) {
+  const { t } = useI18n()
   const [name, setName] = useState(service?.name ?? '')
   const [category, setCategory] = useState<ServiceCategory>(
     service?.category ?? 'Haircut'
@@ -80,7 +82,7 @@ export function HairServiceDialog({
     const nextErrors: FormErrors = {}
 
     if (trimmedName === '') {
-      nextErrors.name = 'Введите название услуги.'
+      nextErrors.name = t('Введите название услуги.')
     }
 
     if (
@@ -88,7 +90,10 @@ export function HairServiceDialog({
       || minutes < MIN_DURATION
       || minutes > MAX_DURATION
     ) {
-      nextErrors.defaultDurationMinutes = `От ${MIN_DURATION} до ${MAX_DURATION} минут.`
+      nextErrors.defaultDurationMinutes = t(
+        'От {min} до {max} минут.',
+        { min: MIN_DURATION, max: MAX_DURATION }
+      )
     }
 
     setErrors(nextErrors)
@@ -109,19 +114,24 @@ export function HairServiceDialog({
     try {
       if (mode === 'create') {
         await createHairService({ ...payload, category })
-        onSaved('Услуга создана')
+        onSaved(t('Услуга создана'))
       } else if (service) {
         await updateHairService(service.id, payload)
-        onSaved('Изменения сохранены')
+        onSaved(t('Изменения сохранены'))
       }
     } catch (cause) {
       if (cause instanceof ApiError) {
         if (cause.hasCode('hairService.name')) {
-          setErrors({ name: 'Проверьте название услуги.' })
+          setErrors({ name: t('Проверьте название услуги.') })
         }
 
         if (cause.hasCode('hairService.defaultDurationMinutes')) {
-          setErrors({ defaultDurationMinutes: `От ${MIN_DURATION} до ${MAX_DURATION} минут.` })
+          setErrors({
+            defaultDurationMinutes: t('От {min} до {max} минут.', {
+              min: MIN_DURATION,
+              max: MAX_DURATION,
+            }),
+          })
         }
       }
 
@@ -129,8 +139,8 @@ export function HairServiceDialog({
         describeAdminCatalogueError(
           cause,
           mode === 'create'
-            ? 'Не удалось создать услугу. Попробуйте ещё раз.'
-            : 'Не удалось сохранить услугу. Попробуйте ещё раз.'
+            ? t('Не удалось создать услугу. Попробуйте ещё раз.')
+            : t('Не удалось сохранить услугу. Попробуйте ещё раз.')
         )
       )
     } finally {
@@ -156,16 +166,18 @@ export function HairServiceDialog({
         >
           <DialogHeader>
             <DialogTitle>
-              {mode === 'create' ? 'Новая услуга' : 'Правка услуги'}
+              {mode === 'create' ? t('Новая услуга') : t('Правка услуги')}
             </DialogTitle>
             <DialogDescription>
-              Услуга появляется в фильтрах витрины сразу после создания.
+              {t('Услуга появляется в фильтрах витрины сразу после создания.')}
             </DialogDescription>
           </DialogHeader>
 
           <FieldGroup>
             <Field data-invalid={Boolean(errors.name)}>
-              <FieldLabel htmlFor="catalogue-service-name">Название</FieldLabel>
+              <FieldLabel htmlFor="catalogue-service-name">
+                {t('Название')}
+              </FieldLabel>
               <Input
                 id="catalogue-service-name"
                 name="name"
@@ -189,7 +201,7 @@ export function HairServiceDialog({
             {mode === 'create' ? (
               <Field>
                 <FieldLabel htmlFor="catalogue-service-category">
-                  Категория
+                  {t('Категория')}
                 </FieldLabel>
                 <select
                   id="catalogue-service-category"
@@ -203,7 +215,7 @@ export function HairServiceDialog({
                 >
                   {CATEGORIES.map((value) => (
                     <option key={value} value={value}>
-                      {SERVICE_CATEGORY_LABELS[value]}
+                      {t(SERVICE_CATEGORY_LABELS[value])}
                     </option>
                   ))}
                 </select>
@@ -211,23 +223,25 @@ export function HairServiceDialog({
             ) : (
               <Field>
                 <FieldLabel htmlFor="catalogue-service-category-readonly">
-                  Категория
+                  {t('Категория')}
                 </FieldLabel>
                 <Input
                   id="catalogue-service-category-readonly"
-                  value={service ? SERVICE_CATEGORY_LABELS[service.category] : ''}
+                  value={
+                    service ? t(SERVICE_CATEGORY_LABELS[service.category]) : ''
+                  }
                   readOnly
                   disabled
                 />
                 <FieldDescription>
-                  Категория не меняется после создания.
+                  {t('Категория не меняется после создания.')}
                 </FieldDescription>
               </Field>
             )}
 
             <Field data-invalid={Boolean(errors.defaultDurationMinutes)}>
               <FieldLabel htmlFor="catalogue-service-duration">
-                Длительность по умолчанию, минуты
+                {t('Длительность по умолчанию, минуты')}
               </FieldLabel>
               <Input
                 id="catalogue-service-duration"
@@ -260,7 +274,7 @@ export function HairServiceDialog({
 
             <Field>
               <FieldLabel htmlFor="catalogue-service-description">
-                Описание
+                {t('Описание')}
               </FieldLabel>
               <Textarea
                 id="catalogue-service-description"
@@ -287,7 +301,7 @@ export function HairServiceDialog({
               disabled={isPending}
               onClick={onClose}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="submit"
@@ -298,7 +312,7 @@ export function HairServiceDialog({
               {isPending && (
                 <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
               )}
-              {mode === 'create' ? 'Создать' : 'Сохранить'}
+              {mode === 'create' ? t('Создать') : t('Сохранить')}
             </Button>
           </DialogFooter>
         </form>

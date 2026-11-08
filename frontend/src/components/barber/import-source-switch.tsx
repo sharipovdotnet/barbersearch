@@ -2,6 +2,7 @@ import { CalendarDays, List } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import { FieldLegend, FieldSet } from '@/components/ui/field'
+import { useI18n } from '@/i18n'
 import type { ImportSource } from '@/lib/import-parse'
 import { cn } from '@/lib/utils'
 
@@ -29,9 +30,11 @@ export function ImportSourceSwitch({
   value: ImportSource
   onChange: (value: ImportSource) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <FieldSet>
-      <FieldLegend>Откуда перенести</FieldLegend>
+      <FieldLegend>{t('Откуда перенести')}</FieldLegend>
       <div className="grid gap-2 sm:grid-cols-2">
         {OPTIONS.map((option) => {
           const Icon = option.icon
@@ -64,7 +67,9 @@ export function ImportSourceSwitch({
               >
                 <Icon className="size-4" />
               </span>
-              <span className="text-sm font-medium">{option.label}</span>
+              <span className="text-sm font-medium">
+                {t(option.label)}
+              </span>
             </label>
           )
         })}

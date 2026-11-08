@@ -25,6 +25,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberSalons } from '@/hooks/use-barber-salons'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
 import { BARBER_SALONS_PATH, BARBER_SCHEDULE_PATH } from '@/lib/barber-cabinet-path'
 import { navigate } from '@/lib/router'
@@ -43,17 +44,18 @@ type EditingSalon = {
  */
 export function BarberSalonsPage() {
   const { status, user } = useSession()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
-    document.title = 'Мои салоны — BarberSearch'
-  }, [])
+    document.title = t('Мои салоны — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем салоны…
+            {t('Загружаем салоны…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -68,8 +70,10 @@ export function BarberSalonsPage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы выбрать салон"
-            description="Салоны, в которых вы работаете, видны только владельцу профиля. Вход по email и паролю."
+            title={t('Войдите, чтобы выбрать салон')}
+            description={t(
+              'Салоны, в которых вы работаете, видны только владельцу профиля. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_SALONS_PATH}
           />
         </div>
@@ -106,6 +110,7 @@ function BarberSalonsScreen({
   /** Id текущего пользователя: правка салона доступна только его владельцу. */
   userId: string
 }) {
+  const { t } = useI18n()
   const { status, salons, error, isRefreshing, reload } =
     useBarberSalons(barberProfileId)
   const [announcement, setAnnouncement] = useState<string | null>(null)
@@ -116,7 +121,7 @@ function BarberSalonsScreen({
   )
 
   function handleAttached() {
-    setAnnouncement('Салон добавлен.')
+    setAnnouncement(t('Салон добавлен.'))
     reload()
   }
 
@@ -130,7 +135,9 @@ function BarberSalonsScreen({
   function handleContactsFailed() {
     // Адрес уже сохранён: диалог остаётся открытым, а список перечитывается.
     setAnnouncement(
-      'Адрес сохранён, контакты — нет. Обновите список и попробуйте ещё раз.'
+      t(
+        'Адрес сохранён, контакты — нет. Обновите список и попробуйте ещё раз.'
+      )
     )
     reload()
   }
@@ -144,11 +151,12 @@ function BarberSalonsScreen({
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
-              Мои салоны
+              {t('Мои салоны')}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Салоны, в которых вы работаете. Расписание и запись ведутся по паре
-              «барбер — салон».
+              {t(
+                'Салоны, в которых вы работаете. Расписание и запись ведутся по паре «барбер — салон».'
+              )}
             </p>
           </div>
         </div>
@@ -166,7 +174,7 @@ function BarberSalonsScreen({
                 }}
               >
                 <Plus data-icon="inline-start" aria-hidden />
-                Создать салон
+                {t('Создать салон')}
               </Button>
               {salons.length > 0 && (
                 <SalonPickerDialog
@@ -191,7 +199,7 @@ function BarberSalonsScreen({
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => {
               setAnnouncement(null)
@@ -205,13 +213,13 @@ function BarberSalonsScreen({
       {isRefreshing && (
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" aria-hidden />
-          Обновляем салоны…
+          {t('Обновляем салоны…')}
         </p>
       )}
 
       {status === 'loading' && (
         <div aria-busy="true" className="space-y-3">
-          <span className="sr-only">Загружаем салоны…</span>
+          <span className="sr-only">{t('Загружаем салоны…')}</span>
           {['salons-skeleton-1', 'salons-skeleton-2', 'salons-skeleton-3'].map(
             (key) => (
               <div key={key} aria-hidden className="rounded-xl border p-4">
@@ -227,9 +235,11 @@ function BarberSalonsScreen({
       {status === 'error' && (
         <Card>
           <CardHeader>
-            <CardTitle>Не удалось загрузить салоны</CardTitle>
+            <CardTitle>{t('Не удалось загрузить салоны')}</CardTitle>
             <CardDescription>
-              Сервер не ответил. Проверьте подключение и повторите попытку.
+              {t(
+                'Сервер не ответил. Проверьте подключение и повторите попытку.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -243,7 +253,7 @@ function BarberSalonsScreen({
               className="h-11 sm:h-8"
               onClick={reload}
             >
-              Повторить
+              {t('Повторить')}
             </Button>
           </CardContent>
         </Card>
@@ -259,7 +269,7 @@ function BarberSalonsScreen({
               className="underline underline-offset-2"
               onClick={reload}
             >
-              Повторить
+              {t('Повторить')}
             </button>
           </span>
         </p>
@@ -268,9 +278,9 @@ function BarberSalonsScreen({
       {status === 'ready' && salons.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Салон не добавлен</CardTitle>
+            <CardTitle>{t('Салон не добавлен')}</CardTitle>
             <CardDescription>
-              Без салона расписание и запись не работают.
+              {t('Без салона расписание и запись не работают.')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -315,7 +325,7 @@ function BarberSalonsScreen({
               navigate(BARBER_SCHEDULE_PATH)
             }}
           >
-            Настроить расписание
+            {t('Настроить расписание')}
           </Button>
         </>
       )}

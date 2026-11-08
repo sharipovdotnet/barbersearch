@@ -15,6 +15,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import {
   attachSalon,
   describeSalonAttachError,
@@ -55,6 +56,7 @@ export function SalonPickerDialog({
   /** `409`/`404`: выбор устарел, список «Мои салоны» надо перечитать. */
   onStale: () => void
 }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [city, setCity] = useState('')
@@ -175,11 +177,11 @@ export function SalonPickerDialog({
 
   const announcement =
     effectiveStatus === 'loading'
-      ? 'Ищем салоны…'
+      ? t('Ищем салоны…')
       : effectiveStatus === 'ready'
         ? results.length === 0
-          ? 'Ничего не найдено'
-          : `Найдено салонов: ${results.length}`
+          ? t('Ничего не найдено')
+          : t('Найдено салонов: {count}', { count: results.length })
         : ''
 
   return (
@@ -192,24 +194,27 @@ export function SalonPickerDialog({
         {trigger ?? (
           <>
             <MapPin data-icon="inline-start" aria-hidden />
-            Добавить салон
+            {t('Добавить салон')}
           </>
         )}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Добавить салон</DialogTitle>
+          <DialogTitle>{t('Добавить салон')}</DialogTitle>
           <DialogDescription>
-            Найдите салон в каталоге и выберите его. Без салона расписание и
-            запись не работают.
+            {t(
+              'Найдите салон в каталоге и выберите его. Без салона расписание и запись не работают.'
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field className="sm:col-span-2">
-              <FieldLabel htmlFor="salon-picker-search">Поиск</FieldLabel>
+              <FieldLabel htmlFor="salon-picker-search">
+                {t('Поиск')}
+              </FieldLabel>
               <div className="relative">
                 <Search
                   className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -219,7 +224,7 @@ export function SalonPickerDialog({
                   id="salon-picker-search"
                   value={search}
                   autoFocus
-                  placeholder="Название или адрес"
+                  placeholder={t('Название или адрес')}
                   className="h-11 pl-9 sm:h-8"
                   onChange={(event) => {
                     setSearch(event.target.value)
@@ -232,12 +237,15 @@ export function SalonPickerDialog({
 
             <Field className="sm:col-span-2">
               <FieldLabel htmlFor="salon-picker-city">
-                Город <span className="font-normal text-muted-foreground">— необязательно</span>
+                {t('Город')}{' '}
+                <span className="font-normal text-muted-foreground">
+                  {t('— необязательно')}
+                </span>
               </FieldLabel>
               <Input
                 id="salon-picker-city"
                 value={city}
-                placeholder="Например, Екатеринбург"
+                placeholder={t('Например, Екатеринбург')}
                 className="h-11 sm:h-8"
                 onChange={(event) => {
                   setCity(event.target.value)
@@ -253,18 +261,22 @@ export function SalonPickerDialog({
           </p>
 
           <fieldset className="min-w-0">
-            <legend className="mb-2 text-sm font-medium">Результаты поиска</legend>
+            <legend className="mb-2 text-sm font-medium">
+              {t('Результаты поиска')}
+            </legend>
 
             {effectiveStatus === 'idle' && !canSearch && (
               <p className="text-sm text-muted-foreground">
-                Начните вводить название или адрес — минимум{' '}
-                {SALON_SEARCH_MIN_LENGTH} символа.
+                {t(
+                  'Начните вводить название или адрес — минимум {count} символа.',
+                  { count: SALON_SEARCH_MIN_LENGTH }
+                )}
               </p>
             )}
 
             {effectiveStatus === 'loading' && (
               <div aria-busy="true">
-                <span className="sr-only">Загружаем каталог…</span>
+                <span className="sr-only">{t('Загружаем каталог…')}</span>
                 <ul className="space-y-2">
                   {SKELETON_KEYS.map((key) => (
                     <li key={key} className="rounded-lg border p-3">
@@ -290,13 +302,15 @@ export function SalonPickerDialog({
                     setAttempt((current) => current + 1)
                   }}
                 >
-                  Повторить
+                  {t('Повторить')}
                 </Button>
               </div>
             )}
 
             {effectiveStatus === 'ready' && results.length === 0 && (
-              <p className="text-sm text-muted-foreground">Ничего не найдено.</p>
+              <p className="text-sm text-muted-foreground">
+                {t('Ничего не найдено.')}
+              </p>
             )}
 
             {effectiveStatus === 'ready' && results.length > 0 && (
@@ -348,8 +362,8 @@ export function SalonPickerDialog({
               className="font-normal text-muted-foreground"
             >
               {isFirstSalon
-                ? 'Первый салон станет основным'
-                : 'Сделать основным'}
+                ? t('Первый салон станет основным')
+                : t('Сделать основным')}
             </FieldLabel>
           </Field>
 
@@ -368,7 +382,7 @@ export function SalonPickerDialog({
                 handleOpenChange(false)
               }}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="submit"
@@ -382,7 +396,7 @@ export function SalonPickerDialog({
                   className="animate-spin"
                 />
               )}
-              {isSubmitting ? 'Добавляем…' : 'Добавить'}
+              {isSubmitting ? t('Добавляем…') : t('Добавить')}
             </Button>
           </DialogFooter>
         </form>

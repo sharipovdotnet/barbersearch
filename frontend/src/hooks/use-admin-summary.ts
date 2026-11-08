@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   describeAdminSummaryError,
@@ -102,7 +103,7 @@ export function useAdminSummary(): AdminSummaryController {
           return
         }
 
-        const message = describeAdminSummaryError(cause, LOAD_FALLBACK)
+        const message = describeAdminSummaryError(cause, t(LOAD_FALLBACK))
 
         if (request.mode === 'refresh') {
           // Тихое обновление: число на экране было верным на момент чтения,

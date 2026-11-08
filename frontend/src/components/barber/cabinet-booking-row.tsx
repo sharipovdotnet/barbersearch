@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type {
   BarberBooking,
   BarberBookingScope,
@@ -50,6 +51,7 @@ export function CabinetBookingRow({
   onReload: () => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
+  const { t } = useI18n()
   const [pendingAction, setPendingAction] = useState<
     'confirm' | 'complete' | null
   >(null)
@@ -163,14 +165,18 @@ export function CabinetBookingRow({
 
       {booking.customerNote && (
         <p className="break-words text-sm">
-          <span className="text-muted-foreground">Комментарий клиента: </span>
+          <span className="text-muted-foreground">
+            {t('Комментарий клиента:')}{' '}
+          </span>
           {booking.customerNote}
         </p>
       )}
 
       {booking.barberNote && (
         <p className="break-words text-sm">
-          <span className="text-muted-foreground">Ваша заметка: </span>
+          <span className="text-muted-foreground">
+            {t('Ваша заметка:')}{' '}
+          </span>
           {booking.barberNote}
         </p>
       )}
@@ -179,12 +185,14 @@ export function CabinetBookingRow({
         <p className="break-words text-sm">
           {booking.cancellationReason ? (
             <>
-              <span className="text-muted-foreground">Причина отмены: </span>
+              <span className="text-muted-foreground">
+                {t('Причина отмены:')}{' '}
+              </span>
               {booking.cancellationReason}
             </>
           ) : (
             <span className="text-muted-foreground">
-              Причина отмены не указана
+              {t('Причина отмены не указана')}
             </span>
           )}
         </p>
@@ -203,7 +211,7 @@ export function CabinetBookingRow({
                 void runAction(
                   'confirm',
                   onConfirm,
-                  'Не удалось подтвердить запись.'
+                  t('Не удалось подтвердить запись.')
                 )
               }
             >
@@ -214,7 +222,7 @@ export function CabinetBookingRow({
                   className="animate-spin"
                 />
               )}
-              Подтвердить
+              {t('Подтвердить')}
             </Button>
           )}
 
@@ -230,7 +238,7 @@ export function CabinetBookingRow({
                 void runAction(
                   'complete',
                   onComplete,
-                  'Не удалось завершить визит.'
+                  t('Не удалось завершить визит.')
                 )
               }
             >
@@ -241,7 +249,7 @@ export function CabinetBookingRow({
                   className="animate-spin"
                 />
               )}
-              Завершить
+              {t('Завершить')}
             </Button>
           )}
 
@@ -253,7 +261,7 @@ export function CabinetBookingRow({
               disabled={pendingAction !== null}
               onClick={() => onOpenNoShow(booking)}
             >
-              Неявка
+              {t('Неявка')}
             </Button>
           )}
 
@@ -266,7 +274,7 @@ export function CabinetBookingRow({
               disabled={pendingAction !== null}
               onClick={() => onOpenCancel(booking)}
             >
-              Отменить
+              {t('Отменить')}
             </Button>
           )}
 
@@ -278,7 +286,7 @@ export function CabinetBookingRow({
             disabled={pendingAction !== null}
             onClick={() => onOpenNote(booking)}
           >
-            Заметка
+            {t('Заметка')}
           </Button>
         </div>
       )}
@@ -297,7 +305,7 @@ export function CabinetBookingRow({
               className="h-11 sm:h-8"
               onClick={onReload}
             >
-              Обновить
+              {t('Обновить')}
             </Button>
           )}
         </div>

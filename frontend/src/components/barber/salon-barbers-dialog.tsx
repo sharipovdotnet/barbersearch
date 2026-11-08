@@ -15,6 +15,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
 import { describeApiFailure } from '@/lib/errors'
 import {
@@ -53,6 +54,7 @@ export function SalonBarbersDialog({
   salon: BarberSalonSummary
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [status, setStatus] = useState<LoadStatus>('loading')
   const [barbers, setBarbers] = useState<SalonBarber[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -183,14 +185,16 @@ export function SalonBarbersDialog({
 
     try {
       await attachSalonBarber(salon.salonId, barber.barberProfileId)
-      setAnnouncement(`Барбер добавлен: ${barber.displayName}.`)
+      setAnnouncement(
+        t('Барбер добавлен: {name}.', { name: barber.displayName })
+      )
       resetSearch()
       reload()
     } catch (cause) {
       setActionError(
         describeSalonBarberError(
           cause,
-          'Не удалось прикрепить барбера. Попробуйте ещё раз.'
+          t('Не удалось прикрепить барбера. Попробуйте ещё раз.')
         )
       )
 
@@ -214,7 +218,9 @@ export function SalonBarbersDialog({
 
     try {
       await detachSalonBarber(salon.salonId, barber.barberProfileId)
-      setAnnouncement(`Барбер убран из салона: ${barber.displayName}.`)
+      setAnnouncement(
+        t('Барбер убран из салона: {name}.', { name: barber.displayName })
+      )
       setPendingRemovalId(null)
       reload()
 
@@ -225,7 +231,7 @@ export function SalonBarbersDialog({
       setActionError(
         describeSalonBarberError(
           cause,
-          'Не удалось убрать барбера. Попробуйте ещё раз.'
+          t('Не удалось убрать барбера. Попробуйте ещё раз.')
         )
       )
 
@@ -239,11 +245,11 @@ export function SalonBarbersDialog({
 
   const searchAnnouncement =
     effectiveSearchStatus === 'loading'
-      ? 'Ищем барберов…'
+      ? t('Ищем барберов…')
       : effectiveSearchStatus === 'ready'
         ? candidates.length === 0
-          ? 'Ничего не найдено'
-          : `Найдено барберов: ${candidates.length}`
+          ? t('Ничего не найдено')
+          : t('Найдено барберов: {count}', { count: candidates.length })
         : ''
 
   return (
@@ -257,10 +263,12 @@ export function SalonBarbersDialog({
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Барберы салона</DialogTitle>
+          <DialogTitle>{t('Барберы салона')}</DialogTitle>
           <DialogDescription>
-            {salon.name}. Добавьте мастера, который работает в этом салоне, или
-            уберите его из состава.
+            {t(
+              '{name}. Добавьте мастера, который работает в этом салоне, или уберите его из состава.',
+              { name: salon.name }
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -270,12 +278,12 @@ export function SalonBarbersDialog({
               id="salon-barbers-current-heading"
               className="text-sm font-medium"
             >
-              Работают в салоне
+              {t('Работают в салоне')}
             </h3>
 
             {status === 'loading' && (
               <div aria-busy="true" className="mt-2">
-                <span className="sr-only">Загружаем барберов…</span>
+                <span className="sr-only">{t('Загружаем барберов…')}</span>
                 <ul className="space-y-2">
                   {['salon-barbers-skeleton-1', 'salon-barbers-skeleton-2'].map(
                     (key) => (
@@ -292,7 +300,7 @@ export function SalonBarbersDialog({
             {status === 'error' && (
               <div className="mt-2 space-y-3">
                 <p role="alert" className="text-sm text-destructive">
-                  {loadError ?? LOAD_FALLBACK}
+                  {loadError ?? t(LOAD_FALLBACK)}
                 </p>
                 <Button
                   type="button"
@@ -300,7 +308,7 @@ export function SalonBarbersDialog({
                   className="h-11 sm:h-8"
                   onClick={retryLoad}
                 >
-                  Повторить
+                  {t('Повторить')}
                 </Button>
               </div>
             )}
@@ -313,7 +321,7 @@ export function SalonBarbersDialog({
                     className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"
                   >
                     <Loader2 className="size-4 animate-spin" aria-hidden />
-                    Обновляем список…
+                    {t('Обновляем список…')}
                   </p>
                 )}
 
@@ -325,7 +333,7 @@ export function SalonBarbersDialog({
 
                 {barbers.length === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    В салоне пока нет барберов.
+                    {t('В салоне пока нет барберов.')}
                   </p>
                 ) : (
                   <ul className="mt-2 space-y-2">
@@ -350,9 +358,10 @@ export function SalonBarbersDialog({
                               className="mt-3 rounded-lg bg-destructive/10 p-3"
                             >
                               <p className="text-sm">
-                                Убрать {barber.displayName} из салона? Его
-                                расписание в этом салоне останется историей, но
-                                новые записи станут недоступны.
+                                {t(
+                                  'Убрать {name} из салона? Его расписание в этом салоне останется историей, но новые записи станут недоступны.',
+                                  { name: barber.displayName }
+                                )}
                               </p>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 <Button
@@ -372,7 +381,7 @@ export function SalonBarbersDialog({
                                       className="animate-spin"
                                     />
                                   )}
-                                  Убрать
+                                  {t('Убрать')}
                                 </Button>
                                 <Button
                                   type="button"
@@ -384,7 +393,7 @@ export function SalonBarbersDialog({
                                     setPendingRemovalId(null)
                                   }}
                                 >
-                                  Отмена
+                                  {t('Отмена')}
                                 </Button>
                               </div>
                             </div>
@@ -395,13 +404,15 @@ export function SalonBarbersDialog({
                               size="sm"
                               className="mt-3 h-11 sm:h-8"
                               disabled={isBusy}
-                              aria-label={`Убрать ${barber.displayName} из салона`}
+                              aria-label={t('Убрать {name} из салона', {
+                                name: barber.displayName,
+                              })}
                               onClick={() => {
                                 setPendingRemovalId(barber.barberProfileId)
                                 setActionError(null)
                               }}
                             >
-                              Убрать
+                              {t('Убрать')}
                             </Button>
                           ))}
                       </li>
@@ -416,17 +427,19 @@ export function SalonBarbersDialog({
 
           <section aria-labelledby="salon-barbers-add-heading" className="min-w-0">
             <h3 id="salon-barbers-add-heading" className="text-sm font-medium">
-              Добавить барбера
+              {t('Добавить барбера')}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Найдите мастера по имени или email. Минимум{' '}
-              {SALON_BARBER_SEARCH_MIN_LENGTH} символа.
+              {t(
+                'Найдите мастера по имени или email. Минимум {count} символа.',
+                { count: SALON_BARBER_SEARCH_MIN_LENGTH }
+              )}
             </p>
 
             <div className="mt-3 flex flex-col gap-3">
               <Field>
                 <FieldLabel htmlFor="salon-barbers-search">
-                  Поиск барбера
+                  {t('Поиск барбера')}
                 </FieldLabel>
                 <div className="relative">
                   <Search
@@ -437,7 +450,7 @@ export function SalonBarbersDialog({
                     id="salon-barbers-search"
                     value={search}
                     maxLength={SALON_BARBER_SEARCH_MAX_LENGTH}
-                    placeholder="Имя или email"
+                    placeholder={t('Имя или email')}
                     className="h-11 pl-9 sm:h-8"
                     onChange={(event) => {
                       setSearch(event.target.value)
@@ -453,13 +466,17 @@ export function SalonBarbersDialog({
 
               {!canSearch && (
                 <p className="text-sm text-muted-foreground">
-                  Введите хотя бы {SALON_BARBER_SEARCH_MIN_LENGTH} символа.
+                  {t('Введите хотя бы {count} символа.', {
+                    count: SALON_BARBER_SEARCH_MIN_LENGTH,
+                  })}
                 </p>
               )}
 
               {effectiveSearchStatus === 'loading' && (
                 <div aria-busy="true">
-                  <span className="sr-only">Загружаем результаты…</span>
+                  <span className="sr-only">
+                    {t('Загружаем результаты…')}
+                  </span>
                   <ul className="space-y-2">
                     {['salon-barber-search-1', 'salon-barber-search-2'].map(
                       (key) => (
@@ -476,7 +493,7 @@ export function SalonBarbersDialog({
               {effectiveSearchStatus === 'error' && (
                 <div className="space-y-2">
                   <p role="alert" className="text-sm text-destructive">
-                    {searchError ?? SEARCH_FALLBACK}
+                    {searchError ?? t(SEARCH_FALLBACK)}
                   </p>
                   <Button
                     type="button"
@@ -488,14 +505,14 @@ export function SalonBarbersDialog({
                       setSearchAttempt((current) => current + 1)
                     }}
                   >
-                    Повторить
+                    {t('Повторить')}
                   </Button>
                 </div>
               )}
 
               {effectiveSearchStatus === 'ready' && candidates.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Ничего не найдено. Уточните имя или email.
+                  {t('Ничего не найдено. Уточните имя или email.')}
                 </p>
               )}
 
@@ -512,7 +529,9 @@ export function SalonBarbersDialog({
                         size="sm"
                         className="h-11 sm:h-8"
                         disabled={isBusy}
-                        aria-label={`Добавить барбера ${barber.displayName}`}
+                        aria-label={t('Добавить барбера {name}', {
+                          name: barber.displayName,
+                        })}
                         onClick={() => {
                           void handleAdd(barber)
                         }}
@@ -525,8 +544,8 @@ export function SalonBarbersDialog({
                           />
                         )}
                         {addingId === barber.barberProfileId
-                          ? 'Добавляем…'
-                          : 'Добавить'}
+                          ? t('Добавляем…')
+                          : t('Добавить')}
                       </Button>
                     </li>
                   ))}
@@ -556,7 +575,7 @@ export function SalonBarbersDialog({
             disabled={isBusy}
             onClick={onClose}
           >
-            Готово
+            {t('Готово')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -571,14 +590,20 @@ function BarberSummary({
   barber: SalonBarber
   isOwner?: boolean
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2">
         <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="font-medium break-words">{barber.displayName}</span>
-        {isOwner && <Badge variant="secondary">Владелец</Badge>}
-        {!barber.isVerified && <Badge variant="outline">На проверке</Badge>}
-        {!barber.isActive && <Badge variant="destructive">Выключен</Badge>}
+        {isOwner && <Badge variant="secondary">{t('Владелец')}</Badge>}
+        {!barber.isVerified && (
+          <Badge variant="outline">{t('На проверке')}</Badge>
+        )}
+        {!barber.isActive && (
+          <Badge variant="destructive">{t('Выключен')}</Badge>
+        )}
       </div>
       <p className="mt-0.5 text-sm break-words text-muted-foreground">
         {barber.email}

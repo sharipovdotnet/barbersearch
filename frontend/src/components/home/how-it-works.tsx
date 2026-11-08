@@ -1,3 +1,5 @@
+import { useI18n } from '@/i18n'
+
 const steps = [
   {
     title: 'Найдите барбера',
@@ -15,6 +17,8 @@ const steps = [
 
 /** Короткое объяснение того, как устроена запись. */
 export function HowItWorks() {
+  const { t } = useI18n()
+
   return (
     <section id="how" className="scroll-mt-14 border-y bg-muted/30">
       <div className="mx-auto grid max-w-5xl gap-6 px-4 py-10 sm:grid-cols-3">
@@ -24,8 +28,10 @@ export function HowItWorks() {
               {index + 1}
             </div>
             <div>
-              <h2 className="font-medium">{step.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{step.text}</p>
+              <h2 className="font-medium">{t(step.title)}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t(step.text)}
+              </p>
             </div>
           </div>
         ))}

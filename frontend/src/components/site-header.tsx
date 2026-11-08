@@ -2,7 +2,9 @@ import type { MouseEvent } from 'react'
 import { Scissors } from 'lucide-react'
 
 import { HeaderAuth } from '@/components/header-auth'
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { buttonVariants } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { isBarberCabinetPath } from '@/lib/barber-cabinet-path'
@@ -24,6 +26,7 @@ const navLinkClass =
   'whitespace-nowrap rounded-md px-2.5 py-1.5 transition-colors hover:bg-muted hover:text-foreground'
 
 export function SiteHeader() {
+  const { t } = useI18n()
   const pathname = usePathname()
   const isAccount = isAccountPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
@@ -38,7 +41,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
       <div
         className={cn(
-          'mx-auto flex h-14 items-center gap-5 px-4 sm:gap-6',
+          'mx-auto flex h-14 items-center gap-2 px-4 sm:gap-6',
           isAdmin ? 'max-w-6xl' : 'max-w-5xl'
         )}
       >
@@ -56,7 +59,7 @@ export function SiteHeader() {
 
         {!isAdmin && (
           <nav
-            aria-label="Основная навигация"
+            aria-label={t('Основная навигация')}
             className="-ml-2.5 hidden items-center gap-0.5 text-sm text-muted-foreground sm:flex"
           >
             <a
@@ -64,14 +67,14 @@ export function SiteHeader() {
               className={navLinkClass}
               onClick={(event) => handleSection(event, 'barbers')}
             >
-              Барберы
+              {t('Барберы')}
             </a>
             <a
               href="/#how"
               className={navLinkClass}
               onClick={(event) => handleSection(event, 'how')}
             >
-              Как это работает
+              {t('Как это работает')}
             </a>
           </nav>
         )}
@@ -80,15 +83,19 @@ export function SiteHeader() {
           {isAdmin && (
             <a
               href="/"
-              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'hidden sm:inline-flex'
+              )}
               onClick={(event) => {
                 event.preventDefault()
                 navigate('/')
               }}
             >
-              На сайт
+              {t('На сайт')}
             </a>
           )}
+          <LanguageSwitcher />
           <HeaderAuth />
           {!isAdmin && (
             <a
@@ -96,7 +103,9 @@ export function SiteHeader() {
               className={cn(buttonVariants({ size: 'sm' }), 'hidden sm:inline-flex')}
               onClick={(event) => handleSection(event, 'barbers')}
             >
-              {isAccount || isBarberCabinet ? 'К поиску' : 'Найти барбера'}
+              {isAccount || isBarberCabinet
+                ? t('К поиску')
+                : t('Найти барбера')}
             </a>
           )}
         </div>

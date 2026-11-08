@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n'
 import type { AdminStatisticsStatuses } from '@/lib/admin-statistics'
 import { formatNumber } from '@/lib/format'
 
@@ -23,38 +24,39 @@ export function StatusBar({
 }: {
   statuses: AdminStatisticsStatuses
 }) {
+  const { t } = useI18n()
   const segments: Segment[] = [
     {
       key: 'completed',
-      label: 'Завершены',
+      label: t('Завершены'),
       value: statuses.completed,
       fill: 'fill-success',
       dot: 'bg-success',
     },
     {
       key: 'cancelled',
-      label: 'Отменены',
+      label: t('Отменены'),
       value: statuses.cancelled,
       fill: 'fill-warning',
       dot: 'bg-warning',
     },
     {
       key: 'noShow',
-      label: 'Неявки',
+      label: t('Неявки'),
       value: statuses.noShow,
       fill: 'fill-destructive',
       dot: 'bg-destructive',
     },
     {
       key: 'pending',
-      label: 'Ждут подтверждения',
+      label: t('Ждут подтверждения'),
       value: statuses.pending,
       fill: 'fill-chart-3',
       dot: 'bg-chart-3',
     },
     {
       key: 'confirmed',
-      label: 'Подтверждены',
+      label: t('Подтверждены'),
       value: statuses.confirmed,
       fill: 'fill-chart-2',
       dot: 'bg-chart-2',
@@ -110,11 +112,14 @@ export function StatusBar({
       </dl>
 
       <p className="text-sm">
-        Закрыто визитов:{' '}
+        {t('Закрыто визитов:')}{' '}
         <span className="font-medium tabular-nums">
           {statuses.due === 0
             ? '—'
-            : `${formatNumber(statuses.closed)} из ${formatNumber(statuses.due)}`}
+            : t('{closed} из {due}', {
+                closed: formatNumber(statuses.closed),
+                due: formatNumber(statuses.due),
+              })}
         </span>
       </p>
     </div>

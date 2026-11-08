@@ -1,9 +1,12 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
 import type { BarberProfile } from '@/lib/catalog'
+import { useI18n } from '@/i18n'
 
 /** Специализации с описаниями. Пустой блок не показываем: заголовок без данных — шум. */
 export function BarberSpecializations({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
+
   if (profile.specializations.length === 0) {
     return null
   }
@@ -12,7 +15,7 @@ export function BarberSpecializations({ profile }: { profile: BarberProfile }) {
     <section aria-labelledby="barber-specializations-heading">
       <Card>
         <BarberSectionHeading id="barber-specializations-heading">
-          Специализации
+          {t('Специализации')}
         </BarberSectionHeading>
 
         <CardContent>

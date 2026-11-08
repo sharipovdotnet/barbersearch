@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   describeAdminStatisticsError,
@@ -145,7 +146,7 @@ export function useAdminStatistics(
           return
         }
 
-        const message = describeAdminStatisticsError(cause, LOAD_FALLBACK)
+        const message = describeAdminStatisticsError(cause, t(LOAD_FALLBACK))
 
         if (mode === 'refresh') {
           // Тихое обновление: числа были верны на момент чтения, поэтому ошибка

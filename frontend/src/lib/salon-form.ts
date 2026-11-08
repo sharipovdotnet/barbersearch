@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import {
@@ -166,23 +167,23 @@ export function validateSalonForm(values: SalonFormValues): SalonFormErrors {
 
   // Длину названия сервер не ограничивает — выдумывать лимит нельзя.
   if (values.name.trim() === '') {
-    errors.name = 'Введите название.'
+    errors.name = t('Введите название.')
   }
 
   if (values.address.trim() === '') {
-    errors.address = 'Введите адрес.'
+    errors.address = t('Введите адрес.')
   }
 
   if (values.city.trim() === '') {
-    errors.city = 'Введите город.'
+    errors.city = t('Введите город.')
   }
 
   if (values.country.trim() === '') {
-    errors.country = 'Введите страну.'
+    errors.country = t('Введите страну.')
   }
 
   if (values.timeZoneId.trim() === '') {
-    errors.timeZoneId = 'Выберите часовой пояс из списка.'
+    errors.timeZoneId = t('Выберите часовой пояс из списка.')
   }
 
   const latitude = Number(values.latitude)
@@ -193,7 +194,10 @@ export function validateSalonForm(values: SalonFormValues): SalonFormErrors {
     latitude < MIN_LATITUDE ||
     latitude > MAX_LATITUDE
   ) {
-    errors.latitude = `От ${MIN_LATITUDE} до ${MAX_LATITUDE}.`
+    errors.latitude = t('От {min} до {max}.', {
+      min: MIN_LATITUDE,
+      max: MAX_LATITUDE,
+    })
   }
 
   const longitude = Number(values.longitude)
@@ -204,28 +208,33 @@ export function validateSalonForm(values: SalonFormValues): SalonFormErrors {
     longitude < MIN_LONGITUDE ||
     longitude > MAX_LONGITUDE
   ) {
-    errors.longitude = `От ${MIN_LONGITUDE} до ${MAX_LONGITUDE}.`
+    errors.longitude = t('От {min} до {max}.', {
+      min: MIN_LONGITUDE,
+      max: MAX_LONGITUDE,
+    })
   }
 
   const website = values.websiteUrl.trim()
 
   if (website !== '' && !isHttpUrl(website)) {
-    errors.websiteUrl = 'Адрес сайта начинается с http:// или https://.'
+    errors.websiteUrl = t('Адрес сайта начинается с http:// или https://.')
   }
 
   if (values.phoneNumber.trim().length > MAX_PHONE_LENGTH) {
-    errors.phoneNumber = `Не длиннее ${MAX_PHONE_LENGTH} символов.`
+    errors.phoneNumber = t('Не длиннее {max} символов.', {
+      max: MAX_PHONE_LENGTH,
+    })
   }
 
   if (!isListedAllowed(values.kind) && values.isListed) {
-    errors.isListed = 'Для этого типа места каталог недоступен.'
+    errors.isListed = t('Для этого типа места каталог недоступен.')
   }
 
   if (
     (values.kind === 'Salon' || values.kind === 'RentalStudio') &&
     !values.isListed
   ) {
-    errors.isListed = 'Барбершоп и студию нельзя скрыть из каталога.'
+    errors.isListed = t('Барбершоп и студию нельзя скрыть из каталога.')
   }
 
   return errors
@@ -340,7 +349,7 @@ export function salonFieldErrors(
     { codes: readonly string[]; message: string },
   ][]) {
     if (rule.codes.some((code) => cause.hasCode(code))) {
-      errors[field] = rule.message
+      errors[field] = t(rule.message)
     }
   }
 
@@ -364,50 +373,52 @@ export function describeSalonSaveError(
       : 'Не удалось сохранить салон. Попробуйте ещё раз.'
 
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
     if (scope === 'owner') {
       if (cause.hasCode('barberProfile.notFound')) {
-        return 'Профиль барбера не найден. Создайте профиль и повторите.'
+        return t('Профиль барбера не найден. Создайте профиль и повторите.')
       }
 
-      return 'Это чужой салон — править его может только владелец.'
+      return t('Это чужой салон — править его может только владелец.')
     }
 
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.status === 404 || cause.hasCode('salon.notFound')) {
-    return 'Салон не найден — обновите список.'
+    return t('Салон не найден — обновите список.')
   }
 
   if (
     cause.status === 409 &&
     cause.codes.some((code) => code.endsWith('update.concurrencyConflict'))
   ) {
-    return 'Запись изменили одновременно. Обновите список.'
+    return t('Запись изменили одновременно. Обновите список.')
   }
 
   if (cause.hasCode('salon.timeZoneId.unknown')) {
-    return 'Неизвестный часовой пояс. Выберите зону из списка.'
+    return t('Неизвестный часовой пояс. Выберите зону из списка.')
   }
 
   if (cause.hasCode('salon.city') || cause.hasCode('salon.city.invalid')) {
-    return 'Город не может быть пустым.'
+    return t('Город не может быть пустым.')
   }
 
   if (cause.hasCode('salon.isListed.kind')) {
-    return 'Барбершоп и студию нельзя скрыть из каталога.'
+    return t('Барбершоп и студию нельзя скрыть из каталога.')
   }
 
   if (cause.hasCode('salon.kind.unknown')) {
-    return 'Неизвестный тип места. Обновите страницу и попробуйте ещё раз.'
+    return t(
+      'Неизвестный тип места. Обновите страницу и попробуйте ещё раз.'
+    )
   }
 
   if (cause.status === 429) {
-    return 'Слишком много действий подряд. Подождите минуту.'
+    return t('Слишком много действий подряд. Подождите минуту.')
   }
 
   return describeApiFailure(cause, fallback)

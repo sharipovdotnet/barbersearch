@@ -1,4 +1,5 @@
 import type { BookingStatus } from '@/lib/bookings'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 const STEPS = [
@@ -15,6 +16,7 @@ const STEPS = [
  * иначе он читается как «визит ещё будет».
  */
 export function StatusTimeline({ status }: { status: BookingStatus }) {
+  const { t } = useI18n()
   const reached = status === 'Confirmed' ? 2 : 1
 
   return (
@@ -36,7 +38,7 @@ export function StatusTimeline({ status }: { status: BookingStatus }) {
                 isReached ? 'font-medium text-foreground' : 'text-muted-foreground'
               )}
             >
-              {step.label}
+              {t(step.label)}
             </span>
             {index < STEPS.length - 1 && (
               <span aria-hidden className="h-px w-4 bg-border sm:w-6" />

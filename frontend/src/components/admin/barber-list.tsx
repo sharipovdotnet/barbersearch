@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { ListPager } from '@/components/list-pager'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import type { AdminBarber, AdminBarberStatusFilter } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
@@ -48,31 +49,33 @@ export function BarberList({
   onPrev: () => void
   onNext: () => void
 }) {
+  const { t } = useI18n()
+
   return (
-    <section aria-label="Барберы" className="space-y-3">
+    <section aria-label={t('Барберы')} className="space-y-3">
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-        <span>Показано {items.length}</span>
-        <span>Сначала новые</span>
+        <span>{t('Показано {count}', { count: items.length })}</span>
+        <span>{t('Сначала новые')}</span>
       </div>
 
       <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
         <table className="hidden w-full text-left text-sm lg:table">
           <caption className="sr-only">
-            Барберы: имя, email, грейд, рейтинг и статус профиля
+            {t('Барберы: имя, email, грейд, рейтинг и статус профиля')}
           </caption>
           <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">
-                Барбер
+                {t('Барбер')}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Грейд
+                {t('Грейд')}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Рейтинг
+                {t('Рейтинг')}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Статус
+                {t('Статус')}
               </th>
             </tr>
           </thead>
@@ -104,7 +107,7 @@ export function BarberList({
                     </a>
                   </td>
                   <td className="px-3 py-3 align-middle whitespace-nowrap">
-                    {BARBER_GRADE_LABELS[barber.grade]}
+                    {t(BARBER_GRADE_LABELS[barber.grade])}
                   </td>
                   <td className="px-3 py-3 align-middle whitespace-nowrap">
                     <BarberRating barber={barber} />
@@ -132,7 +135,7 @@ export function BarberList({
               >
                 <BarberIdentity barber={barber} />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <span>{BARBER_GRADE_LABELS[barber.grade]}</span>
+                  <span>{t(BARBER_GRADE_LABELS[barber.grade])}</span>
                   <BarberRating barber={barber} />
                 </div>
                 <BarberStatusBadge barber={barber} />
@@ -143,7 +146,7 @@ export function BarberList({
       </div>
 
       <ListPager
-        label="Страницы барберов"
+        label={t('Страницы барберов')}
         rangeLabel={
           items.length === 0 ? '' : formatPageRange(offset, items.length)
         }
@@ -180,10 +183,12 @@ export function BarberIdentity({ barber }: { barber: AdminBarber }) {
 }
 
 function BarberRating({ barber }: { barber: AdminBarber }) {
+  const { t } = useI18n()
+
   return (
     <span className="text-muted-foreground tabular-nums">
       {barber.rating === null ? (
-        'Нет отзывов'
+        t('Нет отзывов')
       ) : (
         <>
           {formatRating(barber.rating)} ·{' '}
@@ -205,10 +210,12 @@ export function BarberStatusBadge({
   barber: { isActive: boolean; isVerified: boolean }
   className?: string
 }) {
+  const { t } = useI18n()
+
   if (!barber.isActive) {
     return (
       <Badge variant="outline" className={className}>
-        Скрыт из поиска
+        {t('Скрыт из поиска')}
       </Badge>
     )
   }
@@ -216,14 +223,14 @@ export function BarberStatusBadge({
   if (!barber.isVerified) {
     return (
       <Badge variant="outline" className={className}>
-        На проверке
+        {t('На проверке')}
       </Badge>
     )
   }
 
   return (
     <Badge variant="secondary" className={className}>
-      Подтверждён
+      {t('Подтверждён')}
     </Badge>
   )
 }

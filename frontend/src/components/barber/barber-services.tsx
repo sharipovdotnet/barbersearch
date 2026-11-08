@@ -6,6 +6,7 @@ import { BarberSectionHeading } from '@/components/barber/barber-section'
 import { SERVICE_CATEGORY_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberProfile } from '@/lib/catalog'
 import { formatDuration, formatPrice } from '@/lib/format'
+import { useI18n } from '@/i18n'
 
 /**
  * Прайс мастера: цена и длительность конкретной услуги.
@@ -14,19 +15,20 @@ import { formatDuration, formatPrice } from '@/lib/format'
  * выше, а кнопка-пустышка хуже, чем её отсутствие.
  */
 export function BarberServices({ profile }: { profile: BarberProfile }) {
+  const { t } = useI18n()
   const services = profile.services.filter((service) => service.isActive)
 
   return (
     <section aria-labelledby="barber-services-heading">
       <Card>
         <BarberSectionHeading id="barber-services-heading">
-          Услуги
+          {t('Услуги')}
         </BarberSectionHeading>
 
         <CardContent>
           {services.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Услуги пока не добавлены.
+              {t('Услуги пока не добавлены.')}
             </p>
           ) : (
             <ul className="divide-y">
@@ -42,7 +44,7 @@ export function BarberServices({ profile }: { profile: BarberProfile }) {
                       <p className="font-medium break-words">{service.name}</p>
                       <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <Badge variant="outline">
-                          {SERVICE_CATEGORY_LABELS[service.category]}
+                          {t(SERVICE_CATEGORY_LABELS[service.category])}
                         </Badge>
                         {duration !== '' && (
                           <span className="inline-flex items-center gap-1">

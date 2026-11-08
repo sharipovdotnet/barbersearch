@@ -7,6 +7,7 @@ import { BARBER_GRADE_LABELS } from '@/lib/barber-grade'
 import { barberPath } from '@/lib/barber-path'
 import { LANGUAGE_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberSearchItem } from '@/lib/barber-search'
+import { useI18n } from '@/i18n'
 import {
   formatExperience,
   formatRating,
@@ -25,6 +26,8 @@ import { isPlainClick, navigate } from '@/lib/router'
  * клиент видит их до перехода в профиль.
  */
 export function BarberCard({ barber }: { barber: BarberSearchItem }) {
+  const { t } = useI18n()
+
   // `primaryPlaceKind` есть только у места из нового контракта: у барбера без
   // места он `null`, и тогда остаётся прежняя подпись «название · город».
   const location =
@@ -68,7 +71,7 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
               <p className="mt-1 flex items-start gap-1 text-sm text-muted-foreground">
                 <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                 <span className="min-w-0 break-words">
-                  {location || 'Салон не указан'}
+                  {location || t('Салон не указан')}
                 </span>
               </p>
             </div>
@@ -78,12 +81,14 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">
-              {BARBER_GRADE_LABELS[barber.grade]}
+              {t(BARBER_GRADE_LABELS[barber.grade])}
             </Badge>
             <p className="flex items-center gap-1.5 text-sm">
               <Star className="size-3.5 fill-current" aria-hidden />
               {barber.rating === null ? (
-                <span className="text-muted-foreground">Пока нет отзывов</span>
+                <span className="text-muted-foreground">
+                  {t('Пока нет отзывов')}
+                </span>
               ) : (
                 <>
                   <span className="font-medium">
@@ -98,14 +103,14 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Стаж: {formatExperience(barber.yearsOfExperience)}
+            {t('Стаж:')} {formatExperience(barber.yearsOfExperience)}
           </p>
 
           {languages !== '' && (
             <p className="flex items-start gap-1 text-sm text-muted-foreground">
               <Languages className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span className="min-w-0 break-words">
-                <span className="sr-only">Языки: </span>
+                <span className="sr-only">{t('Языки:')} </span>
                 {languages}
               </span>
             </p>
@@ -113,7 +118,7 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
 
           {barber.additionalServices.length > 0 && (
             <ul
-              aria-label="Дополнительные услуги"
+              aria-label={t('Дополнительные услуги')}
               className="flex flex-wrap gap-1.5"
             >
               {barber.additionalServices.slice(0, 3).map((service) => (
@@ -127,7 +132,10 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
                 <li>
                   <Badge variant="outline" className="text-muted-foreground">
                     +{barber.additionalServices.length - 3}
-                    <span className="sr-only"> ещё дополнительных услуг</span>
+                    {' '}
+                    <span className="sr-only">
+                      {t('ещё дополнительных услуг')}
+                    </span>
                   </Badge>
                 </li>
               )}

@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import type { AdminSalon, SalonModerationAction } from '@/lib/admin-catalogue'
 import {
   SALON_REJECTION_MAX_LENGTH,
@@ -43,6 +44,7 @@ export function SalonModerationDialog({
   /** `null` — успех; строка — русский текст ошибки, диалог остаётся открытым. */
   onConfirm: (reason: string | null) => Promise<string | null>
 }) {
+  const { t } = useI18n()
   const [reason, setReason] = useState('')
   const [reasonError, setReasonError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -93,7 +95,7 @@ export function SalonModerationDialog({
       <DialogContent role="alertdialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isApprove ? 'Одобрить салон?' : 'Отклонить салон?'}
+            {isApprove ? t('Одобрить салон?') : t('Отклонить салон?')}
           </DialogTitle>
           <DialogDescription>
             {salon.name}
@@ -108,7 +110,7 @@ export function SalonModerationDialog({
               aria-hidden
             />
             <p className="text-sm text-foreground/80">
-              Салон появится в поиске и станет доступен для записи.
+              {t('Салон появится в поиске и станет доступен для записи.')}
             </p>
           </div>
         ) : (
@@ -118,7 +120,9 @@ export function SalonModerationDialog({
               aria-hidden
             />
             <p className="text-sm text-foreground/80">
-              Салон останется невидимым. Владелец увидит причину в «Моих салонах».
+              {t(
+                'Салон останется невидимым. Владелец увидит причину в «Моих салонах».'
+              )}
             </p>
           </div>
         )}
@@ -126,7 +130,7 @@ export function SalonModerationDialog({
         {!isApprove && (
           <Field data-invalid={Boolean(reasonError)}>
             <FieldLabel htmlFor="salon-rejection-reason">
-              Причина отказа
+              {t('Причина отказа')}
             </FieldLabel>
             <Textarea
               id="salon-rejection-reason"
@@ -148,8 +152,10 @@ export function SalonModerationDialog({
               }}
             />
             <FieldDescription id="salon-rejection-reason-hint">
-              До {SALON_REJECTION_MAX_LENGTH} символов. Причина не редактируется
-              после отказа.
+              {t(
+                'До {max} символов. Причина не редактируется после отказа.',
+                { max: SALON_REJECTION_MAX_LENGTH }
+              )}
             </FieldDescription>
             <FieldError id="salon-rejection-reason-error">
               {reasonError}
@@ -171,7 +177,7 @@ export function SalonModerationDialog({
             disabled={pending}
             onClick={onClose}
           >
-            Оставить как есть
+            {t('Оставить как есть')}
           </Button>
           <Button
             type="button"
@@ -190,7 +196,7 @@ export function SalonModerationDialog({
                 className="animate-spin"
               />
             )}
-            {isApprove ? 'Одобрить' : 'Отклонить'}
+            {isApprove ? t('Одобрить') : t('Отклонить')}
           </Button>
         </DialogFooter>
       </DialogContent>

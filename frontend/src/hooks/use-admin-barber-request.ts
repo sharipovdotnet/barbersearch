@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   describeAdminBarberRequestDetailError,
@@ -93,7 +94,7 @@ export function useAdminBarberRequest(
           status: 'error',
           error:
             cause instanceof ApiError && cause.status === 401
-              ? 'Сессия истекла — войдите снова.'
+              ? t('Сессия истекла — войдите снова.')
               : describeAdminBarberRequestDetailError(cause),
         })
       })

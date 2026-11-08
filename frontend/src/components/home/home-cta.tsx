@@ -1,9 +1,12 @@
 import { Scissors } from 'lucide-react'
 
+import { useI18n } from '@/i18n'
 import { navigate } from '@/lib/router'
 
 /** Нижний блок витрины: возврат в кабинет к своим записям. */
 export function HomeCta() {
+  const { t } = useI18n()
+
   return (
     <section className="border-t">
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-4 px-4 py-12 sm:flex-row sm:items-center sm:justify-between">
@@ -13,11 +16,12 @@ export function HomeCta() {
           </div>
           <div>
             <h2 className="font-heading text-lg font-semibold tracking-tight">
-              Уже записывались?
+              {t('Уже записывались?')}
             </h2>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Все визиты, их статус и отмена собраны в кабинете — там же можно
-              оставить отзыв после стрижки.
+              {t(
+                'Все визиты, их статус и отмена собраны в кабинете — там же можно оставить отзыв после стрижки.'
+              )}
             </p>
           </div>
         </div>
@@ -29,7 +33,7 @@ export function HomeCta() {
             navigate('/account')
           }}
         >
-          Перейти в мои записи
+          {t('Перейти в мои записи')}
         </a>
       </div>
     </section>

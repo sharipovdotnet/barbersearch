@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
   describeAdminBookingsError,
@@ -93,7 +94,7 @@ export function useAdminBooking(
           status: 'error',
           error: describeAdminBookingsError(
             cause,
-            'Не удалось загрузить бронь.'
+            t('Не удалось загрузить бронь.')
           ),
         })
       })

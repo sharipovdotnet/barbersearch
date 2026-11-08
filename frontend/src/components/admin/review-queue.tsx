@@ -2,6 +2,7 @@ import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
 import { Star } from 'lucide-react'
 
 import { ListPager } from '@/components/list-pager'
+import { useI18n } from '@/i18n'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type { AdminTab } from '@/lib/admin-path'
 import { formatShortDay, formatShortName, formatWaitingSince } from '@/lib/format'
@@ -51,6 +52,7 @@ export function ReviewQueue({
 }) {
   const listRef = useRef<HTMLElement | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const { t } = useI18n()
 
   const selectedIndex = items.findIndex((review) => review.id === selectedId)
   const tabbableIndex = selectedIndex >= 0 ? selectedIndex : 0
@@ -111,13 +113,17 @@ export function ReviewQueue({
     <section
       ref={listRef}
       id="reviews-list"
-      aria-label="Очередь отзывов"
+      aria-label={t('Очередь отзывов')}
       tabIndex={-1}
       className="space-y-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-        <span>{items.length > 0 ? `Показано ${items.length}` : 'Список пуст'}</span>
-        <span>{tab === 'pending' ? 'Сначала старые' : 'Сначала новые'}</span>
+        <span>
+          {items.length > 0
+            ? t('Показано {count}', { count: items.length })
+            : t('Список пуст')}
+        </span>
+        <span>{tab === 'pending' ? t('Сначала старые') : t('Сначала новые')}</span>
       </div>
 
       <ul className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
@@ -129,7 +135,9 @@ export function ReviewQueue({
           const secondaryText =
             tab === 'pending'
               ? formatWaitingSince(review.createdAt, now)
-              : `опубликован ${formatShortDay(review.createdAt)}`
+              : t('опубликован {date}', {
+                  date: formatShortDay(review.createdAt),
+                })
 
           // Имя строки собирается из тех же спанов, что видит пользователь:
           // полное ФИО здесь недопустимо, на экране стоит сокращённое (2.5.3).
@@ -196,7 +204,7 @@ export function ReviewQueue({
       </ul>
 
       <ListPager
-        label="Страницы отзывов"
+        label={t('Страницы отзывов')}
         rangeLabel={
           items.length === 0 ? '' : formatPageRange(offset, items.length)
         }

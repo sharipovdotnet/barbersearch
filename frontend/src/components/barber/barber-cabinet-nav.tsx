@@ -8,6 +8,7 @@ import {
 } from '@/lib/barber-cabinet-path'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type Section = 'bookings' | 'schedule' | 'salons'
 
@@ -44,8 +45,10 @@ const ITEMS: readonly {
  * `aria-current` помечает текущий раздел.
  */
 export function BarberCabinetNav({ active }: { active: Section }) {
+  const { t } = useI18n()
+
   return (
-    <nav aria-label="Разделы кабинета барбера" className="mb-5">
+    <nav aria-label={t('Разделы кабинета барбера')} className="mb-5">
       <ul className="inline-flex w-full gap-1 rounded-lg border bg-muted/40 p-1 sm:w-auto">
         {ITEMS.map((item) => {
           const Icon = item.icon
@@ -70,7 +73,7 @@ export function BarberCabinetNav({ active }: { active: Section }) {
                 }}
               >
                 <Icon className="hidden size-4 shrink-0 sm:block" aria-hidden />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.label)}</span>
               </a>
             </li>
           )

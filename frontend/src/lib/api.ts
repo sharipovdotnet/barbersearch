@@ -5,6 +5,8 @@
  * поэтому клиентские ветки разбирают коды из расширения `errorCodes`, а не текст `detail`.
  */
 
+import { t } from '@/i18n'
+
 export type ProblemDetails = {
   type?: string
   title?: string
@@ -133,7 +135,7 @@ function successBody<TResponse>(
     return body as TResponse
   }
 
-  throw new ApiError(status, null, INVALID_RESPONSE_MESSAGE)
+  throw new ApiError(status, null, t('Сервер вернул неожиданный ответ.'))
 }
 
 async function send(path: string, init: RequestInit): Promise<Response> {
@@ -153,7 +155,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
       },
     })
   } catch {
-    throw new ApiError(0, null, 'Нет связи с сервером.')
+    throw new ApiError(0, null, t('Нет связи с сервером.'))
   }
 }
 
@@ -197,15 +199,18 @@ async function askForRetry(): Promise<UnauthorizedResult> {
 }
 
 /** Нейтральный русский текст вместо `HTTP ${status}`: статус наружу не показывается. */
-const GENERIC_ERROR_MESSAGE = 'Запрос не выполнен.'
-
-/** Английских текстов нет: это ошибка контракта, а не ответа сервера. */
-const INVALID_RESPONSE_MESSAGE = 'Сервер вернул неожиданный ответ.'
+function genericErrorMessage(): string {
+  return t('Запрос не выполнен.')
+}
 
 function toApiError(status: number, body: unknown): ApiError {
   const problem = isProblemDetails(body) ? body : null
 
-  return new ApiError(status, problem, problem?.detail ?? GENERIC_ERROR_MESSAGE)
+  return new ApiError(
+    status,
+    problem,
+    problem?.detail ?? genericErrorMessage()
+  )
 }
 
 async function readJson(response: Response): Promise<unknown> {

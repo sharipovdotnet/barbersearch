@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 
 /**
@@ -8,22 +9,22 @@ import { ApiError } from '@/lib/api'
  */
 export function describeApiFailure(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (error.status === 0) {
-    return 'Нет связи с сервером. Проверьте подключение и повторите попытку.'
+    return t('Нет связи с сервером. Проверьте подключение и повторите попытку.')
   }
 
   if (error.status === 401) {
-    return 'Сессия истекла — войдите снова.'
+    return t('Сессия истекла — войдите снова.')
   }
 
   if (error.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
-  return fallback
+  return t(fallback)
 }
 
 export type BarberActionFailure = {
@@ -43,45 +44,45 @@ export function describeBarberBookingFailure(
   fallback: string
 ): BarberActionFailure {
   if (!(error instanceof ApiError)) {
-    return { message: fallback, canReload: false }
+    return { message: t(fallback), canReload: false }
   }
 
   if (error.hasCode('booking.markNoShow.tooEarly')) {
     return {
-      message: 'Неявку нельзя отметить до начала визита.',
+      message: t('Неявку нельзя отметить до начала визита.'),
       canReload: false,
     }
   }
 
   if (error.hasCode('booking.barberNote.tooLong')) {
     return {
-      message: 'Слишком длинная заметка — максимум 1000 символов.',
+      message: t('Слишком длинная заметка — максимум 1000 символов.'),
       canReload: false,
     }
   }
 
   if (error.hasCode('booking.cancel.reasonRequired')) {
-    return { message: 'Укажите причину отмены.', canReload: false }
+    return { message: t('Укажите причину отмены.'), canReload: false }
   }
 
   if (error.hasCode('booking.cancel.reasonTooLong')) {
     return {
-      message: 'Слишком длинная причина — максимум 500 символов.',
+      message: t('Слишком длинная причина — максимум 500 символов.'),
       canReload: false,
     }
   }
 
   if (error.status === 404 || error.hasCode('booking.notFound')) {
-    return { message: 'Запись не найдена.', canReload: false }
+    return { message: t('Запись не найдена.'), canReload: false }
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {
-    return { message: 'Это запись другого барбера.', canReload: false }
+    return { message: t('Это запись другого барбера.'), canReload: false }
   }
 
   if (error.status === 409) {
     return {
-      message: 'Запись уже изменилась — обновите список.',
+      message: t('Запись уже изменилась — обновите список.'),
       canReload: true,
     }
   }
@@ -111,32 +112,39 @@ export function describeBarberBookingCreateFailure(
   fallback: string
 ): BarberBookingCreateFailure {
   if (!(error instanceof ApiError)) {
-    return { message: fallback, reloadSlots: false }
+    return { message: t(fallback), reloadSlots: false }
   }
 
   if (error.status === 401) {
-    return { message: 'Сессия истекла — войдите снова.', reloadSlots: false }
+    return {
+      message: t('Сессия истекла — войдите снова.'),
+      reloadSlots: false,
+    }
   }
 
   if (error.status === 403) {
     return {
-      message: 'Нет доступа к записи клиентов. Войдите под аккаунтом барбера.',
+      message: t(
+        'Нет доступа к записи клиентов. Войдите под аккаунтом барбера.'
+      ),
       reloadSlots: false,
     }
   }
 
   if (error.hasCode('booking.create.customerNotFound')) {
     return {
-      message:
-        'Пользователь не найден — возможно, аккаунт заблокирован. Повторите поиск.',
+      message: t(
+        'Пользователь не найден — возможно, аккаунт заблокирован. Повторите поиск.'
+      ),
       reloadSlots: false,
     }
   }
 
   if (error.hasCode('booking.create.customerAmbiguous')) {
     return {
-      message:
-        'Выберите зарегистрированного клиента или заполните данные нового — не оба варианта сразу.',
+      message: t(
+        'Выберите зарегистрированного клиента или заполните данные нового — не оба варианта сразу.'
+      ),
       reloadSlots: false,
     }
   }
@@ -147,14 +155,14 @@ export function describeBarberBookingCreateFailure(
     || error.hasCode('booking.create.guestPhone')
   ) {
     return {
-      message: 'Укажите имя и телефон клиента.',
+      message: t('Укажите имя и телефон клиента.'),
       reloadSlots: false,
     }
   }
 
   if (error.hasCode('booking.add.overlap')) {
     return {
-      message: 'Это время только что заняли. Выберите другое.',
+      message: t('Это время только что заняли. Выберите другое.'),
       reloadSlots: true,
     }
   }
@@ -164,21 +172,21 @@ export function describeBarberBookingCreateFailure(
     || error.hasCode('booking.create.startAt.tooFar')
   ) {
     return {
-      message: 'Это время уже недоступно. Обновите свободное время.',
+      message: t('Это время уже недоступно. Обновите свободное время.'),
       reloadSlots: true,
     }
   }
 
   if (error.status === 404) {
     return {
-      message: 'Услуга или салон больше недоступны. Выберите другой вариант.',
+      message: t('Услуга или салон больше недоступны. Выберите другой вариант.'),
       reloadSlots: true,
     }
   }
 
   if (error.hasCode('booking.add.lockTimeout')) {
     return {
-      message: 'Не удалось занять время, попробуйте ещё раз.',
+      message: t('Не удалось занять время, попробуйте ещё раз.'),
       reloadSlots: false,
     }
   }

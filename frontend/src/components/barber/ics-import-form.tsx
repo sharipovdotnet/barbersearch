@@ -7,6 +7,8 @@ import type {
   ImportFileInfo,
   ImportPeriodDays,
 } from '@/hooks/use-barber-import'
+import { t } from '@/i18n'
+import { formatDaysCount, formatNumber } from '@/lib/format'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
@@ -24,25 +26,21 @@ const FILE_ERROR_ID = 'import-ics-file-error'
 const DROP_ERROR_ID = 'import-ics-drop-error'
 const PERIOD_ID = 'import-ics-period'
 
-const PERIODS: readonly { value: ImportPeriodDays; label: string }[] = [
-  { value: 7, label: '7 дней' },
-  { value: 30, label: '30 дней' },
-  { value: 90, label: '90 дней' },
-]
+const PERIODS: readonly ImportPeriodDays[] = [7, 30, 90]
 
 /** Размер файла без внешних библиотек: «248 КБ», «2,0 МБ». */
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) {
-    return `${bytes} Б`
+    return t('{size} Б', { size: bytes })
   }
 
   const kilobytes = bytes / 1024
 
   if (kilobytes < 1024) {
-    return `${Math.round(kilobytes)} КБ`
+    return t('{size} КБ', { size: Math.round(kilobytes) })
   }
 
-  return `${(kilobytes / 1024).toFixed(1).replace('.', ',')} МБ`
+  return t('{size} МБ', { size: formatNumber(kilobytes / 1024, 1) })
 }
 
 function periodFromValue(value: string): ImportPeriodDays {
@@ -103,7 +101,7 @@ export function IcsImportForm({
     }
 
     if (files.length > 1) {
-      setDropError('Один файл за раз.')
+      setDropError(t('Один файл за раз.'))
       return
     }
 
@@ -146,10 +144,10 @@ export function IcsImportForm({
         >
           <Upload className="size-5 text-muted-foreground" aria-hidden />
           <span className="text-sm font-medium">
-            Перетащите .ics сюда или выберите файл
+            {t('Перетащите .ics сюда или выберите файл')}
           </span>
           <span id={FILE_HINT_ID} className="text-sm text-muted-foreground">
-            Один календарь, до 2 МБ.
+            {t('Один календарь, до 2 МБ.')}
           </span>
           <input
             ref={fileInputRef}
@@ -190,7 +188,7 @@ export function IcsImportForm({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <Field className="sm:w-40">
-          <FieldLabel htmlFor={PERIOD_ID}>Период</FieldLabel>
+          <FieldLabel htmlFor={PERIOD_ID}>{t('Период')}</FieldLabel>
           <select
             id={PERIOD_ID}
             value={periodDays}
@@ -200,8 +198,8 @@ export function IcsImportForm({
             }}
           >
             {PERIODS.map((period) => (
-              <option key={period.value} value={period.value}>
-                {period.label}
+              <option key={period} value={period}>
+                {formatDaysCount(period)}
               </option>
             ))}
           </select>
@@ -215,7 +213,7 @@ export function IcsImportForm({
             aria-busy={isParsing}
             disabled={isParsing || file === null}
           >
-            {isParsing ? 'Разбираем…' : 'Разобрать файл'}
+            {isParsing ? t('Разбираем…') : t('Разобрать файл')}
           </Button>
           <Button
             type="button"
@@ -234,19 +232,19 @@ export function IcsImportForm({
               onClear()
             }}
           >
-            Очистить
+            {t('Очистить')}
           </Button>
         </div>
       </div>
 
       {isParsing && (
         <p role="status" className="text-sm text-muted-foreground">
-          Разбираем…
+          {t('Разбираем…')}
         </p>
       )}
 
       <p className="text-sm text-muted-foreground">
-        Файл читается в браузере и не загружается на сервер.{' '}
+        {t('Файл читается в браузере и не загружается на сервер.')}{' '}
         <a
           href="/privacy"
           className="underline underline-offset-2 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -257,27 +255,27 @@ export function IcsImportForm({
             }
           }}
         >
-          Политика обработки данных
+          {t('Политика обработки данных')}
         </a>
         .
       </p>
 
       <details className="rounded-xl border px-3 py-2 text-sm">
         <summary className="flex min-h-11 cursor-pointer items-center rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:min-h-0 sm:py-1">
-          Как выгрузить календарь
+          {t('Как выгрузить календарь')}
         </summary>
         <ul className="mt-2 space-y-1 text-muted-foreground">
           <li>
-            <span className="font-medium text-foreground">Google</span> —
-            «Настройки → Импорт и экспорт → Экспорт»
+            <span className="font-medium text-foreground">Google</span> —{' '}
+            {t('«Настройки → Импорт и экспорт → Экспорт»')}
           </li>
           <li>
-            <span className="font-medium text-foreground">Apple</span> — «Файл →
-            Экспорт»
+            <span className="font-medium text-foreground">Apple</span> —{' '}
+            {t('«Файл → Экспорт»')}
           </li>
           <li>
-            <span className="font-medium text-foreground">Outlook</span> —
-            «Настройки → Календарь → Экспорт»
+            <span className="font-medium text-foreground">Outlook</span> —{' '}
+            {t('«Настройки → Календарь → Экспорт»')}
           </li>
         </ul>
       </details>

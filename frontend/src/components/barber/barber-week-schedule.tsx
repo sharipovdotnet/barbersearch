@@ -12,6 +12,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useI18n } from '@/i18n'
 import {
   DAY_LABELS,
   describeScheduleError,
@@ -42,6 +43,7 @@ type Props = {
  * об этом честно сказано в карточке.
  */
 export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
+  const { t } = useI18n()
   const [days, setDays] = useState<WorkingDayInput[]>(() =>
     weeklyDaysToInput(salon.weekly)
   )
@@ -74,9 +76,11 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
 
     try {
       await replaceWorkingSchedules(barberProfileId, salon.salonId, days)
-      onSaved('Расписание сохранено.')
+      onSaved(t('Расписание сохранено.'))
     } catch (cause) {
-      setError(describeScheduleError(cause, 'Не удалось сохранить расписание.'))
+      setError(
+        describeScheduleError(cause, t('Не удалось сохранить расписание.'))
+      )
     } finally {
       setIsSaving(false)
     }
@@ -85,9 +89,12 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Недельное расписание</CardTitle>
+        <CardTitle>{t('Недельное расписание')}</CardTitle>
         <CardDescription>
-          Обычные рабочие часы салона «{salon.name}». Время — в поясе салона{' '}
+          {t(
+            'Обычные рабочие часы салона «{name}». Время — в поясе салона',
+            { name: salon.name }
+          )}{' '}
           <span className="whitespace-nowrap">{salon.timeZoneId}</span>.
         </CardDescription>
       </CardHeader>
@@ -104,7 +111,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
               setDays(weekdayTemplate())
             }}
           >
-            Заполнить будни
+            {t('Заполнить будни')}
           </Button>
         </div>
 
@@ -130,13 +137,13 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
                     htmlFor={`schedule-${salon.salonId}-${day.dayOfWeek}`}
                     className="cursor-pointer"
                   >
-                    {label}
+                    {t(label)}
                   </Label>
                 </div>
 
                 {day.isDayOff ? (
                   <p className="text-sm text-muted-foreground sm:pl-1">
-                    Выходной
+                    {t('Выходной')}
                   </p>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
@@ -144,7 +151,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
                       type="time"
                       step={1800}
                       value={toTimeInputValue(day.startTime)}
-                      aria-label={`Начало работы, ${label}`}
+                      aria-label={t('Начало работы, {day}', { day: t(label) })}
                       aria-invalid={isInvalid || undefined}
                       className="h-11 w-32 sm:h-8"
                       onChange={(event) => {
@@ -158,7 +165,9 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
                       type="time"
                       step={1800}
                       value={toTimeInputValue(day.endTime)}
-                      aria-label={`Окончание работы, ${label}`}
+                      aria-label={t('Окончание работы, {day}', {
+                        day: t(label),
+                      })}
                       aria-invalid={isInvalid || undefined}
                       className="h-11 w-32 sm:h-8"
                       onChange={(event) => {
@@ -169,7 +178,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
                     />
                     {isInvalid && (
                       <p className="w-full text-xs text-destructive">
-                        Конец должен быть позже начала.
+                        {t('Конец должен быть позже начала.')}
                       </p>
                     )}
                   </div>
@@ -183,14 +192,17 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
           <p className="flex items-start gap-2 text-sm text-muted-foreground">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>
-              Все дни отмечены выходными: клиенты не увидят свободное время.
+              {t(
+                'Все дни отмечены выходными: клиенты не увидят свободное время.'
+              )}
             </span>
           </p>
         )}
 
         <p className="text-xs text-muted-foreground">
-          Изменение графика не отменяет уже созданные записи. Если запись выйдет за
-          новые часы, она останется в силе — проверьте её в разделе «Записи».
+          {t(
+            'Изменение графика не отменяет уже созданные записи. Если запись выйдет за новые часы, она останется в силе — проверьте её в разделе «Записи».'
+          )}
         </p>
 
         {error && (
@@ -210,7 +222,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
             }}
           >
             {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
-            Сохранить расписание
+            {t('Сохранить расписание')}
           </Button>
 
           <span
@@ -220,7 +232,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
             )}
             aria-hidden={!isDirty}
           >
-            Есть несохранённые изменения
+            {t('Есть несохранённые изменения')}
           </span>
         </div>
       </CardContent>

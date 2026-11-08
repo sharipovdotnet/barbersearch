@@ -14,6 +14,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminBookingDetailStatus } from '@/hooks/use-admin-booking'
 import { useNow } from '@/hooks/use-now'
+import { useI18n } from '@/i18n'
 import {
   cancelAdminBooking,
   describeAdminBookingActionError,
@@ -62,6 +63,7 @@ export function BookingDetail({
   /** Экран останавливает опрос, пока идёт отмена или неявка. */
   onActingChange?: (isActing: boolean) => void
 }) {
+  const { t } = useI18n()
   const [target, setTarget] = useState<BookingActionKind | null>(null)
   const [pending, setPending] = useState<BookingActionKind | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -111,7 +113,7 @@ export function BookingDetail({
 
       setTarget(null)
       setAnnouncement(
-        kind === 'cancel' ? 'Бронь отменена.' : 'Неявка отмечена.'
+        kind === 'cancel' ? t('Бронь отменена.') : t('Неявка отмечена.')
       )
       onReload()
 
@@ -128,8 +130,8 @@ export function BookingDetail({
         describeAdminBookingActionError(
           cause,
           kind === 'cancel'
-            ? 'Не удалось отменить бронь. Попробуйте ещё раз.'
-            : 'Не удалось отметить неявку. Попробуйте ещё раз.'
+            ? t('Не удалось отменить бронь. Попробуйте ещё раз.')
+            : t('Не удалось отметить неявку. Попробуйте ещё раз.')
         )
       )
     } finally {
@@ -154,7 +156,7 @@ export function BookingDetail({
             onClick={onBack}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden />
-            Назад
+            {t('Назад')}
           </Button>
           <div className="ml-auto">
             <BookingStatusBadge status={booking.status} />
@@ -168,7 +170,7 @@ export function BookingDetail({
             tabIndex={-1}
             className="scroll-mt-20 font-heading text-xl leading-tight font-semibold tracking-tight"
           >
-            Бронь
+            {t('Бронь')}
           </h2>
           <p className="mt-0.5 text-sm break-words text-muted-foreground">
             {formatAdminBookingTime(booking)} · {customerName}
@@ -185,25 +187,25 @@ export function BookingDetail({
         )}
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-          <ContextItem label="Начало">
+          <ContextItem label={t('Начало')}>
             <time dateTime={booking.startAt}>
               {formatAdminBookingTime(booking)}
             </time>
           </ContextItem>
 
-          <ContextItem label="Окончание">
+          <ContextItem label={t('Окончание')}>
             <time dateTime={booking.endAt}>
               {formatShortDateTime(booking.endAt, booking.salon.timeZoneId)}
             </time>
           </ContextItem>
 
-          <ContextItem label="Длительность">
+          <ContextItem label={t('Длительность')}>
             {formatDuration(durationMinutes) || '—'}
           </ContextItem>
 
-          <ContextItem label="Цена">{formatPrice(booking.price)}</ContextItem>
+          <ContextItem label={t('Цена')}>{formatPrice(booking.price)}</ContextItem>
 
-          <ContextItem label="Клиент">
+          <ContextItem label={t('Клиент')}>
             <span className="block break-words">{customerName}</span>
             <span className="block break-all text-muted-foreground">
               {getAdminBookingCustomerContact(booking.customer)}
@@ -217,34 +219,36 @@ export function BookingDetail({
               )}
             {booking.customer.id === null && (
               <span className="mt-1 block text-xs text-muted-foreground">
-                Записан без аккаунта
+                {t('Записан без аккаунта')}
               </span>
             )}
           </ContextItem>
 
-          <ContextItem label="Барбер">
+          <ContextItem label={t('Барбер')}>
             <span className="break-words">{booking.barber.displayName}</span>
           </ContextItem>
 
-          <ContextItem label="Услуга">
+          <ContextItem label={t('Услуга')}>
             <span className="break-words">{booking.service.name}</span>
           </ContextItem>
 
-          <ContextItem label="Салон">
+          <ContextItem label={t('Салон')}>
             <span className="block break-words">{booking.salon.name}</span>
             <span className="block break-words text-muted-foreground">
               {booking.salon.city}, {booking.salon.address}
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              Время в поясе салона: {booking.salon.timeZoneId}
+              {t('Время в поясе салона: {timeZone}', {
+                timeZone: booking.salon.timeZoneId,
+              })}
             </span>
           </ContextItem>
 
-          <ContextItem label="Создана">
+          <ContextItem label={t('Создана')}>
             {formatDateTime(booking.createdAt, booking.salon.timeZoneId)}
           </ContextItem>
 
-          <ContextItem label="Номер брони">
+          <ContextItem label={t('Номер брони')}>
             <span className="break-all">{booking.id}</span>
           </ContextItem>
         </dl>
@@ -257,18 +261,18 @@ export function BookingDetail({
             className="space-y-3 border-t pt-4"
           >
             <h3 id="booking-notes-title" className="text-sm font-medium">
-              Заметки
+              {t('Заметки')}
             </h3>
 
             {booking.customerNote && (
-              <Note label="Клиент" text={booking.customerNote} />
+              <Note label={t('Клиент')} text={booking.customerNote} />
             )}
             {booking.barberNote && (
-              <Note label="Барбер" text={booking.barberNote} />
+              <Note label={t('Барбер')} text={booking.barberNote} />
             )}
             {booking.cancellationReason && (
               <Note
-                label="Причина отмены"
+                label={t('Причина отмены')}
                 text={booking.cancellationReason}
               />
             )}
@@ -281,7 +285,7 @@ export function BookingDetail({
             className="space-y-3 border-t pt-4"
           >
             <h3 id="booking-actions-title" className="text-sm font-medium">
-              Действия
+              {t('Действия')}
             </h3>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -291,7 +295,7 @@ export function BookingDetail({
                   className="h-11 sm:h-9"
                   onClick={() => openAction('cancel')}
                 >
-                  Отменить бронь
+                  {t('Отменить бронь')}
                 </Button>
               )}
               {canMarkNoShow && (
@@ -300,14 +304,15 @@ export function BookingDetail({
                   className="h-11 sm:h-9"
                   onClick={() => openAction('noShow')}
                 >
-                  Отметить неявку
+                  {t('Отметить неявку')}
                 </Button>
               )}
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Доступны только отмена и отметка неявки. Заметку барбера
-              администратор не меняет.
+              {t(
+                'Доступны только отмена и отметка неявки. Заметку барбера администратор не меняет.'
+              )}
             </p>
           </section>
         )}
@@ -350,6 +355,7 @@ function BookingActionDialog({
   onClose: () => void
   onConfirm: () => void
 }) {
+  const { t } = useI18n()
   const isCancel = kind === 'cancel'
 
   return (
@@ -365,7 +371,7 @@ function BookingActionDialog({
       <DialogContent role="alertdialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isCancel ? 'Отменить бронь?' : 'Отметить неявку?'}
+            {isCancel ? t('Отменить бронь?') : t('Отметить неявку?')}
           </DialogTitle>
           <DialogDescription>
             {formatAdminBookingTime(booking)} ·{' '}
@@ -380,8 +386,10 @@ function BookingActionDialog({
           />
           <p className="text-sm text-foreground/80">
             {isCancel
-              ? 'Бронь будет отменена. Клиент и барбер увидят новый статус.'
-              : 'Визит будет отмечен как неявка. Отменить это действие нельзя.'}
+              ? t('Бронь будет отменена. Клиент и барбер увидят новый статус.')
+              : t(
+                  'Визит будет отмечен как неявка. Отменить это действие нельзя.'
+                )}
           </p>
         </div>
 
@@ -399,7 +407,7 @@ function BookingActionDialog({
             disabled={isPending}
             onClick={onClose}
           >
-            Оставить как есть
+            {t('Оставить как есть')}
           </Button>
           <Button
             type="button"
@@ -416,7 +424,7 @@ function BookingActionDialog({
                 className="animate-spin"
               />
             )}
-            {isCancel ? 'Отменить бронь' : 'Отметить неявку'}
+            {isCancel ? t('Отменить бронь') : t('Отметить неявку')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -426,16 +434,19 @@ function BookingActionDialog({
 
 /** Заглушка правой колонки, пока бронь не выбрана. */
 export function BookingDetailPlaceholder() {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <Circle className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Выберите бронь</p>
+        <p className="font-medium">{t('Выберите бронь')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Слева список: откройте строку, чтобы увидеть клиента, барбера и действия
-          поддержки.
+          {t(
+            'Слева список: откройте строку, чтобы увидеть клиента, барбера и действия поддержки.'
+          )}
         </p>
       </div>
     </div>
@@ -454,6 +465,8 @@ export function BookingDetailState({
   onRetry: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
+
   if (status === 'notFound') {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -461,10 +474,11 @@ export function BookingDetailState({
           <Circle className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Бронь не найдена.</p>
+          <p className="font-medium">{t('Бронь не найдена.')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные
-            брони.
+            {t(
+              'Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные брони.'
+            )}
           </p>
         </div>
         <Button
@@ -473,7 +487,7 @@ export function BookingDetailState({
           className="h-11 sm:h-7"
           onClick={onBack}
         >
-          К списку
+          {t('К списку')}
         </Button>
       </div>
     )
@@ -486,12 +500,12 @@ export function BookingDetailState({
           <TriangleAlert className="size-4 text-destructive" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить бронь</p>
+          <p className="font-medium">{t('Не удалось загрузить бронь')}</p>
           <p
             role="alert"
             className="mx-auto max-w-sm text-sm text-muted-foreground"
           >
-            {error ?? 'Попробуйте ещё раз.'}
+            {error ?? t('Попробуйте ещё раз.')}
           </p>
         </div>
         <Button
@@ -500,7 +514,7 @@ export function BookingDetailState({
           className="h-11 sm:h-7"
           onClick={onRetry}
         >
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -509,7 +523,7 @@ export function BookingDetailState({
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем бронь…
+        {t('Загружаем бронь…')}
       </p>
       <Skeleton className="h-12 w-40" aria-hidden />
       <Skeleton className="h-6 w-60" aria-hidden />

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { BARBER_REQUEST_LIMITS } from '@/lib/barber-requests'
 
 /**
@@ -31,9 +32,12 @@ export type BarberRequestFormErrors = Partial<
 >
 
 const YEARS_REQUIRED_ERROR = 'Укажите стаж в годах.'
-const YEARS_RANGE_ERROR = `Стаж — целое число от 1 года до ${BARBER_REQUEST_LIMITS.yearsOfExperience} лет.`
+const YEARS_RANGE_ERROR = 'Стаж — целое число от 1 года до {max} лет.'
 const DISPLAY_NAME_REQUIRED_ERROR = 'Введите имя, которое увидят клиенты.'
 const CITY_REQUIRED_ERROR = 'Укажите город.'
+const DISPLAY_NAME_LENGTH_ERROR = 'Имя — не длиннее {max} символов.'
+const CITY_LENGTH_ERROR = 'Город — не длиннее {max} символов.'
+const ABOUT_LENGTH_ERROR = 'О себе — не длиннее {max} символов.'
 
 export function validateBarberRequestForm(
   values: BarberRequestFormValues
@@ -44,13 +48,15 @@ export function validateBarberRequestForm(
   const years = values.yearsOfExperience.trim()
 
   if (!displayName) {
-    errors.displayName = DISPLAY_NAME_REQUIRED_ERROR
+    errors.displayName = t(DISPLAY_NAME_REQUIRED_ERROR)
   } else if (displayName.length > BARBER_REQUEST_LIMITS.displayName) {
-    errors.displayName = `Имя — не длиннее ${BARBER_REQUEST_LIMITS.displayName} символов.`
+    errors.displayName = t(DISPLAY_NAME_LENGTH_ERROR, {
+      max: BARBER_REQUEST_LIMITS.displayName,
+    })
   }
 
   if (!years) {
-    errors.yearsOfExperience = YEARS_REQUIRED_ERROR
+    errors.yearsOfExperience = t(YEARS_REQUIRED_ERROR)
   } else {
     const parsed = Number(years)
 
@@ -59,18 +65,22 @@ export function validateBarberRequestForm(
       parsed < 1 ||
       parsed > BARBER_REQUEST_LIMITS.yearsOfExperience
     ) {
-      errors.yearsOfExperience = YEARS_RANGE_ERROR
+      errors.yearsOfExperience = t(YEARS_RANGE_ERROR, {
+        max: BARBER_REQUEST_LIMITS.yearsOfExperience,
+      })
     }
   }
 
   if (!city) {
-    errors.city = CITY_REQUIRED_ERROR
+    errors.city = t(CITY_REQUIRED_ERROR)
   } else if (city.length > BARBER_REQUEST_LIMITS.city) {
-    errors.city = `Город — не длиннее ${BARBER_REQUEST_LIMITS.city} символов.`
+    errors.city = t(CITY_LENGTH_ERROR, { max: BARBER_REQUEST_LIMITS.city })
   }
 
   if (values.about.trim().length > BARBER_REQUEST_LIMITS.about) {
-    errors.about = `О себе — не длиннее ${BARBER_REQUEST_LIMITS.about} символов.`
+    errors.about = t(ABOUT_LENGTH_ERROR, {
+      max: BARBER_REQUEST_LIMITS.about,
+    })
   }
 
   return errors

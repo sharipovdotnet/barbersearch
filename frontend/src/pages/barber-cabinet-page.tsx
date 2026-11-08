@@ -27,6 +27,7 @@ import { useBarberBookings } from '@/hooks/use-barber-bookings'
 import { useBarberDay } from '@/hooks/use-barber-day'
 import { useNow } from '@/hooks/use-now'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 import { localDateKey, type DayGap } from '@/lib/barber-day'
 import {
   BARBER_CABINET_PANEL_ID,
@@ -55,17 +56,18 @@ import { describeBarberBookingsChange } from '@/lib/booking-changes'
  */
 export function BarberCabinetPage() {
   const { status, user } = useSession()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
-    document.title = 'Кабинет барбера — BarberSearch'
-  }, [])
+    document.title = t('Кабинет барбера — BarberSearch')
+  }, [t, locale])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       {status === 'loading' && (
         <div className="space-y-5">
           <p role="status" className="sr-only">
-            Загружаем кабинет…
+            {t('Загружаем кабинет…')}
           </p>
           <BarberCabinetSkeleton />
         </div>
@@ -80,8 +82,10 @@ export function BarberCabinetPage() {
       {status === 'anonymous' && (
         <div className="flex min-h-[55vh] items-center justify-center py-6">
           <SignInGate
-            title="Войдите, чтобы увидеть записи клиентов"
-            description="Здесь барбер подтверждает записи, завершает визиты и оставляет заметки. Вход по email и паролю."
+            title={t('Войдите, чтобы увидеть записи клиентов')}
+            description={t(
+              'Здесь барбер подтверждает записи, завершает визиты и оставляет заметки. Вход по email и паролю.'
+            )}
             redirectTo={BARBER_CABINET_PATH}
           />
         </div>
@@ -121,6 +125,7 @@ function BarberBookingsScreen({
 }: {
   barberProfileId: string
 }) {
+  const { t } = useI18n()
   const [view, setView] = useState<BarberCabinetView>('day')
   // Оба контроллера живут, пока открыт кабинет: два `GET` при монтировании и ни
   // одного при переключении вкладок.
@@ -249,14 +254,14 @@ function BarberBookingsScreen({
   async function handleConfirm(id: string) {
     await actions.confirm(id)
     pendingFocus.current = { id, target: 'afterConfirm' }
-    setAnnouncement('Запись подтверждена.')
+    setAnnouncement(t('Запись подтверждена.'))
   }
 
   async function handleComplete(id: string) {
     const nextId = nextRowId(id)
 
     await actions.complete(id)
-    finishTerminal(nextId, 'Визит завершён.')
+    finishTerminal(nextId, t('Визит завершён.'))
   }
 
   async function handleActionConfirm(
@@ -280,14 +285,14 @@ function BarberBookingsScreen({
 
     finishTerminal(
       nextId,
-      kind === 'cancel' ? 'Запись отменена.' : 'Отмечена неявка.'
+      kind === 'cancel' ? t('Запись отменена.') : t('Отмечена неявка.')
     )
   }
 
   async function handleSaveNote(id: string, note: string) {
     await actions.saveNote(id, note)
     pendingFocus.current = { id, target: 'note' }
-    setAnnouncement('Заметка сохранена.')
+    setAnnouncement(t('Заметка сохранена.'))
   }
 
   /**
@@ -295,7 +300,7 @@ function BarberBookingsScreen({
    * возвращаемся на «Сегодня» — это вид по умолчанию, и строка сразу на месте.
    */
   function handleClientCreated(clientName: string) {
-    setAnnouncement(`Клиент записан: ${clientName}.`)
+    setAnnouncement(t('Клиент записан: {name}.', { name: clientName }))
 
     if (view === 'day') {
       day.reload()
@@ -355,8 +360,9 @@ function BarberBookingsScreen({
 
       <div className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Клиент звонит или приходит в салон? Запишите его сами — запись сразу
-          подтверждена.
+          {t(
+            'Клиент звонит или приходит в салон? Запишите его сами — запись сразу подтверждена.'
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <BarberBookingDialog
@@ -378,7 +384,7 @@ function BarberBookingsScreen({
               }
             }}
           >
-            Перенести записи
+            {t('Перенести записи')}
           </a>
         </div>
       </div>
@@ -391,7 +397,7 @@ function BarberBookingsScreen({
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => setAnnouncement(null)}
           >
@@ -403,8 +409,10 @@ function BarberBookingsScreen({
       {requiresSignIn ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
-            title="Сессия истекла"
-            description="Войдите снова, чтобы увидеть записи клиентов: cookie-сессия закончилась, пока страница была открыта."
+            title={t('Сессия истекла')}
+            description={t(
+              'Войдите снова, чтобы увидеть записи клиентов: cookie-сессия закончилась, пока страница была открыта.'
+            )}
             redirectTo={BARBER_CABINET_PATH}
             onSignedIn={actions.reload}
           />

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminUserDetailStatus } from '@/hooks/use-admin-user'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_USER_ROLE_LABELS,
   ADMIN_USER_ROLES,
@@ -102,6 +103,7 @@ export function UserDetail({
   onVerifyPhone: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
   const name = getUserDisplayName(user)
 
   return (
@@ -120,7 +122,7 @@ export function UserDetail({
             onClick={onBack}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden />
-            Назад
+            {t('Назад')}
           </Button>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             <UserRoleBadge role={user.role} />
@@ -144,47 +146,52 @@ export function UserDetail({
               {user.email}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {ADMIN_USER_ROLE_LABELS[user.role]}
+              {t(ADMIN_USER_ROLE_LABELS[user.role])}
             </p>
           </div>
         </div>
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-          <ContextItem label="Телефон">
-            {user.phoneNumber ?? 'Не указан'}
+          <ContextItem label={t('Телефон')}>
+            {user.phoneNumber ?? t('Не указан')}
           </ContextItem>
 
-          <ContextItem label="Последний вход">
+          <ContextItem label={t('Последний вход')}>
             {user.lastLoginAt === null
-              ? 'Ещё не входил'
+              ? t('Ещё не входил')
               : formatDateTime(user.lastLoginAt)}
           </ContextItem>
 
-          <ContextItem label="Создан">
+          <ContextItem label={t('Создан')}>
             {formatDateTime(user.createdAt)}
           </ContextItem>
 
-          <ContextItem label="Обновлён">
+          <ContextItem label={t('Обновлён')}>
             {formatDateTime(user.updatedAt)}
           </ContextItem>
 
           {/* Только чтение: согласие нельзя выдать или отозвать из админки. */}
-          <ContextItem label="Согласие на обработку ПД">
+          <ContextItem label={t('Согласие на обработку ПД')}>
             {user.consentPolicyVersion === null || user.consentedAt === null
-              ? `Записи нет — аккаунт создан до ${formatPolicyDate(PRIVACY_POLICY_VERSION)}`
-              : `Редакция ${user.consentPolicyVersion} · ${formatConsentMoment(user.consentedAt)} UTC`}
+              ? t('Записи нет — аккаунт создан до {date}', {
+                  date: formatPolicyDate(PRIVACY_POLICY_VERSION),
+                })
+              : t('Редакция {version} · {moment} UTC', {
+                  version: user.consentPolicyVersion,
+                  moment: formatConsentMoment(user.consentedAt),
+                })}
           </ContextItem>
 
-          <ContextItem label="Неудачные попытки входа">
+          <ContextItem label={t('Неудачные попытки входа')}>
             {user.failedLoginAttempts === 0
-              ? 'Нет'
+              ? t('Нет')
               : String(user.failedLoginAttempts)}
           </ContextItem>
 
-          <ContextItem label="Временная блокировка">
+          <ContextItem label={t('Временная блокировка')}>
             {user.lockoutEnd === null
-              ? 'Нет'
-              : `До ${formatDateTime(user.lockoutEnd)}`}
+              ? t('Нет')
+              : t('До {date}', { date: formatDateTime(user.lockoutEnd) })}
           </ContextItem>
         </dl>
 
@@ -230,6 +237,7 @@ function Confirmations({
 }) {
   const isPending = pendingAction !== null
   const hasPhone = user.phoneNumber !== null
+  const { t } = useI18n()
 
   return (
     <section
@@ -237,7 +245,7 @@ function Confirmations({
       className="space-y-3 border-t pt-4"
     >
       <h3 id="user-confirmations-title" className="text-sm font-medium">
-        Подтверждения
+        {t('Подтверждения')}
       </h3>
 
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -245,18 +253,18 @@ function Confirmations({
           <dt className="text-xs text-muted-foreground">Email</dt>
           <dd className="mt-0.5 break-all">{user.email}</dd>
           <dd className="text-xs text-muted-foreground">
-            {user.isEmailVerified ? 'Подтверждён' : 'Не подтверждён'}
+            {user.isEmailVerified ? t('Подтверждён') : t('Не подтверждён')}
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-xs text-muted-foreground">Телефон</dt>
-          <dd className="mt-0.5">{user.phoneNumber ?? 'Не указан'}</dd>
+          <dt className="text-xs text-muted-foreground">{t('Телефон')}</dt>
+          <dd className="mt-0.5">{user.phoneNumber ?? t('Не указан')}</dd>
           <dd className="text-xs text-muted-foreground">
             {!hasPhone
-              ? 'Подтверждать нечего'
+              ? t('Подтверждать нечего')
               : user.isPhoneVerified
-                ? 'Подтверждён'
-                : 'Не подтверждён'}
+                ? t('Подтверждён')
+                : t('Не подтверждён')}
           </dd>
         </div>
       </dl>
@@ -272,10 +280,10 @@ function Confirmations({
             <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
           )}
           {pendingAction === 'verifyEmail'
-            ? 'Подтверждаем…'
+            ? t('Подтверждаем…')
             : user.isEmailVerified
-              ? 'Email подтверждён'
-              : 'Подтвердить email'}
+              ? t('Email подтверждён')
+              : t('Подтвердить email')}
         </Button>
         <Button
           variant="outline"
@@ -287,19 +295,21 @@ function Confirmations({
             <Loader2 data-icon="inline-start" aria-hidden className="animate-spin" />
           )}
           {pendingAction === 'verifyPhone'
-            ? 'Подтверждаем…'
+            ? t('Подтверждаем…')
             : user.isPhoneVerified
-              ? 'Телефон подтверждён'
-              : 'Подтвердить телефон'}
+              ? t('Телефон подтверждён')
+              : t('Подтвердить телефон')}
         </Button>
       </div>
 
       <p className="text-xs text-muted-foreground">
         {!hasPhone
-          ? 'У пользователя не указан телефон — подтверждать нечего.'
+          ? t('У пользователя не указан телефон — подтверждать нечего.')
           : user.isPhoneVerified && user.isEmailVerified
-            ? 'Оба контакта подтверждены вручную: сервис не отправляет писем и SMS.'
-            : 'Отметка ставится вручную: сервис не отправляет писем и SMS.'}
+            ? t(
+                'Оба контакта подтверждены вручную: сервис не отправляет писем и SMS.'
+              )
+            : t('Отметка ставится вручную: сервис не отправляет писем и SMS.')}
       </p>
     </section>
   )
@@ -312,6 +322,7 @@ function Confirmations({
  * идентификатора — не действие. Статус и ссылка на карточку дают контекст.
  */
 function BarberProfileBlock({ user }: { user: AdminUserDetail }) {
+  const { t } = useI18n()
   const barberProfileId = user.barberProfileId
   const profile = user.barberProfile
 
@@ -321,36 +332,38 @@ function BarberProfileBlock({ user }: { user: AdminUserDetail }) {
       className="space-y-2 border-t pt-4"
     >
       <h3 id="user-barber-profile-title" className="text-sm font-medium">
-        Профиль барбера
+        {t('Профиль барбера')}
       </h3>
 
       {barberProfileId === null ? (
         <p className="text-sm text-muted-foreground">
-          Профиль барбера не привязан: пользователь не работает как барбер.
+          {t('Профиль барбера не привязан: пользователь не работает как барбер.')}
         </p>
       ) : (
         <div className="rounded-lg border bg-muted/40 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="min-w-0 text-sm font-medium">
-              {profile?.displayName ?? 'Профиль барбера'}
+              {profile?.displayName ?? t('Профиль барбера')}
             </p>
             {profile && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant={profile.isVerified ? 'secondary' : 'outline'}>
-                  {profile.isVerified ? 'Подтверждён' : 'На проверке'}
+                  {profile.isVerified ? t('Подтверждён') : t('На проверке')}
                 </Badge>
                 <Badge variant="outline">
-                  {profile.isActive ? 'Виден в поиске' : 'Скрыт из поиска'}
+                  {profile.isActive ? t('Виден в поиске') : t('Скрыт из поиска')}
                 </Badge>
               </div>
             )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {profile === null
-              ? 'Профиль привязан, но сервер не отдал его карточку.'
+              ? t('Профиль привязан, но сервер не отдал его карточку.')
               : profile.isVerified && profile.isActive
-                ? 'Профиль виден в поиске и доступен для записи.'
-                : 'Профиль не показывается в поиске, пока не подтверждён и не активен.'}
+                ? t('Профиль виден в поиске и доступен для записи.')
+                : t(
+                    'Профиль не показывается в поиске, пока не подтверждён и не активен.'
+                  )}
           </p>
           <a
             href={barbersPath(barberProfileId, 'all')}
@@ -363,13 +376,15 @@ function BarberProfileBlock({ user }: { user: AdminUserDetail }) {
               navigate(barbersPath(barberProfileId, 'all'))
             }}
           >
-            Открыть карточку
+            {t('Открыть карточку')}
           </a>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground">
-        Привязка профиля здесь не меняется: выбрать профиль из списка пока нельзя.
+        {t(
+          'Привязка профиля здесь не меняется: выбрать профиль из списка пока нельзя.'
+        )}
       </p>
     </section>
   )
@@ -406,6 +421,7 @@ function UserActions({
   const [isRoleOpen, setIsRoleOpen] = useState(false)
   const [isBlockOpen, setIsBlockOpen] = useState(false)
   const isPending = pendingAction !== null
+  const { t } = useI18n()
 
   // Черновик роли живёт до ответа сервера: после перечитывания карточки
   // `user.role` меняется, и выбор снова берётся из данных, а не из памяти формы.
@@ -422,7 +438,7 @@ function UserActions({
       className="space-y-4 border-t pt-4"
     >
       <h3 id="user-actions-title" className="text-sm font-medium">
-        Действия
+        {t('Действия')}
       </h3>
 
       {actionError && (
@@ -433,7 +449,7 @@ function UserActions({
 
       {isSelf ? (
         <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Это ваш аккаунт: роль и доступ здесь не меняются.
+          {t('Это ваш аккаунт: роль и доступ здесь не меняются.')}
         </p>
       ) : (
         <>
@@ -452,21 +468,21 @@ function UserActions({
                       aria-hidden
                       className="animate-spin"
                     />
-                    Меняем роль…
+                    {t('Меняем роль…')}
                   </>
                 ) : (
-                  'Изменить роль'
+                  t('Изменить роль')
                 )}
               </Button>
               <p className="text-xs text-muted-foreground sm:max-w-xs">
-                Смена роли завершит все текущие сессии пользователя.
+                {t('Смена роли завершит все текущие сессии пользователя.')}
               </p>
             </div>
           </div>
 
           <div className="space-y-2 border-t pt-3">
             <p className="text-sm font-medium">
-              {user.isActive ? 'Доступ открыт' : 'Доступ заблокирован'}
+              {user.isActive ? t('Доступ открыт') : t('Доступ заблокирован')}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button
@@ -482,7 +498,7 @@ function UserActions({
                       aria-hidden
                       className="animate-spin"
                     />
-                    Блокируем…
+                    {t('Блокируем…')}
                   </>
                 ) : pendingAction === 'unblock' ? (
                   <>
@@ -491,18 +507,22 @@ function UserActions({
                       aria-hidden
                       className="animate-spin"
                     />
-                    Разблокируем…
+                    {t('Разблокируем…')}
                   </>
                 ) : user.isActive ? (
-                  'Заблокировать доступ'
+                  t('Заблокировать доступ')
                 ) : (
-                  'Разблокировать'
+                  t('Разблокировать')
                 )}
               </Button>
               <p className="text-xs text-muted-foreground sm:max-w-xs">
                 {user.isActive
-                  ? 'Пользователь потеряет доступ, все его сессии завершатся. Записи и отзывы сохранятся.'
-                  : 'Пользователь снова сможет войти. Роль, записи и отзывы не изменятся.'}
+                  ? t(
+                      'Пользователь потеряет доступ, все его сессии завершатся. Записи и отзывы сохранятся.'
+                    )
+                  : t(
+                      'Пользователь снова сможет войти. Роль, записи и отзывы не изменятся.'
+                    )}
               </p>
             </div>
           </div>
@@ -512,15 +532,15 @@ function UserActions({
       <Dialog open={isRoleOpen} onOpenChange={setIsRoleOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Изменить роль?</DialogTitle>
+            <DialogTitle>{t('Изменить роль?')}</DialogTitle>
             <DialogDescription>
-              Новая роль начнёт действовать сразу после сохранения.
+              {t('Новая роль начнёт действовать сразу после сохранения.')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-2">
             <label htmlFor="user-role" className="text-sm font-medium">
-              Роль
+              {t('Роль')}
             </label>
             <select
               id="user-role"
@@ -536,7 +556,7 @@ function UserActions({
             >
               {ADMIN_USER_ROLES.map((value) => (
                 <option key={value} value={value}>
-                  {ADMIN_USER_ROLE_LABELS[value]}
+                  {t(ADMIN_USER_ROLE_LABELS[value])}
                 </option>
               ))}
             </select>
@@ -548,7 +568,7 @@ function UserActions({
               aria-hidden
             />
             <p className="text-sm">
-              Смена роли завершит все текущие сессии пользователя.
+              {t('Смена роли завершит все текущие сессии пользователя.')}
             </p>
           </div>
 
@@ -559,7 +579,7 @@ function UserActions({
               disabled={isPending}
               onClick={() => setIsRoleOpen(false)}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="button"
@@ -569,7 +589,7 @@ function UserActions({
                 onChangeRole(role)
               }}
             >
-              Изменить роль
+              {t('Изменить роль')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -578,10 +598,11 @@ function UserActions({
       <Dialog open={isBlockOpen} onOpenChange={setIsBlockOpen}>
         <DialogContent role="alertdialog">
           <DialogHeader>
-            <DialogTitle>Заблокировать доступ?</DialogTitle>
+            <DialogTitle>{t('Заблокировать доступ?')}</DialogTitle>
             <DialogDescription>
-              Пользователь потеряет доступ, все его сессии завершатся. Записи и
-              отзывы сохранятся.
+              {t(
+                'Пользователь потеряет доступ, все его сессии завершатся. Записи и отзывы сохранятся.'
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -591,7 +612,7 @@ function UserActions({
               disabled={isPending}
               onClick={() => setIsBlockOpen(false)}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="button"
@@ -602,7 +623,7 @@ function UserActions({
                 onBlock()
               }}
             >
-              Заблокировать доступ
+              {t('Заблокировать доступ')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -613,16 +634,19 @@ function UserActions({
 
 /** Заглушка правой колонки, пока пользователь не выбран. */
 export function UserDetailPlaceholder() {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <Users className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Выберите пользователя</p>
+        <p className="font-medium">{t('Выберите пользователя')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Слева список: откройте строку, чтобы увидеть контакты, роль и
-          подтверждения.
+          {t(
+            'Слева список: откройте строку, чтобы увидеть контакты, роль и подтверждения.'
+          )}
         </p>
       </div>
     </div>
@@ -641,6 +665,8 @@ export function UserDetailState({
   onRetry: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
+
   if (status === 'notFound') {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -648,10 +674,11 @@ export function UserDetailState({
           <Circle className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Пользователь не найден</p>
+          <p className="font-medium">{t('Пользователь не найден')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные
-            аккаунты.
+            {t(
+              'Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные аккаунты.'
+            )}
           </p>
         </div>
         <Button
@@ -660,7 +687,7 @@ export function UserDetailState({
           className="h-11 sm:h-7"
           onClick={onBack}
         >
-          К списку
+          {t('К списку')}
         </Button>
       </div>
     )
@@ -673,12 +700,12 @@ export function UserDetailState({
           <TriangleAlert className="size-4 text-destructive" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить пользователя</p>
+          <p className="font-medium">{t('Не удалось загрузить пользователя')}</p>
           <p
             role="alert"
             className="mx-auto max-w-sm text-sm text-muted-foreground"
           >
-            {error ?? 'Попробуйте ещё раз.'}
+            {error ?? t('Попробуйте ещё раз.')}
           </p>
         </div>
         <Button
@@ -687,7 +714,7 @@ export function UserDetailState({
           className="h-11 sm:h-7"
           onClick={onRetry}
         >
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -696,7 +723,7 @@ export function UserDetailState({
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем пользователя…
+        {t('Загружаем пользователя…')}
       </p>
       <Skeleton className="h-12 w-40" aria-hidden />
       <Skeleton className="h-6 w-60" aria-hidden />

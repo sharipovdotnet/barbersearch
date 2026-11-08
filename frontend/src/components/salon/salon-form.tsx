@@ -5,7 +5,6 @@ import {
   useMemo,
   useState,
   type FormEvent,
-  type ReactNode,
 } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -27,6 +26,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import {
   createSalon,
   updateSalonContactInfo,
@@ -89,6 +89,7 @@ export function SalonDialogForm({
   onSaved: (message: string) => void
   onContactsFailed?: () => void
 }) {
+  const { t } = useI18n()
   const [form, setForm] = useState<SalonFormValues>(() => salonFormValues(salon))
   const [errors, setErrors] = useState<SalonFormErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -156,14 +157,16 @@ export function SalonDialogForm({
           await createOwnSalon(input)
           onSaved(
             input.isListed
-              ? 'Салон отправлен на проверку.'
-              : 'Место приёма создано.'
+              ? t('Салон отправлен на проверку.')
+              : t('Место приёма создано.')
           )
           return
         }
 
         await createSalon(input)
-        onSaved(input.isListed ? 'Салон создан' : 'Место приёма создано')
+        onSaved(
+          input.isListed ? t('Салон создан') : t('Место приёма создано')
+        )
         return
       }
 
@@ -179,13 +182,15 @@ export function SalonDialogForm({
         // Первый запрос уже применён: «Сохранено» было бы враньём.
         setErrors(salonFieldErrors(cause))
         setFormError(
-          'Адрес сохранён, контакты — нет. Обновите список и попробуйте ещё раз.'
+          t(
+            'Адрес сохранён, контакты — нет. Обновите список и попробуйте ещё раз.'
+          )
         )
         onContactsFailed?.()
         return
       }
 
-      onSaved('Изменения сохранены')
+      onSaved(t('Изменения сохранены'))
     } catch (cause) {
       setErrors(salonFieldErrors(cause))
       setFormError(describeSalonSaveError(cause, scope, mode))
@@ -211,25 +216,27 @@ export function SalonDialogForm({
           onSubmit={handleSubmit}
         >
           <DialogHeader className="shrink-0">
-            <DialogTitle>{titleFor(scope, mode)}</DialogTitle>
-            <DialogDescription>{descriptionFor(scope, mode)}</DialogDescription>
+            <DialogTitle>{t(titleFor(scope, mode))}</DialogTitle>
+            <DialogDescription>
+              {t(descriptionFor(scope, mode))}
+            </DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="grid min-h-0 gap-4 overflow-y-auto sm:grid-cols-6">
             {isEdit ? (
               <Field className="sm:col-span-6">
-                <FieldLabel>Тип места</FieldLabel>
+                <FieldLabel>{t('Тип места')}</FieldLabel>
                 <FieldDescription id="salon-kind-readonly">
-                  {PLACE_KIND_LABELS[form.kind]} ·{' '}
-                  {form.isListed ? 'в каталоге' : 'не в каталоге'}. Тип места
-                  задаётся при создании.
+                  {t(PLACE_KIND_LABELS[form.kind])} ·{' '}
+                  {t(form.isListed ? 'в каталоге' : 'не в каталоге')}.{' '}
+                  {t('Тип места задаётся при создании.')}
                 </FieldDescription>
               </Field>
             ) : (
               <>
                 <fieldset className="min-w-0 sm:col-span-6">
                   <legend className="text-sm font-medium">
-                    Что это за место?
+                    {t('Что это за место?')}
                   </legend>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {PLACE_KIND_ORDER.map((kind) => (
@@ -248,10 +255,10 @@ export function SalonDialogForm({
                         />
                         <span className="min-w-0">
                           <span className="block font-medium">
-                            {PLACE_KIND_LABELS[kind]}
+                            {t(PLACE_KIND_LABELS[kind])}
                           </span>
                           <span className="mt-0.5 block text-sm break-words text-muted-foreground">
-                            {PLACE_KIND_HINTS[kind]}
+                            {t(PLACE_KIND_HINTS[kind])}
                           </span>
                         </span>
                       </label>
@@ -278,11 +285,12 @@ export function SalonDialogForm({
                   />
                   <FieldContent>
                     <FieldLabel htmlFor="salon-listed" className="font-normal">
-                      Показывать в каталоге
+                      {t('Показывать в каталоге')}
                     </FieldLabel>
                     <FieldDescription id="salon-listed-hint">
-                      Скрытое место не попадает в каталог и не требует проверки,
-                      но остаётся доступным для записи с вашей карточки.
+                      {t(
+                        'Скрытое место не попадает в каталог и не требует проверки, но остаётся доступным для записи с вашей карточки.'
+                      )}
                     </FieldDescription>
                     <FieldError id="salon-listed-error">
                       {errors.isListed}
@@ -293,7 +301,7 @@ export function SalonDialogForm({
             )}
 
             <Field className="sm:col-span-6">
-              <FieldLabel htmlFor="salon-name">Название</FieldLabel>
+              <FieldLabel htmlFor="salon-name">{t('Название')}</FieldLabel>
               <Input
                 id="salon-name"
                 name="name"
@@ -314,11 +322,11 @@ export function SalonDialogForm({
               />
               {isEdit ? (
                 <FieldDescription id="salon-name-hint">
-                  Название задаётся при создании.
+                  {t('Название задаётся при создании.')}
                 </FieldDescription>
               ) : isOwner ? (
                 <FieldDescription id="salon-name-warning">
-                  Название нельзя изменить после создания салона.
+                  {t('Название нельзя изменить после создания салона.')}
                 </FieldDescription>
               ) : null}
               <FieldError id="salon-name-error">{errors.name}</FieldError>
@@ -328,7 +336,7 @@ export function SalonDialogForm({
               className="sm:col-span-4"
               data-invalid={Boolean(errors.address)}
             >
-              <FieldLabel htmlFor="salon-address">Адрес</FieldLabel>
+              <FieldLabel htmlFor="salon-address">{t('Адрес')}</FieldLabel>
               <Input
                 id="salon-address"
                 name="address"
@@ -345,7 +353,7 @@ export function SalonDialogForm({
             </Field>
 
             <Field className="sm:col-span-2" data-invalid={Boolean(errors.city)}>
-              <FieldLabel htmlFor="salon-city">Город</FieldLabel>
+              <FieldLabel htmlFor="salon-city">{t('Город')}</FieldLabel>
               <Input
                 id="salon-city"
                 name="city"
@@ -362,7 +370,7 @@ export function SalonDialogForm({
               className="sm:col-span-2"
               data-invalid={Boolean(errors.country)}
             >
-              <FieldLabel htmlFor="salon-country">Страна</FieldLabel>
+              <FieldLabel htmlFor="salon-country">{t('Страна')}</FieldLabel>
               <Input
                 id="salon-country"
                 name="country"
@@ -380,7 +388,7 @@ export function SalonDialogForm({
             {showPostalCode && (
               <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="salon-postal-code">
-                  Почтовый индекс
+                  {t('Почтовый индекс')}
                 </FieldLabel>
                 <Input
                   id="salon-postal-code"
@@ -396,7 +404,9 @@ export function SalonDialogForm({
               className="sm:col-span-2"
               data-invalid={Boolean(errors.timeZoneId)}
             >
-              <FieldLabel htmlFor="salon-time-zone">Часовой пояс</FieldLabel>
+              <FieldLabel htmlFor="salon-time-zone">
+                {t('Часовой пояс')}
+              </FieldLabel>
               <TimeZoneSelect
                 value={form.timeZoneId}
                 disabled={isPending}
@@ -415,7 +425,7 @@ export function SalonDialogForm({
               className="sm:col-span-3"
               data-invalid={Boolean(errors.latitude)}
             >
-              <FieldLabel htmlFor="salon-latitude">Широта</FieldLabel>
+              <FieldLabel htmlFor="salon-latitude">{t('Широта')}</FieldLabel>
               <Input
                 id="salon-latitude"
                 name="latitude"
@@ -439,7 +449,7 @@ export function SalonDialogForm({
               className="sm:col-span-3"
               data-invalid={Boolean(errors.longitude)}
             >
-              <FieldLabel htmlFor="salon-longitude">Долгота</FieldLabel>
+              <FieldLabel htmlFor="salon-longitude">{t('Долгота')}</FieldLabel>
               <Input
                 id="salon-longitude"
                 name="longitude"
@@ -464,7 +474,9 @@ export function SalonDialogForm({
                 id="salon-coordinates-hint"
                 className="sm:col-span-6"
               >
-                Скопируйте координаты из карт — встроенной карты и геокодера нет.
+                {t(
+                  'Скопируйте координаты из карт — встроенной карты и геокодера нет.'
+                )}
               </FieldDescription>
             )}
 
@@ -472,7 +484,7 @@ export function SalonDialogForm({
               className="sm:col-span-3"
               data-invalid={Boolean(errors.phoneNumber)}
             >
-              <FieldLabel htmlFor="salon-phone">Телефон</FieldLabel>
+              <FieldLabel htmlFor="salon-phone">{t('Телефон')}</FieldLabel>
               <Input
                 id="salon-phone"
                 name="phoneNumber"
@@ -495,7 +507,7 @@ export function SalonDialogForm({
               className="sm:col-span-3"
               data-invalid={Boolean(errors.websiteUrl)}
             >
-              <FieldLabel htmlFor="salon-website">Сайт</FieldLabel>
+              <FieldLabel htmlFor="salon-website">{t('Сайт')}</FieldLabel>
               <Input
                 id="salon-website"
                 name="websiteUrl"
@@ -530,7 +542,7 @@ export function SalonDialogForm({
               disabled={isPending}
               onClick={onClose}
             >
-              Отмена
+              {t('Отмена')}
             </Button>
             <Button
               type="submit"
@@ -545,7 +557,7 @@ export function SalonDialogForm({
                   className="animate-spin"
                 />
               )}
-              {submitLabelFor(scope, mode, form.isListed)}
+              {t(submitLabelFor(scope, mode, form.isListed))}
             </Button>
           </DialogFooter>
         </form>
@@ -603,7 +615,7 @@ function titleFor(scope: SalonScope, mode: SalonFormMode): string {
   return scope === 'owner' ? 'Создать салон' : 'Новый салон'
 }
 
-function descriptionFor(scope: SalonScope, mode: SalonFormMode): ReactNode {
+function descriptionFor(scope: SalonScope, mode: SalonFormMode): string {
   if (scope === 'owner') {
     return mode === 'create'
       ? 'Публичное место проверит администратор, и оно появится в поиске после одобрения. Скрытое место не проходит проверку и доступно для записи сразу.'

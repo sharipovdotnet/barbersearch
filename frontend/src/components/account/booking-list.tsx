@@ -6,6 +6,7 @@ import type { BookingView } from '@/components/account/booking-view'
 import { ListPager } from '@/components/list-pager'
 import { RefreshStatus } from '@/components/refresh-status'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { formatMonth } from '@/lib/format'
 import { goToSection } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -101,6 +102,7 @@ export function BookingList({
   onRequestCancel: (view: BookingView) => void
   onRequestReview: (view: BookingView) => void
 }) {
+  const { t } = useI18n()
   const tabRefs = useRef<Record<BookingsTab, HTMLButtonElement | null>>({
     upcoming: null,
     history: null,
@@ -124,7 +126,7 @@ export function BookingList({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
           role="tablist"
-          aria-label="Какие записи показать"
+          aria-label={t('Какие записи показать')}
           className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
         >
           {TABS.map((item) => {
@@ -151,7 +153,7 @@ export function BookingList({
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {item.label}
+                {t(item.label)}
               </button>
             )
           })}
@@ -205,7 +207,7 @@ export function BookingList({
         )}
 
         <ListPager
-          label={PAGER_LABELS[tab]}
+          label={t(PAGER_LABELS[tab])}
           rangeLabel={rangeLabel}
           hasPrev={hasPrev}
           hasNext={hasNext}
@@ -222,6 +224,8 @@ export function BookingList({
 }
 
 function TabEmptyState({ tab }: { tab: BookingsTab }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
@@ -229,17 +233,23 @@ function TabEmptyState({ tab }: { tab: BookingsTab }) {
       </div>
       <div className="space-y-1">
         <p className="font-medium">
-          {tab === 'upcoming' ? 'Пока ни одной записи' : 'История пока пуста'}
+          {tab === 'upcoming'
+            ? t('Пока ни одной записи')
+            : t('История пока пуста')}
         </p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
           {tab === 'upcoming'
-            ? 'Выберите барбера, услугу и свободное время — запись появится здесь. Прошлые визиты останутся в истории.'
-            : 'После визита здесь останется запись и можно будет оставить отзыв.'}
+            ? t(
+                'Выберите барбера, услугу и свободное время — запись появится здесь. Прошлые визиты останутся в истории.'
+              )
+            : t(
+                'После визита здесь останется запись и можно будет оставить отзыв.'
+              )}
         </p>
       </div>
       {tab === 'upcoming' && (
         <Button size="sm" variant="outline" onClick={() => goToSection('barbers')}>
-          Найти барбера
+          {t('Найти барбера')}
         </Button>
       )}
     </div>

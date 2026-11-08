@@ -3,6 +3,7 @@ import { useRef, type KeyboardEvent, type RefObject } from 'react'
 import { ListPager } from '@/components/list-pager'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import {
   ADMIN_USER_ACTIVITY_LABELS,
   ADMIN_USER_ROLE_LABELS,
@@ -54,6 +55,7 @@ export function UserList({
   onNext: () => void
 }) {
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const { t } = useI18n()
 
   const selectedIndex = items.findIndex((user) => user.id === selectedId)
   const tabbableIndex = selectedIndex >= 0 ? selectedIndex : 0
@@ -100,10 +102,10 @@ export function UserList({
   }
 
   return (
-    <section aria-label="Пользователи" className="space-y-3">
+    <section aria-label={t('Пользователи')} className="space-y-3">
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-        <span>Показано {items.length}</span>
-        <span>Сначала новые</span>
+        <span>{t('Показано {count}', { count: items.length })}</span>
+        <span>{t('Сначала новые')}</span>
       </div>
 
       <ul className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
@@ -150,12 +152,12 @@ export function UserList({
                   <UserStatusBadge isActive={user.isActive} />
                   <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
                     {lastLoginAt === null
-                      ? 'Ещё не входил'
-                      : `Вход ${lastLoginAt}`}
+                      ? t('Ещё не входил')
+                      : t('Вход {time}', { time: lastLoginAt })}
                   </span>
                   {!user.isEmailVerified && (
                     <span className="text-xs text-muted-foreground">
-                      email не подтверждён
+                      {t('email не подтверждён')}
                     </span>
                   )}
                 </span>
@@ -166,7 +168,7 @@ export function UserList({
       </ul>
 
       <ListPager
-        label="Страницы пользователей"
+        label={t('Страницы пользователей')}
         rangeLabel={
           items.length === 0 ? '' : formatPageRange(offset, items.length)
         }
@@ -220,9 +222,11 @@ export function UserRoleBadge({
   role: AdminUserRole
   className?: string
 }) {
+  const { t } = useI18n()
+
   return (
     <Badge variant="outline" className={className}>
-      {ADMIN_USER_ROLE_LABELS[role]}
+      {t(ADMIN_USER_ROLE_LABELS[role])}
     </Badge>
   )
 }
@@ -235,14 +239,16 @@ export function UserStatusBadge({
   isActive: boolean
   className?: string
 }) {
+  const { t } = useI18n()
+
   return (
     <Badge
       variant={isActive ? 'secondary' : 'destructive'}
       className={className}
     >
       {isActive
-        ? ADMIN_USER_ACTIVITY_LABELS.active
-        : ADMIN_USER_ACTIVITY_LABELS.blocked}
+        ? t(ADMIN_USER_ACTIVITY_LABELS.active)
+        : t(ADMIN_USER_ACTIVITY_LABELS.blocked)}
     </Badge>
   )
 }

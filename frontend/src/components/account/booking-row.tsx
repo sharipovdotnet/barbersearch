@@ -3,6 +3,7 @@ import { Check, Star, X } from 'lucide-react'
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import type { BookingView } from '@/components/account/booking-view'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { canCancelBooking, canReviewBooking } from '@/lib/booking-status'
 import {
   formatDateTime,
@@ -30,6 +31,7 @@ export function BookingRow({
   onRequestCancel: () => void
   onRequestReview: () => void
 }) {
+  const { t } = useI18n()
   const { booking } = view
   const timeZone = view.timeZoneId
   const when = formatDateTime(booking.startAt, timeZone)
@@ -72,8 +74,8 @@ export function BookingRow({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Отменить запись ${when}`}
-              title="Отменить запись"
+              aria-label={t('Отменить запись {when}', { when })}
+              title={t('Отменить запись')}
               className="text-muted-foreground hover:text-destructive"
               onClick={onRequestCancel}
             >
@@ -85,8 +87,8 @@ export function BookingRow({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Оставить отзыв о визите ${when}`}
-              title="Оставить отзыв"
+              aria-label={t('Оставить отзыв о визите {when}', { when })}
+              title={t('Оставить отзыв')}
               className="text-muted-foreground hover:text-foreground"
               onClick={onRequestReview}
             >
@@ -96,11 +98,11 @@ export function BookingRow({
 
           {canReviewBooking(booking.status) && isReviewed && (
             <span
-              title="Отзыв отправлен"
+              title={t('Отзыв отправлен')}
               className="inline-flex size-7 items-center justify-center text-muted-foreground"
             >
               <Check className="size-3.5" aria-hidden />
-              <span className="sr-only">Отзыв отправлен</span>
+              <span className="sr-only">{t('Отзыв отправлен')}</span>
             </span>
           )}
         </div>
@@ -110,13 +112,13 @@ export function BookingRow({
         <p className="col-span-full break-words text-xs text-muted-foreground">
           {booking.cancellationReason ? (
             <>
-              <span>Причина отмены: </span>
+              <span>{t('Причина отмены:')} </span>
               <span className="text-foreground">
                 {booking.cancellationReason}
               </span>
             </>
           ) : (
-            'Причина отмены не указана'
+            t('Причина отмены не указана')
           )}
         </p>
       )}

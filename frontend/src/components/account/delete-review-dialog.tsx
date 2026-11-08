@@ -13,16 +13,17 @@ import {
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
+import { t, useI18n } from '@/i18n'
 import type { MyReview } from '@/lib/my-reviews'
 
 function describeDeleteError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Удалить отзыв может только его автор.'
+      return t('Удалить отзыв может только его автор.')
     }
 
     if (error.status === 404) {
-      return 'Этот отзыв уже удалён.'
+      return t('Этот отзыв уже удалён.')
     }
   }
 
@@ -76,6 +77,7 @@ function DeleteConfirmation({
   onClose: () => void
   onConfirm: (review: MyReview) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -99,7 +101,7 @@ function DeleteConfirmation({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Удалить отзыв?</DialogTitle>
+        <DialogTitle>{t('Удалить отзыв?')}</DialogTitle>
         <DialogDescription>
           {formatDateTime(review.visit.startAt, review.visit.timeZoneId)} ·{' '}
           {review.barber.displayName}
@@ -113,11 +115,12 @@ function DeleteConfirmation({
         />
         <div className="space-y-1">
           <p className="text-sm font-medium text-destructive">
-            Удаление необратимо
+            {t('Удаление необратимо')}
           </p>
           <p className="text-sm text-foreground/80">
-            Отзыв исчезнет навсегда, восстановить его нельзя. По этой записи
-            можно будет оставить новый отзыв.
+            {t(
+              'Отзыв исчезнет навсегда, восстановить его нельзя. По этой записи можно будет оставить новый отзыв.'
+            )}
           </p>
         </div>
       </div>
@@ -135,7 +138,7 @@ function DeleteConfirmation({
           onClick={onClose}
           disabled={isPending}
         >
-          Не удалять
+          {t('Не удалять')}
         </Button>
         <Button
           type="button"
@@ -151,7 +154,7 @@ function DeleteConfirmation({
               className="animate-spin"
             />
           )}
-          {isPending ? 'Удаляем…' : 'Удалить отзыв'}
+          {isPending ? t('Удаляем…') : t('Удалить отзыв')}
         </Button>
       </DialogFooter>
     </>

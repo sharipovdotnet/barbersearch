@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -115,23 +116,23 @@ export function describeSalonAttachError(
   fallback = 'Не удалось добавить салон. Попробуйте ещё раз.'
 ): string {
   if (!(error instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (error.hasCode('barberProfile.addSalon.duplicate')) {
-    return 'Этот салон уже добавлен.'
+    return t('Этот салон уже добавлен.')
   }
 
   if (error.hasCode('barberProfile.addSalon.salonNotFound')) {
-    return 'Салон больше не доступен.'
+    return t('Салон больше не доступен.')
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {
-    return 'Нет доступа к профилю.'
+    return t('Нет доступа к профилю.')
   }
 
   if (error.status === 401) {
-    return 'Сессия истекла — войдите снова.'
+    return t('Сессия истекла — войдите снова.')
   }
 
   return describeApiFailure(error, fallback)

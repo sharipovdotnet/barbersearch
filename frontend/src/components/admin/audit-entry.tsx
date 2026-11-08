@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { t, useI18n } from '@/i18n'
 import {
   ADMIN_AUDIT_ENTITY_LABELS,
   ADMIN_AUDIT_FIELD_LABELS,
@@ -28,27 +29,28 @@ const SHORT_ID_LENGTH = 8
 /** Автор: `null` — системная запись, `email: null` — аккаунт уже удалён. */
 function actorLabel(actor: AdminAuditActor | null): string {
   if (actor === null) {
-    return 'Система'
+    return t('Система')
   }
 
-  return actor.email ?? 'Удалённый пользователь'
+  return actor.email ?? t('Удалённый пользователь')
 }
 
 /** Подпись типа сущности; неизвестный тип показывается строкой сервера как есть. */
 function entityLabel(entityType: string): string {
-  return (
+  return t(
     ADMIN_AUDIT_ENTITY_LABELS[entityType as AdminAuditEntityType] ?? entityType
   )
 }
 
 /** Русское имя поля; неизвестное поле — camelCase как пришло. */
 function fieldLabel(field: string): string {
-  return ADMIN_AUDIT_FIELD_LABELS[field] ?? field
+  return t(ADMIN_AUDIT_FIELD_LABELS[field] ?? field)
 }
 
 export function AuditEntry({ entry }: { entry: AdminAuditEntry }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const diffId = useId()
+  const { t } = useI18n()
 
   return (
     <li
@@ -97,7 +99,7 @@ export function AuditEntry({ entry }: { entry: AdminAuditEntry }) {
           ) : (
             <ChevronDown data-icon="inline-start" aria-hidden />
           )}
-          {isExpanded ? 'Скрыть изменения' : 'Показать изменения'}
+          {isExpanded ? t('Скрыть изменения') : t('Показать изменения')}
         </Button>
       </div>
 
@@ -106,7 +108,9 @@ export function AuditEntry({ entry }: { entry: AdminAuditEntry }) {
           состояние. Так же ведут себя остальные раскрывающиеся блоки в проекте. */}
       <div id={diffId} hidden={!isExpanded} className="mt-3 border-t pt-3">
         {entry.changes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Изменения не записаны.</p>
+          <p className="text-sm text-muted-foreground">
+            {t('Изменения не записаны.')}
+          </p>
         ) : (
           <dl className="space-y-1 text-sm">
             {entry.changes.map((change: AdminAuditChange) => (

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { Language, PaymentMethod } from '@/lib/barber-profile-labels'
@@ -115,13 +116,17 @@ export function describeBarberProfileCreateError(
   error: unknown
 ): BarberProfileCreateFailure {
   if (!(error instanceof ApiError)) {
-    return { field: null, message: FALLBACK_ERROR, canRetry: false }
+    return { field: null, message: t(FALLBACK_ERROR), canRetry: false }
   }
 
   const fieldError = FIELD_ERRORS.find((entry) => error.hasCode(entry.code))
 
   if (fieldError) {
-    return { field: fieldError.field, message: fieldError.message, canRetry: false }
+    return {
+      field: fieldError.field,
+      message: t(fieldError.message),
+      canRetry: false,
+    }
   }
 
   return {

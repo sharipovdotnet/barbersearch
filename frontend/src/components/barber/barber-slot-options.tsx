@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import { useId } from 'react'
 
+import { useI18n } from '@/i18n'
 import type { BarberSlot, BarberSlots } from '@/lib/barber-slots'
 import { formatTime } from '@/lib/format'
 
@@ -25,12 +26,13 @@ export function BarberSlotOptions({
   onSelect: (slot: BarberSlot) => void
   name?: string
 }) {
+  const { t } = useI18n()
   const groupId = useId().replace(/:/g, '')
 
   if (!slots.isWorkingDay) {
     return (
       <p className="text-sm text-muted-foreground">
-        В этот день барбер не работает.
+        {t('В этот день барбер не работает.')}
       </p>
     )
   }
@@ -38,7 +40,7 @@ export function BarberSlotOptions({
   if (slots.slots.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Свободного времени на этот день нет.
+        {t('Свободного времени на этот день нет.')}
       </p>
     )
   }
@@ -61,7 +63,7 @@ export function BarberSlotOptions({
 
   return (
     <fieldset>
-      <legend className="sr-only">Время приёма</legend>
+      <legend className="sr-only">{t('Время приёма')}</legend>
       <div className="flex flex-wrap gap-2">
         {slots.slots.map((slot, index) => {
           const inputId = `${groupId}-slot-${index}`

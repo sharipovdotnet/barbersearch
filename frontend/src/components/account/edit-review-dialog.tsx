@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
@@ -28,23 +29,25 @@ function describeEditError(error: unknown): string {
       error.status === 409 ||
       error.hasCode('review.update.concurrencyConflict')
     ) {
-      return 'Отзыв изменился в другой вкладке — обновите список.'
+      return t('Отзыв изменился в другой вкладке — обновите список.')
     }
 
     if (error.status === 404 || error.hasCode('review.notFound')) {
-      return 'Отзыв больше не существует.'
+      return t('Отзыв больше не существует.')
     }
 
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
-      return 'Править отзыв может только его автор.'
+      return t('Править отзыв может только его автор.')
     }
 
     if (error.hasCode('review.update.rating')) {
-      return 'Оценка должна быть от 1 до 5.'
+      return t('Оценка должна быть от 1 до 5.')
     }
 
     if (error.hasCode('review.update.text.tooLong')) {
-      return `Слишком длинный текст: максимум ${MAX_TEXT_LENGTH} символов.`
+      return t('Слишком длинный текст: максимум {count} символов.', {
+        count: MAX_TEXT_LENGTH,
+      })
     }
   }
 
@@ -93,6 +96,7 @@ function EditReviewForm({
   onClose: () => void
   onSave: (id: string, input: UpdateMyReviewInput) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [rating, setRating] = useState(review.rating)
   const [text, setText] = useState(review.text ?? '')
   const [isPending, setIsPending] = useState(false)
@@ -106,12 +110,16 @@ function EditReviewForm({
     }
 
     if (rating < 1 || rating > 5) {
-      setError('Оценка должна быть от 1 до 5.')
+      setError(t('Оценка должна быть от 1 до 5.'))
       return
     }
 
     if (text.length > MAX_TEXT_LENGTH) {
-      setError(`Слишком длинный текст: максимум ${MAX_TEXT_LENGTH} символов.`)
+      setError(
+        t('Слишком длинный текст: максимум {count} символов.', {
+          count: MAX_TEXT_LENGTH,
+        })
+      )
       return
     }
 
@@ -134,7 +142,7 @@ function EditReviewForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Изменить отзыв</DialogTitle>
+        <DialogTitle>{t('Изменить отзыв')}</DialogTitle>
         <DialogDescription>
           {formatDateTime(review.visit.startAt, review.visit.timeZoneId)} ·{' '}
           {review.barber.displayName}
@@ -143,7 +151,7 @@ function EditReviewForm({
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium">Оценка</legend>
+          <legend className="text-sm font-medium">{t('Оценка')}</legend>
           <div className="flex items-center gap-0.5">
             {RATINGS.map((value) => {
               const isActive = value <= rating
@@ -153,7 +161,7 @@ function EditReviewForm({
                   key={value}
                   type="button"
                   aria-pressed={rating === value}
-                  aria-label={`${value} из 5`}
+                  aria-label={t('{rating} из 5', { rating: value })}
                   disabled={isPending}
                   onClick={() => {
                     setRating(value)
@@ -174,16 +182,16 @@ function EditReviewForm({
               )
             })}
             <span className="ml-2 text-sm text-muted-foreground tabular-nums">
-              {rating > 0 ? `${rating} / 5` : 'не выбрана'}
+              {rating > 0 ? `${rating} / 5` : t('не выбрана')}
             </span>
           </div>
         </fieldset>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="edit-review-text">
-            Комментарий{' '}
+            {t('Комментарий')}{' '}
             <span className="font-normal text-muted-foreground">
-              — необязательно
+              {t('— необязательно')}
             </span>
           </Label>
           <Textarea
@@ -192,7 +200,7 @@ function EditReviewForm({
             value={text}
             maxLength={MAX_TEXT_LENGTH}
             disabled={isPending}
-            placeholder="Что понравилось, что можно улучшить"
+            placeholder={t('Что понравилось, что можно улучшить')}
             onChange={(event) => {
               setText(event.target.value)
               setError(null)
@@ -204,8 +212,9 @@ function EditReviewForm({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Опубликованный отзыв изменится на карточке барбера сразу — на повторную
-          проверку он не уйдёт.
+          {t(
+            'Опубликованный отзыв изменится на карточке барбера сразу — на повторную проверку он не уйдёт.'
+          )}
         </p>
 
         {error && (
@@ -221,7 +230,7 @@ function EditReviewForm({
             onClick={onClose}
             disabled={isPending}
           >
-            Отмена
+            {t('Отмена')}
           </Button>
           <Button type="submit" disabled={isPending} aria-busy={isPending}>
             {isPending && (
@@ -231,7 +240,7 @@ function EditReviewForm({
                 className="animate-spin"
               />
             )}
-            {isPending ? 'Сохраняем…' : 'Сохранить'}
+            {isPending ? t('Сохраняем…') : t('Сохранить')}
           </Button>
         </DialogFooter>
       </form>

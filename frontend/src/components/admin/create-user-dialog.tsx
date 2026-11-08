@@ -25,6 +25,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { t, useI18n } from '@/i18n'
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/auth'
 import {
   ADMIN_USER_ROLE_LABELS,
@@ -99,29 +100,37 @@ function validate(input: {
   const errors: CreateUserErrors = {}
 
   if (!input.email) {
-    errors.email = 'Введите email.'
+    errors.email = t('Введите email.')
   } else if (!EMAIL_PATTERN.test(input.email)) {
-    errors.email = 'Похоже, в адресе опечатка.'
+    errors.email = t('Похоже, в адресе опечатка.')
   }
 
   if (!input.firstName) {
-    errors.firstName = 'Введите имя.'
+    errors.firstName = t('Введите имя.')
   } else if (input.firstName.length > MAX_NAME_LENGTH) {
-    errors.firstName = `Максимум ${MAX_NAME_LENGTH} символов.`
+    errors.firstName = t('Максимум {count} символов.', {
+      count: MAX_NAME_LENGTH,
+    })
   }
 
   if (!input.lastName) {
-    errors.lastName = 'Введите фамилию.'
+    errors.lastName = t('Введите фамилию.')
   } else if (input.lastName.length > MAX_NAME_LENGTH) {
-    errors.lastName = `Максимум ${MAX_NAME_LENGTH} символов.`
+    errors.lastName = t('Максимум {count} символов.', {
+      count: MAX_NAME_LENGTH,
+    })
   }
 
   if (!input.password) {
-    errors.password = 'Введите или сгенерируйте пароль.'
+    errors.password = t('Введите или сгенерируйте пароль.')
   } else if (input.password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = `Минимум ${MIN_PASSWORD_LENGTH} символов.`
+    errors.password = t('Минимум {count} символов.', {
+      count: MIN_PASSWORD_LENGTH,
+    })
   } else if (input.password.length > MAX_PASSWORD_LENGTH) {
-    errors.password = `Максимум ${MAX_PASSWORD_LENGTH} символов.`
+    errors.password = t('Максимум {count} символов.', {
+      count: MAX_PASSWORD_LENGTH,
+    })
   }
 
   return errors
@@ -171,13 +180,14 @@ function copyWithTextarea(value: string): boolean {
  * вместе с размонтированным компонентом.
  */
 export function CreateUserDialog({ onCreated }: { onCreated?: () => void }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger render={<Button className="h-11 sm:h-9" />}>
         <Plus data-icon="inline-start" aria-hidden />
-        Создать пользователя
+        {t('Создать пользователя')}
       </DialogTrigger>
       {isOpen && (
         <DialogContent className="sm:max-w-md">
@@ -198,6 +208,7 @@ function CreateUserForm({
   onCreated?: () => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -266,10 +277,11 @@ function CreateUserForm({
       onSubmit={handleSubmit}
     >
       <DialogHeader>
-        <DialogTitle>Новый пользователь</DialogTitle>
+        <DialogTitle>{t('Новый пользователь')}</DialogTitle>
         <DialogDescription>
-          Аккаунт создаётся сразу активным. Отправки писем нет: временный пароль
-          придётся передать вручную.
+          {t(
+            'Аккаунт создаётся сразу активным. Отправки писем нет: временный пароль придётся передать вручную.'
+          )}
         </DialogDescription>
       </DialogHeader>
 
@@ -301,7 +313,9 @@ function CreateUserForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={Boolean(errors.firstName)}>
-            <FieldLabel htmlFor="create-user-first-name">Имя</FieldLabel>
+            <FieldLabel htmlFor="create-user-first-name">
+              {t('Имя')}
+            </FieldLabel>
             <Input
               id="create-user-first-name"
               name="firstName"
@@ -325,7 +339,9 @@ function CreateUserForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.lastName)}>
-            <FieldLabel htmlFor="create-user-last-name">Фамилия</FieldLabel>
+            <FieldLabel htmlFor="create-user-last-name">
+              {t('Фамилия')}
+            </FieldLabel>
             <Input
               id="create-user-last-name"
               name="lastName"
@@ -350,7 +366,7 @@ function CreateUserForm({
         </div>
 
         <Field>
-          <FieldLabel htmlFor="create-user-role">Роль</FieldLabel>
+          <FieldLabel htmlFor="create-user-role">{t('Роль')}</FieldLabel>
           <select
             id="create-user-role"
             name="role"
@@ -364,14 +380,14 @@ function CreateUserForm({
           >
             {ADMIN_USER_ROLES.map((value) => (
               <option key={value} value={value}>
-                {ADMIN_USER_ROLE_LABELS[value]}
+                {t(ADMIN_USER_ROLE_LABELS[value])}
               </option>
             ))}
           </select>
         </Field>
 
         <Field data-invalid={isPasswordInvalid}>
-          <FieldLabel htmlFor="create-user-password">Пароль</FieldLabel>
+          <FieldLabel htmlFor="create-user-password">{t('Пароль')}</FieldLabel>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               id="create-user-password"
@@ -405,12 +421,14 @@ function CreateUserForm({
               }}
             >
               <RefreshCw data-icon="inline-start" aria-hidden />
-              Сгенерировать
+              {t('Сгенерировать')}
             </Button>
           </div>
           <FieldDescription id="create-user-password-hint">
-            От {MIN_PASSWORD_LENGTH} до {MAX_PASSWORD_LENGTH} символов. Пароль
-            показывается открыто: его нужно передать пользователю.
+            {t(
+              'От {min} до {max} символов. Пароль показывается открыто: его нужно передать пользователю.',
+              { min: MIN_PASSWORD_LENGTH, max: MAX_PASSWORD_LENGTH }
+            )}
           </FieldDescription>
           <FieldError id="create-user-password-error">
             {errors.password}
@@ -432,7 +450,7 @@ function CreateUserForm({
           disabled={isPending}
           onClick={onClose}
         >
-          Отмена
+          {t('Отмена')}
         </Button>
         <Button
           type="submit"
@@ -446,7 +464,7 @@ function CreateUserForm({
               className="animate-spin"
             />
           )}
-          {isPending ? 'Создаём…' : 'Создать пользователя'}
+          {isPending ? t('Создаём…') : t('Создать пользователя')}
         </Button>
       </DialogFooter>
     </form>
@@ -460,6 +478,7 @@ function CreateUserSuccess({
   created: CreatedUser
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>(
     'idle'
   )
@@ -472,17 +491,21 @@ function CreateUserSuccess({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Пользователь создан</DialogTitle>
+        <DialogTitle>{t('Пользователь создан')}</DialogTitle>
         <DialogDescription>
-          Пользователь {created.email} создан с ролью «
-          {ADMIN_USER_ROLE_LABELS[created.role]}». Передайте пароль безопасным
-          каналом — больше он не покажется.
+          {t(
+            'Пользователь {email} создан с ролью «{role}». Передайте пароль безопасным каналом — больше он не покажется.',
+            {
+              email: created.email,
+              role: t(ADMIN_USER_ROLE_LABELS[created.role]),
+            }
+          )}
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-col gap-2">
         <label htmlFor="created-user-password" className="text-sm font-medium">
-          Временный пароль
+          {t('Временный пароль')}
         </label>
         <Input
           id="created-user-password"
@@ -505,20 +528,24 @@ function CreateUserSuccess({
           ) : (
             <Copy data-icon="inline-start" aria-hidden />
           )}
-          {copyState === 'copied' ? 'Пароль скопирован' : 'Скопировать пароль'}
+          {copyState === 'copied'
+            ? t('Пароль скопирован')
+            : t('Скопировать пароль')}
         </Button>
         <p role="status" className="text-xs text-muted-foreground">
           {copyState === 'copied'
-            ? 'Пароль в буфере обмена. Передайте его безопасным каналом.'
+            ? t('Пароль в буфере обмена. Передайте его безопасным каналом.')
             : copyState === 'failed'
-              ? 'Не удалось скопировать. Выделите пароль и скопируйте вручную.'
-              : 'Скопируйте пароль сейчас: после закрытия окна он не сохранится.'}
+              ? t('Не удалось скопировать. Выделите пароль и скопируйте вручную.')
+              : t(
+                  'Скопируйте пароль сейчас: после закрытия окна он не сохранится.'
+                )}
         </p>
       </div>
 
       <DialogFooter>
         <Button type="button" className="h-11 sm:h-9" onClick={onClose}>
-          Готово
+          {t('Готово')}
         </Button>
       </DialogFooter>
     </>

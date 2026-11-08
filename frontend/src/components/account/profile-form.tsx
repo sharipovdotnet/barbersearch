@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useAccountProfile } from '@/components/account/account-profile-context'
+import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { describeApiFailure } from '@/lib/errors'
 import type { MyProfile } from '@/lib/my-profile'
@@ -49,11 +50,11 @@ function validate(values: ProfileValues): ProfileErrors {
   const errors: ProfileErrors = {}
 
   if (!values.firstName.trim()) {
-    errors.firstName = 'Введите имя.'
+    errors.firstName = t('Введите имя.')
   }
 
   if (!values.lastName.trim()) {
-    errors.lastName = 'Введите фамилию.'
+    errors.lastName = t('Введите фамилию.')
   }
 
   return errors
@@ -65,11 +66,11 @@ function describeProfileError(error: unknown): {
 } {
   if (error instanceof ApiError) {
     if (error.hasCode('user.updateProfile.firstName')) {
-      return { field: 'firstName', message: 'Введите имя.' }
+      return { field: 'firstName', message: t('Введите имя.') }
     }
 
     if (error.hasCode('user.updateProfile.lastName')) {
-      return { field: 'lastName', message: 'Введите фамилию.' }
+      return { field: 'lastName', message: t('Введите фамилию.') }
     }
   }
 
@@ -77,6 +78,7 @@ function describeProfileError(error: unknown): {
 }
 
 export function ProfileForm({ profile }: { profile: MyProfile }) {
+  const { t } = useI18n()
   const { save } = useAccountProfile()
   const [baseline, setBaseline] = useState(() => toValues(profile))
   const [values, setValues] = useState(baseline)
@@ -135,7 +137,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
 
       setValues(nextValues)
       setBaseline(nextValues)
-      setAnnouncement('Изменения сохранены.')
+      setAnnouncement(t('Изменения сохранены.'))
     } catch (error) {
       const described = describeProfileError(error)
       const field = described.field
@@ -153,9 +155,11 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Личные данные</CardTitle>
+        <CardTitle>{t('Личные данные')}</CardTitle>
         <CardDescription>
-          Имя и телефон видны вам и администратору. Барбер увидит имя в записи.
+          {t(
+            'Имя и телефон видны вам и администратору. Барбер увидит имя в записи.'
+          )}
         </CardDescription>
       </CardHeader>
 
@@ -164,7 +168,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
           <FieldGroup>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={Boolean(errors.firstName)}>
-                <FieldLabel htmlFor="profile-first-name">Имя</FieldLabel>
+                <FieldLabel htmlFor="profile-first-name">{t('Имя')}</FieldLabel>
                 <Input
                   id="profile-first-name"
                   name="firstName"
@@ -184,7 +188,9 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
               </Field>
 
               <Field data-invalid={Boolean(errors.lastName)}>
-                <FieldLabel htmlFor="profile-last-name">Фамилия</FieldLabel>
+                <FieldLabel htmlFor="profile-last-name">
+                  {t('Фамилия')}
+                </FieldLabel>
                 <Input
                   id="profile-last-name"
                   name="lastName"
@@ -205,7 +211,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
             </div>
 
             <Field>
-              <FieldLabel htmlFor="profile-phone">Телефон</FieldLabel>
+              <FieldLabel htmlFor="profile-phone">{t('Телефон')}</FieldLabel>
               <Input
                 id="profile-phone"
                 name="phoneNumber"
@@ -219,7 +225,9 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
                 onChange={(event) => update('phoneNumber', event.target.value)}
               />
               <FieldDescription>
-                Необязательно. По этому номеру с вами может связаться салон.
+                {t(
+                  'Необязательно. По этому номеру с вами может связаться салон.'
+                )}
               </FieldDescription>
             </Field>
 
@@ -233,10 +241,11 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
               </p>
               <FieldDescription id="profile-email-hint">
                 {profile.isEmailVerified
-                  ? 'Адрес подтверждён. '
-                  : 'Адрес не подтверждён. '}
-                Email используется для входа; его смена появится отдельным
-                сценарием с подтверждением.
+                  ? t('Адрес подтверждён.')
+                  : t('Адрес не подтверждён.')}{' '}
+                {t(
+                  'Email используется для входа; его смена появится отдельным сценарием с подтверждением.'
+                )}
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -260,7 +269,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
                   className="animate-spin"
                 />
               )}
-              {isPending ? 'Сохраняем…' : 'Сохранить'}
+              {isPending ? t('Сохраняем…') : t('Сохранить')}
             </Button>
             <Button
               type="button"
@@ -269,7 +278,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
               disabled={!isDirty || isPending}
               onClick={handleReset}
             >
-              Отменить
+              {t('Отменить')}
             </Button>
           </div>
 

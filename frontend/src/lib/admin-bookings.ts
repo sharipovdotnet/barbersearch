@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { BookingStatus } from '@/lib/bookings'
 import { mutateWithCsrf } from '@/lib/csrf'
@@ -116,7 +117,7 @@ export function getAdminBookingCustomerName(
   customer: Pick<AdminBookingCustomer, 'firstName' | 'lastName' | 'email'>
 ): string {
   const name = `${customer.firstName} ${customer.lastName}`.trim()
-  return name === '' ? customer.email ?? 'Без имени' : name
+  return name === '' ? customer.email ?? t('Без имени') : name
 }
 
 /**
@@ -127,7 +128,7 @@ export function getAdminBookingCustomerName(
 export function getAdminBookingCustomerContact(
   customer: Pick<AdminBookingCustomer, 'email' | 'phoneNumber'>
 ): string {
-  return customer.email ?? customer.phoneNumber ?? 'Без аккаунта'
+  return customer.email ?? customer.phoneNumber ?? t('Без аккаунта')
 }
 
 /**
@@ -221,19 +222,19 @@ export function describeAdminBookingsError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.hasCode('admin.bookings.cursor.invalid')) {
-    return 'Список устарел. Обновите и начните с первой страницы.'
+    return t('Список устарел. Обновите и начните с первой страницы.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
   return describeApiFailure(cause, fallback)
@@ -251,32 +252,32 @@ export function describeAdminBookingActionError(
   fallback: string
 ): string {
   if (!(cause instanceof ApiError)) {
-    return fallback
+    return t(fallback)
   }
 
   if (cause.hasCode('booking.cancel.invalidStatus')) {
-    return 'Бронь уже завершена или отменена.'
+    return t('Бронь уже завершена или отменена.')
   }
 
   if (cause.hasCode('booking.markNoShow.tooEarly')) {
-    return 'Неявку можно отметить только после начала визита.'
+    return t('Неявку можно отметить только после начала визита.')
   }
 
   if (cause.hasCode('booking.markNoShow.invalidStatus')) {
-    return 'Неявку отмечают только для подтверждённой брони.'
+    return t('Неявку отмечают только для подтверждённой брони.')
   }
 
   if (cause.status === 404 || cause.hasCode('admin.bookings.notFound')) {
-    return 'Бронь не найдена.'
+    return t('Бронь не найдена.')
   }
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
-    return 'Раздел доступен только администратору.'
+    return t('Раздел доступен только администратору.')
   }
 
   if (cause.status === 429) {
-    return 'Слишком много запросов. Подождите минуту и повторите.'
+    return t('Слишком много запросов. Подождите минуту и повторите.')
   }
 
-  return fallback
+  return t(fallback)
 }

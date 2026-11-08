@@ -6,6 +6,7 @@ import { BarberRequestActionDialog } from '@/components/admin/barber-request-act
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AdminBarberRequestDetailStatus } from '@/hooks/use-admin-barber-request'
+import { useI18n } from '@/i18n'
 import type {
   AdminBarberRequest,
   AdminBarberRequestAction,
@@ -34,6 +35,7 @@ export function BarberRequestDetail({
   onReject: (reason: string) => Promise<string | null>
   onBack: () => void
 }) {
+  const { t } = useI18n()
   const [target, setTarget] = useState<AdminBarberRequestAction | null>(null)
 
   const isPending = request.status === 'Pending'
@@ -60,7 +62,7 @@ export function BarberRequestDetail({
             onClick={onBack}
           >
             <ArrowLeft data-icon="inline-start" aria-hidden />
-            Назад
+            {t('Назад')}
           </Button>
           <BarberRequestStatusBadge status={request.status} className="ml-auto" />
         </div>
@@ -80,23 +82,23 @@ export function BarberRequestDetail({
         </div>
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-          <ContextItem label="Стаж">
+          <ContextItem label={t('Стаж')}>
             {formatExperience(request.yearsOfExperience)}
           </ContextItem>
 
-          <ContextItem label="Город">{request.city}</ContextItem>
+          <ContextItem label={t('Город')}>{request.city}</ContextItem>
 
-          <ContextItem label="Уже работает в салоне">
-            {request.hasSalon ? 'Да' : 'Нет'}
+          <ContextItem label={t('Уже работает в салоне')}>
+            {request.hasSalon ? t('Да') : t('Нет')}
           </ContextItem>
 
-          <ContextItem label="Подана">
+          <ContextItem label={t('Подана')}>
             <time dateTime={request.createdAt}>
               {formatDateTime(request.createdAt)}
             </time>
           </ContextItem>
 
-          <ContextItem label="Заявитель">
+          <ContextItem label={t('Заявитель')}>
             <span className="block break-words">
               {request.applicant.fullName}
             </span>
@@ -106,7 +108,7 @@ export function BarberRequestDetail({
           </ContextItem>
 
           {request.reviewedAt && (
-            <ContextItem label="Рассмотрена">
+            <ContextItem label={t('Рассмотрена')}>
               <time dateTime={request.reviewedAt}>
                 {formatDateTime(request.reviewedAt)}
               </time>
@@ -116,7 +118,7 @@ export function BarberRequestDetail({
 
         <div className="border-t pt-4">
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            О себе
+            {t('О себе')}
           </h3>
           {request.about ? (
             <p className="mt-1 text-sm break-words whitespace-pre-line">
@@ -124,7 +126,7 @@ export function BarberRequestDetail({
             </p>
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">
-              Заявитель не заполнил описание.
+              {t('Заявитель не заполнил описание.')}
             </p>
           )}
         </div>
@@ -132,10 +134,10 @@ export function BarberRequestDetail({
         {request.status === 'Rejected' && (
           <div className="rounded-lg bg-destructive/10 p-3">
             <h3 className="text-xs font-medium tracking-wide text-destructive uppercase">
-              Причина отказа
+              {t('Причина отказа')}
             </h3>
             <p className="mt-1 text-sm break-words whitespace-pre-line">
-              {request.rejectionReason ?? 'Причина не указана.'}
+              {request.rejectionReason ?? t('Причина не указана.')}
             </p>
           </div>
         )}
@@ -149,7 +151,7 @@ export function BarberRequestDetail({
               id="barber-request-actions-title"
               className="text-sm font-medium"
             >
-              Решение
+              {t('Решение')}
             </h3>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -157,26 +159,28 @@ export function BarberRequestDetail({
                 className="h-11 sm:h-9"
                 onClick={() => setTarget('approve')}
               >
-                Одобрить
+                {t('Одобрить')}
               </Button>
               <Button
                 variant="outline"
                 className="h-11 sm:h-9"
                 onClick={() => setTarget('reject')}
               >
-                Отклонить
+                {t('Отклонить')}
               </Button>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Одобрение сразу меняет роль и завершает сессии заявителя. Отказ
-              требует причину — её увидит заявитель.
+              {t(
+                'Одобрение сразу меняет роль и завершает сессии заявителя. Отказ требует причину — её увидит заявитель.'
+              )}
             </p>
           </section>
         ) : (
           <p className="border-t pt-4 text-xs text-muted-foreground">
-            Заявка разобрана: решение не меняется, повторное действие сервер
-            отклонит.
+            {t(
+              'Заявка разобрана: решение не меняется, повторное действие сервер отклонит.'
+            )}
           </p>
         )}
       </div>
@@ -197,16 +201,19 @@ export function BarberRequestDetail({
 
 /** Заглушка правой колонки, пока заявка не выбрана. */
 export function BarberRequestDetailPlaceholder() {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <FileText className="size-4 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">Выберите заявку</p>
+        <p className="font-medium">{t('Выберите заявку')}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Слева очередь: откройте строку, чтобы увидеть ответы заявителя и принять
-          решение.
+          {t(
+            'Слева очередь: откройте строку, чтобы увидеть ответы заявителя и принять решение.'
+          )}
         </p>
       </div>
     </div>
@@ -225,6 +232,8 @@ export function BarberRequestDetailState({
   onRetry: () => void
   onBack: () => void
 }) {
+  const { t } = useI18n()
+
   if (status === 'notFound') {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
@@ -232,10 +241,11 @@ export function BarberRequestDetailState({
           <Circle className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Заявка не найдена.</p>
+          <p className="font-medium">{t('Заявка не найдена.')}</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные
-            заявки.
+            {t(
+              'Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные заявки.'
+            )}
           </p>
         </div>
         <Button
@@ -244,7 +254,7 @@ export function BarberRequestDetailState({
           className="h-11 sm:h-7"
           onClick={onBack}
         >
-          К списку
+          {t('К списку')}
         </Button>
       </div>
     )
@@ -257,12 +267,12 @@ export function BarberRequestDetailState({
           <TriangleAlert className="size-4 text-destructive" aria-hidden />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">Не удалось загрузить заявку</p>
+          <p className="font-medium">{t('Не удалось загрузить заявку')}</p>
           <p
             role="alert"
             className="mx-auto max-w-sm text-sm text-muted-foreground"
           >
-            {error ?? 'Попробуйте ещё раз.'}
+            {error ?? t('Попробуйте ещё раз.')}
           </p>
         </div>
         <Button
@@ -271,7 +281,7 @@ export function BarberRequestDetailState({
           className="h-11 sm:h-7"
           onClick={onRetry}
         >
-          Повторить
+          {t('Повторить')}
         </Button>
       </div>
     )
@@ -280,7 +290,7 @@ export function BarberRequestDetailState({
   return (
     <div className="space-y-3" aria-busy="true">
       <p role="status" className="sr-only">
-        Загружаем заявку…
+        {t('Загружаем заявку…')}
       </p>
       <Skeleton className="h-12 w-40" aria-hidden />
       <Skeleton className="h-6 w-60" aria-hidden />

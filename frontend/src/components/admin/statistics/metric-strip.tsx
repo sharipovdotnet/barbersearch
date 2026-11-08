@@ -1,3 +1,5 @@
+import { useI18n } from '@/i18n'
+
 export type StatisticsMetric = {
   key: string
   label: string
@@ -16,6 +18,8 @@ export type StatisticsMetric = {
  * смысла: знак дельты и подписи читаются текстом.
  */
 export function MetricStrip({ metrics }: { metrics: StatisticsMetric[] }) {
+  const { t } = useI18n()
+
   return (
     <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {metrics.map((metric) => (
@@ -28,7 +32,7 @@ export function MetricStrip({ metrics }: { metrics: StatisticsMetric[] }) {
             {metric.delta !== undefined && metric.delta !== null && (
               <span className="mt-1 block text-xs text-muted-foreground tabular-nums">
                 {metric.delta}{' '}
-                <span className="sr-only">к прошлому периоду</span>
+                <span className="sr-only">{t('к прошлому периоду')}</span>
               </span>
             )}
             {metric.hint && (

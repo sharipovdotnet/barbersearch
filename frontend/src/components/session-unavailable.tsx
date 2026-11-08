@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useSession } from '@/hooks/use-session'
+import { useI18n } from '@/i18n'
 
 /**
  * Состояние «сессию проверить не удалось».
@@ -17,6 +18,7 @@ import { useSession } from '@/hooks/use-session'
  * объясняет причину и даёт единственный безопасный шаг — повторить проверку.
  */
 export function SessionUnavailable() {
+  const { t } = useI18n()
   const { retrySession } = useSession()
 
   return (
@@ -26,9 +28,11 @@ export function SessionUnavailable() {
           <div className="flex size-10 items-center justify-center rounded-full bg-muted">
             <WifiOff className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <CardTitle>Не удалось проверить сессию</CardTitle>
+          <CardTitle>{t('Не удалось проверить сессию')}</CardTitle>
           <CardDescription>
-            Сервер не ответил. Проверьте подключение и повторите попытку.
+            {t(
+              'Сервер не ответил. Проверьте подключение и повторите попытку.'
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -38,7 +42,7 @@ export function SessionUnavailable() {
             onClick={retrySession}
           >
             <RefreshCw data-icon="inline-start" aria-hidden />
-            Повторить
+            {t('Повторить')}
           </Button>
         </CardContent>
       </Card>
@@ -48,6 +52,7 @@ export function SessionUnavailable() {
 
 /** Компактный вариант для шапки: на узком экране остаётся иконка с доступным именем. */
 export function SessionRetryButton() {
+  const { t } = useI18n()
   const { retrySession } = useSession()
 
   return (
@@ -55,10 +60,10 @@ export function SessionRetryButton() {
       variant="outline"
       size="sm"
       onClick={retrySession}
-      aria-label="Нет связи с сервером. Повторить проверку сессии"
+      aria-label={t('Нет связи с сервером. Повторить проверку сессии')}
     >
       <RefreshCw data-icon="inline-start" aria-hidden />
-      <span className="hidden sm:inline">Повторить</span>
+      <span className="hidden sm:inline">{t('Повторить')}</span>
     </Button>
   )
 }

@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent } from 'react'
 
+import { useI18n } from '@/i18n'
 import {
   ADMIN_CATALOGUE_TAB_LABELS,
   type CatalogueTab,
@@ -26,6 +27,7 @@ export function CatalogueTabs({
   tab: CatalogueTab
   onChange: (tab: CatalogueTab) => void
 }) {
+  const { t } = useI18n()
   const tabRefs = useRef<Record<CatalogueTab, HTMLButtonElement | null>>({
     services: null,
     specializations: null,
@@ -65,7 +67,7 @@ export function CatalogueTabs({
   return (
     <div
       role="tablist"
-      aria-label="Какой справочник показать"
+      aria-label={t('Какой справочник показать')}
       className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5"
     >
       {TABS.map((item) => {
@@ -92,7 +94,7 @@ export function CatalogueTabs({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {item.label}
+            {t(item.label)}
           </button>
         )
       })}

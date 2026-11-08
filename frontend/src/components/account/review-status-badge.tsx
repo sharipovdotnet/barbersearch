@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 /**
@@ -15,6 +16,8 @@ export function ReviewStatusBadge({
   isPublished: boolean
   className?: string
 }) {
+  const { t } = useI18n()
+
   return (
     <Badge
       variant="outline"
@@ -25,7 +28,7 @@ export function ReviewStatusBadge({
       )}
     >
       <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {isPublished ? 'Опубликован' : 'На модерации'}
+      {isPublished ? t('Опубликован') : t('На модерации')}
     </Badge>
   )
 }

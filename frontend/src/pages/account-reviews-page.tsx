@@ -7,6 +7,7 @@ import { DeleteReviewDialog } from '@/components/account/delete-review-dialog'
 import { EditReviewDialog } from '@/components/account/edit-review-dialog'
 import { MyReviewsList } from '@/components/account/my-reviews-list'
 import { useMyReviews } from '@/hooks/use-my-reviews'
+import { useI18n } from '@/i18n'
 import { ACCOUNT_REVIEWS_PATH } from '@/lib/account-path'
 import type { MyReview, UpdateMyReviewInput } from '@/lib/my-reviews'
 
@@ -18,21 +19,27 @@ import type { MyReview, UpdateMyReviewInput } from '@/lib/my-reviews'
  * барбера для строки не нужны — контекст визита уже в ответе.
  */
 export function AccountReviewsPage() {
+  const { locale, t } = useI18n()
+
   useEffect(() => {
-    document.title = 'Мои отзывы — BarberSearch'
-  }, [])
+    document.title = t('Мои отзывы — BarberSearch')
+  }, [locale, t])
 
   return (
     <AccountAccess
-      title="Войдите, чтобы увидеть свои отзывы"
-      description="Здесь собраны отзывы, которые вы оставили после визитов: опубликованные и ожидающие проверки. Вход по email и паролю."
+      title={t('Войдите, чтобы увидеть свои отзывы')}
+      description={t(
+        'Здесь собраны отзывы, которые вы оставили после визитов: опубликованные и ожидающие проверки. Вход по email и паролю.'
+      )}
     >
       {(user) => (
         <AccountShell
           user={user}
           section="reviews"
-          title="Мои отзывы"
-          description="Отзывы, которые вы оставили после визитов. Опубликованные и ожидающие проверки — в одном списке."
+          title={t('Мои отзывы')}
+          description={t(
+            'Отзывы, которые вы оставили после визитов. Опубликованные и ожидающие проверки — в одном списке.'
+          )}
         >
           <MyReviewsScreen />
         </AccountShell>
@@ -46,6 +53,7 @@ export function AccountReviewsPage() {
  * сходит за отзывами и получит `401` вместо гейта.
  */
 function MyReviewsScreen() {
+  const { t } = useI18n()
   const reviews = useMyReviews()
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<MyReview | null>(null)
@@ -100,7 +108,7 @@ function MyReviewsScreen() {
 
   async function handleSave(id: string, input: UpdateMyReviewInput) {
     await reviews.updateReview(id, input)
-    setAnnouncement('Отзыв обновлён.')
+    setAnnouncement(t('Отзыв обновлён.'))
   }
 
   async function handleDelete(review: MyReview) {
@@ -112,8 +120,8 @@ function MyReviewsScreen() {
     pendingDeleteFocus.current = { id: next?.id ?? '' }
     setAnnouncement(
       outcome === 'alreadyDeleted'
-        ? 'Этот отзыв уже удалён.'
-        : 'Отзыв удалён.'
+        ? t('Этот отзыв уже удалён.')
+        : t('Отзыв удалён.')
     )
   }
 
@@ -127,7 +135,7 @@ function MyReviewsScreen() {
           <p>{announcement}</p>
           <button
             type="button"
-            aria-label="Скрыть сообщение"
+            aria-label={t('Скрыть сообщение')}
             className="rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             onClick={() => setAnnouncement(null)}
           >
@@ -139,8 +147,10 @@ function MyReviewsScreen() {
       {reviews.requiresSignIn ? (
         <div className="flex min-h-[45vh] items-center justify-center py-6">
           <SignInGate
-            title="Сессия истекла"
-            description="Войдите снова, чтобы увидеть свои отзывы: cookie-сессия закончилась, пока страница была открыта."
+            title={t('Сессия истекла')}
+            description={t(
+              'Войдите снова, чтобы увидеть свои отзывы: cookie-сессия закончилась, пока страница была открыта.'
+            )}
             redirectTo={ACCOUNT_REVIEWS_PATH}
             onSignedIn={reviews.reload}
           />
