@@ -7,11 +7,14 @@ import { BarberImportPage } from '../pages/barber-import-page'
 import { CabinetPage } from '../pages/cabinet-page'
 
 /**
- * Перенос старых записей: `/barber` → «Перенести записи из Google Docs» → пачка.
+ * Перенос старых записей: `/barber` → «Перенести записи» → вставка списка → пачка.
  *
  * Сцена мутирующая: создаёт две гостевые записи через интерфейс. Их id из UI не
  * видны, поэтому уборка в `finally` ищет строки по метке в фамилии гостя и
  * отменяет их: второго прогона без пересеянной базы это не ломает.
+ *
+ * Источник по умолчанию теперь «Файл календаря», поэтому сценарий сначала
+ * выбирает «Список текстом»; дальше он повторяет прежний текстовый путь.
  */
 
 const GUEST_MARK = 'Импортов'
@@ -36,7 +39,7 @@ test.describe('перенос записей', () => {
       await expect(cabinet.heading).toBeVisible()
 
       await page
-        .getByRole('link', { name: 'Перенести записи из Google Docs' })
+        .getByRole('link', { name: 'Перенести записи', exact: true })
         .click()
 
       await expect(page).toHaveURL(/\/barber\/import$/)
@@ -44,7 +47,10 @@ test.describe('перенос записей', () => {
       await expect(screen.cabinetHeading).toBeVisible()
       await expect(screen.privacyLink).toBeVisible()
 
-      // 2. Разбор: сводка считает обе строки готовыми без ручных правок.
+      // 2. Источник — текст: по умолчанию выбран файл календаря.
+      await screen.selectTextSource()
+
+      // 3. Разбор: сводка считает обе строки готовыми без ручных правок.
       await screen.parse(PASTE)
 
       await expect(screen.summary).toHaveText('Готово 2 из 2')
@@ -53,7 +59,7 @@ test.describe('перенос записей', () => {
       await expect(screen.row(3)).toContainText('Пётр')
       await expect(screen.createButton).toHaveText('Создать 2 записи')
 
-      // 3. Доступность на 1280 и 320: карточки не дают горизонтального скролла.
+      // 4. Доступность на 1280 и 320: карточки не дают горизонтального скролла.
       await expectNoBlockingViolations(
         page,
         '/barber/import (проверка)',
@@ -74,12 +80,12 @@ test.describe('перенос записей', () => {
 
       await page.setViewportSize({ width: 1280, height: 900 })
 
-      // 4. Создание: последовательная отправка и отчёт.
+      // 5. Создание: последовательная отправка и отчёт.
       await screen.createButton.click()
 
       await expect(screen.report).toHaveText('Перенесено 2 из 2 записей.')
 
-      // 5. Обе записи на месте: «Ближайшие» кабинета.
+      // 6. Обе записи на месте: «Ближайшие» кабинета.
       await screen.openBookingsButton.click()
       await expect(page).toHaveURL(/\/barber$/)
       await cabinet.openTab('Ближайшие')
@@ -87,7 +93,7 @@ test.describe('перенос записей', () => {
       await expect(page.getByText(`Анна ${GUEST_MARK}а`).first()).toBeVisible()
       await expect(page.getByText(`Пётр ${GUEST_MARK}`).first()).toBeVisible()
     } finally {
-      // 6. Уборка: отменить созданное, иначе следующий прогон увидит лишние строки.
+      // 7. Уборка: отменить созданное, иначе следующий прогон увидит лишние строки.
       await cancelBookingsByGuestName(page.request, GUEST_MARK)
     }
   })
