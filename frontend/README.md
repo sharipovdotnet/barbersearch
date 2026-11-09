@@ -223,8 +223,11 @@ context, so the screen makes no `/bookings`, `/barbers/{id}` or public `/reviews
 
 Editing opens a dialog prefilled with the rating and text (rating 1–5, text up to 2000
 characters, trimmed to `null` when empty) and sends `PUT /api/reviews/{id}` with
-`X-CSRF-TOKEN`; `204` updates the row locally without a second read, and a published review
-changes on the barber card immediately. Deleting asks for confirmation in an `alertdialog` and
+`X-CSRF-TOKEN`; `200 { isPublished, updatedAt }` updates the row locally without a second
+read. A rating-only edit of a published review applies immediately; changing its **text**
+returns the review to moderation, so the row flips to «На модерации» and the review leaves
+the barber card until it is approved again — the dialog says which one will happen.
+Deleting asks for confirmation in an `alertdialog` and
 sends `DELETE /api/reviews/{id}` with the CSRF header; a repeat `404` is treated as «уже
 удалён», and a `403` keeps the row with an error. Only the author can edit or delete — the admin
 has no bypass.
@@ -1240,6 +1243,8 @@ What it shows:
   «Самый старый ждёт 3 дня», the rating, the client and the barber names, and «Открыть отзыв» →
   `/admin/reviews/{id}`; below, «К очереди отзывов» → `/admin/reviews`. The copy explains that both
   new reviews and reviews hidden by an administrator wait here — `is_published` is one flag.
+  «Ждёт» is counted from `awaitingSince` — the moment the review entered the queue, so a text
+  edit that returns an old review shows minutes, not months.
 - **«Барберы без подтверждения»** — `unverifiedCount` and «Открыть барберов» → `/admin/barbers`,
   which opens on the «На проверке» queue.
 - **«Выключенные салоны»** — `inactiveCount` and «Открыть каталог салонов» →

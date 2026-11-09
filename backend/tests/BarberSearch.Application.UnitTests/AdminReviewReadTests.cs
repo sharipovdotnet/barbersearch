@@ -16,7 +16,7 @@ public class AdminReviewReadTests
         new(2026, 10, 28, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Get_Pending_ReturnsOldestFirstAcrossPages()
+    public async Task Get_Pending_ReturnsLongestWaitingFirstAcrossPages()
     {
         var repository = new FakeReviewRepository();
         var oldest = CreateReview(published: false, Start, "Oldest");
@@ -46,6 +46,34 @@ public class AdminReviewReadTests
         Assert.True(secondPage.IsSuccess);
         Assert.Equal(new[] { newest.Id }, secondPage.Value.Items.Select(review => review.Id));
         Assert.Null(secondPage.Value.NextCursor);
+    }
+
+    [Fact]
+    public async Task Get_Pending_RequeuedReviewWaitsBehindOlderOnes()
+    {
+        // Отзыв создан давно и был опубликован, но текст поправили только что:
+        // ожидание начинается заново, поэтому в очередь он встаёт последним,
+        // а не первым «самым старым» по дате создания.
+        var repository = new FakeReviewRepository();
+        var oldButRequeued = CreateReview(
+            published: false,
+            Start,
+            "Правка старого отзыва",
+            updatedAt: Start.AddDays(30));
+        var waiting = CreateReview(published: false, Start.AddDays(10), "Свежий скрытый");
+        repository.AddAdminReview(oldButRequeued);
+        repository.AddAdminReview(waiting);
+
+        var handler = new GetAdminReviewsHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminReviewsQuery("pending", null, 20),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            new[] { waiting.Id, oldButRequeued.Id },
+            result.Value.Items.Select(review => review.Id));
     }
 
     [Fact]
@@ -164,17 +192,23 @@ public class AdminReviewReadTests
         Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
     }
 
+    /// <summary>
+    /// Строка админского списка. <paramref name="updatedAt"/> по умолчанию равен
+    /// <paramref name="createdAt"/>; большее значение моделирует отзыв, вернувшийся
+    /// в очередь после правки опубликованного текста.
+    /// </summary>
     private static AdminReviewResponse CreateReview(
         bool published,
         DateTimeOffset createdAt,
-        string text)
+        string text,
+        DateTimeOffset? updatedAt = null)
         => new(
             Guid.CreateVersion7(),
             5,
             text,
             published,
             createdAt,
-            createdAt,
+            updatedAt ?? createdAt,
             new AdminReviewBarberResponse(
                 Guid.CreateVersion7(),
                 "Артём Соколов",

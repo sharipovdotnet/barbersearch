@@ -82,7 +82,7 @@ public class ReviewRatingTests
     }
 
     [Fact]
-    public async Task Update_PublishedReview_RecalculatesAverage()
+    public async Task Update_PublishedReview_WithNewText_ReturnsToModerationAndDropsRating()
     {
         var authorId = Guid.CreateVersion7();
         var profile = CreateProfile();
@@ -103,6 +103,40 @@ public class ReviewRatingTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+
+        // R-35: администратор проверял прежний текст. Новый текст — новый контент,
+        // поэтому отзыв снова скрыт и из публичной сводки выпадает.
+        Assert.False(result.Value.IsPublished);
+        Assert.False(first.IsPublished);
+        Assert.Equal(3.00m, profile.Rating);
+        Assert.Equal(1, profile.ReviewsCount);
+    }
+
+    [Fact]
+    public async Task Update_PublishedReview_RatingOnly_RecalculatesAverageInPlace()
+    {
+        var authorId = Guid.CreateVersion7();
+        var profile = CreateProfile();
+        var booking = CreateBooking(authorId, profile.Id, completed: true);
+        var first = CreateReview(booking, 5);
+        var second = CreateReview(CreateBooking(Guid.CreateVersion7(), profile.Id), 3);
+        var reviews = new FakeReviewRepository();
+        reviews.Add(first);
+        reviews.Add(second);
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        profile.UpdateRating(4.00m, 2);
+
+        var handler = CreateUpdateHandler(reviews, profiles, authorId);
+
+        // Тот же текст: меняется только оценка, публикацию это не снимает.
+        var result = await handler.Handle(
+            new UpdateReviewCommand(first.Id, 1, "Original"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.IsPublished);
+        Assert.True(first.IsPublished);
         Assert.Equal(2.00m, profile.Rating);
         Assert.Equal(2, profile.ReviewsCount);
     }

@@ -22,7 +22,12 @@ import { cn } from '@/lib/utils'
 const MAX_TEXT_LENGTH = 2000
 const RATINGS = [1, 2, 3, 4, 5] as const
 
-/** Правка меняет строку на месте: повторной модерации и сброса пагинации нет. */
+/**
+ * Правка меняет строку на месте: сброса пагинации нет.
+ *
+ * Правка текста опубликованного отзыва возвращает его на модерацию — статус приходит
+ * в ответе `PUT`, поэтому строка кабинета не ждёт перезагрузки, чтобы показать бейдж.
+ */
 function describeEditError(error: unknown): string {
   if (error instanceof ApiError) {
     if (
@@ -101,6 +106,10 @@ function EditReviewForm({
   const [text, setText] = useState(review.text ?? '')
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Правило сервера: текст опубликованного отзыва уходит на повторную проверку,
+  // одна оценка — нет. Подсказка должна совпадать с тем, что произойдёт после «Сохранить».
+  const textChanged = text.trim() !== (review.text ?? '').trim()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -212,9 +221,17 @@ function EditReviewForm({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {t(
-            'Опубликованный отзыв изменится на карточке барбера сразу — на повторную проверку он не уйдёт.'
-          )}
+          {review.isPublished
+            ? textChanged
+              ? t(
+                  'Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке барбера.'
+                )
+              : t(
+                  'Оценку можно изменить сразу: повторная проверка нужна только для текста.'
+                )
+            : t(
+                'Отзыв на проверке: изменения появятся на карточке после одобрения.'
+              )}
         </p>
 
         {error && (

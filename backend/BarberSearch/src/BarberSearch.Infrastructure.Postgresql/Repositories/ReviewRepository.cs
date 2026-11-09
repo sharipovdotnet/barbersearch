@@ -153,17 +153,20 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
     }
 
     /// <summary>
-    /// Очередь модерации: скрытые отзывы всех барберов, старые сверху (FIFO).
+    /// Очередь модерации: скрытые отзывы всех барберов, дольше всех ждущие сверху (FIFO).
     /// </summary>
     /// <remarks>
-    /// Порядок <c>created_at ASC, id</c> обслуживает частичный индекс
-    /// <c>ix_reviews_moderation_created_at_id</c> (<c>WHERE is_published = false</c>).
-    /// Курсор хранит пару <c>(created_at, id)</c>: условие продолжения обратно предикату
-    /// карточки, потому что очередь читается по возрастанию. Опубликованные отзывы в выдачу
-    /// не попадают. <paramref name="limit"/> &lt;= 0 даёт <c>400 review.page.limit</c> до SQL.
+    /// Порядок <c>updated_at ASC, id</c> обслуживает частичный индекс
+    /// <c>ix_reviews_moderation_updated_at_id</c> (<c>WHERE is_published = false</c>).
+    /// Ключ — момент попадания в очередь, а не создания: правка текста опубликованного
+    /// отзыва возвращает его сюда, и он должен встать в конец очереди, а не в начало,
+    /// где «ждал» бы с даты создания. Курсор хранит пару <c>(updated_at, id)</c>, условие
+    /// продолжения обратно предикату карточки, потому что очередь читается по возрастанию.
+    /// Опубликованные отзывы в выдачу не попадают. <paramref name="limit"/> &lt;= 0 даёт
+    /// <c>400 review.page.limit</c> до SQL.
     /// </remarks>
     public async Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
-        ReviewCursor? cursor,
+        ModerationCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
     {
@@ -182,13 +185,13 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         if (cursor is { } position)
         {
             query = query.Where(review =>
-                review.CreatedAt > position.CreatedAt
-                || (review.CreatedAt == position.CreatedAt
+                review.UpdatedAt > position.AwaitingSince
+                || (review.UpdatedAt == position.AwaitingSince
                     && review.Id.CompareTo(position.Id) > 0));
         }
 
         var rows = await query
-            .OrderBy(review => review.CreatedAt)
+            .OrderBy(review => review.UpdatedAt)
             .ThenBy(review => review.Id)
             .Take(limit)
             .Select(review => new ReviewResponse(
@@ -360,17 +363,50 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
                 row.SalonName));
 
     /// <summary>
-    /// Страница отзывов для админского экрана: скрытые (FIFO) или опубликованные (свежие сверху).
+    /// Очередь модерации для админского экрана: скрытые отзывы всех барберов,
+    /// дольше всех ждущие сверху.
     /// </summary>
     /// <remarks>
     /// Проекция собирает имя барбера, клиента и контекст визита из соседних агрегатов.
     /// Это единственное чтение отзывов, которое отдаёт PII, поэтому оно закрыто
-    /// <c>AdminOnly</c> на контроллере. Фильтр и порядок задаёт <paramref name="isPublished"/>:
-    /// для очереди работает частичный индекс <c>ix_reviews_moderation_created_at_id</c>,
-    /// для опубликованных — <c>ix_reviews_published_created_at_id</c>.
+    /// <c>AdminOnly</c> на контроллере. Порядок <c>updated_at ASC, id</c> — момент входа
+    /// в очередь, а не создания: правка опубликованного отзыва возвращает строку в конец,
+    /// а не в начало. Порядок обслуживает частичный индекс
+    /// <c>ix_reviews_moderation_updated_at_id</c>. <paramref name="limit"/> &lt;= 0 —
+    /// <c>400 review.page.limit</c> до SQL.
     /// </remarks>
-    public async Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
-        bool isPublished,
+    public async Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminModerationPageAsync(
+        ModerationCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.Review.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminReviewsQuery(
+                Context,
+                isPublished: false,
+                moderationCursor: cursor,
+                limit: limit)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToAdminResponse).ToList();
+    }
+
+    /// <summary>
+    /// Опубликованные отзывы для админского экрана: свежие сверху.
+    /// </summary>
+    /// <remarks>
+    /// Та же проекция, что у очереди, но статус и порядок другие: <c>created_at DESC, id</c>
+    /// по частичному индексу <c>ix_reviews_published_created_at_id</c>. Правка отзыва
+    /// дату создания не меняет, поэтому порядок вкладки стабилен.
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPublishedPageAsync(
         ReviewCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
@@ -385,9 +421,8 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
 
         var rows = await BuildAdminReviewsQuery(
                 Context,
-                isPublished: isPublished,
-                cursor: cursor,
-                descending: isPublished,
+                isPublished: true,
+                publishedCursor: cursor,
                 limit: limit)
             .ToListAsync(cancellationToken);
 
@@ -446,8 +481,8 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
         ApplicationDbContext context,
         bool? isPublished = null,
         Guid? reviewId = null,
-        ReviewCursor? cursor = null,
-        bool descending = false,
+        ReviewCursor? publishedCursor = null,
+        ModerationCursor? moderationCursor = null,
         int? limit = null)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -531,22 +566,28 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
             joined = joined.Where(row => row.review.IsPublished == published);
         }
 
-        if (cursor is { } position)
+        // Опубликованные читаются по created_at DESC (свежие сверху), очередь — по
+        // updated_at ASC (момент входа в очередь). Условие продолжения повторяет
+        // соответствующий ORDER BY: иначе keyset пропускал бы строки.
+        if (publishedCursor is { } position)
         {
-            joined = descending
-                ? joined.Where(row =>
-                    row.review.CreatedAt < position.CreatedAt
-                    || (row.review.CreatedAt == position.CreatedAt
-                        && row.review.Id.CompareTo(position.Id) > 0))
-                : joined.Where(row =>
-                    row.review.CreatedAt > position.CreatedAt
-                    || (row.review.CreatedAt == position.CreatedAt
-                        && row.review.Id.CompareTo(position.Id) > 0));
+            joined = joined.Where(row =>
+                row.review.CreatedAt < position.CreatedAt
+                || (row.review.CreatedAt == position.CreatedAt
+                    && row.review.Id.CompareTo(position.Id) > 0));
         }
 
-        var ordered = descending
+        if (moderationCursor is { } awaiting)
+        {
+            joined = joined.Where(row =>
+                row.review.UpdatedAt > awaiting.AwaitingSince
+                || (row.review.UpdatedAt == awaiting.AwaitingSince
+                    && row.review.Id.CompareTo(awaiting.Id) > 0));
+        }
+
+        var ordered = isPublished == true
             ? joined.OrderByDescending(row => row.review.CreatedAt).ThenBy(row => row.review.Id)
-            : joined.OrderBy(row => row.review.CreatedAt).ThenBy(row => row.review.Id);
+            : joined.OrderBy(row => row.review.UpdatedAt).ThenBy(row => row.review.Id);
 
         var paged = limit is { } take ? ordered.Take(take) : ordered;
 

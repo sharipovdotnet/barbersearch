@@ -32,14 +32,14 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
     /// <summary>Подмена ошибки админской страницы отзывов.</summary>
     public Failure? AdminPageFailure { get; set; }
 
-    /// <summary>Фильтр последнего запроса админской страницы: сводка просит только <c>false</c>.</summary>
-    public bool? LastAdminIsPublished { get; private set; }
-
-    /// <summary>Курсор последнего запроса админской страницы: сводка просит только <c>null</c>.</summary>
+    /// <summary>Курсор последнего запроса опубликованной страницы.</summary>
     public ReviewCursor? LastAdminCursor { get; private set; }
 
-    /// <summary>Лимит последнего запроса админской страницы: сводка просит ровно одну строку.</summary>
-    public int? LastAdminLimit { get; private set; }
+    /// <summary>Курсор последнего запроса очереди модерации: сводка просит только <c>null</c>.</summary>
+    public ModerationCursor? LastModerationCursor { get; private set; }
+
+    /// <summary>Лимит последнего запроса страницы: сводка просит ровно одну строку.</summary>
+    public int? LastModerationLimit { get; private set; }
 
     public void Add(Review review) => _reviews[review.Id] = review;
 
@@ -134,22 +134,23 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
     }
 
     public Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
-        ReviewCursor? cursor,
+        ModerationCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
     {
         IEnumerable<Review> query = _reviews.Values.Where(review => !review.IsPublished);
 
+        // Порядок и keyset — по моменту входа в очередь, как в БД.
         if (cursor is { } position)
         {
             query = query.Where(review =>
-                review.CreatedAt > position.CreatedAt
-                || (review.CreatedAt == position.CreatedAt
+                review.UpdatedAt > position.AwaitingSince
+                || (review.UpdatedAt == position.AwaitingSince
                     && review.Id.CompareTo(position.Id) > 0));
         }
 
         IReadOnlyList<ReviewResponse> rows = query
-            .OrderBy(review => review.CreatedAt)
+            .OrderBy(review => review.UpdatedAt)
             .ThenBy(review => review.Id)
             .Take(limit)
             .Select(ToResponse)
@@ -209,15 +210,13 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
             ? Result.Failure<int, Failure>(failure)
             : Result.Success<int, Failure>(PendingCount));
 
-    public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
-        bool isPublished,
-        ReviewCursor? cursor,
+    public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminModerationPageAsync(
+        ModerationCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default)
     {
-        LastAdminIsPublished = isPublished;
-        LastAdminCursor = cursor;
-        LastAdminLimit = limit;
+        LastModerationCursor = cursor;
+        LastModerationLimit = limit;
 
         if (AdminPageFailure is { } failure)
         {
@@ -234,24 +233,60 @@ public sealed class FakeReviewRepository : IReviewRepository, IFakeTransactionPa
         }
 
         IEnumerable<AdminReviewResponse> query = _adminReviews
-            .Where(review => review.IsPublished == isPublished);
+            .Where(review => !review.IsPublished);
 
         if (cursor is { } position)
         {
-            query = isPublished
-                ? query.Where(review =>
-                    review.CreatedAt < position.CreatedAt
-                    || (review.CreatedAt == position.CreatedAt
-                        && review.Id.CompareTo(position.Id) > 0))
-                : query.Where(review =>
-                    review.CreatedAt > position.CreatedAt
-                    || (review.CreatedAt == position.CreatedAt
-                        && review.Id.CompareTo(position.Id) > 0));
+            query = query.Where(review =>
+                review.UpdatedAt > position.AwaitingSince
+                || (review.UpdatedAt == position.AwaitingSince
+                    && review.Id.CompareTo(position.Id) > 0));
         }
 
-        IReadOnlyList<AdminReviewResponse> rows = (isPublished
-                ? query.OrderByDescending(review => review.CreatedAt)
-                : query.OrderBy(review => review.CreatedAt))
+        IReadOnlyList<AdminReviewResponse> rows = query
+            .OrderBy(review => review.UpdatedAt)
+            .ThenBy(review => review.Id)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminReviewResponse>, Failure>(rows));
+    }
+
+    public Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPublishedPageAsync(
+        ReviewCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        LastAdminCursor = cursor;
+
+        if (AdminPageFailure is { } failure)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminReviewResponse>, Failure>>(failure);
+        }
+
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminReviewResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.Review.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        IEnumerable<AdminReviewResponse> query = _adminReviews
+            .Where(review => review.IsPublished);
+
+        if (cursor is { } position)
+        {
+            query = query.Where(review =>
+                review.CreatedAt < position.CreatedAt
+                || (review.CreatedAt == position.CreatedAt
+                    && review.Id.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<AdminReviewResponse> rows = query
+            .OrderByDescending(review => review.CreatedAt)
             .ThenBy(review => review.Id)
             .Take(limit)
             .ToList();

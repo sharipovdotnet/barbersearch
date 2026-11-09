@@ -22,7 +22,7 @@ const URL = '/api/admin/summary'
 const OLDEST = {
   id: '9e800000-0000-4000-8000-000000000001',
   rating: 4,
-  createdAt: '2026-09-10T10:00:00+00:00',
+  awaitingSince: '2026-09-10T10:00:00+00:00',
   barberDisplayName: 'Артём Соколов',
   customerDisplayName: 'Дмитрий Крылов',
 }

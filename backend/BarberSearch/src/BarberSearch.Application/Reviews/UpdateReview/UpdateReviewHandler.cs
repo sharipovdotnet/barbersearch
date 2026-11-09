@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Reviews;
+using BarberSearch.Contracts.Reviews.UpdateReview;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -11,11 +12,19 @@ namespace BarberSearch.Application.Reviews.UpdateReview;
 /// Обработчик команды <see cref="UpdateReviewCommand"/>.
 /// </summary>
 /// <remarks>
-/// Правка опубликованного отзыва меняет среднюю оценку; правка скрытого публичную сводку
-/// не трогает. В обоих случаях сохранение отзыва и пересчёт профиля идут одной транзакцией,
-/// поэтому отзыв не может остаться сохранённым без согласованного рейтинга.
+/// <para>
+/// Правка опубликованного отзыва меняет среднюю оценку; правка его текста снимает отзыв
+/// с публикации (<see cref="Domain.Reviews.Review.Update"/>), поэтому он выпадает из сводки
+/// до нового решения администратора. Правка скрытого отзыва публичную сводку не трогает.
+/// В обоих случаях сохранение отзыва и пересчёт профиля идут одной транзакцией, поэтому
+/// отзыв не может остаться сохранённым без согласованного рейтинга.
+/// </para>
+/// <para>
+/// Ответ несёт новый статус публикации: клиент не должен сам повторять доменное правило,
+/// чтобы не показать «Опубликован» на отзыве, вернувшемся в очередь.
+/// </para>
 /// </remarks>
-public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
+public class UpdateReviewHandler : ICommandHandler<UpdateReviewResponse, UpdateReviewCommand>
 {
     private readonly IReviewRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
@@ -40,7 +49,7 @@ public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
     /// <summary>
     /// Загружает отзыв, применяет к нему правку, сохраняет отзыв и пересчитывает рейтинг.
     /// </summary>
-    public async Task<UnitResult<Failure>> Handle(
+    public async Task<Result<UpdateReviewResponse, Failure>> Handle(
         UpdateReviewCommand command,
         CancellationToken cancellationToken)
     {
@@ -49,7 +58,7 @@ public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
             var reviewResult = await _repository.GetByIdAsync(command.ReviewId, token);
             if (reviewResult.IsFailure)
             {
-                return reviewResult.Error;
+                return Result.Failure<UpdateReviewResponse, Failure>(reviewResult.Error);
             }
 
             var review = reviewResult.Value;
@@ -57,27 +66,43 @@ public class UpdateReviewHandler : ICommandHandler<UpdateReviewCommand>
             var allowed = _currentUser.EnsureCanManage(review.UserId);
             if (allowed.IsFailure)
             {
-                return allowed.Error;
+                return Result.Failure<UpdateReviewResponse, Failure>(allowed.Error);
             }
 
             var updated = review.Update(command.Rating, command.Text);
             if (updated.IsFailure)
             {
-                return updated.Error;
+                return Result.Failure<UpdateReviewResponse, Failure>(updated.Error);
             }
 
             var saved = await _repository.UpdateAsync(review, token);
             if (saved.IsFailure)
             {
-                return saved.Error;
+                return Result.Failure<UpdateReviewResponse, Failure>(saved.Error);
             }
 
-            return await _ratingRecalculator.RecalculateAsync(review.BarberProfileId, token);
+            var recalculated = await _ratingRecalculator.RecalculateAsync(review.BarberProfileId, token);
+            if (recalculated.IsFailure)
+            {
+                return Result.Failure<UpdateReviewResponse, Failure>(recalculated.Error);
+            }
+
+            return Result.Success<UpdateReviewResponse, Failure>(
+                new UpdateReviewResponse(review.IsPublished, review.UpdatedAt));
         }, cancellationToken);
 
         if (result.IsSuccess)
         {
-            _logger.LogInformation("Review {ReviewId} has been updated.", command.ReviewId);
+            if (result.Value.IsPublished)
+            {
+                _logger.LogInformation("Review {ReviewId} has been updated.", command.ReviewId);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Review {ReviewId} has been updated and returned to moderation.",
+                    command.ReviewId);
+            }
         }
 
         return result;

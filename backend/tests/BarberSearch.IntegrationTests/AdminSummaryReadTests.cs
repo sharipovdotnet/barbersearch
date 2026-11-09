@@ -294,7 +294,7 @@ public sealed class AdminSummaryReadTests
     private sealed record SummaryOldest(
         Guid Id,
         int Rating,
-        DateTimeOffset CreatedAt,
+        DateTimeOffset AwaitingSince,
         string BarberDisplayName,
         string CustomerDisplayName);
 

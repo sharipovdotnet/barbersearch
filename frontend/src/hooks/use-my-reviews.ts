@@ -53,7 +53,7 @@ export function useMyReviews(): MyReviewsController {
 
   const updateReview = useCallback(
     async (id: string, input: UpdateMyReviewInput) => {
-      await updateMyReview(id, input)
+      const saved = await updateMyReview(id, input)
 
       const current = items.find((review) => review.id === id)
 
@@ -62,9 +62,16 @@ export function useMyReviews(): MyReviewsController {
         return
       }
 
-      // `204` без тела: `updatedAt` не обновляем — `createdAt` не меняется,
-      // строка остаётся на месте и порядок списка не пересортировывается.
-      replaceItem(id, { ...current, rating: input.rating, text: input.text })
+      // Статус берём из ответа: правка текста опубликованного отзыва возвращает его
+      // в очередь модерации, и бейдж «Опубликован» иначе врал бы до перезагрузки.
+      // `createdAt` не меняется, поэтому строка остаётся на месте и порядок не едет.
+      replaceItem(id, {
+        ...current,
+        rating: input.rating,
+        text: input.text,
+        isPublished: saved.isPublished,
+        updatedAt: saved.updatedAt,
+      })
     },
     [items, replaceItem]
   )

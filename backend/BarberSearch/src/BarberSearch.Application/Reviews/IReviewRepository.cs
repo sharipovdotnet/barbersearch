@@ -64,13 +64,15 @@ public interface IReviewRepository
 
     /// <summary>
     /// Очередь модерации — страница скрытых отзывов всех барберов в порядке
-    /// <c>created_at ASC, id</c> (FIFO: старые сверху).
+    /// <c>updated_at ASC, id</c> (FIFO: дольше всех ждущие сверху).
     /// </summary>
     /// <remarks>
     /// В выдачу попадают только <c>is_published = false</c>, независимо от барбера: администратор
-    /// видит всё, что ждёт решения. Порядок обратен карточке барбера, поэтому порядок задаёт
-    /// запрос, а курсор хранит пару <c>(created_at, id)</c> без направления. Keyset-условие
-    /// берётся из <paramref name="cursor"/>; <paramref name="limit"/> — это pageSize + 1.
+    /// видит всё, что ждёт решения. Ключ порядка — момент входа в очередь, а не создания:
+    /// правка текста опубликованного отзыва возвращает строку в конец, а не в начало, где
+    /// она «ждала» бы с даты создания. Порядок обслуживает частичный индекс
+    /// <c>ix_reviews_moderation_updated_at_id</c>. Keyset-условие берётся из
+    /// <paramref name="cursor"/>; <paramref name="limit"/> — это pageSize + 1.
     /// <paramref name="limit"/> &lt;= 0 — <c>400</c> с кодом <c>review.page.limit</c>, как у
     /// <see cref="GetPublishedPageAsync"/>. Читается без отслеживания и проецируется сразу
     /// в <see cref="ReviewResponse"/>.
@@ -79,7 +81,7 @@ public interface IReviewRepository
     /// <param name="limit">Сколько строк прочитать.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<IReadOnlyList<ReviewResponse>, Failure>> GetModerationPageAsync(
-        ReviewCursor? cursor,
+        ModerationCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default);
 
@@ -104,21 +106,37 @@ public interface IReviewRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Страница отзывов для админского экрана: скрытые (FIFO) или опубликованные (свежие сверху).
+    /// Очередь модерации для админского экрана: скрытые отзывы в порядке
+    /// <c>updated_at ASC, id</c>.
     /// </summary>
     /// <remarks>
     /// Отдельная проекция от публичного <see cref="ReviewResponse"/>: в ответ входят имя барбера,
-    /// клиент и контекст визита. Данные доступны только администратору. Фильтр по статусу
-    /// и порядок задаёт <paramref name="isPublished"/>; курсор хранит пару <c>(created_at, id)</c>,
-    /// направление меняет только запрос. <paramref name="limit"/> — это pageSize + 1, поэтому
+    /// клиент и контекст визита. Данные доступны только администратору. Ключ порядка — момент
+    /// входа в очередь, поэтому правка опубликованного отзыва встаёт в конец; курсор хранит
+    /// пару <c>(updated_at, id)</c>. <paramref name="limit"/> — это pageSize + 1, поэтому
     /// <c>limit &lt;= 0</c> — <c>400 review.page.limit</c>.
     /// </remarks>
-    /// <param name="isPublished"><c>true</c> — опубликованные, <c>false</c> — очередь модерации.</param>
     /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
     /// <param name="limit">Сколько строк прочитать.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPageAsync(
-        bool isPublished,
+    Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminModerationPageAsync(
+        ModerationCursor? cursor,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Опубликованные отзывы для админского экрана: свежие сверху
+    /// (<c>created_at DESC, id</c>).
+    /// </summary>
+    /// <remarks>
+    /// Та же проекция, что у очереди модерации, но другой статус и порядок. Курсор хранит
+    /// пару <c>(created_at, id)</c>. <paramref name="limit"/> — это pageSize + 1, поэтому
+    /// <c>limit &lt;= 0</c> — <c>400 review.page.limit</c>.
+    /// </remarks>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminReviewResponse>, Failure>> GetAdminPublishedPageAsync(
         ReviewCursor? cursor,
         int limit,
         CancellationToken cancellationToken = default);

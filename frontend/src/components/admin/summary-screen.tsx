@@ -130,8 +130,9 @@ export function SummaryScreen() {
 /**
  * Самый старый отзыв очереди: ожидание словами, оценка и имена.
  *
- * Дата создания не выводится: для отзыва важно «сколько ждёт», а не календарный день
- * визита — пояса салона здесь нет.
+ * Дата не выводится: для отзыва важно «сколько ждёт», а не календарный день визита —
+ * пояса салона здесь нет. Ожидание считается от попадания в очередь (`awaitingSince`),
+ * поэтому отредактированный старый отзыв не показывает месяцы ожидания.
  */
 function OldestReview({
   review,
@@ -148,7 +149,7 @@ function OldestReview({
       <p className="break-words">
         {t('Самый старый')}{' '}
         <span className="font-medium">
-          {formatWaitingSince(review.createdAt, now)}
+          {formatWaitingSince(review.awaitingSince, now)}
         </span>
       </p>
       <p>{t('Оценка: {value} из 5', { value: review.rating })}</p>

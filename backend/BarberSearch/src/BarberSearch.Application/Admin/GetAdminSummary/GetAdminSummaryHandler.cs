@@ -21,9 +21,11 @@ namespace BarberSearch.Application.Admin.GetAdminSummary;
 /// </para>
 /// <para>
 /// «Самый старый» — не отдельный SQL: обработчик переиспользует существующее чтение
-/// <c>GetAdminPageAsync(isPublished: false, cursor: null, limit: 1)</c> с тем же фильтром,
-/// теми же join'ами и тем же FIFO-порядком <c>created_at ASC, id ASC</c>. Своё <c>ORDER BY</c>
-/// рядом с очередью рано или поздно разошлось бы с ней.
+/// <c>GetAdminModerationPageAsync(cursor: null, limit: 1)</c> с тем же фильтром,
+/// теми же join'ами и тем же FIFO-порядком <c>updated_at ASC, id ASC</c>. Своё <c>ORDER BY</c>
+/// рядом с очередью рано или поздно разошлось бы с ней. Ждать отзыв начинает с момента
+/// попадания в очередь, а не создания: правка опубликованного отзыва возвращает его сюда
+/// уже с новым временем ожидания.
 /// </para>
 /// <para>
 /// Вызовы последовательные: <c>DbContext</c> не потокобезопасен, поэтому <c>Task.WhenAll</c>
@@ -74,8 +76,7 @@ public sealed class GetAdminSummaryHandler
         }
 
         // Первая строка существующей FIFO-страницы очереди, а не второй запрос «самого старого».
-        var pageResult = await _reviews.GetAdminPageAsync(
-            isPublished: false,
+        var pageResult = await _reviews.GetAdminModerationPageAsync(
             cursor: null,
             limit: 1,
             cancellationToken);
@@ -113,7 +114,7 @@ public sealed class GetAdminSummaryHandler
         => new(
             row.Id,
             row.Rating,
-            row.CreatedAt,
+            row.UpdatedAt,
             row.Barber.DisplayName,
             row.Customer.FullName);
 }

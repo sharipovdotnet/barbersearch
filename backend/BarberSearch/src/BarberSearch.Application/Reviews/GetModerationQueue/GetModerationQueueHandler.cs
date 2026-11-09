@@ -13,9 +13,9 @@ namespace BarberSearch.Application.Reviews.GetModerationQueue;
 /// </summary>
 /// <remarks>
 /// Только административный сценарий; роль проверяет контроллер политикой <c>AdminOnly</c>.
-/// Порядок задаёт репозиторий (<c>created_at ASC, id</c>), курсор хранит пару
-/// <c>(created_at, id)</c>, поэтому декодирование общее с карточкой барбера
-/// (<see cref="ReviewCursor"/>), а направление меняет только запрос.
+/// Порядок задаёт репозиторий (<c>updated_at ASC, id</c> — момент попадания в очередь),
+/// курсор хранит пару <c>(updated_at, id)</c> в <see cref="ModerationCursor"/>: правка
+/// опубликованного отзыва возвращает его сюда уже с новым временем ожидания.
 /// </remarks>
 public sealed class GetModerationQueueHandler
     : IQueryHandler<PagedResponse<ReviewResponse>, GetModerationQueueQuery>
@@ -46,11 +46,11 @@ public sealed class GetModerationQueueHandler
             return pageSizeError;
         }
 
-        ReviewCursor? cursor = null;
+        ModerationCursor? cursor = null;
 
         if (!string.IsNullOrWhiteSpace(query.Cursor))
         {
-            var decoded = ReviewCursor.Decode(query.Cursor);
+            var decoded = ModerationCursor.Decode(query.Cursor);
             if (decoded.IsFailure)
             {
                 return decoded.Error;
@@ -75,7 +75,7 @@ public sealed class GetModerationQueueHandler
             : rows.ToList();
 
         var nextCursor = hasNextPage && items.Count > 0
-            ? new ReviewCursor(items[^1].CreatedAt, items[^1].Id).Encode()
+            ? new ModerationCursor(items[^1].UpdatedAt, items[^1].Id).Encode()
             : null;
 
         return new PagedResponse<ReviewResponse>(items, nextCursor);
