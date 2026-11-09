@@ -512,21 +512,13 @@ public class EmailVerificationTests
             Tokens.IsInTransaction = () => UnitOfWork.IsInTransaction;
             Sender.IsInTransaction = () => UnitOfWork.IsInTransaction;
 
-            var emailOptions = new EmailOptions
-            {
-                Enabled = emailEnabled,
-                Host = "localhost",
-                Port = 1025,
-                UseTls = false,
-                FromAddress = "no-reply@barbersearch.test"
-            };
+            Sender.IsAvailable = emailEnabled;
 
             Requester = new RequestEmailVerificationHandler(
                 Users,
                 Tokens,
                 UnitOfWork,
                 Sender,
-                emailOptions,
                 new AppOptions { PublicUrl = publicUrl },
                 Clock,
                 NullLogger<RequestEmailVerificationHandler>.Instance);

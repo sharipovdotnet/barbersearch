@@ -1,5 +1,4 @@
 using BarberSearch.Application.Abstractions;
-using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Users;
 using BarberSearch.Contracts.Common;
@@ -51,7 +50,6 @@ public sealed class RequestPasswordResetHandler
     private readonly IPasswordResetTokenRepository _tokens;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailSender _emailSender;
-    private readonly EmailOptions _emailOptions;
     private readonly AppOptions _appOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RequestPasswordResetHandler> _logger;
@@ -61,7 +59,6 @@ public sealed class RequestPasswordResetHandler
         IPasswordResetTokenRepository tokens,
         IUnitOfWork unitOfWork,
         IEmailSender emailSender,
-        EmailOptions emailOptions,
         AppOptions appOptions,
         TimeProvider timeProvider,
         ILogger<RequestPasswordResetHandler> logger)
@@ -70,7 +67,6 @@ public sealed class RequestPasswordResetHandler
         ArgumentNullException.ThrowIfNull(tokens);
         ArgumentNullException.ThrowIfNull(unitOfWork);
         ArgumentNullException.ThrowIfNull(emailSender);
-        ArgumentNullException.ThrowIfNull(emailOptions);
         ArgumentNullException.ThrowIfNull(appOptions);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
@@ -79,7 +75,6 @@ public sealed class RequestPasswordResetHandler
         _tokens = tokens;
         _unitOfWork = unitOfWork;
         _emailSender = emailSender;
-        _emailOptions = emailOptions;
         _appOptions = appOptions;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -98,7 +93,7 @@ public sealed class RequestPasswordResetHandler
 
         // Глобальное состояние сервера проверяется до поиска пользователя: иначе 409
         // получали бы только существующие адреса и стал бы оракулом существования.
-        if (!_emailOptions.IsConfigured || string.IsNullOrWhiteSpace(publicUrl))
+        if (!_emailSender.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Auth.PasswordResetUnavailable,

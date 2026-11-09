@@ -22,6 +22,11 @@ public sealed class CapturingEmailSender : IEmailSender
     public IReadOnlyList<CapturedEmailMessage> Messages => _messages.ToArray();
 
     /// <summary>
+    /// Готовность транспорта; по умолчанию настроен, как в реальном рабочем окружении.
+    /// </summary>
+    public bool IsAvailable { get; set; } = true;
+
+    /// <summary>
     /// Подмена результата отправки: тест проверяет <c>500 auth.emailVerification.sendFailed</c>.
     /// </summary>
     public Func<EmailMessage, UnitResult<Failure>>? Behavior { get; set; }

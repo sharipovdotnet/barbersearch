@@ -1,12 +1,10 @@
 using System.Globalization;
-using BarberSearch.Application.Abstractions;
-using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.Notifications;
+using BarberSearch.Infrastructure.Email;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
-using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
 using Microsoft.Extensions.Hosting;
@@ -58,10 +56,9 @@ try
 
     // Почта: пустая секция — нормальное состояние (письма не уходят, регистрация работает).
     // Адрес App:PublicUrl проверяется в обработчике запроса письма, а не здесь.
-    builder.Services.AddSingleton(
+    builder.Services.AddEmailSender(
         builder.Configuration.GetSection(EmailOptions.SECTION).Get<EmailOptions>()
         ?? new EmailOptions());
-    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
     // Telegram — единственный внешний HTTP-канал напоминаний; отдельного NuGet-пакета нет.
     builder.Services.AddHttpClient(

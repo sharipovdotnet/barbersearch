@@ -18,6 +18,11 @@ public sealed class FakeEmailSender : IEmailSender
     public IReadOnlyList<EmailMessage> Messages => _messages;
 
     /// <summary>
+    /// Готовность транспорта: тест выключает почту, не собирая реальные настройки.
+    /// </summary>
+    public bool IsAvailable { get; set; } = true;
+
+    /// <summary>
     /// Проверка «мы внутри транзакции»; тест подключает сюда <see cref="FakeUnitOfWork"/>.
     /// </summary>
     public Func<bool>? IsInTransaction { get; set; }

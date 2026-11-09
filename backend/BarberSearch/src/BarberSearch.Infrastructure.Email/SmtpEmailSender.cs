@@ -3,13 +3,12 @@ using System.Net.Mail;
 using System.Net.Mime;
 using System.Text;
 using BarberSearch.Application.Abstractions;
-using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
 
-namespace BarberSearch.Web.Emails;
+namespace BarberSearch.Infrastructure.Email;
 
 /// <summary>
 /// Отправка писем через <see cref="SmtpClient"/>.
@@ -44,6 +43,9 @@ public sealed class SmtpEmailSender : IEmailSender
         _options = options;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    public bool IsAvailable => _options.IsConfigured;
 
     /// <inheritdoc />
     public async Task<UnitResult<Failure>> SendAsync(
@@ -82,18 +84,21 @@ public sealed class SmtpEmailSender : IEmailSender
             From = new MailAddress(_options.FromAddress!, _options.FromName),
             Subject = message.Subject,
             SubjectEncoding = Encoding.UTF8,
-            Body = message.HtmlBody,
+            // Основное тело — текст, HTML — AlternateView ниже. Обратный порядок
+            // (Body = html, IsBodyHtml = true, текстовый AlternateView) даёт
+            // multipart/alternative, где обе части помечены text/plain: клиент
+            // показывает разметку как обычный текст.
+            Body = message.TextBody,
             BodyEncoding = Encoding.UTF8,
-            IsBodyHtml = true
+            IsBodyHtml = false
         };
 
         mail.To.Add(message.To);
 
-        // Текстовый дубль: клиент без HTML прочитает то же письмо, а не пустое тело.
         mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-            message.TextBody,
+            message.HtmlBody,
             Encoding.UTF8,
-            MediaTypeNames.Text.Plain));
+            MediaTypeNames.Text.Html));
 
         try
         {
@@ -104,7 +109,7 @@ public sealed class SmtpEmailSender : IEmailSender
         catch (SmtpException exception)
         {
             // Сообщение SmtpException может содержать адрес получателя, поэтому в лог
-            // попадают только тип и статус.
+            // попадают только тип и SMTP-статус.
             _logger.LogWarning(
                 "SMTP send failed: {ExceptionType}, status {StatusCode}.",
                 exception.GetType().Name,

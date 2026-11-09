@@ -1,7 +1,7 @@
-using BarberSearch.Application.EmailVerifications;
+using BarberSearch.Infrastructure.Email;
 using Xunit;
 
-namespace BarberSearch.Application.UnitTests;
+namespace BarberSearch.Infrastructure.UnitTests;
 
 /// <summary>
 /// Настройки почты: без валидного адреса отправителя, хоста или порта отправка не считается

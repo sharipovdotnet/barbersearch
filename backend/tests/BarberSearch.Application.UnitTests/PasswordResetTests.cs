@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.PasswordResets;
 using BarberSearch.Application.PasswordResets.CleanupPasswordResetTokens;
@@ -915,7 +914,6 @@ public class PasswordResetTests
     {
         public const string Email = "client@example.com";
 
-        private readonly EmailOptions _emailOptions;
         private readonly AppOptions _appOptions;
 
         public Context(
@@ -934,14 +932,7 @@ public class PasswordResetTests
             Sender.IsInTransaction = () => UnitOfWork.IsInTransaction;
             RefreshTokens.IsInTransaction = () => UnitOfWork.IsInTransaction;
 
-            _emailOptions = new EmailOptions
-            {
-                Enabled = emailEnabled,
-                Host = "localhost",
-                Port = 1025,
-                UseTls = false,
-                FromAddress = "no-reply@barbersearch.test"
-            };
+            Sender.IsAvailable = emailEnabled;
 
             _appOptions = new AppOptions { PublicUrl = publicUrl };
 
@@ -996,7 +987,6 @@ public class PasswordResetTests
                 Tokens,
                 UnitOfWork,
                 Sender,
-                _emailOptions,
                 _appOptions,
                 Clock,
                 logger);

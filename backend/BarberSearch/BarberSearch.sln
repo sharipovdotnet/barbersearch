@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{02148D49
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.Postgresql", "src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj", "{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.Email", "src\BarberSearch.Infrastructure.Email\BarberSearch.Infrastructure.Email.csproj", "{816AF77A-D0A7-4839-B261-B106C251B947}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Application", "src\BarberSearch.Application\BarberSearch.Application.csproj", "{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Contracts", "src\BarberSearch.Contracts\BarberSearch.Contracts.csproj", "{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}"
@@ -48,6 +50,10 @@ Global
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DE1DCEDE-A25B-42B7-ADF0-8EC473412E66}.Release|Any CPU.Build.0 = Release|Any CPU
+		{816AF77A-D0A7-4839-B261-B106C251B947}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{816AF77A-D0A7-4839-B261-B106C251B947}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{816AF77A-D0A7-4839-B261-B106C251B947}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{816AF77A-D0A7-4839-B261-B106C251B947}.Release|Any CPU.Build.0 = Release|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Release|Any CPU.ActiveCfg = Release|Any CPU
