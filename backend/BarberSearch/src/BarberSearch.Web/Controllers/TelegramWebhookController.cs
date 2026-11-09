@@ -68,7 +68,7 @@ public sealed class TelegramWebhookController : ControllerBase
     [SkipCookieAntiforgery]
     [SkipRateLimit]
     public async Task<IActionResult> Receive(
-        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TelegramUpdate? update,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TelegramWebhookUpdate? update,
         [FromServices] ICommandHandler<LinkTelegramChatCommand> handler,
         CancellationToken cancellationToken)
     {

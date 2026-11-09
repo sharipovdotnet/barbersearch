@@ -150,7 +150,7 @@ backend/                                  ← workspace root
         ├── BarberSearch.Infrastructure.Telegram/       ← Telegram Bot API: транспорт и модели вебхука
         │   ├── TelegramSender.cs         ← ITelegramSender на именованном HttpClient
         │   ├── TelegramOptions.cs        ← секция Telegram + ITelegramBot (глубина ссылки t.me)
-        │   ├── TelegramChat.cs, TelegramMessage.cs, TelegramUpdate.cs  ← модели вебхука Bot API
+        │   ├── TelegramChat.cs, TelegramMessage.cs, TelegramWebhookUpdate.cs  ← модели вебхука Bot API
         │   ├── TelegramSenderExtensions.cs ← AddTelegramSender: настройки, ITelegramBot, HttpClient, отправитель
         │   └── BarberSearch.Infrastructure.Telegram.csproj → Application
         │
