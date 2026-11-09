@@ -144,52 +144,51 @@ function BarberSalonsScreen({
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
-            <MapPin className="size-5 text-muted-foreground" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
-              {t('Мои салоны')}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t(
-                'Салоны, в которых вы работаете. Расписание и запись ведутся по паре «барбер — салон».'
-              )}
-            </p>
-          </div>
+      {/* Как в «Записях» и «Расписании»: колокольчик — последний элемент строки
+          заголовка, а не часть группы действий. Иначе он зажат между названием и
+          кнопками и сжимает подпись. */}
+      <header className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
+          <MapPin className="size-5 text-muted-foreground" aria-hidden />
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <BarberUnreadBell />
-          {status === 'ready' && (
-            <>
-              <Button
-                type="button"
-                className="h-11 gap-2 sm:h-8"
-                onClick={() => {
-                  setAnnouncement(null)
-                  setIsCreateOpen(true)
-                }}
-              >
-                <Plus data-icon="inline-start" aria-hidden />
-                {t('Создать салон')}
-              </Button>
-              {salons.length > 0 && (
-                <SalonPickerDialog
-                  barberProfileId={barberProfileId}
-                  hasSalons={salons.length > 0}
-                  onAttached={handleAttached}
-                  onStale={reload}
-                />
-              )}
-            </>
-          )}
+        <div className="min-w-0 flex-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">
+            {t('Мои салоны')}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t(
+              'Салоны, в которых вы работаете. Расписание и запись ведутся по паре «барбер — салон».'
+            )}
+          </p>
         </div>
+        <BarberUnreadBell />
       </header>
 
       <BarberCabinetNav active="salons" />
+
+      {status === 'ready' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            className="h-11 gap-2 sm:h-8"
+            onClick={() => {
+              setAnnouncement(null)
+              setIsCreateOpen(true)
+            }}
+          >
+            <Plus data-icon="inline-start" aria-hidden />
+            {t('Создать салон')}
+          </Button>
+          {salons.length > 0 && (
+            <SalonPickerDialog
+              barberProfileId={barberProfileId}
+              hasSalons={salons.length > 0}
+              onAttached={handleAttached}
+              onStale={reload}
+            />
+          )}
+        </div>
+      )}
 
       {announcement && (
         <div

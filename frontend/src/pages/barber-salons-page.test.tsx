@@ -201,6 +201,30 @@ describe('BarberSalonsPage', () => {
     )
   })
 
+  it('колокольчик стоит в заголовке отдельно от действий, как в других разделах', async () => {
+    mockSalons([SALON])
+
+    renderPage()
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Мои салоны',
+      level: 1,
+    })
+    const header = heading.closest('header')
+    const bell = await screen.findByRole('link', { name: /^Уведомления/ })
+
+    expect(header).not.toBeNull()
+    expect(header).toContainElement(bell)
+    // Кнопки салонов живут отдельной строкой под навигацией, а не в строке
+    // заголовка: колокольчик остаётся у правого края, как в «Записях».
+    expect(header).not.toContainElement(
+      screen.getByRole('button', { name: 'Создать салон' })
+    )
+    expect(header).not.toContainElement(
+      screen.getByRole('button', { name: 'Добавить салон' })
+    )
+  })
+
   it('пустой список предлагает добавить салон и объясняет последствия', async () => {
     mockSalons([])
 
