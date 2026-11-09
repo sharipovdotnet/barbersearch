@@ -12,7 +12,9 @@ import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { CabinetPage } from '../pages/cabinet-page'
+import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { ProfilePage } from '../pages/profile-page'
+import { ResetPasswordPage } from '../pages/reset-password-page'
 import { VerifyEmailPage } from '../pages/verify-email-page'
 
 /**
@@ -105,6 +107,45 @@ test.describe('axe: 320 px, публичный профиль', () => {
       '/verify-email (недействительная ссылка) @320',
       test.info()
     )
+  })
+
+  test('восстановление пароля: форма на 320', async ({ page }) => {
+    const forgot = new ForgotPasswordPage(page)
+
+    // Форма без submit: каждый submit — auth-запрос, лимит общий на IP (§6).
+    await forgot.goto()
+    await forgot.waitForReady()
+
+    // Поле, подсказка и кнопка переносятся, а не дают горизонтальный скролл.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/forgot-password @320', test.info())
+  })
+
+  test('новый пароль: форма на 320', async ({ page }) => {
+    const reset = new ResetPasswordPage(page)
+
+    // Фейковый токен: до submit страница не обращается к API, поэтому скан
+    // не тратит auth-лимит. Токен сразу исчезает из адреса.
+    await reset.goto('broken-token-from-axe')
+    await reset.waitForForm()
+
+    // Подсказка «Минимум 12 символов…» и два поля не расширяют страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/reset-password @320', test.info())
   })
 })
 

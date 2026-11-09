@@ -13,9 +13,11 @@ import { AccountProfilePage } from '../pages/account-profile-page'
 import { AccountSecurityPage } from '../pages/account-security-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { CabinetPage } from '../pages/cabinet-page'
+import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { LandingPage } from '../pages/landing-page'
 import { MyReviewsPage } from '../pages/my-reviews-page'
 import { ProfilePage } from '../pages/profile-page'
+import { ResetPasswordPage } from '../pages/reset-password-page'
 import { VerifyEmailPage } from '../pages/verify-email-page'
 
 /**
@@ -77,6 +79,31 @@ test.describe('axe: публичные экраны', () => {
     await verify.waitForInvalid()
 
     await expectNoBlockingViolations(page, '/verify-email', test.info())
+  })
+
+  test('восстановление пароля /forgot-password: форма', async ({ page }) => {
+    const forgot = new ForgotPasswordPage(page)
+
+    // Только форма: любой submit — auth-запрос, а лимит (10/мин) общий на IP и
+    // делится с функциональным спеком сброса (§6). Состояние «sent» сканируется
+    // там же, где проверяется сценарий, а не в axe-тесте.
+    await forgot.goto()
+    await forgot.waitForReady()
+
+    await expectNoBlockingViolations(page, '/forgot-password', test.info())
+  })
+
+  test('новый пароль /reset-password: форма с фейковым токеном', async ({
+    page,
+  }) => {
+    const reset = new ResetPasswordPage(page)
+
+    // Фейковый токен: страница не делает preflight и не ходит в API до submit,
+    // поэтому форма рендерится без auth-запроса. Токен сразу исчезает из адреса.
+    await reset.goto('broken-token-from-axe')
+    await reset.waitForForm()
+
+    await expectNoBlockingViolations(page, '/reset-password', test.info())
   })
 
   test('«Стать барбером» /become-a-barber: анонимный экран', async ({ page }) => {
