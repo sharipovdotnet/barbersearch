@@ -121,6 +121,27 @@ public static class ApiErrorCodes
         /// повторная отправка возможна после кулдауна.
         /// </remarks>
         public const string EmailVerificationSendFailed = "auth.emailVerification.sendFailed";
+
+        /// <summary>
+        /// Ссылка сброса пароля недействительна, истекла или уже использована; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Один код на все причины: неизвестный, просроченный, использованный и отозванный
+        /// токен для клиента неразличимы. Повторная отправка того же токена тоже даёт этот
+        /// код: сброс пароля одноразовый, второго «успеха» не бывает.
+        /// </remarks>
+        public const string PasswordResetInvalid = "auth.passwordReset.invalid";
+
+        /// <summary>
+        /// Сброс пароля по почте не настроен на сервере; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отказ глобальный: почта не настроена или пуст <c>App:PublicUrl</c>. В маппере
+        /// ошибок нет отдельного <c>ErrorType</c> для «сервис недоступен», поэтому это
+        /// конфликт состояния сервера, как у подтверждения email. Кулдауна и сбоя отправки
+        /// в публичном контракте нет: для клиента они неотличимы от успеха.
+        /// </remarks>
+        public const string PasswordResetUnavailable = "auth.passwordReset.unavailable";
     }
 
     /// <summary>

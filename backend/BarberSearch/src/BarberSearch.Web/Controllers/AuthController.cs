@@ -4,6 +4,8 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.EmailVerifications.ConfirmEmailVerification;
 using BarberSearch.Application.EmailVerifications.RequestEmailVerification;
+using BarberSearch.Application.PasswordResets.ConfirmPasswordReset;
+using BarberSearch.Application.PasswordResets.RequestPasswordReset;
 using BarberSearch.Application.RefreshTokens;
 using BarberSearch.Application.RefreshTokens.IssueRefreshToken;
 using BarberSearch.Application.RefreshTokens.RefreshSession;
@@ -18,6 +20,7 @@ using BarberSearch.Contracts.Auth.EmailVerification;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Logout;
 using BarberSearch.Contracts.Auth.Me;
+using BarberSearch.Contracts.Auth.PasswordReset;
 using BarberSearch.Contracts.Auth.Refresh;
 using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Contracts.Common;
@@ -166,6 +169,70 @@ public class AuthController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new ConfirmEmailVerificationCommand(request.Token ?? string.Empty),
+            cancellationToken));
+
+    /// <summary>
+    /// Отправляет на указанный адрес ссылку для сброса пароля.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Действие анонимное и не опирается на текущую сессию: адрес берётся из тела, а не из
+    /// <c>ICurrentUser</c>. Поэтому <c>[SkipCookieAntiforgery]</c> обязателен и безопасен —
+    /// у запроса нет ambient-идентичности, к которой можно привязать antiforgery-пару, а
+    /// секрет (одноразовый токен) живёт только в письме. Это тот же случай, что у регистрации
+    /// и подтверждения email.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c> одинаков для существующего, несуществующего, неактивного, пустого и
+    /// кривого адреса: по ответу нельзя выяснить, есть ли аккаунт. Тихий кулдаун 60 секунд
+    /// и сбой SMTP тоже дают <c>204</c>. Единственный отказ — глобальный
+    /// <c>409 auth.passwordReset.unavailable</c>, когда почта или <c>App:PublicUrl</c> не
+    /// настроены; настоящий <c>429</c> приходит от rate limiter.
+    /// </para>
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Запрос анонимный и не несёт ambient-идентичности: привязывать токен не к чему.
+    [SkipCookieAntiforgery]
+    [HttpPost("password-reset")]
+    public async Task<ActionResult> RequestPasswordReset(
+        [FromBody] RequestPasswordResetRequest request,
+        [FromServices] ICommandHandler<RequestPasswordResetCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new RequestPasswordResetCommand(request.Email ?? string.Empty),
+            cancellationToken));
+
+    /// <summary>
+    /// Меняет пароль по одноразовой ссылке из письма и завершает все сессии пользователя.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Действие анонимное, как и подтверждение email: ссылку открывают в другом браузере или
+    /// на другом устройстве, а секрет — сам одноразовый токен. Antiforgery отключён осознанно:
+    /// у запроса нет cookie-идентичности, к которой его можно привязать.
+    /// </para>
+    /// <para>
+    /// Использованный, отозванный, просроченный и неизвестный токен, отсутствующий или
+    /// деактивированный пользователь дают один <c>400 auth.passwordReset.invalid</c>.
+    /// Пароль, не прошедший политику, — <c>400 auth.password.*</c> с
+    /// <c>invalidField = "newPassword"</c>; токен при этом не потребляется. Успех — <c>204</c>
+    /// без тела: автоматического входа нет, клиент входит заново новым паролем.
+    /// </para>
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Секрет — одноразовый токен из письма; ambient-идентичности у запроса нет.
+    [SkipCookieAntiforgery]
+    [HttpPost("password-reset/confirm")]
+    public async Task<ActionResult> ConfirmPasswordReset(
+        [FromBody] ConfirmPasswordResetRequest request,
+        [FromServices] ICommandHandler<ConfirmPasswordResetCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ConfirmPasswordResetCommand(
+                request.Token ?? string.Empty,
+                request.NewPassword ?? string.Empty),
             cancellationToken));
 
     /// <summary>

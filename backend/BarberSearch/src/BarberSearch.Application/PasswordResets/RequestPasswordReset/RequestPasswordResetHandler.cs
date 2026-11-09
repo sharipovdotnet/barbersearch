@@ -40,15 +40,6 @@ public sealed class RequestPasswordResetHandler
     : ICommandHandler<RequestPasswordResetCommand>
 {
     /// <summary>
-    /// Публичный код «сброс пароля по почте не настроен».
-    /// </summary>
-    /// <remarks>
-    /// Константа объявлена здесь, а не в <c>ApiErrorCodes</c>: слой Contracts в этом срезе
-    /// не меняется. Значение — часть публичного контракта и совпадает со спекой.
-    /// </remarks>
-    private const string UNAVAILABLE_CODE = "auth.passwordReset.unavailable";
-
-    /// <summary>
     /// Внутренний код проигранной гонки за активную строку.
     /// </summary>
     private const string ISSUE_CONFLICT_CODE = "passwordResetToken.issue.conflict";
@@ -109,7 +100,9 @@ public sealed class RequestPasswordResetHandler
         // получали бы только существующие адреса и стал бы оракулом существования.
         if (!_emailOptions.IsConfigured || string.IsNullOrWhiteSpace(publicUrl))
         {
-            return new Failure(Error.Conflict(UNAVAILABLE_CODE, UNAVAILABLE_MESSAGE));
+            return new Failure(Error.Conflict(
+                ApiErrorCodes.Auth.PasswordResetUnavailable,
+                UNAVAILABLE_MESSAGE));
         }
 
         var email = User.NormalizeEmail(command.Email);

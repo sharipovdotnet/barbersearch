@@ -34,15 +34,6 @@ public sealed class ConfirmPasswordResetHandler
     : ICommandHandler<ConfirmPasswordResetCommand>
 {
     /// <summary>
-    /// Публичный код «ссылка сброса недействительна».
-    /// </summary>
-    /// <remarks>
-    /// Константа объявлена здесь, а не в <c>ApiErrorCodes</c>: слой Contracts в этом срезе
-    /// не меняется. Значение — часть публичного контракта и совпадает со спекой.
-    /// </remarks>
-    private const string INVALID_CODE = "auth.passwordReset.invalid";
-
-    /// <summary>
     /// Код репозитория «токена с таким хешем нет».
     /// </summary>
     private const string TOKEN_NOT_FOUND_CODE = "passwordResetToken.notFound";
@@ -241,5 +232,7 @@ public sealed class ConfirmPasswordResetHandler
             StringComparison.Ordinal));
 
     private static Failure Invalid()
-        => new(Error.Validation(INVALID_CODE, INVALID_MESSAGE));
+        => new(Error.Validation(
+            ApiErrorCodes.Auth.PasswordResetInvalid,
+            INVALID_MESSAGE));
 }
