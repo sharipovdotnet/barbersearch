@@ -30,7 +30,7 @@ namespace BarberSearch.Infrastructure.Email;
 /// адрес.
 /// </para>
 /// </remarks>
-public sealed class SmtpEmailSender : IEmailSender
+public sealed class SmtpEmailSender : IEmailSender, IEmailSenderAvailability
 {
     private readonly EmailOptions _options;
     private readonly ILogger<SmtpEmailSender> _logger;

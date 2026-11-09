@@ -7,24 +7,23 @@ namespace BarberSearch.Application.Abstractions;
 /// Отправка транзакционного письма.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Абстракция живёт в Application, реализация — в <c>BarberSearch.Infrastructure.Email</c>
 /// (<c>SmtpEmailSender</c>): слой Application не знает ни про SMTP, ни про настройки
-/// транспорта. Ошибка отправки — <c>Error.Failure</c> с публичным кодом
-/// <c>auth.emailVerification.sendFailed</c>; адрес получателя и текст письма в сообщение
-/// ошибки не попадают.
+/// транспорта. Готовность почты для обработчиков — отдельный порт
+/// <see cref="IEmailSenderAvailability"/>; здесь остаётся только отправка.
+/// </para>
+/// <para>
+/// Единственный вызывающий — диспетчер outbox. Обработчики запросов письма не отправляют:
+/// они кладут строку в outbox в своей транзакции.
+/// </para>
+/// <para>
+/// Ошибка отправки — <c>Error.Failure</c>: код и сообщение не содержат ни адреса получателя,
+/// ни тела письма.
+/// </para>
 /// </remarks>
 public interface IEmailSender
 {
-    /// <summary>
-    /// Настроен ли транспорт: есть хост, порт и валидный адрес отправителя.
-    /// </summary>
-    /// <remarks>
-    /// Проверка готовности почты для обработчиков: они решают, можно ли выпускать токен,
-    /// не зная про <c>EmailOptions</c> и SMTP. Пустая секция <c>Email</c> — нормальное
-    /// состояние, при котором <see cref="IsAvailable"/> равно <c>false</c>.
-    /// </remarks>
-    bool IsAvailable { get; }
-
     /// <summary>
     /// Отправляет письмо.
     /// </summary>

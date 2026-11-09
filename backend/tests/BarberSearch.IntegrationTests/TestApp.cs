@@ -12,6 +12,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using BarberSearch.Web.Auth;
+using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -119,6 +120,21 @@ public sealed class TestApp : IAsyncDisposable
     }
 
     /// <summary>
+    /// Настройки, без которых тестовый хост не получает письма: воркер outbox включён,
+    /// но тикает раз в час — письма в тестах доставляет явный
+    /// <see cref="RunEmailDispatchAsync"/>, а не фоновый таймер.
+    /// </summary>
+    /// <remarks>
+    /// Тест может переопределить любую настройку через аргумент <c>configuration</c>
+    /// (например, выключить воркер, чтобы проверить, что строки остаются в таблице).
+    /// </remarks>
+    private static readonly Dictionary<string, string?> EmailOutboxDefaults = new(StringComparer.Ordinal)
+    {
+        ["EmailOutbox__Enabled"] = "true",
+        ["EmailOutbox__IntervalSeconds"] = "3600"
+    };
+
+    /// <summary>
     /// Очищает базу и поднимает новый хост с собственной конфигурацией.
     /// </summary>
     /// <remarks>
@@ -145,13 +161,21 @@ public sealed class TestApp : IAsyncDisposable
 
         var previousEnvironment = new Dictionary<string, string?>(StringComparer.Ordinal);
 
+        // Сначала значения по умолчанию для outbox, затем конфигурация теста: она важнее.
+        var effectiveConfiguration = new Dictionary<string, string?>(EmailOutboxDefaults, StringComparer.Ordinal);
+
         if (configuration is not null)
         {
             foreach (var (name, value) in configuration)
             {
-                previousEnvironment[name] = Environment.GetEnvironmentVariable(name);
-                Environment.SetEnvironmentVariable(name, value);
+                effectiveConfiguration[name] = value;
             }
+        }
+
+        foreach (var (name, value) in effectiveConfiguration)
+        {
+            previousEnvironment[name] = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
         }
 
         try
@@ -178,6 +202,10 @@ public sealed class TestApp : IAsyncDisposable
             // с настройками, которые тест сидирует сразу после старта.
             var reminders = factory.Services.GetRequiredService<ReminderDispatchService>();
             await reminders.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
+            // Тот же порядок для воркера outbox: стартовый тик идёт параллельно запуску хоста.
+            var emails = factory.Services.GetRequiredService<EmailDispatchService>();
+            await emails.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
             // Уборка токенов подтверждения email тоже идёт сразу на старте: DELETE не должен
             // гоняться со строками, которые тест сидирует после старта хоста.
@@ -250,6 +278,14 @@ public sealed class TestApp : IAsyncDisposable
                 {
                     services.RemoveAll<IEmailSender>();
                     services.AddSingleton(_emailSender);
+
+                    // Готовность почты — тот же экземпляр: иначе обработчики увидели бы
+                    // настоящий (ненастроенный) SmtpEmailSender и отвечали бы 409.
+                    if (_emailSender is IEmailSenderAvailability availability)
+                    {
+                        services.RemoveAll<IEmailSenderAvailability>();
+                        services.AddSingleton(availability);
+                    }
                 }
             });
         }
@@ -407,6 +443,21 @@ public sealed class TestApp : IAsyncDisposable
         }
 
         return body.Token;
+    }
+
+    /// <summary>
+    /// Прогоняет один тик диспетчера outbox: тест получает письма без ожидания таймера.
+    /// </summary>
+    /// <remarks>
+    /// Воркер в тестовом хосте тикает раз в час (<see cref="EmailOutboxDefaults"/>), поэтому
+    /// письмо появляется у <see cref="CapturingEmailSender"/> только после явного тика.
+    /// При <c>EmailOutbox:Enabled=false</c> тик ничего не делает.
+    /// </remarks>
+    public async Task<EmailTickResult> RunEmailDispatchAsync()
+    {
+        var service = Services.GetRequiredService<EmailDispatchService>();
+
+        return await service.RunTickAsync(CancellationToken.None);
     }
 
     /// <inheritdoc />

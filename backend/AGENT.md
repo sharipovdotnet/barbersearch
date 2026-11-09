@@ -1,11 +1,11 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: **10 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> Code state: **11 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **257 domain + 472 application + 119 infrastructure + 158 integration (1006 total)**;
-> the three unit projects are green locally (2026-11-06), integration runs on PostgreSQL
+> Tests: **393 domain + 677 application + 188 infrastructure + 209 integration (1467 total)**;
+> the three unit projects are green locally (2026-11-09), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
@@ -21,7 +21,8 @@
 [§14. Tooling / skills](#14-tooling--skills) · [§15. High-load checklist](#15-high-load-checklist) ·
 [§16. Web / API layer](#16-web--api-layer-added-2026-10-16) ·
 [§17. Auth: cookie + JWT](#17-auth-cookie--jwt-added-2026-10-19) ·
-[§18. Logging: Serilog](#18-logging-serilog-file-sink-added-2026-11-05)
+[§18. Logging: Serilog](#18-logging-serilog-file-sink-added-2026-11-05) ·
+[§19. Email outbox](#19-email-outbox-added-2026-11-09)
 
 ---
 
@@ -133,17 +134,25 @@ backend/                                  ← workspace root
         │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (110)
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
-        │   ├── Configurations/           ← 18 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 23 migrations + ApplicationDbContextModelSnapshot
-        │   ├── Repositories/             ← RepositoryBase<T> + 10 repository implementations
-        │   ├── ApplicationDbContext.cs   ← 18 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── Configurations/           ← 24 × IEntityTypeConfiguration<T>
+        │   ├── Migrations/               ← 31 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Repositories/             ← RepositoryBase<T> + 17 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 24 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
+        │
+        ├── BarberSearch.Infrastructure.Email/          ← SMTP-транспорт (§19)
+        │   ├── SmtpEmailSender.cs        ← IEmailSender + IEmailSenderAvailability на System.Net.Mail.SmtpClient
+        │   ├── EmailOptions.cs           ← секция Email (хост, порт, TLS, отправитель, таймаут)
+        │   ├── EmailSenderExtensions.cs  ← AddEmailSender: один singleton на оба интерфейса
+        │   └── BarberSearch.Infrastructure.Email.csproj → Application
         │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
+            ├── Emails/                   ← EmailDispatchService (воркер outbox) + EmailTickResult (§19)
+            ├── Notifications/            ← ReminderDispatchService, TelegramSender
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (12 actions)
@@ -151,7 +160,7 @@ backend/                                  ← workspace root
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
-            │                               Logging:LogLevel / Logging:File (§18) + AllowedHosts
+            │                               Logging:LogLevel / Logging:File (§18) + EmailOutbox (§19) + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← requests for the main flows
@@ -165,7 +174,8 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 **Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
 `Infrastructure` → `Application`
 → `Contracts`, `Domain` → `Shared` · `Contracts` → `Domain` (только ради enum'ов `Language` /
-`PaymentMethod` в контрактах) · `Shared` → CSharpFunctionalExtensions.
+`PaymentMethod` в контрактах) · `BarberSearch.Infrastructure.Email` → `Application` только
+(почтовый транспорт не знает домена и EF) · `Shared` → CSharpFunctionalExtensions.
 
 > Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
 > (`Users/IUserRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`),
@@ -216,7 +226,10 @@ docker compose down -v          # stop and wipe the data
 # the same `docker compose up -d`
 # starts it. SMTP listens on 127.0.0.1:1025 (Email:Port in appsettings.Development.json),
 # the inbox UI/API is http://localhost:8025. There is no volume: letters are transient.
-# Without Mailpit registration still works — the request endpoint answers 409 unavailable.
+# The request only queues the letter in email_outbox (§19); EmailDispatchService sends it
+# (EmailOutbox:Enabled=true in appsettings.Development.json). With Mailpit stopped the request
+# still answers 201/204, the row stays in the table and is retried by the worker once SMTP is
+# back. Without the Email section registration still works — the request answers 409 unavailable.
 
 # EF Core migrations (dotnet-ef is installed globally, 10.0.10; the DbContext lives in
 # Infrastructure, the design-time host is Web — the only project referencing the Design package)
@@ -401,8 +414,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-09 (срез password-reset): domain **374**, application **672**,
-infrastructure **158**, integration **200** — всего **1404**, все зелёные на локальной PostgreSQL.
+Актуальный baseline на 2026-11-09 (срез email-outbox): domain **393**, application **677**,
+infrastructure **188**, integration **209** — всего **1467**, все зелёные на локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
@@ -488,6 +501,8 @@ HairService (AR)             — standalone, no child collection
 Specialization (AR)          — standalone, no child collection
 EmailVerificationToken (AR)  — standalone one-time email confirmation token
 PasswordResetToken (AR)      — standalone one-time password-reset token (§17.12)
+EmailOutboxMessage (Entity)  — строка transactional outbox писем (§19); не агрегат:
+                               инфраструктурная запись, бизнес-инвариантов у неё нет
 ```
 
 AR = `AggregateRoot`, which derives from `Entity`.
@@ -555,6 +570,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
 | `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions; **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
+| `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
 
 ### 7.4 Statuses and enums
 
@@ -692,15 +708,15 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 374 domain + 672 application + 158 infrastructure + 200 integration (1404 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 131 обработчик (96 command + 35 query), 16 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 393 domain + 677 application + 188 infrastructure + 209 integration (1467 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 133 обработчика (98 command + 35 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 39 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 23 конфигурации, 16 репозиториев, `IUnitOfWork`, 23 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
-| Web | ✅ 28 контроллеров / 137 endpoints (125 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService` и `ReminderDispatchService` (воркер напоминаний); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
+| Web | ✅ 28 контроллеров / 137 endpoints (125 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (30):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (31):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -709,7 +725,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
-`AddEmailVerificationTokens`, `AddPasswordResetTokens`.
+`AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -777,6 +793,15 @@ revoked_at IS NULL`) и `ix_password_reset_tokens_expires_at`. Открытый 
 меняются до успешного сброса. Новых ключей конфигурации нет: переиспользуются `Email:*` и
 `App:PublicUrl`. `Down` удаляет таблицу. Проверено накатом, откатом и повторным накатом на
 локальной `barbersearch`; `has-pending-model-changes` — чисто (§17.12).
+
+**`AddEmailOutbox` (2026-11-09, email-outbox).** Новая таблица `email_outbox`:
+`id` UUIDv7 PK, `deduplication_key` (`varchar(128)`, unique), `to_email` (`varchar(254)`),
+`subject` (`varchar(256)`), `html_body`/`text_body` (`text`), `next_attempt_at`, `attempts`,
+`sent_at`, `failed_at`, `last_error` (`varchar(200)`), `created_at`, `updated_at`.
+Индексы: `ux_email_outbox_deduplication_key` (unique) и `ix_email_outbox_dispatch`
+(`(sent_at, failed_at, next_attempt_at)`). Check-ограничения: `attempts >= 0` и
+`NOT (sent_at IS NOT NULL AND failed_at IS NOT NULL)`. Внешних ключей нет: письмо переживает
+удаление пользователя и токена. Backfill не нужен — таблица новая. Подробности — §19.
 
 **Напоминания (вариант C).** Инбокс — обязательный и единственный источник правды, Telegram —
 необязательный канал доставки (D1). API: `GET api/barber/notifications?cursor=&pageSize=`
@@ -1917,7 +1942,9 @@ Conventions:
   or revoked token; one code so probing cannot distinguish rows), `auth.emailVerification.cooldown`
   (409 — resend earlier than 60 s, including the partial-index race),
   `auth.emailVerification.unavailable` (409 — `Email` is not configured or `App:PublicUrl` is
-  empty) and `auth.emailVerification.sendFailed` (500 — SMTP failure). There is no `503` in
+  empty) and `auth.emailVerification.sendFailed` (500 — SMTP failure; since the email-outbox
+  slice the request endpoint never returns it: the letter is queued in `email_outbox` and the
+  code only lands in `last_error`, §19). There is no `503` in
   `FailureProblemDetails` and no new `ErrorType`, so "email is not configured" is a state conflict,
   not a server error; a real `429` still belongs to the rate limiter. `POST api/auth/register`
   calls the request command after a successful `CreateUser` and **ignores** its failure (warning
@@ -2637,7 +2664,7 @@ activity of the barber service and takes the price from it.
 | `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `Privacy/PrivacyPolicy` — текущая редакция Политики (#42); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers; `EmailVerifications/*` — токен, письмо, request/confirm/cleanup, `IEmailVerificationTokenRepository`, `IEmailSender`, `EmailOptions`; `PasswordResets/*` — `PasswordResetTokenGenerator`, `PasswordResetLifetime`, `PasswordResetMessage`, request/confirm/cleanup, `IPasswordResetTokenRepository` |
 | `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword`, `Auth/EmailVerification`, `Auth/PasswordReset` |
 | `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens`, `Migrations/*_AddUserConsent`, `Configurations/EmailVerificationTokenConfiguration`, `Repositories/EmailVerificationTokenRepository`, `Migrations/*_AddEmailVerificationTokens`, `Configurations/PasswordResetTokenConfiguration`, `Repositories/PasswordResetTokenRepository`, `Migrations/*_AddPasswordResetTokens` |
-| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Auth/RefreshTokenCleanupService`, `Auth/EmailVerificationTokenCleanupService`, `Auth/PasswordResetTokenCleanupService`, `Emails/SmtpEmailSender`, `Controllers/AuthController` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Auth/RefreshTokenCleanupService`, `Auth/EmailVerificationTokenCleanupService`, `Auth/PasswordResetTokenCleanupService`, `Emails/EmailDispatchService`, `Controllers/AuthController`; транспорт — `BarberSearch.Infrastructure.Email/SmtpEmailSender` (§19) |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
 
 **IP согласия (#42) читает Web, а не Application.** `AuthController.GetClientIpAddress` берёт
@@ -2652,7 +2679,7 @@ activity of the barber service and takes the price from it.
 | Метод | Маршрут | Доступ | Что делает |
 |---|---|---|---|
 | POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается; обязателен `consentVersion` (`auth.register.consentRequired` / `auth.register.consentVersion`), сервер сам ставит UTC-время и IP; после успешного создания сам заказывает письмо, сбой почты не меняет `201 { id }` |
-| POST | `api/auth/email-verification` | аутентификация, rate limit, antiforgery | высылает письмо со ссылкой `/verify-email?token=…`; `409 auth.emailVerification.cooldown` / `unavailable`, `500 auth.emailVerification.sendFailed` |
+| POST | `api/auth/email-verification` | аутентификация, rate limit, antiforgery | высылает письмо со ссылкой `/verify-email?token=…`; `409 auth.emailVerification.cooldown` / `unavailable`; письмо пишется в outbox в транзакции с токеном и уходит через диспетчер (§19) |
 | POST | `api/auth/email-verification/confirm` | аноним, rate limit, без antiforgery | подтверждает адрес по токену из тела: `204`; битый/истёкший/использованный токен — `400 auth.emailVerification.invalid`; повторный клик и уже подтверждённый адрес — `204` |
 | POST | `api/auth/password-reset` | аноним, rate limit, без antiforgery | `{ email }` → `204` для любого адреса (существующего, неизвестного, неактивного, пустого, кривого); тихие кулдаун 60 с и сбой SMTP — тоже `204`; `409 auth.passwordReset.unavailable` (почта или `App:PublicUrl` не настроены), `429`; письмо со ссылкой `/reset-password?token=…` действует 30 минут |
 | POST | `api/auth/password-reset/confirm` | аноним, rate limit, без antiforgery | `{ token, newPassword }` → `204`; одноразовый: повторный/неизвестный/истёкший/отозванный токен, отсутствующий или неактивный пользователь — `400 auth.passwordReset.invalid`; пароль вне политики — `400 auth.password.*` (`invalidField = "newPassword"`), токен остаётся рабочим; завершает все сессии, авто-входа нет |
@@ -2897,8 +2924,9 @@ cookie и остаток refresh-срока в `TokenResponse`. Бизнес-«�
   идентичности, к которой можно привязать antiforgery-пару, нет (тот же случай, что
   `register` и `email-verification/confirm`). `request` отвечает `204` для любого адреса —
   существующего, несуществующего, неактивного, пустого и кривого — и молчит о кулдауне
-  (60 секунд) и сбое SMTP: `409 cooldown` или `500 sendFailed` только для существующего
-  адреса были бы оракулом существования. В лог при сбое идут `userId` и коды, не адрес.
+  (60 секунд): `409 cooldown` для существующего адреса был бы оракулом существования.
+  Синхронной отправки в запросе больше нет — письмо попадает в outbox (§19), поэтому сбой SMTP
+  не влияет ни на ответ, ни на время ответа. В лог при сбое идут `userId` и коды, не адрес.
   Единственные отказы глобальны: `409 auth.passwordReset.unavailable` (почта или
   `App:PublicUrl` не настроены), `429` лимитера и `500 internal.database`. Почему `409`, а не
   `503`: в `FailureProblemDetails` нет `ErrorType` для «сервис недоступен», и новый тип ради
@@ -3250,11 +3278,13 @@ revoked_at IS NULL`) и `ix_email_verification_tokens_expires_at`. Открыт�
 
 **Поток `POST api/auth/email-verification`.** Порядок проверок фиксирован:
 1) пользователь по `sub`; 2) уже подтверждён → `204` без письма (проверка стоит до конфигурации
-почты); 3) почта не настроена (`EmailOptions.IsConfigured`) или пуст `App:PublicUrl` →
+почты); 3) почта не настроена (`IEmailSenderAvailability.IsAvailable`, под ним
+`EmailOptions.IsConfigured`) или пуст `App:PublicUrl` →
 `409 auth.emailVerification.unavailable`; 4) активный токен моложе `RESEND_COOLDOWN` (60 секунд)
 → `409 auth.emailVerification.cooldown`; 5) в одной транзакции `IUnitOfWork` — отозвать активный
-токен и вставить новый; 6) **после** коммита отправить письмо; сбой отправки →
-`500 auth.emailVerification.sendFailed`, строка при этом остаётся (письмо можно повторить).
+токен, вставить новый и положить письмо в `email_outbox`; 6) отправить письмо больше не здесь:
+его забирает фоновый диспетчер с ретраями (§19). Сбой SMTP не откатывает токен и не меняет
+ответ — строка остаётся в outbox.
 Ссылка собирается в одном месте: `{App:PublicUrl.TrimEnd('/')}/verify-email?token=…`
 (`Uri.EscapeDataString`). Гонка двух переотправок упирается в
 `ux_email_verification_tokens_active`; репозиторий переводит именно это нарушение в `409
@@ -3264,11 +3294,12 @@ auth.emailVerification.cooldown`, а коллизию хеша оставляе�
 **Письмо.** Тема «Подтвердите адрес электронной почты — BarberSearch»; HTML + текстовый дубль,
 без картинок и трекинга. Имя в приветствии проходит через `WebUtility.HtmlEncode`; пароль,
 `id` и адрес в тексте не появляются, токен — только внутри ссылки. Транспорт —
-`System.Net.Mail.SmtpClient` (`Web/Emails/SmtpEmailSender`, singleton без состояния,
-`SmtpClient` создаётся на вызов): `Timeout = Email:TimeoutSeconds` (5 по умолчанию, не 100),
-`EnableSsl = UseTls` (STARTTLS; порт 465 не поддерживается), `Credentials` только при непустом
-`UserName`. `SmtpException`/таймаут → `auth.emailVerification.sendFailed`; в лог — тип исключения
-и `StatusCode`, без сообщения (оно может содержать адрес).
+`System.Net.Mail.SmtpClient` (`BarberSearch.Infrastructure.Email/SmtpEmailSender`, singleton без
+состояния, `SmtpClient` создаётся на вызов): `Timeout = Email:TimeoutSeconds` (5 по умолчанию,
+не 100), `EnableSsl = UseTls` (STARTTLS; порт 465 не поддерживается), `Credentials` только при
+непустом `UserName`. `SmtpException`/таймаут → `auth.emailVerification.sendFailed`, и этот код
+становится `last_error` строки outbox; в лог — тип исключения и `StatusCode`, без сообщения
+(оно может содержать адрес).
 
 **Поток `POST api/auth/email-verification/confirm`.** Анонимный, `[SkipCookieAntiforgery]`,
 `auth`-лимит. 1) формат токена (≤ 128, `[A-Za-z0-9_-]`) → иначе `400
@@ -3358,8 +3389,8 @@ auth.emailVerification.invalid`; 2) `GetByHashAsync` → нет → тот же 
 текстовый дубль, без картинок и трекинга. Имя в приветствии проходит через
 `WebUtility.HtmlEncode`; email, `id` пользователя и пароль в тексте не появляются, открытый
 токен — только внутри ссылки. Текст говорит, зачем письмо, что ссылка действует 30 минут и
-что при отсутствии запроса письмо можно проигнорировать. Транспорт — существующий
-`SmtpEmailSender`; новых ключей конфигурации нет.
+что при отсутствии запроса письмо можно проигнорировать. Транспорт — тот же
+`SmtpEmailSender`; письмо уходит через `email_outbox`, новых ключей конфигурации нет (§19).
 
 **Поток `POST api/auth/password-reset/confirm`.** Анонимный, `[SkipCookieAntiforgery]`,
 политика `auth`. 1) формат токена (≤ 128, `[A-Za-z0-9_-]`) → иначе `400
@@ -3391,10 +3422,11 @@ antiforgery-пару не к чему: это тот же случай, что `
 это отдельный сценарий и отдельный срез (§3.12).
 
 **Анти-энумерация и честность ошибок.** `request` отвечает `204` для любого адреса, кулдаун
-и сбой SMTP тихие; публичных кодов `auth.passwordReset.cooldown`/`sendFailed` нет. Постоянное
-время ответа не гарантируется: синхронный SMTP делает ответ для существующего адреса
-медленнее, чем для несуществующего. Это известное ограничение среза; outbox/асинхронная
-отправка — отдельный срез, искусственные задержки не добавляются. `confirm` использует один
+тихий; публичных кодов `auth.passwordReset.cooldown`/`sendFailed` нет. Синхронной отправки в
+запросе больше нет: письмо пишется в `email_outbox` в транзакции с токеном, поэтому
+недоступный SMTP не влияет ни на ответ, ни на его время. Небольшая разница во времени ответа
+между существующим и несуществующим адресом остаётся (запросы в БД), но SMTP её больше не
+усиливает; искусственные задержки не добавляются (§19). `confirm` использует один
 код `auth.passwordReset.invalid` на неизвестный, просроченный, использованный и отозванный
 токен, чтобы перебор не различал строки.
 
@@ -3490,3 +3522,168 @@ Bootstrap-логгер в начале `Program.cs` пишет в консоль
 
 **Открыто:** структурный (JSON) формат для сборщика логов, ретенция по времени и OpenTelemetry —
 отдельные срезы (§15.8).
+
+---
+
+## 19. Email outbox (added 2026-11-09)
+
+> Письма подтверждения email и сброса пароля больше не отправляются в HTTP-запросе.
+> Строка `email_outbox` пишется **в той же транзакции**, что и токен, а отправляет её фоновый
+> `EmailDispatchService` с ретраями. Публичный контракт не менялся: `409`/`204`/`201`
+> прежние, коды ошибок те же.
+> Срез `BarberSearch.Infrastructure.Email` (SMTP-транспорт) — из предыдущего этапа;
+> этот раздел дополняет его.
+
+### 19.1 Зачем
+
+Синхронная отправка после коммита теряла письмо, если SMTP недоступен в момент запроса:
+токен в базе есть, ссылки у пользователя нет. Outbox меняет порядок: сначала атомарно
+фиксируются токен **и** готовое письмо, потом письмо уходит. Сбой транспорта влияет только
+на скорость доставки, не на сохранность письма.
+
+### 19.2 Поток
+
+1. `RequestEmailVerificationHandler` / `RequestPasswordResetHandler` выполняют прежние
+   проверки (пользователь, активность, почта настроена, `App:PublicUrl`, кулдаун 60 с) —
+   `409 …unavailable` и `409 …cooldown` остались на своих местах и до записи в outbox.
+2. Внутри `IUnitOfWork.ExecuteAsync` одной транзакцией: отзыв прежнего активного токена,
+   вставка нового токена и строка `email_outbox` с `deduplication_key = token.Id`.
+   Откат транзакции не оставляет ни токена, ни письма.
+3. Хендлер только пишет в лог факт постановки в очередь — отправки из запроса нет.
+4. `EmailDispatchService.RunTickAsync` → `DispatchPendingEmailsHandler`: пачка готовых строк
+   (`sent_at IS NULL AND failed_at IS NULL AND next_attempt_at <= now`) читается
+   с `ORDER BY next_attempt_at LIMIT batch FOR UPDATE SKIP LOCKED` внутри транзакции и
+   остаётся заблокированной, пока идут SMTP-вызовы.
+5. Каждая строка получает `sent_at` либо `attempts += 1` + новый `next_attempt_at` /
+   `failed_at`. Отметки коммитятся одной транзакцией с блокировкой пачки.
+
+### 19.3 Схема `email_outbox` (миграция `AddEmailOutbox`)
+
+| Колонка | Тип | Смысл |
+|---|---|---|
+| `id` | uuid PK | UUIDv7 из домена (`Entity`) |
+| `deduplication_key` | varchar(128), unique | id выпущенного токена: одно письмо — одна строка |
+| `to_email` | varchar(254) | получатель (PII — в лог не попадает) |
+| `subject` | varchar(256) | тема |
+| `html_body`, `text_body` | text | готовые тела (вариант A, см. 19.6) |
+| `next_attempt_at` | timestamptz | с какого момента строку можно брать |
+| `attempts` | int, `>= 0` | сделано попыток |
+| `sent_at` | timestamptz, null | транспорт принял письмо |
+| `failed_at` | timestamptz, null | попытки исчерпаны, больше не отправляем |
+| `last_error` | varchar(200), null | код ошибки транспорта, **не текст исключения** |
+| `created_at`, `updated_at` | timestamptz | технические метки `Entity` |
+
+Индексы: `ux_email_outbox_deduplication_key` (unique) и `ix_email_outbox_dispatch`
+(`(sent_at, failed_at, next_attempt_at)`). Check-ограничения: `attempts >= 0`,
+`NOT (sent_at IS NOT NULL AND failed_at IS NOT NULL)`. Внешних ключей нет — письмо
+переживает удаление пользователя и токена; аудит изменений (`AuditTrail`) сюда не пишется,
+это инфраструктурная таблица.
+
+### 19.4 Диспетчер, ретраи и at-least-once
+
+- **Воркер:** `Web/Emails/EmailDispatchService` — singleton `BackgroundService` по образцу
+  `ReminderDispatchService`: первый тик сразу при старте, затем `PeriodicTimer` на
+  `EmailOutbox:IntervalSeconds`, `InitialTickCompleted` для тестов, регистрация
+  `AddHostedService(sp => sp.GetRequiredService<…>())`.
+- **Пачка и блокировка:** `IEmailOutboxRepository.GetReadyForDispatchAsync` использует
+  `FOR UPDATE SKIP LOCKED`, поэтому второй инстанс приложения или параллельный тик пропускает
+  занятые строки, а не отправляет их повторно.
+- **Backoff после неудачи:** 1 мин, 5 мин, 15 мин, 1 ч, 6 ч.
+- **Предел:** после `EmailOutbox:MaxAttempts` (по умолчанию 5) строка получает `failed_at` и
+  больше не отправляется; `last_error` хранит код последней ошибки.
+- **Доставка at-least-once.** «SMTP принял письмо, но отметка `sent_at` не успела
+  закоммититься» — штатный сценарий: после освобождения блокировки строка вернётся в очередь
+  и письмо уйдёт повторно. Дубликат письма допустим, потеря — нет. Идемпотентность
+  `deduplication_key` защищает только от двух строк на **одно** письмо, а не от повторной
+  отправки уже отправленного.
+- **Уборка.** Раз в сутки тик удаляет обработанные (`sent_at`/`failed_at` старше
+  `EmailOutbox:RetentionDays`, по умолчанию 7 дней) строки: тело письма содержит открытый
+  токен, держать его дольше нельзя.
+
+### 19.5 Конфигурация (`EmailOutbox`)
+
+| Ключ | По умолчанию | Где задан | Смысл |
+|---|---|---|---|
+| `Enabled` | `false` / `true` в Development | `appsettings.json` / `appsettings.Development.json` | включает **только воркер** |
+| `BatchSize` | `20` | `appsettings.json` | строк за тик, `1..1000` |
+| `IntervalSeconds` | `30` | `appsettings.json` | период тика, `1..3600` |
+| `MaxAttempts` | `5` | `appsettings.json` | попыток до `failed_at`, `1..100` |
+| `RetentionDays` | `7` | `appsettings.json` | хранение обработанных строк, `1..365` |
+
+Диапазоны проверяет `StartupSettings.Load` (как `RefreshTokens:CleanupIntervalMinutes`):
+неверное значение роняет старт, пустая секция — нет (берутся значения по умолчанию).
+`Enabled=false` не выключает запись: хендлеры пишут строки всегда, когда почта настроена
+(`Email:Enabled` + хост + `FromAddress`), поэтому при выключенном воркере письма копятся
+в таблице и уходят после включения флага без перезапуска. Health-check воркер не проверяет
+и из-за выключенного флага не падает.
+
+### 19.6 Решение по открытому токену — вариант A
+
+В БД лежит только SHA-256 токена, а письмо содержит открытый токен, поэтому outbox **должен**
+хранить либо готовое письмо, либо шаблон + шифротекст. Для этого среза выбран **вариант A**:
+готовые `html_body`/`text_body`, отправленные строки удаляются уборкой через 7 дней.
+
+Почему это приемлемо и чем ограничено:
+
+- окно, в котором строка содержит рабочий секрет, задаётся TTL самого токена (24 ч для
+  подтверждения email, 30 мин для сброса) — после истечения ссылка бесполезна;
+- строки живут ограниченно (7 дней по умолчанию), а не бессрочно;
+- риск ограничен бэкапами и доступом к таблице: у кого есть доступ к `email_outbox`, тот
+  видит открытые токены в пределах их TTL — как и любой, у кого есть доступ к письмам;
+- вариант B (шифрование токена через Data Protection, сборка письма в диспетчере) строже,
+  но требует переноса сборки текстов из Application в инфраструктуру/шаблоны и ротации ключей;
+  это отдельный срез, если модель секрета ужесточится.
+
+Не хранить открытый токен дольше необходимого — обязательное правило: уборка обработанных
+строк часть тика, а не «когда-нибудь».
+
+### 19.7 Наблюдаемость
+
+- Одна строка на тик (`Information`, воркер): `sent`, `retried`, `failed`.
+- Временная ошибка (`Warning`, хендлер): `outboxId`, `attempts`, код ошибки, `nextAttemptAt`.
+- Окончательный отказ (`Error`): `outboxId`, `attempts`, код ошибки — это единственный исход,
+  требующий разбора.
+- В логах **нет** адреса получателя, открытого токена и тела письма; `last_error` — только
+  код/тип ошибки транспорта (например `auth.emailVerification.sendFailed`), не текст
+  исключения: сообщение SMTP может содержать адрес.
+
+### 19.8 Файлы
+
+| Слой | Где |
+|---|---|
+| Domain | `Domain/EmailOutbox/EmailOutboxMessage.cs` |
+| Application | `Emails/EmailOutboxOptions.cs`, `Emails/IEmailOutboxRepository.cs`, `Emails/DispatchPendingEmails/*`, `Emails/CleanupSentEmails/*`, `Abstractions/IEmailSenderAvailability.cs`; хендлеры запросов кладут письмо в outbox |
+| Infrastructure | `Configurations/EmailOutboxMessageConfiguration.cs`, `Repositories/EmailOutboxRepository.cs`, `Migrations/*_AddEmailOutbox`, `ApplicationDbContext.EmailOutbox`, `AddRepositories` |
+| Infrastructure.Email | `SmtpEmailSender` — `IEmailSender` (только `SendAsync`) + `IEmailSenderAvailability`; `AddEmailSender` регистрирует один singleton на оба интерфейса |
+| Web | `Emails/EmailDispatchService.cs`, `Emails/EmailTickResult.cs`, `Program.cs` (опции + воркер), `Deployment/StartupSettings.cs` (валидация), `appsettings*.json` |
+
+### 19.9 Тесты
+
+- Domain: `EmailOutboxMessageTests` — валидация, `IsReady`, `MarkSent`, `RecordFailure`, `FailedAt`.
+- Application: `EmailOutboxDispatchTests` — отправка и `sent_at` в транзакции, backoff
+  1/5/15/60, `failed_at` после предела, пропуск незрелых строк, уборка; обновлённые
+  `EmailVerificationTests` / `PasswordResetTests` — письмо в outbox, транспорт не вызывается,
+  откат транзакции не оставляет строку.
+- Infrastructure: `EmailOutboxModelTests`, `StartupSettingsTests` (диапазоны секции).
+- Integration: `EmailOutboxTests` — регистрация создаёт строку, тик отправляет её, два
+  параллельных тика не дублируют отправку, недоступный SMTP строку не теряет, выключенный
+  воркер строки сохраняет, повторный запрос после кулдауна создаёт новое письмо;
+  `EmailOutboxPersistenceTests` — схема, уникальность ключа, выборка `FOR UPDATE SKIP LOCKED`,
+  уборка.
+- `TestApp` включает воркер (`EmailOutbox__Enabled=true`) и ставит интервал 3600 с, поэтому
+  письмо в тестах появляется после явного `await app.RunEmailDispatchAsync()`.
+
+### 19.10 Ручная проверка с Mailpit
+
+```powershell
+docker compose up -d          # PostgreSQL + Mailpit
+dotnet run --project BarberSearch/src/BarberSearch.Web
+# запросите письмо (регистрация или POST api/auth/password-reset) — UI http://localhost:8025
+docker compose stop mailpit   # транспорт недоступен: запрос отвечает как раньше, строка pending
+docker compose start mailpit  # следующий тик досылает письмо; в логе — sent/retried
+```
+
+Проверка выключенного воркера: `EmailOutbox__Enabled=false` — запрос пишет строку, писем нет;
+после перезапуска с `true` строка уходит. Строки и `last_error` видны в `email_outbox`
+(`SELECT id, attempts, sent_at, failed_at, last_error FROM email_outbox ORDER BY created_at DESC`).
+

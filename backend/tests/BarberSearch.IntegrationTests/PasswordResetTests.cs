@@ -77,6 +77,8 @@ public sealed class PasswordResetTests
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
 
+        await app.RunEmailDispatchAsync();
+
         var message = Assert.Single(sender.Messages);
         Assert.Equal(email, message.To);
         Assert.Equal(Subject, message.Subject);
@@ -114,6 +116,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
@@ -166,6 +170,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
@@ -224,6 +230,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
@@ -386,6 +394,8 @@ public sealed class PasswordResetTests
             Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
         }
 
+        await app.RunEmailDispatchAsync();
+
         var firstLink = ExtractResetLink(Assert.Single(sender.Messages));
 
         // Повтор внутри 60 секунд — тихий 204 без письма и без отзыва токена.
@@ -406,6 +416,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         Assert.Equal(2, sender.Messages.Count);
 
@@ -451,6 +463,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
@@ -529,6 +543,8 @@ public sealed class PasswordResetTests
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
 
+        await app.RunEmailDispatchAsync();
+
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
         using (var confirm = await anonymous.PostAsJsonAsync(
@@ -569,6 +585,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 
@@ -630,6 +648,8 @@ public sealed class PasswordResetTests
         {
             Assert.Equal(HttpStatusCode.NoContent, request.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         var link = ExtractResetLink(Assert.Single(sender.Messages));
 

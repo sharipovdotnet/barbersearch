@@ -58,6 +58,9 @@ public sealed class EmailVerificationTests
         var email = NewEmail("email-verification");
         var userId = await app.RegisterAsync(email);
 
+        // Регистрация только ставит письмо в outbox; диспетчер отправляет его отдельным тиком.
+        await app.RunEmailDispatchAsync();
+
         var registrationMessage = Assert.Single(sender.Messages);
         Assert.Equal(email, registrationMessage.To);
         Assert.Equal(Subject, registrationMessage.Subject);
@@ -92,6 +95,8 @@ public sealed class EmailVerificationTests
         {
             Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
         }
+
+        await app.RunEmailDispatchAsync();
 
         Assert.Equal(2, sender.Messages.Count);
 
@@ -232,6 +237,13 @@ public sealed class EmailVerificationTests
         Assert.Contains(
             "auth.emailVerification.unavailable",
             await ReadErrorCodesAsync(response));
+
+        // 409 приходит до записи в outbox: строк за запрос не появилось.
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Equal(0, await db.EmailOutbox.CountAsync());
+        }
 
         // Пользователь существует и не подтверждён: отказ почты не сломал регистрацию.
         var profile = await app.Client.GetFromJsonAsync<MyProfileResponse>(

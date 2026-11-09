@@ -104,9 +104,10 @@ public class AuthController : ApiController
             return ToCreatedResult(created);
         }
 
-        // Письмо уходит сразу после создания пользователя, но сбой почты не валит
+        // Письмо ставится в outbox сразу после создания пользователя, но сбой почты не валит
         // регистрацию: контракт ответа остаётся 201 { id }, ошибка — только в лог.
-        // Отказ request-команды (почта не настроена, кулдаун, SMTP) здесь не возвращается.
+        // Отправку выполняет фоновый диспетчер (§19), поэтому недоступный SMTP на регистрацию
+        // не влияет. Отказ request-команды (почта не настроена, кулдаун) здесь не возвращается.
         var verification = await requestEmailVerification.Handle(
             new RequestEmailVerificationCommand(created.Value),
             cancellationToken);
@@ -128,8 +129,9 @@ public class AuthController : ApiController
     /// <remarks>
     /// Это cookie-мутация вошедшего пользователя, поэтому antiforgery-фильтр не отключается.
     /// Повторная отправка раньше 60 секунд — <c>409 auth.emailVerification.cooldown</c>,
-    /// ненастроенная почта — <c>409 auth.emailVerification.unavailable</c>, сбой SMTP —
-    /// <c>500 auth.emailVerification.sendFailed</c>.
+    /// ненастроенная почта — <c>409 auth.emailVerification.unavailable</c>. Письмо попадает
+    /// в outbox в той же транзакции, что и токен, и уходит через фоновый диспетчер (§19):
+    /// сбой SMTP на ответ этого запроса не влияет.
     /// </remarks>
     [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
     [HttpPost("email-verification")]

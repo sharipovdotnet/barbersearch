@@ -5,6 +5,7 @@ using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.BarberSpecializations;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.EmailVerifications;
+using BarberSearch.Domain.EmailOutbox;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Notifications;
@@ -58,6 +59,9 @@ public class ApplicationDbContext : DbContext
 
     // Сброс забытого пароля
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+
+    // Очередь исходящих писем (transactional outbox)
+    public DbSet<EmailOutboxMessage> EmailOutbox => Set<EmailOutboxMessage>();
 
     // Уведомления барберу
     public DbSet<BarberNotification> BarberNotifications => Set<BarberNotification>();
