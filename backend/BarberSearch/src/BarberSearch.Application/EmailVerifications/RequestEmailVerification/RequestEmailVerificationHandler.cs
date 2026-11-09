@@ -44,7 +44,6 @@ public sealed class RequestEmailVerificationHandler
     private readonly IEmailVerificationTokenRepository _tokens;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailSender _emailSender;
-    private readonly EmailOptions _emailOptions;
     private readonly AppOptions _appOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RequestEmailVerificationHandler> _logger;
@@ -54,7 +53,6 @@ public sealed class RequestEmailVerificationHandler
         IEmailVerificationTokenRepository tokens,
         IUnitOfWork unitOfWork,
         IEmailSender emailSender,
-        EmailOptions emailOptions,
         AppOptions appOptions,
         TimeProvider timeProvider,
         ILogger<RequestEmailVerificationHandler> logger)
@@ -63,7 +61,6 @@ public sealed class RequestEmailVerificationHandler
         ArgumentNullException.ThrowIfNull(tokens);
         ArgumentNullException.ThrowIfNull(unitOfWork);
         ArgumentNullException.ThrowIfNull(emailSender);
-        ArgumentNullException.ThrowIfNull(emailOptions);
         ArgumentNullException.ThrowIfNull(appOptions);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
@@ -72,7 +69,6 @@ public sealed class RequestEmailVerificationHandler
         _tokens = tokens;
         _unitOfWork = unitOfWork;
         _emailSender = emailSender;
-        _emailOptions = emailOptions;
         _appOptions = appOptions;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -104,7 +100,7 @@ public sealed class RequestEmailVerificationHandler
 
         var publicUrl = _appOptions.PublicUrl?.TrimEnd('/');
 
-        if (!_emailOptions.IsConfigured || string.IsNullOrWhiteSpace(publicUrl))
+        if (!_emailSender.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Auth.EmailVerificationUnavailable,

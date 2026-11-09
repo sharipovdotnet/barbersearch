@@ -200,7 +200,9 @@ public sealed class EmailVerificationTests
     [Fact(Timeout = 180_000)]
     public async Task Request_without_configured_email_returns_unavailable_but_registration_works()
     {
-        var sender = new CapturingEmailSender();
+        // Подменный отправитель тоже «не настроен»: готовность почты — его свойство,
+        // а не глобальной конфигурации, которую видит только реальный SMTP-транспорт.
+        var sender = new CapturingEmailSender { IsAvailable = false };
 
         await using var app = await TestApp.StartAsync(
             _database,

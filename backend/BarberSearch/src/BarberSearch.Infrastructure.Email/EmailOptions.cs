@@ -1,13 +1,15 @@
 using System.Net.Mail;
 
-namespace BarberSearch.Application.EmailVerifications;
+namespace BarberSearch.Infrastructure.Email;
 
 /// <summary>
 /// Настройки отправки писем — секция конфигурации <c>Email</c>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Заполняется композиционным корнем Web и регистрируется синглтоном, как
+/// Транспортные настройки SMTP: Application их не видит и не зависит от
+/// <see cref="System.Net.Mail"/>. Заполняется композиционным корнем Web и регистрируется
+/// синглтоном через <see cref="EmailSenderExtensions.AddEmailSender"/>, как
 /// <c>TelegramOptions</c>. Пароль — секрет: он приходит из user secrets или переменных
 /// окружения и никогда не попадает в ответы API и в логи.
 /// </para>
