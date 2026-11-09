@@ -29,6 +29,7 @@
         <ProjectReference Include="..\BarberSearch.Application\BarberSearch.Application.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Email\BarberSearch.Infrastructure.Email.csproj" />
+        <ProjectReference Include="..\BarberSearch.Infrastructure.Telegram\BarberSearch.Infrastructure.Telegram.csproj" />
     </ItemGroup>
 
 </Project>

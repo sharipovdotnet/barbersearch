@@ -21,7 +21,7 @@ namespace BarberSearch.Application.Notifications.GetNotificationSettings;
 /// первичного ключа, и обработчик перечитывает уже созданную строку.
 /// </para>
 /// <para>
-/// <c>botConfigured</c> приходит из конфигурации (<see cref="TelegramOptions.IsConfigured"/>),
+/// <c>botConfigured</c> приходит из порта <see cref="ITelegramBot.IsConfigured"/>,
 /// а не из базы: это состояние сервера, а не настройка барбера. Идентификатор чата наружу
 /// не отдаётся — только <c>telegramLinked</c>/<c>telegramLinkedAt</c>.
 /// </para>
@@ -31,20 +31,20 @@ public sealed class GetNotificationSettingsHandler
 {
     private readonly IBarberNotificationSettingsRepository _settings;
     private readonly ICurrentUser _currentUser;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly ITelegramBot _telegramBot;
 
     public GetNotificationSettingsHandler(
         IBarberNotificationSettingsRepository settings,
         ICurrentUser currentUser,
-        TelegramOptions telegramOptions)
+        ITelegramBot telegramBot)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(currentUser);
-        ArgumentNullException.ThrowIfNull(telegramOptions);
+        ArgumentNullException.ThrowIfNull(telegramBot);
 
         _settings = settings;
         _currentUser = currentUser;
-        _telegramOptions = telegramOptions;
+        _telegramBot = telegramBot;
     }
 
     /// <summary>
@@ -102,6 +102,6 @@ public sealed class GetNotificationSettingsHandler
             }
         }
 
-        return NotificationMapping.ToSettingsResponse(settings, _telegramOptions.IsConfigured);
+        return NotificationMapping.ToSettingsResponse(settings, _telegramBot.IsConfigured);
     }
 }

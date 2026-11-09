@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BarberSearch.Web.Notifications;
+namespace BarberSearch.Infrastructure.Telegram;
 
 /// <summary>
 /// Сообщение Telegram, из которого берутся чат и текст команды.

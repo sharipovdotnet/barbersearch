@@ -29,20 +29,20 @@ public sealed class UpdateNotificationSettingsHandler
 {
     private readonly IBarberNotificationSettingsRepository _settings;
     private readonly ICurrentUser _currentUser;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly ITelegramBot _telegramBot;
 
     public UpdateNotificationSettingsHandler(
         IBarberNotificationSettingsRepository settings,
         ICurrentUser currentUser,
-        TelegramOptions telegramOptions)
+        ITelegramBot telegramBot)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(currentUser);
-        ArgumentNullException.ThrowIfNull(telegramOptions);
+        ArgumentNullException.ThrowIfNull(telegramBot);
 
         _settings = settings;
         _currentUser = currentUser;
-        _telegramOptions = telegramOptions;
+        _telegramBot = telegramBot;
     }
 
     /// <summary>
@@ -107,7 +107,7 @@ public sealed class UpdateNotificationSettingsHandler
             return saved.Error;
         }
 
-        return NotificationMapping.ToSettingsResponse(settings, _telegramOptions.IsConfigured);
+        return NotificationMapping.ToSettingsResponse(settings, _telegramBot.IsConfigured);
     }
 
     /// <summary>

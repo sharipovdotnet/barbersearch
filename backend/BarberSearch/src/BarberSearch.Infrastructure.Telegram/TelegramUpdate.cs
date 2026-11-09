@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BarberSearch.Web.Notifications;
+namespace BarberSearch.Infrastructure.Telegram;
 
 /// <summary>
 /// Обновление Telegram Bot API, пришедшее на вебхук.

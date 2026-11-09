@@ -6,7 +6,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
 
-namespace BarberSearch.Web.Notifications;
+namespace BarberSearch.Infrastructure.Telegram;
 
 /// <summary>
 /// Отправка сообщений в Telegram Bot API через <see cref="IHttpClientFactory"/>.
@@ -16,6 +16,7 @@ namespace BarberSearch.Web.Notifications;
 /// Адрес — <c>https://api.telegram.org/bot{token}/sendMessage</c>; пакет для Bot API не
 /// нужен, запрос — обычная форма <c>chat_id</c> + <c>text</c>. Токен приходит из
 /// <see cref="TelegramOptions"/> и никогда не попадает в лог, текст ошибки или ответ API.
+/// Регистрируется через <see cref="TelegramSenderExtensions.AddTelegramSender"/>.
 /// </para>
 /// <para>
 /// Ошибки разделены так, как требует <see cref="ITelegramSender"/>: <c>400</c>/<c>403</c> —

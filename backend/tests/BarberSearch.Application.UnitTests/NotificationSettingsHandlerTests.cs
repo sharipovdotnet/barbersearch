@@ -23,12 +23,8 @@ public class NotificationSettingsHandlerTests
 
     private const string BotUsername = "barbersearch_bot";
 
-    private static readonly TelegramOptions ConfiguredBot = new()
-    {
-        BotToken = "test-token",
-        BotUsername = BotUsername,
-        WebhookSecret = "secret"
-    };
+    private static readonly FakeTelegramBot ConfiguredBot =
+        new(botUsername: BotUsername);
 
     [Fact]
     public async Task Get_CreatesDefaultsOnTheFirstRead()
@@ -82,7 +78,7 @@ public class NotificationSettingsHandlerTests
         var handler = new GetNotificationSettingsHandler(
             new FakeBarberNotificationSettingsRepository(),
             new FakeCurrentUser(userId),
-            new TelegramOptions());
+            new FakeTelegramBot(isConfigured: false));
 
         var result = await handler.Handle(new GetNotificationSettingsQuery(), CancellationToken.None);
 
@@ -274,7 +270,7 @@ public class NotificationSettingsHandlerTests
         var handler = new CreateTelegramLinkHandler(
             new FakeBarberNotificationSettingsRepository(),
             new FakeCurrentUser(userId),
-            new TelegramOptions(),
+            new FakeTelegramBot(isConfigured: false),
             new FakeTimeProvider(Now));
 
         var result = await handler.Handle(new CreateTelegramLinkCommand(), CancellationToken.None);

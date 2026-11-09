@@ -1,10 +1,10 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: **11 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **393 domain + 677 application + 188 infrastructure + 209 integration (1467 total)**;
+> Tests: **393 domain + 677 application + 192 infrastructure + 210 integration (1472 total)**;
 > the three unit projects are green locally (2026-11-09), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
@@ -147,12 +147,19 @@ backend/                                  ← workspace root
         │   ├── EmailSenderExtensions.cs  ← AddEmailSender: один singleton на оба интерфейса
         │   └── BarberSearch.Infrastructure.Email.csproj → Application
         │
+        ├── BarberSearch.Infrastructure.Telegram/       ← Telegram Bot API: транспорт и модели вебхука
+        │   ├── TelegramSender.cs         ← ITelegramSender на именованном HttpClient
+        │   ├── TelegramOptions.cs        ← секция Telegram + ITelegramBot (глубина ссылки t.me)
+        │   ├── TelegramChat.cs, TelegramMessage.cs, TelegramUpdate.cs  ← модели вебхука Bot API
+        │   ├── TelegramSenderExtensions.cs ← AddTelegramSender: настройки, ITelegramBot, HttpClient, отправитель
+        │   └── BarberSearch.Infrastructure.Telegram.csproj → Application
+        │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── Emails/                   ← EmailDispatchService (воркер outbox) + EmailTickResult (§19)
-            ├── Notifications/            ← ReminderDispatchService, TelegramSender
+            ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (12 actions)
@@ -175,7 +182,9 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 `Infrastructure` → `Application`
 → `Contracts`, `Domain` → `Shared` · `Contracts` → `Domain` (только ради enum'ов `Language` /
 `PaymentMethod` в контрактах) · `BarberSearch.Infrastructure.Email` → `Application` только
-(почтовый транспорт не знает домена и EF) · `Shared` → CSharpFunctionalExtensions.
+(почтовый транспорт не знает домена и EF) · `BarberSearch.Infrastructure.Telegram` →
+`Application` только (транспорт Bot API не знает домена и EF; Web видит и его настройки —
+контроллеру вебхука нужен `WebhookSecret`) · `Shared` → CSharpFunctionalExtensions.
 
 > Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
 > (`Users/IUserRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`),
@@ -276,14 +285,15 @@ its environment variables.
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all ten projects. Verify with:
+`BarberSearch.sln` lists all twelve projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
 ```
 
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
-`BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`, `Shared`,
+`BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`,
+`BarberSearch.Infrastructure.Email`, `BarberSearch.Infrastructure.Telegram`, `Shared`,
 `..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
 `..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`,
 `..\tests\BarberSearch.Infrastructure.UnitTests\BarberSearch.Infrastructure.UnitTests.csproj`,
@@ -309,11 +319,16 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 `{A5487549-6B9C-462E-992A-DA0F87B69383}`; вложен в папку `tests`. Тесты проверяют модель
 `xmin` у 16 сущностей и маппинг `DbUpdateConcurrencyException` в `409`; базы данных не требуют.
 
-Since 2026-10-25 (R-54) all ten `Project(…)` entries use the SDK-style project type GUID
+**`BarberSearch.Infrastructure.Telegram` добавлен 2026-11-09 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Infrastructure.Email`, четыре строки
+`ProjectConfigurationPlatforms`, GUID проекта — `{7C4E1A2B-9D3F-4E58-B6A1-2F8C5D7E9B03}`;
+проект не вложен ни в одну папку решения.
+
+Since 2026-10-25 (R-54) all twelve `Project(…)` entries use the SDK-style project type GUID
 `{9A19103F-16F7-4668-BE54-9A1E7A4F7556}`; the legacy C# project-type GUID is gone. The solution
 folder `tests` keeps `{2150E333-…}`. Nothing else in the file was touched: project GUIDs, paths,
 configurations and the order of the lines are unchanged. `dotnet sln list` still prints the same
-ten projects, and Debug and Release build with 0 errors / 0 warnings.
+twelve projects, and Debug and Release build with 0 errors / 0 warnings.
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
 > adds `x64`/`x86` solution configurations for every project and nests the new project into the
@@ -415,7 +430,7 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTe
 ```
 
 Актуальный baseline на 2026-11-09 (срез email-outbox): domain **393**, application **677**,
-infrastructure **188**, integration **209** — всего **1467**, все зелёные на локальной PostgreSQL.
+infrastructure **192**, integration **210** — всего **1472**, все зелёные на локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
@@ -706,9 +721,9 @@ The rules below were pushed to the application layer because the aggregate canno
 
 | Слой | Статус |
 |---|---|
-| Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
+| Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 393 domain + 677 application + 188 infrastructure + 209 integration (1467 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 393 domain + 677 application + 192 infrastructure + 210 integration (1472 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 133 обработчика (98 command + 35 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 39 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BarberSearch.Web.Notifications;
+namespace BarberSearch.Infrastructure.Telegram;
 
 /// <summary>
 /// Чат Telegram: идентификатор, по которому бот отправляет сообщения.

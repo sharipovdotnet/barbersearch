@@ -2,6 +2,7 @@ using System.Globalization;
 using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Infrastructure.Email;
+using BarberSearch.Infrastructure.Telegram;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
@@ -50,9 +51,6 @@ try
         builder.Configuration.GetSection(RemindersOptions.SECTION).Get<RemindersOptions>()
         ?? new RemindersOptions());
     builder.Services.AddSingleton(
-        builder.Configuration.GetSection(TelegramOptions.SECTION).Get<TelegramOptions>()
-        ?? new TelegramOptions());
-    builder.Services.AddSingleton(
         builder.Configuration.GetSection(AppOptions.SECTION).Get<AppOptions>()
         ?? new AppOptions());
 
@@ -74,10 +72,10 @@ try
     builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailDispatchService>());
 
     // Telegram — единственный внешний HTTP-канал напоминаний; отдельного NuGet-пакета нет.
-    builder.Services.AddHttpClient(
-        TelegramSender.HTTP_CLIENT_NAME,
-        client => client.Timeout = TelegramSender.REQUEST_TIMEOUT);
-    builder.Services.AddSingleton<ITelegramSender, TelegramSender>();
+    // Пустая секция — нормальное состояние: канал выключен, воркер работает без него.
+    builder.Services.AddTelegramSender(
+        builder.Configuration.GetSection(TelegramOptions.SECTION).Get<TelegramOptions>()
+        ?? new TelegramOptions());
 
     // Воркер напоминаний. Конкретный тип — синглтон, а хост получает его же через фабрику:
     // интеграционный тест вызывает RunTickAsync у того же экземпляра, не создавая второй
