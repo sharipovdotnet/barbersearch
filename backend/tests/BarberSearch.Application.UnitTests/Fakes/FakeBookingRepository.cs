@@ -469,7 +469,8 @@ public sealed class FakeBookingRepository : IBookingRepository
             booking.CustomerNote,
             booking.BarberNote,
             booking.CancellationReason,
-            booking.CreatedAt);
+            booking.CreatedAt,
+            HasReview: false);
 
     /// <summary>
     /// Запись барбера с синтетическим клиентом: фейк проверяет фильтры и порядок,

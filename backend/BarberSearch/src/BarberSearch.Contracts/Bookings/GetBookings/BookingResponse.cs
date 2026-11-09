@@ -28,6 +28,11 @@ namespace BarberSearch.Contracts.Bookings.GetBookings;
 /// (отмена клиентом или запись старше среза).
 /// </param>
 /// <param name="CreatedAt">Когда бронь создана.</param>
+/// <param name="HasReview">
+/// По брони уже оставлен отзыв (в любом статусе модерации). Кабинет скрывает
+/// «Оставить отзыв» и показывает «Отзыв отправлен»; удаление отзыва снова делает
+/// флаг <c>false</c>, потому что уникальный индекс освобождается.
+/// </param>
 public record BookingResponse(
     Guid Id,
     Guid? UserId,
@@ -42,4 +47,5 @@ public record BookingResponse(
     string? CustomerNote,
     string? BarberNote,
     string? CancellationReason,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    bool HasReview);

@@ -25,6 +25,7 @@ const booking = (
   customerNote: null,
   barberNote: null,
   cancellationReason: null,
+  hasReview: false,
   createdAt: '2026-11-01T09:00:00Z',
 })
 

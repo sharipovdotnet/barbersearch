@@ -36,7 +36,10 @@ export function BookingRow({
   const timeZone = view.timeZoneId
   const when = formatDateTime(booking.startAt, timeZone)
   const canCancel = canCancelBooking(booking.status)
-  const canReview = canReviewBooking(booking.status) && !isReviewed
+  // Отзыв мог уйти в этой сессии (`isReviewed`) или прийти с сервера (`hasReview`):
+  // без второго флага звезда возвращалась после перезагрузки истории.
+  const isAlreadyReviewed = isReviewed || booking.hasReview
+  const canReview = canReviewBooking(booking.status) && !isAlreadyReviewed
 
   return (
     <li className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/40 sm:grid-cols-[4.5rem_minmax(0,1fr)_5.5rem_auto] sm:items-center sm:gap-x-4">
@@ -96,7 +99,7 @@ export function BookingRow({
             </Button>
           )}
 
-          {canReviewBooking(booking.status) && isReviewed && (
+          {canReviewBooking(booking.status) && isAlreadyReviewed && (
             <span
               title={t('Отзыв отправлен')}
               className="inline-flex size-7 items-center justify-center text-muted-foreground"

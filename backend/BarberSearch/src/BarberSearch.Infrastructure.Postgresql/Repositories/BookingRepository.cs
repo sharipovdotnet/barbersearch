@@ -229,7 +229,9 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 booking.CustomerNote,
                 booking.BarberNote,
                 booking.CancellationReason,
-                booking.CreatedAt))
+                booking.CreatedAt,
+                // EXISTS по уникальному ux_reviews_booking_id: отзыв один на бронь.
+                Context.Reviews.Any(review => review.BookingId == booking.Id)))
             .ToListAsync(cancellationToken);
 
         return rows;
