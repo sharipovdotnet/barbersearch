@@ -1,8 +1,10 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Users;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
+using BarberSearch.Domain.EmailOutbox;
 using BarberSearch.Domain.PasswordResets;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
@@ -12,13 +14,13 @@ using Shared;
 namespace BarberSearch.Application.PasswordResets.RequestPasswordReset;
 
 /// <summary>
-/// Выпускает одноразовый токен сброса пароля и отправляет письмо со ссылкой.
+/// Выпускает одноразовый токен сброса пароля и кладёт письмо со ссылкой в outbox.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Порядок проверок зафиксирован §4.3 спеки: глобальная конфигурация → формат адреса →
-/// пользователь → активность → кулдаун → одна транзакция «отозвать активный токен и вставить
-/// новый» → отправка письма **после** коммита.
+/// пользователь → активность → кулдаун → одна транзакция «отозвать активный токен, вставить
+/// новый и положить письмо в outbox».
 /// </para>
 /// <para>
 /// Анти-энумерация важнее честности ошибок: для несуществующего, неактивного, пустого и
@@ -27,8 +29,9 @@ namespace BarberSearch.Application.PasswordResets.RequestPasswordReset;
 /// <c>App:PublicUrl</c> не настроены; он возвращается **до** поиска пользователя.
 /// </para>
 /// <para>
-/// Кулдаун и сбой SMTP тихие: иначе существующий адрес отличался бы от несуществующего.
-/// Сбой отправки не откатывает токен — через кулдаун можно запросить новое письмо.
+/// Письмо не отправляется из запроса: оно попадает в <c>email_outbox</c> в той же транзакции,
+/// что и токен, и уходит через фоновый диспетчер. Поэтому недоступный SMTP больше не влияет
+/// на ответ — и не может стать оракулом существования адреса.
 /// </para>
 /// <para>
 /// В лог попадают только идентификатор пользователя и коды ошибок: адрес получателя,
@@ -48,8 +51,9 @@ public sealed class RequestPasswordResetHandler
 
     private readonly IUserRepository _users;
     private readonly IPasswordResetTokenRepository _tokens;
+    private readonly IEmailOutboxRepository _outbox;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailSender _emailSender;
+    private readonly IEmailSenderAvailability _emailAvailability;
     private readonly AppOptions _appOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RequestPasswordResetHandler> _logger;
@@ -57,31 +61,34 @@ public sealed class RequestPasswordResetHandler
     public RequestPasswordResetHandler(
         IUserRepository users,
         IPasswordResetTokenRepository tokens,
+        IEmailOutboxRepository outbox,
         IUnitOfWork unitOfWork,
-        IEmailSender emailSender,
+        IEmailSenderAvailability emailAvailability,
         AppOptions appOptions,
         TimeProvider timeProvider,
         ILogger<RequestPasswordResetHandler> logger)
     {
         ArgumentNullException.ThrowIfNull(users);
         ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(outbox);
         ArgumentNullException.ThrowIfNull(unitOfWork);
-        ArgumentNullException.ThrowIfNull(emailSender);
+        ArgumentNullException.ThrowIfNull(emailAvailability);
         ArgumentNullException.ThrowIfNull(appOptions);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _users = users;
         _tokens = tokens;
+        _outbox = outbox;
         _unitOfWork = unitOfWork;
-        _emailSender = emailSender;
+        _emailAvailability = emailAvailability;
         _appOptions = appOptions;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
     /// <summary>
-    /// Проверяет адрес и состояние пользователя, выпускает новый токен и отправляет письмо.
+    /// Проверяет адрес и состояние пользователя, выпускает новый токен и ставит письмо в outbox.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         RequestPasswordResetCommand command,
@@ -93,7 +100,7 @@ public sealed class RequestPasswordResetHandler
 
         // Глобальное состояние сервера проверяется до поиска пользователя: иначе 409
         // получали бы только существующие адреса и стал бы оракулом существования.
-        if (!_emailSender.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
+        if (!_emailAvailability.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Auth.PasswordResetUnavailable,
@@ -160,9 +167,33 @@ public sealed class RequestPasswordResetHandler
 
         var token = created.Value;
 
-        // Отзыв предыдущего активного и вставка нового — одна транзакция: в базе не должно
-        // остаться двух активных строк. Повторное чтение внутри транзакции закрывает окно
-        // между проверкой кулдауна и записью; частичный уникальный индекс — последняя защита.
+        // Ссылка собирается ровно в одном месте; PublicUrl уже проверен на пустоту.
+        var link = $"{publicUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
+
+        var content = PasswordResetMessage.Create(
+            user.Email,
+            user.FirstName,
+            link,
+            (int)PasswordResetLifetime.TOKEN_LIFETIME.TotalMinutes);
+
+        // Ключ дедупликации — id токена: одно письмо на одну выданную строку токена.
+        var queued = EmailOutboxMessage.Create(
+            token.Id.ToString("D"),
+            content.To,
+            content.Subject,
+            content.HtmlBody,
+            content.TextBody,
+            now);
+
+        if (queued.IsFailure)
+        {
+            return queued.Error;
+        }
+
+        // Отзыв предыдущего активного, вставка нового токена и строка outbox — одна транзакция:
+        // в базе не должно остаться двух активных строк, а письмо не должно пережить откат
+        // токена (или наоборот). Повторное чтение внутри транзакции закрывает окно между
+        // проверкой кулдауна и записью; частичный уникальный индекс — последняя защита.
         var persisted = await _unitOfWork.ExecuteAsync(async transactionToken =>
         {
             var existingResult = await _tokens.GetActiveByUserIdAsync(user.Id, transactionToken);
@@ -186,7 +217,13 @@ public sealed class RequestPasswordResetHandler
                 }
             }
 
-            return await _tokens.AddAsync(token, transactionToken);
+            var addedToken = await _tokens.AddAsync(token, transactionToken);
+            if (addedToken.IsFailure)
+            {
+                return addedToken.Error;
+            }
+
+            return await _outbox.AddAsync(queued.Value, transactionToken);
         }, cancellationToken);
 
         if (persisted.IsFailure)
@@ -205,30 +242,10 @@ public sealed class RequestPasswordResetHandler
             return persisted.Error;
         }
 
-        // Ссылка собирается ровно в одном месте; PublicUrl уже проверен на пустоту.
-        var link = $"{publicUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
-
-        var message = PasswordResetMessage.Create(
-            user.Email,
-            user.FirstName,
-            link,
-            (int)PasswordResetLifetime.TOKEN_LIFETIME.TotalMinutes);
-
-        var sent = await _emailSender.SendAsync(message, cancellationToken);
-        if (sent.IsFailure)
-        {
-            // Сбой SMTP — тихий: 500 только для существующего адреса был бы оракулом.
-            // Токен остаётся в базе, повторная отправка возможна после кулдауна.
-            _logger.LogWarning(
-                "Failed to send the password reset message to user {UserId}: {ErrorCodes}.",
-                user.Id,
-                string.Join(", ", sent.Error.Errors.Select(error => error.Code)));
-
-            return UnitResult.Success<Failure>();
-        }
-
+        // Письмо ещё не отправлено — его отправит диспетчер. В лог не попадают ни адрес,
+        // ни токен: только пользователь и факт постановки в очередь.
         _logger.LogInformation(
-            "Password reset message has been sent to user {UserId}.",
+            "Password reset message for user {UserId} has been queued in the outbox.",
             user.Id);
 
         return UnitResult.Success<Failure>();

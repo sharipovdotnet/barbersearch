@@ -509,6 +509,87 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.EmailOutbox.EmailOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DeduplicationKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("deduplication_key");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
+                    b.Property<string>("HtmlBody")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("html_body");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("TextBody")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text_body");
+
+                    b.Property<string>("ToEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("to_email");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_email_outbox");
+
+                    b.HasIndex("DeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_email_outbox_deduplication_key");
+
+                    b.HasIndex("SentAt", "FailedAt", "NextAttemptAt")
+                        .HasDatabaseName("ix_email_outbox_dispatch");
+
+                    b.ToTable("email_outbox", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_email_outbox_attempts", "attempts >= 0");
+
+                            t.HasCheckConstraint("ck_email_outbox_state", "NOT (sent_at IS NOT NULL AND failed_at IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.EmailVerifications.EmailVerificationToken", b =>
                 {
                     b.Property<Guid>("Id")

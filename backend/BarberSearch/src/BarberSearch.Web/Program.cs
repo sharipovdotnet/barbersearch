@@ -1,10 +1,12 @@
 using System.Globalization;
+using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Infrastructure.Email;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
+using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
 using Microsoft.Extensions.Hosting;
@@ -59,6 +61,17 @@ try
     builder.Services.AddEmailSender(
         builder.Configuration.GetSection(EmailOptions.SECTION).Get<EmailOptions>()
         ?? new EmailOptions());
+
+    // Outbox писем: настройки уже проверены StartupSettings (диапазоны BatchSize, IntervalSeconds,
+    // MaxAttempts, RetentionDays). Выключенный воркер не роняет старт и не теряет письма —
+    // обработчики пишут строки всегда, когда почта настроена.
+    builder.Services.AddSingleton(startup.EmailOutbox);
+
+    // Воркер outbox. Конкретный тип — синглтон, а хост получает его же через фабрику:
+    // интеграционный тест вызывает RunTickAsync у того же экземпляра, не создавая второй
+    // фоновый сервис (тот же приём, что у ReminderDispatchService).
+    builder.Services.AddSingleton<EmailDispatchService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailDispatchService>());
 
     // Telegram — единственный внешний HTTP-канал напоминаний; отдельного NuGet-пакета нет.
     builder.Services.AddHttpClient(

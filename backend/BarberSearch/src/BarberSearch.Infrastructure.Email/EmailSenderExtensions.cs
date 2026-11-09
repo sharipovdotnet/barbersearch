@@ -16,6 +16,12 @@ public static class EmailSenderExtensions
     /// <summary>
     /// Регистрирует настройки почты и SMTP-отправитель синглтонами.
     /// </summary>
+    /// <remarks>
+    /// Транспорт регистрируется дважды, но экземпляр один: <see cref="IEmailSender"/> нужен
+    /// диспетчеру outbox, <see cref="IEmailSenderAvailability"/> — обработчикам запросов,
+    /// которых интересует только «почта настроена». Оба интерфейса реализует
+    /// <see cref="SmtpEmailSender"/>.
+    /// </remarks>
     /// <param name="services">Коллекция сервисов композиционного корня.</param>
     /// <param name="options">Связанная секция <c>Email</c>; пустая секция допустима.</param>
     public static IServiceCollection AddEmailSender(
@@ -26,7 +32,10 @@ public static class EmailSenderExtensions
         ArgumentNullException.ThrowIfNull(options);
 
         services.AddSingleton(options);
-        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<SmtpEmailSender>();
+        services.AddSingleton<IEmailSender>(sp => sp.GetRequiredService<SmtpEmailSender>());
+        services.AddSingleton<IEmailSenderAvailability>(
+            sp => sp.GetRequiredService<SmtpEmailSender>());
 
         return services;
     }

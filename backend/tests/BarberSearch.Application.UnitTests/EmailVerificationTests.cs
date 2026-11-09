@@ -3,9 +3,11 @@ using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.EmailVerifications.CleanupEmailVerificationTokens;
 using BarberSearch.Application.EmailVerifications.ConfirmEmailVerification;
 using BarberSearch.Application.EmailVerifications.RequestEmailVerification;
+using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.EmailOutbox;
 using BarberSearch.Domain.EmailVerifications;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
@@ -48,12 +50,14 @@ public class EmailVerificationTests
         Assert.Equal(Now, revoked.RevokedAt);
         Assert.Null(revoked.ConsumedAt);
 
-        // Отзыв и вставка — в одной транзакции, письмо уходит после коммита.
+        // Отзыв, вставка токена и строка outbox — в одной транзакции; из запроса письмо
+        // не отправляется, его заберёт диспетчер.
         Assert.True(context.Tokens.UpdateInTransaction);
         Assert.True(context.Tokens.AddInTransaction);
+        Assert.True(context.Outbox.AddInTransaction);
         Assert.Equal(1, context.UnitOfWork.CommitCount);
-        Assert.False(context.Sender.SentInTransaction);
-        Assert.Single(context.Sender.Messages);
+        Assert.Equal(0, context.Sender.SendCallCount);
+        Assert.Single(context.Outbox.Messages);
     }
 
     [Fact]
@@ -67,7 +71,7 @@ public class EmailVerificationTests
 
         Assert.True(result.IsSuccess);
 
-        var message = Assert.Single(context.Sender.Messages);
+        var message = Assert.Single(context.Outbox.Messages);
         Assert.Equal(context.User.Email, message.To);
         Assert.Equal(EmailVerificationMessage.SUBJECT, message.Subject);
 
@@ -111,7 +115,7 @@ public class EmailVerificationTests
         Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
         Assert.Equal("auth.emailVerification.cooldown", result.Error.Errors[0].Code);
         Assert.Single(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
         Assert.Equal(0, context.Tokens.AddCallCount);
     }
 
@@ -129,7 +133,7 @@ public class EmailVerificationTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, context.StoredTokens.Count);
-        Assert.Single(context.Sender.Messages);
+        Assert.Single(context.Outbox.Messages);
     }
 
     [Fact]
@@ -145,7 +149,7 @@ public class EmailVerificationTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -161,7 +165,7 @@ public class EmailVerificationTests
         Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
         Assert.Equal("auth.emailVerification.unavailable", result.Error.Errors[0].Code);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -175,13 +179,16 @@ public class EmailVerificationTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("auth.emailVerification.unavailable", result.Error.Errors[0].Code);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
-    public async Task Request_WhenSenderFails_ReturnsSendFailedAndKeepsStoredToken()
+    public async Task Request_QueuesLetterAndNeverCallsTheTransport()
     {
         var context = new Context();
+
+        // Даже недоступный SMTP не влияет на запрос: письмо не отправляется из обработчика,
+        // оно лежит в outbox и уйдёт через диспетчер.
         context.Sender.Behavior = _ => UnitResult.Failure(
             new Failure(Error.Failure("smtp.unavailable", "SMTP is unreachable.")));
 
@@ -189,14 +196,43 @@ public class EmailVerificationTests
             new RequestEmailVerificationCommand(context.User.Id),
             CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(ErrorType.FAILURE, result.Error.Errors[0].Type);
-        Assert.Equal("auth.emailVerification.sendFailed", result.Error.Errors[0].Code);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, context.Sender.SendCallCount);
 
-        // Отправка идёт после коммита: токен остался, чтобы повторная отправка была
-        // осмысленной; откатывать его из-за сбоя транспорта бессмысленно.
+        var queued = Assert.Single(context.Outbox.Rows);
+        Assert.Equal(context.User.Email, queued.ToEmail);
+        Assert.Equal(EmailVerificationMessage.SUBJECT, queued.Subject);
+        Assert.Equal(0, queued.Attempts);
+        Assert.Null(queued.SentAt);
+        Assert.Null(queued.FailedAt);
+        Assert.Equal(Now, queued.NextAttemptAt);
+        Assert.Equal(queued.DeduplicationKey, Assert.Single(context.StoredTokens).Id.ToString("D"));
+
+        // Токен и письмо зафиксированы вместе.
         Assert.Single(context.StoredTokens);
         Assert.Equal(1, context.UnitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task Request_WhenOutboxInsertFails_RollsBackTokenAsWell()
+    {
+        var context = new Context();
+        var previous = context.SeedToken(Now.AddMinutes(-5));
+        context.Outbox.AddBehavior = _ => UnitResult.Failure(
+            new Failure(Error.Failure("emailOutbox.add.failed", "Insert failed.")));
+
+        var result = await context.Requester.Handle(
+            new RequestEmailVerificationCommand(context.User.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(1, context.UnitOfWork.RollbackCount);
+
+        // Откат вернул и отзыв прежнего токена, и вставку нового: письма нет, строки нет.
+        var stored = Assert.Single(context.StoredTokens);
+        Assert.Equal(previous.Id, stored.Id);
+        Assert.Null(stored.RevokedAt);
+        Assert.Empty(context.Outbox.Rows);
     }
 
     [Fact]
@@ -210,7 +246,7 @@ public class EmailVerificationTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.NOT_FOUND, result.Error.Errors[0].Type);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -231,7 +267,7 @@ public class EmailVerificationTests
         var stored = Assert.Single(context.StoredTokens);
         Assert.Equal(previous.Id, stored.Id);
         Assert.Null(stored.RevokedAt);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -254,7 +290,7 @@ public class EmailVerificationTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Single(context.Sender.Messages);
+        Assert.Single(context.Outbox.Messages);
     }
 
     [Fact]
@@ -508,15 +544,17 @@ public class EmailVerificationTests
             Users.Add(User);
 
             Tokens = new FakeEmailVerificationTokenRepository();
-            UnitOfWork = new FakeUnitOfWork(Users, Tokens);
+            Outbox = new FakeEmailOutboxRepository();
+            UnitOfWork = new FakeUnitOfWork(Users, Tokens, Outbox);
             Tokens.IsInTransaction = () => UnitOfWork.IsInTransaction;
-            Sender.IsInTransaction = () => UnitOfWork.IsInTransaction;
+            Outbox.IsInTransaction = () => UnitOfWork.IsInTransaction;
 
             Sender.IsAvailable = emailEnabled;
 
             Requester = new RequestEmailVerificationHandler(
                 Users,
                 Tokens,
+                Outbox,
                 UnitOfWork,
                 Sender,
                 new AppOptions { PublicUrl = publicUrl },
@@ -538,6 +576,8 @@ public class EmailVerificationTests
         public FakeUserRepository Users { get; } = new();
 
         public FakeEmailVerificationTokenRepository Tokens { get; }
+
+        public FakeEmailOutboxRepository Outbox { get; }
 
         public FakeEmailSender Sender { get; } = new();
 

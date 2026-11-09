@@ -1,7 +1,9 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Users;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.EmailOutbox;
 using BarberSearch.Domain.EmailVerifications;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -10,22 +12,23 @@ using Shared;
 namespace BarberSearch.Application.EmailVerifications.RequestEmailVerification;
 
 /// <summary>
-/// Отправляет письмо со ссылкой подтверждения email.
+/// Выпускает одноразовый токен подтверждения email и кладёт письмо в outbox.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Порядок проверок зафиксирован: пользователь → уже подтверждён → почта настроена →
-/// кулдаун → транзакция «отозвать активный токен и вставить новый» → отправка письма
-/// **после** коммита.
+/// кулдаун → одна транзакция «отозвать активный токен, вставить новый и положить письмо
+/// в outbox».
 /// </para>
 /// <para>
-/// Отправка после коммита, а не внутри транзакции: письмо нельзя откатить, а строка токена
-/// должна существовать, когда пользователь перейдёт по ссылке. Сбой отправки не откатывает
-/// токен — пользователь повторит отправку через кулдаун.
+/// Письмо больше не отправляется из запроса. Строка <c>email_outbox</c> пишется в той же
+/// транзакции, что и токен, поэтому письмо не теряется, даже когда SMTP недоступен; отправляет
+/// его фоновый диспетчер с ретраями (at-least-once, дубликат допустим). Сбой отправки не
+/// откатывает токен — письмо уйдёт, когда транспорт восстановится.
 /// </para>
 /// <para>
-/// В лог попадают только идентификатор пользователя и коды ошибок: адрес получателя и
-/// открытый токен — персональные данные и секрет.
+/// В лог попадают только идентификатор пользователя и коды ошибок: адрес получателя,
+/// открытый токен и тело письма — персональные данные и секрет.
 /// </para>
 /// </remarks>
 public sealed class RequestEmailVerificationHandler
@@ -37,13 +40,11 @@ public sealed class RequestEmailVerificationHandler
     private const string COOLDOWN_MESSAGE =
         "The verification email has already been sent. Try again in a minute.";
 
-    private const string SEND_FAILED_MESSAGE =
-        "The verification email could not be sent.";
-
     private readonly IUserRepository _users;
     private readonly IEmailVerificationTokenRepository _tokens;
+    private readonly IEmailOutboxRepository _outbox;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailSender _emailSender;
+    private readonly IEmailSenderAvailability _emailAvailability;
     private readonly AppOptions _appOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RequestEmailVerificationHandler> _logger;
@@ -51,31 +52,34 @@ public sealed class RequestEmailVerificationHandler
     public RequestEmailVerificationHandler(
         IUserRepository users,
         IEmailVerificationTokenRepository tokens,
+        IEmailOutboxRepository outbox,
         IUnitOfWork unitOfWork,
-        IEmailSender emailSender,
+        IEmailSenderAvailability emailAvailability,
         AppOptions appOptions,
         TimeProvider timeProvider,
         ILogger<RequestEmailVerificationHandler> logger)
     {
         ArgumentNullException.ThrowIfNull(users);
         ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(outbox);
         ArgumentNullException.ThrowIfNull(unitOfWork);
-        ArgumentNullException.ThrowIfNull(emailSender);
+        ArgumentNullException.ThrowIfNull(emailAvailability);
         ArgumentNullException.ThrowIfNull(appOptions);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _users = users;
         _tokens = tokens;
+        _outbox = outbox;
         _unitOfWork = unitOfWork;
-        _emailSender = emailSender;
+        _emailAvailability = emailAvailability;
         _appOptions = appOptions;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
     /// <summary>
-    /// Проверяет состояние пользователя, выпускает новый токен и отправляет письмо.
+    /// Проверяет состояние пользователя, выпускает новый токен и ставит письмо в outbox.
     /// </summary>
     public async Task<UnitResult<Failure>> Handle(
         RequestEmailVerificationCommand command,
@@ -100,7 +104,7 @@ public sealed class RequestEmailVerificationHandler
 
         var publicUrl = _appOptions.PublicUrl?.TrimEnd('/');
 
-        if (!_emailSender.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
+        if (!_emailAvailability.IsAvailable || string.IsNullOrWhiteSpace(publicUrl))
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Auth.EmailVerificationUnavailable,
@@ -141,9 +145,34 @@ public sealed class RequestEmailVerificationHandler
 
         var token = created.Value;
 
-        // Отзыв предыдущего активного и вставка нового — одна транзакция: в базе не должно
-        // остаться двух активных строк. Повторное чтение внутри транзакции закрывает окно
-        // между проверкой кулдауна и записью; частичный уникальный индекс — последняя защита.
+        // Ссылка собирается ровно в одном месте; PublicUrl уже проверен на пустоту.
+        var link = $"{publicUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}";
+
+        var content = EmailVerificationMessage.Create(
+            user.Email,
+            user.FirstName,
+            link,
+            (int)EmailVerificationLifetime.TOKEN_LIFETIME.TotalHours);
+
+        // Ключ дедупликации — id токена: одно письмо на одну выданную строку токена.
+        // Повторная переотправка выпускает новый токен и, значит, новое письмо.
+        var queued = EmailOutboxMessage.Create(
+            token.Id.ToString("D"),
+            content.To,
+            content.Subject,
+            content.HtmlBody,
+            content.TextBody,
+            now);
+
+        if (queued.IsFailure)
+        {
+            return queued.Error;
+        }
+
+        // Отзыв предыдущего активного, вставка нового токена и строка outbox — одна транзакция:
+        // в базе не должно остаться двух активных строк, а письмо не должно пережить откат
+        // токена (или наоборот). Повторное чтение внутри транзакции закрывает окно между
+        // проверкой кулдауна и записью; частичный уникальный индекс — последняя защита.
         var persisted = await _unitOfWork.ExecuteAsync(async transactionToken =>
         {
             var existingResult = await _tokens.GetActiveByUserIdAsync(user.Id, transactionToken);
@@ -167,7 +196,13 @@ public sealed class RequestEmailVerificationHandler
                 }
             }
 
-            return await _tokens.AddAsync(token, transactionToken);
+            var addedToken = await _tokens.AddAsync(token, transactionToken);
+            if (addedToken.IsFailure)
+            {
+                return addedToken.Error;
+            }
+
+            return await _outbox.AddAsync(queued.Value, transactionToken);
         }, cancellationToken);
 
         if (persisted.IsFailure)
@@ -175,30 +210,10 @@ public sealed class RequestEmailVerificationHandler
             return persisted.Error;
         }
 
-        // Ссылка собирается ровно в одном месте; PublicUrl уже проверен на пустоту.
-        var link = $"{publicUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}";
-
-        var message = EmailVerificationMessage.Create(
-            user.Email,
-            user.FirstName,
-            link,
-            (int)EmailVerificationLifetime.TOKEN_LIFETIME.TotalHours);
-
-        var sent = await _emailSender.SendAsync(message, cancellationToken);
-        if (sent.IsFailure)
-        {
-            _logger.LogError(
-                "Failed to send the email verification message to user {UserId}: {ErrorCodes}.",
-                user.Id,
-                string.Join(", ", sent.Error.Errors.Select(error => error.Code)));
-
-            return new Failure(Error.Failure(
-                ApiErrorCodes.Auth.EmailVerificationSendFailed,
-                SEND_FAILED_MESSAGE));
-        }
-
+        // Письмо ещё не отправлено — его отправит диспетчер. В лог не попадают ни адрес,
+        // ни токен: только пользователь и факт постановки в очередь.
         _logger.LogInformation(
-            "Email verification message has been sent to user {UserId}.",
+            "Email verification message for user {UserId} has been queued in the outbox.",
             user.Id);
 
         return UnitResult.Success<Failure>();

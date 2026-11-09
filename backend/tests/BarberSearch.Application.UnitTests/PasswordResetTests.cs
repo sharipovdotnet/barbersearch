@@ -48,7 +48,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
 
-        var message = Assert.Single(context.Sender.Messages);
+        var message = Assert.Single(context.Outbox.Messages);
         Assert.Equal(Context.Email, message.To);
         Assert.Equal(PasswordResetMessage.SUBJECT, message.Subject);
 
@@ -106,9 +106,10 @@ public class PasswordResetTests
         Assert.DoesNotContain("hash:", message.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("hash:", message.TextBody, StringComparison.OrdinalIgnoreCase);
 
-        // Отзыв/вставка — в одной транзакции, письмо — после коммита.
+        // Отзыв/вставка и строка outbox — в одной транзакции; из запроса письмо не уходит.
         Assert.True(context.Tokens.AddInTransaction);
-        Assert.False(context.Sender.SentInTransaction);
+        Assert.True(context.Outbox.AddInTransaction);
+        Assert.Equal(0, context.Sender.SendCallCount);
         Assert.Equal(1, context.UnitOfWork.CommitCount);
         Assert.Equal(Context.Email, context.Users.LastGetByEmail);
     }
@@ -139,9 +140,10 @@ public class PasswordResetTests
 
         Assert.True(context.Tokens.UpdateInTransaction);
         Assert.True(context.Tokens.AddInTransaction);
+        Assert.True(context.Outbox.AddInTransaction);
         Assert.Equal(1, context.UnitOfWork.CommitCount);
-        Assert.False(context.Sender.SentInTransaction);
-        Assert.Single(context.Sender.Messages);
+        Assert.Equal(0, context.Sender.SendCallCount);
+        Assert.Single(context.Outbox.Messages);
     }
 
     [Fact]
@@ -155,7 +157,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
         Assert.Equal(0, context.UnitOfWork.CommitCount);
     }
 
@@ -173,7 +175,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -188,7 +190,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
         Assert.Equal(1, context.Users.GetByEmailCallCount);
     }
 
@@ -206,7 +208,7 @@ public class PasswordResetTests
         Assert.True(result.IsSuccess);
         Assert.Equal(0, context.Users.GetByEmailCallCount);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -222,7 +224,7 @@ public class PasswordResetTests
         Assert.True(result.IsSuccess);
         Assert.Equal(0, context.Users.GetByEmailCallCount);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Theory]
@@ -244,7 +246,7 @@ public class PasswordResetTests
         Assert.Equal("auth.passwordReset.unavailable", result.Error.Errors[0].Code);
         Assert.Equal(0, context.Users.GetByEmailCallCount);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Theory]
@@ -260,7 +262,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
         Assert.Single(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
         Assert.Equal(0, context.Tokens.AddCallCount);
         Assert.Equal(0, context.UnitOfWork.CommitCount);
     }
@@ -279,7 +281,7 @@ public class PasswordResetTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, context.StoredTokens.Count);
-        Assert.Single(context.Sender.Messages);
+        Assert.Single(context.Outbox.Messages);
 
         var storedPrevious = Assert.Single(
             context.StoredTokens,
@@ -288,9 +290,11 @@ public class PasswordResetTests
     }
 
     [Fact]
-    public async Task Request_WhenSenderFails_ReturnsOkKeepsTokenAndLogsWarningWithoutSecrets()
+    public async Task Request_QueuesLetterWithoutContactingTransportAndLogsNoSecrets()
     {
         var context = new Context();
+
+        // Недоступный SMTP больше не влияет на запрос: письмо не отправляется из обработчика.
         context.Sender.Behavior = _ => UnitResult.Failure(
             new Failure(Error.Failure("smtp.unavailable", "SMTP is unreachable.")));
 
@@ -302,23 +306,42 @@ public class PasswordResetTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(0, context.Sender.SendCallCount);
 
-        // Письмо пытались отправить, но токен остался: через кулдаун можно запросить ещё раз.
-        var attempted = Assert.Single(context.Sender.Messages);
+        // Письмо лежит в outbox: диспетчер отправит его, когда транспорт восстановится.
+        var queued = Assert.Single(context.Outbox.Messages);
         var stored = Assert.Single(context.StoredTokens);
         Assert.Equal(1, context.UnitOfWork.CommitCount);
+        Assert.Equal(stored.Id.ToString("D"), Assert.Single(context.Outbox.Rows).DeduplicationKey);
 
-        var warning = Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, warning.Level);
-        Assert.Contains(context.User.Id.ToString(), warning.Message, StringComparison.Ordinal);
+        var information = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, information.Level);
+        Assert.Contains(context.User.Id.ToString(), information.Message, StringComparison.Ordinal);
 
         var rawToken = Regex.Match(
-            attempted.HtmlBody,
+            queued.HtmlBody,
             @"token=([A-Za-z0-9_-]+)").Groups[1].Value;
         Assert.NotEmpty(rawToken);
-        Assert.DoesNotContain(Context.Email, warning.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(rawToken, warning.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(stored.TokenHash, warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Context.Email, information.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(rawToken, information.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(stored.TokenHash, information.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Request_WhenOutboxInsertFails_RollsBackTokenAsWell()
+    {
+        var context = new Context();
+        context.Outbox.AddBehavior = _ => UnitResult.Failure(
+            new Failure(Error.Failure("emailOutbox.add.failed", "Insert failed.")));
+
+        var result = await context.Requester.Handle(
+            new RequestPasswordResetCommand(Context.Email),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(1, context.UnitOfWork.RollbackCount);
+        Assert.Empty(context.StoredTokens);
+        Assert.Empty(context.Outbox.Rows);
     }
 
     [Theory]
@@ -346,7 +369,7 @@ public class PasswordResetTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
         Assert.Equal(1, context.UnitOfWork.RollbackCount);
 
         if (previous is null)
@@ -377,7 +400,7 @@ public class PasswordResetTests
         Assert.Equal(ApiErrorCodes.InternalDatabaseError, result.Error.Errors[0].Code);
         Assert.Equal(1, context.UnitOfWork.RollbackCount);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -395,7 +418,7 @@ public class PasswordResetTests
         Assert.True(result.IsFailure);
         Assert.Equal("database.unavailable", result.Error.Errors[0].Code);
         Assert.Empty(context.StoredTokens);
-        Assert.Empty(context.Sender.Messages);
+        Assert.Empty(context.Outbox.Messages);
     }
 
     [Fact]
@@ -927,9 +950,10 @@ public class PasswordResetTests
 
             Tokens = new FakePasswordResetTokenRepository();
             RefreshTokens = new FakeRefreshTokenRepository();
-            UnitOfWork = new FakeUnitOfWork(Users, Tokens, RefreshTokens);
+            Outbox = new FakeEmailOutboxRepository();
+            UnitOfWork = new FakeUnitOfWork(Users, Tokens, RefreshTokens, Outbox);
             Tokens.IsInTransaction = () => UnitOfWork.IsInTransaction;
-            Sender.IsInTransaction = () => UnitOfWork.IsInTransaction;
+            Outbox.IsInTransaction = () => UnitOfWork.IsInTransaction;
             RefreshTokens.IsInTransaction = () => UnitOfWork.IsInTransaction;
 
             Sender.IsAvailable = emailEnabled;
@@ -963,6 +987,8 @@ public class PasswordResetTests
 
         public FakeEmailSender Sender { get; } = new();
 
+        public FakeEmailOutboxRepository Outbox { get; }
+
         public FakeUnitOfWork UnitOfWork { get; }
 
         public User User { get; }
@@ -985,6 +1011,7 @@ public class PasswordResetTests
             return new RequestPasswordResetHandler(
                 Users,
                 Tokens,
+                Outbox,
                 UnitOfWork,
                 Sender,
                 _appOptions,

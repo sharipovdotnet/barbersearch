@@ -1,4 +1,5 @@
 using System.Globalization;
+using BarberSearch.Application.Emails;
 using BarberSearch.Web.Auth;
 using Microsoft.AspNetCore.Http;
 
@@ -21,6 +22,11 @@ public sealed record StartupSettings
     private const string SHUTDOWN_TIMEOUT_SECONDS_KEY = "Deployment:ShutdownTimeoutSeconds";
     private const string HEALTH_DATABASE_TIMEOUT_SECONDS_KEY = "HealthChecks:DatabaseTimeoutSeconds";
     private const string REFRESH_TOKEN_CLEANUP_INTERVAL_MINUTES_KEY = "RefreshTokens:CleanupIntervalMinutes";
+    private const string EMAIL_OUTBOX_ENABLED_KEY = "EmailOutbox:Enabled";
+    private const string EMAIL_OUTBOX_BATCH_SIZE_KEY = "EmailOutbox:BatchSize";
+    private const string EMAIL_OUTBOX_INTERVAL_SECONDS_KEY = "EmailOutbox:IntervalSeconds";
+    private const string EMAIL_OUTBOX_MAX_ATTEMPTS_KEY = "EmailOutbox:MaxAttempts";
+    private const string EMAIL_OUTBOX_RETENTION_DAYS_KEY = "EmailOutbox:RetentionDays";
 
     /// <summary>
     /// Строка подключения PostgreSQL.
@@ -66,6 +72,15 @@ public sealed record StartupSettings
     /// уменьшает разовый объём DELETE, редкое — нагрузку на БД.
     /// </remarks>
     public required int RefreshTokenCleanupIntervalMinutes { get; init; }
+
+    /// <summary>
+    /// Проверенные настройки outbox писем: воркер, пачка, интервал, попытки и ретенция.
+    /// </summary>
+    /// <remarks>
+    /// Пустая или выключенная секция — нормальное состояние: старт не падает, обработчики
+    /// продолжают писать письма в таблицу, а воркер только ждёт включения флага.
+    /// </remarks>
+    public required EmailOutboxOptions EmailOutbox { get; init; }
 
     /// <summary>
     /// Читает и проверяет конфигурацию.
@@ -138,7 +153,37 @@ public sealed record StartupSettings
                 REFRESH_TOKEN_CLEANUP_INTERVAL_MINUTES_KEY,
                 defaultValue: 60,
                 min: 1,
-                max: 1440)
+                max: 1440),
+            EmailOutbox = new EmailOutboxOptions
+            {
+                // Включение воркера — необязательный флаг: пустая строка трактуется как false.
+                Enabled = bool.TryParse(configuration[EMAIL_OUTBOX_ENABLED_KEY], out var enabled)
+                          && enabled,
+                BatchSize = ReadInt(
+                    configuration,
+                    EMAIL_OUTBOX_BATCH_SIZE_KEY,
+                    EmailOutboxOptions.DEFAULT_BATCH_SIZE,
+                    min: 1,
+                    max: 1000),
+                IntervalSeconds = ReadInt(
+                    configuration,
+                    EMAIL_OUTBOX_INTERVAL_SECONDS_KEY,
+                    EmailOutboxOptions.DEFAULT_INTERVAL_SECONDS,
+                    min: 1,
+                    max: 3600),
+                MaxAttempts = ReadInt(
+                    configuration,
+                    EMAIL_OUTBOX_MAX_ATTEMPTS_KEY,
+                    EmailOutboxOptions.DEFAULT_MAX_ATTEMPTS,
+                    min: 1,
+                    max: 100),
+                RetentionDays = ReadInt(
+                    configuration,
+                    EMAIL_OUTBOX_RETENTION_DAYS_KEY,
+                    EmailOutboxOptions.DEFAULT_RETENTION_DAYS,
+                    min: 1,
+                    max: 365)
+            }
         };
     }
 

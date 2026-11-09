@@ -8,10 +8,11 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// In-memory <see cref="IEmailSender"/>: запоминает письма вместо SMTP.
 /// </summary>
 /// <remarks>
-/// Тесты проверяют ссылку в письме и отсутствие отправки при ошибках валидации/кулдауна.
-/// <see cref="IsInTransaction"/> позволяет убедиться, что письмо уходит **после** коммита.
+/// Обработчики запросов больше не шлют письма: <see cref="Messages"/> заполняется только
+/// диспетчером outbox. Признак готовности почты — тот же объект, поэтому обработчики получают
+/// его как <see cref="IEmailSenderAvailability"/>, а тесты выключают почту одним свойством.
 /// </remarks>
-public sealed class FakeEmailSender : IEmailSender
+public sealed class FakeEmailSender : IEmailSender, IEmailSenderAvailability
 {
     private readonly List<EmailMessage> _messages = [];
 
@@ -23,17 +24,12 @@ public sealed class FakeEmailSender : IEmailSender
     public bool IsAvailable { get; set; } = true;
 
     /// <summary>
-    /// Проверка «мы внутри транзакции»; тест подключает сюда <see cref="FakeUnitOfWork"/>.
+    /// Сколько раз диспетчер пытался отправить письмо.
     /// </summary>
-    public Func<bool>? IsInTransaction { get; set; }
+    public int SendCallCount { get; private set; }
 
     /// <summary>
-    /// Был ли <see cref="SendAsync"/> вызван внутри транзакции.
-    /// </summary>
-    public bool SentInTransaction { get; private set; }
-
-    /// <summary>
-    /// Подмена результата отправки: тест проверяет <c>500 auth.emailVerification.sendFailed</c>.
+    /// Подмена результата отправки: тест проверяет ретраи диспетчера.
     /// </summary>
     public Func<EmailMessage, UnitResult<Failure>>? Behavior { get; set; }
 
@@ -41,8 +37,8 @@ public sealed class FakeEmailSender : IEmailSender
         EmailMessage message,
         CancellationToken cancellationToken = default)
     {
+        SendCallCount++;
         _messages.Add(message);
-        SentInTransaction |= IsInTransaction?.Invoke() ?? false;
 
         return Task.FromResult(
             Behavior?.Invoke(message) ?? UnitResult.Success<Failure>());

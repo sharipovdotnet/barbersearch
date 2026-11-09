@@ -5,6 +5,7 @@ using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.BarberRequests;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.EmailVerifications;
+using BarberSearch.Application.Emails;
 using BarberSearch.Application.HairServices;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.PasswordResets;
@@ -89,6 +90,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+        services.AddScoped<IEmailOutboxRepository, EmailOutboxRepository>();
         services.AddScoped<IBarberNotificationRepository, BarberNotificationsRepository>();
         services.AddScoped<IBarberNotificationSettingsRepository, BarberNotificationSettingsRepository>();
         services.AddScoped<IReminderSourceRepository, ReminderSourceRepository>();
