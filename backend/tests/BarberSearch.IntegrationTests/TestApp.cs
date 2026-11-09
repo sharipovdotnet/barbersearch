@@ -185,6 +185,11 @@ public sealed class TestApp : IAsyncDisposable
                 .GetRequiredService<EmailVerificationTokenCleanupService>();
             await emailCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
+            // Уборка токенов сброса пароля — тот же стартовый прогон и тот же риск гонки.
+            var passwordResetCleanup = factory.Services
+                .GetRequiredService<PasswordResetTokenCleanupService>();
+            await passwordResetCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
             return new TestApp(factory, client);
         }
         finally

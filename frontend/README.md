@@ -58,7 +58,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
-| `/account/security` | security: password change, sign out and email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) |
+| `/account/security` | security: password change, sign out, email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) and the «Забыли пароль?» link |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: the «Сегодня» day feed by default (visits of the day, the free windows between them and a one-click booking into a window), then «Ближайшие» / «История» lists with confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
@@ -69,6 +69,8 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/verify-email` | confirmation from the email link: one anonymous `POST` with the token, then «Адрес подтверждён», «Ссылка недействительна», a network error or «Ссылка неполная»; the token is removed from the address after it settles |
+| `/forgot-password` | request a password-reset link: one anonymous `POST`, the generic «Проверьте почту» card for any address, a local 60-second resend cooldown, «Указать другой адрес» and the global «почта не настроена» error |
+| `/reset-password` | set a new password from the email link: the token is read once and removed from the address, then the form, «Пароль изменён» (all sessions ended, no auto sign-in) or «Ссылка недействительна» |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions; a salon waiting for moderation is not counted as disabled |
@@ -323,6 +325,26 @@ with `replace`. The letter itself is sent by the server during registration, so 
 delivery does not fail registration: the notice still says the letter was sent, while the resend
 button honestly reports an unconfigured email channel. The «Email не подтверждён» line in the
 cabinet rail is a link to this section.
+
+Forgotten passwords are restored from the same page's «Забыли пароль?» link (the login dialog has
+one too). `/forgot-password` sends one anonymous `POST /api/auth/password-reset` with the email
+and always shows the same «Проверьте почту» card — the API answers `204` for an existing, an
+unknown, an inactive and a malformed address alike, so the screen cannot and must not reveal
+whether an account exists. The resend button counts down a local 60 seconds; the server's
+cooldown is silent for the same reason. Honest errors are only the global ones: `409
+auth.passwordReset.unavailable` when the server has no mail channel, `429` from the auth limiter
+and a network/`5xx` failure. The letter links to `/reset-password?token=…`; the link lives **30
+minutes** and works **once**. The page reads the token from the query once and immediately
+removes it with `replace`, so it does not stay in history, `Referer` or the address bar (a reload
+therefore loses it — open the letter again); there is no preflight check, the form appears for
+any non-empty token and an invalid or already used link is reported on submit. Setting the new
+password ends **every** session: the server revokes all refresh tokens and rotates the security
+stamp, so the old access cookie, the old refresh token and the old password all stop working, and
+the address is marked confirmed. There is no auto sign-in: the success card ends the local
+session if it was signed in (`signOut`) and opens the normal login dialog. The password policy is
+the same as in registration and the account dialog, and its `400 auth.password.*` codes are
+mapped to the new-password field; the one-time token is not consumed by a policy failure, so the
+same link can be retried with a valid password.
 
 The page also shows the last login from `GET /api/users/me`; there is no active-device list
 because the API does not expose one, and the screen does not invent it.
@@ -743,10 +765,14 @@ Every state-changing request goes through `mutateWithCsrf` in `src/lib/csrf.ts`:
 fresh `X-CSRF-TOKEN` immediately before the request and, on `400 auth.csrf.invalid`, repeats the
 same mutation **once** with a new token. The antiforgery filter rejects the request before the
 action runs, so nothing was changed and the repeat is safe; a second failure shows the existing
-Russian text and the dialog stays usable — there is no third attempt. There are two exceptions:
-`POST /api/auth/register` and `POST /api/auth/email-verification/confirm`. Both are anonymous:
-the confirmation secret is the token from the letter, which may be opened in another browser, so
-the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14). Booking creation
+Russian text and the dialog stays usable — there is no third attempt. The anonymous endpoints are
+the exceptions: `POST /api/auth/register`, `POST /api/auth/email-verification/confirm` and the two
+password-reset calls. None of them has an ambient identity: the confirmation and reset secrets are
+the tokens from the letters, which may be opened in another browser, so the client does not fetch
+or send a token there (see `AGENT.md` §9.4 and §14). `POST /api/auth/password-reset` takes the
+email from the body rather than from the session, and `POST /api/auth/password-reset/confirm` is
+authorised by the one-time token, so `src/lib/password-reset.ts` neither fetches
+`/api/auth/csrf` nor sends `X-CSRF-TOKEN`. Booking creation
 goes through `mutateWithCsrf` like every other cookie mutation.
 
 Successful responses are checked too: `apiRequest` accepts a hand-written guard from
@@ -1410,9 +1436,10 @@ layer below.
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
 admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, email
-verification (registration → letter in Mailpit → link → confirmed cabinet), the keyboard paths and
-an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest) stays
-separate and fast; E2E never runs inside it.
+verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
+(registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
+paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
+stays separate and fast; E2E never runs inside it.
 
 ### One-time setup
 
@@ -1428,9 +1455,10 @@ createdb -h localhost -U postgres barbersearch_e2e
 
 ### Mailpit
 
-Verification letters are **real SMTP messages, not mocks**: the E2E suite reads the inbox through
-the Mailpit HTTP API (`GET /api/v1/messages`, then `GET /api/v1/message/{id}`). Start the container
-before the API — it is the same pinned image as in `backend/docker-compose.yml`:
+Verification and password-reset letters are **real SMTP messages, not mocks**: the E2E suite
+reads the inbox through the Mailpit HTTP API (`GET /api/v1/messages`, then
+`GET /api/v1/message/{id}`). Start the container before the API — it is the same pinned image as
+in `backend/docker-compose.yml`:
 
 ```bash
 docker run -d --rm --name barbersearch-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.21.8
@@ -1439,6 +1467,14 @@ docker run -d --rm --name barbersearch-mailpit -p 1025:1025 -p 8025:8025 axllent
 The inbox UI is http://localhost:8025. `e2e/global-setup.ts` polls `GET /api/v1/info` for about
 15 seconds and fails immediately with this command if the container is missing, so the first test
 cannot flake on a not-yet-ready SMTP port.
+
+The same inbox serves both mail flows. Registration sends the verification letter to the new
+address first, so `password-reset.spec.ts` waits for the reset message **by recipient and
+subject** — «Сброс пароля — BarberSearch», `waitForPasswordResetMessage` in
+`e2e/fixtures/mail.ts` — instead of taking the first message to that address; the verification
+token extractor is unchanged. The reset spec is desktop-only: it spends several of the 10
+auth requests per minute per IP, and the mobile project is skipped explicitly with that reason,
+while 320 px is covered by the axe scan of both forms.
 
 The API must be running with the email settings and the public link base (the letter's link points
 at Vite, not at the API):
@@ -1452,8 +1488,10 @@ ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;
 ```
 
 Without these variables registration still returns `201`, but no letter is sent: the resend button
-honestly answers `409 auth.emailVerification.unavailable`, and `email-verification.spec.ts` fails at
-the Mailpit step. Migrations and both seed files (the backend's minimal seed plus the E2E fixtures):
+honestly answers `409 auth.emailVerification.unavailable`, `POST /api/auth/password-reset` answers
+`409 auth.passwordReset.unavailable`, and both `email-verification.spec.ts` and
+`password-reset.spec.ts` fail at the Mailpit step. Migrations and both seed files (the backend's
+minimal seed plus the E2E fixtures):
 
 ```bash
 # from ../backend, with ConnectionStrings__Postgres pointing at barbersearch_e2e
@@ -1471,10 +1509,10 @@ npm run test:e2e:seed             # wrapper around e2e/fixtures/seed.sql
 local default — and refuses to run against any database except `barbersearch_e2e` (the SQL file
 checks the name itself as well). Rerun it whenever the fixtures could have been mutated: the tests
 that edit, delete or publish restore their own rows, but the seed is the authoritative reset.
-`email-verification.spec.ts` additionally registers fresh `e2e+<timestamp>@barbersearch.test`
-customers (one per project per run). The API has no user deletion and the seed does not remove
-them, so they accumulate in `barbersearch_e2e`; the rows are additive, and the admin user list
-pages through them, so no other scene depends on the total.
+`email-verification.spec.ts` and `password-reset.spec.ts` additionally register fresh
+`e2e+<timestamp>@barbersearch.test` customers (one per project per run). The API has no user
+deletion and the seed does not remove them, so they accumulate in `barbersearch_e2e`; the rows are
+additive, and the admin user list pages through them, so no other scene depends on the total.
 
 ### Running
 
@@ -1510,6 +1548,9 @@ written to the Playwright report as `axe-advisory` annotations. There is **no al
 finding is fixed or gets a new number in `AGENT.md` §14 and an entry that cites it — an exception
 without a debt number is not allowed. `/verify-email` is scanned in both files at its
 invalid-link state, and `email-verification.spec.ts` adds the confirmed state at 1280.
+`/forgot-password` and `/reset-password` are scanned at 1280 and 320 in their form states with a
+fake token (the axe scenes never submit: every submit spends an auth request); the sent, success
+and invalid states are covered by `password-reset.spec.ts` and the unit tests.
 
 ### Fixtures and accounts
 

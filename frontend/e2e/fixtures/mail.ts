@@ -1,10 +1,12 @@
 /**
  * Mailpit-клиент для E2E-сценариев с письмами.
  *
- * Письма подтверждения email не мокаются: тест читает настоящий инбокс Mailpit
+ * Письма не мокаются: тест читает настоящий инбокс Mailpit
  * (`GET /api/v1/messages`, затем `GET /api/v1/message/{id}`) и берёт из него
  * токен. Адрес уникален для теста, поэтому письма фильтруются по `To`, а не по
  * порядку в инбоксе: прогон не зависит от соседних сцен и прошлых запусков.
+ * Когда на один адрес приходят два письма (подтверждение email и сброс пароля),
+ * дополнительно фильтруем по теме — `to` у них одинаковый.
  *
  * Mailpit обязателен для всего E2E: `global-setup.ts` проверяет
  * `GET /api/v1/info` до старта тестов и падает с инструкцией, если контейнера нет.
@@ -23,6 +25,21 @@ const MESSAGES_LIMIT = 200
 
 /** Сколько ждать ответа Mailpit: зависший HTTP не должен съесть весь таймаут. */
 const REQUEST_TIMEOUT_MS = 3_000
+
+/**
+ * Тема письма сброса пароля (backend `PasswordResetMessage.SUBJECT`).
+ *
+ * После регистрации на один адрес приходят два письма — подтверждение email и
+ * сброс пароля. `To` у них одинаковый, поэтому различить их можно только темой:
+ * `waitForMessageTo(address)` без фильтра вернул бы первое (§6, ловушка 13).
+ */
+export const PASSWORD_RESET_SUBJECT = 'Сброс пароля — BarberSearch'
+
+/** Дополнительный признак письма, когда на адрес приходит несколько писем. */
+export type WaitForMessageOptions = {
+  /** Тема целиком: письма с другой темой игнорируются. */
+  subject?: string
+}
 
 export type MailpitAddress = {
   Name: string
@@ -45,17 +62,29 @@ export type MailpitMessage = MailpitMessageSummary & {
 /**
  * Ждёт письмо для адреса и возвращает его целиком.
  *
- * Ошибка называет адрес и подсказывает, что проверить: без понятного текста
- * упавший первый тест выглядит как «просто не нашлось письмо».
+ * `options.subject` сужает поиск до одной темы: после регистрации на адрес
+ * приходят и подтверждение email, и сброс пароля, а порядок писем в инбоксе не
+ * контракт. Без темы возвращается первое письмо адресату — прежнее поведение.
+ *
+ * Ошибка называет адрес (и тему) и подсказывает, что проверить: без понятного
+ * текста упавший первый тест выглядит как «просто не нашлось письмо».
  */
-export async function waitForMessageTo(address: string): Promise<MailpitMessage> {
+export async function waitForMessageTo(
+  address: string,
+  options: WaitForMessageOptions = {}
+): Promise<MailpitMessage> {
   const deadline = Date.now() + MESSAGE_TIMEOUT_MS
+  const subject = options.subject
   let lastError: string | null = null
 
   while (Date.now() < deadline) {
     try {
       const summaries = await listMessages()
-      const summary = summaries.find((message) => isAddressedTo(message, address))
+      const summary = summaries.find(
+        (message) =>
+          isAddressedTo(message, address) &&
+          (subject === undefined || message.Subject === subject)
+      )
 
       if (summary) {
         return await fetchMessage(summary.ID)
@@ -68,15 +97,32 @@ export async function waitForMessageTo(address: string): Promise<MailpitMessage>
   }
 
   const details = lastError === null ? '' : `\n  Последняя ошибка: ${lastError}`
+  const wanted =
+    subject === undefined
+      ? `Письмо для ${address}`
+      : `Письмо для ${address} с темой «${subject}»`
 
   throw new Error(
     [
-      `Письмо для ${address} не пришло в Mailpit за ${MESSAGE_TIMEOUT_MS / 1000} с.`,
+      `${wanted} не пришло в Mailpit за ${MESSAGE_TIMEOUT_MS / 1000} с.`,
+      `  На один адрес могут приходить два письма (verification и reset): фильтр по теме — единственный надёжный признак.`,
       `  Проверь Mailpit: docker run -d --rm --name barbersearch-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.21.8`,
       `  и что API запущен с Email__Enabled=true, Email__Host=localhost, Email__Port=1025, Email__UseTls=false и App__PublicUrl=http://localhost:5173.`,
       `  Инбокс: ${MAILPIT_URL}`,
     ].join('\n') + details
   )
+}
+
+/**
+ * Ждёт именно письмо сброса пароля — по теме, а не по порядку в инбоксе.
+ *
+ * На адрес, прошедший регистрацию, сначала приходит verification-письмо, поэтому
+ * `waitForMessageTo(address)` вернул бы его и сломал сценарий (§6).
+ */
+export async function waitForPasswordResetMessage(
+  address: string
+): Promise<MailpitMessage> {
+  return waitForMessageTo(address, { subject: PASSWORD_RESET_SUBJECT })
 }
 
 /**
@@ -98,6 +144,29 @@ export function extractVerificationToken(message: MailpitMessage): string {
 
   throw new Error(
     `В письме «${message.Subject}» нет ссылки /verify-email?token=…: проверь текст письма (EmailVerificationMessage).`
+  )
+}
+
+/**
+ * Достаёт токен сброса пароля из ссылки `/reset-password?token=…`.
+ *
+ * Как и у подтверждения email, ищем в HTML и в текстовом дубле: письмо содержит
+ * обе версии. Токен — 43 символа base64url (§4.2), `decodeURIComponent` оставлен
+ * на случай, если сервер когда-нибудь начнёт экранировать ссылку иначе.
+ */
+export function extractPasswordResetToken(message: MailpitMessage): string {
+  const link = /reset-password\?token=([A-Za-z0-9_-]+)/
+
+  for (const body of [message.HTML, message.Text]) {
+    const match = link.exec(body)
+
+    if (match?.[1]) {
+      return decodeURIComponent(match[1])
+    }
+  }
+
+  throw new Error(
+    `В письме «${message.Subject}» нет ссылки /reset-password?token=…: проверь текст письма (PasswordResetMessage).`
   )
 }
 

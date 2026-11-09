@@ -8,6 +8,7 @@ using BarberSearch.Domain.EmailVerifications;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Notifications;
+using BarberSearch.Domain.PasswordResets;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.RefreshTokens;
 using BarberSearch.Domain.Reviews;
@@ -54,6 +55,9 @@ public class ApplicationDbContext : DbContext
 
     // Подтверждение адреса электронной почты
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
+
+    // Сброс забытого пароля
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     // Уведомления барберу
     public DbSet<BarberNotification> BarberNotifications => Set<BarberNotification>();

@@ -56,6 +56,29 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     public int GetByIdCallCount { get; private set; }
 
     /// <summary>
+    /// Сколько раз обработчики искали пользователя по email.
+    /// </summary>
+    public int GetByEmailCallCount { get; private set; }
+
+    /// <summary>
+    /// Адрес последнего поиска по email: тест проверяет, что обработчик передал
+    /// канонический вид, а не исходную строку.
+    /// </summary>
+    public string? LastGetByEmail { get; private set; }
+
+    /// <summary>
+    /// Подмена чтения по идентификатору: тест проверяет, что не-«not found» ошибка
+    /// репозитория не превращается в <c>400</c>.
+    /// </summary>
+    public Func<Guid, Result<User, Failure>>? GetByIdBehavior { get; set; }
+
+    /// <summary>
+    /// Подмена поиска по email: тест проверяет неожиданную ошибку репозитория и
+    /// отдельный код <c>user.email.invalid</c>.
+    /// </summary>
+    public Func<string, Result<User, Failure>>? GetByEmailBehavior { get; set; }
+
+    /// <summary>
     /// Сколько раз обработчики читали узкую проекцию через <see cref="GetSecurityStampAsync"/>.
     /// </summary>
     public int GetSecurityStampCallCount { get; private set; }
@@ -124,6 +147,11 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     {
         GetByIdCallCount++;
 
+        if (GetByIdBehavior is { } behavior)
+        {
+            return Task.FromResult(behavior(id));
+        }
+
         return Task.FromResult<Result<User, Failure>>(
             _users.TryGetValue(id, out var user)
                 ? user
@@ -159,6 +187,14 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         string email,
         CancellationToken cancellationToken = default)
     {
+        GetByEmailCallCount++;
+        LastGetByEmail = User.NormalizeEmail(email);
+
+        if (GetByEmailBehavior is { } behavior)
+        {
+            return Task.FromResult(behavior(email));
+        }
+
         var normalized = User.NormalizeEmail(email);
         var user = _users.Values.FirstOrDefault(x => x.Email == normalized);
 

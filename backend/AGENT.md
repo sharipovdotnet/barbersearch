@@ -146,7 +146,7 @@ backend/                                  ← workspace root
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (8 actions)
+            ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (12 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -212,7 +212,8 @@ docker compose ps               # status and health
 docker compose down             # stop, the named volume keeps the data
 docker compose down -v          # stop and wipe the data
 
-# Mailpit (email verification letters, not the database): the same `docker compose up -d`
+# Mailpit (transactional letters — email verification and password reset — not the database):
+# the same `docker compose up -d`
 # starts it. SMTP listens on 127.0.0.1:1025 (Email:Port in appsettings.Development.json),
 # the inbox UI/API is http://localhost:8025. There is no volume: letters are transient.
 # Without Mailpit registration still works — the request endpoint answers 409 unavailable.
@@ -400,8 +401,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-09 (срез email-verification): domain **350**, application **613**,
-infrastructure **143**, integration **189** — всего **1295**, все зелёные на локальной PostgreSQL.
+Актуальный baseline на 2026-11-09 (срез password-reset): domain **374**, application **672**,
+infrastructure **158**, integration **200** — всего **1404**, все зелёные на локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
@@ -443,7 +444,7 @@ BarberSearch.Application    → commands/queries, handlers, Abstractions, DI    
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
 BarberSearch.Contracts      → record-контракты входных данных и ответов операций      [DONE]
-                              34 request-записи покрывают write-операции; для пяти
+                              36 request-записей покрывают write-операции; для пяти
                               read-эндпоинтов — response-DTO + PagedResponse<T> (§16)
 BarberSearch.Domain         → aggregates, VOs, invariants, domain errors         [DONE]
 Shared                      → Error / Failure / ErrorType                        [DONE]
@@ -486,6 +487,7 @@ Salon (AR)                   — standalone, no child collection
 HairService (AR)             — standalone, no child collection
 Specialization (AR)          — standalone, no child collection
 EmailVerificationToken (AR)  — standalone one-time email confirmation token
+PasswordResetToken (AR)      — standalone one-time password-reset token (§17.12)
 ```
 
 AR = `AggregateRoot`, which derives from `Entity`.
@@ -544,6 +546,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
+| `PasswordResetToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`passwordResetToken.consume.invalid`) and an expired one (`passwordResetToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
 | `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`); `Kind` is a defined `PlaceKind` value (`salon.kind.unknown` otherwise); `IsListed` is set only by the two factories, is always `true` for `Salon`/`RentalStudio` and may be `false` only for `SoloStudio`/`Home`/`Mobile` (`salon.isListed.kind` otherwise); `SubmitByOwner(isListed: false)` creates an `Active`/`IsActive` place with no `ReviewedAt`/`ReviewedByUserId` — an unlisted place is not moderated |
 | `HairService` | non-empty name, known category, duration `1..1440` |
 | `Specialization` | non-empty name |
@@ -688,16 +691,16 @@ The rules below were pushed to the application layer because the aggregate canno
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 10 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 24 типа; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 350 domain + 613 application + 143 infrastructure + 189 integration (1295 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 128 обработчиков (93 command + 35 query), 15 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 37 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 22 конфигурации, 15 репозиториев, `IUnitOfWork`, 22 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
-| Web | ✅ 28 контроллеров / 135 endpoints (125 доменных + 10 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService` и `ReminderDispatchService` (воркер напоминаний); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 374 domain + 672 application + 158 infrastructure + 200 integration (1404 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 131 обработчик (96 command + 35 query), 16 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 39 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 23 конфигурации, 16 репозиториев, `IUnitOfWork`, 23 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно |
+| Web | ✅ 28 контроллеров / 137 endpoints (125 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService` и `ReminderDispatchService` (воркер напоминаний); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (29):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (30):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -706,7 +709,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
-`AddEmailVerificationTokens`.
+`AddEmailVerificationTokens`, `AddPasswordResetTokens`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -762,6 +765,18 @@ revoked_at IS NULL`) и `ix_email_verification_tokens_expires_at`. Открыт�
 нужен: таблица новая, существующие аккаунты остаются неподтверждёнными (мягкий флаг, §3.1).
 `Down` удаляет таблицу. Проверено накатом, откатом и повторным накатом на локальной
 `barbersearch` (§17.11).
+
+**`AddPasswordResetTokens` (2026-11-09, password-reset).** Новая таблица
+`password_reset_tokens`: `id` UUIDv7 PK, `user_id` FK → `users` `ON DELETE CASCADE`,
+`token_hash` (`text`, check `char_length = 64`), `issued_at`, `expires_at`, `consumed_at`,
+`revoked_at`, `created_at`, `updated_at`. Индексы: `ux_password_reset_tokens_hash` (unique),
+`ux_password_reset_tokens_active` (`UNIQUE (user_id) WHERE consumed_at IS NULL AND
+revoked_at IS NULL`) и `ix_password_reset_tokens_expires_at`. Открытый токен не хранится —
+только SHA-256; TTL 30 минут, кулдаун переотправки 60 секунд, ретенция уборки 30 дней
+(`PasswordResetLifetime`). Backfill не нужен: таблица новая, существующие аккаунты не
+меняются до успешного сброса. Новых ключей конфигурации нет: переиспользуются `Email:*` и
+`App:PublicUrl`. `Down` удаляет таблицу. Проверено накатом, откатом и повторным накатом на
+локальной `barbersearch`; `has-pending-model-changes` — чисто (§17.12).
 
 **Напоминания (вариант C).** Инбокс — обязательный и единственный источник правды, Telegram —
 необязательный канал доставки (D1). API: `GET api/barber/notifications?cursor=&pageSize=`
@@ -1283,6 +1298,9 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `email_verification_tokens` | `UNIQUE (token_hash)` — `ux_email_verification_tokens_hash`, migration `AddEmailVerificationTokens` | The only defence against a CSPRNG collision: the table stores SHA-256, never the open token, so lookup by hash is the confirmation path. A collision is `500 internal.database`, not a business error |
 | `email_verification_tokens` | `UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` — `ux_email_verification_tokens_active` | One active letter per user: the precheck covers the common case, the partial index closes the race between two simultaneous resends. The loser gets `409 auth.emailVerification.cooldown`, never `500` |
 | `email_verification_tokens` | `(expires_at)` — `ix_email_verification_tokens_expires_at` | Background cleanup range predicate (`expires_at < now − 30 days`); no query filters by user and expiry together, so a separate composite index is not needed |
+| `password_reset_tokens` | `UNIQUE (token_hash)` — `ux_password_reset_tokens_hash`, migration `AddPasswordResetTokens` | The only defence against a CSPRNG collision: the table stores SHA-256, never the open token, so lookup by hash is the confirm path. A collision is `500 internal.database`, not a business error |
+| `password_reset_tokens` | `UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` — `ux_password_reset_tokens_active` | One active reset link per user: the 60-second precheck covers the common case, the partial index closes the race between two simultaneous resends. The loser is a silent `204` in `request` (internal `passwordResetToken.issue.conflict`), never `500`; `user_id` is a FK to `users` with `ON DELETE CASCADE` |
+| `password_reset_tokens` | `(expires_at)` — `ix_password_reset_tokens_expires_at` | Background cleanup range predicate (`expires_at` or `consumed_at` older than 30 days); no user+expiry query exists, so no composite index |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -1777,8 +1795,8 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**28 controllers, 135 endpoints: 125 domain + 10 auth** — one endpoint per Application operation,
-plus the ten `AuthController` actions (§17). The route always names the aggregate that owns the
+**28 controllers, 137 endpoints: 125 domain + 12 auth** — one endpoint per Application operation,
+plus the twelve `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
 | Controller | Route prefix | Handlers |
@@ -1822,7 +1840,7 @@ Conventions:
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
 - Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
   string (read endpoints), so the shape of an operation is visible in its signature. A body is used
-  only when the payload is more than a single identifier — 34 request records cover all write
+  only when the payload is more than a single identifier — 36 request records cover all write
   operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
@@ -1907,6 +1925,23 @@ Conventions:
   mail. The admin endpoint `POST api/users/{id}/email-verification` is unchanged — it remains the
   manual bypass. The `VerifiedEmail` policy is still declared but applied to no endpoint: the flag
   is soft (§3.1). Flow, TTL/cooldown, transaction and cleanup are in §17.11.
+- **Password reset (2026-11-09, slice password-reset).** Two anonymous endpoints, both under the
+  `auth` rate limit (10/min per IP) and both with `[SkipCookieAntiforgery]`: `POST
+  api/auth/password-reset` takes `{ email }` and `POST api/auth/password-reset/confirm` takes
+  `{ token, newPassword }` — there is no ambient identity to bind an antiforgery pair to, and the
+  confirm secret is the one-time token from the letter (the same reasoning as `register` and
+  `email-verification/confirm`). `request` answers `204` for **every** address — existing, unknown,
+  inactive, empty or malformed — and the quiet 60-second cooldown and a silent SMTP failure are
+  also `204`: the response must not become an account-existence oracle. The only refusals are
+  global: `409 auth.passwordReset.unavailable` when `Email` is not configured or `App:PublicUrl`
+  is empty, `429` from the limiter and `500 internal.database`. `confirm` is one-time and not
+  idempotent: a used, revoked, expired or unknown token, a missing user or an inactive account is
+  `400 auth.passwordReset.invalid`; a password rejected by the policy is `400 auth.password.*`
+  with `invalidField = "newPassword"` and the token stays usable. Success is `204` with no
+  auto-login: all refresh tokens are revoked, the security stamp rotates, the email is marked
+  verified and the lockout is cleared in the same transaction. No new configuration keys:
+  `Email:*` and `App:PublicUrl` are reused. Flow, TTL, transaction, audit and cleanup are in
+  §17.12.
 - The password is hashed in the Web layer (`IPasswordHasher<User>` registered in
   `DependencyInjection.cs`), because `CreateUserCommand` takes a hash — Web is the "layer above"
   that its XML doc refers to.
@@ -2598,11 +2633,11 @@ activity of the barber service and takes the price from it.
 | Слой | Файлы |
 |---|---|
 | `Shared` | `ErrorType.UNAUTHORIZED` / `FORBIDDEN`, фабрики `Error.Unauthorized/Forbidden` |
-| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `Users/UserConsent` — запись согласия (#42); `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by`; `EmailVerifications/EmailVerificationToken` — одноразовый токен подтверждения email |
-| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `Privacy/PrivacyPolicy` — текущая редакция Политики (#42); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers; `EmailVerifications/*` — токен, письмо, request/confirm/cleanup, `IEmailVerificationTokenRepository`, `IEmailSender`, `EmailOptions` |
-| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword`, `Auth/EmailVerification` |
-| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens`, `Migrations/*_AddUserConsent`, `Configurations/EmailVerificationTokenConfiguration`, `Repositories/EmailVerificationTokenRepository`, `Migrations/*_AddEmailVerificationTokens` |
-| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Auth/RefreshTokenCleanupService`, `Auth/EmailVerificationTokenCleanupService`, `Emails/SmtpEmailSender`, `Controllers/AuthController` |
+| `Domain` | `User.ChangePasswordHash` — смена пароля и перехеширование; `Users/UserConsent` — запись согласия (#42); `RefreshTokens/RefreshToken` — хеш, срок, отзыв, `replaced_by`; `EmailVerifications/EmailVerificationToken` — одноразовый токен подтверждения email; `PasswordResets/PasswordResetToken` — одноразовый токен сброса пароля (§17.12) |
+| `Application` | `Users/IPasswordService`, `Users/PasswordVerification`, `Users/LoginUser/*`, `Users/ChangePassword/*`, `Users/Passwords/*` (`IPasswordPolicy`, `PasswordPolicy` + словарь top-10k); `Privacy/PrivacyPolicy` — текущая редакция Политики (#42); `RefreshTokens/*` — `IRefreshTokenRepository`, `RefreshTokenGenerator`, Issue/RefreshSession/Revoke handlers; `EmailVerifications/*` — токен, письмо, request/confirm/cleanup, `IEmailVerificationTokenRepository`, `IEmailSender`, `EmailOptions`; `PasswordResets/*` — `PasswordResetTokenGenerator`, `PasswordResetLifetime`, `PasswordResetMessage`, request/confirm/cleanup, `IPasswordResetTokenRepository` |
+| `Contracts` | `Auth/Login`, `Auth/Register`, `Auth/Me`, `Auth/Csrf`, `Auth/Refresh`, `Auth/Logout`, `Auth/ChangePassword`, `Auth/EmailVerification`, `Auth/PasswordReset` |
+| `Infrastructure` | `Configurations/RefreshTokenConfiguration`, `Repositories/RefreshTokenRepository`, `Migrations/*_AddRefreshTokens`, `Migrations/*_AddUserConsent`, `Configurations/EmailVerificationTokenConfiguration`, `Repositories/EmailVerificationTokenRepository`, `Migrations/*_AddEmailVerificationTokens`, `Configurations/PasswordResetTokenConfiguration`, `Repositories/PasswordResetTokenRepository`, `Migrations/*_AddPasswordResetTokens` |
+| `Web` | `Auth/AuthOptions`, `ClaimsPrincipalFactory`, `SecurityStampValidator`, `JwtTokenIssuer`, `PasswordService`, `AuthenticationExtensions`, `AuthCookiePolicy`, `RefreshTokenCookie`, `AntiforgeryValidation`, `CookieMutationAntiforgeryFilter`, `SkipCookieAntiforgeryAttribute`, `AuthorizationExtensions`, `AuthorizationPolicies`, `AuthProblemDetails`, `ValidateAntiforgeryHeaderAttribute`, `Auth/RefreshTokenCleanupService`, `Auth/EmailVerificationTokenCleanupService`, `Auth/PasswordResetTokenCleanupService`, `Emails/SmtpEmailSender`, `Controllers/AuthController` |
 | `Web/OpenApi` | `BearerSecuritySchemeTransformer` — кнопка Authorize в Swagger UI |
 
 **IP согласия (#42) читает Web, а не Application.** `AuthController.GetClientIpAddress` берёт
@@ -2619,6 +2654,8 @@ activity of the barber service and takes the price from it.
 | POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается; обязателен `consentVersion` (`auth.register.consentRequired` / `auth.register.consentVersion`), сервер сам ставит UTC-время и IP; после успешного создания сам заказывает письмо, сбой почты не меняет `201 { id }` |
 | POST | `api/auth/email-verification` | аутентификация, rate limit, antiforgery | высылает письмо со ссылкой `/verify-email?token=…`; `409 auth.emailVerification.cooldown` / `unavailable`, `500 auth.emailVerification.sendFailed` |
 | POST | `api/auth/email-verification/confirm` | аноним, rate limit, без antiforgery | подтверждает адрес по токену из тела: `204`; битый/истёкший/использованный токен — `400 auth.emailVerification.invalid`; повторный клик и уже подтверждённый адрес — `204` |
+| POST | `api/auth/password-reset` | аноним, rate limit, без antiforgery | `{ email }` → `204` для любого адреса (существующего, неизвестного, неактивного, пустого, кривого); тихие кулдаун 60 с и сбой SMTP — тоже `204`; `409 auth.passwordReset.unavailable` (почта или `App:PublicUrl` не настроены), `429`; письмо со ссылкой `/reset-password?token=…` действует 30 минут |
+| POST | `api/auth/password-reset/confirm` | аноним, rate limit, без antiforgery | `{ token, newPassword }` → `204`; одноразовый: повторный/неизвестный/истёкший/отозванный токен, отсутствующий или неактивный пользователь — `400 auth.passwordReset.invalid`; пароль вне политики — `400 auth.password.*` (`invalidField = "newPassword"`), токен остаётся рабочим; завершает все сессии, авто-входа нет |
 | POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
 | POST | `api/auth/login/cookie` | аноним, rate limit, antiforgery | 204 + HttpOnly access-cookie (8 часов) + HttpOnly refresh-cookie |
 | POST | `api/auth/refresh` | аноним, rate limit; antiforgery только для cookie | ротирует refresh: cookie-ветка — 204 + новые cookie (`rememberMe` — постоянная или сессионная access-cookie), тело — 200 + новые access/refresh без cookie |
@@ -2754,7 +2791,9 @@ Mailpit: `Email:Enabled=true`, `Host=localhost`, `Port=1025`, `UseTls=false`,
 `FromAddress=no-reply@barbersearch.test`, `App:PublicUrl=http://localhost:5173` уже стоят в
 `appsettings.Development.json`; инбокс — `http://localhost:8025`, `docker compose up -d`
 поднимает Mailpit вместе с базой. `TimeoutSeconds` — 5, а не 100 по умолчанию у `SmtpClient`:
-регистрация не должна ждать почту дольше.
+регистрация не должна ждать почту дольше. Та же секция `Email` и тот же `App:PublicUrl`
+обслуживают сброс пароля (§17.12): новых ключей конфигурации срез не добавляет, а без
+настроенной почты `request` отвечает `409 auth.passwordReset.unavailable`.
 
 `JwtTokenIssuer` берёт «сейчас» из singleton'а `TimeProvider` и заполняет из него и `exp`, и
 `iat` (раньше `iat` оставался системным); `AuthController` считает оттуда же `ExpiresUtc` обеих
@@ -2841,7 +2880,9 @@ cookie и остаток refresh-срока в `TokenResponse`. Бизнес-«�
   `AddControllersWithViews()`. Исключения и причины: `register` — анонимное действие без
   ambient-идентичности; `login` — body-ветка выдаёт токены в теле (`login/cookie` защищён
   отдельным `ValidateAntiforgeryHeaderAttribute`); `refresh` и `logout` — ветка зависит от
-  тела, проверка уже реализована внутри действия. `change-password` маркера не имеет:
+  тела, проверка уже реализована внутри действия; `password-reset` и
+  `password-reset/confirm` — анонимные действия без ambient-идентичности, секрет — сам
+  одноразовый токен из письма (§17.12). `change-password` маркера не имеет:
   cookie-ветку закрывает фильтр, Bearer-ветка не проверяется. Antiforgery-cookie — `HttpOnly`,
   `Path=/`, следует `Auth:CookieSameSite`/`Secure`.
 - **Подтверждение email и CSRF.** `POST api/auth/email-verification` — cookie-мутация
@@ -2850,6 +2891,20 @@ cookie и остаток refresh-срока в `TokenResponse`. Бизнес-«�
   маркер имеет: ссылку открывают в другом браузере, ambient-идентичности нет, а секрет — сам
   токен; привязывать antiforgery-пару не к чему, это тот же случай, что у `register`.
   Оба действия под политикой `auth` (10/мин на IP).
+- **Сброс пароля: без CSRF, без оракула.** Оба эндпоинта анонимные и оба помечены
+  `[SkipCookieAntiforgery]`: `request` работает с email из тела, а не с текущей сессией, а
+  `confirm` авторизуется одноразовым токеном, который открывают в другом браузере; ambient-
+  идентичности, к которой можно привязать antiforgery-пару, нет (тот же случай, что
+  `register` и `email-verification/confirm`). `request` отвечает `204` для любого адреса —
+  существующего, несуществующего, неактивного, пустого и кривого — и молчит о кулдауне
+  (60 секунд) и сбое SMTP: `409 cooldown` или `500 sendFailed` только для существующего
+  адреса были бы оракулом существования. В лог при сбое идут `userId` и коды, не адрес.
+  Единственные отказы глобальны: `409 auth.passwordReset.unavailable` (почта или
+  `App:PublicUrl` не настроены), `429` лимитера и `500 internal.database`. Почему `409`, а не
+  `503`: в `FailureProblemDetails` нет `ErrorType` для «сервис недоступен», и новый тип ради
+  одного случая не вводится — как у подтверждения email (§17.11). Постоянное время ответа не
+  гарантируется: синхронный SMTP делает ответ для существующего адреса медленнее; это
+  задокументированное ограничение среза, а не обещание (§17.12).
 - CORS — только явные origins из `Cors:AllowedOrigins` и только с `AllowCredentials`;
   wildcard отклоняется на старте. Для cross-site SPA нужны `Auth:CookieSameSite=None`
   (тогда cookie `Secure`) и тот же origin в CORS; для same-site — `Lax`.
@@ -3260,6 +3315,119 @@ auth.emailVerification.invalid`; 2) `GetByHashAsync` → нет → тот же 
 оба репозитория в транзакции, гонка) и cleanup. Infrastructure: модель индексов/check/FK и
 маппинг ограничений. Integration: полный сценарий на реальной PostgreSQL, отсутствие
 конфигурации почты и схема/репозиторий на живой базе (§5.3, §8).
+
+### 17.12 Сброс пароля по email (added 2026-11-09)
+
+**Зачем.** Смена пароля в кабинете требует текущий пароль, поэтому человек, который его
+забыл, не мог восстановить доступ. Срез добавляет самостоятельный сценарий: анонимный
+посетитель указывает email → сервер высылает одноразовую ссылку → переход по ней задаёт
+новый пароль → старый пароль и все сессии перестают работать. Главное ограничение дизайна —
+ответ `request` не должен различать существующий и несуществующий адрес (§3.3): это
+определяет почти все решения ниже.
+
+**Схема и сроки.** Отдельная таблица `password_reset_tokens` (миграция
+`AddPasswordResetTokens`, §8) повторяет проверенный шаблон `email_verification_tokens`, но
+живёт своей жизнью: у токенов разный TTL, разная семантика повторного клика и разный
+жизненный цикл. Колонки: `id` UUIDv7 PK, `user_id` FK → `users` `ON DELETE CASCADE`,
+`token_hash` (`text`, `CHECK char_length = 64`), `issued_at` / `expires_at` / `consumed_at` /
+`revoked_at`, `created_at` / `updated_at`. Индексы — §15.2. Открытый токен в базе не
+хранится: 32 случайных байта → base64url (43 символа), в таблице только SHA-256 в нижнем
+регистре. `issued_at` — бизнес-время из `TimeProvider`, а не `Entity.CreatedAt`: по нему
+считается кулдаун. Сроки — именованные константы `PasswordResetLifetime`: TTL ссылки
+**30 минут** (короче 24 часов у подтверждения email — сброс чувствительнее), кулдаун
+переотправки **60 секунд**, ретенция уборки **30 дней**.
+
+**Поток `POST api/auth/password-reset`.** Анонимный, `[SkipCookieAntiforgery]`, политика
+`auth` (10/мин на IP). Порядок проверок фиксирован:
+1) почта не настроена (`EmailOptions.IsConfigured`) или пуст `App:PublicUrl` →
+`409 auth.passwordReset.unavailable` — **до** поиска пользователя, это глобальное состояние
+сервера; 2) `User.NormalizeEmail`; пустой адрес или длиннее 254 → `Ok` без запроса в базу и
+без письма; 3) `GetByEmailAsync`; «нет пользователя» и «адрес не прошёл проверку» → `Ok`,
+любая другая ошибка репозитория — наверх (не маскируется под успех); 4) `!user.IsActive` →
+`Ok` без письма (деактивированный аккаунт не восстанавливается); 5) активный токен моложе
+60 секунд → `Ok` без письма — кулдаун тихий, сравнение строгое (ровно через 60 секунд
+отправка разрешена); 6) в одной транзакции `IUnitOfWork` повторно читается активный токен,
+при наличии — `Revoke(now)` + `UpdateAsync`, затем `AddAsync` нового; нарушение
+`ux_password_reset_tokens_active` или `concurrencyConflict` — проигранная гонка, тоже тихий
+`Ok`, остальные ошибки — наверх; 7) **после** коммита собирается ссылка
+`{App:PublicUrl.TrimEnd('/')}/reset-password?token=…` (`Uri.EscapeDataString`) и отправляется
+письмо; сбой sender'а логируется (`userId`, коды) и тоже даёт `Ok`, токен остаётся в базе —
+через 60 секунд можно запросить новое письмо. Ответ — `204` без тела.
+
+**Письмо.** Тема `PasswordResetMessage.SUBJECT = "Сброс пароля — BarberSearch"`; HTML и
+текстовый дубль, без картинок и трекинга. Имя в приветствии проходит через
+`WebUtility.HtmlEncode`; email, `id` пользователя и пароль в тексте не появляются, открытый
+токен — только внутри ссылки. Текст говорит, зачем письмо, что ссылка действует 30 минут и
+что при отсутствии запроса письмо можно проигнорировать. Транспорт — существующий
+`SmtpEmailSender`; новых ключей конфигурации нет.
+
+**Поток `POST api/auth/password-reset/confirm`.** Анонимный, `[SkipCookieAntiforgery]`,
+политика `auth`. 1) формат токена (≤ 128, `[A-Za-z0-9_-]`) → иначе `400
+auth.passwordReset.invalid`; 2) `GetByHashAsync`; нет токена → тот же код, другая ошибка —
+наверх; 3) пользователь по `token.UserId`; нет → тот же код; 4) `!user.IsActive` → тот же
+код; 5) `ConsumedAt`/`RevokedAt`/`!IsActive(now)` → тот же код (токен одноразовый и не
+идемпотентный: повторный клик не «доигрывает» первый); 6) `IPasswordPolicy.Validate` —
+сначала обязательность/длина/словарь, затем совпадение с email, именем и фамилией; отказ —
+`400 auth.password.*` с `invalidField = "newPassword"`, токен при этом **не** потребляется;
+7) `IPasswordService.Hash` — до транзакции, PBKDF2 не держит соединение; 8) в одной
+транзакции: `token.Consume(now)` → `user.ChangePasswordHash(hash)` (он же ротирует
+`SecurityStamp`) → `user.MarkEmailAsVerified()` → `user.ResetFailedLogin()` →
+`_users.UpdateAsync` → `_tokens.UpdateAsync` → `_refreshTokens.RevokeAllForUserAsync`; любой
+`Failure` откатывает всё; 9) `concurrencyConflict` (гонка двух confirm) → `400 invalid`, не
+`500`; 10) `204`.
+
+**Почему confirm без CSRF.** Ссылку открывают в другом браузере или на другом устройстве;
+запрос анонимный, ambient-идентичности нет, а секрет — сам одноразовый токен. Привязывать
+antiforgery-пару не к чему: это тот же случай, что `register` и `email-verification/confirm`
+(§17.5). `EmailOptions`/`PublicUrl` в confirm не проверяются — письмо уже выдано, повторная
+отправка не нужна; активная блокировка входа не отказ, её снимает `ResetFailedLogin`.
+
+**Что происходит с сессиями.** Успешный сброс завершает все сессии: смена хеша ротирует
+`SecurityStamp`, поэтому старые access-cookie/JWT отклоняются на следующем запросе, а
+`RevokeAllForUserAsync` гасит refresh-токены (§17.10). Автоматического входа нет — клиент
+входит заново новым паролем. В той же транзакции адрес помечается подтверждённым: владение
+ящиком доказано ссылкой из письма, это не слабее клика подтверждения email, а отдельного
+`email_verified_at` не появляется. Смена пароля в кабинете активные reset-токены не отзывает:
+это отдельный сценарий и отдельный срез (§3.12).
+
+**Анти-энумерация и честность ошибок.** `request` отвечает `204` для любого адреса, кулдаун
+и сбой SMTP тихие; публичных кодов `auth.passwordReset.cooldown`/`sendFailed` нет. Постоянное
+время ответа не гарантируется: синхронный SMTP делает ответ для существующего адреса
+медленнее, чем для несуществующего. Это известное ограничение среза; outbox/асинхронная
+отправка — отдельный срез, искусственные задержки не добавляются. `confirm` использует один
+код `auth.passwordReset.invalid` на неизвестный, просроченный, использованный и отозванный
+токен, чтобы перебор не различал строки.
+
+**Уборка.** `PasswordResetTokenCleanupService` (`Web/Auth`, по образцу
+`EmailVerificationTokenCleanupService`) вызывает `CleanupPasswordResetTokensHandler` сразу на
+старте и далее каждые 60 минут; удаляются строки, у которых `expires_at` или `consumed_at`
+старше 30 дней (`TOKEN_RETENTION`). Активная и недавняя использованная строки остаются: по
+первой считается кулдаун. `DELETE` идемпотентен, ошибки БД логируются и не роняют хост.
+
+**Аудит.** Успешный сброс пишет одну строку `user.updated` с `actorUserId = null` (клиент
+анонимный): `IsEmailVerified` входит в allowlist `AuditTrail`, а `PasswordHash` и
+`SecurityStamp` сохраняются как `[redacted]`. Отдельных записей срез не добавляет; открытый
+токен, хеш и пароль не логируются и в журнал не попадают.
+
+**Коды и контракты.** `RequestPasswordResetRequest(string? Email)` и
+`ConfirmPasswordResetRequest(string? Token, string? NewPassword)` в
+`Contracts/Auth/PasswordReset`; публичные коды — `ApiErrorCodes.Auth.PasswordResetInvalid`
+(`400`) и `PasswordResetUnavailable` (`409`) рядом с `EmailVerification*`. Новых `ErrorType`
+в `FailureProblemDetails` нет, политика пароля переиспользует существующие
+`auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`.
+
+**Тесты.** Domain: `PasswordResetTokenTests` — `Create` (пустой `userId`, кривой хеш,
+`default` время, `issuedAt > now`, `expiresAt <= issuedAt`), `IsActive` на строгой границе
+`ExpiresAt`, `Consume` (активный, повторный, отозванный, просроченный) и `Revoke` (активный,
+просроченный, повторный, потреблённый). Application: `PasswordResetTests` — request
+(транзакция, ссылка в письме, кулдаун 59/60/61 c, неизвестный/неактивный/пустой адрес,
+почта выключена, пустой `PublicUrl`, сбой sender'а, конфликт активного индекса), confirm
+(успех со сменой хеша/stamp/refresh/lockout/email, все виды недействительного токена,
+политика пароля без потребления токена, конкурентность) и cleanup. Infrastructure: модель
+индексов/check/FK, маппинг ограничений, `DeleteExpiredAsync`. Integration: полный сценарий
+на реальной PostgreSQL, анти-энумерация, кулдаун, lockout, аудит и `GET api/users/me` с
+`isEmailVerified = true`. Итог: domain **374**, application **672**, infrastructure **158**,
+integration **200** — всего **1404** теста, `dotnet build` — 0 warnings, 0 errors (§5.3, §8).
 
 ---
 

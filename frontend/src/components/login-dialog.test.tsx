@@ -387,6 +387,25 @@ describe('LoginDialog', () => {
     )
   })
 
+  it('ссылка «Забыли пароль?» закрывает диалог и ведёт на /forgot-password', async () => {
+    const user = userEvent.setup()
+
+    renderDialog()
+    const dialog = await openDialog(user)
+
+    const link = within(dialog).getByRole('link', {
+      name: 'Забыли пароль?',
+    })
+    expect(link).toHaveAttribute('href', '/forgot-password')
+
+    await user.click(link)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(window.location.pathname).toBe('/forgot-password')
+  })
+
   it('связывает ошибку с полем через aria-invalid и aria-describedby', async () => {
     const user = userEvent.setup()
 

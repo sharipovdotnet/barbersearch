@@ -228,6 +228,24 @@ describe('AccountSecurityPage: статус адреса', () => {
   })
 })
 
+describe('AccountSecurityPage: восстановление пароля', () => {
+  it('ссылка «Забыли пароль?» ведёт на /forgot-password', async () => {
+    const user = userEvent.setup()
+    const current = profile('88888888-8888-4888-8888-888888888888', true)
+
+    server.use(http.get('/api/users/me', () => HttpResponse.json(current)))
+
+    renderPage(current)
+
+    const link = await screen.findByRole('link', { name: 'Забыли пароль?' })
+    expect(link).toHaveAttribute('href', '/forgot-password')
+
+    await user.click(link)
+
+    expect(window.location.pathname).toBe('/forgot-password')
+  })
+})
+
 describe('AccountSecurityPage: приземление после регистрации', () => {
   it('показывает «письмо отправлено» и сразу убирает query из адреса', async () => {
     const current = profile('77777777-7777-4777-8777-777777777777', false)

@@ -41,6 +41,21 @@ public sealed class FakeRefreshTokenRepository : IRefreshTokenRepository, IFakeT
     /// </summary>
     public Func<Guid, DateTimeOffset, UnitResult<Failure>>? RevokeAllBehavior { get; set; }
 
+    /// <summary>
+    /// Проверка «мы внутри транзакции»; тест подключает сюда <see cref="FakeUnitOfWork"/>.
+    /// </summary>
+    public Func<bool>? IsInTransaction { get; set; }
+
+    /// <summary>
+    /// Сколько раз обработчики отзывали все токены пользователя.
+    /// </summary>
+    public int RevokeAllCallCount { get; private set; }
+
+    /// <summary>
+    /// Был ли <see cref="RevokeAllForUserAsync"/> вызван внутри транзакции.
+    /// </summary>
+    public bool RevokeAllInTransaction { get; private set; }
+
     public void BeginTransaction()
         => _snapshot = _tokens.ToDictionary(
             entry => entry.Key,
@@ -185,6 +200,9 @@ public sealed class FakeRefreshTokenRepository : IRefreshTokenRepository, IFakeT
         DateTimeOffset revokedAt,
         CancellationToken cancellationToken = default)
     {
+        RevokeAllCallCount++;
+        RevokeAllInTransaction |= IsInTransaction?.Invoke() ?? false;
+
         if (RevokeAllBehavior is { } behavior)
         {
             return Task.FromResult(behavior(userId, revokedAt));
