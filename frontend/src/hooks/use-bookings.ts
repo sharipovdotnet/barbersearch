@@ -47,23 +47,28 @@ const statusChanged = (before: Booking, after: Booking): boolean =>
  * `refreshUpcoming` — обратная операция для опроса: барбер подтверждает или отменяет
  * запись, клиент видит это без перезагрузки. Опрос не трогает «Историю»: это лог
  * прошлых визитов, ему хватает загрузки при открытии вкладки.
+ *
+ * `userId` передаётся в каждый запрос: кабинет — это «мои записи» для любой роли,
+ * а администратор без фильтра получил бы с сервера все брони системы.
  */
 export function useCustomerBookings({
   historyEnabled,
+  userId,
 }: {
   historyEnabled: boolean
+  userId: string
 }): CustomerBookingsController {
   const { t } = useI18n()
   const fetchUpcomingPage = useCallback(
     (cursor: string | null, signal: AbortSignal) =>
-      fetchBookings('upcoming', cursor, signal),
-    []
+      fetchBookings('upcoming', cursor, signal, userId),
+    [userId]
   )
 
   const fetchHistoryPage = useCallback(
     (cursor: string | null, signal: AbortSignal) =>
-      fetchBookings('past', cursor, signal),
-    []
+      fetchBookings('past', cursor, signal, userId),
+    [userId]
   )
 
   const upcoming = usePagedList<Booking>({

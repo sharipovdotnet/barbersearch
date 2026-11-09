@@ -58,21 +58,24 @@ export function AccountPage() {
             'Ближайший визит, история и отмена — без звонков в салон.'
           )}
         >
-          <BookingsCabinet role={user.role} />
+          <BookingsCabinet role={user.role} userId={user.id} />
         </AccountShell>
       )}
     </AccountAccess>
   )
 }
 
-function BookingsCabinet({ role }: { role: string }) {
+function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
   const { t } = useI18n()
   const [tab, setTab] = useState<BookingsTab>('upcoming')
   // История ленивая: на входе в кабинет грузятся только «Предстоящие».
   const historyEnabled = tab === 'history'
+  // id передаётся и в «Предстоящие», и в «Историю»: у администратора сервер без
+  // этого фильтра возвращает все брони системы, а не только его собственные.
   const { upcoming, history, cancelBooking, refreshUpcoming, isCancelling } =
     useCustomerBookings({
       historyEnabled,
+      userId,
     })
 
   // Активный список задаёт и строки, и пагинатор: у вкладок разные курсоры.

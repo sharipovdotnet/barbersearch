@@ -46,6 +46,16 @@ describe('fetchBookings', () => {
     expect(requests).toStrictEqual(['?scope=upcoming&pageSize=20'])
   })
 
+  it('передаёт userId, чтобы кабинет показывал только свои записи', async () => {
+    const requests = captureBookingRequests()
+
+    await fetchBookings('past', null, undefined, 'user-1')
+
+    expect(requests).toStrictEqual([
+      '?scope=past&pageSize=20&userId=user-1',
+    ])
+  })
+
   it('передаёт signal отмены в запрос', async () => {
     server.use(
       http.get('/api/bookings', () => {
