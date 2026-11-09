@@ -53,6 +53,19 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      # Письма подтверждения email: E2E читает настоящий инбокс из API Mailpit.
+      # SMTP — 1025 (его ждёт API), HTTP-UI и API — 8025.
+      mailpit:
+        image: axllent/mailpit:v1.21.8
+        ports:
+          - 1025:1025
+          - 8025:8025
+        options: >-
+          --health-cmd "wget -q --spider http://localhost:8025/api/v1/info || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,6 +127,13 @@ jobs:
         working-directory: backend
         env:
           ASPNETCORE_ENVIRONMENT: Development
+          # Письма идут в сервис-контейнер Mailpit, а ссылка из письма ведёт на Vite.
+          Email__Enabled: 'true'
+          Email__Host: localhost
+          Email__Port: '1025'
+          Email__UseTls: 'false'
+          Email__FromAddress: no-reply@barbersearch.test
+          App__PublicUrl: http://localhost:5173
         run: |
           nohup dotnet run --project BarberSearch/src/BarberSearch.Web \
             --launch-profile http --no-build > "$RUNNER_TEMP/api.log" 2>&1 &

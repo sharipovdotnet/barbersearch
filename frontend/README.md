@@ -58,7 +58,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
-| `/account/security` | security: password change, sign out and email verification status |
+| `/account/security` | security: password change, sign out and email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: the «Сегодня» day feed by default (visits of the day, the free windows between them and a one-click booking into a window), then «Ближайшие» / «История» lists with confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
@@ -68,6 +68,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
+| `/verify-email` | confirmation from the email link: one anonymous `POST` with the token, then «Адрес подтверждён», «Ссылка недействительна», a network error or «Ссылка неполная»; the token is removed from the address after it settles |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
 | `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions; a salon waiting for moderation is not counted as disabled |
@@ -301,9 +302,30 @@ name updates immediately after a save without a second read.
 
 `/account/security` reuses the existing `ChangePasswordDialog` (password from 12 characters,
 `POST /api/auth/change-password`, all refresh tokens revoked) and adds sign-out. The copy explains
-that changing the password ends the other sessions. The page also shows the email verification
-status and the last login from `GET /api/users/me`; there is no active-device list because the API
-does not expose one, and the screen does not invent it.
+that changing the password ends the other sessions.
+
+Email verification is a working card, not a status line. A verified address shows a green
+«Адрес подтверждён.» and the address itself. An unverified one shows a yellow
+«Адрес не подтверждён.» and «Отправить письмо ещё раз»: the request goes through
+`mutateWithCsrf` with an empty body, the button then counts down a local 60 seconds, and success
+or failure is announced in an `aria-live` region. `409 auth.emailVerification.cooldown` and the
+`429` auth limiter share the same «Письмо уже отправлено…» text;
+`409 auth.emailVerification.unavailable` says «Отправка писем пока не настроена.» instead of
+pretending the letter was sent. While `GET /api/users/me` loads, the button is not rendered;
+after `204` the profile is re-read through `AccountProfileContext.reload()` rather than guessing
+the flag. To verify the address, open the letter and follow the link: it opens
+`/verify-email?token=…`, where one anonymous `POST` confirms the address, the token is removed
+from the address bar, and a repeated click is still a success (the API answers `204`). The same
+card is the landing after registration: the form navigates to
+`/account/security?verification=sent`, the page reads the query **once** into state, shows
+«Письмо отправлено на …» in an `aria-live` notice and immediately removes `?verification=sent`
+with `replace`. The letter itself is sent by the server during registration, so a failed SMTP
+delivery does not fail registration: the notice still says the letter was sent, while the resend
+button honestly reports an unconfigured email channel. The «Email не подтверждён» line in the
+cabinet rail is a link to this section.
+
+The page also shows the last login from `GET /api/users/me`; there is no active-device list
+because the API does not expose one, and the screen does not invent it.
 
 ## Barber cabinet
 
@@ -722,8 +744,10 @@ fresh `X-CSRF-TOKEN` immediately before the request and, on `400 auth.csrf.inval
 same mutation **once** with a new token. The antiforgery filter rejects the request before the
 action runs, so nothing was changed and the repeat is safe; a second failure shows the existing
 Russian text and the dialog stays usable — there is no third attempt. There are two exceptions:
-`POST /api/bookings` and `POST /api/auth/register`. The API does not validate antiforgery on
-either, so the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14).
+`POST /api/auth/register` and `POST /api/auth/email-verification/confirm`. Both are anonymous:
+the confirmation secret is the token from the letter, which may be opened in another browser, so
+the client does not fetch or send a token there (see `AGENT.md` §9.4 and §14). Booking creation
+goes through `mutateWithCsrf` like every other cookie mutation.
 
 Successful responses are checked too: `apiRequest` accepts a hand-written guard from
 `src/lib/response-guards.ts` and turns a malformed `200`/`201` into a normal `ApiError`
@@ -839,9 +863,12 @@ not reproduced on the client.
 
 On `201 { id }` the form signs in with the same credentials through the usual CSRF path
 (`GET /api/auth/csrf` → `POST /api/auth/login/cookie` → `GET /api/auth/me`) and navigates to
-`/account`; the role is always `Customer` and `isEmailVerified` is `false`. If the auto sign-in
-fails, registration is **not** repeated (a second attempt would be `409`): the form is replaced
-by the «Аккаунт создан» card with a `LoginDialog` (`redirectTo="/account"`).
+`/account/security?verification=sent`; the role is always `Customer` and `isEmailVerified` is
+`false`. The server sends the confirmation letter in the registration request itself, so the
+new landing is the security card with an «Письмо отправлено на …» notice (the query is read once
+and removed from the address). If the auto sign-in fails, registration is **not** repeated (a
+second attempt would be `409`): the form is replaced by the «Аккаунт создан» card with a
+`LoginDialog` (`redirectTo="/account"`).
 
 Public codes are mapped at the field or the form: `user.create.emailTaken` (409),
 `auth.register.consentRequired` (the checkbox error), `auth.register.consentVersion` (the
@@ -850,7 +877,9 @@ form-level «Политика обновилась» alert), `auth.password.requ
 offline, `5xx` and anything else have their own Russian text. The English `detail` is never
 shown. Both registration and sign-in use the auth rate limiter (10 requests per minute per IP),
 so a registration with its auto sign-in spends two of them. The new account is active
-immediately; email confirmation is out of scope. Accounts created before the consent record
+immediately; email verification is a **soft** flag that does not block sign-in or booking, so the
+user can confirm the address now or later from `/account/security` (the link in the letter opens
+`/verify-email?token=…`). Accounts created before the consent record
 existed and the ones an administrator creates have no record — that is expected and the admin
 card says «Записи нет».
 
@@ -859,6 +888,9 @@ card says «Записи нет».
   guard and the «Аккаунт создан» card.
 - `src/lib/auth.ts` — `RegistrationInput` and `register()`; `src/lib/register-path.ts` —
   `REGISTER_PATH` / `isRegisterPath`.
+- `src/pages/verify-email-page.tsx` — the confirmation landing; `src/lib/email-verification.ts` —
+  the two transport calls and the code mapping; `src/lib/verify-email-path.ts` —
+  `VERIFY_EMAIL_PATH` / `isVerifyEmailPath`.
 
 ## Become a barber
 
@@ -1377,9 +1409,10 @@ layer below.
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
-admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
-keyboard paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test`
-(Vitest) stays separate and fast; E2E never runs inside it.
+admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, email
+verification (registration → letter in Mailpit → link → confirmed cabinet), the keyboard paths and
+an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest) stays
+separate and fast; E2E never runs inside it.
 
 ### One-time setup
 
@@ -1393,15 +1426,34 @@ A separate database is mandatory — never `barbersearch` and never `barbersearc
 createdb -h localhost -U postgres barbersearch_e2e
 ```
 
-The API must be running on `http://localhost:5243` (the `http` profile, which Vite proxies):
+### Mailpit
+
+Verification letters are **real SMTP messages, not mocks**: the E2E suite reads the inbox through
+the Mailpit HTTP API (`GET /api/v1/messages`, then `GET /api/v1/message/{id}`). Start the container
+before the API — it is the same pinned image as in `backend/docker-compose.yml`:
+
+```bash
+docker run -d --rm --name barbersearch-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.21.8
+```
+
+The inbox UI is http://localhost:8025. `e2e/global-setup.ts` polls `GET /api/v1/info` for about
+15 seconds and fails immediately with this command if the container is missing, so the first test
+cannot flake on a not-yet-ready SMTP port.
+
+The API must be running with the email settings and the public link base (the letter's link points
+at Vite, not at the API):
 
 ```bash
 # from ../backend
 ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;Username=postgres;Password=postgres" \
+  Email__Enabled=true Email__Host=localhost Email__Port=1025 Email__UseTls=false \
+  Email__FromAddress=no-reply@barbersearch.test App__PublicUrl=http://localhost:5173 \
   dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
 ```
 
-Migrations and both seed files (the backend's minimal seed plus the E2E fixtures):
+Without these variables registration still returns `201`, but no letter is sent: the resend button
+honestly answers `409 auth.emailVerification.unavailable`, and `email-verification.spec.ts` fails at
+the Mailpit step. Migrations and both seed files (the backend's minimal seed plus the E2E fixtures):
 
 ```bash
 # from ../backend, with ConnectionStrings__Postgres pointing at barbersearch_e2e
@@ -1419,6 +1471,10 @@ npm run test:e2e:seed             # wrapper around e2e/fixtures/seed.sql
 local default — and refuses to run against any database except `barbersearch_e2e` (the SQL file
 checks the name itself as well). Rerun it whenever the fixtures could have been mutated: the tests
 that edit, delete or publish restore their own rows, but the seed is the authoritative reset.
+`email-verification.spec.ts` additionally registers fresh `e2e+<timestamp>@barbersearch.test`
+customers (one per project per run). The API has no user deletion and the seed does not remove
+them, so they accumulate in `barbersearch_e2e`; the rows are additive, and the admin user list
+pages through them, so no other scene depends on the total.
 
 ### Running
 
@@ -1452,7 +1508,8 @@ scroll). It needs no authenticated account, so it also runs in isolation with
 narrow branches at 320. Only `critical` and `serious` fail the run; `moderate`/`minor` findings are
 written to the Playwright report as `axe-advisory` annotations. There is **no allow-list**: a known
 finding is fixed or gets a new number in `AGENT.md` §14 and an entry that cites it — an exception
-without a debt number is not allowed.
+without a debt number is not allowed. `/verify-email` is scanned in both files at its
+invalid-link state, and `email-verification.spec.ts` adds the confirmed state at 1280.
 
 ### Fixtures and accounts
 

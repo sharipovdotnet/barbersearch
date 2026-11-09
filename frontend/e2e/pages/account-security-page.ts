@@ -32,6 +32,35 @@ export class AccountSecurityPage {
       .filter({ hasText: 'Подтверждение email' })
   }
 
+  /** Строка статуса карточки: «Адрес подтверждён.» / «Адрес не подтверждён.». */
+  get emailStatus(): Locator {
+    return this.emailCard.getByText(/^Адрес (не )?подтверждён\.$/)
+  }
+
+  get emailVerifiedStatus(): Locator {
+    return this.emailCard.getByText('Адрес подтверждён.', { exact: true })
+  }
+
+  get emailUnverifiedStatus(): Locator {
+    return this.emailCard.getByText('Адрес не подтверждён.', { exact: true })
+  }
+
+  get resendButton(): Locator {
+    return this.emailCard.getByRole('button', { name: 'Отправить письмо ещё раз' })
+  }
+
+  /** Кнопка после нажатия: «Повторить через 60 с» и заблокирована. */
+  get resendCooldown(): Locator {
+    return this.emailCard.getByRole('button', { name: /^Повторить через \d+ с$/ })
+  }
+
+  /** `?verification=sent` — уведомление приземления после регистрации. */
+  get verificationSentNotice(): Locator {
+    return this.main.getByRole('status').filter({
+      hasText: 'Письмо отправлено на',
+    })
+  }
+
   get passwordDialog(): Locator {
     return this.page.getByRole('dialog')
   }
@@ -40,5 +69,11 @@ export class AccountSecurityPage {
     await expect(this.heading).toBeVisible()
     await expect(this.changePassword).toBeVisible()
     await expect(this.signOut).toBeVisible()
+  }
+
+  /** Ждём загруженный профиль: до него карточка показывает только статус сессии. */
+  async waitForEmailStatus(): Promise<void> {
+    await expect(this.emailCard).toBeVisible()
+    await expect(this.emailStatus).toBeVisible()
   }
 }

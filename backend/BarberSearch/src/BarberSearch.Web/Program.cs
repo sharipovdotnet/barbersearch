@@ -1,9 +1,12 @@
 using System.Globalization;
+using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
+using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
 using Microsoft.Extensions.Hosting;
@@ -53,6 +56,13 @@ try
         builder.Configuration.GetSection(AppOptions.SECTION).Get<AppOptions>()
         ?? new AppOptions());
 
+    // Почта: пустая секция — нормальное состояние (письма не уходят, регистрация работает).
+    // Адрес App:PublicUrl проверяется в обработчике запроса письма, а не здесь.
+    builder.Services.AddSingleton(
+        builder.Configuration.GetSection(EmailOptions.SECTION).Get<EmailOptions>()
+        ?? new EmailOptions());
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
     // Telegram — единственный внешний HTTP-канал напоминаний; отдельного NuGet-пакета нет.
     builder.Services.AddHttpClient(
         TelegramSender.HTTP_CLIENT_NAME,
@@ -82,6 +92,11 @@ try
     // вызывает CleanupOnceAsync у того же экземпляра, а не создаёт второй фоновой сервис.
     builder.Services.AddSingleton<RefreshTokenCleanupService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<RefreshTokenCleanupService>());
+
+    // Уборка одноразовых токенов подтверждения email: сразу на старте и далее раз в час.
+    // Ретенция (30 дней) и TTL живут в Application (EmailVerificationLifetime).
+    builder.Services.AddSingleton<EmailVerificationTokenCleanupService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailVerificationTokenCleanupService>());
 
     // При остановке хоста Kestrel перестаёт принимать новые соединения и ждёт in-flight запросы
     // не дольше этого таймаута. Оркестратор должен давать pod'у не меньше времени.

@@ -24,6 +24,7 @@ import { matchBarberPath } from '@/lib/barber-path'
 import { isPrivacyPath } from '@/lib/legal'
 import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
+import { isVerifyEmailPath } from '@/lib/verify-email-path'
 import { useI18n } from '@/i18n'
 import { HomePage } from '@/pages/home-page'
 
@@ -107,6 +108,12 @@ const RegisterPage = lazy(() =>
   })),
 )
 
+const VerifyEmailPage = lazy(() =>
+  import('@/pages/verify-email-page').then((module) => ({
+    default: module.VerifyEmailPage,
+  })),
+)
+
 const PrivacyPage = lazy(() =>
   import('@/pages/privacy-page').then((module) => ({
     default: module.PrivacyPage,
@@ -136,6 +143,7 @@ function App() {
   const { t } = useI18n()
   const pathname = usePathname()
   const isRegister = isRegisterPath(pathname)
+  const isVerifyEmail = isVerifyEmailPath(pathname)
   const isPrivacy = isPrivacyPath(pathname)
   const isBecomeABarber = isBecomeABarberPath(pathname)
   const barberId = matchBarberPath(pathname)
@@ -175,11 +183,13 @@ function App() {
                           ? 'barber-salons'
                           : isBarberCabinet
                             ? 'barber-cabinet'
-                            : pathname === '/account'
-                              ? 'account'
-                              : barberId !== null
-                                ? `barber:${barberId}`
-                                : 'home'
+                            : isVerifyEmail
+                              ? 'verify-email'
+                              : pathname === '/account'
+                                ? 'account'
+                                : barberId !== null
+                                  ? `barber:${barberId}`
+                                  : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -210,6 +220,8 @@ function App() {
           <Suspense fallback={<RouteFallback />}>
             {isRegister ? (
               <RegisterPage />
+            ) : isVerifyEmail ? (
+              <VerifyEmailPage />
             ) : isPrivacy ? (
               <PrivacyPage />
             ) : isBecomeABarber ? (

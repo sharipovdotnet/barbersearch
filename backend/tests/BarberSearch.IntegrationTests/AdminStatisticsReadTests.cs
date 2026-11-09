@@ -14,17 +14,24 @@ namespace BarberSearch.IntegrationTests;
 /// плотный ряд и отсутствие PII в теле.
 /// </summary>
 /// <remarks>
-/// Часы подменены на фиксированный момент: <c>due</c>, <c>closed</c> и снимок зависших
+/// <para>
+/// Часы подменяются на момент запуска прогона: <c>due</c>, <c>closed</c> и снимок зависших
 /// броней зависят от «сейчас», а не от системного времени. Период — январь 2020,
 /// поэтому аккаунты, созданные сидом сейчас, в «новые аккаунты» не попадают.
+/// </para>
+/// <para>
+/// Конкретная дата не фиксируется: <see cref="BarberSearch.Web.Auth.JwtTokenIssuer"/> берёт
+/// «сейчас» из <see cref="TimeProvider"/>, а валидация bearer-токена — из системных часов.
+/// Замороженное прошлое делало выданный access-токен просроченным, и каждый аутентифицированный
+/// запрос отвечал <c>401</c>.
+/// </para>
 /// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed class AdminStatisticsReadTests
 {
     private const string ENDPOINT = "api/admin/statistics";
 
-    private static readonly DateTimeOffset Now =
-        new(2026, 11, 8, 9, 30, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);

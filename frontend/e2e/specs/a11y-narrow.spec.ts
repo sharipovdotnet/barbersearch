@@ -13,6 +13,7 @@ import { AccountProfilePage } from '../pages/account-profile-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { ProfilePage } from '../pages/profile-page'
+import { VerifyEmailPage } from '../pages/verify-email-page'
 
 /**
  * axe на 320 px: узкий экран рендерит другую ветку разметки.
@@ -80,6 +81,28 @@ test.describe('axe: 320 px, публичный профиль', () => {
     await expectNoBlockingViolations(
       page,
       '/become-a-barber @320',
+      test.info()
+    )
+  })
+
+  test('подтверждение email: карточка ошибки на 320', async ({ page }) => {
+    const verify = new VerifyEmailPage(page)
+
+    await verify.goto('broken-token-from-axe')
+    await verify.waitForInvalid()
+
+    // Длинный текст ошибки и две кнопки действий переносятся, а не дают scroll.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/verify-email (недействительная ссылка) @320',
       test.info()
     )
   })

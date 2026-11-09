@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Privacy;
 using BarberSearch.Contracts.Auth.Csrf;
@@ -135,7 +136,8 @@ public sealed class TestApp : IAsyncDisposable
         PostgresFixture database,
         IReadOnlyDictionary<string, string?>? configuration = null,
         TimeProvider? timeProvider = null,
-        ITelegramSender? telegramSender = null)
+        ITelegramSender? telegramSender = null,
+        IEmailSender? emailSender = null)
     {
         ArgumentNullException.ThrowIfNull(database);
 
@@ -154,7 +156,10 @@ public sealed class TestApp : IAsyncDisposable
 
         try
         {
-            var factory = new IntegrationWebApplicationFactory(timeProvider, telegramSender);
+            var factory = new IntegrationWebApplicationFactory(
+                timeProvider,
+                telegramSender,
+                emailSender);
 
             var client = factory.CreateClient(new WebApplicationFactoryClientOptions
             {
@@ -174,6 +179,12 @@ public sealed class TestApp : IAsyncDisposable
             var reminders = factory.Services.GetRequiredService<ReminderDispatchService>();
             await reminders.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
+            // Уборка токенов подтверждения email тоже идёт сразу на старте: DELETE не должен
+            // гоняться со строками, которые тест сидирует после старта хоста.
+            var emailCleanup = factory.Services
+                .GetRequiredService<EmailVerificationTokenCleanupService>();
+            await emailCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
             return new TestApp(factory, client);
         }
         finally
@@ -192,13 +203,16 @@ public sealed class TestApp : IAsyncDisposable
     {
         private readonly TimeProvider? _timeProvider;
         private readonly ITelegramSender? _telegramSender;
+        private readonly IEmailSender? _emailSender;
 
         public IntegrationWebApplicationFactory(
             TimeProvider? timeProvider,
-            ITelegramSender? telegramSender)
+            ITelegramSender? telegramSender,
+            IEmailSender? emailSender)
         {
             _timeProvider = timeProvider;
             _telegramSender = telegramSender;
+            _emailSender = emailSender;
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -225,6 +239,12 @@ public sealed class TestApp : IAsyncDisposable
                 {
                     services.RemoveAll<ITelegramSender>();
                     services.AddSingleton(_telegramSender);
+                }
+
+                if (_emailSender is not null)
+                {
+                    services.RemoveAll<IEmailSender>();
+                    services.AddSingleton(_emailSender);
                 }
             });
         }

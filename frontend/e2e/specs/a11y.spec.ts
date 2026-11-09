@@ -16,6 +16,7 @@ import { CabinetPage } from '../pages/cabinet-page'
 import { LandingPage } from '../pages/landing-page'
 import { MyReviewsPage } from '../pages/my-reviews-page'
 import { ProfilePage } from '../pages/profile-page'
+import { VerifyEmailPage } from '../pages/verify-email-page'
 
 /**
  * axe на 1280: матрица экранов и ролей (§6).
@@ -62,6 +63,20 @@ test.describe('axe: публичные экраны', () => {
     ).toBeVisible()
 
     await expectNoBlockingViolations(page, '/register', test.info())
+  })
+
+  test('подтверждение email /verify-email: недействительная ссылка', async ({
+    page,
+  }) => {
+    const verify = new VerifyEmailPage(page)
+
+    // Анонимный экран: токен битый, поэтому страница сразу в состоянии `invalid`,
+    // без валидного токена и без создания аккаунта. Успех сканируется в
+    // `email-verification.spec.ts`, 320 px — в `a11y-narrow.spec.ts`.
+    await verify.goto('broken-token-from-axe')
+    await verify.waitForInvalid()
+
+    await expectNoBlockingViolations(page, '/verify-email', test.info())
   })
 
   test('«Стать барбером» /become-a-barber: анонимный экран', async ({ page }) => {

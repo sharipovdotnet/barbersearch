@@ -186,10 +186,19 @@ function AccountIdentity({
         </p>
 
         {!isEmailVerified && (
-          <p className="mt-1.5 flex items-center gap-1 text-xs text-warning">
+          <a
+            href={ACCOUNT_SECURITY_PATH}
+            className="mt-1.5 flex w-fit items-center gap-1 rounded-sm text-xs text-warning transition-colors outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+              if (isPlainClick(event)) {
+                event.preventDefault()
+                navigate(ACCOUNT_SECURITY_PATH)
+              }
+            }}
+          >
             <MailWarning className="size-3 shrink-0" aria-hidden />
             {t('Email не подтверждён')}
-          </p>
+          </a>
         )}
       </div>
     </div>

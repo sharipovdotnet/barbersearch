@@ -2,6 +2,8 @@ using System.Net;
 using System.Security.Claims;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.EmailVerifications.ConfirmEmailVerification;
+using BarberSearch.Application.EmailVerifications.RequestEmailVerification;
 using BarberSearch.Application.RefreshTokens;
 using BarberSearch.Application.RefreshTokens.IssueRefreshToken;
 using BarberSearch.Application.RefreshTokens.RefreshSession;
@@ -12,6 +14,7 @@ using BarberSearch.Application.Users.LoginUser;
 using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Contracts.Auth.ChangePassword;
 using BarberSearch.Contracts.Auth.Csrf;
+using BarberSearch.Contracts.Auth.EmailVerification;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Logout;
 using BarberSearch.Contracts.Auth.Me;
@@ -30,6 +33,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 using Shared;
 
 namespace BarberSearch.Web.Controllers;
@@ -59,8 +63,10 @@ public class AuthController : ApiController
     public async Task<ActionResult<CreatedResourceResponse>> Register(
         [FromBody] RegisterRequest request,
         [FromServices] ICommandHandler<Guid, CreateUserCommand> handler,
+        [FromServices] ICommandHandler<RequestEmailVerificationCommand> requestEmailVerification,
         [FromServices] IPasswordHasher<User> passwordHasher,
         [FromServices] IPasswordPolicy passwordPolicy,
+        [FromServices] ILogger<AuthController> logger,
         CancellationToken cancellationToken)
     {
         // Политика проверяется до PBKDF2: 128 — потолок, чтобы большой пароль не жёг CPU.
@@ -88,8 +94,79 @@ public class AuthController : ApiController
             GetClientIpAddress(),
             RequireConsent: true);
 
-        return ToCreatedResult(await handler.Handle(command, cancellationToken));
+        var created = await handler.Handle(command, cancellationToken);
+
+        if (created.IsFailure)
+        {
+            return ToCreatedResult(created);
+        }
+
+        // Письмо уходит сразу после создания пользователя, но сбой почты не валит
+        // регистрацию: контракт ответа остаётся 201 { id }, ошибка — только в лог.
+        // Отказ request-команды (почта не настроена, кулдаун, SMTP) здесь не возвращается.
+        var verification = await requestEmailVerification.Handle(
+            new RequestEmailVerificationCommand(created.Value),
+            cancellationToken);
+
+        if (verification.IsFailure)
+        {
+            logger.LogWarning(
+                "The verification email for user {UserId} was not sent: {ErrorCodes}.",
+                created.Value,
+                string.Join(", ", verification.Error.Errors.Select(error => error.Code)));
+        }
+
+        return ToCreatedResult(created);
     }
+
+    /// <summary>
+    /// Отправляет письмо со ссылкой подтверждения email текущему пользователю.
+    /// </summary>
+    /// <remarks>
+    /// Это cookie-мутация вошедшего пользователя, поэтому antiforgery-фильтр не отключается.
+    /// Повторная отправка раньше 60 секунд — <c>409 auth.emailVerification.cooldown</c>,
+    /// ненастроенная почта — <c>409 auth.emailVerification.unavailable</c>, сбой SMTP —
+    /// <c>500 auth.emailVerification.sendFailed</c>.
+    /// </remarks>
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    [HttpPost("email-verification")]
+    public async Task<ActionResult> RequestEmailVerification(
+        [FromServices] ICurrentUser currentUser,
+        [FromServices] ICommandHandler<RequestEmailVerificationCommand> handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.RequireUserId();
+        if (userId.IsFailure)
+        {
+            return FailureProblemDetails.CreateResult(userId.Error);
+        }
+
+        return ToActionResult(await handler.Handle(
+            new RequestEmailVerificationCommand(userId.Value),
+            cancellationToken));
+    }
+
+    /// <summary>
+    /// Подтверждает адрес электронной почты по одноразовой ссылке из письма.
+    /// </summary>
+    /// <remarks>
+    /// Действие анонимное: ссылку открывают в другом браузере, а секрет — сам токен.
+    /// Antiforgery отключён осознанно: у запроса нет ambient-идентичности, и привязывать
+    /// токен не к чему (тот же случай, что у регистрации). Повторный клик и уже
+    /// подтверждённый адрес — <c>204</c>, битый или истёкший токен —
+    /// <c>400 auth.emailVerification.invalid</c>.
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    [SkipCookieAntiforgery]
+    [HttpPost("email-verification/confirm")]
+    public async Task<ActionResult> ConfirmEmailVerification(
+        [FromBody] ConfirmEmailVerificationRequest request,
+        [FromServices] ICommandHandler<ConfirmEmailVerificationCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ConfirmEmailVerificationCommand(request.Token ?? string.Empty),
+            cancellationToken));
 
     /// <summary>
     /// Адрес клиента для записи согласия.
