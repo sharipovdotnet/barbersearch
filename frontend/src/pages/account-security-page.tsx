@@ -34,7 +34,8 @@ import {
   requestEmailVerification,
 } from '@/lib/email-verification'
 import { formatDateTime } from '@/lib/format'
-import { navigate } from '@/lib/router'
+import { FORGOT_PASSWORD_PATH } from '@/lib/password-reset-path'
+import { isPlainClick, navigate } from '@/lib/router'
 
 /** Локальный кулдаун повторной отправки: серверный лимит — те же 60 секунд. */
 const RESEND_COOLDOWN_SECONDS = 60
@@ -253,7 +254,7 @@ function SecurityScreen({
             )}
           </CardDescription>
         </CardHeader>
-        <CardFooter>
+        <CardFooter className="flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
             className="h-11 sm:h-8"
@@ -261,6 +262,23 @@ function SecurityScreen({
           >
             {t('Сменить пароль')}
           </Button>
+          {/* Пароль мог быть забыт, хотя сессия ещё жива: это не гейт, а выход
+              к восстановлению через письмо. */}
+          <a
+            href={FORGOT_PASSWORD_PATH}
+            className="inline-flex min-h-11 items-center rounded-sm text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-0"
+            onClick={(event) => {
+              // Ctrl/Cmd-клик не перехватываем: ссылка должна открываться в новой вкладке.
+              if (!isPlainClick(event)) {
+                return
+              }
+
+              event.preventDefault()
+              navigate(FORGOT_PASSWORD_PATH)
+            }}
+          >
+            {t('Забыли пароль?')}
+          </a>
         </CardFooter>
       </Card>
 

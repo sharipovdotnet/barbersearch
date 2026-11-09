@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { t, useI18n } from '@/i18n'
+import { FORGOT_PASSWORD_PATH } from '@/lib/password-reset-path'
 import { REGISTER_PATH } from '@/lib/register-path'
 import { isPlainClick, navigate } from '@/lib/router'
 import { signInDestination } from '@/lib/sign-in-destination'
@@ -60,9 +61,11 @@ function validate(email: string, password: string): LoginErrors {
 function LoginForm({
   onSuccess,
   onRegister,
+  onForgotPassword,
 }: {
   onSuccess: (user: SessionUser) => void
   onRegister: () => void
+  onForgotPassword: () => void
 }) {
   const { t } = useI18n()
   const { signIn } = useSession()
@@ -176,6 +179,24 @@ function LoginForm({
         </p>
       )}
 
+      <p className="text-right text-sm">
+        <a
+          href={FORGOT_PASSWORD_PATH}
+          className="rounded-sm font-medium text-foreground underline underline-offset-4 hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          onClick={(event) => {
+            // Ctrl/Cmd-клик не перехватываем: `/forgot-password` откроется в новой вкладке.
+            if (!isPlainClick(event)) {
+              return
+            }
+
+            event.preventDefault()
+            onForgotPassword()
+          }}
+        >
+          {t('Забыли пароль?')}
+        </a>
+      </p>
+
       <p className="text-center text-sm text-muted-foreground">
         {t('Нет аккаунта?')}{' '}
         <a
@@ -269,6 +290,11 @@ function LoginDialog({
               navigate(destination)
             }
             onSignedIn?.()
+          }}
+          onForgotPassword={() => {
+            // Как и регистрация: диалог закрывается, чтобы не висеть поверх новой страницы.
+            setIsOpen(false)
+            navigate(FORGOT_PASSWORD_PATH)
           }}
           onRegister={() => {
             // Диалог живёт в шапке и без закрытия остался бы поверх `/register`.

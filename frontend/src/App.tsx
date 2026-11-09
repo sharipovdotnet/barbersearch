@@ -22,6 +22,10 @@ import {
 } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
 import { isPrivacyPath } from '@/lib/legal'
+import {
+  isForgotPasswordPath,
+  isResetPasswordPath,
+} from '@/lib/password-reset-path'
 import { isRegisterPath } from '@/lib/register-path'
 import { usePathname } from '@/lib/router'
 import { isVerifyEmailPath } from '@/lib/verify-email-path'
@@ -108,6 +112,18 @@ const RegisterPage = lazy(() =>
   })),
 )
 
+const ForgotPasswordPage = lazy(() =>
+  import('@/pages/forgot-password-page').then((module) => ({
+    default: module.ForgotPasswordPage,
+  })),
+)
+
+const ResetPasswordPage = lazy(() =>
+  import('@/pages/reset-password-page').then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+)
+
 const VerifyEmailPage = lazy(() =>
   import('@/pages/verify-email-page').then((module) => ({
     default: module.VerifyEmailPage,
@@ -144,6 +160,8 @@ function App() {
   const pathname = usePathname()
   const isRegister = isRegisterPath(pathname)
   const isVerifyEmail = isVerifyEmailPath(pathname)
+  const isForgotPassword = isForgotPasswordPath(pathname)
+  const isResetPassword = isResetPasswordPath(pathname)
   const isPrivacy = isPrivacyPath(pathname)
   const isBecomeABarber = isBecomeABarberPath(pathname)
   const barberId = matchBarberPath(pathname)
@@ -185,11 +203,15 @@ function App() {
                             ? 'barber-cabinet'
                             : isVerifyEmail
                               ? 'verify-email'
-                              : pathname === '/account'
-                                ? 'account'
-                                : barberId !== null
-                                  ? `barber:${barberId}`
-                                  : 'home'
+                              : isForgotPassword
+                                ? 'forgot-password'
+                                : isResetPassword
+                                  ? 'reset-password'
+                                  : pathname === '/account'
+                                    ? 'account'
+                                    : barberId !== null
+                                      ? `barber:${barberId}`
+                                      : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -220,6 +242,10 @@ function App() {
           <Suspense fallback={<RouteFallback />}>
             {isRegister ? (
               <RegisterPage />
+            ) : isForgotPassword ? (
+              <ForgotPasswordPage />
+            ) : isResetPassword ? (
+              <ResetPasswordPage />
             ) : isVerifyEmail ? (
               <VerifyEmailPage />
             ) : isPrivacy ? (
