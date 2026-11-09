@@ -3,9 +3,9 @@ using System.Text;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Notifications.LinkTelegramChat;
+using BarberSearch.Infrastructure.Telegram;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Deployment;
-using BarberSearch.Web.Notifications;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -68,7 +68,7 @@ public sealed class TelegramWebhookController : ControllerBase
     [SkipCookieAntiforgery]
     [SkipRateLimit]
     public async Task<IActionResult> Receive(
-        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TelegramUpdate? update,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TelegramWebhookUpdate? update,
         [FromServices] ICommandHandler<LinkTelegramChatCommand> handler,
         CancellationToken cancellationToken)
     {

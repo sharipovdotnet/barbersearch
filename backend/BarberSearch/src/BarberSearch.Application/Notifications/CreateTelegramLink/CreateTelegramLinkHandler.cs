@@ -29,23 +29,23 @@ public sealed class CreateTelegramLinkHandler
 {
     private readonly IBarberNotificationSettingsRepository _settings;
     private readonly ICurrentUser _currentUser;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly ITelegramBot _telegramBot;
     private readonly TimeProvider _timeProvider;
 
     public CreateTelegramLinkHandler(
         IBarberNotificationSettingsRepository settings,
         ICurrentUser currentUser,
-        TelegramOptions telegramOptions,
+        ITelegramBot telegramBot,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(currentUser);
-        ArgumentNullException.ThrowIfNull(telegramOptions);
+        ArgumentNullException.ThrowIfNull(telegramBot);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _settings = settings;
         _currentUser = currentUser;
-        _telegramOptions = telegramOptions;
+        _telegramBot = telegramBot;
         _timeProvider = timeProvider;
     }
 
@@ -64,7 +64,7 @@ public sealed class CreateTelegramLinkHandler
             return userId.Error;
         }
 
-        if (!_telegramOptions.IsConfigured)
+        if (!_telegramBot.IsConfigured)
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Notification.TelegramNotConfigured,
@@ -117,17 +117,6 @@ public sealed class CreateTelegramLinkHandler
             return saved.Error;
         }
 
-        return new TelegramLinkResponse(code, BuildDeepLink(code), expiresAt);
-    }
-
-    /// <summary>
-    /// Собирает ссылку на бота. Имя бота приходит из конфигурации; ведущий <c>@</c>
-    /// отбрасывается, потому что в ссылке он недопустим.
-    /// </summary>
-    private string BuildDeepLink(string code)
-    {
-        var botUsername = _telegramOptions.BotUsername!.Trim().TrimStart('@');
-
-        return $"https://t.me/{botUsername}?start={code}";
+        return new TelegramLinkResponse(code, _telegramBot.BuildDeepLink(code), expiresAt);
     }
 }

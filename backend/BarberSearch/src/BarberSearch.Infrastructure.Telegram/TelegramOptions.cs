@@ -1,22 +1,24 @@
-using BarberSearch.Domain;
+using BarberSearch.Application.Notifications;
 
-namespace BarberSearch.Application.Notifications;
+namespace BarberSearch.Infrastructure.Telegram;
 
 /// <summary>
 /// Настройки Telegram-бота — секция конфигурации <c>Telegram</c>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Заполняется композиционным корнем Web и регистрируется синглтоном. Токен и секрет вебхука
-/// — секреты: они приходят из user secrets или переменных окружения и никогда не попадают
-/// в ответы API. Наружу отдаётся только производный флаг <see cref="IsConfigured"/>.
+/// Транспортные настройки Bot API: Application их не видит и знает только порты
+/// <see cref="ITelegramBot"/> и <see cref="ITelegramSender"/>. Заполняется композиционным
+/// корнем Web и регистрируется синглтоном через <see cref="TelegramSenderExtensions.AddTelegramSender"/>,
+/// как <c>EmailOptions</c>. Токен и секрет вебхука — секреты: они приходят из user secrets или
+/// переменных окружения и никогда не попадают в ответы API.
 /// </para>
 /// <para>
 /// Пустой токен — нормальное состояние разработки: канал выключен, инбокс работает.
 /// Поэтому ни один обработчик не падает без токена (§6.1, критерий приёмки 3).
 /// </para>
 /// </remarks>
-public sealed record TelegramOptions
+public sealed record TelegramOptions : ITelegramBot
 {
     /// <summary>
     /// Имя секции конфигурации: <c>Telegram</c>.
@@ -45,4 +47,19 @@ public sealed record TelegramOptions
     /// </summary>
     public bool IsConfigured
         => !string.IsNullOrWhiteSpace(BotToken) && !string.IsNullOrWhiteSpace(BotUsername);
+
+    /// <inheritdoc />
+    public string BuildDeepLink(string code)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
+        var botUsername = BotUsername?.Trim().TrimStart('@');
+        if (string.IsNullOrEmpty(botUsername))
+        {
+            throw new InvalidOperationException(
+                "Cannot build a Telegram deep link without the bot username.");
+        }
+
+        return $"https://t.me/{botUsername}?start={code}";
+    }
 }

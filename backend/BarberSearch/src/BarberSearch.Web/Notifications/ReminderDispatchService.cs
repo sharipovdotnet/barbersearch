@@ -41,7 +41,7 @@ public sealed class ReminderDispatchService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly RemindersOptions _remindersOptions;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly ITelegramBot _telegramBot;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ReminderDispatchService> _logger;
     private readonly TaskCompletionSource _initialTickCompleted =
@@ -53,19 +53,19 @@ public sealed class ReminderDispatchService : BackgroundService
     public ReminderDispatchService(
         IServiceScopeFactory scopeFactory,
         RemindersOptions remindersOptions,
-        TelegramOptions telegramOptions,
+        ITelegramBot telegramBot,
         TimeProvider timeProvider,
         ILogger<ReminderDispatchService> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(remindersOptions);
-        ArgumentNullException.ThrowIfNull(telegramOptions);
+        ArgumentNullException.ThrowIfNull(telegramBot);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _scopeFactory = scopeFactory;
         _remindersOptions = remindersOptions;
-        _telegramOptions = telegramOptions;
+        _telegramBot = telegramBot;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -98,7 +98,7 @@ public sealed class ReminderDispatchService : BackgroundService
             0,
             cancellationToken);
 
-        var (sent, skipped, failed) = _telegramOptions.IsConfigured
+        var (sent, skipped, failed) = _telegramBot.IsConfigured
             ? await RunStepAsync(
                 "deliver",
                 DeliverPendingAsync,

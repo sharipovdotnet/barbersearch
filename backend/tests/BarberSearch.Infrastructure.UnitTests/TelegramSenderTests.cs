@@ -1,15 +1,16 @@
 using System.Net;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Contracts.Common;
-using BarberSearch.Web.Notifications;
+using BarberSearch.Infrastructure.Telegram;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace BarberSearch.Infrastructure.UnitTests;
 
 /// <summary>
-/// Проверяет контракт <see cref="ITelegramSender"/> у реализации Web: без токена
-/// HTTP-запрос не выполняется, а <c>400</c>/<c>403</c> отделяются от временных ошибок.
+/// Проверяет контракт <see cref="ITelegramSender"/> у реализации Infrastructure.Telegram:
+/// без токена HTTP-запрос не выполняется, а <c>400</c>/<c>403</c> отделяются от временных
+/// ошибок.
 /// </summary>
 /// <remarks>
 /// Настоящий Bot API не вызывается: <see cref="IHttpClientFactory"/> подменён, поэтому
