@@ -458,6 +458,8 @@ $env:ConnectionStrings__Postgres = 'Host=localhost;Port=5432;Database=barbersear
 $env:Email__Enabled = 'true'; $env:Email__Host = 'localhost'; $env:Email__Port = '1025'
 $env:Email__UseTls = 'false'; $env:Email__FromAddress = 'no-reply@barbersearch.test'
 $env:App__PublicUrl = 'http://localhost:5173'
+# Outbox-воркер шлёт письма раз в 1 с (дефолтные 30 с не успевают в 10-секундный wait Playwright)
+$env:EmailOutbox__IntervalSeconds = '1'
 dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web --launch-profile http
 
 npm run test:e2e:install   # once: Chromium for the Playwright version in package-lock

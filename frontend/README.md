@@ -1484,6 +1484,7 @@ at Vite, not at the API):
 ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;Username=postgres;Password=postgres" \
   Email__Enabled=true Email__Host=localhost Email__Port=1025 Email__UseTls=false \
   Email__FromAddress=no-reply@barbersearch.test App__PublicUrl=http://localhost:5173 \
+  EmailOutbox__IntervalSeconds=1 \
   dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
 ```
 

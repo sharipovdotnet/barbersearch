@@ -10,7 +10,9 @@ import { isBookingPage, isCreatedId } from '@/lib/response-guards'
  * имя барбера, услуга и салон догружаются из карточки барбера (`lib/catalog.ts`).
  * Пагинация курсорная: `nextCursor` возвращается как есть и не разбирается на клиенте.
  * Скоуп вкладок определяет сервер: `all` (по умолчанию), `upcoming` и `past` — разные
- * выборки, у каждой свой курсор и своё направление сравнения.
+ * выборки, у каждой свой курсор и своё направление сравнения. `userId` — фильтр
+ * «только мои»: без него администратор по контракту получает все брони системы,
+ * поэтому личный кабинет всегда передаёт id вошедшего пользователя.
  */
 
 export type BookingStatus =
@@ -55,12 +57,20 @@ export const BOOKINGS_PAGE_SIZE = 20
 export async function fetchBookings(
   scope: BookingScope = 'all',
   cursor: string | null = null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  userId?: string | null
 ): Promise<Page<Booking>> {
   const query = new URLSearchParams({
     scope,
     pageSize: String(BOOKINGS_PAGE_SIZE),
   })
+
+  // Кабинет всегда сужает выборку до своего пользователя. Для администратора это
+  // единственный способ не получить в «Моих записях» чужие брони: сервер без
+  // `userId` отдаёт ему весь список.
+  if (userId) {
+    query.set('userId', userId)
+  }
 
   if (cursor) {
     query.set('cursor', cursor)
