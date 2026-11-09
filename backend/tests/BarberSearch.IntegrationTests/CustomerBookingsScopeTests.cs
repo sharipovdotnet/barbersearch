@@ -81,6 +81,30 @@ public sealed class CustomerBookingsScopeTests
             page.Items.Select(item => item.Id));
     }
 
+    /// <summary>
+    /// Отзыв по визиту виден клиенту в списке броней: кабинет скрывает звёздочку
+    /// «Оставить отзыв» и после перезагрузки страницы, а не только в памяти вкладки.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Booking_with_a_review_is_flagged_and_the_others_are_not()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var seed = await SeedAsync(app, data);
+
+        await data.CreateReviewForBookingAsync(seed.CompletedPast.Id, seed.Customer.Id);
+
+        await app.AuthenticateAsync(seed.Customer.Email);
+
+        var page = await GetPageAsync(app, "api/bookings?scope=past");
+        var reviewed = Assert.Single(page.Items, item => item.HasReview);
+
+        Assert.Equal(seed.CompletedPast.Id, reviewed.Id);
+        Assert.All(
+            page.Items.Where(item => item.Id != seed.CompletedPast.Id),
+            item => Assert.False(item.HasReview));
+    }
+
     [Fact(Timeout = 180_000)]
     public async Task Without_scope_the_response_keeps_the_previous_descending_order()
     {

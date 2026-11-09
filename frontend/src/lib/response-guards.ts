@@ -326,6 +326,7 @@ export function isBooking(value: unknown): value is Booking {
     isNullableString(value.customerNote) &&
     isNullableString(value.barberNote) &&
     isNullableString(value.cancellationReason) &&
+    isBoolean(value.hasReview) &&
     isString(value.createdAt)
   )
 }

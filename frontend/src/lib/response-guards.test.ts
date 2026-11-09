@@ -88,6 +88,7 @@ const BOOKING = {
   customerNote: null,
   barberNote: null,
   cancellationReason: 'Барбер заболел',
+  hasReview: false,
   createdAt: '2026-11-01T10:00:00Z',
 }
 
@@ -136,6 +137,21 @@ describe('isBooking / isBarberBooking, причина отмены', () => {
     expect(isBarberBooking({ ...BARBER_BOOKING, cancellationReason: {} })).toBe(
       false
     )
+  })
+})
+
+describe('isBooking, отметка об отзыве', () => {
+  it('принимает только булев hasReview', () => {
+    expect(isBooking({ ...BOOKING, hasReview: true })).toBe(true)
+    expect(isBooking({ ...BOOKING, hasReview: false })).toBe(true)
+    expect(isBooking({ ...BOOKING, hasReview: 'true' })).toBe(false)
+  })
+
+  it('отвергает ответ без hasReview: флаг решает, показывать ли звезду', () => {
+    const { hasReview, ...withoutReview } = BOOKING
+
+    expect(hasReview).toBe(false)
+    expect(isBooking(withoutReview)).toBe(false)
   })
 })
 

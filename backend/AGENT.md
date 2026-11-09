@@ -2414,6 +2414,9 @@ Read endpoints (added 2026-10-19):
   booking.getBookings.scope`, an out-of-range `pageSize` `400 booking.getBookings.pageSize`, a
   broken cursor `400 booking.cursor.invalid`. The response stays `PagedResponse<BookingResponse>`
   with no total count, and the read is still authenticated but CSRF-free (a read, not a mutation).
+  Since 2026-11-09 `BookingResponse` also carries `hasReview`: an `EXISTS` over the unique
+  `reviews.booking_id`, true for a review in any moderation status (the cabinet hides «Оставить
+  отзыв» and shows «Отзыв отправлен»), false again after the author hard-deletes the review.
 - **`GET api/barber/bookings` (2026-10-30, issue-22)** — the barber's own bookings for the cabinet,
   `[Authorize(Policy = BarberOnly)]`: anonymous `401`, `Customer`/`Admin` `403`. The barber profile
   comes from the `barber_profile_id` claim, not from the query, so one barber cannot read another

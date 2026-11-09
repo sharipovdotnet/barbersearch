@@ -20,6 +20,7 @@ const VIEW: BookingView = {
     barberNote: null,
     cancellationReason: 'Барбер заболел',
     createdAt: '2026-11-01T10:00:00Z',
+    hasReview: false,
   },
   barberName: 'Барбер Номер 1',
   serviceName: 'Стрижка',
@@ -31,18 +32,49 @@ const VIEW: BookingView = {
   isResolved: true,
 }
 
-function renderRow(overrides: Partial<BookingView['booking']> = {}) {
+function renderRow(
+  overrides: Partial<BookingView['booking']> = {},
+  isReviewed = false
+) {
   return render(
     <ul>
       <BookingRow
         view={{ ...VIEW, booking: { ...VIEW.booking, ...overrides } }}
-        isReviewed={false}
+        isReviewed={isReviewed}
         onRequestCancel={vi.fn()}
         onRequestReview={vi.fn()}
       />
     </ul>
   )
 }
+
+describe('BookingRow, отзыв', () => {
+  it('предлагает отзыв по завершённому визиту без отзыва', () => {
+    renderRow({ status: 'Completed', hasReview: false })
+
+    expect(
+      screen.getByRole('button', { name: /Оставить отзыв о визите/ })
+    ).toBeInTheDocument()
+  })
+
+  it('скрывает звезду, если отзыв уже оставлен на сервере', () => {
+    renderRow({ status: 'Completed', hasReview: true })
+
+    expect(
+      screen.queryByRole('button', { name: /Оставить отзыв о визите/ })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Отзыв отправлен')).toBeInTheDocument()
+  })
+
+  it('скрывает звезду сразу после отправки отзыва', () => {
+    renderRow({ status: 'Completed', hasReview: false }, true)
+
+    expect(
+      screen.queryByRole('button', { name: /Оставить отзыв о визите/ })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Отзыв отправлен')).toBeInTheDocument()
+  })
+})
 
 describe('BookingRow, причина отмены', () => {
   it('показывает причину отмены в истории посещений', () => {
