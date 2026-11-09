@@ -82,7 +82,7 @@ import type {
   WorkingSchedule,
 } from '@/lib/catalog'
 import type { HairServiceOption } from '@/lib/hair-services'
-import type { MyReview } from '@/lib/my-reviews'
+import type { MyReview, UpdateMyReviewResult } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import { isPlaceKind } from '@/lib/place-kind'
@@ -356,6 +356,22 @@ export function isMyReview(value: unknown): value is MyReview {
 }
 
 export const isMyReviewPage = isPageOf(isMyReview)
+
+/**
+ * Ответ `PUT /api/reviews/{id}`: новый статус публикации и время правки.
+ *
+ * Сервер решает, вернулся ли отзыв в очередь (правка текста опубликованного отзыва),
+ * поэтому клиент обязан взять статус из ответа, а не вывести его сам.
+ */
+export function isUpdateMyReviewResult(
+  value: unknown
+): value is UpdateMyReviewResult {
+  return (
+    isRecord(value) &&
+    isBoolean(value.isPublished) &&
+    isString(value.updatedAt)
+  )
+}
 
 export function isBarberBooking(value: unknown): value is BarberBooking {
   return (
@@ -1065,7 +1081,7 @@ function isAdminSummaryOldestReview(
     Number.isInteger(value.rating) &&
     value.rating >= 1 &&
     value.rating <= 5 &&
-    isString(value.createdAt) &&
+    isString(value.awaitingSince) &&
     isString(value.barberDisplayName) &&
     isString(value.customerDisplayName)
   )

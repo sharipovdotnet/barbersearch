@@ -18,7 +18,7 @@ namespace BarberSearch.Infrastructure.UnitTests;
 public class ReviewModerationIndexModelTests
 {
     [Fact]
-    public void ReviewModerationIndex_IsPartialAscendingOnCreatedAtAndId()
+    public void ReviewModerationIndex_IsPartialAscendingOnUpdatedAtAndId()
     {
         using var context = CreateContext();
         var entity = context.GetService<IDesignTimeModel>().Model
@@ -27,7 +27,7 @@ public class ReviewModerationIndexModelTests
 
         var index = Assert.Single(
             entity.GetIndexes(),
-            candidate => candidate.GetDatabaseName() == "ix_reviews_moderation_created_at_id");
+            candidate => candidate.GetDatabaseName() == "ix_reviews_moderation_updated_at_id");
 
         Assert.False(index.IsUnique);
 
@@ -35,8 +35,10 @@ public class ReviewModerationIndexModelTests
             index.Properties,
             property =>
             {
-                Assert.Equal("CreatedAt", property.Name);
-                Assert.Equal("created_at", property.GetColumnName());
+                // Очередь ждёт по моменту входа, а не по дате создания: правка опубликованного
+                // отзыва возвращает строку в очередь, и created_at её уже не описывает.
+                Assert.Equal("UpdatedAt", property.Name);
+                Assert.Equal("updated_at", property.GetColumnName());
             },
             property =>
             {
@@ -47,7 +49,7 @@ public class ReviewModerationIndexModelTests
         // Очередь читает только скрытые отзывы: опубликованные в индекс не попадают.
         Assert.Equal("is_published = false", index.GetFilter());
 
-        // HasIndex без IsDescending — ASC по обеим колонкам, под ORDER BY created_at, id.
+        // HasIndex без IsDescending — ASC по обеим колонкам, под ORDER BY updated_at, id.
         Assert.True(
             index.IsDescending is null || index.IsDescending.All(descending => !descending),
             "The moderation index must be ascending.");

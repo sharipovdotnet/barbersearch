@@ -851,7 +851,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_barber_notifications_kind", "kind IN (1, 2)");
 
-                            t.HasCheckConstraint("ck_barber_notifications_shape", "(kind = 1 AND booking_id IS NOT NULL AND start_at IS NOT NULL)\nOR (kind = 2 AND bookings_count IS NOT NULL AND digest_local_date IS NOT NULL)");
+                            t.HasCheckConstraint("ck_barber_notifications_shape", "(kind = 1 AND booking_id IS NOT NULL AND start_at IS NOT NULL)\r\nOR (kind = 2 AND bookings_count IS NOT NULL AND digest_local_date IS NOT NULL)");
                         });
                 });
 
@@ -1155,8 +1155,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_reviews_barber_profile_id_created_at");
 
-                    b.HasIndex("CreatedAt", "Id")
-                        .HasDatabaseName("ix_reviews_moderation_created_at_id")
+                    b.HasIndex("UpdatedAt", "Id")
+                        .HasDatabaseName("ix_reviews_moderation_updated_at_id")
                         .HasFilter("is_published = false");
 
                     b.HasIndex("IsPublished", "CreatedAt", "Id")

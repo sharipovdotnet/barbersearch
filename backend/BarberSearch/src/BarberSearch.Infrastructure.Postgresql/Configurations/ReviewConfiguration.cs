@@ -50,11 +50,13 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .IsDescending(false, true)
             .HasDatabaseName("ix_reviews_barber_profile_id_created_at");
 
-        // Очередь модерации: скрытые отзывы всех барберов, старые сверху (ASC-скан).
-        // Частичный индекс: опубликованные строки в него не попадают (R-35).
-        builder.HasIndex(x => new { x.CreatedAt, x.Id })
+        // Очередь модерации: скрытые отзывы всех барберов, дольше всех ждущие сверху.
+        // Ключ — updated_at (момент входа в очередь), а не created_at: правка опубликованного
+        // отзыва возвращает строку в очередь (R-35), и по created_at она встала бы в начало
+        // с «ожиданием» в месяцы. Частичный индекс: опубликованные строки в него не попадают.
+        builder.HasIndex(x => new { x.UpdatedAt, x.Id })
             .HasFilter("is_published = false")
-            .HasDatabaseName("ix_reviews_moderation_created_at_id");
+            .HasDatabaseName("ix_reviews_moderation_updated_at_id");
 
         // Админский список опубликованных: свежие сверху. Первый ключ — is_published:
         // EF не различает два индекса с одинаковым набором колонок, поэтому фильтр

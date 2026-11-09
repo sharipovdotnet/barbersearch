@@ -37,7 +37,7 @@ public class AdminSummaryHandlerTests
         var oldestSummary = Assert.IsType<AdminSummaryOldestReviewResponse>(result.Value.Reviews.Oldest);
         Assert.Equal(oldest.Id, oldestSummary.Id);
         Assert.Equal(oldest.Rating, oldestSummary.Rating);
-        Assert.Equal(oldest.CreatedAt, oldestSummary.CreatedAt);
+        Assert.Equal(oldest.UpdatedAt, oldestSummary.AwaitingSince);
         Assert.Equal(oldest.Barber.DisplayName, oldestSummary.BarberDisplayName);
         Assert.Equal(oldest.Customer.FullName, oldestSummary.CustomerDisplayName);
     }
@@ -51,9 +51,8 @@ public class AdminSummaryHandlerTests
         var result = await HandleAsync(reviews);
 
         Assert.True(result.IsSuccess);
-        Assert.False(reviews.LastAdminIsPublished);
-        Assert.Null(reviews.LastAdminCursor);
-        Assert.Equal(1, reviews.LastAdminLimit);
+        Assert.Null(reviews.LastModerationCursor);
+        Assert.Equal(1, reviews.LastModerationLimit);
     }
 
     [Fact]
@@ -156,7 +155,7 @@ public class AdminSummaryHandlerTests
             {
                 nameof(AdminSummaryOldestReviewResponse.Id),
                 nameof(AdminSummaryOldestReviewResponse.Rating),
-                nameof(AdminSummaryOldestReviewResponse.CreatedAt),
+                nameof(AdminSummaryOldestReviewResponse.AwaitingSince),
                 nameof(AdminSummaryOldestReviewResponse.BarberDisplayName),
                 nameof(AdminSummaryOldestReviewResponse.CustomerDisplayName)
             },

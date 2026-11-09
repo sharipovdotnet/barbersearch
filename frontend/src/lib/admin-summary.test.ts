@@ -23,7 +23,7 @@ const SUMMARY_URL = '/api/admin/summary'
 const OLDEST = {
   id: '9e800000-0000-4000-8000-000000000001',
   rating: 4,
-  createdAt: '2026-09-10T10:00:00+00:00',
+  awaitingSince: '2026-09-10T10:00:00+00:00',
   barberDisplayName: 'E2E Барбер',
   customerDisplayName: 'Иван Петров',
 }
@@ -53,7 +53,7 @@ const INVALID_SUMMARIES: readonly [string, JsonBodyType][] = [
   ['«самый старый» без поля', {
     reviews: {
       pendingCount: 1,
-      oldest: { id: OLDEST.id, rating: 4, createdAt: OLDEST.createdAt },
+      oldest: { id: OLDEST.id, rating: 4, awaitingSince: OLDEST.awaitingSince },
     },
     barbers: { unverifiedCount: 0 },
     salons: { inactiveCount: 0 },

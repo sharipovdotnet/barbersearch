@@ -12,7 +12,9 @@ namespace BarberSearch.Domain.Reviews;
 /// <remarks>
 /// Отзыв создаётся на модерации (<see cref="IsPublished"/> = <c>false</c>) и не участвует
 /// в публичной сводке, пока администратор не вызовет <see cref="Publish"/>. Скрыть
-/// опубликованный отзыв можно через <see cref="Hide"/> (R-35).
+/// опубликованный отзыв можно через <see cref="Hide"/> (R-35). Правка текста опубликованного
+/// отзыва тоже возвращает его на модерацию (<see cref="Update"/>): администратор проверял
+/// прежний текст, а не новый.
 /// </remarks>
 public class Review : AggregateRoot
 {
@@ -93,6 +95,23 @@ public class Review : AggregateRoot
         };
     }
 
+    /// <summary>
+    /// Меняет оценку и текст отзыва.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Правка текста опубликованного отзыва снимает его с публикации: проверенный
+    /// администратором текст заменяется новым, которого никто не видел, поэтому отзыв
+    /// возвращается в очередь модерации и выпадает из публичной сводки до нового решения
+    /// (<see cref="Publish"/>). Правка только оценки публикацию сохраняет: целое 1..5
+    /// не несёт произвольного контента и пересчитывается на месте.
+    /// </para>
+    /// <para>
+    /// Текст сравнивается после обрезки пробелов по краям: «сохранить без изменений»
+    /// не должно отправлять отзыв на повторную проверку. Само значение сохраняется как
+    /// пришло — домен не переписывает ввод пользователя.
+    /// </para>
+    /// </remarks>
     public UnitResult<Failure> Update(int rating, string? text)
     {
         if (rating is < Constants.MIN_REVIEW_RATING or > Constants.MAX_REVIEW_RATING)
@@ -114,13 +133,26 @@ public class Review : AggregateRoot
                 nameof(text)));
         }
 
+        var textChanged = !HasSameText(Text, text);
+
         Rating = rating;
         Text = text;
+
+        if (IsPublished && textChanged)
+        {
+            IsPublished = false;
+        }
 
         MarkUpdated();
 
         return DomainErrors.Ok();
     }
+
+    /// <summary>
+    /// Сравнивает тексты так, как их видит читатель: пробелы по краям не считаются правкой.
+    /// </summary>
+    private static bool HasSameText(string? current, string? next)
+        => string.Equals(current?.Trim(), next?.Trim(), StringComparison.Ordinal);
 
     /// <summary>
     /// Публикует отзыв (в том числе ранее скрытый).

@@ -1087,7 +1087,9 @@ Suggested order:
    `BarberProfile.Rating` / `ReviewsCount` пересчитываются синхронно при публикации, скрытии и
    правке опубликованного отзыва. С R-35 действует пре-модерация: `Review.Create` ставит
    `IsPublished = false`, поэтому создание отзыва публичную сводку не меняет; отзыв публикует
-   администратор (`POST api/reviews/{id}/publication`). Считаются только `Review.IsPublished =
+   администратор (`POST api/reviews/{id}/publication`). С 2026-11-09 правка **текста**
+   опубликованного отзыва снимает его с публикации (`Review.Update`), поэтому правка оценки
+   пересчитывает сводку на месте, а правка текста выводит отзыв из неё до нового одобрения. Считаются только `Review.IsPublished =
    true`; скрытые не входят ни в count, ни в average. Пересчёт идёт в одной транзакции с
    изменением отзыва (`IUnitOfWork`), перед чтением сводки берётся row lock на `barber_profiles`
    (`SELECT … FOR UPDATE`), поэтому два параллельных `Publish`/`Hide` не теряют обновление.
@@ -1120,12 +1122,20 @@ Suggested order:
    скрытым (`Review.Create` → `IsPublished = false`) и не влияет на рейтинг, пока администратор
    не опубликует его существующим `POST api/reviews/{id}/publication`; скрытие —
    `DELETE api/reviews/{id}/publication`. Очередь скрытых отзывов всех барберов —
-   `GET api/reviews/moderation` (AdminOnly, keyset, `created_at ASC, id` — старые сверху,
-   частичный индекс `ix_reviews_moderation_created_at_id`). Закрыто 2026-10-30 (issue-20):
+   `GET api/reviews/moderation` (AdminOnly, keyset, `updated_at ASC, id` — дольше всех ждущие
+   сверху, частичный индекс `ix_reviews_moderation_updated_at_id`). Закрыто 2026-10-30 (issue-20):
    автор видит свои отзывы в обоих статусах через `GET api/reviews/mine` и может удалить свой
    отзыв через `DELETE api/reviews/{id}`. Ограничение осталось только в статусе: в таблице
    один boolean, поэтому «на модерации» и «скрыт администратором» неразличимы, и UI не должен
    обещать второе (§17.8).
+   **Правка опубликованного отзыва (2026-11-09):** замена текста снимает отзыв с публикации и
+   возвращает его в очередь — иначе пре-модерацию обходили бы «опубликуй безобидное, потом
+   замени текст». Правка только оценки публикацию сохраняет: целое 1..5 не несёт произвольного
+   текста. `PUT api/reviews/{id}` отвечает `200 { isPublished, updatedAt }`, чтобы кабинет
+   показал новый статус без перезагрузки. Ключ очереди — `updated_at` (момент входа в очередь),
+   а не `created_at`: иначе отредактированный старый отзыв встал бы в начало и в сводке «ждал»
+   бы месяцами. Ожидание в `GET api/admin/summary` считается от этого же момента
+   (`awaitingSince`).
 10. **Salon ownership and moderation** — **decided 2026-11-06 and implemented (issue-48):**
     владелец — связь `Salon.OwnerUserId` (`NULL` у админских салонов), **не роль**; управляющий
     без профиля барбера и передача владения — отдельные срезы. Барбер с профилем создаёт салон
@@ -1326,7 +1336,7 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `barber_services` | `(hair_service_id, barber_profile_id)` and `(barber_profile_id)` | The same join traversed in both directions |
 | `reviews` | `UNIQUE (booking_id)` | One review per booking (nothing in the domain prevents a second one today) |
 | `reviews` | `(barber_profile_id, created_at DESC, id) WHERE is_published` — partial | Published reviews of one barber, keyset order; hidden reviews never enter the public list |
-| `reviews` | `(created_at, id) WHERE is_published = false` — partial, `ix_reviews_moderation_created_at_id` (R-35) | Admin moderation queue, oldest first (FIFO): the same keyset pair as the public list, but ASC, so it has its own partial index |
+| `reviews` | `(updated_at, id) WHERE is_published = false` — partial, `ix_reviews_moderation_updated_at_id` (R-35) | Admin moderation queue, longest waiting first (FIFO by queue entry, not by creation): a text edit returns a published review to the queue, so `created_at` no longer describes the wait |
 | `reviews` | `(user_id, created_at DESC, id)` — full, `ix_reviews_user_id_created_at_id` (issue-20) | Author's own list (`GET api/reviews/mine`): filter by author and keyset `created_at DESC, id`. Both statuses are returned, so the index is full, not partial |
 | `barber_requests` | `UNIQUE (user_id) WHERE status = 1` — `ux_barber_requests_pending_user` | One active request per user (issue-46): the precheck covers the common case, the index closes the race; both surface as `409 barberRequest.create.alreadyPending`, never `500` |
 | `barber_requests` | `(created_at, id)` — `ix_barber_requests_created_at_id` | Admin queue in both directions: `created_at ASC, id` (pending, FIFO) and `created_at DESC, id` (all) — one btree scanned forward or backward |
@@ -1410,10 +1420,12 @@ of the 14k-row `users` table, a bitmap scan on `ix_bookings_user_id_start_at` an
 Evidence: `frontend/verification/issue-39-explain.txt` and `issue-39-explain-index.txt`.
 
 **Admin summary (2026-11-02, issue-40).** `GET api/admin/summary` reads three counts and the
-first row of the moderation queue with the existing `BuildAdminReviewsQuery(isPublished: false,
-limit: 1)`. Measured on the migrated copy of the load database (`barbersearch_load_40`: 80 332
+first row of the moderation queue with the existing moderation page
+(`GetAdminModerationPageAsync(cursor: null, limit: 1)`; before 2026-11-09 it was
+`BuildAdminReviewsQuery(isPublished: false, limit: 1)`). Measured on the migrated copy of the load database (`barbersearch_load_40`: 80 332
 reviews / 20 024 unpublished, 12 000 profiles / 1 000 unverified, 400 salons with none inactive):
-the review count is an `Index Only Scan` of the partial `ix_reviews_moderation_created_at_id`
+the review count is an `Index Only Scan` of the partial moderation index (then
+`ix_reviews_moderation_created_at_id`; since 2026-11-09 `ix_reviews_moderation_updated_at_id`)
 (3.9 ms), the profile count is a `Seq Scan` over 12 000 rows (3.4 ms), the salon count is an
 `Index Only Scan` of `ix_salons_city_is_active` (0.03 ms), and the oldest-row query is an
 `Index Scan` of the partial moderation index without `Sort` (0.7 ms, 21 buffers). The criterion
@@ -2032,10 +2044,11 @@ Read endpoints (added 2026-10-19):
   `AdminReviewResponse` — a separate contract from `ReviewResponse`, with barber name/rating,
   client name/email, and the visit (service, salon, price, start, `timeZoneId`). This is the only
   review read that carries PII, and it is not shared with the storefront. `pending` is
-  `created_at ASC, id` (FIFO, served by `ix_reviews_moderation_created_at_id`); `published` is
-  `created_at DESC, id` (served by `ix_reviews_published_created_at_id`, partial
-  `is_published = true`). The cursor is the existing `(created_at, id)`; `pageSize` defaults to
-  20 and is capped at 100; an unknown status or bad cursor is `400`. The projection joins
+  `updated_at ASC, id` (longest waiting first, served by `ix_reviews_moderation_updated_at_id`)
+  with its own `(updated_at, id)` cursor (`ModerationCursor`); `published` is `created_at DESC, id`
+  (served by `ix_reviews_published_created_at_id`, partial `is_published = true`) with the existing
+  `(created_at, id)` cursor; `pageSize` defaults to 20 and is capped at 100; an unknown status or
+  bad cursor is `400`. The projection joins
   reviews → bookings → users/barber_profiles/barber_services/hair_services/salons; those links are
   not all FK-enforced on `reviews`/`bookings`, so a dangling historical row would drop out of the
   admin list instead of appearing with missing context.
@@ -2173,11 +2186,12 @@ Read endpoints (added 2026-10-19):
   `is_verified = false` (`AdminBarberStatus.Pending`, **without** `is_active`; adding it would
   diverge from the «На проверке» queue) and `is_active = false` (`AdminCatalogueStatus.Hidden`
   for salons). `oldest` is the first row of the existing FIFO moderation page
-  (`GetAdminPageAsync(isPublished: false, cursor: null, limit: 1)`) — not a second SQL — and is
-  `null` when the queue is empty; the count and the page are two reads without a transaction, so
-  a review published between them gives `pendingCount > 0` with `oldest: null`, which the UI
-  renders as a number rather than a `500`. `AdminSummaryOldestReviewResponse` is compact: id,
-  rating, `createdAt`, barber display name and customer `FullName` — **no email and no phone**;
+  (`GetAdminModerationPageAsync(cursor: null, limit: 1)`, ordered by `updated_at`) — not a second
+  SQL — and is `null` when the queue is empty; the count and the page are two reads without a
+  transaction, so a review published between them gives `pendingCount > 0` with `oldest: null`,
+  which the UI renders as a number rather than a `500`. `AdminSummaryOldestReviewResponse` is
+  compact: id, rating, `awaitingSince` (when the review entered the queue, UTC), barber display
+  name and customer `FullName` — **no email and no phone**;
   the full visit context and PII stay in `GET api/admin/reviews`, and `customerDisplayName` keeps
   that contract's behaviour (an empty name falls back to the email). The summary only reads: it
   adds no mutation and writes nothing to `audit_log`, and the existing list contracts are
@@ -2564,11 +2578,12 @@ auth.register.consentVersion`; это отдельный юридический 
   returned, order `created_at DESC, id`, keyset cursor, `PagedResponse<ReviewResponse>`. The response
   contains ids and text only — no navigation into the booking/user/barber cycle.
 - **`GET api/reviews/moderation` (2026-10-24, R-35)** — the moderation queue: hidden reviews of
-  all barbers, order `created_at ASC, id` (oldest first, FIFO), keyset cursor shared with the
-  public list, `PagedResponse<ReviewResponse>`. `pageSize` defaults to 20 and is capped at 100;
-  an out-of-range value is `400 review.moderation.pageSize`, a broken cursor is `400
+  all barbers, order `updated_at ASC, id` (longest waiting first, FIFO by queue entry; since
+  2026-11-09 a text edit returns a published review here), keyset cursor `(updated_at, id)`
+  (`ModerationCursor`), `PagedResponse<ReviewResponse>`. `pageSize` defaults to 20 and is capped at
+  100; an out-of-range value is `400 review.moderation.pageSize`, a broken cursor is `400
   review.cursor.invalid`. Admin-only (`[Authorize(Policy = AdminOnly)]`), because hidden rows are
-  not part of the storefront; the partial index `ix_reviews_moderation_created_at_id`
+  not part of the storefront; the partial index `ix_reviews_moderation_updated_at_id`
   (`WHERE is_published = false`) serves the ASC scan.
 - **`GET api/reviews/mine` (2026-10-30, issue-20)** — the author's own reviews in both statuses,
   order `created_at DESC, id` (newest first), keyset cursor, `PagedResponse<MyReviewResponse>`.
@@ -2589,19 +2604,23 @@ auth.register.consentVersion`; это отдельный юридический 
   (`IUnitOfWork` + `ReviewRatingRecalculator`; `null`/0 when no published reviews are left), while
   a hidden review does not touch the summary. The hard delete frees `ux_reviews_booking_id`, so
   the author can review that booking again.
-- **Review moderation and rating (2026-10-19; pre-moderation from 2026-10-24, R-35).**
+- **Review moderation and rating (2026-10-19; pre-moderation from 2026-10-24, R-35; text edits
+  re-queued 2026-11-09).**
   `POST api/reviews` creates a hidden review (`IsPublished = false`), so it does not change the
   public summary and does not wake the rating recalculator; an administrator later calls
   `POST …/{id}/publication`. `PUT api/reviews/{id}` on a published review, `POST …/{id}/publication`
   and `DELETE …/{id}/publication` save the review and update `barber_profiles.rating` /
-  `reviews_count` in one transaction (`IUnitOfWork`). The profile root is locked with
+  `reviews_count` in one transaction (`IUnitOfWork`). `PUT` answers `200
+  { isPublished, updatedAt }`: a text change on a published review unpublishes it inside the same
+  transaction (`Review.Update`), a rating-only change keeps it published. The profile root is locked with
   `SELECT … FOR UPDATE` before the published-only summary is read, so parallel publish/hide cannot
   lose an update. Apart from the admin queue the response contract and the endpoint set did not
   change; `Rating` is still read from the stored column in the card and search.
 - **Query hygiene.** All read paths are `AsNoTracking`; search and list endpoints project directly
   into Contracts response records, and search uses EXISTS instead of `Include` of five collections.
   Keyset cursors are encoded/decoded in Application (`BarberSearchCursor`, `BookingCursor`,
-  `ReviewCursor`, `CursorCodec`) with invariant culture; the opaque string is the contract.
+  `ReviewCursor`, `ModerationCursor`, `CursorCodec`) with invariant culture; the opaque string is
+  the contract.
 - **Service identifiers (2026-10-23, R-20).** `hairServiceId` in search and slots is always
   `hair_services.id`; `barberServiceId` in `POST api/bookings`, the card and the slot response is
   `barber_services.id`. Renaming the query parameter `serviceId` → `hairServiceId` and the card

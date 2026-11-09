@@ -11,9 +11,11 @@ namespace BarberSearch.Application.Reviews.Admin.GetAdminReviews;
 /// Обработчик админского списка отзывов.
 /// </summary>
 /// <remarks>
-/// Очередь модерации отдаётся в порядке <c>created_at ASC, id</c> (FIFO), опубликованные —
-/// в порядке <c>created_at DESC, id</c>. Курсор общий: направление задаёт фильтр, а не
-/// содержимое строки. Доступ проверяет контроллер политикой <c>AdminOnly</c>.
+/// Очередь модерации отдаётся в порядке <c>updated_at ASC, id</c> — по моменту попадания
+/// в очередь, поэтому отредактированный опубликованный отзыв встаёт в конец, а не в начало,
+/// где «ждал» бы с даты создания. Опубликованные — в порядке <c>created_at DESC, id</c>.
+/// Курсор у вкладок разный: очередь хранит <see cref="ModerationCursor"/>, опубликованные —
+/// <see cref="ReviewCursor"/>. Доступ проверяет контроллер политикой <c>AdminOnly</c>.
 /// </remarks>
 public sealed class GetAdminReviewsHandler
     : IQueryHandler<PagedResponse<AdminReviewResponse>, GetAdminReviewsQuery>
@@ -56,11 +58,24 @@ public sealed class GetAdminReviewsHandler
             return pageSizeError;
         }
 
-        ReviewCursor? cursor = null;
+        return isPublished.Value
+            ? await ReadPublishedAsync(query.Cursor, pageSize, cancellationToken)
+            : await ReadModerationAsync(query.Cursor, pageSize, cancellationToken);
+    }
 
-        if (!string.IsNullOrWhiteSpace(query.Cursor))
+    /// <summary>
+    /// Очередь модерации: курсор — пара <c>(updated_at, id)</c>.
+    /// </summary>
+    private async Task<Result<PagedResponse<AdminReviewResponse>, Failure>> ReadModerationAsync(
+        string? rawCursor,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        ModerationCursor? cursor = null;
+
+        if (!string.IsNullOrWhiteSpace(rawCursor))
         {
-            var decoded = ReviewCursor.Decode(query.Cursor);
+            var decoded = ModerationCursor.Decode(rawCursor);
             if (decoded.IsFailure)
             {
                 return decoded.Error;
@@ -69,8 +84,50 @@ public sealed class GetAdminReviewsHandler
             cursor = decoded.Value;
         }
 
-        var rowsResult = await _reviewRepository.GetAdminPageAsync(
-            isPublished.Value,
+        var rowsResult = await _reviewRepository.GetAdminModerationPageAsync(
+            cursor,
+            pageSize + 1,
+            cancellationToken);
+        if (rowsResult.IsFailure)
+        {
+            return rowsResult.Error;
+        }
+
+        var rows = rowsResult.Value;
+        var hasNextPage = rows.Count > pageSize;
+        var items = hasNextPage
+            ? rows.Take(pageSize).ToList()
+            : rows.ToList();
+
+        var nextCursor = hasNextPage && items.Count > 0
+            ? new ModerationCursor(items[^1].UpdatedAt, items[^1].Id).Encode()
+            : null;
+
+        return new PagedResponse<AdminReviewResponse>(items, nextCursor);
+    }
+
+    /// <summary>
+    /// Опубликованные: курсор — пара <c>(created_at, id)</c>.
+    /// </summary>
+    private async Task<Result<PagedResponse<AdminReviewResponse>, Failure>> ReadPublishedAsync(
+        string? rawCursor,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        ReviewCursor? cursor = null;
+
+        if (!string.IsNullOrWhiteSpace(rawCursor))
+        {
+            var decoded = ReviewCursor.Decode(rawCursor);
+            if (decoded.IsFailure)
+            {
+                return decoded.Error;
+            }
+
+            cursor = decoded.Value;
+        }
+
+        var rowsResult = await _reviewRepository.GetAdminPublishedPageAsync(
             cursor,
             pageSize + 1,
             cancellationToken);

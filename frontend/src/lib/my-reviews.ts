@@ -1,7 +1,10 @@
 import { apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import type { Page } from '@/lib/paging'
-import { isMyReviewPage } from '@/lib/response-guards'
+import {
+  isMyReviewPage,
+  isUpdateMyReviewResult,
+} from '@/lib/response-guards'
 
 /**
  * Отзывы автора.
@@ -65,15 +68,30 @@ export type UpdateMyReviewInput = {
   text: string | null
 }
 
-/** `204` без тела: `updatedAt` на клиенте после правки не обновляется. */
+/**
+ * Результат правки: статус публикации решает сервер.
+ *
+ * Правка только оценки оставляет отзыв опубликованным, правка текста опубликованного
+ * отзыва возвращает его в очередь модерации — клиент не повторяет это правило сам.
+ */
+export type UpdateMyReviewResult = {
+  isPublished: boolean
+  updatedAt: string
+}
+
+/** `200` с новым статусом: строка кабинета не ждёт перезагрузки, чтобы показать бейдж. */
 export async function updateMyReview(
   id: string,
   input: UpdateMyReviewInput
-): Promise<void> {
-  await mutateWithCsrf<void>(`/reviews/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  })
+): Promise<UpdateMyReviewResult> {
+  return mutateWithCsrf<UpdateMyReviewResult>(
+    `/reviews/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(input),
+      validate: isUpdateMyReviewResult,
+    }
+  )
 }
 
 /** Удаление только автором; повторный запрос по тому же id вернёт `404`. */

@@ -20,8 +20,12 @@ import { isAdminSummary } from '@/lib/response-guards'
 export type AdminSummaryOldestReview = {
   id: string
   rating: number
-  /** UTC: экран показывает ожидание словами, а не дату и не пояс салона. */
-  createdAt: string
+  /**
+   * UTC: с какого момента отзыв ждёт решения. Экран показывает ожидание словами,
+   * а не дату: правка опубликованного отзыва возвращает его в очередь, и ожидание
+   * начинается заново — это не дата создания.
+   */
+  awaitingSince: string
   barberDisplayName: string
   customerDisplayName: string
 }

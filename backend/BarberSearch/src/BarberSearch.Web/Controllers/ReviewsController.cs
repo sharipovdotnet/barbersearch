@@ -44,7 +44,9 @@ namespace BarberSearch.Web.Controllers;
 /// Барбер выводится из брони, а не приходит от клиента, поэтому отзыв нельзя привязать
 /// не к тому барберу. Рейтинг барбера меняется при публикации, скрытии и правке
 /// опубликованного отзыва — в одной транзакции с изменением отзыва (<c>IUnitOfWork</c>);
-/// создание скрытого отзыва публичную сводку не трогает.
+/// создание скрытого отзыва публичную сводку не трогает. Правка текста опубликованного
+/// отзыва возвращает его на модерацию, поэтому оценка вступает в силу только после нового
+/// одобрения.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -89,9 +91,10 @@ public class ReviewsController : ApiController
     /// Очередь модерации: скрытые отзывы всех барберов, старые сверху. Только администратор.
     /// </summary>
     /// <remarks>
-    /// Keyset-пагинация, порядок <c>created_at ASC, id</c> (FIFO), курсор общий с публичным
-    /// списком. Отзыв, созданный клиентом, сразу попадает сюда: с R-35 создание оставляет его
-    /// скрытым. Опубликованные отзывы в очередь не входят.
+    /// Keyset-пагинация, порядок <c>updated_at ASC, id</c> — по моменту попадания в очередь,
+    /// а не по времени создания: правка опубликованного отзыва возвращает его сюда, и он
+    /// встаёт в конец, а не в начало. Отзыв, созданный клиентом, сразу попадает сюда: с R-35
+    /// создание оставляет его скрытым. Опубликованные отзывы в очередь не входят.
     /// </remarks>
     /// <param name="cursor">Непрозрачный курсор следующей страницы.</param>
     /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
@@ -177,13 +180,25 @@ public class ReviewsController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Меняет оценку и текст отзыва.
+    /// Меняет оценку и текст отзыва. Правка текста опубликованного отзыва возвращает его
+    /// на модерацию — ответ несёт новый статус публикации.
     /// </summary>
+    /// <remarks>
+    /// Правит только автор: чужой отзыв — <c>403 auth.forbidden</c>, неизвестный —
+    /// <c>404 review.notFound</c>. Оценка применяется сразу, но если изменился текст
+    /// опубликованного отзыва, он снимается с публикации и снова ждёт решения администратора
+    /// (R-35): проверялся прежний текст, а не новый. Ответ <c>200</c> с
+    /// <c>{ isPublished, updatedAt }</c>, чтобы клиент показал «На модерации» без перезагрузки.
+    /// </remarks>
+    /// <param name="reviewId">Идентификатор отзыва.</param>
+    /// <param name="request">Новая оценка и текст.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     [HttpPut("{reviewId:guid}")]
-    public async Task<ActionResult> Update(
+    public async Task<ActionResult<UpdateReviewResponse>> Update(
         Guid reviewId,
         [FromBody] UpdateReviewRequest request,
-        [FromServices] ICommandHandler<UpdateReviewCommand> handler,
+        [FromServices] ICommandHandler<UpdateReviewResponse, UpdateReviewCommand> handler,
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UpdateReviewCommand(reviewId, request.Rating, request.Text),
