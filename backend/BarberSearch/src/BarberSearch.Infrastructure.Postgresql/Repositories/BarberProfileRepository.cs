@@ -127,6 +127,33 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return ownerId.Value;
     }
 
+    /// <summary>
+    /// Фотография портфолио по паре (профиль, URL) — данные для раздачи файла.
+    /// </summary>
+    /// <remarks>
+    /// Один join фотографии с профилем, без загрузки агрегата и других коллекций.
+    /// Фильтра по флагам здесь нет намеренно: видимость решает вызывающий код, а владельцу
+    /// и администратору скрытый кадр тоже нужен (иначе превью в кабинете были бы битыми).
+    /// Индекс не добавляется: строк на профиль максимум десять, и запрос идёт по
+    /// <c>ix_portfolio_photos_barber_profile_id_sort_order</c>.
+    /// </remarks>
+    public async Task<PortfolioPhotoAccess?> GetPortfolioPhotoAccessAsync(
+        Guid barberProfileId,
+        string url,
+        CancellationToken cancellationToken = default)
+    {
+        return await (from photo in Context.PortfolioPhotos.AsNoTracking()
+                      join profile in Context.BarberProfiles.AsNoTracking()
+                          on photo.BarberProfileId equals profile.Id
+                      where photo.BarberProfileId == barberProfileId
+                            && photo.Url == url
+                      select new PortfolioPhotoAccess(
+                          profile.UserId,
+                          photo.IsPublished,
+                          photo.IsBlocked))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Result<BarberSalon, Failure>> GetSalonAsync(
         Guid barberProfileId,
         Guid salonId,
@@ -692,7 +719,38 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 id));
         }
 
-        return ToAdminDetailResponse(row);
+        // Второй запрос вместо Include в проекции: карточка уже считает счётчики
+        // подзапросами, а фотографии нужны отсортированными и одним плоским списком.
+        var photos = await LoadAdminPhotosAsync(id, cancellationToken);
+
+        return ToAdminDetailResponse(row, photos);
+    }
+
+    /// <summary>
+    /// Все фотографии профиля для админской карточки: скрытые и заблокированные тоже.
+    /// </summary>
+    /// <remarks>
+    /// Читается без отслеживания, порядок — <c>SortOrder</c>, затем <c>CreatedAt</c>:
+    /// администратор должен видеть тот же порядок, что и владелец в кабинете.
+    /// </remarks>
+    private async Task<IReadOnlyList<BarberProfilePhotoResponse>> LoadAdminPhotosAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken)
+    {
+        return await Context.PortfolioPhotos
+            .AsNoTracking()
+            .Where(photo => photo.BarberProfileId == barberProfileId)
+            .OrderBy(photo => photo.SortOrder)
+            .ThenBy(photo => photo.CreatedAt)
+            .Select(photo => new BarberProfilePhotoResponse(
+                photo.Id,
+                photo.Url,
+                photo.ThumbnailUrl,
+                photo.Description,
+                photo.SortOrder,
+                photo.IsPublished,
+                photo.IsBlocked))
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
@@ -702,7 +760,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// Коллекции агрегата не загружаются: услуги, салоны, фото и рабочие дни считаются
     /// подзапросами <c>COUNT</c>, поэтому карточка остаётся одним SQL-запросом.
     /// Рабочие дни схлопываются в дни недели: чек-листу нужен ответ «сколько разных дней
-    /// расписано», а не число строк расписания по всем салонам.
+    /// расписано», а не число строк расписания по всем салонам. Счётчик фотографий
+    /// считает только видимые (<c>IsPublished &amp;&amp; !IsBlocked</c>): чек-лист отражает
+    /// публичную карточку, а не строки в БД.
     /// </remarks>
     internal static IQueryable<AdminBarberDetailRow> BuildAdminBarberDetailQuery(
         ApplicationDbContext context,
@@ -741,12 +801,16 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                        .Distinct()
                        .Count(),
                    context.PortfolioPhotos.Count(
-                       photo => photo.BarberProfileId == profile.Id),
+                       photo => photo.BarberProfileId == profile.Id
+                                && photo.IsPublished
+                                && !photo.IsBlocked),
                    profile.CreatedAt,
                    profile.UpdatedAt);
     }
 
-    private static AdminBarberDetailResponse ToAdminDetailResponse(AdminBarberDetailRow row)
+    private static AdminBarberDetailResponse ToAdminDetailResponse(
+        AdminBarberDetailRow row,
+        IReadOnlyList<BarberProfilePhotoResponse> photos)
         => new(
             row.Id,
             row.UserId,
@@ -770,7 +834,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 ScheduleDaysCount: row.ScheduleDaysCount,
                 PhotosCount: row.PhotosCount),
             row.CreatedAt,
-            row.UpdatedAt);
+            row.UpdatedAt,
+            photos);
 
     /// <summary>
     /// Админская выборка барберов: профиль, владелец, поиск и курсор.
@@ -1120,6 +1185,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var card = await BuildCardAsync(
             profile,
             includeInactiveServices: false,
+            includeHiddenPhotos: false,
             cancellationToken);
 
         return card;
@@ -1154,18 +1220,20 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         var card = await BuildCardAsync(
             profile,
             includeInactiveServices: true,
+            includeHiddenPhotos: true,
             cancellationToken);
 
         return card;
     }
 
     /// <summary>
-    /// Читает профиль с коллекциями карточки: салоны с расписанием, услуги, специализации.
+    /// Читает профиль с коллекциями карточки: салоны с расписанием, услуги, специализации
+    /// и портфолио.
     /// </summary>
     /// <remarks>
     /// <paramref name="requireVisible"/> — единственное отличие публичного чтения от
     /// собственного: <c>IsActive &amp;&amp; IsVerified</c> против «любой статус».
-    /// <c>AsSplitQuery</c> обязателен: три коллекции в одном запросе дали бы декартово
+    /// <c>AsSplitQuery</c> обязателен: четыре коллекции в одном запросе дали бы декартово
     /// произведение. Чтение идёт без отслеживания — карточка только читается.
     /// </remarks>
     private async Task<BarberProfile?> LoadCardProfileAsync(
@@ -1179,6 +1247,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 .ThenInclude(salon => salon.WorkingSchedules)
             .Include(x => x.Services)
             .Include(x => x.BarberSpecializations)
+            .Include(x => x.PortfolioPhotos)
             .AsSplitQuery();
 
         if (requireVisible)
@@ -1199,11 +1268,15 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// <remarks>
     /// Одна проекция на оба чтения: публичное и собственное. Дублировать восемьдесят строк
     /// ради одного флага нельзя — карточка обязана меняться в одном месте. Флаг
-    /// <paramref name="includeInactiveServices"/> уходит в <c>LoadServicesAsync</c>.
+    /// <paramref name="includeInactiveServices"/> уходит в <c>LoadServicesAsync</c>,
+    /// <paramref name="includeHiddenPhotos"/> — в фильтр портфолио: публичная карточка
+    /// отдаёт только <c>IsPublished &amp;&amp; !IsBlocked</c>, собственная — все фотографии
+    /// с обоими флагами, чтобы барбер видел «Скрыто» и «Скрыто администратором».
     /// </remarks>
     private async Task<BarberProfileResponse> BuildCardAsync(
         BarberProfile profile,
         bool includeInactiveServices,
+        bool includeHiddenPhotos,
         CancellationToken cancellationToken)
     {
         var services = await LoadServicesAsync(
@@ -1211,6 +1284,21 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             includeInactiveServices,
             cancellationToken);
         var salons = await LoadSalonsAsync(profile, cancellationToken);
+
+        var photos = profile.PortfolioPhotos
+            .Where(photo => includeHiddenPhotos
+                            || (photo.IsPublished && !photo.IsBlocked))
+            .OrderBy(photo => photo.SortOrder)
+            .ThenBy(photo => photo.CreatedAt)
+            .Select(photo => new BarberProfilePhotoResponse(
+                photo.Id,
+                photo.Url,
+                photo.ThumbnailUrl,
+                photo.Description,
+                photo.SortOrder,
+                photo.IsPublished,
+                photo.IsBlocked))
+            .ToList();
 
         var specializationIds = profile.BarberSpecializations
             .Select(link => link.SpecializationId)
@@ -1257,7 +1345,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             services,
             salons,
             specializations,
-            [.. profile.AdditionalServices]);
+            [.. profile.AdditionalServices],
+            photos);
     }
 
     /// <summary>

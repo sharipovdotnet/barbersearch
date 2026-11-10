@@ -66,6 +66,100 @@ export class BarberProfilePage {
     return this.page.getByText('Профиль на проверке.', { exact: false })
   }
 
+  /** Секция «Фотографии» между «Карточкой» и «Услугами» (§5.3). */
+  get photosSection(): Locator {
+    return this.page.locator(
+      'section[aria-labelledby="barber-profile-photos-heading"]'
+    )
+  }
+
+  get emptyPhotos(): Locator {
+    return this.photosSection.getByText('Фотографий нет.', { exact: false })
+  }
+
+  get addPhotoButton(): Locator {
+    return this.photosSection.getByRole('button', {
+      name: 'Добавить фото',
+      exact: true,
+    })
+  }
+
+  get uploadDialog(): Locator {
+    return this.page.getByRole('dialog', { name: 'Добавить фото' })
+  }
+
+  get photoFileInput(): Locator {
+    return this.uploadDialog.getByLabel('Файл', { exact: true })
+  }
+
+  get photoCaption(): Locator {
+    return this.uploadDialog.getByLabel('Подпись', { exact: true })
+  }
+
+  get uploadSubmit(): Locator {
+    return this.uploadDialog.getByRole('button', {
+      name: 'Загрузить',
+      exact: true,
+    })
+  }
+
+  get deleteDialog(): Locator {
+    return this.page.getByRole('alertdialog', { name: 'Удалить фото?' })
+  }
+
+  get deleteConfirm(): Locator {
+    return this.deleteDialog.getByRole('button', {
+      name: 'Удалить',
+      exact: true,
+    })
+  }
+
+  /** Карточки фотографий в порядке `SortOrder`: сетка секции «Фотографии». */
+  photoCards(): Locator {
+    return this.photosSection
+      .getByRole('list', { name: 'Фотографии', exact: true })
+      .getByRole('listitem')
+  }
+
+  /**
+   * Показать секцию «Фотографии»: на `/barber/profile` это якорь-секция, а не
+   * отдельный маршрут, поэтому «открыть» значит дождаться её и прокрутить к ней.
+   */
+  async openPortfolio(): Promise<void> {
+    await expect(this.photosSection).toBeVisible()
+    await this.photosSection.scrollIntoViewIfNeeded()
+  }
+
+  /** Загрузка: файл, подпись и «Загрузить»; успех объявляет вызывающий тест. */
+  async uploadPhoto(filePath: string, description: string): Promise<void> {
+    await this.addPhotoButton.click()
+    await expect(this.uploadDialog).toBeVisible()
+
+    await this.photoFileInput.setInputFiles(filePath)
+
+    if (description !== '') {
+      await this.photoCaption.fill(description)
+    }
+
+    await this.uploadSubmit.click()
+  }
+
+  /**
+   * Нажать «Удалить» у фотографии и дождаться `alertdialog`: подтверждение
+   * остаётся за тестом, чтобы он проверил текст последствия.
+   */
+  async deletePhoto(index: number): Promise<void> {
+    await this.photoCards()
+      .nth(index)
+      .getByRole('button', { name: /^Удалить:/ })
+      .click()
+    await expect(this.deleteDialog).toBeVisible()
+  }
+
+  async confirmDelete(): Promise<void> {
+    await this.deleteConfirm.click()
+  }
+
   get servicesSection(): Locator {
     return this.page.locator(
       'section[aria-labelledby="barber-profile-services-heading"]'

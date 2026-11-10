@@ -55,7 +55,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | Path | Screen |
 |---|---|
 | `/` | landing page: real barber search by city, date, language, specialization, service and additional-service substring, how it works, account CTA |
-| `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating |
+| `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating, the «Работы» portfolio gallery with a lightbox |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
 | `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out, email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) and the «Забыли пароль?» link |
@@ -64,7 +64,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
-| `/barber/profile` | own profile: the card form (grade read-only), the price list with active and hidden services (add, change the price, hide, restore) and specializations; «hiding» a service keeps the row for the booking history |
+| `/barber/profile` | own profile: the card form (grade read-only), the price list with active and hidden services (add, change the price, hide, restore), «Фотографии» (upload, caption, order, hide/restore, delete, up to ten) and specializations; «hiding» a service keeps the row for the booking history |
 | `/barber/import` | «Перенести записи»: two sources. A `.ics` calendar file — one file up to 2 MB, parsed in the browser, single and recurring events with `RRULE`/`RDATE`/`EXDATE`, `VTIMEZONE`, a 7/30/90-day window, a per-event preview with edits and selection up to 50, a deterministic idempotency key from the event `UID`, guests-only bookings (`customerId: null`), `409` → nearest free slots and `429` → a one-minute pause. A pasted list from Google Docs or a spreadsheet — up to 50 lines, tab/semicolon/pipe separated, line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes. Both: sequential guest bookings with progress, partial success and retry of failed rows |
 | `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
@@ -79,7 +79,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
 | `/admin/barbers` | barber queue: pending / all / hidden (filter in `?status=all\|hidden`, `pending` by default), search by name or email |
-| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, verify/grade/hide; the current filter stays in `?status=` |
+| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, «Фотографии» with block/unblock, verify/grade/hide; the current filter stays in `?status=` |
 | `/admin/users` | user list: status/role filters, search by name or email |
 | `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
 | `/admin/barber-requests` | «Стать барбером» queue: pending requests oldest first, `?status=all` for every request newest first |
@@ -211,6 +211,99 @@ through the author list at `/account/reviews`.
 - `src/components/barber/barber-reviews.tsx` — section, summary, states, stars and the pager.
 - `src/components/review-stars.tsx` — the shared five stars, used by both review lists.
 
+## Portfolio photos
+
+A photo can now be a real uploaded image, not only a link. The public card shows it in the «Работы»
+section, the cabinet manages it in «Фотографии», and an administrator can take a frame off the
+public card without deleting it.
+
+**Public gallery.** `/barbers/{id}` renders `photos` between the hero and the slots grid. An empty
+array means no section at all. The grid is two columns at 320 px, three from `sm` and four from
+`lg`; every cell is `aspect-square` + `object-cover`, so the page does not shift while images
+load. The first photo is `loading="eager" fetchPriority="high"`, the rest are `lazy` with
+`decoding="async"`. A click opens a `Dialog` lightbox with the full image (`object-contain`,
+`max-h-[75vh]`), the caption, a «2 из 5» counter, «Назад»/«Дальше» (disabled at the edges),
+ArrowLeft/ArrowRight and Escape; Base UI returns focus to the photo button on close. A failed
+image becomes a muted placeholder with the same `alt` instead of disappearing. The section is
+covered by axe at 1280 and 320.
+
+**Cabinet.** `/barber/profile` has «Фотографии» between «Карточка» and «Услуги». «Добавить фото»
+opens a dialog with a file input, a local preview and a caption (up to 2000 characters with a
+counter); at ten photos the button is disabled with an honest limit text. Each card has «Выше» /
+«Ниже» (one bulk `PUT .../photos/order` with the full id array, never two swaps), «Изменить
+подпись», «Скрыть» / «Вернуть» and «Удалить» behind an `alertdialog`. A photo blocked by an
+administrator shows the `destructive` badge «Скрыто администратором» and only «Удалить» — the
+owner cannot unblock it. A hidden-by-owner photo shows «Скрыто» and can be returned. Every
+success is announced, calls `invalidateBarberProfile(id)` so «Открыть, как видят клиенты» does
+not read the stale public cache, and quietly re-reads the card; an error stays in a `role="alert"`
+line above the grid and never hides the loaded photos.
+
+**Upload and client preparation.** The browser accepts JPEG, PNG and WebP up to 15 MiB and checks
+that before decoding. `src/lib/image-prep.ts` draws the image on a white canvas (transparency does
+not turn black), scales the long side down to 1600 px (never up), encodes JPEG at quality 0.85 and
+retries at 0.7 if the result is still over 5 MiB; a larger result is the `tooLarge` error. This
+also removes EXIF, including GPS, for browser clients. The upload is one `multipart/form-data`
+request with `file` and `description` (`POST api/barber-profiles/{id}/photos/upload`); `api.ts`
+does not add a JSON `Content-Type` for `FormData`, and a stale CSRF token is retried with the same
+`FormData`. The server re-checks the signature (JPEG/PNG/WebP, never SVG/GIF), the size (1 KiB..5
+MiB), the sides (300..6000 px) and the area (at most 24 MP); the request itself is capped at 6 MiB,
+so Kestrel may answer `413` before the action. The result is `201 { id }`; the 11th photo is
+`409 barberProfile.addPhoto.limit`.
+
+**Storage and URL.** Files live on the API disk behind `IPhotoStorage`, under `Storage:RootPath`
+(default `App_Data/photos`, relative to the API content root; an absolute path is used as is). The
+layout is `{root}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`; `mediaId` is a new
+UUIDv7 and the extension comes from the signature, not from the client file name. The API returns
+a **relative** URL `/api/media/portfolio/{barberProfileId:D}/{mediaId:N}.{ext}`, which works in
+`<img src>` because the SPA and `/api` share an origin. Old photos added through the JSON endpoint
+keep their absolute external URLs.
+
+**Visibility and blocking.**
+
+| State | Public card | `GET /api/media/portfolio/...` |
+|---|---|---|
+| `isPublished: true`, `isBlocked: false` | shown | `200`, `Cache-Control: public, max-age=86400` |
+| `isPublished: false` («Скрыть») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
+| `isBlocked: true` («Скрыто администратором») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
+
+The media route reads visibility from the database on every request; a hidden or blocked URL is
+`404` even if it is already known, and a served file always carries
+`X-Content-Type-Options: nosniff`.
+Only an admin can block or unblock (`POST`/`DELETE api/barber-profiles/{id}/photos/{photoId}/block`);
+the owner can hide and return a photo with `POST`/`DELETE .../publication`, and those calls never
+change `isBlocked`. `GET api/barber-profiles/{id}` (the own card) returns all photos with both
+flags, the public card only visible ones, and `AdminBarberDetailResponse.photos` all of them while
+`readiness.photosCount` counts visible rows only. Photos have no server thumbnails in this slice:
+`thumbnailUrl` is always `null`, and there is no `srcset`/WebP/AVIF (see `AGENT.md` §14 #31).
+
+- `src/lib/portfolio-photos.ts` — DTO, the eight mutations, the `FormData` upload and
+  `describePortfolioPhotoError`.
+- `src/lib/image-prep.ts` — `preparePortfolioImage` and its `ImagePrepError` codes.
+- `src/lib/catalog.ts` — `invalidateBarberProfile`, called after every photo mutation.
+- `src/components/barber/barber-portfolio.tsx` — the public «Работы» gallery and lightbox.
+- `src/components/barber/barber-profile-photos.tsx` — the cabinet section and its three dialogs.
+- `src/components/admin/barber-detail.tsx`, `barbers-screen.tsx` — the admin «Фотографии» block and
+  its `block`/`unblock` calls; `src/hooks/use-admin-barber.ts` quietly re-reads the open card.
+
+**E2E.** The portfolio scenario uses `e2e/fixtures/portfolio-photo.png`, a real **800×600** PNG of
+about 101 KB (not an SVG and not a 1×1 pixel), and
+`e2e/specs/barber-profile-photos-mutations.spec.ts` in the `mutations-chromium` project, last: five
+serial scenes on the isolated `profileBarber`. The barber uploads it from `/barber/profile` and
+sees a real image (`naturalWidth > 0`); the public card shows the «Работы» gallery, a click opens
+the lightbox with «1 из 1» and both arrows disabled at the edges (the scenario has one photo —
+multi-photo paging is covered by the `barber-portfolio.test.tsx` unit test), Escape closes it and
+focus returns; axe scans the gallery and the open lightbox at 1280, then a 320 reload checks
+`scrollWidth <= 320`, scans the gallery and opens a lightbox no wider than the screen. An admin
+then blocks the photo (badge «Скрыто администратором», `role="status"`), the public card loses the
+section and the API returns no photos, «Разблокировать» restores both, and the barber finally
+deletes the photo — «Фотографий нет.» and no «Работы» publicly. `e2e/fixtures/seed.sql` deletes the
+`portfolio_photos` rows of `profileBarber` (`9e100000-0000-4000-8000-000000000015`) before its
+fixture upsert, so a rerun is idempotent; a failed scene is cleaned through the API in `afterEach`,
+with a best-effort `afterAll` as the last resort. File uploads are written to `Storage:RootPath`;
+CI passes `Storage__RootPath: ${{ runner.temp }}/photos` to the API step, and a local run may leave
+orphan files in `App_Data/photos` — they do not affect the database or the tests, but the
+directory should be emptied when it grows.
+
 ## My reviews
 
 `/account/reviews` is a separate lazy screen inside the cabinet shell (not a tab of
@@ -297,8 +390,9 @@ next-page error in one tab does not clear the other.
 
 `/account/profile` edits `firstName`, `lastName` and `phoneNumber` through the existing
 `PUT /api/users/{id}/profile` with `X-CSRF-TOKEN`; `avatarUrl` is returned unchanged because the
-endpoint replaces the whole profile, and avatar upload has no storage yet. Email is read-only: the
-API has no self-service email-change flow, and the copy says so instead of showing a dead button.
+endpoint replaces the whole profile, and avatar upload has no endpoint of its own yet. Email is
+read-only: the API has no self-service email-change flow, and the copy says so instead of showing
+a dead button.
 The form enables «Сохранить» only when a field changed, trims values, maps
 `user.updateProfile.firstName|lastName` to the field and everything else to the form-level Russian
 error. `GET /api/users/me` supplies the initial values; the same response feeds the rail, so the
@@ -1475,6 +1569,13 @@ needs no API and no database, and covers:
   empty period, the first-page error with «Повторить», the `403`/`429`/`400` texts, the `401`
   gate and exactly one quiet refresh that keeps the sections. `formatPercent`, `formatDelta`,
   `formatCount` and `formatNumber` are covered in `format.test.ts`.
+- `portfolio-photos`, `image-prep`, `BarberProfilePhotos`, `BarberPortfolio` — the multipart
+  upload with a fresh CSRF token and one retry with the same `FormData`, the `201 { id }` guard,
+  caption/order/publication/delete/block calls, the `413`/409/404/403/storage error mapping, the
+  type and 15 MiB gates before decoding, the 1600 px white-background JPEG with the 0.7 retry,
+  the cabinet section (empty, limit, blocked row without «Вернуть», dialogs) and the public
+  gallery (no section when empty, alt text, lightbox counter/edges/arrows/Escape, broken image).
+  `api.test.ts` proves `FormData` gets no JSON `Content-Type` while an ordinary body does.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -1487,11 +1588,13 @@ layer below.
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
-admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, email
+admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
+portfolio gallery with its lightbox (axe at 1280 and 320) and the admin blocking of a photo, email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
-stays separate and fast; E2E never runs inside it.
+stays separate and fast; E2E never runs inside it. After the portfolio slice the full local run is
+**281 passed, 4 skipped, 0 failed**.
 
 ### One-time setup
 
@@ -1537,8 +1640,13 @@ ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;
   Email__Enabled=true Email__Host=localhost Email__Port=1025 Email__UseTls=false \
   Email__FromAddress=no-reply@barbersearch.test App__PublicUrl=http://localhost:5173 \
   EmailOutbox__IntervalSeconds=1 \
+  Storage__RootPath=/tmp/barbersearch-e2e-photos \
   dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
 ```
+
+`Storage__RootPath` keeps uploaded portfolio files out of the checkout; CI passes
+`${{ runner.temp }}/photos` instead. Without it the API uses `App_Data/photos`, which still works
+but pollutes the working tree and survives between runs.
 
 Without these variables registration still returns `201`, but no letter is sent: the resend button
 honestly answers `409 auth.emailVerification.unavailable`, `POST /api/auth/password-reset` answers
@@ -1656,6 +1764,14 @@ unread `Upcoming` (14:00 in `Europe/Moscow`, «стрижка», «Барбер�
 «Сегодня» on any run day, and the badge is exactly `1`. The section deletes and re-inserts only
 this barber's rows, so a reseed restores the unread state and `leadMinutes = 30` after the
 mutating scenes.
+For portfolio photos the seed keeps the isolated `profileBarber`
+(`9e100000-0000-4000-8000-000000000015`) clean: it deletes that profile's `portfolio_photos` rows
+before its fixture upsert, so `barber-profile-photos-mutations.spec.ts` starts from «Фотографий
+нет.» and can upload the same `e2e/fixtures/portfolio-photo.png` (a real **800×600** PNG, about
+101 KB) on every run; a failed scene is cleaned through the API (`afterEach`, plus a best-effort
+`afterAll`). Uploaded files live outside PostgreSQL in `Storage:RootPath`; orphan files from a
+failed run do not affect the seed or the tests and are ignored by the media route once their
+database row is gone.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

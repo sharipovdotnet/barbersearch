@@ -86,6 +86,7 @@ import type { MyReview, UpdateMyReviewResult } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import { isPlaceKind } from '@/lib/place-kind'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import type { Review } from '@/lib/reviews'
 import { isSalonModerationStatus } from '@/lib/salon-moderation'
 import type { SalonDirectoryItem } from '@/lib/salons'
@@ -268,6 +269,9 @@ function isDigestTime(value: unknown): value is string {
 export function isCreatedId(value: unknown): value is { id: string } {
   return isRecord(value) && isNonEmptyString(value.id)
 }
+
+/** Имя из спецификации #84 для `201 { id }`, в том числе загрузки фото. */
+export const isCreatedResource: Guard<{ id: string }> = isCreatedId
 
 /** `{ token }` из `GET api/auth/csrf`. */
 export function isCsrfToken(value: unknown): value is { token: string } {
@@ -605,6 +609,26 @@ function isSpecialization(
   )
 }
 
+/**
+ * Фотография портфолио: `url` — непустая строка (относительный `/api/media/...`
+ * или абсолютный внешний URL), подпись и миниатюра — `null` или строка, флаги
+ * публикации и блокировки — boolean. `sortOrder` — число, не «почти число».
+ */
+export function isPortfolioPhoto(value: unknown): value is PortfolioPhoto {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.url) &&
+    isNullableString(value.thumbnailUrl) &&
+    isNullableString(value.description) &&
+    isNumber(value.sortOrder) &&
+    isBoolean(value.isPublished) &&
+    isBoolean(value.isBlocked)
+  )
+}
+
+export const isPortfolioPhotoList = isArrayOf(isPortfolioPhoto)
+
 export function isBarberProfile(value: unknown): value is BarberProfile {
   return (
     isRecord(value) &&
@@ -628,7 +652,8 @@ export function isBarberProfile(value: unknown): value is BarberProfile {
     isBoolean(value.isVerified) &&
     isArrayOf(isProfileService)(value.services) &&
     isArrayOf(isProfileSalon)(value.salons) &&
-    isArrayOf(isSpecialization)(value.specializations)
+    isArrayOf(isSpecialization)(value.specializations) &&
+    isArrayOf(isPortfolioPhoto)(value.photos)
   )
 }
 
@@ -832,6 +857,7 @@ export function isAdminBarber(value: unknown): value is AdminBarberDetail {
     isBoolean(value.isActive) &&
     isBoolean(value.isVerified) &&
     isReadiness(value.readiness) &&
+    isArrayOf(isPortfolioPhoto)(value.photos) &&
     isString(value.createdAt) &&
     isString(value.updatedAt)
   )

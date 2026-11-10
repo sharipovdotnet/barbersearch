@@ -254,5 +254,13 @@
   "Клиенты": "Clients",
   "Администраторы": "Administrators",
   "Активен": "Active",
-  "Заблокирован": "Blocked"
+  "Заблокирован": "Blocked",
+
+  "Фотографий нет.": "No photos.",
+  "Опубликовано": "Published",
+  "Скрыто владельцем": "Hidden by the owner",
+  "Скрыть фото?": "Hide this photo?",
+  "Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.": "The photo will disappear from the public card. The barber cannot bring it back themselves.",
+  "Фото скрыто: его больше нет на публичной карточке.": "The photo is hidden: it is no longer on the public card.",
+  "Фото снова на публичной карточке.": "The photo is back on the public card."
 }

@@ -139,5 +139,14 @@
   "Карта": "Card",
   "Цифровой кошелёк": "Digital wallet",
   "СБП": "SBP",
-  "Перевод": "Bank transfer"
+  "Перевод": "Bank transfer",
+
+  "Работы": "Work",
+  "Работа барбера {name}, фото {number}": "Work by {name}, photo {number}",
+  "Открыть фото: {caption}": "Open photo: {caption}",
+  "{current} из {total}": "{current} of {total}",
+  "Назад — фото {number} из {total}": "Back — photo {number} of {total}",
+  "Дальше — фото {number} из {total}": "Next — photo {number} of {total}",
+  "Фото барбера": "Barber photo",
+  "Просмотр работ барбера": "Viewing the barber's work"
 }

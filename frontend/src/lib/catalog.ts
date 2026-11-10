@@ -7,6 +7,7 @@ import type {
   ServiceCategory,
 } from '@/lib/barber-profile-labels'
 import type { PlaceKind } from '@/lib/place-kind'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import { isBarberProfile } from '@/lib/response-guards'
 
 /**
@@ -88,6 +89,8 @@ export type BarberProfile = {
   services: BarberProfileService[]
   salons: BarberProfileSalon[]
   specializations: BarberProfileSpecialization[]
+  /** Портфолио: публичная карточка отдаёт только видимые, своя — все. */
+  photos: PortfolioPhoto[]
 }
 
 const profiles = new Map<string, BarberProfile>()
@@ -96,6 +99,18 @@ const inFlight = new Map<string, Promise<BarberProfile>>()
 /** Уже загруженная карточка — для синхронной отрисовки до ответа сети. */
 export function readCachedBarberProfile(id: string): BarberProfile | null {
   return profiles.get(id) ?? null
+}
+
+/**
+ * Сброс кэша карточки после мутации фотографий.
+ *
+ * `upload`, `remove`, `reorder`, `publish` и блокировка меняют карточку, а «Открыть,
+ * как видят клиенты» читает её из этого кэша: без сброса ссылка показала бы старый
+ * набор. Незавершённый запрос тоже забываем — следующий читатель начнёт заново.
+ */
+export function invalidateBarberProfile(id: string): void {
+  profiles.delete(id)
+  inFlight.delete(id)
 }
 
 /**

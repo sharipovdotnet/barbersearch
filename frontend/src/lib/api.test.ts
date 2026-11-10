@@ -246,3 +246,49 @@ describe('apiRequest', () => {
     expect(requests()).toBe(1)
   })
 })
+
+describe('apiRequest, заголовки тела', () => {
+  it('для FormData не ставит JSON Content-Type: boundary выставляет браузер', async () => {
+    let contentType: string | null = null
+    let accept: string | null = null
+
+    server.use(
+      http.post('/api/upload', ({ request }) => {
+        contentType = request.headers.get('content-type')
+        accept = request.headers.get('accept')
+
+        return HttpResponse.json({ id: 'photo-1' }, { status: 201 })
+      })
+    )
+
+    const form = new FormData()
+    form.append('description', 'Работа')
+
+    await expect(
+      apiRequest('/upload', { method: 'POST', body: form })
+    ).resolves.toStrictEqual({ id: 'photo-1' })
+
+    expect(contentType).not.toBe('application/json')
+    expect(contentType).toMatch(/^multipart\/form-data; boundary=/)
+    expect(accept).toBe('application/json')
+  })
+
+  it('для обычного тела оставляет JSON Content-Type и Accept', async () => {
+    let contentType: string | null = null
+    let accept: string | null = null
+
+    server.use(
+      http.post('/api/thing', ({ request }) => {
+        contentType = request.headers.get('content-type')
+        accept = request.headers.get('accept')
+
+        return HttpResponse.json({ ok: true })
+      })
+    )
+
+    await apiRequest('/thing', { method: 'POST', body: '{"a":1}' })
+
+    expect(contentType).toBe('application/json')
+    expect(accept).toBe('application/json')
+  })
+})

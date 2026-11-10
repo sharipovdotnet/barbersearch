@@ -1,13 +1,15 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   SessionContext,
   type SessionContextValue,
 } from '@/hooks/use-session'
 import type { BarberProfile } from '@/lib/catalog'
+import { preparePortfolioImage } from '@/lib/image-prep'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import { BarberProfilePage } from '@/pages/barber-profile-page'
 import {
   catalogueHairService,
@@ -19,7 +21,18 @@ import {
 import { recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
+vi.mock('@/lib/image-prep', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/image-prep')>()
+
+  return {
+    ...actual,
+    // jsdom не рисует canvas: подготовку файла подменяем, транспорт остаётся настоящим.
+    preparePortfolioImage: vi.fn(async (file: File) => file),
+  }
+})
+
 const PROFILE_URL = `/api/barber-profiles/${testBarberProfile.id}`
+const PHOTOS_URL = `${PROFILE_URL}/photos`
 
 const BARBER = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -572,5 +585,304 @@ describe('BarberProfilePage: отказы', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Профиль' })
     ).toBeInTheDocument()
+  })
+})
+
+/** Фотография портфолио в фикстурах страницы. */
+function portfolioPhoto(
+  overrides: Partial<PortfolioPhoto> = {}
+): PortfolioPhoto {
+  return {
+    id: 'eeeeeeee-1111-4111-8111-111111111111',
+    url: `/api/media/portfolio/${testBarberProfile.id}/eeeeeeee111141118111111111111111.jpg`,
+    thumbnailUrl: null,
+    description: 'Стрижка',
+    sortOrder: 0,
+    isPublished: true,
+    isBlocked: false,
+    ...overrides,
+  }
+}
+
+/** Профиль с портфолио: остальные поля — из общей фикстуры MSW. */
+function profileWith(photos: PortfolioPhoto[]): BarberProfile {
+  return { ...cloneProfile(testBarberProfile), photos }
+}
+
+function photoFile(): File {
+  return new File(['photo-bytes'], 'IMG_0001.jpeg', { type: 'image/jpeg' })
+}
+
+describe('BarberProfilePage: фотографии', () => {
+  beforeEach(() => {
+    // jsdom не умеет object URL: превью получает стабильную заглушку.
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  it('пустое портфолио: секция между карточкой и услугами', async () => {
+    mockOwnProfile()
+
+    renderPage()
+    await waitForProfile()
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Фотографии' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Фотографий нет. Добавьте работы, чтобы клиенты видели ваш стиль.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Добавить фото' })
+    ).toBeEnabled()
+  })
+
+  it('две работы: подписи, бейдж скрытой и стрелки порядка', async () => {
+    mockOwnProfile(
+      profileWith([
+        portfolioPhoto(),
+        portfolioPhoto({
+          id: 'eeeeeeee-2222-4222-8222-222222222222',
+          description: 'Борода',
+          sortOrder: 1,
+          isPublished: false,
+        }),
+      ])
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    expect(screen.getByAltText('Стрижка')).toBeInTheDocument()
+    expect(screen.getByAltText('Борода')).toBeInTheDocument()
+    expect(screen.getByText('Скрыто')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Ниже: Стрижка' })
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Вернуть: Борода' })
+    ).toBeInTheDocument()
+  })
+
+  it('загружает фото: подготовка файла, POST, объявление и перечитывание', async () => {
+    const user = userEvent.setup()
+    const profile = mockOwnProfile()
+    let uploads = 0
+
+    server.use(
+      http.post(`${PHOTOS_URL}/upload`, () => {
+        uploads += 1
+
+        return HttpResponse.json(
+          { id: portfolioPhoto().id },
+          { status: 201 }
+        )
+      })
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await user.click(screen.getByRole('button', { name: 'Добавить фото' }))
+    await user.upload(screen.getByLabelText('Файл'), photoFile())
+    await user.type(screen.getByLabelText('Подпись'), 'Стрижка')
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Загрузить',
+      })
+    )
+
+    expect(await screen.findByText('Фото добавлено.')).toBeInTheDocument()
+    expect(uploads).toBe(1)
+    expect(vi.mocked(preparePortfolioImage)).toHaveBeenCalledTimes(1)
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(2)
+    })
+  })
+
+  it('десять фото: кнопка загрузки disabled и текст лимита', async () => {
+    mockOwnProfile(
+      profileWith(
+        Array.from({ length: 10 }, (_item, index) =>
+          portfolioPhoto({
+            id: `eeeeeeee-3333-4333-8333-00000000000${index}`,
+            description: `Работа ${index + 1}`,
+            sortOrder: index,
+          })
+        )
+      )
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    expect(
+      screen.getByRole('button', { name: 'Добавить фото' })
+    ).toBeDisabled()
+    expect(
+      screen.getByText(
+        'В портфолио уже 10 фото. Удалите одно, чтобы добавить новое.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('удаляет фото через alertdialog и перечитывает профиль', async () => {
+    const user = userEvent.setup()
+    const profile = mockOwnProfile(profileWith([portfolioPhoto()]))
+
+    server.use(
+      http.delete(`${PHOTOS_URL}/:photoId`, () => noContent())
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await user.click(screen.getByRole('button', { name: 'Удалить: Стрижка' }))
+
+    const dialog = screen.getByRole('alertdialog')
+
+    expect(
+      within(dialog).getByText(
+        'Фото исчезнет из карточки и поиска. Это необратимо.'
+      )
+    ).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+
+    expect(await screen.findByText('Фото удалено.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(2)
+    })
+  })
+
+  it('скрывает и возвращает фото: DELETE и POST публикации', async () => {
+    const user = userEvent.setup()
+    const base = profileWith([portfolioPhoto()])
+    const profile = mockOwnProfile(base)
+    let deleted = 0
+    let published = 0
+
+    server.use(
+      http.delete(`${PHOTOS_URL}/:photoId/publication`, () => {
+        deleted += 1
+        profile.setProfile(
+          profileWith([
+            portfolioPhoto({ isPublished: false }),
+          ])
+        )
+
+        return noContent()
+      }),
+      http.post(`${PHOTOS_URL}/:photoId/publication`, () => {
+        published += 1
+        profile.setProfile(base)
+
+        return noContent()
+      })
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть: Стрижка' }))
+
+    expect(await screen.findByText('Фото скрыто.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Вернуть: Стрижка' })
+      ).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Вернуть: Стрижка' }))
+
+    expect(
+      await screen.findByText('Фото снова в карточке.')
+    ).toBeInTheDocument()
+    expect(deleted).toBe(1)
+    expect(published).toBe(1)
+  })
+
+  it('заблокированное администратором фото: нет «Вернуть»', async () => {
+    mockOwnProfile(profileWith([portfolioPhoto({ isBlocked: true })]))
+
+    renderPage()
+    await waitForProfile()
+
+    expect(screen.getByText('Скрыто администратором')).toBeInTheDocument()
+
+    const section = screen.getByRole('region', { name: 'Фотографии' })
+
+    expect(
+      within(section).queryByRole('button', { name: /Вернуть/ })
+    ).not.toBeInTheDocument()
+    expect(
+      within(section).getByRole('button', { name: 'Удалить: Стрижка' })
+    ).toBeInTheDocument()
+  })
+
+  it('409 лимита и 400 типа файла объясняются в диалоге', async () => {
+    const user = userEvent.setup()
+    let uploads = false
+    let failWith = ''
+
+    server.use(
+      http.post(`${PHOTOS_URL}/upload`, () => {
+        uploads = true
+
+        if (failWith === 'limit') {
+          return HttpResponse.json(
+            problemDetails(409, {
+              errorCodes: ['barberProfile.addPhoto.limit'],
+            }),
+            { status: 409 }
+          )
+        }
+
+        return HttpResponse.json(
+          problemDetails(400, {
+            errorCodes: ['barberProfile.uploadPhoto.unsupportedType'],
+          }),
+          { status: 400 }
+        )
+      })
+    )
+
+    failWith = 'limit'
+    mockOwnProfile()
+    renderPage()
+    await waitForProfile()
+
+    await user.click(screen.getByRole('button', { name: 'Добавить фото' }))
+    await user.upload(screen.getByLabelText('Файл'), photoFile())
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Загрузить',
+      })
+    )
+
+    expect(
+      await screen.findByText(
+        'В портфолио уже 10 фото. Удалите одно, чтобы добавить новое.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    failWith = 'type'
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Загрузить',
+      })
+    )
+
+    expect(
+      await screen.findByText('Поддерживаются только JPEG, PNG и WebP.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(uploads).toBe(true)
   })
 })

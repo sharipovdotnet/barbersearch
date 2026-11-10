@@ -78,8 +78,9 @@ export function setUnauthorizedHandler(
  * Запрос к API с одним прозрачным повтором после `401`.
  *
  * Повтор безопасен и для мутаций: `401` формирует middleware аутентификации **до** действия,
- * поэтому запрос не был выполнен. Тело — строка, её можно отправить повторно; потоковые тела
- * (`FormData`, `ReadableStream`) не повторяем. Второй `401` уже не продлевает сессию.
+ * поэтому запрос не был выполнен. Тело можно отправить повторно, если это строка или
+ * `FormData` (её сериализация не расходует объект). Потоковые тела (`ReadableStream`,
+ * `Blob`) не повторяем. Второй `401` уже не продлевает сессию.
  */
 export async function apiRequest<TResponse>(
   path: string,
@@ -148,7 +149,9 @@ async function send(path: string, init: RequestInit): Promise<Response> {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
-        ...(requestInit.body === undefined
+        // `FormData` получает `Content-Type` с boundary от браузера: JSON-заголовок
+        // сломал бы multipart, поэтому для него заголовок не ставим (§8).
+        ...(requestInit.body === undefined || isFormData(requestInit.body)
           ? {}
           : { 'Content-Type': 'application/json' }),
         ...headers,
@@ -157,6 +160,11 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   } catch {
     throw new ApiError(0, null, t('Нет связи с сервером.'))
   }
+}
+
+/** `FormData` в тестовом/браузерном окружении есть всегда, но проверяем безопасно. */
+function isFormData(body: BodyInit | null | undefined): body is FormData {
+  return typeof FormData !== 'undefined' && body instanceof FormData
 }
 
 /** Повторяем только `401` на данных: вход, `/auth/me` и refresh продлевать нечего. */
@@ -181,7 +189,8 @@ function canRetryAfterUnauthorized(
   return (
     init.body === undefined ||
     init.body === null ||
-    typeof init.body === 'string'
+    typeof init.body === 'string' ||
+    isFormData(init.body)
   )
 }
 

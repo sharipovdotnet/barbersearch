@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { BarberAbout } from '@/components/barber/barber-about'
 import { BarberHero } from '@/components/barber/barber-hero'
+import { BarberPortfolio } from '@/components/barber/barber-portfolio'
 import { BarberReviews } from '@/components/barber/barber-reviews'
 import { BarberSalons } from '@/components/barber/barber-salons'
 import { BarberServices } from '@/components/barber/barber-services'
@@ -72,6 +73,11 @@ export function BarberPage({ id }: { id: string }) {
       {status === 'ready' && profile && (
         <div className="mt-6 space-y-6">
           <BarberHero profile={profile} />
+
+          <BarberPortfolio
+            photos={profile.photos}
+            barberName={profile.displayName}
+          />
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">

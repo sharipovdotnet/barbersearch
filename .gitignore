@@ -23,3 +23,7 @@ Thumbs.db
 # test project under backend/tests/ needs the rules at the repository root.
 [Bb]in/
 [Oo]bj/
+
+# Рабочие материалы прогонов (логи, скриншоты, отчёты агентов) лежат в verification/
+# рядом с frontend/. Это не часть продукта: каталог не коммитится никогда.
+verification/

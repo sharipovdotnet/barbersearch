@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, Circle, Loader2, Star } from 'lucide-react'
 
 import { BarberStatusBadge } from '@/components/admin/barber-list'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -21,6 +22,7 @@ import type {
 } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS, BARBER_GRADES } from '@/lib/admin-barbers'
 import type { AdminBarberDetailStatus } from '@/hooks/use-admin-barber'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import {
   formatDateTime,
   formatDaysCount,
@@ -45,6 +47,10 @@ export function BarberDetail({
   onChangeGrade,
   onHide,
   onShow,
+  pendingPhotoId,
+  photoError,
+  onBlockPhoto,
+  onUnblockPhoto,
   onBack,
 }: {
   barber: AdminBarberDetail
@@ -55,6 +61,10 @@ export function BarberDetail({
   onChangeGrade: (grade: BarberGrade) => void
   onHide: () => void
   onShow: () => void
+  pendingPhotoId: string | null
+  photoError: string | null
+  onBlockPhoto: (photoId: string) => void
+  onUnblockPhoto: (photoId: string) => void
   onBack: () => void
 }) {
   const { t } = useI18n()
@@ -146,6 +156,14 @@ export function BarberDetail({
         </dl>
 
         <ReadinessChecklist barber={barber} />
+
+        <BarberPhotos
+          photos={barber.photos}
+          pendingPhotoId={pendingPhotoId}
+          error={photoError}
+          onBlock={onBlockPhoto}
+          onUnblock={onUnblockPhoto}
+        />
 
         <BarberActions
           barber={barber}
@@ -436,6 +454,170 @@ function BarberActions({
       </Dialog>
     </section>
   )
+}
+
+/**
+ * «Фотографии» в админской карточке (§5.5).
+ *
+ * Админ видит все кадры профиля, включая скрытые владельцем и заблокированные, и может
+ * скрыть кадр с публичной карточки. Вернуть его сам барбер не может — «Разблокировать»
+ * доступно только здесь. Скрытие спрашивает подтверждение `alertdialog`: последствие
+ * видит клиент, а не только барбер.
+ */
+function BarberPhotos({
+  photos,
+  pendingPhotoId,
+  error,
+  onBlock,
+  onUnblock,
+}: {
+  photos: readonly PortfolioPhoto[]
+  pendingPhotoId: string | null
+  error: string | null
+  onBlock: (photoId: string) => void
+  onUnblock: (photoId: string) => void
+}) {
+  const { t } = useI18n()
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const confirmPhoto =
+    photos.find((photo) => photo.id === confirmId) ?? null
+
+  return (
+    <section
+      aria-labelledby="barber-photos-title"
+      className="space-y-2 border-t pt-4"
+    >
+      <h3 id="barber-photos-title" className="text-sm font-medium">
+        {t('Фотографии')}
+      </h3>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      {photos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('Фотографий нет.')}</p>
+      ) : (
+        <ul className="space-y-2">
+          {photos.map((photo) => {
+            const isPending = pendingPhotoId === photo.id
+            const caption = photo.description?.trim() ?? ''
+            const label = caption === '' ? t('Без подписи') : caption
+            // Имя кнопки начинается с видимого текста и содержит подпись фото (WCAG 2.5.3).
+            const ariaLabel = (action: string): string =>
+              t('{action}: {caption}', { action, caption: label })
+
+            return (
+              <li
+                key={photo.id}
+                className="flex items-start gap-3"
+                aria-busy={isPending || undefined}
+              >
+                <img
+                  src={photo.url}
+                  alt={label}
+                  loading="lazy"
+                  className="size-24 shrink-0 rounded-lg bg-muted object-cover"
+                />
+
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm break-words">{label}</p>
+                  <AdminPhotoStatus photo={photo} />
+                </div>
+
+                {photo.isBlocked ? (
+                  <Button
+                    variant="outline"
+                    className="h-11 shrink-0 sm:h-9"
+                    aria-label={ariaLabel(t('Разблокировать'))}
+                    disabled={isPending}
+                    aria-busy={isPending || undefined}
+                    onClick={() => onUnblock(photo.id)}
+                  >
+                    {isPending && (
+                      <Loader2
+                        data-icon="inline-start"
+                        aria-hidden
+                        className="animate-spin"
+                      />
+                    )}
+                    {isPending ? t('Разблокируем…') : t('Разблокировать')}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    className="h-11 shrink-0 sm:h-9"
+                    aria-label={ariaLabel(t('Скрыть'))}
+                    disabled={isPending}
+                    onClick={() => setConfirmId(photo.id)}
+                  >
+                    {t('Скрыть')}
+                  </Button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <Dialog
+        open={confirmPhoto !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmId(null)
+          }
+        }}
+      >
+        <DialogContent role="alertdialog">
+          <DialogHeader>
+            <DialogTitle>{t('Скрыть фото?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmId(null)}>
+              {t('Отмена')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const photoId = confirmId
+                setConfirmId(null)
+
+                if (photoId !== null) {
+                  onBlock(photoId)
+                }
+              }}
+            >
+              {t('Скрыть')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  )
+}
+
+/** Статус кадра: блокировка приоритетнее снятия с публикации. */
+function AdminPhotoStatus({ photo }: { photo: PortfolioPhoto }) {
+  const { t } = useI18n()
+
+  if (photo.isBlocked) {
+    return (
+      <Badge variant="destructive">{t('Скрыто администратором')}</Badge>
+    )
+  }
+
+  if (!photo.isPublished) {
+    return <Badge variant="secondary">{t('Скрыто владельцем')}</Badge>
+  }
+
+  return <Badge variant="secondary">{t('Опубликовано')}</Badge>
 }
 
 /** Чек-лист готовности: шесть пунктов, по которым видно, чего не хватает. */

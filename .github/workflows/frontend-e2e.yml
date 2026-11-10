@@ -137,6 +137,10 @@ jobs:
           # Письма уходят через outbox-воркер, а Playwright ждёт их 10 с. Дефолтные
           # 30 с дают флейк: письмо, поставленное сразу после тика, не успевает.
           EmailOutbox__IntervalSeconds: '1'
+          # Загруженные фото портфолио живут на диске (backend/AGENT.md §15.2).
+          # Абсолютный путь в runner.temp изолирует прогон от workspace и от кэша между
+          # прогонами: файлы не попадают ни в коммит, ни в артефакты.
+          Storage__RootPath: ${{ runner.temp }}/photos
         run: |
           nohup dotnet run --project BarberSearch/src/BarberSearch.Web \
             --launch-profile http --no-build > "$RUNNER_TEMP/api.log" 2>&1 &

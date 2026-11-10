@@ -4,7 +4,15 @@ import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import type { AdminBarberStatusFilter } from '@/lib/admin-path'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import { isAdminBarber, isAdminBarberPage } from '@/lib/response-guards'
+
+// Блокировка живёт в транспорте портфолио: здесь только точка импорта для админской
+// карточки, чтобы не заводить второй экземпляр запроса.
+export {
+  blockPortfolioPhoto,
+  unblockPortfolioPhoto,
+} from '@/lib/portfolio-photos'
 
 /**
  * Админское чтение барберов и словари для экрана.
@@ -70,6 +78,8 @@ export type AdminBarberDetail = {
   isActive: boolean
   isVerified: boolean
   readiness: AdminBarberReadiness
+  /** Все фотографии профиля: админ видит и скрытые, и заблокированные. */
+  photos: PortfolioPhoto[]
   createdAt: string
   updatedAt: string
 }

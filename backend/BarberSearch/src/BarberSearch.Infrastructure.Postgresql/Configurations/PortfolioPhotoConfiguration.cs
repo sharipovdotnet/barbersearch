@@ -48,6 +48,13 @@ public class PortfolioPhotoConfiguration : IEntityTypeConfiguration<PortfolioPho
         builder.Property(x => x.SortOrder).HasColumnName("sort_order");
         builder.Property(x => x.IsPublished).HasColumnName("is_published");
 
+        // Административная блокировка: отдельное от is_published состояние. NOT NULL
+        // с DEFAULT false — миграция AddPortfolioPhotoBlocked; существующие строки
+        // остаются видимыми.
+        builder.Property(x => x.IsBlocked)
+            .HasColumnName("is_blocked")
+            .IsRequired();
+
         // Ребёнок живёт только вместе с агрегатом.
         builder.HasOne(x => x.BarberProfile)
             .WithMany(profile => profile.PortfolioPhotos)

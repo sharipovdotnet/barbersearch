@@ -21,5 +21,19 @@
   "Запрос не выполнен.": "The request failed.",
   "Сервер вернул неожиданный ответ.": "The server returned an unexpected response.",
   "Продление сессии не уложилось во время ожидания.": "Session refresh timed out while waiting.",
-  "Продление сессии не удалось.": "Session refresh failed."
+  "Продление сессии не удалось.": "Session refresh failed.",
+  "Поддерживаются только JPEG, PNG и WebP.": "Only JPEG, PNG and WebP are supported.",
+  "Файл больше 15 МБ. Выберите фото поменьше.": "The file is larger than 15 MB. Choose a smaller photo.",
+  "Не удалось уменьшить фото до 5 МБ. Выберите другое.": "Could not shrink the photo below 5 MB. Choose another one.",
+  "Не удалось прочитать изображение. Выберите другой файл.": "Could not read the image. Choose another file.",
+  "Файл слишком большой. Максимум — 5 МБ.": "The file is too large. 5 MB maximum.",
+  "Выберите файл.": "Choose a file.",
+  "Стороны фото должны быть от 300 до 6000 px.": "Photo sides must be between 300 and 6,000 px.",
+  "Подпись не длиннее 2000 символов.": "The description must be 2,000 characters or fewer.",
+  "В портфолио уже 10 фото. Удалите одно, чтобы добавить новое.": "The portfolio already has 10 photos. Delete one to add another.",
+  "Не удалось сохранить порядок. Обновите страницу.": "Could not save the order. Refresh the page.",
+  "Фото не найдено. Обновите страницу.": "Photo not found. Refresh the page.",
+  "Нет доступа к портфолио этого барбера.": "You don't have access to this barber's portfolio.",
+  "Не удалось сохранить файл. Попробуйте ещё раз.": "Could not save the file. Try again.",
+  "Не удалось выполнить действие с фото. Попробуйте ещё раз.": "Could not complete the photo action. Try again."
 }

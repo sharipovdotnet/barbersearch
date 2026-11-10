@@ -17,12 +17,14 @@ using BarberSearch.Application.BarberProfiles.RemoveBarberProfileService;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileSpecialization;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileTimeOff;
 using BarberSearch.Application.BarberProfiles.ReorderBarberProfilePhoto;
+using BarberSearch.Application.BarberProfiles.ReorderBarberProfilePhotos;
 using BarberSearch.Application.BarberProfiles.SetBarberProfilePrimarySalon;
 using BarberSearch.Application.BarberProfiles.UnverifyBarberProfile;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfileRating;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfileService;
 using BarberSearch.Application.BarberProfiles.VerifyBarberProfile;
+using BarberSearch.Application.PortfolioPhotos.UploadPortfolioPhoto;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfilePhoto;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileService;
@@ -33,14 +35,18 @@ using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhoto;
+using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhotos;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileService;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using BarberSearch.Web.Controllers.PortfolioPhotos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared;
 
 namespace BarberSearch.Web.Controllers;
 
@@ -56,6 +62,26 @@ namespace BarberSearch.Web.Controllers;
 [Route("api/barber-profiles")]
 public class BarberProfilesController : ApiController
 {
+    /// <summary>
+    /// Предел всего multipart-запроса: 6 МиБ, чтобы обвязка формы помещалась вокруг
+    /// файла в 5 МиБ (<c>Constants.MAX_PHOTO_BYTES</c>). Kestrel отвечает <c>413</c> до
+    /// действия; клиент обрабатывает и его, и код <c>tooLarge</c>.
+    /// </summary>
+    private const int MAX_UPLOAD_REQUEST_BYTES = 6 * 1024 * 1024;
+
+    /// <summary>
+    /// Кусок чтения потока формы: файл читается порциями, а не целиком по <c>IFormFile.Length</c>.
+    /// </summary>
+    private const int UPLOAD_READ_CHUNK_BYTES = 64 * 1024;
+
+    private const string UPLOAD_FILE_REQUIRED_CODE = "barberProfile.uploadPhoto.fileRequired";
+    private const string UPLOAD_TOO_LARGE_CODE = "barberProfile.uploadPhoto.tooLarge";
+
+    private const string UPLOAD_FILE_REQUIRED_MESSAGE = "A photo file is required.";
+
+    private static readonly string UploadTooLargeMessage =
+        $"The image file cannot be larger than {Constants.MAX_PHOTO_BYTES} bytes.";
+
     /// <summary>
     /// Создаёт профиль барбера для текущего пользователя. Доступно только роли <c>Barber</c>:
     /// администратор выдаёт её через <c>PUT api/users/{userId}/role</c>.
@@ -222,6 +248,117 @@ public class BarberProfilesController : ApiController
                 request.Url,
                 request.ThumbnailUrl,
                 request.Description),
+            cancellationToken));
+
+    /// <summary>
+    /// Загружает файл фотографии в портфолио барбера (<c>multipart/form-data</c>, одно поле).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Принимает только JPEG, PNG и WebP; тип определяется по сигнатуре в
+    /// <c>ImageFileInspector</c>, а не по имени файла или <c>Content-Type</c> клиента.
+    /// Поток формы читается в память порциями с жёстким пределом
+    /// <c>Constants.MAX_PHOTO_BYTES + 1</c> байт: <c>IFormFile.Length</c> — это лишь
+    /// подсказка от клиента, и доверять ей как пределу нельзя. Пустой файл —
+    /// <c>400 barberProfile.uploadPhoto.fileRequired</c>, превышение —
+    /// <c>400 barberProfile.uploadPhoto.tooLarge</c>.
+    /// </para>
+    /// <para>
+    /// Остальные проверки (формат, размеры, лимит 10 фотографий, права владельца) выполняет
+    /// обработчик Application; ответ — <c>201 { "id": "&lt;photoId&gt;" }</c> без
+    /// <c>Location</c>: у фотографии нет читаемого self-URI (R-42). Multipart-запрос —
+    /// cookie-мутация, поэтому глобальный antiforgery-фильтр продолжает требовать
+    /// <c>X-CSRF-TOKEN</c>; отдельной политики rate limiter нет — хватает глобальных
+    /// 30 записей/мин и доменного лимита 10 фото.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, в портфолио которого добавляется фотография.</param>
+    /// <param name="form">Файл и необязательная подпись.</param>
+    /// <param name="handler">Обработчик команды загрузки.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPost("{barberProfileId:guid}/photos/upload")]
+    [RequestSizeLimit(MAX_UPLOAD_REQUEST_BYTES)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MAX_UPLOAD_REQUEST_BYTES)]
+    public async Task<ActionResult<CreatedResourceResponse>> UploadPhoto(
+        Guid barberProfileId,
+        [FromForm] UploadPortfolioPhotoForm form,
+        [FromServices] ICommandHandler<Guid, UploadPortfolioPhotoCommand> handler,
+        CancellationToken cancellationToken)
+    {
+        // form?.File: при запросе без form-content биндер оставляет параметр пустым,
+        // и это тот же «файла нет», а не 500.
+        var file = form?.File;
+
+        if (file is null || file.Length == 0)
+        {
+            return UploadFileRequired();
+        }
+
+        await using var source = file.OpenReadStream();
+
+        // Начальная ёмкость ограничена пределом: даже вредоносный Length не раздует буфер.
+        using var buffer = new MemoryStream(
+            capacity: (int)Math.Min(file.Length, Constants.MAX_PHOTO_BYTES));
+
+        var chunk = new byte[UPLOAD_READ_CHUNK_BYTES];
+        var totalBytes = 0;
+
+        while (true)
+        {
+            var read = await source.ReadAsync(chunk.AsMemory(), cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            totalBytes += read;
+
+            // Останавливаемся на первом же байте сверх предела: целиком 6 МиБ не читаем.
+            if (totalBytes > Constants.MAX_PHOTO_BYTES)
+            {
+                return UploadTooLarge();
+            }
+
+            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+        }
+
+        if (totalBytes == 0)
+        {
+            return UploadFileRequired();
+        }
+
+        var uploaded = await handler.Handle(
+            new UploadPortfolioPhotoCommand(
+                barberProfileId,
+                buffer.ToArray(),
+                form!.Description),
+            cancellationToken);
+
+        return ToCreatedResult(uploaded);
+    }
+
+    /// <summary>
+    /// Меняет порядок фотографий портфолио одним запросом: тело — полный список
+    /// идентификаторов в новом порядке.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный <c>PUT .../photos/{photoId}/sort-order</c> остаётся для совместимости, но
+    /// кабинет меняет порядок только здесь: два одиночных запроса на обмен местами при
+    /// частичном сбое оставили бы дубли <c>SortOrder</c>. Неполный список или дубли —
+    /// <c>400 barberProfile.reorderPhotos.invalid</c>; владение проверяет обработчик.
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, чьё портфолио переупорядочивается.</param>
+    /// <param name="request">Полный список фотографий в новом порядке.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPut("{barberProfileId:guid}/photos/order")]
+    public async Task<ActionResult> ReorderPhotos(
+        Guid barberProfileId,
+        [FromBody] ReorderBarberProfilePhotosRequest request,
+        [FromServices] ICommandHandler<ReorderBarberProfilePhotosCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ReorderBarberProfilePhotosCommand(barberProfileId, request.PhotoIds),
             cancellationToken));
 
     /// <summary>
@@ -445,4 +582,24 @@ public class BarberProfilesController : ApiController
         => ToActionResult(await handler.Handle(
             new RemoveBarberProfileTimeOffCommand(barberProfileId, timeOffId),
             cancellationToken));
+
+    /// <summary>
+    /// <c>400 barberProfile.uploadPhoto.fileRequired</c>: файла нет или он пуст.
+    /// </summary>
+    private static ObjectResult UploadFileRequired()
+        => FailureProblemDetails.CreateResult(
+            new Failure(Error.Validation(
+                UPLOAD_FILE_REQUIRED_CODE,
+                UPLOAD_FILE_REQUIRED_MESSAGE,
+                "file")));
+
+    /// <summary>
+    /// <c>400 barberProfile.uploadPhoto.tooLarge</c>: файл больше 5 МиБ.
+    /// </summary>
+    private static ObjectResult UploadTooLarge()
+        => FailureProblemDetails.CreateResult(
+            new Failure(Error.Validation(
+                UPLOAD_TOO_LARGE_CODE,
+                UploadTooLargeMessage,
+                "file")));
 }

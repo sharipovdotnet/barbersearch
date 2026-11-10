@@ -41,7 +41,13 @@ import {
   type BarberGrade,
 } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
+import { invalidateBarberProfile } from '@/lib/catalog'
 import { formatClockTime } from '@/lib/format'
+import {
+  blockPortfolioPhoto,
+  describePortfolioPhotoError,
+  unblockPortfolioPhoto,
+} from '@/lib/portfolio-photos'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
@@ -110,6 +116,11 @@ export function BarbersScreen({
     barberId: string
     message: string
   } | null>(null)
+  const [pendingPhotoId, setPendingPhotoId] = useState<string | null>(null)
+  const [photoFailure, setPhotoFailure] = useState<{
+    barberId: string
+    message: string
+  } | null>(null)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [requiresSignIn, setRequiresSignIn] = useState(false)
 
@@ -117,6 +128,10 @@ export function BarbersScreen({
   const actionError =
     barber && actionFailure?.barberId === barber.id
       ? actionFailure.message
+      : null
+  const photoError =
+    barber && photoFailure?.barberId === barber.id
+      ? photoFailure.message
       : null
   const currentPendingAction =
     barber && pendingAction?.barberId === barber.id ? pendingAction.kind : null
@@ -129,7 +144,8 @@ export function BarbersScreen({
       !list.requiresSignIn &&
       !list.isLoadingPage &&
       !requiresSignIn &&
-      pendingAction === null,
+      pendingAction === null &&
+      pendingPhotoId === null,
     onRefresh: () => {
       list.refresh()
 
@@ -197,6 +213,7 @@ export function BarbersScreen({
 
   function handleSelect(id: string) {
     setActionFailure(null)
+    setPhotoFailure(null)
     navigate(barbersPath(id, status))
   }
 
@@ -267,6 +284,57 @@ export function BarbersScreen({
       })
     } finally {
       setPendingAction(null)
+    }
+  }
+
+  /**
+   * Блокировка кадра: админ скрывает фотографию с публичной карточки и из раздачи.
+   *
+   * После `204` карточка перечитывается — сервер остаётся источником правды для
+   * `isBlocked`; открытая карточка при этом не теряется (`useAdminBarber.reload`
+   * сохраняет прежние данные до ответа). Кэш публичной карточки сбрасывается, иначе
+   * «Открыть, как видят клиенты» показал бы старый кадр.
+   */
+  async function runPhotoAction(
+    kind: 'block' | 'unblock',
+    photoId: string
+  ) {
+    if (!barber || pendingPhotoId !== null) {
+      return
+    }
+
+    const barberIdOfCard = barber.id
+
+    setPendingPhotoId(photoId)
+    setPhotoFailure(null)
+
+    try {
+      if (kind === 'block') {
+        await blockPortfolioPhoto(barberIdOfCard, photoId)
+      } else {
+        await unblockPortfolioPhoto(barberIdOfCard, photoId)
+      }
+
+      invalidateBarberProfile(barberIdOfCard)
+      setAnnouncement({
+        text:
+          kind === 'block'
+            ? t('Фото скрыто: его больше нет на публичной карточке.')
+            : t('Фото снова на публичной карточке.'),
+      })
+      detail.reload()
+    } catch (cause) {
+      if (isBarberUnauthorized(cause)) {
+        setRequiresSignIn(true)
+        return
+      }
+
+      setPhotoFailure({
+        barberId: barberIdOfCard,
+        message: describePortfolioPhotoError(cause).message,
+      })
+    } finally {
+      setPendingPhotoId(null)
     }
   }
 
@@ -546,6 +614,14 @@ export function BarbersScreen({
                 }}
                 onShow={() => {
                   void runAction('show', barber)
+                }}
+                pendingPhotoId={pendingPhotoId}
+                photoError={photoError}
+                onBlockPhoto={(photoId) => {
+                  void runPhotoAction('block', photoId)
+                }}
+                onUnblockPhoto={(photoId) => {
+                  void runPhotoAction('unblock', photoId)
                 }}
                 onBack={handleBack}
               />

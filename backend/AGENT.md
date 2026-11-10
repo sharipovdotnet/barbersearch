@@ -135,7 +135,7 @@ backend/                                  ← workspace root
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 24 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 31 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Migrations/               ← 33 migrations + ApplicationDbContextModelSnapshot
         │   ├── Repositories/             ← RepositoryBase<T> + 17 repository implementations
         │   ├── ApplicationDbContext.cs   ← 24 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
@@ -162,12 +162,16 @@ backend/                                  ← workspace root
             ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 28 controllers: 27 доменных (125 endpoints) + AuthController (12 actions)
+            ├── Controllers/              ← 30 controllers: 29 доменных (133 endpoints) + AuthController (12 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
+            ├── Storage/                  ← host-адаптер хранилища фото: PhotoStorageOptions,
+            │                               LocalPhotoStorage (IPhotoStorage), AddPhotoStorage;
+            │                               нового проекта решения нет — см. ниже
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
-            │                               Logging:LogLevel / Logging:File (§18) + EmailOutbox (§19) + AllowedHosts
+            │                               Storage:RootPath (issue-84) + Logging:LogLevel / Logging:File (§18) +
+            │                               EmailOutbox (§19) + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← requests for the main flows
@@ -177,6 +181,19 @@ backend/tests/BarberSearch.Application.UnitTests/    ← xunit project (in the .
 backend/tests/BarberSearch.Infrastructure.UnitTests/ ← xunit project (in the .sln; no database)
 backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the .sln; real PostgreSQL)
 ```
+
+> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84).** Интерфейс
+> `IPhotoStorage` объявлен в `BarberSearch.Application/PortfolioPhotos`, а `PhotoStorageOptions`,
+> `LocalPhotoStorage` и `PhotoStorageServiceCollectionExtensions` живут в
+> `BarberSearch.Web/Storage`: файловая система — забота хоста, как Data Protection и файловый
+> лог, поэтому Application не знает про ASP.NET и диск, а новый проект решения не заводится —
+> `dotnet sln add` в этом репозитории запрещён (§5.1). `AddPhotoStorage` регистрирует настройки
+> и реализацию синглтонами и вызывается из `Program.cs` после `StartupSettings.Load`;
+> конфигурация — секция `Storage` (`Storage:RootPath`, по умолчанию `App_Data/photos`:
+> относительный путь считается от `ContentRootPath`, абсолютный используется как есть;
+> `Storage__RootPath` — переопределение через окружение/тесты). Предел файла —
+> доменная константа `Constants.MAX_PHOTO_BYTES` (5 МиБ), в конфигурации его нет, чтобы не было
+> второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`.
 
 **Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
 `Infrastructure` → `Application`
@@ -541,7 +558,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 
 | Aggregate | Methods that create children |
 |---|---|
-| `BarberProfile` | `AddPhoto(url, thumbnailUrl, description)`, `AddTimeOff(startAt, endAt, reason)`, `AddSalon(salonId, isPrimary)`, `AddService(hairServiceId, price, durationMinutes)`, `AddSpecialization(specializationId)` |
+| `BarberProfile` | `AddPhoto(url, thumbnailUrl, description)`, `AddUploadedPhoto(url, description)`, `AddTimeOff(startAt, endAt, reason)`, `AddSalon(salonId, isPrimary)`, `AddService(hairServiceId, price, durationMinutes)`, `AddSpecialization(specializationId)` |
 | `User` | `AddFavorite(barberProfileId)` |
 | `BarberSalon` | `AddWorkingSchedule(dayOfWeek, start, end)`, `AddDayOff(dayOfWeek)`, `ReplaceWorkingSchedules(days)`, `SetScheduleException(date, isDayOff, start, end, reason)`, `RemoveScheduleException(date)` |
 
@@ -566,7 +583,8 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberProfile.Rating` | `null` ⟺ `ReviewsCount == 0`; otherwise `1.00..5.00`, rounded to 2 decimals |
 | `BarberProfile.Languages` / `PaymentMethods` | every element is defined in `Language`/`PaymentMethod`; unknown values are rejected (R-23) |
 | `BarberProfile.AdditionalServices` | normalized on write: every entry is trimmed, blank entries are dropped and case-insensitive duplicates collapse to the first occurrence; the order is kept. No upper bound, like the other free-text profile lists |
-| `BarberProfile.PortfolioPhotos` | at most 10 items; `Url` is an absolute `http`/`https` URI with a host, no `userinfo`, trimmed, ≤ 2048 chars; `ThumbnailUrl` — same rule, optional (blank → `null`); `Description` ≤ 2000 |
+| `BarberProfile.PortfolioPhotos` | at most 10 items (`Constants.MAX_PHOTOS_COUNT`); `AddPhoto` accepts only an absolute `http`/`https` URI with a host, no `userinfo`, trimmed, ≤ 2048 chars — `UrlValidator` is **not** relaxed; an uploaded file is added only by `AddUploadedPhoto` and gets a root-relative URL matching `PortfolioMediaUrl` (see below); `ThumbnailUrl` — same rule, optional (blank → `null`); `Description` ≤ 2000 |
+| `PortfolioPhoto` | `IsBlocked` — admin-only, separate from `IsPublished`; `Block`/`Unblock` are idempotent and end with `MarkUpdated`; `SortOrder` — `max + 1` for a new photo, bulk `ReorderPhotos` assigns `index` over the complete set |
 | `BarberProfile.TimeOffs` | `EndAt > StartAt`, intervals do not overlap (touching is allowed) |
 | `BarberProfile.Salons` | unique `SalonId`; at most one `IsPrimary` |
 | `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
@@ -586,6 +604,37 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions; **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 | `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
+
+**Портфолио: внешняя ссылка и загруженный файл (2026-11-11, issue-84).** У фотографии два
+доменных пути создания, и они не взаимозаменяемы. `AddPhoto` по-прежнему принимает только
+абсолютный `http`/`https` URL (внешняя ссылка); `AddUploadedPhoto` принимает только
+root-relative URL строго вида
+`/api/media/portfolio/{profileId:D}/{mediaId:N}.{jpg|png|webp}`, разобранный
+`PortfolioMediaUrl.TryParse(url, Id, …)`: ровно два сегмента, `profileId` совпадает с `Id`
+агрегата, имя файла — 32 hex-символа нижнего регистра, расширение — `jpg|png|webp`; `%`, `?`,
+`#`, `\`, пробелы и `..` запрещены. `PortfolioMediaUrl.Build` — единственная точка сборки URL,
+префикс — `Constants.PORTFOLIO_MEDIA_PATH_PREFIX`. Загруженная фотография создаётся с
+`IsPublished = true`, `IsBlocked = false`; `ThumbnailUrl` всегда `null` (миниатюр нет).
+`SortOrder` новой фотографии — `NextSortOrder()` = `0` для первой, иначе `max + 1`; лимит
+10 — `409 barberProfile.addPhoto.limit`. `ReorderPhotos(photoIds)` принимает **полный** список
+без дублей и присваивает `SortOrder = index`; неполный набор, дубли или чужие id —
+`400 barberProfile.reorderPhotos.invalid`. Одиночный `ReorderPhoto` и маршрут
+`…/photos/{photoId}/sort-order` остаются для совместимости.
+
+Видимость — три состояния; `IsBlocked` снимает только администратор, владелец его не меняет:
+
+| Состояние | Публичная карточка | Своя карточка (и админская) | Раздача `/api/media/portfolio/…` |
+|---|---|---|---|
+| `IsPublished = true`, `IsBlocked = false` | видна | видна | `200`, `Cache-Control: public, max-age=86400` |
+| `IsPublished = false`, `IsBlocked = false` | не видна | видна, `isPublished = false` | анониму и чужому — `404`; владельцу и админу — `200`, `private, no-store` |
+| `IsBlocked = true` (при любом `IsPublished`) | не видна | видна, `isBlocked = true` | анониму и чужому — `404`; владельцу и админу — `200`, `private, no-store` |
+
+Публичная карточка фильтрует `IsPublished && !IsBlocked`; своя и админская отдают все строки
+с обоими флагами. Раздача проверяет флаги по БД на каждый запрос, а не по одному URL. Коды
+загрузки — `barberProfile.uploadPhoto.{fileRequired,empty,tooLarge,unsupportedType,invalidImage,dimensions,url,storage}`;
+`barberProfile.addPhoto.description`; `400 barberProfile.reorderPhotos.invalid`;
+`404 portfolioPhoto.block.notFound` / `portfolioPhoto.unblock.notFound`;
+`403 auth.forbidden` — чужой профиль или не-админ; `401 auth.unauthorized` — аноним.
 
 ### 7.4 Statuses and enums
 
@@ -726,6 +775,12 @@ The rules below were pushed to the application layer because the aggregate canno
    singleton in `AuthenticationExtensions`. `JwtTokenIssuer` fills both `iat` and `exp` from it,
    so token timing is testable too. A clock inside the domain would be a separate slice: it
    changes every aggregate factory. **Closed 2026-10-23 (R-27).**
+7. **"Only an administrator may block a photo" and "the uploaded bytes are a supported
+   image"** — the aggregate cannot see the caller's role or the request body:
+   `PortfolioPhoto.Block`/`Unblock` only change the flag, while `EnsureAdmin` (Application) and
+   the `AdminOnly` policy (Web) decide who may call them; `ImageFileInspector` validates the
+   signature and dimensions and `IPhotoStorage` persists the file, so `AddUploadedPhoto` sees
+   only the resulting URL. The 10-photo, URL and sort-order invariants stay in the aggregate.
 
 ---
 
@@ -741,11 +796,11 @@ The rules below were pushed to the application layer because the aggregate canno
 | Application | ✅ 135 обработчиков (99 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 28 контроллеров / 139 endpoints (127 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 30 контроллеров / 145 endpoints (133 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (31):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (33):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -754,7 +809,8 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddAdminBookingsStatusIndex`, `AddUserConsent`, `AddBarberScheduleOverrides`,
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
-`AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`.
+`AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`,
+`AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -831,6 +887,19 @@ revoked_at IS NULL`) и `ix_password_reset_tokens_expires_at`. Открытый 
 (`(sent_at, failed_at, next_attempt_at)`). Check-ограничения: `attempts >= 0` и
 `NOT (sent_at IS NOT NULL AND failed_at IS NOT NULL)`. Внешних ключей нет: письмо переживает
 удаление пользователя и токена. Backfill не нужен — таблица новая. Подробности — §19.
+
+**`AddReviewModerationUpdatedAtIndex` (2026-11-09).** Заменяет частичный
+`ix_reviews_moderation_created_at_id` на `ix_reviews_moderation_updated_at_id`
+(`updated_at, id WHERE is_published = false`): очередь модерации идёт от момента входа в
+очередь (правка текста возвращает опубликованный отзыв), а не от создания. Миграция
+существовала до среза #84 и в списке выше отсутствовала; `Down` возвращает индекс по
+`created_at`.
+
+**`AddPortfolioPhotoBlocked` (2026-11-11, issue-84).** Добавляет
+`portfolio_photos.is_blocked` (`boolean NOT NULL DEFAULT false`) — отдельный от
+`is_published` флаг административной блокировки. Backfill не нужен: существующие строки
+остаются видимыми. Индексов миграция не добавляет, `ck_portfolio_photos_url` не меняется
+(относительный URL загруженного фото непуст); `Down` удаляет колонку.
 
 **Напоминания (вариант C).** Инбокс — обязательный и единственный источник правды, Telegram —
 необязательный канал доставки (D1). API: `GET api/barber/notifications?cursor=&pageSize=`
@@ -1199,6 +1268,18 @@ Suggested order:
     адрес приёма, у `Mobile` — зона обслуживания, `City` — база; `Address` не делаем nullable.
     Выезд с онлайн-записью (адрес клиента в `Booking`) — отдельный срез, как и перевод скрытого
     места в публичное (нужна повторная модерация).
+12. **Portfolio photos: local disk, post-moderation and caching** — **decided and implemented
+    2026-11-11 (issue-84); долг #31 открыт.** Файлы лежат на локальном диске за
+    `IPhotoStorage`: один инстанс API и один диск, фотографии **не** входят в backup
+    PostgreSQL и каталог бэкапится отдельно (§15.2). Несколько инстансов требуют общего
+    volume или object storage (S3/MinIO) с CDN и подписанными URL — это отдельный срез.
+    Премодерации нет: загруженная фотография публикуется сразу, администратор реагирует
+    блокировкой (`isBlocked`); очереди «на проверке» и счётчика в `/admin/summary` тоже нет.
+    Серверных миниатюр/`srcset` и перекодирования нет — клиент готовит JPEG ≤ 1600 px, а для
+    небраузерных клиентов сервер метаданные не чистит, включая EXIF/GPS. Публичный кадр
+    кэшируется браузером на сутки (`Cache-Control: public, max-age=86400`), поэтому сразу
+    после блокировки старый кадр может показаться из кэша до истечения срока — публичная
+    карточка его уже не содержит, а раздача отвечает `404`.
 
 ---
 
@@ -1406,6 +1487,29 @@ primary-key lookup (`WHERE id = @id`, **no** visibility predicate) with three `I
 `AsSplitQuery`, so it runs on `barber_profiles_pkey` and the collections are fetched by their
 `barber_profile_id` indexes (§7.1). The partial `ix_barber_profiles_search_keyset` cannot serve it
 (the predicate differs) and should not — this read is one row by PK, and no new index was added.
+
+**Portfolio photo access and the card read (2026-11-11, issue-84).**
+`GetPortfolioPhotoAccessAsync` is one join of `portfolio_photos` to `barber_profiles` filtered by
+`(barber_profile_id, url)`, projecting `PortfolioPhotoAccess(owner, isPublished, isBlocked)`.
+**No new index:** a profile has at most `Constants.MAX_PHOTOS_COUNT` (10) rows, and the equality
+on `barber_profile_id` is served by the existing
+`ix_portfolio_photos_barber_profile_id_sort_order`; the `url` predicate then filters at most ten
+rows, so `EXPLAIN` or a separate index is not warranted. The card read (`LoadCardProfileAsync`)
+gained a **fourth collection** (`PortfolioPhotos`) and therefore must stay `AsSplitQuery()` —
+otherwise four collections produce a cartesian product and a slow card; the public/own split is
+the `includeHiddenPhotos` flag of the same `BuildCardAsync` projection. The admin card is
+deliberately **two SQL queries**: `BuildAdminBarberDetailQuery` (profile, owner and readiness
+counters) plus a second `LoadAdminPhotosAsync` read of all photos ordered by
+`SortOrder, CreatedAt`. `readiness.photosCount` is a `COUNT` filtered by
+`IsPublished && !IsBlocked`: the checklist describes the public card, not the rows.
+
+**Photo files: local disk, not in the PostgreSQL backup (2026-11-11, issue-84).** Files are
+written to `{Storage:RootPath}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`;
+`RootPath` is relative to `ContentRootPath` or absolute, the directory is created and
+write-probed at startup, and `App_Data/` is gitignored. There is **one API instance and one
+disk**: the file store is not shared and not transactional with PostgreSQL. `pg_dump` and the
+PostgreSQL backup do **not** contain photo files, so the directory must be backed up
+separately; a shared volume or object storage for several instances is debt #31 (§12.12).
 
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
@@ -1889,15 +1993,16 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**28 controllers, 139 endpoints: 127 domain + 12 auth** — one endpoint per Application operation,
+**29 controllers, 145 endpoints: 133 domain + 12 auth** — one endpoint per Application operation,
 plus the twelve `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
 | `UsersController` | `api/users` | 12 |
-| `BarberProfilesController` | `api/barber-profiles` | 24 |
-| `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 3 |
+| `BarberProfilesController` | `api/barber-profiles` | 26 |
+| `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 5 |
+| `PortfolioMediaController` | `api/media/portfolio` | 1 (anonymous media delivery) |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
@@ -1973,6 +2078,44 @@ Conventions:
   when no row exists), and `POST .../services` with the same `hairServiceId` reactivates a hidden
   row and overwrites price and duration (`409 barberProfile.addService.duplicate` only for an
   active row). No migration: `barber_services.is_active` already existed.
+- **Портфолио: загрузка, порядок, блокировка и раздача (2026-11-11, issue-84).**
+  `POST api/barber-profiles/{id}/photos/upload` — `multipart/form-data` с полями `file` и
+  `description`; запрос ограничен 6 МиБ (`RequestSizeLimit` + `MultipartBodyLengthLimit`),
+  файл — 5 МиБ (`Constants.MAX_PHOTO_BYTES`); поток читается порциями с пределом 5 МиБ + 1,
+  потому что `IFormFile.Length` — лишь подсказка клиента. Успех — `201 { id }` **без**
+  `Location` (R-42: у фотографии нет читаемого self-URI). Коды — `400`:
+  `barberProfile.uploadPhoto.fileRequired`, `.tooLarge`, `.empty`, `.unsupportedType`,
+  `.invalidImage`, `.dimensions`, `.url`; `409 barberProfile.addPhoto.limit` (11-е фото
+  проверяется до записи файла); `500 barberProfile.uploadPhoto.storage` (без пути в
+  `detail`). `413` от Kestrel приходит до действия, и клиент обрабатывает его так же, как
+  `tooLarge`. Multipart — cookie-мутация: глобальный antiforgery-фильтр требует
+  `X-CSRF-TOKEN`; отдельной политики лимитера нет. Загрузка и порядок закрыты
+  fallback-политикой (аноним — `401`), а владение проверяет `EnsureCanManage`: чужой профиль —
+  `403 auth.forbidden`, администратор может управлять любым.
+  `PUT api/barber-profiles/{id}/photos/order` — тело `{ photoIds }`, полный список без
+  дублей, ответ `204`; неполный набор, дубли или чужие id —
+  `400 barberProfile.reorderPhotos.invalid`. Одиночный
+  `PUT .../photos/{photoId}/sort-order` остаётся для совместимости, но UI использует
+  bulk-порядок.
+  `POST`/`DELETE api/barber-profiles/{id}/photos/{photoId}/block` — политика `AdminOnly` +
+  `EnsureAdmin`, `204`, идемпотентно; фото не из этого профиля —
+  `404 portfolioPhoto.block.notFound` / `.unblock.notFound`. `[Authorize(AdminOnly)]` отсекает
+  не-администратора **до** действия, поэтому его `403` — ответ фреймворка, а `EnsureAdmin`
+  в обработчике страхует прямой вызов команды. В `audit_log` блокировка не пишется:
+  allowlist семи типов не расширяется (дочерняя сущность).
+  `GET api/media/portfolio/{barberProfileId}/{fileName}` — анонимный (`[AllowAnonymous]` +
+  политика `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; видимость проверяется по
+  БД **на каждый запрос** (`GetPortfolioPhotoAccessAsync`), отказ —
+  `404 portfolioMedia.notFound` без различия причин (не `403` и не `410`). Владельцу профиля и
+  администратору скрытый или заблокированный кадр отдаётся, иначе превью в кабинете были бы
+  битыми. Видимый кадр — `Cache-Control: public, max-age=86400`; скрытый —
+  `private, no-store`; всегда `X-Content-Type-Options: nosniff`,
+  `enableRangeProcessing: true`; листинга и приёма пути из query нет.
+  `GET api/barber-profiles/{id}` отдаёт **все** фотографии, включая скрытые и
+  заблокированные, а публичная `GET api/barbers/{id}` — только `isPublished && !isBlocked`;
+  `AdminBarberDetailResponse.photos` содержит все, `readiness.photosCount` считает только
+  видимые. Форма элемента одна — `BarberProfilePhotoResponse` с `isPublished` и `isBlocked`
+  (§7.3).
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,
@@ -2704,7 +2847,7 @@ Deliberately absent:
 
 Health checks are **not** controllers: `/health/live` and `/health/ready` are mapped in
 `Program.cs` via `MapHealthChecks` / `Deployment/HealthCheckExtensions` (see §15.8 and
-`DEPLOY.md`). They do not change the 133-endpoint controller surface.
+`DEPLOY.md`). They do not change the 145-endpoint controller surface.
 
 Read-endpoint smoke (2026-10-19, local PostgreSQL): search with `city`/`specializationId`/
 `hairServiceId`/`date` (the parameter was then named `serviceId`; renamed by R-20), two pages
@@ -2792,6 +2935,9 @@ activity of the barber service and takes the price from it.
 ### 17.4 Конфигурация
 
 ```json
+"Storage": {
+  "RootPath": "App_Data/photos"
+},
 "Auth": {
   "Issuer": "BarberSearch",
   "Audience": "BarberSearch.Api",
@@ -2866,6 +3012,15 @@ activity of the barber service and takes the price from it.
 задан в `appsettings.Development.json` (`backend/.data-protection-keys`, git-ignored).
 Опционально ключи шифруются PKCS#12-сертификатом (`DataProtection:CertificatePath` /
 `CertificatePassword` из секрет-стора). Валидация пути и прав — на старте.
+
+`Storage` — секция локального файлового хранилища фотографий портфолио (issue-84):
+единственный ключ `RootPath` (по умолчанию `App_Data/photos`), относительный путь считается
+от `ContentRootPath`, абсолютный используется как есть; каталог создаётся и проверяется на
+запись на старте, поэтому недоступный диск роняет старт, а не первую загрузку. Предела
+размера файла в конфигурации нет: это доменная константа `Constants.MAX_PHOTO_BYTES`
+(5 МиБ), а 6 МиБ — предел всего multipart-запроса. `Storage__RootPath` задаёт каталог в
+окружении и интеграционных тестах; `App_Data/` git-ignored, файлы не входят в backup
+PostgreSQL (§15.2).
 
 `Cors:AllowedOrigins` — явный список origins; `*` запрещён, потому что политика включает
 `AllowCredentials`. `Auth:CookieSameSite=None` (cross-site SPA) требует непустой CORS и
