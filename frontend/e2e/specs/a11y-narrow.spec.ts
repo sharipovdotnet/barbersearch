@@ -11,6 +11,7 @@ import { AdminSummaryPage } from '../pages/admin-summary-page'
 import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
+import { BarberProfilePage } from '../pages/barber-profile-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { ProfilePage } from '../pages/profile-page'
@@ -251,6 +252,54 @@ test.describe('axe: 320 px, расписание барбера', () => {
     await expectNoBlockingViolations(
       page,
       '/barber/salons + диалог @320',
+      test.info()
+    )
+  })
+})
+
+test.describe('axe: 320 px, профиль барбера', () => {
+  test.use({ storageState: storageStatePath('profileBarber') })
+
+  test('карточка и пустой прайс: без горизонтального скролла, действия 44 px', async ({
+    page,
+  }) => {
+    const profile = new BarberProfilePage(page)
+
+    await profile.goto()
+    await profile.waitForReady()
+    await expect(profile.emptyServices).toBeVisible()
+
+    // Длинные подписи и сетка 2×2 навигации не должны расширять страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    // Действия на узком экране — 44 px: навигация, сохранение карточки,
+    // добавление услуги и клиентская ссылка. Диалоги здесь не открываем:
+    // пустой прайс и axe-скан не должны тянуть ленивый справочник.
+    const actions = [
+      profile.nav.getByRole('link', { name: 'Записи', exact: true }),
+      profile.nav.getByRole('link', { name: 'Расписание', exact: true }),
+      profile.nav.getByRole('link', { name: 'Салоны', exact: true }),
+      profile.nav.getByRole('link', { name: 'Профиль', exact: true }),
+      profile.saveProfile,
+      profile.addServiceButton,
+      profile.publicLink,
+    ]
+
+    for (const action of actions) {
+      const box = await action.boundingBox()
+
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+    }
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/profile @320',
       test.info()
     )
   })

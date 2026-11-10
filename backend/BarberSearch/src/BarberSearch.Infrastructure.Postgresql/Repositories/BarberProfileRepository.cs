@@ -1107,23 +1107,109 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var profile = await Context.BarberProfiles
-            .AsNoTracking()
-            .Include(x => x.Salons)
-                .ThenInclude(salon => salon.WorkingSchedules)
-            .Include(x => x.Services)
-            .Include(x => x.BarberSpecializations)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(
-                x => x.Id == id && x.IsActive && x.IsVerified,
-                cancellationToken);
+        var profile = await LoadCardProfileAsync(
+            id,
+            requireVisible: true,
+            cancellationToken);
 
         if (profile is null)
         {
             return NotFound(ApiErrorCodes.BarberProfile.NotFound, nameof(BarberProfile), id);
         }
 
-        var services = await LoadServicesAsync(profile, cancellationToken);
+        var card = await BuildCardAsync(
+            profile,
+            includeInactiveServices: false,
+            cancellationToken);
+
+        return card;
+    }
+
+    /// <summary>
+    /// Собственная карточка барбера: без фильтра публичной видимости и со скрытыми услугами.
+    /// </summary>
+    /// <remarks>
+    /// Проекция та же, что у публичной карточки (<see cref="BuildCardAsync"/>): контракт
+    /// <c>BarberProfileResponse</c> не меняется, а фронтенд переиспользует тип и guard.
+    /// Отличие только в предикатах: профиль читается любого статуса (барбер заполняет карточку
+    /// до подтверждения), а <c>LoadServicesAsync</c> не режет выключенные строки.
+    /// </remarks>
+    public async Task<Result<BarberProfileResponse, Failure>> GetOwnCardByIdAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = await LoadCardProfileAsync(
+            barberProfileId,
+            requireVisible: false,
+            cancellationToken);
+
+        if (profile is null)
+        {
+            return NotFound(
+                ApiErrorCodes.BarberProfile.NotFound,
+                nameof(BarberProfile),
+                barberProfileId);
+        }
+
+        var card = await BuildCardAsync(
+            profile,
+            includeInactiveServices: true,
+            cancellationToken);
+
+        return card;
+    }
+
+    /// <summary>
+    /// Читает профиль с коллекциями карточки: салоны с расписанием, услуги, специализации.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="requireVisible"/> — единственное отличие публичного чтения от
+    /// собственного: <c>IsActive &amp;&amp; IsVerified</c> против «любой статус».
+    /// <c>AsSplitQuery</c> обязателен: три коллекции в одном запросе дали бы декартово
+    /// произведение. Чтение идёт без отслеживания — карточка только читается.
+    /// </remarks>
+    private async Task<BarberProfile?> LoadCardProfileAsync(
+        Guid id,
+        bool requireVisible,
+        CancellationToken cancellationToken)
+    {
+        var query = Context.BarberProfiles
+            .AsNoTracking()
+            .Include(x => x.Salons)
+                .ThenInclude(salon => salon.WorkingSchedules)
+            .Include(x => x.Services)
+            .Include(x => x.BarberSpecializations)
+            .AsSplitQuery();
+
+        if (requireVisible)
+        {
+            query = query.Where(x => x.Id == id && x.IsActive && x.IsVerified);
+        }
+        else
+        {
+            query = query.Where(x => x.Id == id);
+        }
+
+        return await query.FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Проекция загруженного агрегата в <see cref="BarberProfileResponse"/>.
+    /// </summary>
+    /// <remarks>
+    /// Одна проекция на оба чтения: публичное и собственное. Дублировать восемьдесят строк
+    /// ради одного флага нельзя — карточка обязана меняться в одном месте. Флаг
+    /// <paramref name="includeInactiveServices"/> уходит в <c>LoadServicesAsync</c>.
+    /// </remarks>
+    private async Task<BarberProfileResponse> BuildCardAsync(
+        BarberProfile profile,
+        bool includeInactiveServices,
+        CancellationToken cancellationToken)
+    {
+        var services = await LoadServicesAsync(
+            profile,
+            includeInactiveServices,
+            cancellationToken);
         var salons = await LoadSalonsAsync(profile, cancellationToken);
 
         var specializationIds = profile.BarberSpecializations
@@ -1203,21 +1289,29 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 barberProfileId);
         }
 
-        var services = await LoadServicesAsync(profile, cancellationToken);
+        var services = await LoadServicesAsync(
+            profile,
+            includeInactiveServices: false,
+            cancellationToken);
         var salons = await LoadSalonsAsync(profile, cancellationToken);
 
         return new BarberBookingOptionsResponse(services, salons);
     }
 
     /// <summary>
-    /// Активные услуги профиля с названием и категорией из справочника.
+    /// Услуги профиля с названием и категорией из справочника.
     /// </summary>
     /// <remarks>
     /// Читает только <c>hair_services</c>: услуги и их цены уже загружены в агрегат.
     /// Услуга, у которой справочник удалён, не показывается — как и в публичной карточке.
+    /// <paramref name="includeInactiveServices"/> = <c>false</c> — фильтр публичной карточки
+    /// и формы записи: скрытая услуга не показывается клиенту. <c>true</c> — собственный
+    /// прайс барбера: скрытая строка остаётся в списке со статусом «Скрыта», иначе её нельзя
+    /// было бы вернуть в работу.
     /// </remarks>
     private async Task<List<BarberProfileServiceResponse>> LoadServicesAsync(
         BarberProfile profile,
+        bool includeInactiveServices,
         CancellationToken cancellationToken)
     {
         var hairServiceIds = profile.Services
@@ -1230,7 +1324,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .ToDictionaryAsync(service => service.Id, cancellationToken);
 
         return profile.Services
-            .Where(service => service.IsActive && hairServicesById.ContainsKey(service.HairServiceId))
+            .Where(service => (includeInactiveServices || service.IsActive)
+                              && hairServicesById.ContainsKey(service.HairServiceId))
             .OrderBy(service => hairServicesById[service.HairServiceId].Name)
             .Select(service =>
             {

@@ -12,6 +12,7 @@ import { AdminUsersPage } from '../pages/admin-users-page'
 import { AccountProfilePage } from '../pages/account-profile-page'
 import { AccountSecurityPage } from '../pages/account-security-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
+import { BarberProfilePage } from '../pages/barber-profile-page'
 import { CabinetPage } from '../pages/cabinet-page'
 import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { LandingPage } from '../pages/landing-page'
@@ -264,6 +265,26 @@ test.describe('axe: кабинет барбера', () => {
       '/barber/salons + диалог',
       test.info()
     )
+  })
+})
+
+test.describe('axe: профиль барбера', () => {
+  // Отдельный изолированный профиль: у него пустой прайс, поэтому скан
+  // проверяет и разделы с пустыми состояниями, а не только форму.
+  test.use({ storageState: storageStatePath('profileBarber') })
+
+  test('/barber/profile: карточка, пустой прайс и специализации', async ({
+    page,
+  }) => {
+    const profile = new BarberProfilePage(page)
+
+    await profile.goto()
+    // Ждём загруженную форму, а не скелетон: скелетон тоже `role="status"`.
+    await profile.waitForReady()
+    await expect(profile.emptyServices).toBeVisible()
+    await expect(profile.emptySpecializations).toBeVisible()
+
+    await expectNoBlockingViolations(page, '/barber/profile', test.info())
   })
 })
 

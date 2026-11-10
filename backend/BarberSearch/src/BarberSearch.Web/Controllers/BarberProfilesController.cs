@@ -10,6 +10,7 @@ using BarberSearch.Application.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Application.BarberProfiles.DeactivateBarberProfile;
 using BarberSearch.Application.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Application.BarberProfiles.GetBarberProfileSalons;
+using BarberSearch.Application.BarberProfiles.GetOwnBarberProfile;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfilePhoto;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileSalon;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileService;
@@ -20,6 +21,7 @@ using BarberSearch.Application.BarberProfiles.SetBarberProfilePrimarySalon;
 using BarberSearch.Application.BarberProfiles.UnverifyBarberProfile;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfileRating;
+using BarberSearch.Application.BarberProfiles.UpdateBarberProfileService;
 using BarberSearch.Application.BarberProfiles.VerifyBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfilePhoto;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileSalon;
@@ -28,10 +30,12 @@ using BarberSearch.Contracts.BarberProfiles.AddBarberProfileTimeOff;
 using BarberSearch.Contracts.BarberProfiles.ChangeBarberProfileGrade;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
 using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhoto;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileRating;
+using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileService;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
@@ -56,14 +60,60 @@ public class BarberProfilesController : ApiController
     /// Создаёт профиль барбера для текущего пользователя. Доступно только роли <c>Barber</c>:
     /// администратор выдаёт её через <c>PUT api/users/{userId}/role</c>.
     /// </summary>
+    /// <remarks>
+    /// Единственный create-эндпоинт, который выставляет <c>Location</c> (R-42 пересмотрен):
+    /// у созданного профиля есть читаемый <c>GET api/barber-profiles/{id}</c> — собственный
+    /// профиль владельца под <c>BarberOnly</c>. Остальные create-эндпоинты по-прежнему
+    /// отвечают <c>201</c> без заголовка.
+    /// </remarks>
     [Authorize(Policy = AuthorizationPolicies.BarberOnly)]
     [HttpPost]
     public async Task<ActionResult<CreatedResourceResponse>> Create(
         [FromBody] BarberProfileCreateRequest request,
         [FromServices] ICommandHandler<Guid, CreateBarberProfileCommand> handler,
         CancellationToken cancellationToken)
-        => ToCreatedResult(await handler.Handle(
+    {
+        var created = await handler.Handle(
             new CreateBarberProfileCommand(request),
+            cancellationToken);
+
+        return created.IsSuccess
+            ? CreatedAtAction(
+                nameof(Get),
+                new
+                {
+                    barberProfileId = created.Value
+                },
+                new CreatedResourceResponse(created.Value))
+            : FailureProblemDetails.CreateResult(created.Error);
+    }
+
+    /// <summary>
+    /// Собственная карточка барбера — в том числе до подтверждения.
+    /// </summary>
+    /// <remarks>
+    /// Публичная <c>GET api/barbers/{id}</c> для кабинета не годится: она отдаёт только
+    /// <c>IsActive &amp;&amp; IsVerified</c> и новому барберу отвечает <c>404</c>. Здесь профиль
+    /// читается любого статуса, а услуги приходят вместе с выключенными — иначе скрытая строка
+    /// исчезла бы из прайса, и вернуть её было бы нечем. Тип ответа тот же
+    /// <see cref="BarberProfileResponse"/>, что у публичной карточки.
+    /// <para>
+    /// Владение проверяет обработчик: неизвестный профиль — <c>404 barberProfile.notFound</c>,
+    /// чужой — <c>403 auth.forbidden</c>. Политика <c>BarberOnly</c> отсекает анонима
+    /// (<c>401</c>) и остальные роли (<c>403</c>).
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize(Policy = AuthorizationPolicies.BarberOnly)]
+    [HttpGet("{barberProfileId:guid}")]
+    public async Task<ActionResult<BarberProfileResponse>> Get(
+        Guid barberProfileId,
+        [FromServices] IQueryHandler<BarberProfileResponse, GetOwnBarberProfileQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetOwnBarberProfileQuery(barberProfileId),
             cancellationToken));
 
     /// <summary>
@@ -291,8 +341,45 @@ public class BarberProfilesController : ApiController
             cancellationToken));
 
     /// <summary>
-    /// Удаляет услугу из профиля барбера.
+    /// Меняет цену и длительность услуги в прайсе барбера.
     /// </summary>
+    /// <remarks>
+    /// Правка не меняет видимость услуги: скрытая строка остаётся скрытой, активная —
+    /// активной. Отдельный <c>PUT</c> нужен, чтобы барбер не правил прайс парой
+    /// «скрыть и добавить заново» — та меняла бы состояние и историю услуги.
+    /// Неизвестная услуга — <c>404 barberProfile.updateService.notFound</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="hairServiceId">Услуга справочника (<c>hair_services.id</c>).</param>
+    /// <param name="request">Новая цена и длительность.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPut("{barberProfileId:guid}/services/{hairServiceId:guid}")]
+    public async Task<ActionResult> UpdateService(
+        Guid barberProfileId,
+        Guid hairServiceId,
+        [FromBody] UpdateBarberProfileServiceRequest request,
+        [FromServices] ICommandHandler<UpdateBarberProfileServiceCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new UpdateBarberProfileServiceCommand(
+                barberProfileId,
+                hairServiceId,
+                request.Price,
+                request.DurationMinutes),
+            cancellationToken));
+
+    /// <summary>
+    /// Скрывает услугу из прайса барбера: строка остаётся ради истории записей.
+    /// </summary>
+    /// <remarks>
+    /// Ответ <c>204</c>, повторный вызов идемпотентен. Физического удаления нет специально:
+    /// списки записей клиента, барбера и админки строятся внутренними join'ами
+    /// <c>bookings → barber_services → hair_services</c>, и удалённая строка уносила бы чужие
+    /// брони из выдачи. Неизвестная услуга — <c>404 barberProfile.removeService.notFound</c>.
+    /// Вернуть услугу в прайс можно повторным <c>POST .../services</c> с той же услугой
+    /// справочника — строка реактивируется с новой ценой и длительностью.
+    /// </remarks>
     [HttpDelete("{barberProfileId:guid}/services/{hairServiceId:guid}")]
     public async Task<ActionResult> RemoveService(
         Guid barberProfileId,

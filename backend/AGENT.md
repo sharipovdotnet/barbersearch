@@ -623,6 +623,20 @@ All persisted enums have **explicit numeric values** (§10.10).
 - `ErrorType` (`Shared`): `VALIDATION, NOT_FOUND, FAILURE, CONFLICT, UNAUTHORIZED, FORBIDDEN`;
   not persisted, every value has an explicit HTTP mapping and there is no `NONE` (§7.5).
 
+**`BarberService` visibility (2026-11-10, issue-83).** `BarberService.IsActive` is the only state;
+a `barber_services` row is **never deleted**. `BarberProfile.DeactivateService(hairServiceId)` clears
+the flag and keeps the row (`DELETE api/barber-profiles/{id}/services/{hairServiceId}`, `204`; a
+repeated call is also `204`, and `404 barberProfile.removeService.notFound` only means the row does
+not exist at all). The reason is correctness, not softness: the customer, barber and admin booking
+lists are built with **inner** joins `bookings → barber_services → hair_services`, so deleting the
+row would drop other people's bookings from every list while the slot stayed taken.
+`AddService` on a `!IsActive` row reactivates the same row and overwrites `Price` /
+`DurationMinutes` (validation runs before `Activate()`, so a rejected price leaves the row hidden);
+`409 barberProfile.addService.duplicate` is returned only for an **active** row.
+`UpdateService` changes price and duration without touching the flag
+(`PUT .../services/{hairServiceId}`, `404 barberProfile.updateService.notFound`). The
+`is_active` column already existed — no migration.
+
 ### 7.5 Error handling
 
 ```csharp
@@ -717,17 +731,17 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-09; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-10; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 393 domain + 677 application + 192 infrastructure + 210 integration (1472 total); unit-проекты зелёные локально (2026-11-09), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 133 обработчика (98 command + 35 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 39 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Tests | ✅ 403 domain + 689 application + 192 infrastructure + 219 integration (1503 total); unit-проекты зелёные локально (2026-11-10), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 135 обработчиков (99 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 28 контроллеров / 137 endpoints (125 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 28 контроллеров / 139 endpoints (127 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -874,6 +888,28 @@ Telegram в `/privacy` не значится (`PrivacyPolicy.Version` не по�
 **FK `NOT VALID` (R-02):** `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles`,
 `users → barber_profiles`; исторические ссылки чинит `deploy/find-dangling-references.sql`.
+
+**Профиль барбера: чтение своего профиля и деактивация услуги (2026-11-10, issue-83).**
+`GET api/barber-profiles/{id}` — чтение собственной карточки под `BarberOnly` + `EnsureCanManage`:
+профиль любого статуса (кабинет открыт до подтверждения), услуги **включая выключенные**; ответ —
+тот же `BarberProfileResponse`, что у публичной карточки. Неизвестный профиль — `404
+barberProfile.notFound`, чужой — `403 auth.forbidden`, аноним — `401`. Для этого в репозитории
+появился `GetOwnCardByIdAsync`, а проекция карточки вынесена в общий `BuildCardAsync`: публичное
+чтение по-прежнему фильтрует `is_active AND is_verified` и режет услуги по `IsActive`,
+собственное — нет. `PUT api/barber-profiles/{id}/services/{hairServiceId}` меняет цену и
+длительность (`204`; `404 barberProfile.updateService.notFound`, `400
+barberService.updatePrice` / `.updateDuration`). `DELETE .../services/{hairServiceId}` теперь
+**деактивирует** строку `barber_services` (`is_active = false`, `204`, повтор идемпотентен;
+`404 barberProfile.removeService.notFound` — только если строки нет вовсе), а повторный
+`POST .../services` с той же услугой реактивирует её и перезаписывает цену и длительность
+(`409 barberProfile.addService.duplicate` — только для уже **активной** строки). Валидация цены
+и длительности идёт до `Activate()`, поэтому отклонённый запрос оставляет строку скрытой.
+Миграций нет: `barber_services.is_active` уже есть в схеме. По пути исправлен дефект: физическое
+удаление строки уносило сделанные на неё брони из списков клиента, барбера и админки (они
+строятся внутренними join'ами `bookings → barber_services → hair_services`), теперь строки
+остаются и брони видны. `POST api/barber-profiles` — первый create-эндпоинт с заголовком
+`Location: /api/barber-profiles/{id}` (правило R-42 пересмотрено, остальные create-эндпоинты не
+менялись).
 
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
@@ -1365,6 +1401,12 @@ dropped after `EXPLAIN (ANALYZE, BUFFERS)` and `pg_stat_user_indexes` showed zer
 over 47 real search requests. The keyset order is a superset of `rating DESC NULLS LAST, id` and
 the predicate is identical, so one index serves every search query.
 
+**Own card read (2026-11-10, issue-83).** `BarberProfileRepository.GetOwnCardByIdAsync` is a
+primary-key lookup (`WHERE id = @id`, **no** visibility predicate) with three `Include`s under
+`AsSplitQuery`, so it runs on `barber_profiles_pkey` and the collections are fetched by their
+`barber_profile_id` indexes (§7.1). The partial `ix_barber_profiles_search_keyset` cannot serve it
+(the predicate differs) and should not — this read is one row by PK, and no new index was added.
+
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles` and
@@ -1847,14 +1889,14 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**28 controllers, 137 endpoints: 125 domain + 12 auth** — one endpoint per Application operation,
+**28 controllers, 139 endpoints: 127 domain + 12 auth** — one endpoint per Application operation,
 plus the twelve `AuthController` actions (§17). The route always names the aggregate that owns the
 child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
 | `UsersController` | `api/users` | 12 |
-| `BarberProfilesController` | `api/barber-profiles` | 22 |
+| `BarberProfilesController` | `api/barber-profiles` | 24 |
 | `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 3 |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
@@ -1908,16 +1950,29 @@ Conventions:
   приходит как `ProblemDetails` с `Retry-After` и `errorCodes: ["rateLimit.exceeded"]`. Явные
   политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48) и `reads` (120/мин на IP)
   на семи публичных read-действиях (R-25, §17.5).
-- Create endpoints answer **201** with `CreatedResourceResponse` and deliberately **no `Location`**
-  header (2026-10-25, R-42): none of the nine create endpoints has a self-URI readable right after
-  creation. `GET api/bookings` and `GET api/reviews` are lists (the new review is hidden until
-  publication, R-35), `salons` now have a public directory `GET api/salons` but still no read by
-  id (the self-service `POST api/salons/own` answers the same `201 { id }`), `users` has only the self-read
-  `GET api/users/me` (not a resource-by-id for the admin-created user), `hair-services`/`specializations` have
-  only the two public list GETs (no read by id), `GET api/auth/me` is not a resource-by-id, and
-  `GET api/barbers/{id}` is 404 until the profile is
-  active and verified (`GetCardByIdAsync`). A dead link is worse than none. Revisit when a GET by
-  id exists for a created resource — then `CreatedAtAction`/`Created(uri, value)`.
+- Create endpoints answer **201** with `CreatedResourceResponse`; since 2026-10-25 (R-42) none of
+  them set a `Location` header, because none has a self-URI readable right after creation. There is
+  now exactly one exception, added 2026-11-10 (issue-83): `POST api/barber-profiles` answers `201`
+  with `Location: /api/barber-profiles/{id}` via `CreatedAtAction(nameof(Get), …)`, because
+  `GET api/barber-profiles/{id}` reads the owner's own profile in any status. The other create
+  endpoints keep the old rule: `GET api/bookings` and `GET api/reviews` are lists (the new review is
+  hidden until publication, R-35), `salons` have a public directory `GET api/salons` but no read by
+  id (the self-service `POST api/salons/own` answers the same `201 { id }`), `users` has only the
+  self-read `GET api/users/me` (not a resource-by-id for the admin-created user),
+  `hair-services`/`specializations` have only the two public list GETs, `GET api/auth/me` is not a
+  resource-by-id, and `GET api/barbers/{id}` is 404 until the profile is active and verified
+  (`GetCardByIdAsync`). For them a dead link is still worse than none.
+- **Barber profile self-read and service price edit (2026-11-10, issue-83).**
+  `GET api/barber-profiles/{id}` is the cabinet read under `BarberOnly` + `EnsureCanManage`: any
+  profile status and services **including hidden** ones, `200 BarberProfileResponse`, unknown
+  `404 barberProfile.notFound`, someone else's `403 auth.forbidden`, anonymous `401`.
+  `PUT api/barber-profiles/{id}/services/{hairServiceId}` takes `{ price, durationMinutes }` and
+  answers `204` (`404 barberProfile.updateService.notFound`; `400 barberService.updatePrice` /
+  `barberService.updateDuration`). `DELETE .../services/{hairServiceId}` now **deactivates** the
+  row instead of deleting it (`204`, idempotent; `404 barberProfile.removeService.notFound` only
+  when no row exists), and `POST .../services` with the same `hairServiceId` reactivates a hidden
+  row and overwrites price and duration (`409 barberProfile.addService.duplicate` only for an
+  active row). No migration: `barber_services.is_active` already existed.
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,

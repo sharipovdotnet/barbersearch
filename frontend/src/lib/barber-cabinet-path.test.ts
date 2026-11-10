@@ -5,12 +5,14 @@ import {
   BARBER_IMPORT_PATH,
   BARBER_NOTIFICATIONS_PATH,
   BARBER_ONBOARDING_PATH,
+  BARBER_PROFILE_PATH,
   BARBER_SALONS_PATH,
   BARBER_SCHEDULE_PATH,
   isBarberCabinetPath,
   isBarberImportPath,
   isBarberNotificationsPath,
   isBarberOnboardingPath,
+  isBarberProfilePath,
   isBarberSalonsPath,
   isBarberSchedulePath,
 } from '@/lib/barber-cabinet-path'
@@ -32,11 +34,29 @@ describe('адреса кабинета барбера', () => {
     expect(isBarberNotificationsPath('/barber/notifications/42')).toBe(false)
   })
 
+  it('профиль — отдельный адрес, а не общий предикат кабинета', () => {
+    expect(BARBER_PROFILE_PATH).toBe('/barber/profile')
+    expect(isBarberProfilePath('/barber/profile')).toBe(true)
+    expect(isBarberProfilePath('/barber/profile/')).toBe(false)
+    expect(isBarberProfilePath('/barber/profile/x')).toBe(false)
+    expect(isBarberProfilePath('/barber/profile/42')).toBe(false)
+    expect(isBarberProfilePath('/barber')).toBe(false)
+  })
+
   it('общий предикат кабинета по-прежнему знает только два раздела', () => {
     expect(isBarberCabinetPath('/barber')).toBe(true)
     expect(isBarberCabinetPath('/barber/schedule')).toBe(true)
     expect(isBarberCabinetPath('/barber/notifications')).toBe(false)
     expect(isBarberCabinetPath('/barber/salons')).toBe(false)
+    expect(isBarberCabinetPath('/barber/profile')).toBe(false)
+  })
+
+  it('остальные предикаты не перехватывают профиль', () => {
+    expect(isBarberSchedulePath('/barber/profile')).toBe(false)
+    expect(isBarberSalonsPath('/barber/profile')).toBe(false)
+    expect(isBarberOnboardingPath('/barber/profile')).toBe(false)
+    expect(isBarberImportPath('/barber/profile')).toBe(false)
+    expect(isBarberNotificationsPath('/barber/profile')).toBe(false)
   })
 
   it('остальные предикаты не перехватывают уведомления', () => {

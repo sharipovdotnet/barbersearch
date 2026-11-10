@@ -395,6 +395,15 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             id)));
     }
 
+    /// <summary>
+    /// Собственная карточка: в фейке совпадает с публичной — разницу фильтров проверяет
+    /// интеграционный тест на PostgreSQL, а обработчик проверяет владение и коды ошибок.
+    /// </summary>
+    public Task<Result<BarberProfileResponse, Failure>> GetOwnCardByIdAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default)
+        => GetCardByIdAsync(barberProfileId, cancellationToken);
+
     public Task<Result<BarberSlotContext, Failure>> GetSlotContextAsync(
         Guid barberProfileId,
         Guid? salonId,

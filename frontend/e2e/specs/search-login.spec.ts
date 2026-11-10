@@ -32,13 +32,17 @@ test.describe('витрина и вход', () => {
 
     // «Показать ещё» — осознанный append, а не замена страницы: фиксируем это,
     // чтобы поведение не «починили» пагинатором (§4.2).
-    await landing.expectCardCount(13)
-    await expect(landing.counter).toHaveText('Показаны 13 барберов')
+    //
+    // 14, а не 13: к витринным профилям добавлен изолированный подтверждённый
+    // барбер `/barber/profile` (seed §4.2). У него нет услуг, поэтому счётчик
+    // каталога остаётся 13, но в поиске по городу он — последняя карточка.
+    await landing.expectCardCount(14)
+    await expect(landing.counter).toHaveText('Показаны 14 барберов')
     await expect(landing.showMore).toBeHidden()
 
     const appended = await landing.cardTexts()
     expect(appended.slice(0, pageSize.search)).toEqual(firstPage)
-    expect(appended).toHaveLength(firstPage.length + 1)
+    expect(appended).toHaveLength(firstPage.length + 2)
   })
 
   test('поиск по несуществующему городу показывает пустое состояние', async ({ page }) => {

@@ -64,6 +64,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
+| `/barber/profile` | own profile: the card form (grade read-only), the price list with active and hidden services (add, change the price, hide, restore) and specializations; «hiding» a service keeps the row for the booking history |
 | `/barber/import` | «Перенести записи»: two sources. A `.ics` calendar file — one file up to 2 MB, parsed in the browser, single and recurring events with `RRULE`/`RDATE`/`EXDATE`, `VTIMEZONE`, a 7/30/90-day window, a per-event preview with edits and selection up to 50, a deterministic idempotency key from the event `UID`, guests-only bookings (`customerId: null`), `409` → nearest free slots and `429` → a one-minute pause. A pasted list from Google Docs or a spreadsheet — up to 50 lines, tab/semicolon/pipe separated, line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes. Both: sequential guest bookings with progress, partial success and retry of failed rows |
 | `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
@@ -355,9 +356,10 @@ because the API does not expose one, and the screen does not invent it.
 ## Barber cabinet
 
 `/barber` is a separate lazy screen for a signed-in `Barber` with a linked profile. The cabinet
-has three sections — записи (`/barber`), расписание (`/barber/schedule`) and salons
-(`/barber/salons`) — linked by `BarberCabinetNav` and sharing the same gates. The bookings screen
-has three tabs and **opens on «Сегодня»**: the day feed, then «Ближайшие» and «История».
+has four sections — записи (`/barber`), расписание (`/barber/schedule`), salons
+(`/barber/salons`) and profile (`/barber/profile`) — linked by `BarberCabinetNav` and sharing
+the same gates. The bookings screen has three tabs and **opens on «Сегодня»**: the day feed,
+then «Ближайшие» and «История».
 
 The day feed answers «кто придёт сегодня и что у меня в ближайший час». It is assembled from the
 **first pages** of the two existing server lists (`scope=upcoming` and `scope=past`), filtered by
@@ -506,6 +508,51 @@ does not change and «Настроить расписание» links to `/barbe
   labels and rejection-reason validation.
 - `src/lib/salons.ts` / `src/lib/barber-salons.ts` — directory read, linked-salon read, attach and
   `createOwnSalon` transport; `src/hooks/use-barber-salons.ts` — re-read after a write.
+
+### Barber profile
+
+`/barber/profile` is the fourth cabinet section and the only place where a barber edits the
+card after onboarding. It reads `GET /api/barber-profiles/{id}` — the **own** card, not the
+public one: it works before verification and returns hidden services with `isActive: false`,
+so the barber sees exactly what the price list contains. The card form is the same
+`BarberProfileForm` as the onboarding one, switched to `mode="edit"`: the grade is a read-only
+line («Грейд назначает администратор»), «Сохранить» stays disabled until something changes,
+and the Russian field errors come from the same constants as the create form. A verified and
+active profile shows «Открыть, как видят клиенты» → `/barbers/{id}`; an unverified one explains
+that the card appears in search after confirmation.
+
+What changed: the barber can now fix the name, experience, «О себе» and late policy, add a
+service with its own price and duration, change that price later, hide a service and bring it
+back, and add or remove specializations. The service catalogue is loaded lazily — the first
+open of «Добавить услугу» is the only catalogue request, and a failed catalogue does not hide
+the price list that is already on screen.
+
+«Удаление» услуги intentionally **hides** it instead of erasing the row. The row is what the
+customer, barber and admin booking lists join through (`bookings → barber_services →
+hair_services`): a physical delete would make historical visits disappear from all three
+lists even though the slot was really taken. So `DELETE /api/barber-profiles/{id}/services/{hairServiceId}`
+sets `is_active = false`, the row stays with the «Скрыта» badge and a «Вернуть» button, and the
+public card stops showing it. Bringing it back is the same `POST .../services` with the same
+`hairServiceId`: the hidden row is reactivated and the new price and duration are written.
+Specializations are the opposite: they take part in no booking join and carry no history, so
+removing one is a real delete. The UI announces every write («Услуга добавлена.», «Цена
+обновлена.», «Услуга скрыта.», «Услуга снова в прайсе.», «Специализация добавлена.»,
+«Специализация убрана.») and re-reads the card quietly instead of patching it.
+
+On a phone the four cabinet links would not fit in one row, so `BarberCabinetNav` is a 2×2
+grid of 44 px cells below `sm`; the notification bell stays a utility in the heading, not a
+fifth section. Inputs, navigation, «Сохранить», «Добавить услугу» and the public-card link are
+44 px on narrow screens, the page has no horizontal scroll at 320, and axe covers it at 1280
+and 320.
+
+- `src/pages/barber-profile-page.tsx` — gates, header, announcements, the three sections.
+- `src/components/barber/barber-profile-form.tsx` — the shared create/edit form.
+- `src/components/barber/barber-profile-services.tsx`, `barber-profile-specializations.tsx` —
+  the price list with its three dialogs and the tags with the lazy catalogue select.
+- `src/hooks/use-barber-profile.ts` — `useBarberProfile` (public, cache-first) and
+  `useOwnBarberProfile` (always fresh, abort + version, quiet reload after a write).
+- `src/lib/barber-profile.ts` — own-card read, six mutations, error copy;
+  `src/lib/barber-cabinet-path.ts` — the `/barber/profile` path helper.
 
 ### Creating the barber profile
 

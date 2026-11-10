@@ -202,7 +202,11 @@ public class BarberProfileNarrowReadTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(["services"], repository.LoadCalls);
-        Assert.Empty(profile.Services);
+
+        // «Удаление» — деактивация: строка остаётся, флаг снят.
+        var service = Assert.Single(profile.Services);
+        Assert.Equal(hairServiceId, service.HairServiceId);
+        Assert.False(service.IsActive);
     }
 
     [Fact]

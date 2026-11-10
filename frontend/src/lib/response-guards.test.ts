@@ -10,6 +10,7 @@ import {
   isBarberSalonSummary,
   isBarberSearchItem,
   isBooking,
+  isHairServiceOption,
   isNotificationSettings,
   isSalonDirectoryItem,
   isTelegramLink,
@@ -422,5 +423,28 @@ describe('guard-ы уведомлений', () => {
         expiresAt: '2026-11-07T09:10:00Z',
       })
     ).toBe(false)
+  })
+})
+
+describe('isHairServiceOption, длительность по умолчанию', () => {
+  const SERVICE = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Стрижка',
+    category: 'Haircut',
+    defaultDurationMinutes: 45,
+  }
+
+  it('принимает строку с длительностью и лишними полями', () => {
+    expect(isHairServiceOption({ ...SERVICE, description: 'любое' })).toBe(true)
+  })
+
+  it('отвергает строку без длительности или с нечислом', () => {
+    const { defaultDurationMinutes, ...withoutDuration } = SERVICE
+
+    expect(defaultDurationMinutes).toBe(45)
+    expect(isHairServiceOption(withoutDuration)).toBe(false)
+    expect(isHairServiceOption({ ...SERVICE, defaultDurationMinutes: '45' })).toBe(
+      false
+    )
   })
 })

@@ -17,6 +17,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { t, useI18n } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
+  describeBarberProfileError,
+  updateBarberProfile,
+  type BarberProfileUpdateDraft,
+} from '@/lib/barber-profile'
+import {
   BARBER_GRADE_LABELS,
   BARBER_GRADES,
   type BarberGrade,
@@ -40,6 +45,7 @@ import {
   type Language,
   type PaymentMethod,
 } from '@/lib/barber-profile-labels'
+import type { BarberProfile } from '@/lib/catalog'
 import { cn } from '@/lib/utils'
 
 /**
@@ -159,6 +165,34 @@ function toInitialValues(
   }
 }
 
+/**
+ * Значения правки из своего профиля.
+ *
+ * `latePolicy` в контракте — строка, поэтому пустое значение остаётся `''`, а не
+ * `null`. Грейд попадает в состояние только для показа: поля выбора в правке нет.
+ */
+function toEditValues(profile: BarberProfile): FormValues {
+  return {
+    displayName: profile.displayName,
+    yearsOfExperience: String(profile.yearsOfExperience),
+    grade: profile.grade,
+    bio: profile.bio ?? '',
+    languages: profile.languages,
+    paymentMethods: profile.paymentMethods,
+    certificates: profile.certificatesAndTraining.join('\n'),
+    achievements: profile.achievements.join('\n'),
+    communicationFormat: profile.communicationFormat.join('\n'),
+    goodies: profile.goodies.join('\n'),
+    additionalServices: profile.additionalServices.join('\n'),
+    latePolicy: profile.latePolicy,
+  }
+}
+
+/** Сравнение с baseline: порядок пунктов списка тоже значим, как в полях формы. */
+function isSameValues(current: FormValues, baseline: FormValues): boolean {
+  return JSON.stringify(current) === JSON.stringify(baseline)
+}
+
 /** `aria-describedby` из подсказки и ошибки: пустая строка не нужна. */
 function describedBy(
   ...ids: (string | null | undefined)[]
@@ -169,10 +203,20 @@ function describedBy(
 }
 
 export type BarberProfileFormProps = {
+  /**
+   * `create` — онбординг: собирает профиль и отдаёт id экрану. `edit` — правка
+   * своего профиля: поля заполнены из `initial`, грейд только для чтения, успех
+   * отдаётся через `onSaved`.
+   */
+  mode?: 'create' | 'edit'
+  /** Свой профиль для правки: форма инициализируется им один раз, без перемонтирования. */
+  initial?: BarberProfile | null
   /** Профиль создан сервером: экран продлевает сессию и уходит в кабинет. */
-  onCreated: (id: string) => void
+  onCreated?: (id: string) => void
   /** `409`: профиль уже есть (например, вкладку открыли дважды) — это тоже успех. */
-  onAlreadyExists: () => void
+  onAlreadyExists?: () => void
+  /** Правка сохранена: экран объявляет успех и перечитывает карточку. */
+  onSaved?: () => void
   /**
    * Данные одобренной заявки. Заполненные в ней имя и опыт приходят готовыми и только
    * для чтения; «О себе» блокируется, только если заявитель его написал.
@@ -193,7 +237,11 @@ function parseExperience(value: string): number | null {
   return Number.isInteger(years) ? years : null
 }
 
-function validate(values: FormValues, years: number | null): ProfileErrors {
+function validate(
+  values: FormValues,
+  years: number | null,
+  requireGrade: boolean
+): ProfileErrors {
   const errors: ProfileErrors = {}
   const displayName = values.displayName.trim()
 
@@ -216,7 +264,7 @@ function validate(values: FormValues, years: number | null): ProfileErrors {
     errors.languages = t(LANGUAGES_REQUIRED_ERROR)
   }
 
-  if (values.grade === '') {
+  if (requireGrade && values.grade === '') {
     errors.grade = t(GRADE_REQUIRED_ERROR)
   }
 
@@ -258,6 +306,26 @@ function toDraft(
   }
 }
 
+/** Тело правки: без грейда, `latePolicy` строкой (пустая — `''`). */
+function toUpdateDraft(
+  values: FormValues,
+  years: number
+): BarberProfileUpdateDraft {
+  return {
+    displayName: values.displayName.trim(),
+    yearsOfExperience: years,
+    bio: toNullable(values.bio),
+    languages: values.languages,
+    certificatesAndTraining: toLines(values.certificates),
+    achievements: toLines(values.achievements),
+    paymentMethods: values.paymentMethods,
+    communicationFormat: toLines(values.communicationFormat),
+    goodies: toLines(values.goodies),
+    additionalServices: toLines(values.additionalServices),
+    latePolicy: values.latePolicy.trim(),
+  }
+}
+
 function toggle<T>(list: readonly T[], value: T): T[] {
   return list.includes(value)
     ? list.filter((item) => item !== value)
@@ -265,14 +333,19 @@ function toggle<T>(list: readonly T[], value: T): T[] {
 }
 
 export function BarberProfileForm({
+  mode = 'create',
+  initial = null,
   onCreated,
   onAlreadyExists,
+  onSaved,
   prefill = null,
 }: BarberProfileFormProps) {
   const { t } = useI18n()
-  const [values, setValues] = useState<FormValues>(() =>
-    toInitialValues(prefill)
+  const isEdit = mode === 'edit'
+  const [baseline, setBaseline] = useState<FormValues>(() =>
+    isEdit && initial ? toEditValues(initial) : toInitialValues(prefill)
   )
+  const [values, setValues] = useState<FormValues>(baseline)
   const [errors, setErrors] = useState<ProfileErrors>({})
   const [formError, setFormError] = useState<{
     message: string
@@ -280,10 +353,14 @@ export function BarberProfileForm({
   } | null>(null)
   const [isPending, setIsPending] = useState(false)
 
-  const isDisplayNameLocked = isFilled(prefill?.displayName)
+  // В правке грейд назначает администратор: поля выбора нет, и валидация его не ждёт.
+  const showGradeSelect = !isEdit
+  const isDirty = !isSameValues(values, baseline)
+
+  const isDisplayNameLocked = !isEdit && isFilled(prefill?.displayName)
   const isExperienceLocked =
-    prefill !== null && prefill.yearsOfExperience > 0
-  const isBioLocked = isFilled(prefill?.bio)
+    !isEdit && prefill !== null && prefill.yearsOfExperience > 0
+  const isBioLocked = !isEdit && isFilled(prefill?.bio)
 
   function setValue<K extends keyof FormValues>(
     key: K,
@@ -309,8 +386,13 @@ export function BarberProfileForm({
       return
     }
 
+    // В правке ненастоящей заявки нет: кнопка заблокирована, но Enter может прийти.
+    if (isEdit && !isDirty) {
+      return
+    }
+
     const years = parseExperience(values.yearsOfExperience)
-    const nextErrors = validate(values, years)
+    const nextErrors = validate(values, years, showGradeSelect)
 
     setErrors(nextErrors)
     setFormError(null)
@@ -318,29 +400,46 @@ export function BarberProfileForm({
     if (
       Object.keys(nextErrors).length > 0 ||
       years === null ||
-      values.grade === ''
+      (showGradeSelect && values.grade === '')
     ) {
+      return
+    }
+
+    if (isEdit && initial === null) {
       return
     }
 
     setIsPending(true)
 
     try {
-      const created = await createBarberProfile(
-        toDraft(values, years, values.grade)
-      )
-      onCreated(created.id)
-    } catch (error) {
-      // Профиль уже создан: это не ошибка, а гонка двух вкладок.
-      if (
-        error instanceof ApiError &&
-        error.hasCode('barberProfile.create.alreadyExists')
-      ) {
-        onAlreadyExists()
+      if (isEdit && initial) {
+        await updateBarberProfile(initial.id, toUpdateDraft(values, years))
+        // baseline обновляется без перемонтирования: фокус и введённые значения
+        // остаются на месте, а кнопка снова гаснет до следующей правки.
+        setBaseline(values)
+        onSaved?.()
+        setIsPending(false)
         return
       }
 
-      const failure = describeBarberProfileCreateError(error)
+      const created = await createBarberProfile(
+        toDraft(values, years, values.grade as BarberGrade)
+      )
+      onCreated?.(created.id)
+    } catch (error) {
+      // Профиль уже создан: это не ошибка, а гонка двух вкладок.
+      if (
+        !isEdit &&
+        error instanceof ApiError &&
+        error.hasCode('barberProfile.create.alreadyExists')
+      ) {
+        onAlreadyExists?.()
+        return
+      }
+
+      const failure = isEdit
+        ? describeBarberProfileError(error)
+        : describeBarberProfileCreateError(error)
       const field = failure.field
 
       if (field) {
@@ -442,38 +541,51 @@ export function BarberProfileForm({
           </Field>
         </div>
 
-        <Field data-invalid={Boolean(errors.grade)}>
-          <FieldLabel htmlFor={IDS.grade}>{t('Грейд')}</FieldLabel>
-          <select
-            id={IDS.grade}
-            name="grade"
-            value={values.grade}
-            disabled={isPending}
-            aria-invalid={Boolean(errors.grade)}
-            aria-describedby={describedBy(
-              errors.grade ? IDS.gradeError : undefined
-            )}
-            onChange={(event) => {
-              setValue('grade', event.target.value as BarberGrade | '')
-            }}
-            className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
-          >
-            <option value="" disabled>
-              {t('Выберите грейд')}
-            </option>
-            {SELECTABLE_GRADES.map((grade) => (
-              <option key={grade} value={grade}>
-                {t(BARBER_GRADE_LABELS[grade])}
+        {showGradeSelect ? (
+          <Field data-invalid={Boolean(errors.grade)}>
+            <FieldLabel htmlFor={IDS.grade}>{t('Грейд')}</FieldLabel>
+            <select
+              id={IDS.grade}
+              name="grade"
+              value={values.grade}
+              disabled={isPending}
+              aria-invalid={Boolean(errors.grade)}
+              aria-describedby={describedBy(
+                errors.grade ? IDS.gradeError : undefined
+              )}
+              onChange={(event) => {
+                setValue('grade', event.target.value as BarberGrade | '')
+              }}
+              className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
+            >
+              <option value="" disabled>
+                {t('Выберите грейд')}
               </option>
-            ))}
-          </select>
-          <FieldDescription>
-            {t(
-              'Грейд видят клиенты в карточке. Администратор может изменить его позже.'
-            )}
-          </FieldDescription>
-          <FieldError id={IDS.gradeError}>{errors.grade}</FieldError>
-        </Field>
+              {SELECTABLE_GRADES.map((grade) => (
+                <option key={grade} value={grade}>
+                  {t(BARBER_GRADE_LABELS[grade])}
+                </option>
+              ))}
+            </select>
+            <FieldDescription>
+              {t(
+                'Грейд видят клиенты в карточке. Администратор может изменить его позже.'
+              )}
+            </FieldDescription>
+            <FieldError id={IDS.gradeError}>{errors.grade}</FieldError>
+          </Field>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {t('Грейд: {grade}', {
+                grade: t(BARBER_GRADE_LABELS[values.grade || 'None']),
+              })}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t('Грейд назначает администратор')}
+            </p>
+          </div>
+        )}
 
         <Field>
           <FieldLabel htmlFor={IDS.bio}>{t('О себе')}</FieldLabel>
@@ -693,7 +805,7 @@ export function BarberProfileForm({
       <Button
         type="submit"
         className="h-11 w-full sm:h-8 sm:w-auto"
-        disabled={isPending}
+        disabled={isPending || (isEdit && !isDirty)}
         aria-busy={isPending}
       >
         {isPending && (
@@ -703,7 +815,13 @@ export function BarberProfileForm({
             className="animate-spin"
           />
         )}
-        {isPending ? t('Создаём профиль…') : t('Создать профиль')}
+        {isPending
+          ? isEdit
+            ? t('Сохраняем…')
+            : t('Создаём профиль…')
+          : isEdit
+            ? t('Сохранить')
+            : t('Создать профиль')}
       </Button>
     </form>
   )
