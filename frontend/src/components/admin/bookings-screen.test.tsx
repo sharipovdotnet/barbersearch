@@ -67,6 +67,41 @@ function mockList(
   return requests
 }
 
+/**
+ * Ширина колонки списка в jsdom.
+ *
+ * `ResizeObserver` в jsdom нет, поэтому таблица броней не включается сама:
+ * тест подменяет наблюдатель и сам сообщает измеренную ширину. Возвращает
+ * функцию, которая «доставляет» ширину после того, как список отрисован.
+ */
+function stubListWidth(width: number): () => void {
+  const callbacks: Array<
+    (entries: Array<{ contentRect: { width: number } }>) => void
+  > = []
+
+  class ResizeObserverStub {
+    constructor(
+      callback: (entries: Array<{ contentRect: { width: number } }>) => void
+    ) {
+      callbacks.push(callback)
+    }
+
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+
+  return () => {
+    act(() => {
+      for (const callback of callbacks) {
+        callback([{ contentRect: { width } }])
+      }
+    })
+  }
+}
+
 describe('BookingsScreen', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -97,6 +132,42 @@ describe('BookingsScreen', () => {
     const link = within(list).getByRole('link')
 
     expect(link).toHaveAttribute('href', `/admin/bookings/${BOOKING.id}`)
+  })
+
+  it('в широкой колонке показывает таблицу с ценами и статусами', async () => {
+    mockList([BOOKING])
+    const notify = stubListWidth(600)
+
+    render(<BookingsScreen bookingId={null} />)
+
+    await screen.findByRole('list', { name: 'Список броней' })
+    notify()
+
+    const table = await screen.findByRole('table', { name: 'Список броней' })
+
+    expect(
+      within(table).getByRole('columnheader', { name: 'Статус' })
+    ).toBeInTheDocument()
+    expect(within(table).getByText('Ждёт подтверждения')).toBeInTheDocument()
+    expect(within(table).getByText('30 ₽')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('list', { name: 'Список броней' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('в узкой колонке оставляет карточки вместо таблицы', async () => {
+    mockList([BOOKING])
+    const notify = stubListWidth(420)
+
+    render(<BookingsScreen bookingId={null} />)
+
+    await screen.findByRole('list', { name: 'Список броней' })
+    notify()
+
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('list', { name: 'Список броней' })
+    ).toBeInTheDocument()
   })
 
   it('показывает гостя без аккаунта по телефону вместо email', async () => {

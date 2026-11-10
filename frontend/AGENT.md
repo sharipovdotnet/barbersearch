@@ -299,6 +299,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── use-my-barber-request.ts    ← own request: one read, quiet retry, 401
     │   ├── use-admin-review.ts        ← one review by URL, when absent from the page
     │   ├── use-auto-refresh.ts        ← 30-second quiet polling or return-only (`poll: false`)
+    │   ├── use-element-width.ts       ← measured column width (admin bookings: table vs cards)
     │   ├── use-barber-search.ts       ← landing search: filters, cursor, abort, retry
     │   ├── use-barber-bookings.ts     ← barber cabinet: scope, cursor, five local mutations, 401
     │   ├── use-barber-booking-options.ts  ← own services and salons for the manual-booking form

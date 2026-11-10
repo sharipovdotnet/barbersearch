@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminBooking } from '@/hooks/use-admin-booking'
 import { useAdminBookingsList } from '@/hooks/use-admin-bookings-list'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
+import { useElementWidth } from '@/hooks/use-element-width'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useI18n } from '@/i18n'
 import {
@@ -43,12 +44,23 @@ import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
 /**
+ * Минимальная ширина колонки списка для таблицы.
+ *
+ * Сумма ширин её колонок — 544 px. В узкой колонке split-view шесть колонок не
+ * помещаются: слова ломаются посередине, а плашка статуса наезжает на цену,
+ * поэтому ниже порога список показывает карточки вместо таблицы.
+ */
+const BOOKINGS_TABLE_MIN_WIDTH = 544
+
+/**
  * `/admin/bookings` — рабочий стол поддержки: список всех броней и карточка.
  *
  * Поиск (email клиента или точный id брони) и фильтр статуса живут в состоянии
  * React и не попадают в URL: email — PII, ему не место в истории браузера и логах
  * прокси. В адресе остаётся только id брони. На широком экране список и карточка
- * стоят рядом, на телефоне карточка заменяет список целиком.
+ * стоят рядом, на телефоне карточка заменяет список целиком. Таблица показывается
+ * только там, где колонка списка достаточно широка (`BOOKINGS_TABLE_MIN_WIDTH`),
+ * иначе список идёт карточками — они переживают любую ширину.
  *
  * Счётчиков «всего» нет: API отдаёт курсорную страницу без общего числа.
  * Действий у строк нет — открыть карточку можно только ссылкой; отмена и неявка
@@ -97,6 +109,11 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
   })
 
   const isWide = useMediaQuery('(min-width: 1024px)')
+  // Таблица живёт по ширине колонки, а не окна: в split-view ей достаётся
+  // разное место в зависимости от рейла, карточки справа и скроллбара.
+  const { ref: listRef, width: listWidth } = useElementWidth<HTMLDivElement>()
+  const showTable =
+    listWidth !== null && listWidth >= BOOKINGS_TABLE_MIN_WIDTH
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
@@ -312,10 +329,13 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 
         {showGrid && (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-            <div className={cn('min-w-0', bookingId ? 'hidden lg:block' : 'block')}>
+            <div
+              ref={listRef}
+              className={cn('min-w-0', bookingId ? 'hidden lg:block' : 'block')}
+            >
               {list.items.length > 0 ? (
                 <div className="space-y-3">
-                  {isWide ? (
+                  {showTable ? (
                     <BookingsTable
                       items={list.items}
                       selectedId={bookingId}
@@ -380,10 +400,13 @@ export function BookingsScreen({ bookingId }: { bookingId: string | null }) {
 }
 
 /**
- * Таблица для `lg`: время — ссылка на карточку, статус словом.
+ * Таблица для широкой колонки списка: время — ссылка на карточку, статус словом.
  *
  * `table-fixed` и переносы вместо горизонтального скролла: в split-view колонка
- * списка узкая, и длинный email не должен растягивать страницу.
+ * списка узкая, и длинный email не должен растягивать страницу. Ширины колонок
+ * заданы явно: поровну делить нельзя — плашка статуса не помещается в 90 px и
+ * вылезает на цену. Время, статус и цена получают ровно нужное, остальное делят
+ * клиент, барбер и услуга; цена прижата вправо и не переносится.
  */
 function BookingsTable({
   items,
@@ -399,15 +422,28 @@ function BookingsTable({
   return (
     <table className="w-full table-fixed text-sm">
       <caption className="sr-only">{t('Список броней')}</caption>
+      <colgroup>
+        <col className="w-19" />
+        {/* Клиенту нужен запас шире остальных: «Абдуллаев» не должен ломаться
+            по буквам, а в равных долях слово не помещается. */}
+        <col className="w-23" />
+        <col className="w-19" />
+        <col className="w-22" />
+        <col className="w-34" />
+        <col className="w-19" />
+      </colgroup>
       <thead>
         <tr className="text-left">
           {TABLE_COLUMNS.map((column) => (
             <th
-              key={column}
+              key={column.label}
               scope="col"
-              className="border-b px-2 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+              className={cn(
+                'border-b px-2 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase',
+                column.align === 'right' && 'text-right'
+              )}
             >
-              {t(column)}
+              {t(column.label)}
             </th>
           ))}
         </tr>
@@ -426,7 +462,7 @@ function BookingsTable({
                 <a
                   href={bookingsPath(booking.id)}
                   aria-current={isSelected ? 'page' : undefined}
-                  className="inline-block rounded-md py-1.5 font-medium break-words underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="inline-block rounded-md py-1 font-medium break-words underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                   onClick={(event) => {
                     event.preventDefault()
                     onSelect(booking.id)
@@ -456,11 +492,9 @@ function BookingsTable({
                 {booking.service.name}
               </td>
               <td className="border-b px-2 py-2">
-                <span className="break-words">
-                  <BookingStatusText status={booking.status} />
-                </span>
+                <BookingStatusText status={booking.status} />
               </td>
-              <td className="border-b px-2 py-2 tabular-nums break-words">
+              <td className="border-b px-2 py-2 text-right tabular-nums whitespace-nowrap">
                 {formatPrice(booking.price)}
               </td>
             </tr>
@@ -557,30 +591,43 @@ function BookingCards({
   )
 }
 
-/** Статус строки словом: цвет — только поддержка, поэтому перенос разрешён. */
+/**
+ * Статус строки: точка и слово, чтобы цвет не был единственным сигналом.
+ *
+ * `rounded-lg`, а не `rounded-full`: у «Ждёт подтверждения» две строки, и капсула
+ * на такой высоте выглядит сплющенной. `px-1.5` — таблица плотнее карточек,
+ * лишние 4 px уходят колонке услуги. Текст — отдельный элемент с `min-w-0`:
+ * иначе flex-элемент не сжимается, длинное слово выходит за плашку и наезжает
+ * на колонку цены.
+ */
 function BookingStatusText({ status }: { status: AdminBookingStatus }) {
   const { t } = useI18n()
 
   return (
     <span
       className={cn(
-        'inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium break-words whitespace-normal',
+        'inline-flex max-w-full items-start gap-1.5 rounded-lg border px-1.5 py-0.5 text-xs font-medium',
         bookingStatusStyle(status)
       )}
     >
-      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-      {t(bookingStatusLabel(status))}
+      <span
+        aria-hidden
+        className="mt-1 size-1.5 shrink-0 rounded-full bg-current"
+      />
+      <span className="min-w-0 break-words">
+        {t(bookingStatusLabel(status))}
+      </span>
     </span>
   )
 }
 
 const TABLE_COLUMNS = [
-  'Время',
-  'Клиент',
-  'Барбер',
-  'Услуга',
-  'Статус',
-  'Цена',
+  { label: 'Время', align: 'left' },
+  { label: 'Клиент', align: 'left' },
+  { label: 'Барбер', align: 'left' },
+  { label: 'Услуга', align: 'left' },
+  { label: 'Статус', align: 'left' },
+  { label: 'Цена', align: 'right' },
 ] as const
 
 function BookingsSkeleton() {
