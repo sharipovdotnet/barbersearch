@@ -9,6 +9,7 @@ import barber from './barber.json'
 import barberCabinet from './barber-cabinet.json'
 import barberImport from './barber-import.json'
 import barberPages from './barber-pages.json'
+import barberProfile from './barber-profile.json'
 import barberPublic from './barber-public.json'
 import barberSchedule from './barber-schedule.json'
 import common from './common.json'
@@ -35,6 +36,7 @@ export const en: Record<string, string> = {
   ...barberPublic,
   ...barberCabinet,
   ...barberSchedule,
+  ...barberProfile,
   ...barberImport,
   ...barberPages,
   ...admin,

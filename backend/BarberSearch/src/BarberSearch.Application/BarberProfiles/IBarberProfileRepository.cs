@@ -272,6 +272,23 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Собственная карточка барбера: профиль любого статуса, услуги — включая выключенные.
+    /// </summary>
+    /// <remarks>
+    /// Публичная карточка <see cref="GetCardByIdAsync"/> отдаёт только активный и подтверждённый
+    /// профиль и скрывает выключенные услуги. Кабинету нужно обратное: барбер заполняет карточку
+    /// до верификации и должен видеть скрытые строки прайса, чтобы вернуть их в работу.
+    /// Поэтому фильтра <c>IsActive &amp;&amp; IsVerified</c> нет, а <c>LoadServicesAsync</c>
+    /// вызывается с <c>includeInactive: true</c>. Владение проверяет обработчик; отсутствие
+    /// профиля — <c>Error.NotFound</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<BarberProfileResponse, Failure>> GetOwnCardByIdAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Услуги и салоны собственного профиля для формы ручной записи клиента.
     /// </summary>
     /// <remarks>

@@ -58,13 +58,17 @@ export type BarberProfileField =
   | 'languages'
   | 'paymentMethods'
 
-export type BarberProfileCreateFailure = {
+/** Отказ сохранения карточки: где показать ошибку, что сказать и можно ли повторить. */
+export type BarberProfileFailure = {
   /** Поле или группа, у которой показывается ошибка; `null` — общая ошибка формы. */
   field: BarberProfileField | null
   message: string
-  /** Транспортный сбой: повтор отправки осмыслен и не дублирует создание. */
+  /** Транспортный сбой: повтор отправки осмыслен и не дублирует сохранение. */
   canRetry: boolean
 }
+
+/** Историческое имя: создание пользуется тем же разбором, что и правка. */
+export type BarberProfileCreateFailure = BarberProfileFailure
 
 const FALLBACK_ERROR = 'Не удалось создать профиль. Попробуйте ещё раз.'
 
@@ -107,16 +111,18 @@ const FIELD_ERRORS: readonly {
 ]
 
 /**
- * Отказ `POST /api/barber-profiles` в виде «где показать» и «что сказать».
+ * Отказ сохранения карточки барбера в виде «где показать» и «что сказать».
  *
- * `409 barberProfile.create.alreadyExists` сюда не попадает: профиль уже создан, и
- * экран переходит в кабинет вместо показа ошибки.
+ * Общий разбор для создания и правки: коды полей и правила повтора одни и те же,
+ * различается только общий текст. `409 barberProfile.create.alreadyExists` сюда не
+ * попадает: профиль уже создан, и экран переходит в кабинет вместо показа ошибки.
  */
-export function describeBarberProfileCreateError(
-  error: unknown
-): BarberProfileCreateFailure {
+export function describeBarberProfileFailure(
+  error: unknown,
+  fallback: string
+): BarberProfileFailure {
   if (!(error instanceof ApiError)) {
-    return { field: null, message: t(FALLBACK_ERROR), canRetry: false }
+    return { field: null, message: t(fallback), canRetry: false }
   }
 
   const fieldError = FIELD_ERRORS.find((entry) => error.hasCode(entry.code))
@@ -131,9 +137,16 @@ export function describeBarberProfileCreateError(
 
   return {
     field: null,
-    message: describeApiFailure(error, FALLBACK_ERROR),
+    message: describeApiFailure(error, fallback),
     canRetry: isRetryable(error.status),
   }
+}
+
+/** Отказ `POST /api/barber-profiles`; тексты онбординга не меняются. */
+export function describeBarberProfileCreateError(
+  error: unknown
+): BarberProfileCreateFailure {
+  return describeBarberProfileFailure(error, FALLBACK_ERROR)
 }
 
 /** `0` — запрос не дошёл, `429` — лимит, `5xx` — сервер: профиль не создан, повторяем. */

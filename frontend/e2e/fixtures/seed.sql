@@ -23,16 +23,17 @@
 --                               «/account» по две страницы (20 + одна строка)
 --   e2e-mutations               12 своих отзывов (вторая страница — 2 строки) + 2 свободные
 --                               записи под восстановление после удаления отзыва
---   B2…B13                      12 барберов, по 2 опубликованных отзыва; 13 профилей в «Москве»
+--   B2…B13                      12 барберов, по 2 опубликованных отзыва; 14 профилей в «Москве»
 --   B14 (9e100000-…-0014)        профиль БЕЗ подтверждения, без услуг и салона: единственная
 --                               строка блока «Барберы без подтверждения» в `/admin/summary`
+--   profileBarber (…-0015)       отдельный подтверждённый барбер `/barber/profile`: без услуг,
+--                               специализаций и броней; его услуги мутирует только #83
 --   2 отзыва на модерации       вкладка «На модерации» админки
 --   e2e-applicant               клиент без заявки «Стать барбером» (#46): спек подаёт
 --                               заявку с нуля, админ отклоняет её с причиной; секция 1
 --                               удаляет заявки фикстур, поэтому повторный прогон не 409
---   28 пользователей            две страницы админки: «1–20» и вторая; в CI к ним
+--   29 пользователей            две страницы админки: «1–20» и вторая; в CI к ним
 --                               добавляется `ci-owner` из `backend/load/seed/minimal.sql`
---                               (29 всего)
 --   25 строк audit_log           журнал `/admin/audit` на 2026-09-10 UTC:
 --                               страница «1–20», вторая «21–25», фильтры по дате,
 --                               типу и автору (+ salon/hair_service/specialization/booking)
@@ -62,6 +63,14 @@ WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
 
 DELETE FROM bookings
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@barbersearch.test');
+
+-- Гостевые записи мутирующих спеков (`POST /api/barber/bookings`): у них нет
+-- `user_id`, поэтому сброс по пользователям фикстур их не ловит. Без этой строки
+-- второй прогон за тот же день видит в ленте дня чужие визиты прошлого прогона и
+-- не находит окно между ними (`barber-cabinet-mutations.spec.ts`).
+DELETE FROM bookings
+WHERE user_id IS NULL
+  AND guest_phone IS NOT NULL;
 
 -- Заявки «Стать барбером» (#46): мутирующий спек подаёт заявку клиенту
 -- `e2e-applicant`, а админ её отклоняет. Без этого удаления второй прогон получил бы
@@ -207,6 +216,40 @@ ON CONFLICT (id) DO UPDATE SET
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
     barber_profile_id = NULL,
+    failed_login_attempts = 0,
+    lockout_end = NULL,
+    updated_at = now();
+
+-- 2.2 Барбер своего профиля (#83).
+--
+-- Отдельный аккаунт для `/barber/profile`: он правит карточку, прайс и
+-- специализации, поэтому не должен делить строки с витринным барбером и его
+-- бронями. Профиль ниже подтверждён и активен (публичная карточка `/barbers/{id}`
+-- обязана отвечать `200`), но услуг у него нет — счётчики каталога не двигаются.
+--
+-- `barber_profile_id` в ON CONFLICT не трогаем: профиль не удаляется, а ссылку
+-- выставляет блок 4.2 после его вставки (FK `users → barber_profiles`).
+INSERT INTO users
+    (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
+     is_email_verified, is_phone_verified, role, is_active, last_login_at,
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
+VALUES
+    ('9e000000-0000-4000-8000-000000000115', 'e2e-profile-barber@barbersearch.test',
+     'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
+     'Профиль', 'Барберов', '+70000000115', NULL,
+     true, false, 2, true, NULL,
+     NULL,
+     timestamptz '2026-09-01 10:07+00', timestamptz '2026-09-01 10:07+00',
+     'e2e-stamp-profile-barber', 0)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    phone_number = EXCLUDED.phone_number,
+    is_active = EXCLUDED.is_active,
+    is_email_verified = EXCLUDED.is_email_verified,
+    role = EXCLUDED.role,
     failed_login_attempts = 0,
     lockout_end = NULL,
     updated_at = now();
@@ -538,6 +581,107 @@ ON CONFLICT (id) DO UPDATE SET
     end_time = EXCLUDED.end_time,
     is_day_off = EXCLUDED.is_day_off,
     updated_at = now();
+
+-- 4.2 Изолированный профиль `/barber/profile` (#83).
+--
+-- Подтверждён и активен: публичная карточка `/barbers/{id}` доступна, поэтому
+-- мутирующий спек проверяет на ней услугу, цену и скрытие. Ни услуг, ни
+-- специализаций, ни броней нет: витринные счётчики (`usageCount` услуги,
+-- `unverifiedCount` сводки) этот профиль не двигает.
+--
+-- Идемпотентность: поля карточки перезаписываются, а строки прайса и
+-- специализаций удаляются целиком — второй прогон не приходит с изменённым
+-- `bio` и скрытой услугой прошлого прогона. Салон и недельный график — upsert
+-- по фиксированным id.
+DELETE FROM barber_services
+WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
+
+DELETE FROM barber_specializations
+WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
+
+INSERT INTO barber_profiles
+    (id, user_id, display_name, grade, bio, languages, years_of_experience,
+     certificates_and_training, rating, reviews_count, achievements,
+     payment_methods, communication_format, goodies, late_policy,
+     is_active, is_verified, created_at, updated_at)
+VALUES
+    ('9e100000-0000-4000-8000-000000000015',
+     '9e000000-0000-4000-8000-000000000115',
+     'E2E Барбер Кабинета',
+     5,
+     'E2E-профиль: карточка, услуги и специализации.',
+     ARRAY[1, 2],
+     7,
+     ARRAY['E2E certificate'],
+     NULL,
+     0,
+     ARRAY[]::text[],
+     ARRAY[1, 2],
+     ARRAY['Friendly'],
+     ARRAY['Coffee'],
+     '10 minutes',
+     true,
+     true,
+     '2026-09-01 10:07+00',
+     '2026-09-01 10:07+00')
+ON CONFLICT (id) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    display_name = EXCLUDED.display_name,
+    bio = EXCLUDED.bio,
+    years_of_experience = EXCLUDED.years_of_experience,
+    late_policy = EXCLUDED.late_policy,
+    languages = EXCLUDED.languages,
+    payment_methods = EXCLUDED.payment_methods,
+    certificates_and_training = EXCLUDED.certificates_and_training,
+    achievements = EXCLUDED.achievements,
+    communication_format = EXCLUDED.communication_format,
+    goodies = EXCLUDED.goodies,
+    rating = EXCLUDED.rating,
+    reviews_count = EXCLUDED.reviews_count,
+    is_active = EXCLUDED.is_active,
+    is_verified = EXCLUDED.is_verified,
+    updated_at = now();
+
+INSERT INTO barber_salons
+    (id, barber_profile_id, salon_id, is_primary, created_at, updated_at)
+VALUES
+    ('9e200000-0000-4000-8000-000000000015',
+     '9e100000-0000-4000-8000-000000000015',
+     '9e400000-0000-4000-8000-000000000001',
+     true,
+     now(),
+     now())
+ON CONFLICT (id) DO UPDATE SET
+    barber_profile_id = EXCLUDED.barber_profile_id,
+    salon_id = EXCLUDED.salon_id,
+    is_primary = EXCLUDED.is_primary,
+    updated_at = now();
+
+-- Неделя 09:00–18:00 на привязке 0015. Профиль подтверждён и привязан к
+-- московскому салону, поэтому в поиске по городу он — 14-я карточка;
+-- `search-login.spec.ts` ждёт 14, а счётчик услуги каталога остаётся 13
+-- (`usageCount` считает активные услуги, которых у этого профиля нет).
+INSERT INTO working_schedules
+    (id, barber_salon_id, day_of_week, start_time, end_time, is_day_off, created_at, updated_at)
+SELECT
+    md5('e2e-profile-working-schedule:' || d)::uuid,
+    '9e200000-0000-4000-8000-000000000015'::uuid,
+    d,
+    '09:00'::time,
+    '18:00'::time,
+    false,
+    now(),
+    now()
+FROM generate_series(0, 6) AS d
+ON CONFLICT (id) DO UPDATE SET
+    start_time = EXCLUDED.start_time,
+    end_time = EXCLUDED.end_time,
+    is_day_off = EXCLUDED.is_day_off,
+    updated_at = now();
+
+UPDATE users
+SET barber_profile_id = '9e100000-0000-4000-8000-000000000015', updated_at = now()
+WHERE id = '9e000000-0000-4000-8000-000000000115';
 
 -- 5. Записи. Колонки одинаковые, меняются владелец, барбер и время.
 --    Статусы: 1 Pending, 2 Confirmed, 3 Cancelled, 4 Completed, 5 NoShow.

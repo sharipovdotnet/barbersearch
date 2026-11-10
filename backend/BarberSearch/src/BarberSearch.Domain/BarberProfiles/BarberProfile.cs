@@ -554,11 +554,50 @@ public class BarberProfile : AggregateRoot
     /// <summary>
     /// Добавляет услугу барбера. Дубликат определяется по <c>HairServiceId</c>.
     /// </summary>
+    /// <remarks>
+    /// Строка услуги живёт до конца жизни профиля: «удаление» — это
+    /// <see cref="DeactivateService"/>, а повторное добавление той же услуги реактивирует
+    /// существующую строку и перезаписывает цену и длительность. Дубликатом считается только
+    /// <b>активная</b> строка; выключенная — это та же услуга, которую возвращают в прайс.
+    /// <para>
+    /// Валидация цены и длительности идёт до <c>Activate()</c>: при ошибке строка обязана
+    /// остаться выключенной, иначе агрегат останется в противоречии с ответом клиенту.
+    /// </para>
+    /// </remarks>
     public UnitResult<Failure> AddService(
         Guid hairServiceId,
         decimal price,
         int durationMinutes)
     {
+        var existing = _services.FirstOrDefault(s => s.HairServiceId == hairServiceId);
+
+        if (existing is not null)
+        {
+            if (existing.IsActive)
+            {
+                return new Failure(Error.Conflict(
+                    "barberProfile.addService.duplicate",
+                    "This service already exists in the barber profile."));
+            }
+
+            var priceUpdated = existing.UpdatePrice(price);
+            if (priceUpdated.IsFailure)
+            {
+                return priceUpdated.Error;
+            }
+
+            var durationUpdated = existing.UpdateDuration(durationMinutes);
+            if (durationUpdated.IsFailure)
+            {
+                return durationUpdated.Error;
+            }
+
+            existing.Activate();
+            MarkUpdated();
+
+            return DomainErrors.Ok();
+        }
+
         var errors = DomainErrors.Collect();
 
         if (price < 0)
@@ -581,13 +620,6 @@ public class BarberProfile : AggregateRoot
                 nameof(durationMinutes)));
         }
 
-        if (_services.Any(s => s.HairServiceId == hairServiceId))
-        {
-            errors.Add(Error.Conflict(
-                "barberProfile.addService.duplicate",
-                "This service already exists in the barber profile."));
-        }
-
         if (errors.Count != 0)
         {
             return new Failure(errors);
@@ -599,11 +631,60 @@ public class BarberProfile : AggregateRoot
         return DomainErrors.Ok();
     }
 
-    public UnitResult<Failure> RemoveService(Guid hairServiceId)
+    /// <summary>
+    /// Меняет цену и длительность уже добавленной услуги — активной или выключенной.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный метод, чтобы правка прайса не проходила парой «скрыть и добавить заново»:
+    /// скрытие меняло бы состояние услуги, а повторное добавление — историю. Неизвестный
+    /// <paramref name="hairServiceId"/> — <c>barberProfile.updateService.notFound</c>.
+    /// </remarks>
+    public UnitResult<Failure> UpdateService(
+        Guid hairServiceId,
+        decimal price,
+        int durationMinutes)
     {
-        var removed = _services.RemoveAll(s => s.HairServiceId == hairServiceId);
+        var service = _services.FirstOrDefault(s => s.HairServiceId == hairServiceId);
 
-        if (removed == 0)
+        if (service is null)
+        {
+            return new Failure(Error.NotFound(
+                "barberProfile.updateService.notFound",
+                "The barber does not provide this service.",
+                hairServiceId));
+        }
+
+        var priceUpdated = service.UpdatePrice(price);
+        if (priceUpdated.IsFailure)
+        {
+            return priceUpdated.Error;
+        }
+
+        var durationUpdated = service.UpdateDuration(durationMinutes);
+        if (durationUpdated.IsFailure)
+        {
+            return durationUpdated.Error;
+        }
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Скрывает услугу из прайса: строка остаётся в агрегате и в БД.
+    /// </summary>
+    /// <remarks>
+    /// Физическое удаление строки <c>barber_services</c> выкидывало бы сделанные на неё брони
+    /// из списков клиента, барбера и админки: те строятся внутренними join'ами
+    /// <c>bookings → barber_services → hair_services</c>. Поэтому «удаление» — это
+    /// <c>IsActive = false</c>. Повторный вызов идемпотентен: уже выключенная строка — успех.
+    /// </remarks>
+    public UnitResult<Failure> DeactivateService(Guid hairServiceId)
+    {
+        var service = _services.FirstOrDefault(s => s.HairServiceId == hairServiceId);
+
+        if (service is null)
         {
             return new Failure(Error.NotFound(
                 "barberProfile.removeService.notFound",
@@ -611,6 +692,7 @@ public class BarberProfile : AggregateRoot
                 hairServiceId));
         }
 
+        service.Deactivate();
         MarkUpdated();
 
         return DomainErrors.Ok();

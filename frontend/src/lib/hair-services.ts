@@ -6,14 +6,15 @@ import { isHairServiceList } from '@/lib/response-guards'
  * Публичный справочник услуг.
  *
  * `GET api/hair-services` отдаёт голый массив активных строк без пагинации.
- * Длительность и описание UI фильтра не читает, поэтому в типе их нет: guard
- * пропускает лишние поля сервера.
+ * `defaultDurationMinutes` — длительность по умолчанию: ею предзаполняется диалог
+ * добавления услуги в прайс барбера, поэтому поле обязательно в контракте.
  */
 
 export type HairServiceOption = {
   id: string
   name: string
   category: ServiceCategory
+  defaultDurationMinutes: number
 }
 
 /** Активные услуги в порядке сервера (категория, затем имя). */

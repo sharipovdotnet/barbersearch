@@ -890,11 +890,163 @@ public class BarberProfileTests
     }
 
     [Fact]
-    public void RemoveService_WhenMissing_ReturnsNotFound()
+    public void AddService_WhenInactiveRowExists_ReactivatesItAndOverwritesPriceAndDuration()
+    {
+        // §3.5: повторное добавление той же услуги — это возврат в прайс, а не новая строка:
+        // unique-индекс (barber_profile_id, hair_service_id) вторую строку не пустит.
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+        profile.DeactivateService(hairServiceId);
+
+        var result = profile.AddService(hairServiceId, 2000m, 60);
+
+        Assert.True(result.IsSuccess);
+        var service = Assert.Single(profile.Services);
+        Assert.Equal(hairServiceId, service.HairServiceId);
+        Assert.True(service.IsActive);
+        Assert.Equal(2000m, service.Price);
+        Assert.Equal(60, service.DurationMinutes);
+    }
+
+    [Fact]
+    public void AddService_WhenInactiveRowExistsAndPriceIsNegative_KeepsRowInactive()
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+        profile.DeactivateService(hairServiceId);
+
+        var result = profile.AddService(hairServiceId, -1m, 60);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberService.updatePrice", result.Error.Errors[0].Code);
+
+        // Флаг не тронут: валидация идёт до Activate(), агрегат не противоречит ответу.
+        var service = Assert.Single(profile.Services);
+        Assert.False(service.IsActive);
+        Assert.Equal(1500m, service.Price);
+        Assert.Equal(45, service.DurationMinutes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1441)]
+    public void AddService_WhenInactiveRowExistsAndDurationIsInvalid_KeepsRowInactive(
+        int durationMinutes)
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+        profile.DeactivateService(hairServiceId);
+
+        var result = profile.AddService(hairServiceId, 2000m, durationMinutes);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberService.updateDuration", result.Error.Errors[0].Code);
+        Assert.False(Assert.Single(profile.Services).IsActive);
+    }
+
+    [Fact]
+    public void UpdateService_ChangesPriceAndDurationOfActiveRow()
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+
+        var result = profile.UpdateService(hairServiceId, 2000m, 60);
+
+        Assert.True(result.IsSuccess);
+        var service = Assert.Single(profile.Services);
+        Assert.True(service.IsActive);
+        Assert.Equal(2000m, service.Price);
+        Assert.Equal(60, service.DurationMinutes);
+    }
+
+    [Fact]
+    public void UpdateService_ChangesPriceAndDurationOfInactiveRow()
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+        profile.DeactivateService(hairServiceId);
+
+        var result = profile.UpdateService(hairServiceId, 2000m, 60);
+
+        Assert.True(result.IsSuccess);
+        var service = Assert.Single(profile.Services);
+        Assert.False(service.IsActive);
+        Assert.Equal(2000m, service.Price);
+        Assert.Equal(60, service.DurationMinutes);
+    }
+
+    [Fact]
+    public void UpdateService_WhenMissing_ReturnsNotFound()
     {
         var profile = CreateProfile();
 
-        var result = profile.RemoveService(Guid.CreateVersion7());
+        var result = profile.UpdateService(Guid.CreateVersion7(), 2000m, 60);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberProfile.updateService.notFound", result.Error.Errors[0].Code);
+        Assert.Empty(profile.Services);
+    }
+
+    [Fact]
+    public void UpdateService_WithInvalidPrice_KeepsPreviousValues()
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+
+        var result = profile.UpdateService(hairServiceId, -1m, 60);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barberService.updatePrice", result.Error.Errors[0].Code);
+
+        var service = Assert.Single(profile.Services);
+        Assert.Equal(1500m, service.Price);
+        Assert.Equal(45, service.DurationMinutes);
+    }
+
+    [Fact]
+    public void DeactivateService_ClearsFlagAndKeepsTheRow()
+    {
+        // §8: строка остаётся в агрегате (и в БД) — иначе брони, сделанные на неё,
+        // исчезнут из списков клиента, барбера и админки.
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+
+        var result = profile.DeactivateService(hairServiceId);
+
+        Assert.True(result.IsSuccess);
+        var service = Assert.Single(profile.Services);
+        Assert.Equal(hairServiceId, service.HairServiceId);
+        Assert.False(service.IsActive);
+    }
+
+    [Fact]
+    public void DeactivateService_IsIdempotent()
+    {
+        var profile = CreateProfile();
+        var hairServiceId = Guid.CreateVersion7();
+        profile.AddService(hairServiceId, 1500m, 45);
+
+        var first = profile.DeactivateService(hairServiceId);
+        var second = profile.DeactivateService(hairServiceId);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.False(Assert.Single(profile.Services).IsActive);
+    }
+
+    [Fact]
+    public void DeactivateService_WhenMissing_ReturnsNotFound()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.DeactivateService(Guid.CreateVersion7());
 
         Assert.True(result.IsFailure);
         Assert.Equal("barberProfile.removeService.notFound", result.Error.Errors[0].Code);

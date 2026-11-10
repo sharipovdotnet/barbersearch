@@ -31,20 +31,22 @@ public abstract class ApiController : ControllerBase
 
     /// <summary>
     /// Ответ на создание ресурса: 201 с идентификатором созданной сущности при успехе,
-    /// <see cref="ProblemDetails"/> при провале.
+    /// <see cref="ProblemDetails"/> при провале. Заголовок <c>Location</c> не выставляется.
     /// </summary>
     /// <remarks>
-    /// Заголовок <c>Location</c> сознательно не выставляется — решение R-42 от 2026-10-25:
-    /// ни у одного из восьми create-эндпоинтов нет self-URI, читаемого сразу после создания.
-    /// <c>GET api/bookings</c> и <c>GET api/reviews</c> — только списки (созданный отзыв к тому же
-    /// скрыт до публикации), у <c>salons</c> и <c>users</c> чтения нет, у <c>hair-services</c>
-    /// и <c>specializations</c> есть только публичные списки активных строк
-    /// (<c>GET api/hair-services</c>, <c>GET api/specializations</c>) без чтения по id,
-    /// <c>GET api/auth/me</c> — не ресурс по id, а единственный GET по id
-    /// среди них, <c>GET api/barbers/{id}</c>, отдаёт лишь активный и подтверждённый профиль
-    /// (<c>GetCardByIdAsync</c>: <c>IsActive &amp;&amp; IsVerified</c>) и сразу после создания
-    /// отвечает 404. Ссылка в никуда хуже её отсутствия. Пересмотреть, когда у созданного ресурса
-    /// появится GET по id: тогда здесь <c>CreatedAtAction</c> / <c>Created(uri, value)</c>.
+    /// Правило R-42 от 2026-10-25: заголовок <c>Location</c> не выставляется, пока у созданного
+    /// ресурса нет self-URI, читаемого сразу после создания. Пересмотрено 2026-11-10 (issue-83):
+    /// такой URI появился у профиля барбера — <c>GET api/barber-profiles/{id}</c> отдаёт
+    /// собственный профиль владельца независимо от верификации. Поэтому
+    /// <c>POST api/barber-profiles</c> больше не идёт через этот метод: он строит
+    /// <c>CreatedAtAction(nameof(Get), …)</c> и отвечает <c>201</c> с
+    /// <c>Location: /api/barber-profiles/{id}</c>. Остальные create-эндпоинты правило
+    /// по-прежнему описывает: <c>GET api/bookings</c> и <c>GET api/reviews</c> — только списки
+    /// (созданный отзыв к тому же скрыт до публикации), у <c>salons</c> и <c>users</c> чтения
+    /// по id нет, у <c>hair-services</c> и <c>specializations</c> — только публичные списки
+    /// активных строк, <c>GET api/auth/me</c> — не ресурс по id, а публичный
+    /// <c>GET api/barbers/{id}</c> отдаёт лишь активный и подтверждённый профиль и сразу после
+    /// создания отвечает 404. Для них ссылка в никуда хуже её отсутствия.
     /// </remarks>
     protected ActionResult<CreatedResourceResponse> ToCreatedResult(Result<Guid, Failure> result)
         => result.IsSuccess

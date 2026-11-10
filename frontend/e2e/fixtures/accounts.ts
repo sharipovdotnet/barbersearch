@@ -11,6 +11,7 @@ export const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173'
 export const roles = [
   'admin',
   'barber',
+  'profileBarber',
   'newBarber',
   'customer',
   'mutations',
@@ -32,6 +33,15 @@ export const accounts: Record<Role, Account> = {
   barber: {
     email: process.env.E2E_BARBER_EMAIL ?? 'e2e-barber@barbersearch.test',
     password: process.env.E2E_BARBER_PASSWORD ?? 'e2e-password',
+  },
+  // Отдельный барбер со своим подтверждённым профилем: экран `/barber/profile`
+  // правит карточку, услуги и специализации, поэтому мутации не должны трогать
+  // витринного барбера и его брони. Сид держит прайс и специализации пустыми.
+  profileBarber: {
+    email:
+      process.env.E2E_PROFILE_BARBER_EMAIL ??
+      'e2e-profile-barber@barbersearch.test',
+    password: process.env.E2E_PROFILE_BARBER_PASSWORD ?? 'e2e-password',
   },
   // Барбер с ролью, но без профиля: онбординг `/barber/onboarding` создаёт его
   // впервые. Сид каждый раз удаляет профиль, созданный прошлым прогоном.
@@ -62,6 +72,15 @@ export const fixtures = {
   barberProfileId: '9e100000-0000-4000-8000-000000000001',
   barberServiceId: '9e300000-0000-4000-8000-000000000001',
   salonId: '9e400000-0000-4000-8000-000000000001',
+  /**
+   * Изолированный профиль `/barber/profile`: подтверждён и активен, поэтому
+   * публичная карточка `/barbers/{id}` доступна, но услуг, специализаций и
+   * броней у него нет — счётчики витрины он не двигает. Мутирует только он.
+   */
+  profileBarber: {
+    profileId: '9e100000-0000-4000-8000-000000000015',
+    userId: '9e000000-0000-4000-8000-000000000115',
+  },
   /** Барбер B2: ближайшая запись клиента и восстановление после её отмены. */
   customerBarberProfileId: '9e100000-0000-4000-8000-000000000002',
   customerBarberServiceId: '9e300000-0000-4000-8000-000000000002',
@@ -98,7 +117,11 @@ export const fixtures = {
     activeSalon: 'E2E Studio',
     hiddenSalon: 'E2E Studio Nord',
   },
-  /** Число барберов фикстур: `usageCount` активной услуги и активного салона. */
+  /**
+   * Число барберов фикстур с **активной услугой** `E2E Стрижка`: её `usageCount`
+   * в админском каталоге. Изолированный `profileBarber` услуг не имеет, поэтому
+   * счётчик остаётся 13; счётчик салона 0001 этим профилем не проверяется.
+   */
   barbersUsingActiveCatalogueRows: 13,
   /**
    * Салон сценария #48: барбер создаёт его через `POST /api/salons/own`, админ

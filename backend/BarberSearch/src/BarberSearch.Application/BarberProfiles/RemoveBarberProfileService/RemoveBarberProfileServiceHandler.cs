@@ -26,8 +26,13 @@ public class RemoveBarberProfileServiceHandler : ICommandHandler<RemoveBarberPro
     }
 
     /// <summary>
-    /// Загружает профиль с услугами, удаляет услугу и сохраняет агрегат.
+    /// Загружает профиль с услугами, скрывает услугу (деактивация) и сохраняет агрегат.
     /// </summary>
+    /// <remarks>
+    /// Имя класса и команды осталось прежним — это имя ручки <c>DELETE .../services</c>, —
+    /// но строка <c>barber_services</c> физически не удаляется: см.
+    /// <c>BarberProfile.DeactivateService</c>. Повторный вызов на уже скрытой услуге успешен.
+    /// </remarks>
     public async Task<UnitResult<Failure>> Handle(
         RemoveBarberProfileServiceCommand command,
         CancellationToken cancellationToken)
@@ -48,10 +53,10 @@ public class RemoveBarberProfileServiceHandler : ICommandHandler<RemoveBarberPro
             return allowed.Error;
         }
 
-        var removed = profile.RemoveService(command.HairServiceId);
-        if (removed.IsFailure)
+        var hidden = profile.DeactivateService(command.HairServiceId);
+        if (hidden.IsFailure)
         {
-            return removed.Error;
+            return hidden.Error;
         }
 
         var saved = await _repository.UpdateAsync(profile, cancellationToken);
@@ -61,7 +66,7 @@ public class RemoveBarberProfileServiceHandler : ICommandHandler<RemoveBarberPro
         }
 
         _logger.LogInformation(
-            "Service {HairServiceId} has been removed from barber profile {BarberProfileId}.",
+            "Service {HairServiceId} has been hidden from barber profile {BarberProfileId}.",
             command.HairServiceId,
             profile.Id);
 

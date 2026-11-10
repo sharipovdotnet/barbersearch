@@ -5,12 +5,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { BarberProfileForm } from '@/components/barber/barber-profile-form'
 import type { BarberProfilePrefill } from '@/components/barber/barber-profile-form'
-import { problemDetails } from '@/test/msw/handlers'
+import {
+  noContent,
+  problemDetails,
+  testBarberProfile,
+} from '@/test/msw/handlers'
 import { countRequests, recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 const CREATE_URL = '/api/barber-profiles'
 const CREATED_ID = '77777777-7777-4777-8777-777777777777'
+const PROFILE_URL = `/api/barber-profiles/${testBarberProfile.id}`
 
 /** Тело создания профиля целиком: экран не вправе придумывать лишние поля. */
 const EXPECTED_BODY = {
@@ -383,5 +388,114 @@ describe('BarberProfileForm', () => {
       additionalServices: [],
       latePolicy: null,
     })
+  })
+})
+
+describe('BarberProfileForm: правка профиля', () => {
+  function renderEdit(onSaved = vi.fn()) {
+    render(
+      <BarberProfileForm
+        mode="edit"
+        initial={testBarberProfile}
+        onSaved={onSaved}
+      />
+    )
+
+    return { onSaved }
+  }
+
+  it('заполняет поля из профиля, грейда-выбора нет, есть строка грейда', () => {
+    renderEdit()
+
+    expect(screen.getByLabelText('Как вас представить')).toHaveValue(
+      'Иван Петров'
+    )
+    expect(screen.getByLabelText('Опыт, лет')).toHaveValue(10)
+    expect(screen.getByLabelText('О себе')).toHaveValue('Стригу с 2015 года.')
+    expect(screen.getByLabelText('Опоздания')).toHaveValue(
+      'Жду максимум 10 минут.'
+    )
+    expect(screen.getByLabelText('Сертификаты и обучение')).toHaveValue(
+      'Курс барберинга'
+    )
+
+    expect(screen.queryByLabelText('Грейд')).not.toBeInTheDocument()
+    expect(screen.getByText('Грейд: Старший барбер')).toBeInTheDocument()
+    expect(
+      screen.getByText('Грейд назначает администратор')
+    ).toBeInTheDocument()
+  })
+
+  it('«Сохранить» заблокирована без изменений и включается после правки', () => {
+    renderEdit()
+
+    const save = screen.getByRole('button', { name: 'Сохранить' })
+
+    expect(save).toBeDisabled()
+
+    change('О себе', 'Новое описание')
+
+    expect(save).toBeEnabled()
+
+    change('О себе', 'Стригу с 2015 года.')
+
+    expect(save).toBeDisabled()
+  })
+
+  it('отправляет один PUT без grade, latePolicy пустой — строка, а не null', async () => {
+    const putCalls = countRequests(PROFILE_URL)
+    let body: unknown = null
+
+    server.use(
+      http.put(PROFILE_URL, async ({ request }) => {
+        body = await request.json()
+
+        return noContent()
+      })
+    )
+
+    const { onSaved } = renderEdit()
+
+    change('О себе', 'Стрижки, борода и укладка.')
+    change('Опоздания', '')
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    })
+
+    expect(putCalls()).toBe(1)
+    expect(body).not.toHaveProperty('grade')
+    expect(body).toMatchObject({
+      displayName: 'Иван Петров',
+      yearsOfExperience: 10,
+      bio: 'Стрижки, борода и укладка.',
+      latePolicy: '',
+    })
+  })
+
+  it('400 «слишком длинное имя» показывается у поля, форма остаётся живой', async () => {
+    server.use(
+      http.put(PROFILE_URL, () =>
+        HttpResponse.json(
+          problemDetails(400, {
+            errorCodes: ['barberProfile.displayName.tooLong'],
+          }),
+          { status: 400 }
+        )
+      )
+    )
+
+    renderEdit()
+
+    change('О себе', 'Новое описание')
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+
+    expect(
+      await screen.findByText('Не длиннее 120 символов.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Сохранить' })
+    ).toBeEnabled()
   })
 })

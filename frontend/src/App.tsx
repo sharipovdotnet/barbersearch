@@ -17,6 +17,7 @@ import {
   isBarberImportPath,
   isBarberNotificationsPath,
   isBarberOnboardingPath,
+  isBarberProfilePath,
   isBarberSalonsPath,
   isBarberSchedulePath,
 } from '@/lib/barber-cabinet-path'
@@ -85,6 +86,12 @@ const BarberSchedulePage = lazy(() =>
 const BarberSalonsPage = lazy(() =>
   import('@/pages/barber-salons-page').then((module) => ({
     default: module.BarberSalonsPage,
+  })),
+)
+
+const BarberProfilePage = lazy(() =>
+  import('@/pages/barber-profile-page').then((module) => ({
+    default: module.BarberProfilePage,
   })),
 )
 
@@ -172,6 +179,7 @@ function App() {
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const isBarberSchedule = isBarberSchedulePath(pathname)
   const isBarberSalons = isBarberSalonsPath(pathname)
+  const isBarberProfile = isBarberProfilePath(pathname)
   const isBarberOnboarding = isBarberOnboardingPath(pathname)
   const isBarberImport = isBarberImportPath(pathname)
   const isBarberNotifications = isBarberNotificationsPath(pathname)
@@ -199,19 +207,21 @@ function App() {
                         ? 'barber-schedule'
                         : isBarberSalons
                           ? 'barber-salons'
-                          : isBarberCabinet
-                            ? 'barber-cabinet'
-                            : isVerifyEmail
-                              ? 'verify-email'
-                              : isForgotPassword
-                                ? 'forgot-password'
-                                : isResetPassword
-                                  ? 'reset-password'
-                                  : pathname === '/account'
-                                    ? 'account'
-                                    : barberId !== null
-                                      ? `barber:${barberId}`
-                                      : 'home'
+                          : isBarberProfile
+                            ? 'barber-profile'
+                            : isBarberCabinet
+                              ? 'barber-cabinet'
+                              : isVerifyEmail
+                                ? 'verify-email'
+                                : isForgotPassword
+                                  ? 'forgot-password'
+                                  : isResetPassword
+                                    ? 'reset-password'
+                                    : pathname === '/account'
+                                      ? 'account'
+                                      : barberId !== null
+                                        ? `barber:${barberId}`
+                                        : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -270,6 +280,8 @@ function App() {
               <BarberSchedulePage />
             ) : isBarberSalons ? (
               <BarberSalonsPage />
+            ) : isBarberProfile ? (
+              <BarberProfilePage />
             ) : isBarberCabinet ? (
               <BarberCabinetPage />
             ) : pathname === '/account' ? (

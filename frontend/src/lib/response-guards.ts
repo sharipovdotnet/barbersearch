@@ -533,13 +533,20 @@ export function isSalonBarber(value: unknown): value is SalonBarber {
 
 export const isSalonBarberList = isArrayOf(isSalonBarber)
 
-/** Строка публичного справочника услуг; длительность и описание UI не читает. */
+/**
+ * Строка публичного справочника услуг.
+ *
+ * `defaultDurationMinutes` обязателен: диалог добавления услуги в прайс берёт его
+ * как стартовое значение, поэтому ответ без поля — битый контракт, а не «почти
+ * подходящая» строка.
+ */
 export function isHairServiceOption(value: unknown): value is HairServiceOption {
   return (
     isRecord(value) &&
     isNonEmptyString(value.id) &&
     isString(value.name) &&
-    isServiceCategory(value.category)
+    isServiceCategory(value.category) &&
+    isNumber(value.defaultDurationMinutes)
   )
 }
 
