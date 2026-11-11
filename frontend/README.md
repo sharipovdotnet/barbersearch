@@ -306,10 +306,21 @@ directory should be emptied when it grows.
 
 ## Avatar
 
-A signed-in user can upload one profile photo. It is shown in the cabinet shell (the identity
-block), in the avatar card at `/account/profile`, and — for a barber — in the hero of the public
-card at `/barbers/{id}`. There is no avatar in the header, in search results, in bookings or on the
-admin screens beyond the user and barber cards that already had an `avatarUrl` field.
+A signed-in user can upload one profile photo. It is shown in the header account menu, in the
+cabinet shell (the identity block), in the avatar card at `/account/profile`, on every barber card
+in search results, in the client cabinet booking lists (the row and «Ближайшая запись»), in the
+barber cabinet customer rows and in the admin booking list and detail — for both the customer and
+the barber. For a barber the photo also appears in the hero of the public card at `/barbers/{id}`.
+Every image is decorative (`alt=""`) and the initials remain the fallback.
+
+**One profile cache.** `ProfileProvider` (`src/components/profile-provider.tsx`) is mounted once in
+`main.tsx` inside `SessionProvider`; `useMyProfile()` reads its context, and the old module cache
+keyed by user id is gone. The header and the cabinet share one state, so the cost is exactly one
+`GET /api/users/me` per authenticated page load and zero for an anonymous visitor, with no second
+cache. `setAvatar` from the avatar card updates every subscriber — the header
+switches to the new photo (or back to the initials) immediately after an upload or delete, without
+a reload. A `401` only sets `requiresSignIn`: the session stays owned by `SessionProvider`; other
+profile errors leave the header on the initials.
 
 **Cabinet card.** `/account/profile` starts with «Аватар» above «Личные данные». The card shows a
 96 px preview: `AvatarImage` when `profile.avatarUrl` is set, otherwise the user's initials. The
@@ -334,8 +345,9 @@ the server's 300 px minimum always holds — on a white background, named `avata
 `multipart/form-data` with the single field `file` through `mutateWithCsrf` (fresh `X-CSRF-TOKEN`,
 one retry with the same `FormData` on `auth.csrf.invalid`), validates the `201 { avatarUrl }` with
 `isAvatarUploadResponse` (a relative `/api/media/avatars/...` URL), and deletes through
-`DELETE /api/users/me/avatar` (`204`, idempotent). `useMyProfile.setAvatar` updates the module cache
-and React state without a second `GET /api/users/me`; a later profile save still sends
+`DELETE /api/users/me/avatar` (`204`, idempotent). The provider's `setAvatar` updates the shared
+context without a second `GET /api/users/me`, so the header and every other consumer change at
+once; a later profile save still sends
 `avatarUrl` back unchanged, and after a successful upload or delete the card calls
 `invalidateBarberProfile(profile.barberProfileId)` so «Открыть, как видят клиенты» never shows the
 old public cache.
@@ -363,13 +375,18 @@ with the backend's `PrivacyPolicy.Version`; older consent records keep the editi
 
 - `e2e/specs/account-avatar-mutations.spec.ts` (`mutations` account): upload from
   `/account/profile`, `naturalWidth > 0` and `src` starting with `/api/media/avatars/`, the same
-  `src` in `AccountIdentity`, a reload that keeps it, an admin context that sees the same `src` in
+  `src` in `AccountIdentity` **and in the header account menu** (the initials `data-initials`
+  before it, no image), a reload that keeps both, an admin context that sees the same `src` in
   `/admin/users/{id}`, axe at 1280 and 320 (zero horizontal scroll, 44 px buttons), then deletion
-  through the `alertdialog` — initials return and the old media URL answers `404`.
+  through the `alertdialog` — the header and the identity block return to the initials without a
+  reload and the old media URL answers `404`.
 - `e2e/specs/public-barber-avatar-mutations.spec.ts` (`profileBarber`, the isolated profile):
   upload in the cabinet, `GET /api/barbers/{id}` returns the same `avatarUrl`, the hero shows a
-  real image, then deletion makes the contract return `avatarUrl: null` and the hero shows the
-  initials again. The showcase barber `…0001` is never touched.
+  real image, and a search by the `E2E поиск` marker (seeded for `…0015`) gives exactly one card
+  with the same `src`, `alt=""` and `naturalWidth > 0`; the contract
+  `GET /api/barbers?additionalService=…` returns the same URL. After deletion the card and the hero
+  show the initials again and the contract returns `avatarUrl: null`. The showcase barber `…0001`
+  is never touched.
 
 Successful scenes pass the uploaded URL to the next one; `afterEach` on a failure removes the
 avatar through `DELETE /api/users/me/avatar`, and `e2e/fixtures/seed.sql` resets `avatar_url` for
@@ -423,10 +440,10 @@ initials, name, email, role, unverified-email note), four section links and — 
 buttons, so all four sections stay visible at 320 px. The whole cabinet is open to every role; the
 old `RoleGate` that turned barbers and admins away is gone.
 
-The shell loads `GET /api/users/me` once per session (module cache keyed by user id) and provides
-the profile to the section screens through context, so the profile form does not issue its own
-read. The header shows «Мой кабинет» for everyone, «Кабинет барбера» for a barber and
-«Администрирование» for an admin; the avatar link points to `/account`.
+The shell reads the profile from `ProfileProvider`, which loads `GET /api/users/me` once per
+authenticated page load, and provides it to the section screens through context, so the profile
+form does not issue its own read. The header shows «Мой кабинет» for everyone, «Кабинет барбера»
+for a barber and «Администрирование» for an admin; the avatar link points to `/account`.
 
 ### Bookings
 
@@ -1659,9 +1676,11 @@ needs no API and no database, and covers:
   announcement, the type rejection without a request, `413`, `401`, the delete `alertdialog` and
   focus returning to the upload button, and a delete failure that keeps the dialog;
   `account-shell.test.tsx` and `barber-hero.test.tsx` prove `AvatarImage` appears when
-  `avatarUrl` is set and initials remain the fallback; `use-my-profile.test.tsx` proves
-  `setAvatar` updates the module cache and state without a second `GET` and that `save` sends the
-  new URL.
+  `avatarUrl` is set and initials remain the fallback; `profile-provider.test.tsx` proves one
+  profile read per authenticated load (zero for an anonymous visitor), `StrictMode` making no
+  second request, a changed user refetching, `setAvatar` reaching every subscriber without a second
+  `GET`, and `401` only setting `requiresSignIn`; `use-my-profile.test.tsx` keeps the #85
+  `setAvatar`/`save` scenarios on the context wrapper.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -1676,14 +1695,14 @@ Playwright drives the real SPA against the real API and a real PostgreSQL: there
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
 admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
 portfolio gallery with its lightbox (axe at 1280 and 320) and the admin blocking of a photo, the
-avatar upload in the cabinet and its public hero (axe at 1280 and 320, an admin sees the same
-image, deletion restores the initials), email
+avatar upload in the cabinet, its header and search appearances and its public hero (axe at 1280
+and 320, an admin sees the same image, deletion restores the initials), email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
-stays separate and fast; E2E never runs inside it. After the portfolio slice the full local run is
-**281 passed, 4 skipped, 0 failed**. The two avatar specs below were added after that run and are
-not part of the 281.
+stays separate and fast; E2E never runs inside it. After the avatar surfaces slice the full local
+run is **287 passed, 4 skipped, 0 failed**; the two avatar specs (header assertions and the search
+card) are part of that count.
 
 ### One-time setup
 
