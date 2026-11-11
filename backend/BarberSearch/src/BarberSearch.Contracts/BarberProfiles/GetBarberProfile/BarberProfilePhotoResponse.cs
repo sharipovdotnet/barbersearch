@@ -20,7 +20,11 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// </remarks>
 /// <param name="Id">Идентификатор фотографии.</param>
 /// <param name="Url">URL фотографии: относительный media-URL или абсолютная внешняя ссылка.</param>
-/// <param name="ThumbnailUrl">URL миниатюры либо <c>null</c>: миниатюр в этом срезе нет.</param>
+/// <param name="ThumbnailUrl">
+/// URL миниатюры: <c>{url}?size=md</c> для собственного media-URL и <c>null</c> для внешних
+/// легаси-ссылок, которые сервер не раздаёт. Вариант — тот же файл в другом размере, поэтому
+/// отдельной колонки в БД у поля нет.
+/// </param>
 /// <param name="Description">Подпись к фотографии либо <c>null</c>.</param>
 /// <param name="SortOrder">Порядковый номер в портфолио, начиная с 0.</param>
 /// <param name="IsPublished">Опубликована ли фотография владельцем.</param>

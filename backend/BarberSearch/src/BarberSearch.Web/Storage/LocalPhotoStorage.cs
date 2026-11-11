@@ -20,6 +20,13 @@ namespace BarberSearch.Web.Storage;
 /// MIME-тип общие.
 /// </para>
 /// <para>
+/// Рядом с исходником лежат производные варианты: <c>{mediaId:N}-{sm|md|lg}.webp</c> в том же
+/// каталоге. Загрузка пишет их сразу (best effort), а чтение варианта догенерирует файл, если
+/// его нет: так работают кадры, загруженные до среза, и кадры, чья генерация на загрузке
+/// упала. Если вариант невозможен, отдаётся исходник — сломанной картинки в <c>srcset</c>
+/// быть не может.
+/// </para>
+/// <para>
 /// Путь собирается только из разобранного media-URL (<see cref="PortfolioMediaUrl.TryParse"/>
 /// или <see cref="UserAvatarMediaUrl.TryParse"/>): листинга каталога, угадывания путей и приёма
 /// пути из query здесь нет. Дополнительно проверяется, что итоговый полный путь остался внутри
@@ -83,19 +90,26 @@ public sealed class LocalPhotoStorage : IPhotoStorage
     private const string UNKNOWN_CONTENT_TYPE = "application/octet-stream";
 
     private readonly string _rootPath;
+    private readonly IPhotoThumbnailer _thumbnailer;
     private readonly ILogger<LocalPhotoStorage> _logger;
 
     /// <summary>
     /// Создаёт хранилище над каталогом из <see cref="PhotoStorageOptions"/>.
     /// </summary>
     /// <param name="options">Уже разрешённые настройки: каталог создан на старте.</param>
+    /// <param name="thumbnailer">Генератор WebP-вариантов: запись при загрузке и лениво.</param>
     /// <param name="logger">Журнал: ошибки удаления и записи без пути к файлу.</param>
-    public LocalPhotoStorage(PhotoStorageOptions options, ILogger<LocalPhotoStorage> logger)
+    public LocalPhotoStorage(
+        PhotoStorageOptions options,
+        IPhotoThumbnailer thumbnailer,
+        ILogger<LocalPhotoStorage> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(thumbnailer);
         ArgumentNullException.ThrowIfNull(logger);
 
         _rootPath = options.RootPath;
+        _thumbnailer = thumbnailer;
         _logger = logger;
     }
 
@@ -124,62 +138,81 @@ public sealed class LocalPhotoStorage : IPhotoStorage
         => SaveFileAsync(userId, mediaId, extension, content, isAvatar: true, cancellationToken);
 
     /// <inheritdoc />
-    public Task<Result<PhotoContent, Failure>> OpenReadAsync(
+    public async Task<Result<PhotoContent, Failure>> OpenReadAsync(
         string url,
+        PhotoVariant variant,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveFile(url, out var fullPath, out var isAvatar, out var ownerId))
+        if (!TryResolveFile(
+                url,
+                out var fullPath,
+                out var isAvatar,
+                out var ownerId,
+                out var mediaId))
         {
-            return Task.FromResult(NotFoundResult(isAvatar: false));
+            return NotFoundResult(isAvatar: false);
         }
 
         if (!IsInsideRoot(fullPath))
         {
-            return Task.FromResult(NotFoundResult(isAvatar));
+            return NotFoundResult(isAvatar);
         }
 
-        try
+        // Исходник — обычное чтение: вариант не запрашивали.
+        if (variant == PhotoVariant.Original)
         {
-            // FileShare.Read: параллельная раздача того же файла не блокируется,
-            // а удаление ждёт закрытия потока.
-            var stream = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            return Task.FromResult(Result.Success<PhotoContent, Failure>(
-                new PhotoContent(stream, ContentTypeFor(Path.GetExtension(fullPath)), stream.Length)));
+            return OpenFile(fullPath, isAvatar, ownerId, mediaId, PhotoVariant.Original);
         }
-        catch (Exception exception)
-            when (exception is IOException or UnauthorizedAccessException)
+
+        var variantPath = ResolveVariantPath(ownerId, mediaId, isAvatar, variant);
+        if (!IsInsideRoot(variantPath))
         {
-            if (isAvatar)
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Failed to open an avatar file of user {UserId}.",
-                    ownerId);
-            }
-            else
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Failed to open a portfolio photo file of barber profile {BarberProfileId}.",
-                    ownerId);
-            }
-
-            return Task.FromResult(NotFoundResult(isAvatar));
+            return NotFoundResult(isAvatar);
         }
+
+        // Вариант уже на диске: отдаём файл, не трогая декодер.
+        if (File.Exists(variantPath))
+        {
+            var stored = OpenFile(variantPath, isAvatar, ownerId, mediaId, variant);
+            if (stored.IsSuccess)
+            {
+                return stored;
+            }
+        }
+
+        // Ленивая генерация: кадр загружен до среза либо генерация на загрузке упала.
+        var generated = await EnsureVariantAsync(
+            fullPath,
+            variantPath,
+            ownerId,
+            mediaId,
+            isAvatar,
+            cancellationToken);
+        if (generated)
+        {
+            var variantContent = OpenFile(variantPath, isAvatar, ownerId, mediaId, variant);
+            if (variantContent.IsSuccess)
+            {
+                return variantContent;
+            }
+        }
+
+        // Вариант невозможен: исходник уже целевой ширины, инспектор отказал или декодер упал.
+        // Отдаём исходник с его Content-Type и его ETag — 404 клиент понял бы как «кадра нет»,
+        // а дескриптор в srcset остался бы битым.
+        return OpenFile(fullPath, isAvatar, ownerId, mediaId, PhotoVariant.Original);
     }
 
     /// <inheritdoc />
     public Task DeleteAsync(string url, CancellationToken cancellationToken)
     {
         // Чужие и внешние URL (абсолютные ссылки старых фотографий) не наши: молча выходим.
-        if (!TryResolveFile(url, out var fullPath, out var isAvatar, out var ownerId))
+        if (!TryResolveFile(
+                url,
+                out var fullPath,
+                out var isAvatar,
+                out var ownerId,
+                out var mediaId))
         {
             return Task.CompletedTask;
         }
@@ -196,23 +229,322 @@ public sealed class LocalPhotoStorage : IPhotoStorage
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            LogDeleteFailure(ownerId, isAvatar, exception);
+        }
+
+        // Производные удаляются по маске рядом с исходником: имя строится из mediaId,
+        // а не приходит строкой, поэтому выйти за корень здесь нечем.
+        var directoryPath = Path.GetDirectoryName(fullPath);
+
+        if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            foreach (var variantPath in Directory.EnumerateFiles(
+                         directoryPath,
+                         PhotoVariantWidths.FilePattern(mediaId)))
+            {
+                if (IsInsideRoot(variantPath))
+                {
+                    File.Delete(variantPath);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogDeleteFailure(ownerId, isAvatar, exception);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Открывает файл на чтение и собирает <see cref="PhotoContent"/> с ETag своего варианта.
+    /// </summary>
+    /// <remarks>
+    /// <c>FileShare.Read</c>: параллельная раздача того же файла не блокируется, а удаление
+    /// ждёт закрытия потока. ETag считает хранилище — только оно знает, что именно отдало.
+    /// </remarks>
+    private Result<PhotoContent, Failure> OpenFile(
+        string fullPath,
+        bool isAvatar,
+        Guid ownerId,
+        Guid mediaId,
+        PhotoVariant variant)
+    {
+        try
+        {
+            var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 4096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            return Result.Success<PhotoContent, Failure>(new PhotoContent(
+                stream,
+                ContentTypeFor(Path.GetExtension(fullPath)),
+                stream.Length,
+                PhotoVariantWidths.EntityTag(mediaId, variant)));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
             if (isAvatar)
             {
                 _logger.LogWarning(
                     exception,
-                    "Failed to delete an avatar file of user {UserId}.",
+                    "Failed to open an avatar file of user {UserId}.",
                     ownerId);
             }
             else
             {
                 _logger.LogWarning(
                     exception,
-                    "Failed to delete a portfolio photo file of barber profile {BarberProfileId}.",
+                    "Failed to open a portfolio photo file of barber profile {BarberProfileId}.",
                     ownerId);
             }
+
+            return NotFoundResult(isAvatar);
+        }
+    }
+
+    /// <summary>
+    /// Дочитывает исходник, генерирует доступные варианты и записывает их рядом с исходником.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c>, если файл запрошенного варианта теперь существует. Ошибки ввода-вывода и
+    /// отказа декодера дают <c>false</c>: вызывающий отдаст исходник.
+    /// </returns>
+    private async Task<bool> EnsureVariantAsync(
+        string fullPath,
+        string variantPath,
+        Guid ownerId,
+        Guid mediaId,
+        bool isAvatar,
+        CancellationToken cancellationToken)
+    {
+        ReadOnlyMemory<byte> original;
+
+        try
+        {
+            original = await File.ReadAllBytesAsync(fullPath, cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogReadFailure(ownerId, isAvatar, exception);
+
+            return false;
         }
 
-        return Task.CompletedTask;
+        var generated = await _thumbnailer.GenerateAsync(
+            original,
+            Path.GetExtension(fullPath).TrimStart('.'),
+            ownerId,
+            mediaId,
+            isAvatar,
+            cancellationToken);
+
+        if (generated.IsFailure)
+        {
+            return false;
+        }
+
+        await WriteVariantsAsync(ownerId, mediaId, isAvatar, generated.Value, cancellationToken);
+
+        // Запрошенного варианта могло не оказаться: исходник уже целевой ширины.
+        return File.Exists(variantPath);
+    }
+
+    /// <summary>
+    /// Записывает производные файлы атомарно: временный <c>.tmp</c> и <c>File.Move</c>.
+    /// </summary>
+    /// <remarks>
+    /// Ошибка записи варианта не отменяет уже записанные и не роняет чтение: кадр живёт с тем,
+    /// что успело лечь на диск, а вариант догенерируется при следующем запросе.
+    /// </remarks>
+    private async Task WriteVariantsAsync(
+        Guid ownerId,
+        Guid mediaId,
+        bool isAvatar,
+        IReadOnlyList<PhotoThumbnail> thumbnails,
+        CancellationToken cancellationToken)
+    {
+        foreach (var thumbnail in thumbnails)
+        {
+            var variantPath = ResolveVariantPath(ownerId, mediaId, isAvatar, thumbnail.Variant);
+
+            if (!IsInsideRoot(variantPath))
+            {
+                continue;
+            }
+
+            var directoryPath = Path.GetDirectoryName(variantPath);
+            if (string.IsNullOrEmpty(directoryPath))
+            {
+                continue;
+            }
+
+            var temporaryPath = Path.Combine(
+                directoryPath,
+                $".{mediaId:N}-{PhotoVariantWidths.Suffix(thumbnail.Variant)}.tmp");
+
+            try
+            {
+                Directory.CreateDirectory(directoryPath);
+
+                await using (var stream = new FileStream(
+                                 temporaryPath,
+                                 FileMode.Create,
+                                 FileAccess.Write,
+                                 FileShare.None,
+                                 bufferSize: 4096,
+                                 FileOptions.Asynchronous | FileOptions.SequentialScan))
+                {
+                    await stream.WriteAsync(thumbnail.Content, cancellationToken);
+                    await stream.FlushAsync(cancellationToken);
+                }
+
+                File.Move(temporaryPath, variantPath, overwrite: true);
+            }
+            catch (OperationCanceledException)
+            {
+                DeleteTemporaryFile(temporaryPath, ownerId, isAvatar);
+
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                DeleteTemporaryFile(temporaryPath, ownerId, isAvatar);
+
+                LogWriteFailure(ownerId, isAvatar, exception);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Генерирует и записывает варианты после успешной записи исходника. Никогда не бросает.
+    /// </summary>
+    /// <remarks>
+    /// Загрузка уже состоялась, исходник лежит на диске: ошибка генерации или обрыв запроса
+    /// не должны превращать успешную загрузку в <c>500</c>. Вариант догенерируется при первом
+    /// чтении <c>?size=</c>.
+    /// </remarks>
+    private async Task GenerateVariantsBestEffortAsync(
+        Guid ownerId,
+        Guid mediaId,
+        bool isAvatar,
+        ReadOnlyMemory<byte> content,
+        string extension,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var generated = await _thumbnailer.GenerateAsync(
+                content,
+                extension,
+                ownerId,
+                mediaId,
+                isAvatar,
+                cancellationToken);
+
+            if (generated.IsFailure)
+            {
+                return;
+            }
+
+            await WriteVariantsAsync(ownerId, mediaId, isAvatar, generated.Value, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Запрос отменён уже после фиксации исходника: возвращать ошибку бессмысленно,
+            // а вариант догенерируется на первом чтении.
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogWriteFailure(ownerId, isAvatar, exception);
+        }
+    }
+
+    /// <summary>
+    /// Путь производного файла: тот же каталог, что у исходника.
+    /// </summary>
+    private string ResolveVariantPath(
+        Guid ownerId,
+        Guid mediaId,
+        bool isAvatar,
+        PhotoVariant variant)
+        => Path.Combine(
+            _rootPath,
+            isAvatar ? AVATAR_DIRECTORY : PORTFOLIO_DIRECTORY,
+            $"{ownerId:N}",
+            PhotoVariantWidths.FileName(mediaId, variant));
+
+    /// <summary>
+    /// Журнал отказа чтения файла: только идентификатор владельца, без пути и имени файла.
+    /// </summary>
+    private void LogReadFailure(Guid ownerId, bool isAvatar, Exception exception)
+    {
+        if (isAvatar)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to read an avatar file of user {UserId}.",
+                ownerId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to read a portfolio photo file of barber profile {BarberProfileId}.",
+                ownerId);
+        }
+    }
+
+    /// <summary>
+    /// Журнал отказа записи: только идентификатор владельца, без пути и имени файла.
+    /// </summary>
+    private void LogWriteFailure(Guid ownerId, bool isAvatar, Exception exception)
+    {
+        if (isAvatar)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to write an avatar variant of user {UserId}.",
+                ownerId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to write a portfolio photo variant of barber profile "
+                + "{BarberProfileId}.",
+                ownerId);
+        }
+    }
+
+    /// <summary>
+    /// Журнал отказа удаления: только идентификатор владельца, без пути и имени файла.
+    /// </summary>
+    private void LogDeleteFailure(Guid ownerId, bool isAvatar, Exception exception)
+    {
+        if (isAvatar)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to delete an avatar file of user {UserId}.",
+                ownerId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to delete a portfolio photo file of barber profile {BarberProfileId}.",
+                ownerId);
+        }
     }
 
     /// <summary>
@@ -267,6 +599,17 @@ public sealed class LocalPhotoStorage : IPhotoStorage
 
             File.Move(temporaryPath, finalPath);
 
+            // Исходник на диске — единственное обязательное условие успешной загрузки.
+            // Варианты пишутся best effort: сбой генерации оставляет кадр с исходником,
+            // а вариант догенерируется на первом чтении.
+            await GenerateVariantsBestEffortAsync(
+                ownerId,
+                mediaId,
+                isAvatar,
+                content,
+                extension,
+                cancellationToken);
+
             return isAvatar
                 ? new StoredPhoto(UserAvatarMediaUrl.Build(ownerId, mediaId, extension))
                 : new StoredPhoto(PortfolioMediaUrl.Build(ownerId, mediaId, extension));
@@ -315,20 +658,24 @@ public sealed class LocalPhotoStorage : IPhotoStorage
     /// <param name="fullPath">Полный путь к файлу при успехе.</param>
     /// <param name="isAvatar"><c>true</c>, если URL принадлежит аватару.</param>
     /// <param name="ownerId">Профиль барбера либо пользователь — владелец файла.</param>
+    /// <param name="mediaId">Идентификатор медиафайла: из него собираются имена вариантов.</param>
     private bool TryResolveFile(
         string url,
         out string fullPath,
         out bool isAvatar,
-        out Guid ownerId)
+        out Guid ownerId,
+        out Guid mediaId)
     {
         fullPath = string.Empty;
         isAvatar = false;
         ownerId = Guid.Empty;
+        mediaId = Guid.Empty;
 
-        if (PortfolioMediaUrl.TryParse(url, out var profileId, out var mediaId, out var extension))
+        if (PortfolioMediaUrl.TryParse(url, out var profileId, out var portfolioMediaId, out var extension))
         {
             ownerId = profileId;
-            fullPath = ResolveFilePath(profileId, mediaId, extension, isAvatar: false);
+            mediaId = portfolioMediaId;
+            fullPath = ResolveFilePath(profileId, portfolioMediaId, extension, isAvatar: false);
 
             return true;
         }
@@ -337,6 +684,7 @@ public sealed class LocalPhotoStorage : IPhotoStorage
         {
             isAvatar = true;
             ownerId = userId;
+            mediaId = avatarMediaId;
             fullPath = ResolveFilePath(userId, avatarMediaId, avatarExtension, isAvatar: true);
 
             return true;

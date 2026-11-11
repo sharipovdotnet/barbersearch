@@ -4,6 +4,7 @@ using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Photos.Admin;
+using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
@@ -979,7 +980,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         Guid barberProfileId,
         CancellationToken cancellationToken)
     {
-        return await Context.PortfolioPhotos
+        var photos = await Context.PortfolioPhotos
             .AsNoTracking()
             .Where(photo => photo.BarberProfileId == barberProfileId)
             .OrderBy(photo => photo.SortOrder)
@@ -995,6 +996,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 photo.ModerationStatus,
                 photo.RejectionReason))
             .ToListAsync(cancellationToken);
+
+        // Адрес миниатюры вычисляется уже после материализации: SQL-проекция не умеет
+        // конкатенацию с проверкой префикса, а поле задаётся по URL, а не по колонке.
+        return [.. photos.Select(PhotoThumbnails.Of)];
     }
 
     /// <summary>
@@ -1555,7 +1560,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Select(photo => new BarberProfilePhotoResponse(
                 photo.Id,
                 photo.Url,
-                photo.ThumbnailUrl,
+                PhotoThumbnails.Of(photo.Url, photo.ThumbnailUrl),
                 photo.Description,
                 photo.SortOrder,
                 photo.IsPublished,
