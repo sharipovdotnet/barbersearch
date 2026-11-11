@@ -8,6 +8,7 @@ import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import type { AdminBarberStatusFilter } from '@/lib/admin-path'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import { isAdminBarber, isAdminBarberPage } from '@/lib/response-guards'
 
@@ -55,6 +56,8 @@ export type AdminBarber = {
   /** Сырой URL владельца: админ видит и скрытое администратором фото. */
   avatarUrl: string | null
   isAvatarBlocked: boolean
+  /** Статус премодерации аватара владельца: бейдж «На проверке» в строке. */
+  avatarModerationStatus: PhotoModerationStatus
   grade: BarberGrade
   rating: number | null
   reviewsCount: number
@@ -83,6 +86,10 @@ export type AdminBarberDetail = {
   avatarUrl: string | null
   /** Флаг модерации: карточка показывает бейдж и кнопку «Вернуть фото». */
   isAvatarBlocked: boolean
+  /** Статус премодерации аватара владельца. */
+  avatarModerationStatus: PhotoModerationStatus
+  /** Причина отказа администратора; `null`, пока кадр не отклонён. */
+  avatarRejectionReason: string | null
   grade: BarberGrade
   bio: string | null
   yearsOfExperience: number

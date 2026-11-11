@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Application.Users;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
@@ -25,16 +26,19 @@ namespace BarberSearch.Web.Controllers;
 /// Доступ проверяется по БД на каждый запрос (<c>GetAvatarAccessAsync</c>): файл отдаётся,
 /// только если сохранённая строка <b>совпадает</b> с запрошенным URL (Ordinal). Поэтому замена
 /// или удаление аватара сразу делает старую ссылку <c>404</c>, даже если файл ещё лежит на диске.
-/// Скрытый администратором аватар отдаётся только администратору — с
-/// <c>Cache-Control: private, no-store</c>; всем остальным, включая владельца, — тот же
-/// <c>404 avatarMedia.notFound</c>. Отказа с <c>403</c> или <c>410</c> нет: существование
-/// скрытого файла не раскрывается.
+/// Публично кадр виден только при <c>AvatarModerationStatus = Approved</c> и
+/// <c>IsAvatarBlocked = false</c>; неодобренный (<c>Pending</c>/<c>Rejected</c>) файл отдаётся
+/// <b>владельцу</b> — иначе превью в кабинете было бы битым, — а скрытый администратором
+/// (<c>IsAvatarBlocked</c>) не отдаётся даже владельцу: его видит только администратор.
+/// Всем остальным — тот же <c>404 avatarMedia.notFound</c>. Отказа с <c>403</c> или <c>410</c>
+/// нет: существование кадра не раскрывается.
 /// </para>
 /// <para>
-/// <c>Cache-Control: public, max-age=86400</c> у видимого аватара: после замены старый кадр
-/// может ещё сутки жить в кэше другого браузера — то же ограничение, что у фотографий
-/// портфолио, и лечится оно сменой имени файла (новый <c>mediaId</c>), а не <c>no-store</c>
-/// для всех.
+/// <c>Cache-Control: public, max-age=86400</c> — только у публичного кадра; неодобренный
+/// (владельцу) и скрытый (администратору) отдаются с <c>private, no-store</c>: после одобрения
+/// или возврата фото клиент не должен показывать устаревший ответ из общего кэша. Ограничение
+/// 24-часового кэша публичного кадра лечится сменой имени файла (новый <c>mediaId</c>), а не
+/// <c>no-store</c> для всех.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -81,7 +85,8 @@ public sealed partial class AvatarMediaController : ControllerBase
 
     /// <summary>
     /// Отдаёт файл аватара, если он существует, сохранённый URL совпадает с запрошенным
-    /// и файл не скрыт администратором (либо запрос пришёл от администратора).
+    /// и кадр доступен вызывающему: публично — только одобренный и не скрытый, владельцу —
+    /// ещё и неодобренный, администратору — любой.
     /// </summary>
     /// <param name="userId">Пользователь из URL.</param>
     /// <param name="fileName">Имя файла: 32 hex-символа и разрешённое расширение.</param>
@@ -121,11 +126,22 @@ public sealed partial class AvatarMediaController : ControllerBase
             return MediaNotFound();
         }
 
-        // Скрытый файл видит только администратор; владелец и аноним получают тот же 404,
-        // что и при отсутствии файла. Порядок важен: блокировка проверяется после точного
-        // совпадения URL, иначе старая ссылка скрытого фото могла бы отдаться после замены.
-        var blocked = access.Value.IsAvatarBlocked;
-        if (blocked && !_currentUser.IsAdmin)
+        // Публичный кадр — только одобренный и не скрытый администратором. Блокировка
+        // проверяется после точного совпадения URL, иначе старая ссылка скрытого фото
+        // могла бы отдаться после замены.
+        var avatar = access.Value;
+        var publicVisible = avatar.ModerationStatus == PhotoModerationStatus.Approved
+            && !avatar.IsAvatarBlocked;
+
+        // Владелец видит превью неодобренного кадра в кабинете (Pending/Rejected), но никогда
+        // не видит скрытый: административная маска сильнее владения.
+        var isOwner = _currentUser.TryGetUserId(out var callerId) && callerId == userId;
+        var ownerPreview = isOwner
+            && !avatar.IsAvatarBlocked
+            && (avatar.ModerationStatus == PhotoModerationStatus.Pending
+                || avatar.ModerationStatus == PhotoModerationStatus.Rejected);
+
+        if (!publicVisible && !_currentUser.IsAdmin && !ownerPreview)
         {
             return MediaNotFound();
         }
@@ -136,15 +152,15 @@ public sealed partial class AvatarMediaController : ControllerBase
             return MediaNotFound();
         }
 
-        // Видимый кадр кэшируется на сутки; скрытый (только админу) — нет: после возврата
-        // фото клиент не должен показывать устаревший «нет файла» из общего кэша.
+        // Публичный кадр кэшируется на сутки; неодобренный и скрытый — нет: после одобрения
+        // или возврата фото клиент не должен показывать устаревший ответ из общего кэша.
         Response.Headers[CACHE_CONTROL_HEADER] =
-            blocked ? CACHE_CONTROL_PRIVATE : CACHE_CONTROL_PUBLIC;
+            publicVisible ? CACHE_CONTROL_PUBLIC : CACHE_CONTROL_PRIVATE;
         Response.Headers[NOSNIFF_HEADER] = NOSNIFF_VALUE;
 
-        var avatar = content.Value;
+        var avatarContent = content.Value;
 
-        return File(avatar.Stream, avatar.ContentType, enableRangeProcessing: true);
+        return File(avatarContent.Stream, avatarContent.ContentType, enableRangeProcessing: true);
     }
 
     /// <summary>

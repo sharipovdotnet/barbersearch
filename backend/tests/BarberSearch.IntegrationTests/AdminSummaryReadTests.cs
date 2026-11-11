@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +83,11 @@ public sealed class AdminSummaryReadTests
         Assert.NotNull(summary.Reviews);
         Assert.NotNull(summary.Barbers);
         Assert.NotNull(summary.Salons);
+        Assert.NotNull(summary.Photos);
+
+        // Чистая база: ни аватаров, ни работ на проверке.
+        Assert.Equal(0, summary.Photos.PendingAvatarsCount);
+        Assert.Equal(0, summary.Photos.PendingPortfolioCount);
     }
 
     [Fact(Timeout = 180_000)]
@@ -112,11 +118,31 @@ public sealed class AdminSummaryReadTests
         // Выключенный салон — ровно `AdminCatalogueStatus.Hidden`.
         await data.CreateSalonAsync("Summary Hidden Salon", isActive: false);
 
+        // Очередь фотографий: один аватар и одна работа, ждущие проверки. Файлы не нужны:
+        // счётчик и очередь смотрят на строку и статус, а не на диск.
+        var avatarUser = await app.CreateUserAsync(
+            $"admin-summary-avatar-{Guid.NewGuid():N}@barbersearch.test");
+
+        await SeedPendingAvatarAsync(app, avatarUser.Id);
+        await SeedPendingPortfolioPhotoAsync(app, publishedBarber.Profile.Id);
+
         var after = await GetSummaryAsync(app);
 
         Assert.Equal(before.Reviews.PendingCount + 1, after.Reviews.PendingCount);
         Assert.Equal(before.Barbers.UnverifiedCount + 1, after.Barbers.UnverifiedCount);
         Assert.Equal(before.Salons.InactiveCount + 1, after.Salons.InactiveCount);
+        Assert.Equal(before.Photos.PendingAvatarsCount + 1, after.Photos.PendingAvatarsCount);
+        Assert.Equal(
+            before.Photos.PendingPortfolioCount + 1,
+            after.Photos.PendingPortfolioCount);
+
+        // Числа сводки — ровно размеры вкладок очереди, а не отдельный подсчёт.
+        Assert.Equal(
+            after.Photos.PendingAvatarsCount,
+            await GetQueueCountAsync(app, "api/admin/photos/avatars"));
+        Assert.Equal(
+            after.Photos.PendingPortfolioCount,
+            await GetQueueCountAsync(app, "api/admin/photos/portfolio"));
 
         // Опубликованный отзыв счётчик не двигает: вкладка «На модерации» его не показывает.
         var queued = await GetQueueIdsAsync(app);
@@ -244,6 +270,61 @@ public sealed class AdminSummaryReadTests
         Assert.False(root.TryGetProperty("nextCursor", out _));
     }
 
+    /// <summary>
+    /// Ставит пользователю новый аватар доменным методом: он уходит в <c>Pending</c>,
+    /// получает техническую метку поступления и попадает в счётчик сводки. Файл не нужен.
+    /// </summary>
+    private static async Task SeedPendingAvatarAsync(TestApp app, Guid userId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var user = await db.Users.SingleAsync(candidate => candidate.Id == userId);
+
+        var avatarUrl = UserAvatarMediaUrl.Build(userId, Guid.CreateVersion7(), "png");
+
+        Assert.False(user.SetAvatar(avatarUrl).IsFailure);
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Добавляет профилю загруженную (Pending) фотографию портфолио без файла: очередь
+    /// и счётчик читают строку, а раздача в этом тесте не участвует.
+    /// </summary>
+    private static async Task SeedPendingPortfolioPhotoAsync(TestApp app, Guid barberProfileId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = await db.BarberProfiles
+            .Include(candidate => candidate.PortfolioPhotos)
+            .SingleAsync(candidate => candidate.Id == barberProfileId);
+
+        var photoUrl = PortfolioMediaUrl.Build(
+            barberProfileId,
+            Guid.CreateVersion7(),
+            "png");
+
+        Assert.False(profile.AddUploadedPhoto(photoUrl, "Summary pending photo").IsFailure);
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Размер админской очереди фотографий: число строк первой страницы (до 100).
+    /// </summary>
+    private static async Task<int> GetQueueCountAsync(TestApp app, string path)
+    {
+        using var response = await app.Client.GetAsync($"{path}?pageSize=100");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        return document.RootElement.GetProperty("items").GetArrayLength();
+    }
+
     private static async Task<Summary> GetSummaryAsync(TestApp app)
     {
         using var response = await app.Client.GetAsync(ENDPOINT);
@@ -287,7 +368,8 @@ public sealed class AdminSummaryReadTests
     private sealed record Summary(
         SummaryReviews Reviews,
         SummaryBarbers Barbers,
-        SummarySalons Salons);
+        SummarySalons Salons,
+        SummaryPhotos Photos);
 
     private sealed record SummaryReviews(int PendingCount, SummaryOldest? Oldest);
 
@@ -301,6 +383,8 @@ public sealed class AdminSummaryReadTests
     private sealed record SummaryBarbers(int UnverifiedCount);
 
     private sealed record SummarySalons(int InactiveCount);
+
+    private sealed record SummaryPhotos(int PendingAvatarsCount, int PendingPortfolioCount);
 
     private sealed record ReviewPage(IReadOnlyList<ReviewRow> Items, string? NextCursor);
 

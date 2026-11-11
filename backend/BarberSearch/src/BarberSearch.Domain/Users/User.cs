@@ -39,6 +39,11 @@ public class User : AggregateRoot
     /// </summary>
     private const string PASSWORD_HASH_REQUIRED = "Password hash cannot be empty.";
 
+    private const string AVATAR_MODERATION_NO_AVATAR_CODE = "user.avatarModeration.noAvatar";
+    private const string AVATAR_MODERATION_INVALID_STATUS_CODE = "user.avatarModeration.invalidStatus";
+    private const string AVATAR_MODERATION_REASON_REQUIRED_CODE = "user.avatarModeration.reasonRequired";
+    private const string AVATAR_MODERATION_REASON_TOO_LONG_CODE = "user.avatarModeration.reasonTooLong";
+
     private readonly List<FavoriteBarber> _favoriteBarbers = [];
 
     public string Email { get; private set; } = null!;
@@ -61,12 +66,52 @@ public class User : AggregateRoot
     /// тот же кадр, а публичные чтения получают <c>null</c>.
     /// </para>
     /// <para>
-    /// Реальная смена <see cref="AvatarUrl"/> снимает флаг: новая загрузка — это новый
-    /// файл и новая публикация (постмодерация, как у портфолио). Повторная запись того же
-    /// URL флаг сохраняет: иначе сохранение имени в кабинете разблокировало бы скрытое фото.
+    /// Маска не заменяет <see cref="AvatarModerationStatus"/>: публичный кадр требует и
+    /// <see cref="PhotoModerationStatus.Approved"/>, и отсутствия блокировки. Реальная смена
+    /// <see cref="AvatarUrl"/> снимает флаг, потому что это новый файл, — но новый кадр
+    /// теперь ждёт проверки. Повторная запись того же URL флаг сохраняет: иначе сохранение
+    /// имени в кабинете разблокировало бы скрытое фото.
     /// </para>
     /// </remarks>
     public bool IsAvatarBlocked { get; private set; }
+
+    /// <summary>
+    /// Допуск аватара к публикации: решение администратора о самом кадре.
+    /// </summary>
+    /// <remarks>
+    /// Значение по умолчанию — <see cref="PhotoModerationStatus.Approved"/>: у аккаунта
+    /// без аватара проверять нечего, а существующие кадры миграция не перепроверяет.
+    /// Реальная загрузка ставит <see cref="PhotoModerationStatus.Pending"/>. Публичный
+    /// кадр — это <see cref="PhotoModerationStatus.Approved"/> и
+    /// <see cref="IsAvatarBlocked"/> = <c>false</c>.
+    /// </remarks>
+    public PhotoModerationStatus AvatarModerationStatus { get; private set; }
+        = PhotoModerationStatus.Approved;
+
+    /// <summary>
+    /// Техническая метка поступления кадра в очередь проверки; <c>null</c> — аватара нет.
+    /// </summary>
+    /// <remarks>
+    /// Пишется системными часами, как <see cref="Entity.CreatedAt"/>: значение не участвует
+    /// в бизнес-инвариантах, а решение администратора приходит параметром. По этой метке
+    /// очередь строится в порядке FIFO.
+    /// </remarks>
+    public DateTimeOffset? AvatarSubmittedAt { get; private set; }
+
+    /// <summary>
+    /// Когда администратор принял решение по аватару; <c>null</c> — кадр ещё ждёт проверки.
+    /// </summary>
+    public DateTimeOffset? AvatarReviewedAt { get; private set; }
+
+    /// <summary>
+    /// Кто принял решение по аватару; <c>null</c> — кадр ещё ждёт проверки.
+    /// </summary>
+    public Guid? AvatarReviewedByUserId { get; private set; }
+
+    /// <summary>
+    /// Причина отказа из <see cref="RejectAvatar"/>; <c>null</c> — кадр не отклонён.
+    /// </summary>
+    public string? AvatarRejectionReason { get; private set; }
 
     public bool IsEmailVerified { get; private set; }
     public bool IsPhoneVerified { get; private set; }
@@ -218,24 +263,13 @@ public class User : AggregateRoot
             return new Failure(errors);
         }
 
-        // Сравнение сделано до присваивания: повторная отправка того же URL (кабинет
-        // присылает текущий avatarUrl обратно в PUT users/{id}/profile) флаг сохраняет,
-        // а реальная смена — включая переход в null — снимает блокировку: это новый кадр
-        // либо пустота, к которой прежний флаг уже не относится.
-        var avatarChanged = !string.Equals(
-            AvatarUrl,
-            normalizedAvatarUrl,
-            StringComparison.Ordinal);
-
         FirstName = firstName;
         LastName = lastName;
         PhoneNumber = phoneNumber;
-        AvatarUrl = normalizedAvatarUrl;
 
-        if (avatarChanged)
-        {
-            IsAvatarBlocked = false;
-        }
+        // Та же логика смены аватара, что у SetAvatar: сохранение имени с текущим URL
+        // не трогает ни статус проверки, ни блокировку, а новый кадр уходит в Pending.
+        ApplyAvatarChange(normalizedAvatarUrl);
 
         MarkUpdated();
 
@@ -261,9 +295,11 @@ public class User : AggregateRoot
     /// реальном изменении значения: повторная запись того же URL не создаёт правку.
     /// </para>
     /// <para>
-    /// Реальная смена значения снимает <see cref="IsAvatarBlocked"/>: новый файл публикуется
-    /// сразу, а <c>null</c> означает, что скрывать больше нечего. Повторная запись того же
-    /// URL (ранний возврат ниже) флаг не трогает.
+    /// Реальная смена значения переводит кадр в <see cref="PhotoModerationStatus.Pending"/>
+    /// и снимает <see cref="IsAvatarBlocked"/>: это новый файл, который ещё не публиковался.
+    /// Публично новый кадр появится только после <see cref="ApproveAvatar"/>. <c>null</c>
+    /// означает удаление: аватара нет, скрывать и проверять нечего. Повторная запись того же
+    /// URL (ранний возврат ниже) не трогает ни статус, ни флаг.
     /// </para>
     /// </remarks>
     /// <param name="avatarUrl">Новый URL аватара либо <c>null</c>/пустая строка.</param>
@@ -278,15 +314,13 @@ public class User : AggregateRoot
             return new Failure(avatarUrlError);
         }
 
-        // Повторная запись того же значения — не изменение: UpdatedAt не трогаем
-        // и административную блокировку не снимаем.
-        if (string.Equals(AvatarUrl, normalizedAvatarUrl, StringComparison.Ordinal))
+        // Повторная запись того же значения — не изменение: UpdatedAt не трогаем,
+        // статус проверки и административную блокировку не меняем.
+        if (!ApplyAvatarChange(normalizedAvatarUrl))
         {
             return DomainErrors.Ok();
         }
 
-        AvatarUrl = normalizedAvatarUrl;
-        IsAvatarBlocked = false;
         MarkUpdated();
 
         return DomainErrors.Ok();
@@ -348,6 +382,150 @@ public class User : AggregateRoot
         MarkUpdated();
 
         return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Одобряет аватар: кадр допускается к публикации, если он не заблокирован.
+    /// </summary>
+    /// <remarks>
+    /// Проверки идут в порядке контракта: сначала «аватара нет» —
+    /// <c>409 user.avatarModeration.noAvatar</c> (проверять нечего), затем «уже не
+    /// <see cref="PhotoModerationStatus.Pending"/>» — <c>409 user.avatarModeration.invalidStatus</c>.
+    /// Повторное решение — ошибка, а не успех. Причина отклонения очищается.
+    /// </remarks>
+    /// <param name="adminId">Администратор, принявший решение.</param>
+    /// <param name="now">Момент решения в UTC.</param>
+    public UnitResult<Failure> ApproveAvatar(Guid adminId, DateTimeOffset now)
+    {
+        if (AvatarUrl is null)
+        {
+            return AvatarModerationNoAvatar();
+        }
+
+        if (AvatarModerationStatus != PhotoModerationStatus.Pending)
+        {
+            return AvatarModerationInvalidStatus();
+        }
+
+        AvatarModerationStatus = PhotoModerationStatus.Approved;
+        AvatarRejectionReason = null;
+        AvatarReviewedByUserId = adminId;
+        AvatarReviewedAt = now;
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Отклоняет аватар с обязательной причиной: публично кадр не показывается.
+    /// </summary>
+    /// <remarks>
+    /// Проверки те же, что у <see cref="ApproveAvatar"/>: нет URL —
+    /// <c>409 user.avatarModeration.noAvatar</c>, кадр уже не
+    /// <see cref="PhotoModerationStatus.Pending"/> — <c>409 user.avatarModeration.invalidStatus</c>.
+    /// Причина тримится, обязательна и ограничена
+    /// <see cref="Constants.MAX_PHOTO_REJECTION_REASON_LENGTH"/> символами:
+    /// <c>400 user.avatarModeration.reasonRequired</c> /
+    /// <c>400 user.avatarModeration.reasonTooLong</c> с
+    /// <see cref="Error.InvalidField"/> = <c>reason</c>.
+    /// </remarks>
+    /// <param name="adminId">Администратор, принявший решение.</param>
+    /// <param name="reason">Причина отказа.</param>
+    /// <param name="now">Момент решения в UTC.</param>
+    public UnitResult<Failure> RejectAvatar(Guid adminId, string? reason, DateTimeOffset now)
+    {
+        if (AvatarUrl is null)
+        {
+            return AvatarModerationNoAvatar();
+        }
+
+        if (AvatarModerationStatus != PhotoModerationStatus.Pending)
+        {
+            return AvatarModerationInvalidStatus();
+        }
+
+        var normalizedReason = reason?.Trim();
+
+        if (string.IsNullOrEmpty(normalizedReason))
+        {
+            return new Failure(Error.Validation(
+                AVATAR_MODERATION_REASON_REQUIRED_CODE,
+                "A rejection reason is required.",
+                nameof(reason)));
+        }
+
+        if (normalizedReason.Length > Constants.MAX_PHOTO_REJECTION_REASON_LENGTH)
+        {
+            return new Failure(Error.Validation(
+                AVATAR_MODERATION_REASON_TOO_LONG_CODE,
+                $"""
+                 A rejection reason cannot be longer than
+                 {Constants.MAX_PHOTO_REJECTION_REASON_LENGTH} characters.
+                 """,
+                nameof(reason)));
+        }
+
+        AvatarModerationStatus = PhotoModerationStatus.Rejected;
+        AvatarRejectionReason = normalizedReason;
+        AvatarReviewedByUserId = adminId;
+        AvatarReviewedAt = now;
+
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Применяет реальную смену аватара — общая логика <see cref="SetAvatar"/> и
+    /// <see cref="UpdateProfile"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Сравнение с текущим значением — <see cref="StringComparison.Ordinal"/> и до
+    /// присваивания: повторная запись того же URL (кабинет отправляет текущий
+    /// <c>avatarUrl</c> обратно в <c>PUT users/{id}/profile</c>) не меняет ни статус, ни
+    /// блокировку, ни метки времени. Один приватный метод на две операции, чтобы правила
+    /// не разошлись.
+    /// </para>
+    /// <para>
+    /// Новый кадр — это премодерация: <see cref="PhotoModerationStatus.Pending"/>,
+    /// техническая метка <see cref="AvatarSubmittedAt"/> и очистка прошлого решения.
+    /// Административная блокировка снимается: новый файл ещё не публиковался. <c>null</c>
+    /// (удаление) — проверять нечего: <see cref="PhotoModerationStatus.Approved"/>
+    /// и пустые метки, как у аккаунта без аватара.
+    /// </para>
+    /// </remarks>
+    /// <param name="normalizedAvatarUrl">Нормализованный URL или <c>null</c>.</param>
+    /// <returns><c>true</c>, если значение действительно изменилось.</returns>
+    private bool ApplyAvatarChange(string? normalizedAvatarUrl)
+    {
+        if (string.Equals(AvatarUrl, normalizedAvatarUrl, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        AvatarUrl = normalizedAvatarUrl;
+        IsAvatarBlocked = false;
+        AvatarReviewedAt = null;
+        AvatarReviewedByUserId = null;
+        AvatarRejectionReason = null;
+
+        if (normalizedAvatarUrl is null)
+        {
+            AvatarModerationStatus = PhotoModerationStatus.Approved;
+            AvatarSubmittedAt = null;
+        }
+        else
+        {
+            AvatarModerationStatus = PhotoModerationStatus.Pending;
+
+            // Техническая метка поступления в очередь, как Entity.CreatedAt: бизнес-«сейчас»
+            // домен не читает, решение администратора приходит параметром.
+            AvatarSubmittedAt = DateTimeOffset.UtcNow;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -778,4 +956,14 @@ public class User : AggregateRoot
     /// <param name="role">Некорректная роль.</param>
     private static string UnknownRole(UserRole role)
         => $"Unknown user role value {(int)role}.";
+
+    private static Failure AvatarModerationNoAvatar()
+        => new(Error.Conflict(
+            AVATAR_MODERATION_NO_AVATAR_CODE,
+            "The user has no avatar to review."));
+
+    private static Failure AvatarModerationInvalidStatus()
+        => new(Error.Conflict(
+            AVATAR_MODERATION_INVALID_STATUS_CODE,
+            "Only a pending avatar can be reviewed."));
 }

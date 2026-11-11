@@ -22,6 +22,7 @@ import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { BARBER_CABINET_PATH, isBarberCabinetPath } from '@/lib/barber-cabinet-path'
 import { profileInitials } from '@/lib/my-profile'
+import { canRenderAvatarPreview } from '@/lib/photo-moderation'
 import { navigate, useLocation } from '@/lib/router'
 
 /**
@@ -111,9 +112,10 @@ export function HeaderAuth() {
         }
       >
         <Avatar size="sm" aria-hidden>
-          {/* Скрытое администратором фото не рендерим: сервер отдаёт сырой URL,
-              но показывать его можно только при `isAvatarBlocked === false`. */}
-          {profile?.avatarUrl && !profile.isAvatarBlocked && (
+          {/* Кадр рендерится только в статусах `Pending`/`Approved`: отклонённый
+              аватар в шапке заменяют инициалы, заблокированный не виден даже
+              владельцу (сервер отдаёт сырой URL, но показывать его нельзя). */}
+          {profile && canRenderAvatarPreview(profile) && profile.avatarUrl !== null && (
             <AvatarImage src={profile.avatarUrl} alt="" />
           )}
           {/* Инициалы рисуются `::before`, а не текстовым узлом: иначе у кнопки с

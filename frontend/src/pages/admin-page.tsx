@@ -12,6 +12,7 @@ import { BarberRequestsScreen } from '@/components/admin/barber-requests-screen'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { BookingsScreen } from '@/components/admin/bookings-screen'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
+import { PhotosScreen } from '@/components/admin/photos-screen'
 import { ReviewsScreen } from '@/components/admin/reviews-screen'
 import { StatisticsScreen } from '@/components/admin/statistics-screen'
 import { SummaryScreen } from '@/components/admin/summary-screen'
@@ -31,6 +32,7 @@ const ADMIN_TITLES = {
   summary: 'Сводка — администрирование BarberSearch',
   statistics: 'Статистика — администрирование BarberSearch',
   reviews: 'Отзывы — администрирование BarberSearch',
+  photos: 'Фото — администрирование BarberSearch',
   barbers: 'Барберы — администрирование BarberSearch',
   catalogue: 'Каталог — администрирование BarberSearch',
   users: 'Пользователи — администрирование BarberSearch',
@@ -54,6 +56,8 @@ function titleFor(route: AdminRoute): string {
       return ADMIN_TITLES.barberRequests
     case 'catalogue':
       return ADMIN_TITLES.catalogue
+    case 'photos':
+      return ADMIN_TITLES.photos
     case 'bookings':
       return ADMIN_TITLES.bookings
     case 'audit':
@@ -194,6 +198,14 @@ export function AdminPage() {
     return (
       <AdminShell>
         <CatalogueScreen tab={route.tab} />
+      </AdminShell>
+    )
+  }
+
+  if (route.kind === 'photos') {
+    return (
+      <AdminShell>
+        <PhotosScreen tab={route.tab} />
       </AdminShell>
     )
   }

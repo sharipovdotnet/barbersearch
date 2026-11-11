@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 
 import type { MyProfile, UpdateMyProfileInput } from '@/lib/my-profile'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 
 /**
  * Профиль текущего пользователя для всех поверхностей приложения.
@@ -27,8 +28,14 @@ export type ProfileContextValue = ProfileState & {
   reload: () => Promise<void>
   /** Сохраняет личные данные и возвращает обновлённый профиль; второй `GET` не нужен. */
   save: (input: UpdateMyProfileInput) => Promise<MyProfile>
-  /** Новый аватар после загрузки/удаления — общий для всех подписчиков, без `GET`. */
-  setAvatar: (avatarUrl: string | null) => void
+  /**
+   * Новый аватар после загрузки/удаления — общий для всех подписчиков, без `GET`.
+   * Статус приходит вместе с URL: после загрузки — `Pending`, после удаления — `Approved`.
+   */
+  setAvatar: (
+    avatarUrl: string | null,
+    status: PhotoModerationStatus
+  ) => void
 }
 
 export const ProfileContext = createContext<ProfileContextValue | null>(null)

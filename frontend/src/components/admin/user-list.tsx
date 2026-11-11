@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin-users'
 import { formatShortDateTime, getInitials } from '@/lib/format'
 import { formatPageRange } from '@/lib/paging'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { cn } from '@/lib/utils'
 
 /**
@@ -190,6 +191,7 @@ export function UserList({
  *
  * Админ видит сырой `avatarUrl` и при скрытом фото — иначе он не смог бы решить,
  * вернуть кадр или нет. Флаг показывает текстовый бейдж: цвет не единственный сигнал.
+ * Бейджи идут по приоритету: скрыто администратором → отклонено → на проверке.
  */
 export function UserIdentity({
   user,
@@ -201,6 +203,7 @@ export function UserIdentity({
     email: string
     avatarUrl: string | null
     isAvatarBlocked: boolean
+    avatarModerationStatus: PhotoModerationStatus
   }
   className?: string
 }) {
@@ -218,11 +221,19 @@ export function UserIdentity({
         <span className="block truncate text-xs text-muted-foreground">
           {user.email}
         </span>
-        {user.isAvatarBlocked && (
+        {user.isAvatarBlocked ? (
           <Badge variant="outline" className="mt-1">
             {t('Фото скрыто')}
           </Badge>
-        )}
+        ) : user.avatarModerationStatus === 'Rejected' ? (
+          <Badge variant="destructive" className="mt-1">
+            {t('Отклонено')}
+          </Badge>
+        ) : user.avatarModerationStatus === 'Pending' ? (
+          <Badge variant="outline" className="mt-1">
+            {t('На проверке')}
+          </Badge>
+        ) : null}
       </span>
     </span>
   )

@@ -13,6 +13,7 @@ import {
 } from '@/hooks/use-session'
 import type { SessionUser } from '@/lib/auth'
 import type { MyProfile } from '@/lib/my-profile'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { noContent, problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
@@ -37,7 +38,12 @@ const AVATAR_URL =
 function profile(
   id: string,
   notice = 'Марк',
-  avatar: { avatarUrl?: string | null; isAvatarBlocked?: boolean } = {}
+  avatar: {
+    avatarUrl?: string | null
+    isAvatarBlocked?: boolean
+    moderationStatus?: PhotoModerationStatus
+    rejectionReason?: string | null
+  } = {}
 ): MyProfile {
   return {
     id,
@@ -47,6 +53,8 @@ function profile(
     phoneNumber: null,
     avatarUrl: avatar.avatarUrl ?? null,
     isAvatarBlocked: avatar.isAvatarBlocked ?? false,
+    avatarModerationStatus: avatar.moderationStatus ?? 'Approved',
+    avatarRejectionReason: avatar.rejectionReason ?? null,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified: true,
@@ -72,6 +80,12 @@ function ProfileProbe({ where }: { where: string }) {
       <output aria-label={`${where}: блокировка`}>
         {profile?.isAvatarBlocked ? 'да' : 'нет'}
       </output>
+      <output aria-label={`${where}: модерация`}>
+        {profile?.avatarModerationStatus ?? 'нет'}
+      </output>
+      <output aria-label={`${where}: причина`}>
+        {profile?.avatarRejectionReason ?? 'нет'}
+      </output>
       <output aria-label={`${where}: ошибка`}>{error ?? 'нет'}</output>
       <output aria-label={`${where}: вход`}>
         {requiresSignIn ? 'нужен' : 'не нужен'}
@@ -86,10 +100,10 @@ function ProfileActions() {
 
   return (
     <div>
-      <button type="button" onClick={() => setAvatar(AVATAR_URL)}>
+      <button type="button" onClick={() => setAvatar(AVATAR_URL, 'Pending')}>
         Новый аватар
       </button>
-      <button type="button" onClick={() => setAvatar(null)}>
+      <button type="button" onClick={() => setAvatar(null, 'Approved')}>
         Убрать аватар
       </button>
       <button
@@ -294,6 +308,13 @@ describe('ProfileProvider', () => {
         AVATAR_URL
       )
     })
+    // Загрузка ставит кадр в очередь: обе поверхности видят `Pending`.
+    expect(screen.getByLabelText('шапка: модерация').textContent).toBe(
+      'Pending'
+    )
+    expect(screen.getByLabelText('кабинет: модерация').textContent).toBe(
+      'Pending'
+    )
     expect(gets()).toBe(1)
 
     // Удаление в кабинете так же сразу возвращает инициалы обеим поверхностям.
@@ -303,6 +324,9 @@ describe('ProfileProvider', () => {
       expect(screen.getByLabelText('шапка: аватар').textContent).toBe('нет')
       expect(screen.getByLabelText('кабинет: аватар').textContent).toBe('нет')
     })
+    expect(screen.getByLabelText('шапка: модерация').textContent).toBe(
+      'Approved'
+    )
   })
 
   it('setAvatar снимает флаг блокировки у всех подписчиков', async () => {
@@ -330,6 +354,56 @@ describe('ProfileProvider', () => {
       expect(screen.getByLabelText('шапка: блокировка').textContent).toBe('нет')
       expect(screen.getByLabelText('кабинет: блокировка').textContent).toBe('нет')
     })
+  })
+
+  it('save не трогает статус модерации и причину отказа', async () => {
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | null = null
+
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json(
+          profile(USER.id, 'Марк', {
+            avatarUrl: AVATAR_URL,
+            moderationStatus: 'Rejected',
+            rejectionReason: 'Кадр размыт.',
+          })
+        )
+      ),
+      http.put(`/api/users/${USER.id}/profile`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+
+        return noContent()
+      })
+    )
+
+    renderHarness()
+
+    await waitForStatus('шапка', 'ready')
+
+    expect(screen.getByLabelText('шапка: модерация').textContent).toBe(
+      'Rejected'
+    )
+    expect(screen.getByLabelText('шапка: причина').textContent).toBe(
+      'Кадр размыт.'
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Сохранить профиль' }))
+    await waitForProfile('кабинет', 'Марк Правкин')
+
+    expect(body).toStrictEqual({
+      firstName: 'Марк',
+      lastName: 'Правкин',
+      phoneNumber: null,
+      avatarUrl: AVATAR_URL,
+    })
+    // Сохранение имени не возвращает кадр в очередь и не стирает причину.
+    expect(screen.getByLabelText('шапка: модерация').textContent).toBe(
+      'Rejected'
+    )
+    expect(screen.getByLabelText('шапка: причина').textContent).toBe(
+      'Кадр размыт.'
+    )
   })
 
   it('save отправляет сырой avatarUrl и сохраняет флаг блокировки', async () => {

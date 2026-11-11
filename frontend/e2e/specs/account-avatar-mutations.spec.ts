@@ -12,36 +12,45 @@ import {
 import { deleteMyAvatar } from '../fixtures/api'
 import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AccountProfilePage } from '../pages/account-profile-page'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
+import { AdminSummaryPage } from '../pages/admin-summary-page'
 
 /**
- * Аватар пользователя (#85): загрузка, каркас, админская карточка и удаление.
+ * Аватар пользователя (#85, #89): загрузка, премодерация, админская карточка
+ * и удаление.
  *
  * Сценарий идёт по мутирующему клиенту `mutations`: имя, отзывы и брони других
- * фикстур он не делит, а `seed.sql` сбрасывает его `avatar_url`. Витринного
- * барбера (`…0001`) не трогаем — на нём держатся поиск, карточка и брони.
+ * фикстур он не делит, а `seed.sql` сбрасывает его `avatar_url` и статус
+ * премодерации. Витринного барбера (`…0001`) не трогаем — на нём держатся поиск,
+ * карточка и брони.
  *
  * Файл `e2e/fixtures/portfolio-photo.png` — настоящий PNG 800×600: только так
  * `naturalWidth > 0` доказывает, что реальный файл прошёл клиентскую подготовку
  * (квадрат 512×512), multipart-загрузку и раздачу `/api/media/avatars/...`.
  *
- * Если сцена упала, `afterEach` удаляет аватар через API; успешные сцены передают
- * его следующей, иначе сцене удаления было бы нечего удалять.
+ * Премодерация (#89): после загрузки кадр ждёт проверки — владелец видит превью и
+ * бейдж «На проверке», а `GET /api/users/me` отдаёт `Pending`. Публичность
+ * возвращает только решение администратора в `/admin/photos?tab=avatars`:
+ * «Одобрить» делает кадр публичным, «Отклонить» оставляет его непубличным и
+ * показывает владельцу причину. Прежние сцены hide/unhide работают уже с
+ * `Approved`, поэтому одобрение идёт до них.
  *
- * Сцены #87 добавляют админскую модерацию: админ в отдельном контексте скрывает
- * фото, владелец после reload видит инициалы и объяснение, а файл отвечает
- * `404` анониму и `200 private, no-store` админу. Упавшая сцена могла оставить
- * флаг блокировки, поэтому `afterEach` снимает его админским контекстом, а не
- * клиентом `mutations`: у владельца нет прав на этот эндпоинт.
+ * Если сцена упала, `afterEach` удаляет аватар через API и снимает флаг
+ * блокировки админским контекстом: у владельца нет прав на этот эндпоинт.
  */
 const AVATAR_PATH = fileURLToPath(
   new URL('../fixtures/portfolio-photo.png', import.meta.url)
 )
 const INITIALS = 'МП'
 const MUTATIONS_USER_ID = fixtures.mutationsUserId
+// Email клиента `mutations` из сида: по нему очередь ищет свою строку.
+const MUTATIONS_EMAIL = 'e2e-mutations@barbersearch.test'
 // Бейдж/кнопки аватара в админской карточке: заголовок диалога и его кнопка
 // совпадают по видимому тексту, поэтому подтверждение ищется внутри `alertdialog`.
 const HIDE_PHOTO = 'Скрыть фото'
 const SHOW_PHOTO = 'Вернуть фото'
+// Причина отказа: ровно она должна появиться у владельца и в `users/me`.
+const REJECTION_REASON = 'E2E: кадр размыт, загрузите резче'
 
 test.use({ storageState: storageStatePath('mutations') })
 
@@ -60,7 +69,7 @@ test.describe('аватар кабинета: мутации', () => {
     }
   })
 
-  test('загрузка: настоящий файл, объявление, каркас и reload', async ({
+  test('загрузка: превью «На проверке», объявление, каркас и reload', async ({
     page,
   }) => {
     const profile = new AccountProfilePage(page)
@@ -83,17 +92,29 @@ test.describe('аватар кабинета: мутации', () => {
 
     await profile.uploadAvatar(AVATAR_PATH)
 
+    // Премодерация: успех — это «ждёт проверки», а не «обновлён».
     await expect(
-      profile.avatarStatus.filter({ hasText: 'Аватар обновлён.' })
+      profile.avatarStatus.filter({
+        hasText: 'Аватар загружен и ждёт проверки.',
+      })
     ).toBeVisible()
     await expect(profile.avatarImage).toBeVisible()
+    await expect(
+      profile.avatarSection.getByText('На проверке', { exact: true })
+    ).toBeVisible()
+    await expect(
+      profile.avatarSection.getByText(
+        'Кадр виден только вам, пока администратор его не одобрит.'
+      )
+    ).toBeVisible()
 
     const src = await profile.avatarImage.getAttribute('src')
 
     expect(src).toMatch(/^\/api\/media\/avatars\//)
     avatarSrc = src
 
-    // Файл реально отдан API, а не подставлен строкой в разметку.
+    // Файл реально отдан API, а не подставлен строкой в разметку. Владелец
+    // получает превью и до одобрения — это его собственный кадр.
     await expect
       .poll(
         () =>
@@ -104,11 +125,29 @@ test.describe('аватар кабинета: мутации', () => {
       )
       .toBeGreaterThan(0)
 
-    // Каркас кабинета и шапка показывают тот же кадр без перезагрузки:
-    // общий `ProfileProvider` обновил всех подписчиков через `setAvatar`.
+    // Каркас кабинета и шапка показывают превью без перезагрузки: общий
+    // `ProfileProvider` обновил всех подписчиков через `setAvatar(url, status)`.
     await expect(profile.identityAvatarImage).toHaveAttribute('src', src ?? '')
     await expect(headerImage).toHaveAttribute('src', src ?? '')
     await expect(headerImage).toHaveAttribute('alt', '')
+
+    // Контракт: `users/me` — единственное чтение с сырым URL, и он же отдаёт
+    // статус проверки. `Pending` здесь обязателен: кадр ещё не публичен.
+    const me = await page.request.get('/api/users/me')
+
+    expect(me.status(), 'GET /api/users/me').toBe(200)
+
+    const meBody = (await me.json()) as {
+      avatarUrl: string | null
+      avatarModerationStatus: string
+      avatarRejectionReason: string | null
+    }
+
+    expect(meBody.avatarUrl).toBe(src)
+    expect(meBody.avatarModerationStatus, 'статус сразу после загрузки').toBe(
+      'Pending'
+    )
+    expect(meBody.avatarRejectionReason).toBeNull()
 
     // axe на 1280: карточка и каркас в реальном состоянии, без исключений.
     await expectNoBlockingViolations(
@@ -122,19 +161,17 @@ test.describe('аватар кабинета: мутации', () => {
 
     await expect(profile.avatarImage).toHaveAttribute('src', src ?? '')
     await expect(headerImage).toHaveAttribute('src', src ?? '')
+    await expect(
+      profile.avatarSection.getByText('На проверке', { exact: true })
+    ).toBeVisible()
   })
 
-  test('админская карточка пользователя видит тот же src', async ({
+  test('админская карточка пользователя видит тот же src и «На проверке»', async ({
     browser,
   }) => {
     expect(avatarSrc).not.toBeNull()
 
-    const adminContext = await browser.newContext({
-      baseURL,
-      storageState: storageStatePath('admin'),
-      viewport: { width: 1280, height: 900 },
-      reducedMotion: 'reduce',
-    })
+    const adminContext = await openAdminContext(browser)
 
     try {
       const adminPage = await adminContext.newPage()
@@ -153,6 +190,130 @@ test.describe('аватар кабинета: мутации', () => {
           image.evaluate((node) => (node as HTMLImageElement).naturalWidth)
         )
         .toBeGreaterThan(0)
+
+      // Карточка показывает статус премодерации: решение принимается и здесь,
+      // но очередь остаётся основным путём (следующая сцена).
+      await expect(
+        detail.getByText('На проверке', { exact: true })
+      ).toBeVisible()
+      await expect(
+        detail.getByRole('button', { name: 'Одобрить', exact: true })
+      ).toBeVisible()
+    } finally {
+      await adminContext.close()
+    }
+  })
+
+  test('очередь аватаров: поиск по email, превью крупно и «Одобрить»', async ({
+    browser,
+    page,
+    playwright,
+  }) => {
+    expect(avatarSrc).not.toBeNull()
+
+    const adminContext = await openAdminContext(browser)
+
+    try {
+      const adminPage = await adminContext.newPage()
+      const photos = new AdminPhotosPage(adminPage)
+
+      // Сводка с реально непустой очередью: блок показывает ссылки в обе вкладки,
+      // а не честный ноль. Числа не проверяем — соседний спек мог добавить свой
+      // кадр; важен сам контракт адресов (`/admin/photos` и `?tab=portfolio`).
+      const summary = new AdminSummaryPage(adminPage)
+
+      await summary.goto()
+      await expect(summary.photosBlock).toBeVisible()
+      await expect(summary.emptyPhotos).toHaveCount(0)
+      await expect(summary.photosAvatarsLink).toHaveAttribute(
+        'href',
+        '/admin/photos'
+      )
+      await expect(summary.photosPortfolioLink).toHaveAttribute(
+        'href',
+        '/admin/photos?tab=portfolio'
+      )
+
+      await photos.goto('avatars')
+      await expect(photos.heading).toBeVisible()
+      await expect(photos.tab('Аватары')).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+
+      // Числа очереди не проверяем: соседний мутирующий спек может успеть
+      // добавить строку. Ищем свою по email владельца.
+      await photos.searchFor(MUTATIONS_EMAIL)
+
+      const row = photos.row(MUTATIONS_EMAIL)
+
+      await expect(row).toHaveCount(1)
+      // Фамилия стабильна: параллельный `account-profile-mutations` правит
+      // только имя клиента, поэтому полное «Марк Правкин» здесь ненадёжно.
+      await expect(row).toContainText('Правкин')
+      await expect(row.getByText('ждёт с', { exact: false })).toBeVisible()
+
+      // Превью открывается крупно и закрывается Escape с возвратом фокуса.
+      await photos.previewButton(row).click()
+
+      const preview = photos.previewDialog
+
+      await expect(preview).toBeVisible()
+      await expect(preview.getByText('Фото на проверке')).toBeVisible()
+      await expect(preview.getByRole('img', { name: /^Фото: / })).toBeVisible()
+
+      // Очередь с реальной строкой — состояние, которого нет на пересеянной
+      // базе: axe проверяет её именно здесь, без allow-list (§11).
+      await expectNoBlockingViolations(
+        adminPage,
+        '/admin/photos?tab=avatars + строка и превью @1280',
+        test.info()
+      )
+
+      await adminPage.keyboard.press('Escape')
+
+      await expect(preview).toBeHidden()
+      await expect(photos.previewButton(row)).toBeFocused()
+
+      await photos.approve(row)
+
+      await expect(photos.announcement('Фото одобрено.')).toBeVisible()
+      await expect(row).toHaveCount(0)
+
+      // Строка исчезла не только локально: очередь перечитана с поиском, и сервер
+      // больше не отдаёт одобренный кадр.
+      await expect(photos.emptySearch).toBeVisible()
+
+      // Публичность вернулась: статус `Approved`, тот же URL.
+      const me = await page.request.get('/api/users/me')
+
+      expect(me.status(), 'GET /api/users/me после одобрения').toBe(200)
+
+      const meBody = (await me.json()) as {
+        avatarUrl: string | null
+        avatarModerationStatus: string
+        avatarRejectionReason: string | null
+      }
+
+      expect(meBody.avatarModerationStatus).toBe('Approved')
+      expect(meBody.avatarUrl).toBe(avatarSrc)
+      expect(meBody.avatarRejectionReason).toBeNull()
+
+      // Файл стал публичным только после решения: аноним получает `200`.
+      // Пустой `storageState` обязателен: `playwright.request.newContext`
+      // наследует `storageState` сценария, и «аноним» иначе был бы владельцем.
+      const anonymous = await playwright.request.newContext({
+        baseURL,
+        storageState: { cookies: [], origins: [] },
+      })
+
+      try {
+        const media = await anonymous.get(avatarSrc ?? '')
+
+        expect(media.status(), 'GET media анонимом после одобрения').toBe(200)
+      } finally {
+        await anonymous.dispose()
+      }
     } finally {
       await adminContext.close()
     }
@@ -186,6 +347,12 @@ test.describe('аватар кабинета: мутации', () => {
         'src',
         avatarSrc ?? ''
       )
+
+      // Блокировать можно только одобренный кадр: после сцены одобрения кнопка
+      // «Скрыть фото» на месте, статуса «На проверке» уже нет.
+      await expect(
+        detail.getByText('На проверке', { exact: true })
+      ).toHaveCount(0)
 
       await detail.getByRole('button', { name: HIDE_PHOTO }).click()
 
@@ -246,7 +413,7 @@ test.describe('аватар кабинета: мутации', () => {
       ).toBeVisible()
       await expect(
         profile.avatarSection.getByText(
-          'Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.'
+          'Его не видно публично. Новое фото появится публично после проверки, а вернуть старое может только администратор.'
         )
       ).toBeVisible()
       await expect(
@@ -266,15 +433,21 @@ test.describe('аватар кабинета: мутации', () => {
       const meBody = (await me.json()) as {
         avatarUrl: string | null
         isAvatarBlocked: boolean
+        avatarModerationStatus: string
       }
 
       expect(meBody.avatarUrl).toBe(avatarSrc)
       expect(meBody.isAvatarBlocked, 'users/me отдаёт флаг блокировки').toBe(
         true
       )
+      // Блокировка — отдельный флаг, а не второе решение о кадре.
+      expect(meBody.avatarModerationStatus).toBe('Approved')
 
       // Скрытый файл: анониму и владельцу — тот же 404, админу — 200 и private.
-      const anonymous = await playwright.request.newContext({ baseURL })
+      const anonymous = await playwright.request.newContext({
+        baseURL,
+        storageState: { cookies: [], origins: [] },
+      })
 
       try {
         const anonymousMedia = await anonymous.get(avatarSrc ?? '')
@@ -397,7 +570,14 @@ test.describe('аватар кабинета: мутации', () => {
       )
       await expect(headerImage).toHaveAttribute('src', avatarSrc ?? '')
 
-      const anonymous = await playwright.request.newContext({ baseURL })
+      // Публичный кадр проверяется настоящим гостем: `playwright.request.newContext`
+      // наследует `storageState` сценария, а запрос владельца обновляет auth-cookie,
+      // и ASP.NET добавляет к ответу `no-cache,no-store` поверх `Cache-Control`.
+      // Именно эта подмена и была причиной известного «флейка» строки с кэшем.
+      const anonymous = await playwright.request.newContext({
+        baseURL,
+        storageState: { cookies: [], origins: [] },
+      })
 
       try {
         const media = await anonymous.get(avatarSrc ?? '')
@@ -446,6 +626,155 @@ test.describe('аватар кабинета: мутации', () => {
     )
   })
 
+  test('очередь отклоняет новый кадр: причина у владельца и `Rejected` в users/me', async ({
+    browser,
+    page,
+    playwright,
+  }) => {
+    expect(avatarSrc).not.toBeNull()
+
+    const profile = new AccountProfilePage(page)
+
+    // Владелец загружает второй кадр: он заменяет одобренный URL и снова ждёт
+    // проверки, поэтому очередь снова непустая — на ней и проверяется отказ.
+    await profile.goto()
+    await profile.waitForReady()
+    await profile.uploadAvatar(AVATAR_PATH)
+
+    await expect(
+      profile.avatarStatus.filter({
+        hasText: 'Аватар загружен и ждёт проверки.',
+      })
+    ).toBeVisible()
+    await expect(profile.avatarImage).toBeVisible()
+
+    const pendingSrc = await profile.avatarImage.getAttribute('src')
+
+    expect(pendingSrc).toMatch(/^\/api\/media\/avatars\//)
+
+    const adminContext = await openAdminContext(browser)
+
+    try {
+      const adminPage = await adminContext.newPage()
+      const photos = new AdminPhotosPage(adminPage)
+
+      // 320 px: строка очереди — карточка, кнопки 44 px, без горизонтального
+      // скролла. Состояние с реальной строкой проверяется здесь же.
+      await adminPage.setViewportSize({ width: 320, height: 800 })
+      await photos.goto('avatars')
+      await photos.searchFor(MUTATIONS_EMAIL)
+
+      const row = photos.row(MUTATIONS_EMAIL)
+
+      await expect(row).toHaveCount(1)
+
+      for (const button of [
+        photos.approveButton(row),
+        photos.rejectButton(row),
+      ]) {
+        const box = await button.boundingBox()
+
+        expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+      }
+
+      const overflow = await adminPage.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth
+      )
+
+      expect(overflow, '/admin/photos?tab=avatars @320').toBeLessThanOrEqual(0)
+
+      await expectNoBlockingViolations(
+        adminPage,
+        '/admin/photos?tab=avatars + строка @320',
+        test.info()
+      )
+
+      // Отказ требует причину: пустую строку клиент не отправляет.
+      const dialog = await photos.openReject(row)
+
+      await expect(dialog).toContainText(
+        'Фото останется непубличным. Владелец увидит причину и сможет загрузить другое.'
+      )
+      await expect(photos.rejectionReason).toBeVisible()
+
+      await expectNoBlockingViolations(
+        adminPage,
+        '/admin/photos + диалог «Отклонить фото?» @320',
+        test.info()
+      )
+
+      await photos.rejectionReason.fill(REJECTION_REASON)
+      await photos.rejectConfirm.click()
+
+      await expect(photos.announcement('Фото отклонено.')).toBeVisible()
+      await expect(row).toHaveCount(0)
+
+      // Владелец видит бейдж «Отклонено» и причину — и не видит кадр в шапке.
+      await profile.goto()
+      await profile.waitForReady()
+
+      await expect(
+        profile.avatarSection.getByText('Отклонено', { exact: true })
+      ).toBeVisible()
+      await expect(
+        profile.avatarSection.getByText(`Причина: ${REJECTION_REASON}`)
+      ).toBeVisible()
+      // В карточке превью остаётся: владелец должен видеть, что отклонили.
+      await expect(profile.avatarImage).toBeVisible()
+      await expect(profile.identityAvatarImage).toHaveCount(0)
+      await expect(
+        page.locator(
+          'button[aria-label="Меню аккаунта"] [data-slot="avatar-image"]'
+        )
+      ).toHaveCount(0)
+
+      // Контракт: статус и причина — часть `users/me`.
+      const me = await page.request.get('/api/users/me')
+
+      expect(me.status(), 'GET /api/users/me после отказа').toBe(200)
+
+      const meBody = (await me.json()) as {
+        avatarUrl: string | null
+        avatarModerationStatus: string
+        avatarRejectionReason: string | null
+      }
+
+      expect(meBody.avatarModerationStatus).toBe('Rejected')
+      expect(meBody.avatarRejectionReason).toBe(REJECTION_REASON)
+      expect(meBody.avatarUrl).toBe(pendingSrc)
+
+      // Отклонённый кадр не публичен: аноним получает `404`, владелец — свой файл.
+      // Без пустого `storageState` «аноним» унаследовал бы cookie владельца и получил
+      // `200` как превью своего же кадра.
+      const anonymous = await playwright.request.newContext({
+        baseURL,
+        storageState: { cookies: [], origins: [] },
+      })
+
+      try {
+        const anonymousMedia = await anonymous.get(pendingSrc ?? '')
+
+        expect(
+          anonymousMedia.status(),
+          'GET media анонимом после отказа'
+        ).toBe(404)
+      } finally {
+        await anonymous.dispose()
+      }
+
+      expect(
+        (await page.request.get(pendingSrc ?? '')).status(),
+        'GET media владельцем после отказа'
+      ).toBe(200)
+
+      avatarSrc = pendingSrc
+    } finally {
+      await adminContext.close()
+    }
+  })
+
   test('удаление через alertdialog возвращает инициалы и отдаёт 404', async ({
     page,
   }) => {
@@ -461,8 +790,8 @@ test.describe('аватар кабинета: мутации', () => {
 
     await profile.goto()
     await profile.waitForReady()
+    // Отклонённый кадр тоже можно удалить — кнопка есть на любом статусе.
     await expect(profile.avatarImage).toBeVisible()
-    await expect(headerImage).toBeVisible()
 
     await profile.openAvatarDeleteDialog()
 

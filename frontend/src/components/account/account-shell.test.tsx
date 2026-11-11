@@ -7,13 +7,16 @@ import { ProfileProvider } from '@/components/profile-provider'
 import { SessionContext, type SessionContextValue } from '@/hooks/use-session'
 import type { SessionUser } from '@/lib/auth'
 import type { MyProfile } from '@/lib/my-profile'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { server } from '@/test/msw/server'
 import { stubImageLoading } from '@/test/image'
 
 function profile(
   id: string,
   isEmailVerified: boolean,
-  avatarUrl: string | null = null
+  avatarUrl: string | null = null,
+  moderationStatus: PhotoModerationStatus = 'Approved',
+  rejectionReason: string | null = null
 ): MyProfile {
   return {
     id,
@@ -23,6 +26,8 @@ function profile(
     phoneNumber: null,
     avatarUrl,
     isAvatarBlocked: false,
+    avatarModerationStatus: moderationStatus,
+    avatarRejectionReason: rejectionReason,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified,
@@ -139,5 +144,53 @@ describe('AccountShell: неподтверждённый email', () => {
     })
 
     expect(screen.queryByText('МК')).not.toBeInTheDocument()
+  })
+
+  it('кадр «На проверке» показывается владельцу в каркасе кабинета', async () => {
+    const avatarUrl =
+      '/api/media/avatars/88888888-8888-4888-8888-888888888888/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const value = profile(
+      '88888888-8888-4888-8888-888888888888',
+      true,
+      avatarUrl,
+      'Pending'
+    )
+
+    stubImageLoading()
+    server.use(http.get('/api/users/me', () => HttpResponse.json(value)))
+
+    renderShell(value)
+
+    await screen.findByText('Мария Кузнецова')
+
+    await waitFor(() => {
+      const image = document.querySelector(
+        'aside [data-slot="avatar-image"]'
+      )
+
+      expect(image).toHaveAttribute('src', avatarUrl)
+    })
+  })
+
+  it('отклонённый кадр в каркасе заменяется инициалами', async () => {
+    const avatarUrl =
+      '/api/media/avatars/88888888-8888-4888-8888-888888888888/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const value = profile(
+      '88888888-8888-4888-8888-888888888888',
+      true,
+      avatarUrl,
+      'Rejected',
+      'Кадр размыт.'
+    )
+
+    stubImageLoading()
+    server.use(http.get('/api/users/me', () => HttpResponse.json(value)))
+
+    renderShell(value)
+
+    await screen.findByText('Мария Кузнецова')
+
+    expect(document.querySelector('aside [data-slot="avatar-image"]')).toBeNull()
+    expect(screen.getByText('МК')).toBeInTheDocument()
   })
 })

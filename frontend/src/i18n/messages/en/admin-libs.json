@@ -137,5 +137,9 @@
   "Не удалось загрузить заявки.": "Could not load requests.",
   "Не удалось загрузить заявку.": "Could not load the request.",
   "Не удалось загрузить ещё заявки.": "Could not load more requests.",
-  "Не удалось загрузить профиль барбера.": "Could not load the barber profile."
+  "Не удалось загрузить профиль барбера.": "Could not load the barber profile.",
+  "Фото уже проверено. Обновите список.": "The photo has already been reviewed. Refresh the list.",
+  "Фото больше не существует. Обновите список.": "The photo no longer exists. Refresh the list.",
+  "У пользователя нет фото — проверять нечего.": "The user has no photo — there is nothing to review.",
+  "Не удалось загрузить фотографии на проверке.": "Could not load the photos awaiting review."
 }

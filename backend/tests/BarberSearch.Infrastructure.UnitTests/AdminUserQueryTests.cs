@@ -33,9 +33,11 @@ public class AdminUserQueryTests
         // Список всегда свежими сверху, поэтому лимит без курсора не добавляется.
         Assert.DoesNotContain("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
 
-        // Админская строка отдаёт сырой аватар и флаг блокировки: скрытое фото админ видит.
+        // Админская строка отдаёт сырой аватар, флаг блокировки и статус проверки:
+        // скрытое и неодобренное фото админ видит.
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -83,9 +85,12 @@ public class AdminUserQueryTests
         Assert.Contains("barber_profiles", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("display_name", sql, StringComparison.OrdinalIgnoreCase);
 
-        // Карточка отдаёт сырой аватар и флаг: админ должен видеть скрытое фото.
+        // Карточка отдаёт сырой аватар, флаг, статус и причину: админ должен видеть
+        // скрытое и отклонённое фото.
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_rejection_reason", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { UserIdentity } from '@/components/admin/user-list'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { stubImageLoading } from '@/test/image'
 
 /**
@@ -19,6 +20,7 @@ const USER = {
   email: 'anna@barbersearch.test',
   avatarUrl: null as string | null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved' as PhotoModerationStatus,
 }
 
 describe('UserIdentity: аватар', () => {
@@ -65,5 +67,36 @@ describe('UserIdentity: аватар', () => {
         container.querySelector('[data-slot="avatar-image"]')
       ).toHaveAttribute('src', AVATAR_URL)
     })
+  })
+
+  it('у кадра «На проверке» показывает бейдж рядом с именем', () => {
+    render(<UserIdentity user={{ ...USER, avatarModerationStatus: 'Pending' }} />)
+
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(screen.queryByText('Фото скрыто')).not.toBeInTheDocument()
+  })
+
+  it('у отклонённого кадра показывает «Отклонено»', () => {
+    render(
+      <UserIdentity user={{ ...USER, avatarModerationStatus: 'Rejected' }} />
+    )
+
+    expect(screen.getByText('Отклонено')).toBeInTheDocument()
+  })
+
+  it('приоритет бейджей: скрыто важнее отклонения и проверки', () => {
+    render(
+      <UserIdentity
+        user={{
+          ...USER,
+          isAvatarBlocked: true,
+          avatarModerationStatus: 'Rejected',
+        }}
+      />
+    )
+
+    expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+    expect(screen.queryByText('Отклонено')).not.toBeInTheDocument()
+    expect(screen.queryByText('На проверке')).not.toBeInTheDocument()
   })
 })

@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { isAvatarUploadResponse } from '@/lib/response-guards'
 
 /**
@@ -27,23 +28,27 @@ export const AVATAR_SOURCE_MAX_BYTES = 15 * 1024 * 1024
 /** Сторона квадратного аватара: сервер принимает от 300 px, клиент готовит 512. */
 export const AVATAR_SIDE = 512
 
-/** Ответ `201 { avatarUrl }`: относительный `/api/media/avatars/...` URL. */
+/** Ответ `201 { avatarUrl, moderationStatus }`: URL раздачи и статус премодерации. */
 export type AvatarUploadResponse = {
   avatarUrl: string
+  /** Новый кадр всегда ждёт проверки: сервер создаёт его `Pending`. */
+  moderationStatus: PhotoModerationStatus
 }
 
 /**
  * Загрузка одного файла: `POST /api/users/me/avatar`.
  *
  * `file` уже подготовлен `prepareAvatarImage`; транспорт не перепроверяет размер.
- * Возвращает относительный URL нового аватара — его можно сразу положить в
- * `<img src>` и в модульный кэш профиля.
+ * Возвращает относительный URL и статус премодерации: до одобрения кадр виден
+ * только владельцу, и карточка кабинета показывает бейдж «На проверке».
  */
-export async function uploadAvatar(file: File): Promise<string> {
+export async function uploadAvatarWithStatus(
+  file: File
+): Promise<AvatarUploadResponse> {
   const form = new FormData()
   form.append('file', file)
 
-  const body = await mutateWithCsrf<AvatarUploadResponse>(
+  return mutateWithCsrf<AvatarUploadResponse>(
     '/users/me/avatar',
     {
       method: 'POST',
@@ -51,11 +56,11 @@ export async function uploadAvatar(file: File): Promise<string> {
       validate: isAvatarUploadResponse,
     }
   )
-
-  return body.avatarUrl
 }
 
-/** Удаление идемпотентно: `204` приходит и когда аватара не было. */
+/**
+ * Удаление идемпотентно: `204` приходит и когда аватара не было.
+ */
 export async function deleteAvatar(): Promise<void> {
   await mutateWithCsrf<void>('/users/me/avatar', { method: 'DELETE' })
 }

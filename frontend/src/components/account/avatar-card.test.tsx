@@ -11,6 +11,7 @@ import {
 } from '@/components/account/account-profile-context'
 import { prepareAvatarImage } from '@/lib/image-prep'
 import type { MyProfile } from '@/lib/my-profile'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { stubImageLoading } from '@/test/image'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
@@ -51,6 +52,8 @@ const BASE_PROFILE: MyProfile = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,
@@ -68,20 +71,33 @@ const BASE_PROFILE: MyProfile = {
 function Harness({
   initialAvatarUrl = null,
   initialBlocked = false,
+  initialStatus = 'Approved',
+  initialReason = null,
   barberProfileId = null,
 }: {
   initialAvatarUrl?: string | null
   initialBlocked?: boolean
+  initialStatus?: PhotoModerationStatus
+  initialReason?: string | null
   barberProfileId?: string | null
 }) {
-  const [avatar, setAvatar] = useState({
+  const [avatar, setAvatar] = useState<{
+    avatarUrl: string | null
+    isAvatarBlocked: boolean
+    moderationStatus: PhotoModerationStatus
+    rejectionReason: string | null
+  }>({
     avatarUrl: initialAvatarUrl,
     isAvatarBlocked: initialBlocked,
+    moderationStatus: initialStatus,
+    rejectionReason: initialReason,
   })
   const profile: MyProfile = {
     ...BASE_PROFILE,
     avatarUrl: avatar.avatarUrl,
     isAvatarBlocked: avatar.isAvatarBlocked,
+    avatarModerationStatus: avatar.moderationStatus,
+    avatarRejectionReason: avatar.rejectionReason,
     barberProfileId,
   }
   const value: AccountProfileValue = {
@@ -91,8 +107,13 @@ function Harness({
     requiresSignIn: false,
     reload: async () => {},
     save: async () => profile,
-    setAvatar: (avatarUrl: string | null) =>
-      setAvatar({ avatarUrl, isAvatarBlocked: false }),
+    setAvatar: (avatarUrl: string | null, status: PhotoModerationStatus) =>
+      setAvatar({
+        avatarUrl,
+        isAvatarBlocked: false,
+        moderationStatus: status,
+        rejectionReason: null,
+      }),
   }
 
   return (
@@ -112,13 +133,16 @@ beforeEach(() => {
 })
 
 describe('AvatarCard: загрузка', () => {
-  it('загружает файл, объявляет успех и меняет кнопки', async () => {
+  it('загружает файл, объявляет проверку и показывает бейдж «На проверке»', async () => {
     const user = userEvent.setup()
     const posts = countRequests('/api/users/me/avatar')
 
     server.use(
       http.post('/api/users/me/avatar', () =>
-        HttpResponse.json({ avatarUrl: AVATAR_URL }, { status: 201 })
+        HttpResponse.json(
+          { avatarUrl: AVATAR_URL, moderationStatus: 'Pending' },
+          { status: 201 }
+        )
       )
     )
 
@@ -131,9 +155,15 @@ describe('AvatarCard: загрузка', () => {
     await user.upload(screen.getByLabelText('Файл'), avatarFile())
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Аватар обновлён.'
+      'Аватар загружен и ждёт проверки.'
     )
     expect(posts()).toBe(1)
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Кадр виден только вам, пока администратор его не одобрит.'
+      )
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Изменить фото' })
     ).toBeInTheDocument()
@@ -299,7 +329,7 @@ describe('AvatarCard: фото скрыто администратором', () 
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.'
+        'Его не видно публично. Новое фото появится публично после проверки, а вернуть старое может только администратор.'
       )
     ).toBeInTheDocument()
     // Загрузка доступна и называется иначе: это новый кадр, а не правка старого.
@@ -316,7 +346,10 @@ describe('AvatarCard: фото скрыто администратором', () 
 
     server.use(
       http.post('/api/users/me/avatar', () =>
-        HttpResponse.json({ avatarUrl: AVATAR_URL }, { status: 201 })
+        HttpResponse.json(
+          { avatarUrl: AVATAR_URL, moderationStatus: 'Pending' },
+          { status: 201 }
+        )
       )
     )
 
@@ -327,11 +360,12 @@ describe('AvatarCard: фото скрыто администратором', () 
     await user.upload(screen.getByLabelText('Файл'), avatarFile())
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Аватар обновлён.'
+      'Аватар загружен и ждёт проверки.'
     )
     expect(
       screen.queryByText('Фото скрыто администратором')
     ).not.toBeInTheDocument()
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Изменить фото' })
     ).toBeInTheDocument()
@@ -372,5 +406,92 @@ describe('AvatarCard: фото скрыто администратором', () 
       screen.getByRole('button', { name: 'Загрузить фото' })
     ).toBeInTheDocument()
     expect(container.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+})
+
+describe('AvatarCard: премодерация', () => {
+  it('кадр «На проверке» рендерится с бейджем и объяснением', async () => {
+    stubImageLoading()
+
+    const { container } = render(
+      <Harness initialAvatarUrl={AVATAR_URL} initialStatus="Pending" />
+    )
+
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Кадр виден только вам, пока администратор его не одобрит.'
+      )
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', AVATAR_URL)
+    })
+    // Удаление доступно и до решения администратора.
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeInTheDocument()
+  })
+
+  it('отклонённый кадр показывает причину и «Загрузить другое фото»', async () => {
+    stubImageLoading()
+
+    const { container } = render(
+      <Harness
+        initialAvatarUrl={AVATAR_URL}
+        initialStatus="Rejected"
+        initialReason="Кадр размыт."
+      />
+    )
+
+    expect(screen.getByText('Отклонено')).toBeInTheDocument()
+    expect(screen.getByText('Причина: Кадр размыт.')).toBeInTheDocument()
+    // Отклонённый кадр в кабинете виден: владелец должен понимать, что именно
+    // не прошло проверку.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', AVATAR_URL)
+    })
+    expect(
+      screen.getByRole('button', { name: 'Загрузить другое фото' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeInTheDocument()
+  })
+
+  it('удаление отклонённого кадра возвращает фокус на загрузку', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.delete('/api/users/me/avatar', () =>
+        new HttpResponse(null, { status: 204 })
+      )
+    )
+
+    render(
+      <Harness
+        initialAvatarUrl={AVATAR_URL}
+        initialStatus="Rejected"
+        initialReason="Кадр размыт."
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Удалить' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: /^Удалить$/,
+      })
+    )
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Аватар удалён.'
+    )
+    expect(screen.queryByText('Отклонено')).not.toBeInTheDocument()
+
+    // Кнопки «Удалить» больше нет: фокус обязан вернуться на загрузку.
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Загрузить фото' })
+      ).toHaveFocus()
+    })
   })
 })

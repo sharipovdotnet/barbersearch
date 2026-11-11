@@ -5,6 +5,7 @@ import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminStatisticsPage } from '../pages/admin-statistics-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
@@ -444,8 +445,44 @@ test.describe('axe: админка', () => {
     await expect(summary.reviewsBlock).toBeVisible()
     await expect(summary.barbersBlock).toBeVisible()
     await expect(summary.salonsBlock).toBeVisible()
+    await expect(summary.photosBlock).toBeVisible()
 
     await expectNoBlockingViolations(page, '/admin/summary', test.info())
+  })
+
+  // Очередь премодерации фото (#89): на пересеянной базе она пуста, поэтому скан
+  // проверяет пустое состояние и вкладки — строку с кадром сканирует мутирующая
+  // сцена аватара, где такой кадр реально есть.
+  test('/admin/photos: вкладка «Аватары», пустая очередь', async ({ page }) => {
+    const photos = new AdminPhotosPage(page)
+
+    await photos.goto('avatars')
+    await expect(photos.heading).toBeVisible()
+    await expect(photos.tab('Аватары')).toHaveAttribute('aria-selected', 'true')
+    await expect(photos.emptyQueue).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/photos?tab=avatars',
+      test.info()
+    )
+  })
+
+  test('/admin/photos?tab=portfolio: пустая очередь', async ({ page }) => {
+    const photos = new AdminPhotosPage(page)
+
+    await photos.goto('portfolio')
+    await expect(photos.tab('Портфолио')).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await expect(photos.emptyQueue).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/photos?tab=portfolio',
+      test.info()
+    )
   })
 
   test('/admin/statistics: плитки, график и таблица', async ({ page }) => {

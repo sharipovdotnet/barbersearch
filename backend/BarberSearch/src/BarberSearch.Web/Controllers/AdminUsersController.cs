@@ -1,9 +1,12 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Users.Admin.ApproveUserAvatar;
 using BarberSearch.Application.Users.Admin.BlockUserAvatar;
 using BarberSearch.Application.Users.Admin.GetAdminUser;
 using BarberSearch.Application.Users.Admin.GetAdminUsers;
+using BarberSearch.Application.Users.Admin.RejectUserAvatar;
 using BarberSearch.Application.Users.Admin.UnblockUserAvatar;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Photos;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
@@ -116,5 +119,63 @@ public class AdminUsersController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UnblockUserAvatarCommand(userId),
+            cancellationToken));
+
+    /// <summary>
+    /// Одобряет аватар пользователя, ждущий проверки. Только администратор.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Одобрение — допуск кадра к публикации, а не публикация: он появится публично по обычным
+    /// правилам, если не скрыт администратором (<c>isAvatarBlocked</c>). Повторное решение по
+    /// уже проверенному кадру — не <c>204</c>: домен возвращает <c>409
+    /// user.avatarModeration.invalidStatus</c>, и интерфейс перечитывает очередь.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c>. Нет пользователя — <c>404 user.notFound</c>, аватара нет —
+    /// <c>409 user.avatarModeration.noAvatar</c>. Решение пишется в поля самой сущности
+    /// (<c>reviewedByUserId</c>, <c>reviewedAt</c>); <c>audit_log</c> новых типов не получает.
+    /// </para>
+    /// </remarks>
+    /// <param name="userId">Пользователь, чей аватар одобряется.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPost("{userId:guid}/avatar/approval")]
+    public async Task<ActionResult> ApproveAvatar(
+        Guid userId,
+        [FromServices] ICommandHandler<ApproveUserAvatarCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ApproveUserAvatarCommand(userId),
+            cancellationToken));
+
+    /// <summary>
+    /// Отклоняет аватар пользователя с обязательной причиной. Только администратор.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Причина — текст администратора для владельца кадра: домен тримит её, требует 1..500
+    /// символов и возвращает <c>400 user.avatarModeration.reasonRequired</c> /
+    /// <c>.reasonTooLong</c> с <c>invalidField = "reason"</c>. В <c>audit_log</c> причина не
+    /// попадает: решение фиксируется полями сущности, а журнал новых типов не получает.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c>. Нет пользователя — <c>404 user.notFound</c>, аватара нет —
+    /// <c>409 user.avatarModeration.noAvatar</c>, кадр уже не <c>Pending</c> — <c>409
+    /// user.avatarModeration.invalidStatus</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="userId">Пользователь, чей аватар отклоняется.</param>
+    /// <param name="request">Тело с причиной отказа.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPost("{userId:guid}/avatar/rejection")]
+    public async Task<ActionResult> RejectAvatar(
+        Guid userId,
+        [FromBody] RejectPhotoRequest request,
+        [FromServices] ICommandHandler<RejectUserAvatarCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new RejectUserAvatarCommand(userId, request.Reason),
             cancellationToken));
 }

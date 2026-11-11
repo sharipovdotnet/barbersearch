@@ -35,6 +35,7 @@ import {
   profileInitials,
   type MyProfileRole,
 } from '@/lib/my-profile'
+import { canRenderAvatarPreview } from '@/lib/photo-moderation'
 import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
@@ -169,11 +170,13 @@ function AccountIdentity({
   return (
     <div className="flex items-center gap-3 border-b border-border pb-4">
       <Avatar size="lg" aria-hidden>
-        {/* Скрытое администратором фото остаётся в сыром `avatarUrl`, но не
-            рендерится: иначе браузер показал бы кадр из 24-часового кэша. */}
-        {profile?.avatarUrl && !profile.isAvatarBlocked && (
-          <AvatarImage src={profile.avatarUrl} alt="" />
-        )}
+        {/* Отклонённый аватар заменяем инициалами, а скрытый администратором не
+            рендерим вовсе: иначе браузер показал бы кадр из 24-часового кэша. */}
+        {profile &&
+          profile.avatarUrl !== null &&
+          canRenderAvatarPreview(profile) && (
+            <AvatarImage src={profile.avatarUrl} alt="" />
+          )}
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
 

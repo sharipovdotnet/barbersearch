@@ -75,14 +75,15 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/reset-password` | set a new password from the email link: the token is read once and removed from the address, then the form, «Пароль изменён» (all sessions ended, no auto sign-in) or «Ссылка недействительна» |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
 | `/admin` | admin shell; redirects to `/admin/reviews` |
-| `/admin/summary` | «Что требует внимания»: reviews on moderation with the oldest one, barbers without confirmation, disabled salons — counters only, no actions; a salon waiting for moderation is not counted as disabled |
+| `/admin/summary` | «Что требует внимания»: four queues — reviews on moderation with the oldest one, barbers without confirmation, disabled salons and photos (avatars/portfolio) waiting for approval — counters and links, no actions; a salon waiting for moderation is not counted as disabled |
 | `/admin/statistics` | «Статистика сервиса» за период: presets 7/30/90/365 days, two dates, comparison with the previous period; six tiles, an SVG chart with a table duplicate, statuses, clients, supply, three leader tables and quality/moderation; read-only |
 | `/admin/reviews` | review moderation queue (pending / published tabs) |
 | `/admin/reviews/{id}` | one review; the tab is in `?tab=published` |
+| `/admin/photos` | photo pre-moderation queue: tabs «Аватары» (`?tab=avatars`, default) and «Портфолио» (`?tab=portfolio`), only frames «На проверке» in arrival order, search by name/email, paged rows, full-size preview, «Одобрить» and «Отклонить» with a mandatory reason |
 | `/admin/barbers` | barber queue: pending / all / hidden (filter in `?status=all\|hidden`, `pending` by default), search by name or email |
-| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, «Фотографии» with block/unblock, verify/grade/hide; the current filter stays in `?status=` |
+| `/admin/barbers/{id}` | one barber: contacts, readiness checklist, «Фотографии» with approve/reject and block/unblock, verify/grade/hide; the current filter stays in `?status=` |
 | `/admin/users` | user list: status/role filters, search by name or email |
-| `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation |
+| `/admin/users/{id}` | one user: role, block/unblock, email/phone confirmation, avatar approve/reject and block/unblock |
 | `/admin/barber-requests` | «Стать барбером» queue: pending requests oldest first, `?status=all` for every request newest first |
 | `/admin/barber-requests/{id}` | one request: applicant, answers, submission/review dates and the rejection reason; approve (with the session warning) or reject with a required reason |
 | `/admin/catalogue` | catalogue of services, specializations and salons (tab in `?tab=services\|specializations\|salons`, `services` by default): full dictionaries including hidden rows, status filter (salons add «На проверке»), search, hide/return, salon approve/reject |
@@ -110,7 +111,8 @@ One list deliberately keeps «Показать ещё»:
   hide barbers the visitor has already seen.
 
 Every other list — the public reviews, `/account/reviews`, `/account`, `/barber`, `/admin/reviews`,
-`/admin/barbers`, `/admin/users`, `/admin/bookings` and `/admin/audit` — pages with the same footer.
+`/admin/barbers`, `/admin/users`, `/admin/photos`, `/admin/bookings` and `/admin/audit` — pages
+with the same footer.
 The cabinet's bookings list was the last one to move to the pager: it split one server list on the client,
 which the server-side `scope` fixed (#36). The bookings list was built on the shared pager from the
 start: the email search and the status filter are part of the request, so changing either starts a
@@ -216,7 +218,9 @@ through the author list at `/account/reviews`.
 
 A photo can now be a real uploaded image, not only a link. The public card shows it in the «Работы»
 section, the cabinet manages it in «Фотографии», and an administrator can take a frame off the
-public card without deleting it.
+public card without deleting it. Since #89 a new photo is **pre-moderated**: the upload creates it
+`Pending`, it is not public and appears in the `/admin/photos?tab=portfolio` queue until an
+administrator approves it.
 
 **Public gallery.** `/barbers/{id}` renders `photos` between the hero and the slots grid. An empty
 array means no section at all. The grid is two columns at 320 px, three from `sm` and four from
@@ -232,9 +236,12 @@ covered by axe at 1280 and 320.
 opens a dialog with a file input, a local preview and a caption (up to 2000 characters with a
 counter); at ten photos the button is disabled with an honest limit text. Each card has «Выше» /
 «Ниже» (one bulk `PUT .../photos/order` with the full id array, never two swaps), «Изменить
-подпись», «Скрыть» / «Вернуть» and «Удалить» behind an `alertdialog`. A photo blocked by an
-administrator shows the `destructive` badge «Скрыто администратором» and only «Удалить» — the
-owner cannot unblock it. A hidden-by-owner photo shows «Скрыто» and can be returned. Every
+подпись», «Скрыть» / «Вернуть» and «Удалить» behind an `alertdialog`. A new frame shows the
+«На проверке» badge and the explanation «Кадр виден только вам, пока администратор его не
+одобрит.»; a rejected one shows «Отклонено» and `Причина: …` from the administrator. A photo
+blocked by an administrator shows the `destructive` badge «Скрыто администратором» and only
+«Удалить» — the owner cannot unblock it. A hidden-by-owner photo shows «Скрыто» and can be
+returned. Every
 success is announced, calls `invalidateBarberProfile(id)` so «Открыть, как видят клиенты» does
 not read the stale public cache, and quietly re-reads the card; an error stays in a `role="alert"`
 line above the grid and never hides the loaded photos.
@@ -248,8 +255,8 @@ request with `file` and `description` (`POST api/barber-profiles/{id}/photos/upl
 does not add a JSON `Content-Type` for `FormData`, and a stale CSRF token is retried with the same
 `FormData`. The server re-checks the signature (JPEG/PNG/WebP, never SVG/GIF), the size (1 KiB..5
 MiB), the sides (300..6000 px) and the area (at most 24 MP); the request itself is capped at 6 MiB,
-so Kestrel may answer `413` before the action. The result is `201 { id }`; the 11th photo is
-`409 barberProfile.addPhoto.limit`.
+so Kestrel may answer `413` before the action. The result is `201 { id }`; the photo is created
+`Pending` and is not public until approved, and the 11th photo is `409 barberProfile.addPhoto.limit`.
 
 **Storage and URL.** Files live on the API disk behind `IPhotoStorage`, under `Storage:RootPath`
 (default `App_Data/photos`, relative to the API content root; an absolute path is used as is). The
@@ -263,19 +270,24 @@ keep their absolute external URLs.
 
 | State | Public card | `GET /api/media/portfolio/...` |
 |---|---|---|
-| `isPublished: true`, `isBlocked: false` | shown | `200`, `Cache-Control: public, max-age=86400` |
+| `moderationStatus: 'Approved'`, `isPublished: true`, `isBlocked: false` | shown | `200`, `Cache-Control: public, max-age=86400` |
+| `moderationStatus: 'Pending'` or `'Rejected'` | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
 | `isPublished: false` («Скрыть») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
 | `isBlocked: true` («Скрыто администратором») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
 
-The media route reads visibility from the database on every request; a hidden or blocked URL is
-`404` even if it is already known, and a served file always carries
+The media route reads visibility from the database on every request; a hidden, blocked or
+not-approved URL is `404` even if it is already known, and a served file always carries
 `X-Content-Type-Options: nosniff`.
-Only an admin can block or unblock (`POST`/`DELETE api/barber-profiles/{id}/photos/{photoId}/block`);
-the owner can hide and return a photo with `POST`/`DELETE .../publication`, and those calls never
-change `isBlocked`. `GET api/barber-profiles/{id}` (the own card) returns all photos with both
-flags, the public card only visible ones, and `AdminBarberDetailResponse.photos` all of them while
-`readiness.photosCount` counts visible rows only. Photos have no server thumbnails in this slice:
-`thumbnailUrl` is always `null`, and there is no `srcset`/WebP/AVIF (see `AGENT.md` §14 #31).
+Only an admin can approve/reject a pending frame (`POST .../photos/{photoId}/approval|rejection`,
+rejection with a mandatory 1..500 reason) and block or unblock a public one
+(`POST`/`DELETE api/barber-profiles/{id}/photos/{photoId}/block`); the owner can hide and return a
+photo with `POST`/`DELETE .../publication`, and those calls never change `isBlocked` or the
+moderation status. `GET api/barber-profiles/{id}` (the own card) returns all photos with both
+flags, the real `moderationStatus` and `rejectionReason`; the public card only
+`Approved && isPublished && !isBlocked` (its response always says `Approved`/`null`), and
+`AdminBarberDetailResponse.photos` all of them while `readiness.photosCount` counts visible and
+approved rows only. Photos have no server thumbnails in this slice: `thumbnailUrl` is always
+`null`, and there is no `srcset`/WebP/AVIF (see `AGENT.md` §14 #31).
 
 - `src/lib/portfolio-photos.ts` — DTO, the eight mutations, the `FormData` upload and
   `describePortfolioPhotoError`.
@@ -288,22 +300,30 @@ flags, the public card only visible ones, and `AdminBarberDetailResponse.photos`
 
 **E2E.** The portfolio scenario uses `e2e/fixtures/portfolio-photo.png`, a real **800×600** PNG of
 about 101 KB (not an SVG and not a 1×1 pixel), and
-`e2e/specs/barber-profile-photos-mutations.spec.ts` in the `mutations-chromium` project, last: five
-serial scenes on the isolated `profileBarber`. The barber uploads it from `/barber/profile` and
-sees a real image (`naturalWidth > 0`); the public card shows the «Работы» gallery, a click opens
+`e2e/specs/barber-profile-photos-mutations.spec.ts` in the `mutations-chromium` project, last: six
+serial scenes on the isolated `profileBarber`. The barber uploads it from `/barber/profile`, sees
+its own preview with the «На проверке» badge and the explanation that only they can see it, while
+the public card has no «Работы» section and `GET /api/barbers/{id}` returns no photos. The admin
+opens `/admin/photos?tab=portfolio`, searches by the barber's name, previews the frame, approves
+it, and the public gallery + contract return exactly one `Approved` photo (axe scans that queue row
+with a caption at 1280). The next scene opens the public card: the «Работы» gallery, a click opens
 the lightbox with «1 из 1» and both arrows disabled at the edges (the scenario has one photo —
 multi-photo paging is covered by the `barber-portfolio.test.tsx` unit test), Escape closes it and
 focus returns; axe scans the gallery and the open lightbox at 1280, then a 320 reload checks
-`scrollWidth <= 320`, scans the gallery and opens a lightbox no wider than the screen. An admin
-then blocks the photo (badge «Скрыто администратором», `role="status"`), the public card loses the
-section and the API returns no photos, «Разблокировать» restores both, and the barber finally
-deletes the photo — «Фотографий нет.» and no «Работы» publicly. `e2e/fixtures/seed.sql` deletes the
-`portfolio_photos` rows of `profileBarber` (`9e100000-0000-4000-8000-000000000015`) before its
-fixture upsert, so a rerun is idempotent; a failed scene is cleaned through the API in `afterEach`,
-with a best-effort `afterAll` as the last resort. File uploads are written to `Storage:RootPath`;
-CI passes `Storage__RootPath: ${{ runner.temp }}/photos` to the API step, and a local run may leave
-orphan files in `App_Data/photos` — they do not affect the database or the tests, but the
-directory should be emptied when it grows.
+`scrollWidth <= 320`, scans the gallery and opens a lightbox no wider than the screen. A second
+frame is uploaded, rejected in the queue with a reason, and the owner sees «Отклонено» and
+«Причина: …» while the public gallery still has one photo. An admin then blocks the approved photo
+(badge «Скрыто администратором», `role="status"`), the public card loses the section and the API
+returns no photos, «Разблокировать» restores both, and the barber finally deletes both frames —
+«Фотографий нет.» and no «Работы» publicly. The queue page object is `e2e/pages/admin-photos-page.ts`
+(tabs, search, rows, preview, both decisions and the reason dialog); it is used by the avatar and
+portfolio specs and by both axe specs. `e2e/fixtures/seed.sql` deletes the `portfolio_photos` rows
+of `profileBarber` (`9e100000-0000-4000-8000-000000000015`) before its fixture upsert, so a rerun is
+idempotent; a failed scene is cleaned through the API in `afterEach`, with a best-effort `afterAll`
+as the last resort. File uploads are written to `Storage:RootPath`; CI passes
+`Storage__RootPath: ${{ runner.temp }}/photos` to the API step, and a local run may leave orphan
+files in `App_Data/photos` — they do not affect the database or the tests, but the directory
+should be emptied when it grows.
 
 ## Avatar
 
@@ -330,13 +350,29 @@ hidden file input accepts `image/jpeg,image/png,image/webp`; the visible action 
 something to delete. The hint says «JPEG, PNG или WebP до 5 МБ. Квадрат 512×512 подготовит
 браузер.», the client checks the type and the 15 MiB source limit *before* decoding, the spinner
 and `disabled` last only while a request is in flight, success is announced in `role="status"`
-(«Аватар обновлён.» / «Аватар удалён.») and a failure in `role="alert"` with Russian copy from
-`describeAvatarError` (the English `detail` is never shown). Deletion is an `alertdialog`:
+(«Аватар загружен и ждёт проверки.» / «Аватар удалён.») and a failure in `role="alert"` with
+Russian copy from `describeAvatarError` (the English `detail` is never shown). A `Pending` frame
+adds the «На проверке» badge and «Кадр виден только вам, пока администратор его не одобрит.»;
+a `Rejected` one shows «Отклонено» and the administrator's reason, and the preview stays in the
+card so the owner can see what was refused. Deletion is an `alertdialog`:
 «Аватар исчезнет из карточки и кабинета. Файл удаляется безвозвратно.», and after it closes focus
 returns to the upload button, because «Удалить» no longer exists. At 320 px the buttons are 44 px
 and the card does not produce horizontal scroll.
 
-**Moderation.** An administrator can hide or restore the photo from `/admin/users/{id}` or
+**Pre-moderation.** Every upload creates a `Pending` frame: it is not public, and the cabinet
+shows the owner-only preview with the badge. The decision is made in `/admin/photos?tab=avatars`
+(the main path) or in the admin user/barber card:
+`POST /api/admin/users/{userId}/avatar/approval` makes the frame public, and
+`POST /api/admin/users/{userId}/avatar/rejection` with a mandatory `{ reason }` (1..500) keeps it
+private and shows the reason to the owner. Only a `Pending` frame can be decided — a repeated
+decision is `409 user.avatarModeration.invalidStatus`; `409 user.avatarModeration.noAvatar` means
+the user has no photo. `GET /api/users/me` returns `avatarModerationStatus` and
+`avatarRejectionReason` next to the raw URL; public `avatarUrl` is `null` unless the status is
+`Approved` and the frame is not blocked. A new upload **replaces** the old frame immediately — it
+is not kept public while the new one waits — so the public header, search and cards show initials
+until approval. The two decisions do **not** write to `audit_log` (see `AGENT.md` §14 #31/#32).
+
+**Blocking.** An administrator can hide or restore an approved photo from `/admin/users/{id}` or
 `/admin/barbers/{id}` — `POST`/`DELETE /api/admin/users/{userId}/avatar/block`, both answering `204`
 and idempotent. Hiding does not touch access: the file and `users.avatar_url` stay, so restoring
 returns the same frame, and the account, role and sessions are unchanged. Public reads hide it:
@@ -348,29 +384,34 @@ Each decision is one `user.updated` row in `/admin/audit` with «Фото скр
 user.blockAvatar.noAvatar` means the user has no photo to hide, `404 user.notFound` means the user
 is gone.
 
-**What the owner sees.** The header, the cabinet identity block and `AvatarCard` render the initials
-instead of the image when `isAvatarBlocked` is true — the raw URL is still in the context, but it is
-never put into an `<img>`, so the 24-hour browser cache cannot bring the old frame back. The avatar
-card says «Фото скрыто администратором» and explains that the photo is not public, a new photo is
-published immediately and only an administrator can restore the old one; the upload button becomes
-«Загрузить другое фото» and «Удалить» stays available (it clears both the URL and the flag). A
-successful upload or delete calls `setAvatar`, which clears the flag locally and in every
-subscriber.
+**What the owner sees.** The header and the cabinet identity block render the photo only while it
+is `Approved` or `Pending` and not blocked; for `Rejected` or a blocked frame they render the
+initials. The raw URL is still in the context, but it is not put into an `<img>` when it must not
+be shown, so the 24-hour browser cache cannot bring an old frame back. `AvatarCard` is the one
+exception: it keeps the rejected preview with «Отклонено» and the reason, because the owner must
+understand what failed. A blocked photo shows «Фото скрыто администратором» and the explanation;
+the upload button becomes «Загрузить другое фото» and «Удалить» stays available (it clears the
+URL and the flag). A successful upload or delete calls `setAvatar(url, status)`, which clears the
+old block flag and reason locally in every subscriber.
 
-**What the admin sees.** The user and barber cards keep the **raw** URL and add a «Фото скрыто»
-badge plus «Скрыть фото»/«Вернуть фото»; hiding asks for confirmation in an `alertdialog`
-(«Фото исчезнет из шапки, поиска, карточек и списков броней. Аккаунт останется активным, вернуть
-фото можно здесь же.»), restoring needs no dialog. Without a URL the card says «У пользователя нет
-фото — скрывать нечего.» and offers no action. The rows of `/admin/users` and `/admin/barbers`
-show the 24 px photo with the same badge, so a hidden photo is visible to the admin who may restore
-it.
+**What the admin sees.** The user and barber cards keep the **raw** URL and add a textual
+moderation badge — «На проверке» with «Одобрить»/«Отклонить» (the rejection `alertdialog` asks
+for a mandatory reason), «Отклонено» with the reason and no decision buttons, or «Опубликовано» —
+plus a «Фото скрыто» badge and «Скрыть фото»/«Вернуть фото» for the blocking state. Hiding asks
+for confirmation in an `alertdialog` («Фото исчезнет из шапки, поиска, карточек и списков
+броней. Аккаунт останется активным, вернуть фото можно здесь же.»), restoring needs no dialog.
+Without a URL the card says «У пользователя нет фото — скрывать нечего.» and offers no action.
+The rows of `/admin/users` and `/admin/barbers` show the 24 px photo with the same textual
+badges, so a pending or hidden photo is visible to the admin who must decide or restore it.
 
 **Why `users/me` returns the raw URL.** `PUT /api/users/{id}/profile` replaces the whole profile and
 the cabinet sends the current `avatarUrl` back; if `GET /api/users/me` returned `null` for a hidden
-photo, saving a name would erase the file (#85 regression). So `users/me` keeps the raw URL and adds
-`isAvatarBlocked`, and every renderer checks the flag. The admin reads keep the raw URL for the same
-reason: an admin must see what is hidden to decide whether to restore it. Public reads are the only
-masked surface.
+or rejected photo, saving a name would erase the file (#85 regression). So `users/me` keeps the raw
+URL and adds `isAvatarBlocked`, `avatarModerationStatus` and `avatarRejectionReason`, and every
+renderer checks them. A real upload or delete changes the URL and clears the old status/reason; a
+name save sends the same URL, so it changes nothing. The admin reads keep the raw URL and the same
+three fields for the same reason: an admin must see what is pending or hidden to decide. Public
+reads are the only masked surface.
 
 **Client preparation.** `src/lib/image-prep.ts` gained `prepareAvatarImage` next to
 `preparePortfolioImage`; both share one private encoder (JPEG quality 0.85, retry at 0.7 if the
@@ -380,31 +421,37 @@ the server's 300 px minimum always holds — on a white background, named `avata
 
 **Transport and cache.** `src/lib/avatars.ts` sends `POST /api/users/me/avatar` as
 `multipart/form-data` with the single field `file` through `mutateWithCsrf` (fresh `X-CSRF-TOKEN`,
-one retry with the same `FormData` on `auth.csrf.invalid`), validates the `201 { avatarUrl }` with
-`isAvatarUploadResponse` (a relative `/api/media/avatars/...` URL), and deletes through
-`DELETE /api/users/me/avatar` (`204`, idempotent). The provider's `setAvatar` updates the shared
+one retry with the same `FormData` on `auth.csrf.invalid`), validates the
+`201 { avatarUrl, moderationStatus }` with `isAvatarUploadResponse` (a relative
+`/api/media/avatars/...` URL and a known status), and deletes through
+`DELETE /api/users/me/avatar` (`204`, idempotent). The upload always answers `Pending`, and the
+provider's `setAvatar(url, status)` updates the shared
 context without a second `GET /api/users/me`, so the header and every other consumer change at
 once; a later profile save still sends
 `avatarUrl` back unchanged, and after a successful upload or delete the card calls
 `invalidateBarberProfile(profile.barberProfileId)` so «Открыть, как видят клиенты» never shows the
 old public cache.
 
-**Public card.** `BarberProfile.avatarUrl` is part of the public response; `BarberHero` renders
-`AvatarImage` when it is set and keeps the initials as the fallback. `AccountIdentity` does the
-same for the cabinet shell. The admin user and barber cards render the raw `avatarUrl` (hidden or
-not) and the «Фото скрыто» badge; the `AvatarModeration` block owns the hide/restore actions. A
-hidden photo is masked on the public card and in search, but never in the admin card.
+**Public card.** `BarberProfile.avatarUrl` is part of the public response and is `null` unless the
+frame is `Approved` and not blocked; `BarberHero` renders `AvatarImage` when it is set and keeps
+the initials as the fallback. `AccountIdentity` does the same for the cabinet shell. The admin
+user and barber cards render the raw `avatarUrl` (pending, hidden or not) with the moderation badge
+and the `AvatarModeration` block owns approve/reject and hide/restore. A hidden or pending photo is
+masked on the public card and in search, but never in the admin card.
 
 **Storage and URL.** The file lives on the same disk and under the same `Storage:RootPath` as the
 portfolio, at `{root}/avatars/{userId:N}/{mediaId:N}.{ext}`. `GET /api/media/avatars/{userId}/{fileName}`
-is anonymous: it serves the file only when the URL stored in the database equals the requested one,
-and a hidden frame only to an administrator (`private, no-store`); everyone else — the owner
-included — gets `404` (never `403`/`410`, so existence is not revealed). A visible frame keeps
-`Cache-Control: public, max-age=86400` and `X-Content-Type-Options: nosniff`. An avatar has no
-server thumbnails and no pre-moderation queue — publication stays post-moderated, and an
-administrator can hide a frame; hiding and restoring **are** written to `audit_log` as
-`user.updated` with `isAvatarBlocked`. Those limits, with the single-disk backup, are debt
-`AGENT.md` §14 #32.
+is anonymous: it serves the file only when the URL stored in the database equals the requested one.
+A public frame (`Approved`, not blocked) keeps `Cache-Control: public, max-age=86400` and
+`X-Content-Type-Options: nosniff`; a `Pending`/`Rejected` frame is served only to its **owner**
+(cabinet preview) with `private, no-store`; a blocked frame is served only to an administrator with
+the same `private, no-store`; everyone else — including the owner for a blocked frame — gets `404`
+(never `403`/`410`, so existence is not revealed). An avatar has no server thumbnails and no
+`srcset`; there is no `avatar=blocked` filter in the admin lists. Hiding and
+restoring **are** written to `audit_log` as `user.updated` with `isAvatarBlocked`; the two
+pre-moderation decisions are not, they live on the user row (`reviewedByUserId`/`reviewedAt`/
+`rejectionReason`). Those limits, with the single-disk backup and the 24-hour public cache, are
+debt `AGENT.md` §14 #32.
 
 **Policy.** `/privacy` §3 now names the profile photo (the user uploads it; for a barber it is
 published on the public card) and §4 sets its retention to «до удаления пользователем или
@@ -415,31 +462,44 @@ with the backend's `PrivacyPolicy.Version`; older consent records keep the editi
 `e2e/fixtures/portfolio-photo.png` (a genuine 800×600 PNG) and the real API:
 
 - `e2e/specs/account-avatar-mutations.spec.ts` (`mutations` account): upload from
-  `/account/profile`, `naturalWidth > 0` and `src` starting with `/api/media/avatars/`, the same
+  `/account/profile` — the card shows the owner-only preview, «На проверке» and «Аватар загружен
+  и ждёт проверки.», `naturalWidth > 0` and `src` starting with `/api/media/avatars/`, the same
   `src` in `AccountIdentity` **and in the header account menu** (the initials `data-initials`
-  before it, no image), a reload that keeps both, an admin context that sees the same `src` in
-  `/admin/users/{id}`; the admin hides the photo (the `alertdialog` is scanned by axe at 1280) —
-  the cabinet and the header show the initials, `GET /api/users/me` returns the raw `avatarUrl`
-  with `isAvatarBlocked: true`, anonymous and owner media requests answer `404`, the admin's
-  answers `200` with `private, no-store`, and the 320 px list row keeps its badge without
-  horizontal overflow; the admin restores it and the frame is back; axe at 1280 and 320 (zero
-  horizontal scroll, 44 px buttons), then deletion through the `alertdialog` — the header and the
-  identity block return to the initials without a reload and the old media URL answers `404`.
+  before it, no image), a reload that keeps both, and `GET /api/users/me` returning the raw URL
+  with `avatarModerationStatus: "Pending"`; an admin context sees the same `src` and the «На
+  проверке» badge in `/admin/users/{id}`. The admin then opens `/admin/photos?tab=avatars`,
+  searches by the customer email, previews the frame, approves it (the row disappears, «Фото
+  одобрено.»), and the owner's `users/me` answers `Approved`; the media file is now `200` to a
+  **real guest** context with `Cache-Control: public, max-age=86400` (the empty `storageState`
+  fix). The admin hides the photo (the `alertdialog` is scanned by axe at 1280) — the cabinet and
+  the header show the initials, `users/me` keeps the raw `avatarUrl` with `isAvatarBlocked: true`,
+  anonymous and owner media requests answer `404`, the admin's answers `200` with `private,
+  no-store`, and the 320 px list row keeps its badge without horizontal overflow; restoring brings
+  the frame back. A second scene rejects a **new** upload with a reason in the queue: the owner
+  sees «Отклонено», the reason and still their own preview (the header shows initials), the
+  anonymous media request is `404`, the owner's is `200`, and `users/me` returns `Rejected` +
+  `avatarRejectionReason`; axe at 1280 and 320 (zero horizontal scroll, 44 px buttons), then
+  deletion through the `alertdialog` — the header and the identity block return to the initials
+  without a reload and the old media URL answers `404`.
 - `e2e/specs/public-barber-avatar-mutations.spec.ts` (`profileBarber`, the isolated profile):
-  upload in the cabinet, `GET /api/barbers/{id}` returns the same `avatarUrl`, the hero shows a
-  real image, and a search by the `E2E поиск` marker (seeded for `…0015`) gives exactly one card
-  with the same `src`, `alt=""` and `naturalWidth > 0`; the contract
-  `GET /api/barbers?additionalService=…` returns the same URL. The admin then hides the owner's
-  photo from `/admin/barbers/{id}`: the search card and the hero show the initials, both contracts
-  return `avatarUrl: null`, and a 320 px row with the badge does not overflow; restoring brings
-  both the image and the contract back. After deletion the card and the hero show the initials
-  again and the contract returns `avatarUrl: null`. The showcase barber `…0001` is never touched.
+  upload in the cabinet gives the pending preview, while `GET /api/barbers/{id}` and
+  `GET /api/barbers?…` return `avatarUrl: null` and the hero/search card show the initials; the
+  admin approves the frame in `/admin/photos?tab=avatars`, after which the hero shows a real image,
+  a search by the `E2E поиск` marker (seeded for `…0015`) gives exactly one card with the same
+  `src`, `alt=""` and `naturalWidth > 0`, and the contract returns the same URL. The admin then
+  hides the owner's photo from `/admin/barbers/{id}`: the search card and the hero show the
+  initials, both contracts return `avatarUrl: null`, and a 320 px row with the badge does not
+  overflow; restoring brings both the image and the contract back. After deletion the card and the
+  hero show the initials again and the contract returns `avatarUrl: null`. The showcase barber
+  `…0001` is never touched.
 
 Successful scenes pass the uploaded URL to the next one; `afterEach` on a failure removes the
 avatar through `DELETE /api/users/me/avatar`, and — since the moderation slice — also lifts
 `is_avatar_blocked` through an admin context, because the `mutations` client cannot call the admin
-route. `e2e/fixtures/seed.sql` resets both `avatar_url` and `is_avatar_blocked` for the fixture
-accounts, so a reseed starts from the initials.
+route. `e2e/fixtures/seed.sql` resets `avatar_url`, `is_avatar_blocked`,
+`avatar_moderation_status`, `avatar_rejection_reason`, `avatar_submitted_at`, `avatar_reviewed_at`
+and `avatar_reviewed_by_user_id` for every fixture account, so a reseed starts from the initials
+and an empty avatar queue.
 
 ## My reviews
 
@@ -1355,12 +1415,15 @@ the domain. Confirming a hidden profile is rejected by the domain, so the button
 the profile must be returned to search first.
 
 **Avatar.** Each row and the card show the owner's photo (24 px in the row) with initials as the
-fallback, and a «Фото скрыто» badge when the flag is set; the card offers «Скрыть фото» (an
-`alertdialog` explaining that the photo disappears from the header, search, cards and booking
-lists while the account stays active) and «Вернуть фото» without a dialog. The request is the
-shared `POST`/`DELETE /api/admin/users/{userId}/avatar/block` with `barber.userId` — the avatar
-belongs to the profile owner, not to the profile — and the row and the card update locally before
-a quiet re-read. The raw URL stays visible to the admin so the frame can be restored.
+fallback, and a textual moderation badge — «На проверке», «Отклонено» (with the reason) or
+«Опубликовано» — plus a «Фото скрыто» badge when the blocking flag is set. A `Pending` frame
+offers «Одобрить»/«Отклонить» (the rejection `alertdialog` requires a reason of 1..500) through
+`POST .../avatar/approval|rejection`; an approved one offers «Скрыть фото» (an `alertdialog`
+explaining that the photo disappears from the header, search, cards and booking lists while the
+account stays active) and «Вернуть фото» without a dialog. The requests use
+`POST`/`DELETE /api/admin/users/{userId}/avatar/block` with `barber.userId` — the avatar belongs to
+the profile owner, not to the profile — and the row and the card update locally before a quiet
+re-read. The raw URL stays visible to the admin so the frame can be restored.
 
 ## Admin users
 
@@ -1376,12 +1439,16 @@ UTC» for a self-registered account, or «Записи нет — аккаунт
 that predate the record and for users created by an administrator. The IP of the consent is not
 returned by the API and is never displayed.
 
-**Avatar.** The row and the card show the user's photo (initials fallback) and a «Фото скрыто»
-badge; the card's avatar block offers «Скрыть фото» behind an `alertdialog` and «Вернуть фото»
-without one, or «У пользователя нет фото — скрывать нечего.» when there is no URL. The shared
-`POST`/`DELETE /api/admin/users/{userId}/avatar/block` answers `204` and is idempotent; the row is
-updated locally, the announcement offers the opposite action, the card is re-read quietly, and the
-raw URL stays visible to the admin so the frame can be restored.
+**Avatar.** The row and the card show the user's photo (initials fallback) with the same textual
+moderation badge («На проверке» / «Отклонено» + reason / «Опубликовано») and a «Фото скрыто»
+badge for the blocking state. The card's avatar block offers «Одобрить»/«Отклонить» for a
+`Pending` frame (rejection asks for a mandatory 1..500 reason), «Скрыть фото» behind an
+`alertdialog` for an approved one and «Вернуть фото» without one, or «У пользователя нет фото —
+скрывать нечего.» when there is no URL. The shared
+`POST`/`DELETE /api/admin/users/{userId}/avatar/block` and the two pre-moderation endpoints answer
+`204`; the row is updated locally, the announcement offers the opposite action, the card is
+re-read quietly, and the raw URL stays visible to the admin so the frame can be decided or
+restored.
 
 ## Admin catalogue
 
@@ -1540,16 +1607,18 @@ queue: the rail is a map of sections, not a start page.
   `fetchAdminSummary` (one parameterless `GET`, no `status`, `pageSize` or `cursor`) and
   `describeAdminSummaryError` (`403` → the role text, `429` → the rate-limit text, otherwise the
   shared Russian fallback; the English `detail` never reaches the DOM).
-- `src/lib/response-guards.ts` — `isAdminSummary`: three mandatory blocks, `pendingCount`,
-  `unverifiedCount` and `inactiveCount` must be non-negative safe integers, and `oldest` is either
-  `null` or `{ id, rating 1..5, createdAt, barberDisplayName, customerDisplayName }`. Extra fields
-  are ignored, so a wider contract keeps working.
+- `src/lib/response-guards.ts` — `isAdminSummary`: four mandatory blocks (reviews, barbers,
+  salons, photos), `pendingCount`, `unverifiedCount`, `inactiveCount`,
+  `photos.pendingAvatarsCount` and `photos.pendingPortfolioCount` must be non-negative safe
+  integers, and `oldest` is either `null` or
+  `{ id, rating 1..5, createdAt, barberDisplayName, customerDisplayName }`. Extra fields are
+  ignored, so a wider contract keeps working.
 - `src/hooks/use-admin-summary.ts` — one read with an `AbortController` and a request token:
   `reload` is the first load (skeleton), `refresh` is the quiet update that keeps the old numbers
   on screen and turns a failure into a `role="alert"` line; `401` sets `requiresSignIn`;
   `updatedAt` is the last success. StrictMode-safe, a stale response is dropped.
 - `src/components/admin/summary-screen.tsx` — the `h1`, the subtitle, «Обновлено в HH:MM», the
-  single «Обновить», and three `<section>`s separated by thin dividers.
+  single «Обновить», and four `<section>`s separated by thin dividers.
 
 What it shows:
 
@@ -1563,12 +1632,19 @@ What it shows:
   which opens on the «На проверке» queue.
 - **«Выключенные салоны»** — `inactiveCount` and «Открыть каталог салонов» →
   `/admin/catalogue?tab=salons`.
+- **«Фотографии на проверке»** — two numbers from `photos.pendingAvatarsCount` and
+  `photos.pendingPortfolioCount` with «Открыть аватары» → `/admin/photos` and «Открыть портфолио»
+  → `/admin/photos?tab=portfolio`; the copy says that new avatars and works are not public until
+  an administrator approves them. When both are zero the block says «Все фотографии проверены.»
+  and renders no links.
 - Zeros are named honestly: «Очередь пуста — все отзывы проверены.», «Все профили подтверждены.»,
-  «Выключенных салонов нет.».
+  «Выключенных салонов нет.», «Все фотографии проверены.».
 
 The counters use the **same predicates** as the sections (`is_published = false`,
-`is_verified = false` without `is_active`, `is_active = false`), so a number is exactly the size of
-its queue; the oldest review is the first row of the same FIFO moderation page the queue uses.
+`is_verified = false` without `is_active`, `is_active = false`, `Pending` avatars with a URL and
+submitted-at, and `Pending` portfolio photos), so a number is exactly the size of
+its queue; the two photo numbers are exactly the sizes of the `/admin/photos` tabs, and the oldest
+review is the first row of the same FIFO moderation page the queue uses.
 There is deliberately no `total` in `PagedResponse` or in the existing lists: one screen needs the
 number, and the shared pagination contract stays unchanged.
 
@@ -1727,7 +1803,7 @@ needs no API and no database, and covers:
 - `admin-summary` — exactly one parameterless `GET /api/admin/summary`, the strict guard rejecting
   a negative or fractional counter, a missing block and a malformed `oldest` while accepting
   `oldest: null` and extra fields, and the `403`/`429`/fallback error mapping. `SummaryScreen`
-  covers the three blocks with their numbers, links and copy, the honest zeros, the `401` gate, the
+  covers the four blocks with their numbers, links and copy, the honest zeros, the `401` gate, the
   first-page error with «Повторить», the refresh error that keeps the blocks, exactly one request
   per «Обновить» and the «Обновлено в …» label; the `formatProfilesCount`/`formatSalonsCount`
   plural forms are covered directly.
@@ -1776,16 +1852,20 @@ layer below.
 
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
-admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
-portfolio gallery with its lightbox (axe at 1280 and 320) and the admin blocking of a photo, the
-avatar upload in the cabinet, its header and search appearances and its public hero (axe at 1280
-and 320, an admin sees the same image, deletion restores the initials), email
+admin bookings desk, the admin summary (including the photo queues' fourth block) and the admin
+statistics, sign-in, public reviews, the portfolio gallery with its lightbox (axe at 1280 and 320)
+and the admin approve/reject/block of a photo, the avatar upload in the cabinet, its
+pre-moderation queue, its header and search appearances and its public hero (axe at 1280 and 320,
+an admin sees the same image, deletion restores the initials), email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
-stays separate and fast; E2E never runs inside it. After the avatar surfaces slice the full local
-run is **287 passed, 4 skipped, 0 failed**; the two avatar specs (header assertions and the search
-card) are part of that count.
+stays separate and fast; E2E never runs inside it. The last full local run (2026-11-12, after the
+photo pre-moderation slice) is **307 passed, 6 skipped, 0 failed** — 313 tests in 6.2 min with
+`--workers=2`; the queue page object is `e2e/pages/admin-photos-page.ts`. The previously documented
+cache flake is fixed: a guest `playwright.request.newContext` inherited the owner's `storageState`,
+so "anonymous" requests carried the cookie and ASP.NET added `no-store`; every guest context now
+passes an explicit empty `storageState`, and `public, max-age=86400` is asserted by a real guest.
 
 ### One-time setup
 
@@ -1814,7 +1894,10 @@ The inbox UI is http://localhost:8025. `e2e/global-setup.ts` polls `GET /api/v1/
 15 seconds and fails immediately with this command if the container is missing, so the first test
 cannot flake on a not-yet-ready SMTP port.
 
-The same inbox serves all mail flows. Registration sends the verification letter to the new
+The same inbox serves all mail flows. The photo pre-moderation scenes do not read the inbox, but
+the suite still requires Mailpit because registration, email verification, email change and
+password reset do; a missing container fails the run before the first spec, not in the middle.
+Registration sends the verification letter to the new
 address first, so `password-reset.spec.ts` waits for the reset message **by recipient and
 subject** — «Сброс пароля — BarberSearch», `waitForPasswordResetMessage` in
 `e2e/fixtures/mail.ts` — instead of taking the first message to that address; the verification
@@ -1968,11 +2051,16 @@ before its fixture upsert, so `barber-profile-photos-mutations.spec.ts` starts f
 `afterAll`). Uploaded files live outside PostgreSQL in `Storage:RootPath`; orphan files from a
 failed run do not affect the seed or the tests and are ignored by the media route once their
 database row is gone.
-For avatars the seed resets `avatar_url` on every fixture account, including the isolated
-`profileBarber` (whose conflict update now clears it too) and the `mutations` customer
-`e2e-mutations@barbersearch.test`, so both avatar specs start from the initials. A failed scene
-deletes the file and the row through `DELETE /api/users/me/avatar` in `afterEach`; the showcase
-barber `…0001` is never mutated.
+For avatars the seed resets `avatar_url`, `is_avatar_blocked`, `avatar_moderation_status`,
+`avatar_rejection_reason`, `avatar_submitted_at`, `avatar_reviewed_at` and
+`avatar_reviewed_by_user_id` on every fixture account, including the isolated `profileBarber`
+(whose conflict update now clears them too) and the `mutations` customer
+`e2e-mutations@barbersearch.test`, so both avatar specs start from the initials and
+`/admin/photos?tab=avatars` starts empty. A failed scene deletes the file and the row through
+`DELETE /api/users/me/avatar` in `afterEach`; the showcase barber `…0001` is never mutated.
+The portfolio fixture deletes `profileBarber`'s `portfolio_photos` rows before the upsert (see
+above), so `/admin/photos?tab=portfolio` is empty on a reseeded database; the summary's «Фотографии
+на проверке» block then shows the honest zero and no links.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 

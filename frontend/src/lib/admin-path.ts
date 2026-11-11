@@ -22,6 +22,12 @@ export type AdminBarberStatusFilter = 'all' | 'pending' | 'hidden'
  */
 export type AdminBarberRequestFilter = 'pending' | 'all'
 
+/**
+ * Вкладка очереди фотографий: аватары или работы портфолио. Живёт в `?tab=`,
+ * по умолчанию аватары.
+ */
+export type PhotosTab = 'avatars' | 'portfolio'
+
 export type AdminRoute =
   | { kind: 'summary' }
   | { kind: 'statistics' }
@@ -38,6 +44,7 @@ export type AdminRoute =
       status: AdminBarberRequestFilter
     }
   | { kind: 'catalogue'; tab: CatalogueTab }
+  | { kind: 'photos'; tab: PhotosTab }
   | { kind: 'bookings'; bookingId: string | null }
   | { kind: 'audit' }
   | { kind: 'notFound' }
@@ -53,6 +60,8 @@ const CATALOGUE_TABS: readonly CatalogueTab[] = [
   'specializations',
   'salons',
 ]
+
+const PHOTOS_TABS: readonly PhotosTab[] = ['avatars', 'portfolio']
 
 const BARBER_STATUSES: readonly AdminBarberStatusFilter[] = [
   'all',
@@ -120,6 +129,12 @@ export function parseAdminPath(pathname: string, search: string): AdminRoute {
 
   if (pathname === '/admin/catalogue') {
     return { kind: 'catalogue', tab: parseCatalogueTab(search) }
+  }
+
+  // Очередь премодерации фото: две вкладки в `?tab=`, по умолчанию аватары.
+  // Карточки у строки нет — решения принимаются прямо в списке.
+  if (pathname === '/admin/photos') {
+    return { kind: 'photos', tab: parsePhotosTab(search) }
   }
 
   // Брони поддержки: список и карточка по id. Фильтры (email, статус) живут
@@ -303,6 +318,28 @@ export function cataloguePath(tab: CatalogueTab = 'services'): string {
   return tab === 'services'
     ? '/admin/catalogue'
     : `/admin/catalogue?tab=${tab}`
+}
+
+/**
+ * Разбирает `?tab=` очереди фото: неизвестная вкладка — аватары.
+ *
+ * Так же ведут себя `?tab=` каталога и отзывов: ссылка с опечаткой не должна
+ * давать «Раздел не найден», потому что раздел существует.
+ */
+export function parsePhotosTab(search: string): PhotosTab {
+  const value = new URLSearchParams(search).get('tab')
+
+  return PHOTOS_TABS.find((tab) => tab === value) ?? 'avatars'
+}
+
+/**
+ * Адрес очереди фото: вкладка — в query, по умолчанию аватары.
+ *
+ * Значение по умолчанию в ссылку не попадает: `/admin/photos` остаётся коротким
+ * адресом вкладки аватаров.
+ */
+export function photosPath(tab: PhotosTab = 'avatars'): string {
+  return tab === 'avatars' ? '/admin/photos' : `/admin/photos?tab=${tab}`
 }
 
 /** Идентификатор отзыва должен быть GUID: иначе запрос заведомо не найдёт запись. */

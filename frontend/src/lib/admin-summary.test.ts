@@ -32,6 +32,7 @@ const SUMMARY = {
   reviews: { pendingCount: 14, oldest: OLDEST },
   barbers: { unverifiedCount: 1 },
   salons: { inactiveCount: 1 },
+  photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 3 },
 }
 
 /** Тело ответа, которое должно собирать ошибку строгого guard'а. */
@@ -40,15 +41,29 @@ const INVALID_SUMMARIES: readonly [string, JsonBodyType][] = [
     reviews: { pendingCount: -1, oldest: null },
     barbers: { unverifiedCount: 0 },
     salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['дробный счётчик', {
     reviews: { pendingCount: 0, oldest: null },
     barbers: { unverifiedCount: 1.5 },
     salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['отсутствующий блок', {
     reviews: { pendingCount: 0, oldest: null },
     barbers: { unverifiedCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+  }],
+  ['отсутствующий блок photos', {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0 },
+  }],
+  ['дробный счётчик фото', {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 2.5 },
   }],
   ['«самый старый» без поля', {
     reviews: {
@@ -57,11 +72,13 @@ const INVALID_SUMMARIES: readonly [string, JsonBodyType][] = [
     },
     barbers: { unverifiedCount: 0 },
     salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['оценка вне 1..5', {
     reviews: { pendingCount: 1, oldest: { ...OLDEST, rating: 6 } },
     barbers: { unverifiedCount: 0 },
     salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
 ]
 

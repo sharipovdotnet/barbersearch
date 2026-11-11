@@ -31,12 +31,14 @@ const SUMMARY = {
   reviews: { pendingCount: 14, oldest: OLDEST },
   barbers: { unverifiedCount: 1 },
   salons: { inactiveCount: 1 },
+  photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 3 },
 }
 
 const EMPTY = {
   reviews: { pendingCount: 0, oldest: null },
   barbers: { unverifiedCount: 0 },
   salons: { inactiveCount: 0 },
+  photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
 }
 
 /** Ответ сводки с запоминанием каждого запроса. */
@@ -59,7 +61,7 @@ describe('SummaryScreen', () => {
     vi.useRealTimers()
   })
 
-  it('показывает три блока с числами и ссылками из контракта', async () => {
+  it('показывает четыре блока с числами и ссылками из контракта', async () => {
     mockSummary(SUMMARY)
 
     render(<SummaryScreen />)
@@ -104,6 +106,26 @@ describe('SummaryScreen', () => {
     expect(
       within(salons).getByRole('link', { name: 'Открыть каталог салонов' })
     ).toHaveAttribute('href', '/admin/catalogue?tab=salons')
+
+    const photos = screen.getByRole('region', {
+      name: 'Фотографии на проверке',
+    })
+
+    expect(
+      within(photos).getByText(
+        'Новые аватары и работы не видны публично, пока администратор их не одобрит.'
+      )
+    ).toBeInTheDocument()
+    expect(within(photos).getByText('Аватары')).toBeInTheDocument()
+    expect(within(photos).getByText('2')).toBeInTheDocument()
+    expect(within(photos).getByText('Портфолио')).toBeInTheDocument()
+    expect(within(photos).getByText('3')).toBeInTheDocument()
+    expect(
+      within(photos).getByRole('link', { name: 'Открыть аватары' })
+    ).toHaveAttribute('href', '/admin/photos')
+    expect(
+      within(photos).getByRole('link', { name: 'Открыть портфолио' })
+    ).toHaveAttribute('href', '/admin/photos?tab=portfolio')
   })
 
   it('нули называет честно и не показывает «самого старого»', async () => {
@@ -116,6 +138,13 @@ describe('SummaryScreen', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Все профили подтверждены.')).toBeInTheDocument()
     expect(screen.getByText('Выключенных салонов нет.')).toBeInTheDocument()
+    expect(screen.getByText('Все фотографии проверены.')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Открыть аватары' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Открыть портфолио' })
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Открыть отзыв' })
     ).not.toBeInTheDocument()

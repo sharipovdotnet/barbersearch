@@ -1,9 +1,12 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.PortfolioPhotos.ApprovePortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.BlockPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.PublishPortfolioPhoto;
+using BarberSearch.Application.PortfolioPhotos.RejectPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UnblockPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UnpublishPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UpdatePortfolioPhotoDescription;
+using BarberSearch.Contracts.Photos;
 using BarberSearch.Contracts.PortfolioPhotos.UpdatePortfolioPhotoDescription;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
@@ -114,5 +117,71 @@ public class PortfolioPhotosController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UnblockPortfolioPhotoCommand(barberProfileId, photoId),
+            cancellationToken));
+
+    /// <summary>
+    /// Одобряет фотографию портфолио, ждущую проверки. Только администратор.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Одобрение — допуск к публикации, а не публикация: кадр появится публично, только если
+    /// владелец не снял его с публикации (<c>isPublished</c>) и он не заблокирован
+    /// администратором. Повторное решение по проверенному кадру — не <c>204</c>: домен
+    /// возвращает <c>409 portfolioPhoto.moderation.invalidStatus</c>, и интерфейс перечитывает
+    /// очередь.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c>. Профиля нет — <c>404 barberProfile.notFound</c>, фотографии нет в этом
+    /// профиле — <c>404 portfolioPhoto.moderation.notFound</c>. Решение пишется в поля самой
+    /// сущности (<c>reviewedByUserId</c>, <c>reviewedAt</c>); <c>audit_log</c> новых типов
+    /// не получает.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
+    /// <param name="photoId">Одобряемая фотография.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [HttpPost("{photoId:guid}/approval")]
+    public async Task<ActionResult> Approve(
+        Guid barberProfileId,
+        Guid photoId,
+        [FromServices] ICommandHandler<ApprovePortfolioPhotoCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ApprovePortfolioPhotoCommand(barberProfileId, photoId),
+            cancellationToken));
+
+    /// <summary>
+    /// Отклоняет фотографию портфолио с обязательной причиной. Только администратор.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Причина — текст администратора для владельца профиля: домен тримит её, требует 1..500
+    /// символов и возвращает <c>400 portfolioPhoto.moderation.reasonRequired</c> /
+    /// <c>.reasonTooLong</c> с <c>invalidField = "reason"</c>. В <c>audit_log</c> причина
+    /// не попадает: решение фиксируется полями сущности, а журнал новых типов не получает.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c>. Профиля нет — <c>404 barberProfile.notFound</c>, фотографии нет —
+    /// <c>404 portfolioPhoto.moderation.notFound</c>, кадр уже не <c>Pending</c> — <c>409
+    /// portfolioPhoto.moderation.invalidStatus</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
+    /// <param name="photoId">Отклоняемая фотография.</param>
+    /// <param name="request">Тело с причиной отказа.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [HttpPost("{photoId:guid}/rejection")]
+    public async Task<ActionResult> Reject(
+        Guid barberProfileId,
+        Guid photoId,
+        [FromBody] RejectPhotoRequest request,
+        [FromServices] ICommandHandler<RejectPortfolioPhotoCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new RejectPortfolioPhotoCommand(barberProfileId, photoId, request.Reason),
             cancellationToken));
 }

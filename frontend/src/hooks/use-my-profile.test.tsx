@@ -34,6 +34,8 @@ function profile(
     phoneNumber: null,
     avatarUrl: avatar.avatarUrl ?? null,
     isAvatarBlocked: avatar.isAvatarBlocked ?? false,
+    avatarModerationStatus: 'Approved',
+    avatarRejectionReason: null,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified: true,
@@ -78,10 +80,11 @@ describe('useMyProfile: аватар', () => {
     expect(gets()).toBe(1)
 
     act(() => {
-      result.current.setAvatar(AVATAR_URL)
+      result.current.setAvatar(AVATAR_URL, 'Pending')
     })
 
     expect(result.current.profile?.avatarUrl).toBe(AVATAR_URL)
+    expect(result.current.profile?.avatarModerationStatus).toBe('Pending')
     expect(gets()).toBe(1)
 
     // Повторный рендер подписчика берёт то же значение из контекста, а не из сети.
@@ -111,7 +114,7 @@ describe('useMyProfile: аватар', () => {
     expect(result.current.profile?.isAvatarBlocked).toBe(true)
 
     act(() => {
-      result.current.setAvatar(AVATAR_URL)
+      result.current.setAvatar(AVATAR_URL, 'Pending')
     })
 
     expect(result.current.profile?.isAvatarBlocked).toBe(false)
@@ -180,7 +183,7 @@ describe('useMyProfile: аватар', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
     act(() => {
-      result.current.setAvatar(AVATAR_URL)
+      result.current.setAvatar(AVATAR_URL, 'Pending')
     })
 
     await act(async () => {

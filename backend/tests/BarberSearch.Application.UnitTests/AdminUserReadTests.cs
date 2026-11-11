@@ -3,6 +3,7 @@ using BarberSearch.Application.Users.Admin.GetAdminUser;
 using BarberSearch.Application.Users.Admin.GetAdminUsers;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.Users.Admin;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using Shared;
 using Xunit;
@@ -289,7 +290,8 @@ public class AdminUserReadTests
         var row = CreateRow(Start, "WithAvatar") with
         {
             AvatarUrl = "https://cdn.example.com/avatar.png",
-            IsAvatarBlocked = true
+            IsAvatarBlocked = true,
+            AvatarModerationStatus = PhotoModerationStatus.Rejected
         };
         repository.AddAdminRow(row);
 
@@ -303,9 +305,11 @@ public class AdminUserReadTests
 
         var item = Assert.Single(result.Value.Items);
 
-        // Админский список не маскирует фото: URL остаётся сырым, состояние — во флаге.
+        // Админский список не маскирует фото: URL остаётся сырым, состояние — во флаге
+        // и статусе проверки.
         Assert.Equal("https://cdn.example.com/avatar.png", item.AvatarUrl);
         Assert.True(item.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Rejected, item.AvatarModerationStatus);
     }
 
     [Fact]
@@ -331,6 +335,10 @@ public class AdminUserReadTests
         Assert.True(result.IsSuccess);
         Assert.Equal("https://cdn.example.com/avatar.png", result.Value.AvatarUrl);
         Assert.True(result.Value.IsAvatarBlocked);
+
+        // Смена URL создала Pending-кадр: админская карточка показывает состояние как есть.
+        Assert.Equal(PhotoModerationStatus.Pending, result.Value.AvatarModerationStatus);
+        Assert.Null(result.Value.AvatarRejectionReason);
     }
 
     private static AdminUserResponse CreateRow(
@@ -352,5 +360,6 @@ public class AdminUserReadTests
             null,
             createdAt,
             AvatarUrl: null,
-            IsAvatarBlocked: false);
+            IsAvatarBlocked: false,
+            AvatarModerationStatus: PhotoModerationStatus.Approved);
 }

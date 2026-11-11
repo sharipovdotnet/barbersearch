@@ -150,10 +150,12 @@ public class UsersController : ApiController
     /// приходят существующими кодами <c>barberProfile.uploadPhoto.*</c>.
     /// </para>
     /// <para>
-    /// Успех — <c>201 { "avatarUrl": "&lt;относительный URL&gt;" }</c> без <c>Location</c>:
-    /// отдельного читаемого self-URI у аватара нет. Multipart-запрос — cookie-мутация,
-    /// поэтому глобальный antiforgery-фильтр продолжает требовать <c>X-CSRF-TOKEN</c>;
-    /// отдельной политики rate limiter нет — хватает глобальных 30 записей/мин.
+    /// Успех — <c>201 { "avatarUrl": "&lt;относительный URL&gt;", "moderationStatus": "Pending" }</c>
+    /// (<see cref="AvatarUploadResponse"/>) без <c>Location</c>: отдельного читаемого self-URI
+    /// у аватара нет. Статус берётся из ответа обработчика, а не подставляется константой:
+    /// премодерация — правило домена. Multipart-запрос — cookie-мутация, поэтому глобальный
+    /// antiforgery-фильтр продолжает требовать <c>X-CSRF-TOKEN</c>; отдельной политики rate
+    /// limiter нет — хватает глобальных 30 записей/мин.
     /// </para>
     /// </remarks>
     /// <param name="form">Форма с одним полем файла.</param>
@@ -165,7 +167,7 @@ public class UsersController : ApiController
     [RequestFormLimits(MultipartBodyLengthLimit = MAX_AVATAR_REQUEST_BYTES)]
     public async Task<ActionResult<AvatarUploadResponse>> UploadAvatar(
         [FromForm] UploadUserAvatarForm form,
-        [FromServices] ICommandHandler<string, UploadUserAvatarCommand> handler,
+        [FromServices] ICommandHandler<AvatarUploadResponse, UploadUserAvatarCommand> handler,
         CancellationToken cancellationToken)
     {
         // form?.File: при запросе без form-content биндер оставляет параметр пустым,
@@ -217,7 +219,7 @@ public class UsersController : ApiController
         return uploaded.IsSuccess
             ? StatusCode(
                 StatusCodes.Status201Created,
-                new AvatarUploadResponse(uploaded.Value))
+                uploaded.Value)
             : FailureProblemDetails.CreateResult(uploaded.Error);
     }
 

@@ -13,6 +13,8 @@ const FIRST: PortfolioPhoto = {
   sortOrder: 0,
   isPublished: true,
   isBlocked: false,
+  moderationStatus: 'Approved',
+  rejectionReason: null,
 }
 
 const SECOND: PortfolioPhoto = {

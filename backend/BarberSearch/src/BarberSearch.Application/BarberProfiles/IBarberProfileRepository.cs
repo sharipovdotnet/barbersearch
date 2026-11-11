@@ -1,6 +1,8 @@
 using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Application.Photos.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
@@ -452,6 +454,43 @@ public interface IBarberProfileRepository
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<int, Failure>> CountPendingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница очереди «Портфолио» на проверку: только <c>Pending</c>-фотографии, FIFO.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Предикат ровно тот же, что у счётчика сводки: <c>ModerationStatus == Pending</c>.
+    /// Порядок — <c>created_at ASC, id ASC</c>: отдельной метки поступления у фотографии
+    /// нет, кадр создаётся сразу в очередь; курсор — пара <c>(createdAt, photoId)</c>.
+    /// </para>
+    /// <para>
+    /// Поиск — подстрока без учёта регистра по отображаемому имени барбера и email владельца
+    /// профиля, служебные символы <c>%</c>, <c>_</c> и <c>\</c> экранируются.
+    /// <paramref name="limit"/> — уже увеличенный на единицу размер страницы.
+    /// </para>
+    /// </remarks>
+    /// <param name="cursor">Позиция последней строки предыдущей страницы.</param>
+    /// <param name="search">Поиск по имени барбера или email владельца; <c>null</c> — без фильтра.</param>
+    /// <param name="limit">Сколько строк прочитать; <c>limit &lt;= 0</c> — <c>400 admin.photos.page.limit</c>.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminPortfolioPhotoResponse>, Failure>> GetAdminPortfolioPhotosPageAsync(
+        AdminPhotoCursor? cursor,
+        string? search,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Сколько работ портфолио ждёт проверки.
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с чтением очереди: <c>moderation_status = Pending</c>. Скрытие
+    /// владельцем (<c>is_published = false</c>) и административная блокировка статус
+    /// не меняют, поэтому такие кадры остаются в счётчике, пока их не проверили.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingPortfolioPhotosAsync(
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Карточка барбера любого статуса вместе с чек-листом готовности.

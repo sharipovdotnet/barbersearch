@@ -7,6 +7,8 @@ import {
   isBarberRequestId,
   isBookingId,
   parseAdminPath,
+  parsePhotosTab,
+  photosPath,
 } from '@/lib/admin-path'
 
 /**
@@ -238,5 +240,47 @@ describe('statistics', () => {
     expect(parseAdminPath('/admin/statistics/2026', '')).toStrictEqual({
       kind: 'notFound',
     })
+  })
+})
+
+describe('parseAdminPath: очередь фото', () => {
+  it('по умолчанию открывает вкладку аватаров', () => {
+    expect(parseAdminPath('/admin/photos', '')).toStrictEqual({
+      kind: 'photos',
+      tab: 'avatars',
+    })
+  })
+
+  it('читает вкладку из ?tab=', () => {
+    expect(parseAdminPath('/admin/photos', '?tab=portfolio')).toStrictEqual({
+      kind: 'photos',
+      tab: 'portfolio',
+    })
+  })
+
+  it('неизвестная вкладка возвращает аватары', () => {
+    expect(parseAdminPath('/admin/photos', '?tab=reviews')).toStrictEqual({
+      kind: 'photos',
+      tab: 'avatars',
+    })
+  })
+
+  it('лишний вложенный путь остаётся notFound', () => {
+    expect(parseAdminPath('/admin/photos/avatars', '')).toStrictEqual({
+      kind: 'notFound',
+    })
+  })
+
+  it('parsePhotosTab понимает только две вкладки', () => {
+    expect(parsePhotosTab('')).toBe('avatars')
+    expect(parsePhotosTab('?tab=avatars')).toBe('avatars')
+    expect(parsePhotosTab('?tab=portfolio')).toBe('portfolio')
+    expect(parsePhotosTab('?tab=Portfolio')).toBe('avatars')
+  })
+
+  it('photosPath опускает вкладку по умолчанию', () => {
+    expect(photosPath()).toBe('/admin/photos')
+    expect(photosPath('avatars')).toBe('/admin/photos')
+    expect(photosPath('portfolio')).toBe('/admin/photos?tab=portfolio')
   })
 })

@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, CheckCircle2, Circle, Loader2, Star } from 'lucide-react'
 
 import { AvatarModeration } from '@/components/admin/avatar-moderation'
+import { PhotoRejectionDialog } from '@/components/admin/photo-rejection-dialog'
 import { BarberStatusBadge } from '@/components/admin/barber-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,16 @@ import type {
   BarberGrade,
 } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS, BARBER_GRADES } from '@/lib/admin-barbers'
+import {
+  approvePortfolioPhoto,
+  describePhotoModerationError,
+  rejectPortfolioPhoto,
+} from '@/lib/admin-photos'
 import type { AdminBarberDetailStatus } from '@/hooks/use-admin-barber'
+import {
+  photoModerationLabel,
+  type PhotoModerationStatus,
+} from '@/lib/photo-moderation'
 import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import {
   formatDateTime,
@@ -101,6 +111,10 @@ export function BarberDetail({
         <AvatarModeration
           avatarUrl={barber.avatarUrl}
           isAvatarBlocked={barber.isAvatarBlocked}
+          moderationStatus={barber.avatarModerationStatus}
+          rejectionReason={barber.avatarRejectionReason}
+          userId={barber.userId}
+          subject={barber.displayName}
           initials={getInitials(barber.displayName)}
           isBusy={pendingAction !== null}
           pendingAction={avatarPending}
@@ -166,6 +180,7 @@ export function BarberDetail({
         <ReadinessChecklist barber={barber} />
 
         <BarberPhotos
+          barberProfileId={barber.id}
           photos={barber.photos}
           pendingPhotoId={pendingPhotoId}
           error={photoError}
@@ -467,18 +482,25 @@ function BarberActions({
 /**
  * «Фотографии» в админской карточке (§5.5).
  *
- * Админ видит все кадры профиля, включая скрытые владельцем и заблокированные, и может
- * скрыть кадр с публичной карточки. Вернуть его сам барбер не может — «Разблокировать»
- * доступно только здесь. Скрытие спрашивает подтверждение `alertdialog`: последствие
- * видит клиент, а не только барбер.
+ * Админ видит все кадры профиля, включая скрытые владельцем и заблокированные.
+ * У кадра «На проверке» есть «Одобрить» и «Отклонить»; отказ спрашивает причину
+ * `alertdialog`, потому что владелец увидит её в кабинете. Решение обновляет
+ * строку локально: второй `GET` карточки не нужен, а сервер уже отдаёт новый
+ * статус при следующем чтении.
+ *
+ * Вернуть скрытый кадр сам барбер не может — «Разблокировать» доступно только
+ * здесь. Скрытие одобренного кадра спрашивает подтверждение: последствие видит
+ * клиент, а не только барбер.
  */
 function BarberPhotos({
+  barberProfileId,
   photos,
   pendingPhotoId,
   error,
   onBlock,
   onUnblock,
 }: {
+  barberProfileId: string
   photos: readonly PortfolioPhoto[]
   pendingPhotoId: string | null
   error: string | null
@@ -487,8 +509,88 @@ function BarberPhotos({
 }) {
   const { t } = useI18n()
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [rejectId, setRejectId] = useState<string | null>(null)
+  const [pendingDecision, setPendingDecision] = useState<{
+    photoId: string
+    action: 'approve' | 'reject'
+  } | null>(null)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState<string | null>(null)
+  const [decisions, setDecisions] = useState<
+    Record<string, { status: PhotoModerationStatus; reason: string | null }>
+  >({})
+  const rejectButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const confirmPhoto =
     photos.find((photo) => photo.id === confirmId) ?? null
+  const rejectPhoto =
+    photos.find((photo) => photo.id === rejectId) ?? null
+
+  function statusOf(photo: PortfolioPhoto): PhotoModerationStatus {
+    return decisions[photo.id]?.status ?? photo.moderationStatus
+  }
+
+  function reasonOf(photo: PortfolioPhoto): string | null {
+    return decisions[photo.id]?.reason ?? photo.rejectionReason
+  }
+
+  async function handleApprove(photo: PortfolioPhoto): Promise<void> {
+    if (pendingDecision !== null) {
+      return
+    }
+
+    setPendingDecision({ photoId: photo.id, action: 'approve' })
+    setDecisionError(null)
+    setAnnouncement(null)
+
+    try {
+      await approvePortfolioPhoto(barberProfileId, photo.id)
+      setDecisions((current) => ({
+        ...current,
+        [photo.id]: { status: 'Approved', reason: null },
+      }))
+      setAnnouncement(t('Фото одобрено.'))
+    } catch (cause) {
+      setDecisionError(describePhotoModerationError(cause))
+    } finally {
+      setPendingDecision(null)
+    }
+  }
+
+  async function handleReject(reasonText: string): Promise<string | null> {
+    if (rejectPhoto === null) {
+      return null
+    }
+
+    setPendingDecision({ photoId: rejectPhoto.id, action: 'reject' })
+    setDecisionError(null)
+    setAnnouncement(null)
+
+    try {
+      await rejectPortfolioPhoto(barberProfileId, rejectPhoto.id, reasonText)
+      setDecisions((current) => ({
+        ...current,
+        [rejectPhoto.id]: { status: 'Rejected', reason: reasonText },
+      }))
+      setAnnouncement(t('Фото отклонено.'))
+      return null
+    } catch (cause) {
+      return describePhotoModerationError(cause)
+    } finally {
+      setPendingDecision(null)
+    }
+  }
+
+  function closeReject(): void {
+    const photoId = rejectId
+    setRejectId(null)
+
+    // Кнопка «Отклонить» осталась на странице: фокус возвращается к ней.
+    window.requestAnimationFrame(() => {
+      if (photoId !== null) {
+        rejectButtonRefs.current.get(photoId)?.focus()
+      }
+    })
+  }
 
   return (
     <section
@@ -505,23 +607,45 @@ function BarberPhotos({
         </p>
       )}
 
+      {decisionError && (
+        <p role="alert" className="text-sm text-destructive">
+          {decisionError}
+        </p>
+      )}
+
+      {announcement && (
+        <p role="status" className="text-sm text-success">
+          {announcement}
+        </p>
+      )}
+
       {photos.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('Фотографий нет.')}</p>
       ) : (
         <ul className="space-y-2">
           {photos.map((photo) => {
-            const isPending = pendingPhotoId === photo.id
+            const status = statusOf(photo)
+            const reason = reasonOf(photo)
+            const isBlockPending = pendingPhotoId === photo.id
+            const isDecisionPending = pendingDecision?.photoId === photo.id
+            const isBusy = isBlockPending || isDecisionPending
+            const action = pendingDecision?.photoId === photo.id
+              ? pendingDecision.action
+              : null
             const caption = photo.description?.trim() ?? ''
             const label = caption === '' ? t('Без подписи') : caption
             // Имя кнопки начинается с видимого текста и содержит подпись фото (WCAG 2.5.3).
-            const ariaLabel = (action: string): string =>
-              t('{action}: {caption}', { action, caption: label })
+            const ariaLabel = (buttonAction: string): string =>
+              t('{action}: {caption}', {
+                action: buttonAction,
+                caption: label,
+              })
 
             return (
               <li
                 key={photo.id}
                 className="flex items-start gap-3"
-                aria-busy={isPending || undefined}
+                aria-busy={isBusy || undefined}
               >
                 <img
                   src={photo.url}
@@ -532,7 +656,11 @@ function BarberPhotos({
 
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm break-words">{label}</p>
-                  <AdminPhotoStatus photo={photo} />
+                  <AdminPhotoStatus
+                    photo={photo}
+                    status={status}
+                    reason={reason}
+                  />
                 </div>
 
                 {photo.isBlocked ? (
@@ -540,30 +668,73 @@ function BarberPhotos({
                     variant="outline"
                     className="h-11 shrink-0 sm:h-9"
                     aria-label={ariaLabel(t('Разблокировать'))}
-                    disabled={isPending}
-                    aria-busy={isPending || undefined}
+                    disabled={isBusy}
+                    aria-busy={isBlockPending || undefined}
                     onClick={() => onUnblock(photo.id)}
                   >
-                    {isPending && (
+                    {isBlockPending && (
                       <Loader2
                         data-icon="inline-start"
                         aria-hidden
                         className="animate-spin"
                       />
                     )}
-                    {isPending ? t('Разблокируем…') : t('Разблокировать')}
+                    {isBlockPending
+                      ? t('Разблокируем…')
+                      : t('Разблокировать')}
                   </Button>
-                ) : (
+                ) : status === 'Pending' ? (
+                  <div className="flex shrink-0 flex-col gap-1.5">
+                    <Button
+                      className="h-11 sm:h-9"
+                      aria-label={ariaLabel(t('Одобрить'))}
+                      disabled={isBusy}
+                      aria-busy={action === 'approve' || undefined}
+                      onClick={() => {
+                        void handleApprove(photo)
+                      }}
+                    >
+                      {action === 'approve' && (
+                        <Loader2
+                          data-icon="inline-start"
+                          aria-hidden
+                          className="animate-spin"
+                        />
+                      )}
+                      {t('Одобрить')}
+                    </Button>
+                    <Button
+                      ref={(element) => {
+                        if (element) {
+                          rejectButtonRefs.current.set(photo.id, element)
+                        } else {
+                          rejectButtonRefs.current.delete(photo.id)
+                        }
+                      }}
+                      variant="outline"
+                      className="h-11 text-destructive hover:text-destructive sm:h-9"
+                      aria-label={ariaLabel(t('Отклонить'))}
+                      disabled={isBusy}
+                      aria-busy={action === 'reject' || undefined}
+                      onClick={() => {
+                        setDecisionError(null)
+                        setRejectId(photo.id)
+                      }}
+                    >
+                      {t('Отклонить')}
+                    </Button>
+                  </div>
+                ) : status === 'Approved' ? (
                   <Button
                     variant="destructive"
                     className="h-11 shrink-0 sm:h-9"
                     aria-label={ariaLabel(t('Скрыть'))}
-                    disabled={isPending}
+                    disabled={isBusy}
                     onClick={() => setConfirmId(photo.id)}
                   >
                     {t('Скрыть')}
                   </Button>
-                )}
+                ) : null}
               </li>
             )
           })}
@@ -607,17 +778,57 @@ function BarberPhotos({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {rejectPhoto !== null && (
+        <PhotoRejectionDialog
+          target={rejectPhoto.description?.trim() || t('Без подписи')}
+          onClose={closeReject}
+          onConfirm={handleReject}
+        />
+      )}
     </section>
   )
 }
 
-/** Статус кадра: блокировка приоритетнее снятия с публикации. */
-function AdminPhotoStatus({ photo }: { photo: PortfolioPhoto }) {
+/**
+ * Статус кадра: блокировка приоритетнее отказа, отказ — снятия с публикации.
+ * `Rejected` показывает причину, потому что именно её владелец увидит в кабинете.
+ */
+function AdminPhotoStatus({
+  photo,
+  status,
+  reason,
+}: {
+  photo: PortfolioPhoto
+  status: PhotoModerationStatus
+  reason: string | null
+}) {
   const { t } = useI18n()
 
   if (photo.isBlocked) {
     return (
       <Badge variant="destructive">{t('Скрыто администратором')}</Badge>
+    )
+  }
+
+  if (status === 'Pending') {
+    return (
+      <Badge variant="outline">{photoModerationLabel('Pending')}</Badge>
+    )
+  }
+
+  if (status === 'Rejected') {
+    return (
+      <div className="space-y-1">
+        <Badge variant="destructive">
+          {photoModerationLabel('Rejected')}
+        </Badge>
+        {reason !== null && (
+          <p className="text-sm break-words text-muted-foreground">
+            {t('Причина: {reason}', { reason })}
+          </p>
+        )}
+      </div>
     )
   }
 

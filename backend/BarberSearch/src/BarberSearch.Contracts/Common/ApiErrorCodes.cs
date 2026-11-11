@@ -405,6 +405,49 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Проверка фотографии портфолио: решение администратора по кадру.
+    /// </summary>
+    /// <remarks>
+    /// Ошибки решения отделены от ошибок блокировки (<c>portfolioPhoto.block.*</c>,
+    /// <c>portfolioPhoto.unblock.*</c>): блокировка — действие над опубликованным кадром,
+    /// проверка — допуск нового. Причина отказа — текст администратора; она хранится
+    /// на фотографии и в аудит не попадает.
+    /// </remarks>
+    public static class PortfolioPhoto
+    {
+        /// <summary>
+        /// Фотографии с указанным идентификатором нет в этом профиле; <c>404</c>.
+        /// </summary>
+        /// <remarks>
+        /// Чужой профиль в маршруте неотличим от несуществующего кадра: клиент не должен
+        /// перебором выяснять, какие фотографии есть у другого барбера.
+        /// </remarks>
+        public const string NotFound = "portfolioPhoto.moderation.notFound";
+
+        /// <summary>
+        /// Фотография уже не ждёт проверки; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Повторное решение по проверенному кадру — не <c>204</c>: интерфейс говорит
+        /// «Фото уже проверено. Обновите список.» и перечитывает очередь. Отклонённый кадр
+        /// нельзя одобрить задним числом — владелец загружает новый.
+        /// </remarks>
+        public const string InvalidStatus = "portfolioPhoto.moderation.invalidStatus";
+
+        /// <summary>
+        /// Причина отказа пуста или состоит из пробелов; <c>400</c>,
+        /// <c>invalidField = "reason"</c>.
+        /// </summary>
+        public const string ReasonRequired = "portfolioPhoto.moderation.reasonRequired";
+
+        /// <summary>
+        /// Причина отказа длиннее <c>500</c> символов; <c>400</c>,
+        /// <c>invalidField = "reason"</c>.
+        /// </summary>
+        public const string ReasonTooLong = "portfolioPhoto.moderation.reasonTooLong";
+    }
+
+    /// <summary>
     /// Заявки на роль барбера: подача, своя заявка, административное решение.
     /// </summary>
     /// <remarks>
@@ -604,6 +647,36 @@ public static class ApiErrorCodes
         /// Строку изменил или удалил параллельный запрос; <c>409</c>.
         /// </summary>
         public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
+
+        /// <summary>
+        /// Аватара нет — проверять нечего; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код от <c>user.blockAvatar.noAvatar</c>: там ошибка административного
+        /// скрытия, здесь — решения о проверке. Клиент показывает разные подсказки.
+        /// </remarks>
+        public const string AvatarModerationNoAvatar = "user.avatarModeration.noAvatar";
+
+        /// <summary>
+        /// Аватар уже не ждёт проверки; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Повторное решение по уже проверенному кадру — не <c>204</c>: интерфейс говорит
+        /// «Фото уже проверено. Обновите список.» и перечитывает очередь.
+        /// </remarks>
+        public const string AvatarModerationInvalidStatus = "user.avatarModeration.invalidStatus";
+
+        /// <summary>
+        /// Причина отказа пуста или состоит из пробелов; <c>400</c>,
+        /// <c>invalidField = "reason"</c>.
+        /// </summary>
+        public const string AvatarModerationReasonRequired = "user.avatarModeration.reasonRequired";
+
+        /// <summary>
+        /// Причина отказа длиннее <c>500</c> символов; <c>400</c>,
+        /// <c>invalidField = "reason"</c>.
+        /// </summary>
+        public const string AvatarModerationReasonTooLong = "user.avatarModeration.reasonTooLong";
     }
 
     /// <summary>
@@ -639,6 +712,43 @@ public static class ApiErrorCodes
         /// Префикс кодов проверки размера страницы; полный код — <c>admin.barbers.pageSize</c>.
         /// </summary>
         public const string PageSizePrefix = "admin.barbers";
+    }
+
+    /// <summary>
+    /// Админские списки и карточки фотографий: аватары пользователей и портфолио барберов.
+    /// </summary>
+    /// <remarks>
+    /// Отдельные коды от <see cref="AdminUser"/>, <see cref="AdminBarber"/> и
+    /// <see cref="AdminCatalogue"/>: экран <c>/admin/photos</c> — отдельное чтение со своим
+    /// курсором, поиском и размером страницы. Ошибки решений по кадру приходят из домена
+    /// (<c>user.avatarModeration.*</c>, <c>portfolioPhoto.moderation.*</c>) и здесь
+    /// не дублируются.
+    /// </remarks>
+    public static class AdminPhotos
+    {
+        /// <summary>
+        /// Курсор очереди не разбирается; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Один код на обе вкладки: форма курсора общая, а сообщение не раскрывает,
+        /// какие части строки не сошлись.
+        /// </remarks>
+        public const string Cursor = "admin.photos.cursor";
+
+        /// <summary>
+        /// Поисковая строка длиннее <c>100</c> символов; <c>400</c>.
+        /// </summary>
+        public const string SearchTooLong = "admin.photos.search";
+
+        /// <summary>
+        /// Лимит keyset-страницы не положительный; <c>400</c>.
+        /// </summary>
+        public const string PageLimitInvalid = "admin.photos.page.limit";
+
+        /// <summary>
+        /// Префикс кодов проверки размера страницы; полный код — <c>admin.photos.pageSize</c>.
+        /// </summary>
+        public const string PageSizePrefix = "admin.photos";
     }
 
     /// <summary>

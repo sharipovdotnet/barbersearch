@@ -600,6 +600,8 @@ function portfolioPhoto(
     sortOrder: 0,
     isPublished: true,
     isBlocked: false,
+    moderationStatus: 'Approved',
+    rejectionReason: null,
     ...overrides,
   }
 }

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.PortfolioPhotos;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Web.Common;
 using BarberSearch.Web.Deployment;
@@ -23,9 +24,12 @@ namespace BarberSearch.Web.Controllers;
 /// </para>
 /// <para>
 /// Видимость проверяется по БД на каждый запрос (<c>GetPortfolioPhotoAccessAsync</c>), а не
-/// по одному URL: скрытая или заблокированная фотография отвечает <c>404</c> анониму и любому
-/// чужому пользователю, даже если ссылка уже известна. Владельцу профиля и администратору
-/// файл отдаётся — иначе превью скрытых работ в кабинете были бы битыми, — но с
+/// по одному URL: публично кадр виден, только когда он одобрен
+/// (<c>ModerationStatus = Approved</c>), опубликован владельцем (<c>IsPublished</c>) и не
+/// заблокирован (<c>IsBlocked</c>). Неодобренная, скрытая или заблокированная фотография
+/// отвечает <c>404</c> анониму и любому чужому пользователю, даже если ссылка уже известна.
+/// Владельцу профиля и администратору файл отдаётся при любом статусе — иначе превью скрытых
+/// и ждущих проверки работ в кабинете были бы битыми, — но с
 /// <c>Cache-Control: private, no-store</c>. Отказ всегда <c>404</c>, никогда <c>403</c> или
 /// <c>410</c>: существование кадра не раскрывается.
 /// </para>
@@ -111,7 +115,12 @@ public sealed partial class PortfolioMediaController : ControllerBase
             return MediaNotFound();
         }
 
-        var visible = access.IsPublished && !access.IsBlocked;
+        // Публичная видимость — допуск к публикации, намерение владельца и отсутствие
+        // административной маски одновременно. Неодобренный кадр не виден никому, кроме
+        // владельца профиля и администратора.
+        var visible = access.ModerationStatus == PhotoModerationStatus.Approved
+            && access.IsPublished
+            && !access.IsBlocked;
         var allowed = visible
             || _currentUser.IsAdmin
             || (_currentUser.TryGetUserId(out var userId) && userId == access.OwnerUserId);

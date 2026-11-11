@@ -34,6 +34,8 @@ function photo(overrides: Partial<PortfolioPhoto> = {}): PortfolioPhoto {
     sortOrder: 0,
     isPublished: true,
     isBlocked: false,
+    moderationStatus: 'Approved',
+    rejectionReason: null,
     ...overrides,
   }
 }
@@ -134,6 +136,53 @@ describe('BarberProfilePhotos: список', () => {
     expect(
       screen.getByRole('button', { name: 'Вернуть: Стрижка' })
     ).toBeInTheDocument()
+  })
+
+  it('кадр «На проверке»: бейдж, пояснение и действия без «Скрыть/Вернуть»', () => {
+    renderSection([photo({ moderationStatus: 'Pending' })])
+
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Кадр виден только вам, пока администратор его не одобрит.'
+      )
+    ).toBeInTheDocument()
+    // Подпись, порядок и удаление доступны и до решения администратора.
+    expect(
+      screen.getByRole('button', { name: 'Изменить подпись: Стрижка' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Удалить: Стрижка' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть: Стрижка' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Вернуть: Стрижка' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('отклонённый кадр: бейдж, причина и отсутствие «Скрыть/Вернуть»', () => {
+    renderSection([
+      photo({
+        moderationStatus: 'Rejected',
+        rejectionReason: 'Слишком тёмный кадр.',
+      }),
+    ])
+
+    expect(screen.getByText('Отклонено')).toBeInTheDocument()
+    expect(
+      screen.getByText('Причина: Слишком тёмный кадр.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Изменить подпись: Стрижка' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Удалить: Стрижка' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть: Стрижка' })
+    ).not.toBeInTheDocument()
   })
 
   it('края порядка: «Выше» disabled на первом фото, «Ниже» — на последнем', () => {

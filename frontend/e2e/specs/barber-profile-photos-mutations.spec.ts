@@ -10,30 +10,36 @@ import type {
 
 import { baseURL, fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { BarberProfilePage } from '../pages/barber-profile-page'
 
 /**
- * Портфолио барбера: загрузка, публичная галерея и блокировка админом (§6.4).
+ * Портфолио барбера: загрузка, премодерация и публичная галерея (§6.4, #89).
  *
  * Сценарий идёт по изолированному `profileBarber`: витринного барбера (`…0001`)
  * не трогаем, на его карточке, бронях и отзывах держатся другие спеки. Имя файла
  * содержит `mutations`, поэтому проект `mutations-chromium` запускает его
- * последним; `serial` обязателен — каждая сцена продолжает предыдущую: загруженное
- * фото открывается публично, скрывается админом, возвращается и наконец удаляется.
+ * последним; `serial` обязателен — каждая сцена продолжает предыдущую.
  *
  * Файл `e2e/fixtures/portfolio-photo.png` — настоящий PNG 800×600, а не 1×1:
  * только так `naturalWidth > 0` доказывает, что реальный файл прошёл
  * multipart-загрузку, клиентскую подготовку и раздачу `/api/media/portfolio/...`.
  *
- * Если сцена упала, `afterEach` удаляет оставшееся фото через API от имени
- * барбера: строки не должны доживать до следующего прогона. Успешные сцены
- * передают фото дальше и ничего не убирают — иначе сцене удаления нечего было бы
- * удалять.
+ * Премодерация (#89): загруженный кадр создаётся `Pending`, поэтому публичная
+ * галерея и контракт `GET /api/barbers/{id}` пусты, а кабинет показывает бейдж
+ * «На проверке». Публичным кадр делает «Одобрить» в `/admin/photos?tab=portfolio`;
+ * «Отклонить» на втором кадре оставляет его непубличным и показывает владельцу
+ * причину. Блокировка/разблокировка и удаление идут после одобрения.
+ *
+ * Если сцена упала, `afterEach` удаляет оставшиеся фото через API от имени
+ * барбера: строки не должны доживать до следующего прогона.
  */
 const PHOTO_PATH = fileURLToPath(
   new URL('../fixtures/portfolio-photo.png', import.meta.url)
 )
 const CAPTION = 'E2E Работа'
+const SECOND_CAPTION = 'E2E Работа 2'
+const REJECTION_REASON = 'E2E: на кадре виден посторонний человек'
 const PROFILE_ID = fixtures.profileBarber.profileId
 const PROFILE_NAME = 'E2E Барбер Кабинета'
 
@@ -41,11 +47,21 @@ const PORTFOLIO_SECTION = 'section[aria-labelledby="barber-portfolio-heading"]'
 const ADMIN_PHOTOS_SECTION = 'section[aria-labelledby="barber-photos-title"]'
 
 type OwnCard = {
-  photos: { id: string }[]
+  photos: {
+    id: string
+    description: string | null
+    moderationStatus: string
+    rejectionReason: string | null
+  }[]
 }
 
 type PublicCard = {
-  photos: { id: string; description: string | null }[]
+  photos: {
+    id: string
+    description: string | null
+    moderationStatus: string
+    rejectionReason: string | null
+  }[]
 }
 
 test.use({ storageState: storageStatePath('profileBarber') })
@@ -77,7 +93,10 @@ test.describe('фотографии портфолио: мутации', () => {
     }
   })
 
-  test('барбер загружает фото и видит настоящий файл', async ({ page }) => {
+  test('барбер загружает фото: «На проверке», публичной галереи нет', async ({
+    browser,
+    page,
+  }) => {
     const profile = new BarberProfilePage(page)
 
     await profile.goto()
@@ -99,6 +118,14 @@ test.describe('фотографии портфолио: мутации', () => {
 
     await expect(card).toContainText(CAPTION)
 
+    // Премодерация: кадр виден владельцу, но помечен как ждущий проверки.
+    await expect(
+      card.getByText('На проверке', { exact: true })
+    ).toBeVisible()
+    await expect(
+      card.getByText('Кадр виден только вам, пока администратор его не одобрит.')
+    ).toBeVisible()
+
     const image = card.getByRole('img')
 
     await expect(image).toBeVisible()
@@ -114,6 +141,107 @@ test.describe('фотографии портфолио: мутации', () => {
         { message: 'файл портфолио отдан API, а не только строка в ответе' }
       )
       .toBeGreaterThan(0)
+
+    // Публично кадра ещё нет: ни галереи, ни фото в контракте. Гостевое чтение —
+    // в отдельном контексте без cookie владельца.
+    const publicContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1280, height: 900 },
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      const publicPage = await publicContext.newPage()
+
+      await expectPublicPortfolio(publicPage, { visible: false })
+      expect((await fetchPublicPhotos(publicContext)).length).toBe(0)
+    } finally {
+      await publicContext.close()
+    }
+
+    // Владелец видит свой кадр в контракте собственной карточки — со статусом.
+    const ownResponse = await page.request.get(
+      `/api/barber-profiles/${PROFILE_ID}`
+    )
+
+    expect(ownResponse.status(), 'GET /api/barber-profiles/{id}').toBe(200)
+
+    const own = (await ownResponse.json()) as OwnCard
+
+    expect(own.photos).toHaveLength(1)
+    expect(own.photos[0]?.moderationStatus).toBe('Pending')
+    expect(own.photos[0]?.rejectionReason).toBeNull()
+  })
+
+  test('очередь портфолио: поиск по имени барбера и «Одобрить»', async ({
+    browser,
+  }) => {    const adminContext = await browser.newContext({
+      baseURL,
+      storageState: storageStatePath('admin'),
+      viewport: { width: 1280, height: 900 },
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      const adminPage = await adminContext.newPage()
+      const photos = new AdminPhotosPage(adminPage)
+
+      await photos.goto('portfolio')
+      await expect(photos.heading).toBeVisible()
+      await expect(photos.tab('Портфолио')).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+
+      // Своя строка — поиском по имени барбера; размер очереди не проверяем.
+      await photos.searchFor(PROFILE_NAME)
+
+      const row = photos.row(CAPTION)
+
+      await expect(row).toHaveCount(1)
+      await expect(row).toContainText(PROFILE_NAME)
+      await expect(row).toContainText(CAPTION)
+
+      // Строка портфолио с подписью — состояние, которого нет на пересеянной
+      // базе: axe без allow-list проверяет его здесь (§11).
+      await expectNoBlockingViolations(
+        adminPage,
+        '/admin/photos?tab=portfolio + строка @1280',
+        test.info()
+      )
+
+      // Кнопка решения подписана именем барбера и подписью кадра; ищем её
+      // внутри своей строки, чтобы не зависеть от полного `aria-label`.
+      await photos.approve(row)
+
+      await expect(photos.announcement('Фото одобрено.')).toBeVisible()
+      await expect(row).toHaveCount(0)
+
+      // Одобренный кадр сразу стал публичным: галерея и контракт.
+      const publicContext = await browser.newContext({
+        baseURL,
+        viewport: { width: 1280, height: 900 },
+        reducedMotion: 'reduce',
+      })
+
+      try {
+        const publicPage = await publicContext.newPage()
+
+        await expectPublicPortfolio(publicPage, { visible: true })
+
+        const photos = await fetchPublicPhotos(publicContext)
+
+        expect(photos).toHaveLength(1)
+        expect(photos[0]?.description).toBe(CAPTION)
+        // Публичный ответ отдаёт только `Approved` и без причины.
+        expect(photos[0]?.moderationStatus).toBe('Approved')
+        expect(photos[0]?.rejectionReason).toBeNull()
+      } finally {
+        await publicContext.close()
+      }
+    } finally {
+      await adminContext.close()
+    }
   })
 
   test('публичная галерея: лайтбокс, края, Escape и возврат фокуса', async ({
@@ -222,6 +350,117 @@ test.describe('фотографии портфолио: мутации', () => {
     await expect(tile).toBeFocused()
   })
 
+  test('второй кадр отклонён с причиной: владелец видит её, публично — только первый', async ({
+    browser,
+    page,
+  }) => {
+    const profile = new BarberProfilePage(page)
+
+    await profile.goto()
+    await profile.waitForReady()
+    await profile.openPortfolio()
+
+    await expect(profile.photoCards()).toHaveCount(1)
+
+    // Второй кадр с другой подписью: он тоже `Pending` и тоже непубличен.
+    await profile.uploadPhoto(PHOTO_PATH, SECOND_CAPTION)
+
+    await expect(profile.announcement('Фото добавлено.')).toBeVisible()
+    await expect(profile.photoCards()).toHaveCount(2)
+    await expect(
+      profile
+        .photoCards()
+        .nth(1)
+        .getByText('На проверке', { exact: true })
+    ).toBeVisible()
+
+    const adminContext = await browser.newContext({
+      baseURL,
+      storageState: storageStatePath('admin'),
+      viewport: { width: 1280, height: 900 },
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      const adminPage = await adminContext.newPage()
+      const photos = new AdminPhotosPage(adminPage)
+
+      await photos.goto('portfolio')
+      await photos.searchFor(PROFILE_NAME)
+
+      const row = photos.row(SECOND_CAPTION)
+
+      await expect(row).toHaveCount(1)
+
+      // Причина обязательна: диалог сначала показывается, потом заполняется.
+      const dialog = await photos.openReject(row)
+
+      await expect(dialog).toContainText(
+        'Фото останется непубличным. Владелец увидит причину и сможет загрузить другое.'
+      )
+
+      await photos.rejectionReason.fill(REJECTION_REASON)
+      await photos.rejectConfirm.click()
+
+      await expect(photos.announcement('Фото отклонено.')).toBeVisible()
+      await expect(row).toHaveCount(0)
+    } finally {
+      await adminContext.close()
+    }
+
+    // Владелец видит бейдж «Отклонено» и причину на втором кадре, первый цел.
+    await profile.goto()
+    await profile.waitForReady()
+    await profile.openPortfolio()
+
+    await expect(profile.photoCards()).toHaveCount(2)
+
+    const rejected = profile.photoCards().nth(1)
+
+    await expect(
+      rejected.getByText('Отклонено', { exact: true })
+    ).toBeVisible()
+    await expect(
+      rejected.getByText(`Причина: ${REJECTION_REASON}`)
+    ).toBeVisible()
+
+    // Публично отклонённого кадра нет: галерея по-прежнему одна.
+    const publicContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1280, height: 900 },
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      const publicPage = await publicContext.newPage()
+
+      await expectPublicPortfolio(publicPage, { visible: true })
+
+      const publicPhotos = await fetchPublicPhotos(publicContext)
+
+      expect(publicPhotos).toHaveLength(1)
+      expect(publicPhotos[0]?.description).toBe(CAPTION)
+    } finally {
+      await publicContext.close()
+    }
+
+    // Собственный контракт отдаёт реальный статус и причину второго кадра.
+    const ownResponse = await page.request.get(
+      `/api/barber-profiles/${PROFILE_ID}`
+    )
+
+    expect(ownResponse.status(), 'GET /api/barber-profiles/{id}').toBe(200)
+
+    const own = (await ownResponse.json()) as OwnCard
+
+    const ownRejected = own.photos.find(
+      (photo) => photo.description === SECOND_CAPTION
+    )
+
+    expect(ownRejected?.moderationStatus).toBe('Rejected')
+    expect(ownRejected?.rejectionReason).toBe(REJECTION_REASON)
+  })
+
   test('админ скрывает фото, публичная карточка теряет галерею, затем возвращает', async ({
     browser,
   }) => {
@@ -250,9 +489,16 @@ test.describe('фотографии портфолио: мутации', () => {
       await expect(
         photos.getByRole('heading', { name: 'Фотографии', level: 3 })
       ).toBeVisible()
-      await expect(photos.getByText(CAPTION, { exact: true })).toBeVisible()
+
+      // Одобренный кадр показывает «Опубликовано», отклонённый — свою причину.
+      const approved = photos
+        .getByRole('listitem')
+        .filter({ hasText: CAPTION })
+        .first()
+
+      await expect(approved).toContainText('Опубликовано')
       await expect(
-        photos.getByText('Опубликовано', { exact: true })
+        photos.getByText(`Причина: ${REJECTION_REASON}`)
       ).toBeVisible()
 
       await photos
@@ -304,7 +550,7 @@ test.describe('фотографии портфолио: мутации', () => {
     }
   })
 
-  test('барбер удаляет фото: пустое состояние и карточка без «Работы»', async ({
+  test('барбер удаляет оба фото: пустое состояние и карточка без «Работы»', async ({
     browser,
     page,
   }) => {
@@ -314,7 +560,8 @@ test.describe('фотографии портфолио: мутации', () => {
     await profile.waitForReady()
     await profile.openPortfolio()
 
-    await expect(profile.photoCards()).toHaveCount(1)
+    // На этом шаге в портфолио два кадра: одобренный и отклонённый.
+    await expect(profile.photoCards()).toHaveCount(2)
 
     await profile.deletePhoto(0)
 
@@ -326,6 +573,13 @@ test.describe('фотографии портфолио: мутации', () => {
     await profile.confirmDelete()
 
     await expect(profile.announcement('Фото удалено.')).toBeVisible()
+    await expect(profile.deleteDialog).toBeHidden()
+    await expect(profile.photoCards()).toHaveCount(1)
+
+    // Отклонённый кадр удаляется тем же путём: удаление доступно на любом статусе.
+    await profile.deletePhoto(0)
+    await profile.confirmDelete()
+
     await expect(profile.deleteDialog).toBeHidden()
     await expect(profile.emptyPhotos).toBeVisible()
     await expect(profile.photoCards()).toHaveCount(0)
@@ -380,7 +634,7 @@ async function expectPublicPortfolio(
 }
 
 /** Публичный ответ API: только видимые фото, без `isBlocked`. */
-async function fetchPublicPhotos(context: BrowserContext): Promise<unknown[]> {
+async function fetchPublicPhotos(context: BrowserContext): Promise<PublicCard['photos']> {
   const response = await context.request.get(`/api/barbers/${PROFILE_ID}`)
 
   expect(response.status(), 'GET /api/barbers/{id}').toBe(200)

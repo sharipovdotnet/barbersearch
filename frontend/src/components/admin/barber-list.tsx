@@ -167,7 +167,8 @@ export function BarberList({
  * Аватар с инициалами, имя и email: одна и та же строка в таблице и карточке.
  *
  * Фото владельца профиля показывается и при блокировке: это админская поверхность,
- * а бейдж «Фото скрыто» говорит, что публично кадра нет.
+ * а бейджи говорят, что публично кадра нет. Приоритет: скрыто администратором →
+ * отклонено → на проверке.
  */
 export function BarberIdentity({ barber }: { barber: AdminBarber }) {
   const { t } = useI18n()
@@ -185,11 +186,19 @@ export function BarberIdentity({ barber }: { barber: AdminBarber }) {
         <span className="block truncate text-xs text-muted-foreground">
           {barber.email}
         </span>
-        {barber.isAvatarBlocked && (
+        {barber.isAvatarBlocked ? (
           <Badge variant="outline" className="mt-1">
             {t('Фото скрыто')}
           </Badge>
-        )}
+        ) : barber.avatarModerationStatus === 'Rejected' ? (
+          <Badge variant="destructive" className="mt-1">
+            {t('Отклонено')}
+          </Badge>
+        ) : barber.avatarModerationStatus === 'Pending' ? (
+          <Badge variant="outline" className="mt-1">
+            {t('На проверке')}
+          </Badge>
+        ) : null}
       </span>
     </div>
   )

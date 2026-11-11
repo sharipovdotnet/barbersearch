@@ -1,3 +1,4 @@
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 
 namespace BarberSearch.Contracts.Users.Me;
@@ -17,7 +18,8 @@ namespace BarberSearch.Contracts.Users.Me;
 /// <param name="PhoneNumber">Телефон либо <c>null</c>.</param>
 /// <param name="AvatarUrl">
 /// Ссылка на аватар либо <c>null</c>. Ссылка сохраняется, даже если фото скрыто
-/// администратором; показывать её можно только при <see cref="IsAvatarBlocked"/> == <c>false</c>.
+/// администратором или ещё не одобрено; показывать её можно при
+/// <see cref="IsAvatarBlocked"/> == <c>false</c> и статусе <c>Approved</c>/<c>Pending</c>.
 /// </param>
 /// <param name="Role">Роль пользователя.</param>
 /// <param name="BarberProfileId">Привязанный профиль барбера либо <c>null</c>.</param>
@@ -27,7 +29,14 @@ namespace BarberSearch.Contracts.Users.Me;
 /// <param name="LastLoginAt">Последний вход либо <c>null</c>.</param>
 /// <param name="IsAvatarBlocked">
 /// Скрыт ли аватар администратором. Сырой <see cref="AvatarUrl"/> отдаётся всегда, чтобы
-/// сохранение имени не стёрло фото; флаг — единственный признак того, что показывать его нельзя.
+/// сохранение имени не стёрло фото; флаг — один из двух признаков того, что показывать его нельзя.
+/// </param>
+/// <param name="AvatarModerationStatus">
+/// Допуск аватара к публикации. Кабинет показывает кадр при <c>Approved</c> и
+/// <c>Pending</c> (превью с бейджем «На проверке»), при <c>Rejected</c> — инициалы.
+/// </param>
+/// <param name="AvatarRejectionReason">
+/// Причина отказа либо <c>null</c>. Текст администратора; в аудит и логи не попадает.
 /// </param>
 public record MyProfileResponse(
     Guid Id,
@@ -42,4 +51,6 @@ public record MyProfileResponse(
     bool IsPhoneVerified,
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastLoginAt,
-    bool IsAvatarBlocked);
+    bool IsAvatarBlocked,
+    PhotoModerationStatus AvatarModerationStatus,
+    string? AvatarRejectionReason);

@@ -141,6 +141,10 @@ export function UserDetail({
         <AvatarModeration
           avatarUrl={user.avatarUrl}
           isAvatarBlocked={user.isAvatarBlocked}
+          moderationStatus={user.avatarModerationStatus}
+          rejectionReason={user.avatarRejectionReason}
+          userId={user.id}
+          subject={name}
           initials={getInitials(name)}
           isBusy={pendingAction !== null}
           pendingAction={avatarPending}

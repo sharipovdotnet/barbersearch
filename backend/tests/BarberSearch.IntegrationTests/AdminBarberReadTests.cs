@@ -1,10 +1,11 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Users;
@@ -46,11 +47,13 @@ public sealed class AdminBarberReadTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
-        var pending = await SeedPendingBarberAsync(app, "Pending Barber");
-        var verified = await data.CreateBookableBarberAsync("Verified Barber");
         var admin = await app.CreateUserAsync(
             $"admin-barbers-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
+
+        // Премодерация: засеянный кадр сразу одобрен, иначе чек-лист считал бы его невидимым.
+        var pending = await SeedPendingBarberAsync(app, "Pending Barber", admin.Id);
+        var verified = await data.CreateBookableBarberAsync("Verified Barber");
 
         await app.AuthenticateAsync(admin.Email);
 
@@ -67,6 +70,7 @@ public sealed class AdminBarberReadTests
         Assert.False(item.IsVerified);
         Assert.True(item.IsActive);
         Assert.Null(item.Rating);
+        Assert.Equal(PhotoModerationStatus.Approved, item.AvatarModerationStatus);
 
         // Поиск идёт по имени профиля; подтверждённый барбер находится по нему же.
         using var search = await app.Client.GetAsync("api/admin/barbers?search=verified");
@@ -89,6 +93,8 @@ public sealed class AdminBarberReadTests
         Assert.False(body.IsVerified);
         Assert.Equal("Проверяю себя на длинных фейдах.", body.Bio);
         Assert.Equal(8, body.YearsOfExperience);
+        Assert.Equal(PhotoModerationStatus.Approved, body.AvatarModerationStatus);
+        Assert.Null(body.AvatarRejectionReason);
 
         // Чек-лист: описание и опыт есть, email не подтверждён, по одному профилю на счётчик.
         Assert.True(body.Readiness.IsProfileFilled);
@@ -117,7 +123,8 @@ public sealed class AdminBarberReadTests
 
     private static async Task<SeededBarber> SeedPendingBarberAsync(
         TestApp app,
-        string displayName)
+        string displayName,
+        Guid reviewerId)
     {
         var user = await app.CreateUserAsync(
             $"pending-{Guid.NewGuid():N}@barbersearch.test",
@@ -160,6 +167,10 @@ public sealed class AdminBarberReadTests
         Require(profile.AddSalon(salon.Id, isPrimary: true));
         Require(profile.AddService(hairService.Id, price: 45.00m, durationMinutes: 30));
         Require(profile.AddPhoto("https://example.com/portfolio/fade.jpg"));
+
+        // Срез премодерации: внешняя ссылка тоже создаётся Pending, поэтому для чек-листа
+        // «есть фото» кадр нужно одобрить — он и есть одобренный в этой фикстуре.
+        Require(profile.PortfolioPhotos.Single().Approve(reviewerId, DateTimeOffset.UtcNow));
 
         var link = Require(profile.FindSalon(salon.Id));
         Require(link.AddWorkingSchedule(DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(19, 0)));

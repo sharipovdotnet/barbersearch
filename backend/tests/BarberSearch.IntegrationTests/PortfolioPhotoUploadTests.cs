@@ -9,6 +9,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
@@ -53,11 +54,12 @@ public sealed class PortfolioPhotoUploadTests
     }
 
     /// <summary>
-    /// Загрузка кладёт файл в хранилище, публичная карточка получает относительный URL,
-    /// а раздача отдаёт тот же байт-в-байт файл с правильными заголовками.
+    /// Загрузка кладёт файл в хранилище, но публично кадр не виден до одобрения: собственное
+    /// чтение отдаёт его как <c>Pending</c>, публичное — пусто, раздача анониму — <c>404</c>.
+    /// После решения администратора карточка и раздача работают по обычным правилам.
     /// </summary>
     [Fact(Timeout = 180_000)]
-    public async Task Upload_stores_file_and_serves_it_with_public_cache_headers()
+    public async Task Upload_stores_file_and_serves_it_publicly_only_after_approval()
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
@@ -73,14 +75,47 @@ public sealed class PortfolioPhotoUploadTests
             content,
             description: "Fresh haircut");
 
-        // Собственная карточка: фотография есть и у только что загруженной.
+        // Собственная карточка: фотография есть, но она ждёт проверки.
         var ownCard = await GetCardAsync(
             app.Client,
             $"api/barber-profiles/{barber.Profile.Id}");
         var ownPhoto = Assert.Single(ownCard.Photos);
         Assert.Equal(photoId, ownPhoto.Id);
+        Assert.Equal(PhotoModerationStatus.Pending, ownPhoto.ModerationStatus);
+        Assert.Null(ownPhoto.RejectionReason);
 
-        // Публичная карточка: только видимые, URL относительный.
+        // Публичная карточка: только одобренные кадры, поэтому пусто.
+        var pendingPublicCard = await GetCardAsync(
+            anonymous,
+            $"api/barbers/{barber.Profile.Id}");
+        Assert.Empty(pendingPublicCard.Photos);
+
+        // Файл уже лежит во временном корне теста, а не в App_Data репозитория.
+        var fileName = ownPhoto.Url[(ownPhoto.Url.LastIndexOf('/') + 1)..];
+        var filePath = Path.Combine(
+            app.StorageRootPath,
+            "portfolio",
+            $"{barber.Profile.Id:N}",
+            fileName);
+        Assert.True(File.Exists(filePath));
+        Assert.Equal(content, await File.ReadAllBytesAsync(filePath));
+
+        // Анониму непубличный кадр не раздаётся, владельцу — да, но без публичного кэша.
+        using (var pendingMedia = await anonymous.GetAsync(ownPhoto.Url))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, pendingMedia.StatusCode);
+        }
+
+        using (var ownerMedia = await app.Client.GetAsync(ownPhoto.Url))
+        {
+            Assert.Equal(HttpStatusCode.OK, ownerMedia.StatusCode);
+            AssertPrivateNoStore(ownerMedia);
+            Assert.Equal(content, await ownerMedia.Content.ReadAsByteArrayAsync());
+        }
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        // Публичная карточка: одобренный кадр, URL относительный, причина отказа пуста.
         var publicCard = await GetCardAsync(
             anonymous,
             $"api/barbers/{barber.Profile.Id}");
@@ -91,17 +126,9 @@ public sealed class PortfolioPhotoUploadTests
         Assert.True(photo.IsPublished);
         Assert.False(photo.IsBlocked);
         Assert.Null(photo.ThumbnailUrl);
+        Assert.Equal(PhotoModerationStatus.Approved, photo.ModerationStatus);
+        Assert.Null(photo.RejectionReason);
         Assert.StartsWith("/api/media/portfolio/", photo.Url, StringComparison.Ordinal);
-
-        // Файл лежит во временном корне теста, а не в App_Data репозитория.
-        var fileName = photo.Url[(photo.Url.LastIndexOf('/') + 1)..];
-        var filePath = Path.Combine(
-            app.StorageRootPath,
-            "portfolio",
-            $"{barber.Profile.Id:N}",
-            fileName);
-        Assert.True(File.Exists(filePath));
-        Assert.Equal(content, await File.ReadAllBytesAsync(filePath));
 
         using var media = await anonymous.GetAsync(photo.Url);
         Assert.Equal(HttpStatusCode.OK, media.StatusCode);
@@ -208,8 +235,15 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Limit Barber");
+        var reviewer = await app.CreateUserAsync(
+            $"portfolio-limit-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
 
-        await SeedPhotosAsync(app, barber.Profile.Id, Constants.MAX_PHOTOS_COUNT);
+        await SeedPhotosAsync(
+            app,
+            barber.Profile.Id,
+            Constants.MAX_PHOTOS_COUNT,
+            reviewer.Id);
         await app.AuthenticateAsync(barber.User.Email);
 
         using var response = await SendUploadAsync(
@@ -346,6 +380,9 @@ public sealed class PortfolioPhotoUploadTests
 
         var photoId = await UploadAsync(app.Client, barber.Profile.Id, PngBytes());
 
+        // Сценарий про скрытие владельцем: кадр должен быть уже одобрен, иначе он скрыт статусом.
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
         var ownCard = await GetCardAsync(
             app.Client,
             $"api/barber-profiles/{barber.Profile.Id}");
@@ -383,6 +420,7 @@ public sealed class PortfolioPhotoUploadTests
         var hidden = Assert.Single(afterHide.Photos);
         Assert.False(hidden.IsPublished);
         Assert.False(hidden.IsBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, hidden.ModerationStatus);
 
         await app.AuthenticateAsync(admin.Email);
 
@@ -430,6 +468,9 @@ public sealed class PortfolioPhotoUploadTests
         await app.AuthenticateAsync(barber.User.Email);
 
         var photoId = await UploadAsync(app.Client, barber.Profile.Id, PngBytes());
+
+        // Блокировка — действие над уже опубликованным кадром: сначала одобрение.
+        await ApproveAsync(app, barber.Profile.Id, photoId);
 
         var ownCard = await GetCardAsync(
             app.Client,
@@ -513,6 +554,7 @@ public sealed class PortfolioPhotoUploadTests
         var restored = Assert.Single(restoredCard.Photos);
         Assert.True(restored.IsPublished);
         Assert.False(restored.IsBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, restored.ModerationStatus);
 
         using (var anonymousMedia = await anonymous.GetAsync(url))
         {
@@ -530,8 +572,11 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Order Barber");
+        var reviewer = await app.CreateUserAsync(
+            $"portfolio-order-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
 
-        await SeedPhotosAsync(app, barber.Profile.Id, 3);
+        await SeedPhotosAsync(app, barber.Profile.Id, 3, reviewer.Id);
         await app.AuthenticateAsync(barber.User.Email);
 
         using var anonymous = app.CreateClient();
@@ -585,7 +630,7 @@ public sealed class PortfolioPhotoUploadTests
             $"portfolio-detail-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await SeedPhotosAsync(app, barber.Profile.Id, 3, profile =>
+        await SeedPhotosAsync(app, barber.Profile.Id, 3, admin.Id, profile =>
         {
             var photos = profile.PortfolioPhotos.OrderBy(photo => photo.SortOrder).ToList();
             Require(photos[1].Unpublish());
@@ -659,10 +704,16 @@ public sealed class PortfolioPhotoUploadTests
     /// Посев фотографий без файлов: строки создаются доменным путём, чтобы сценарии порядка
     /// и лимита не зависели от десяти HTTP-загрузок и лимитера.
     /// </summary>
+    /// <remarks>
+    /// Премодерация: каждая новая строка создаётся <c>Pending</c>. Сценариям, которые проверяют
+    /// публичную видимость, нужен уже одобренный набор, поэтому здесь же вызывается
+    /// <c>Approve</c> от имени администратора. Файлов нет — раздача не участвует.
+    /// </remarks>
     private static async Task SeedPhotosAsync(
         TestApp app,
         Guid barberProfileId,
         int count,
+        Guid reviewerId,
         Action<BarberProfile>? configure = null)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -677,6 +728,12 @@ public sealed class PortfolioPhotoUploadTests
             Require(profile.AddUploadedPhoto(
                 PortfolioMediaUrl.Build(barberProfileId, Guid.CreateVersion7(), "png"),
                 $"Seeded photo {index}"));
+        }
+
+        foreach (var photo in profile.PortfolioPhotos
+                     .Where(photo => photo.ModerationStatus == PhotoModerationStatus.Pending))
+        {
+            Require(photo.Approve(reviewerId, DateTimeOffset.UtcNow));
         }
 
         configure?.Invoke(profile);
@@ -732,6 +789,29 @@ public sealed class PortfolioPhotoUploadTests
         Assert.NotNull(body);
 
         return body.Id;
+    }
+
+    /// <summary>
+    /// Одобряет загруженный кадр администратором: cookie-сессия с <c>X-CSRF-TOKEN</c>, как
+    /// браузер. Отдельный администратор на вызов — тесту не приходится менять личность
+    /// основного клиента, который остаётся владельцем профиля.
+    /// </summary>
+    private static async Task ApproveAsync(TestApp app, Guid barberProfileId, Guid photoId)
+    {
+        var admin = await app.CreateUserAsync(
+            $"portfolio-approval-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
+
+        await using var session = await app.SignInWithCookieAsync(admin.Email);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"api/barber-profiles/{barberProfileId}/photos/{photoId}/approval");
+        request.Headers.Add("X-CSRF-TOKEN", session.CsrfToken);
+
+        using var response = await session.Client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     /// <summary>
