@@ -1349,15 +1349,21 @@ public sealed class PhotoModerationTests
     }
 
     /// <summary>
-    /// Проверяет публичное суточное кэширование кадра, доступного всем.
+    /// Проверяет честный кэш публичного кадра: <c>public, max-age=0, must-revalidate</c>.
     /// </summary>
+    /// <remarks>
+    /// Видимый кадр обязан перепроверяться: иначе скрытый или отклонённый файл показывался бы
+    /// из кэша. Директивы проверяются флагами: <see cref="HttpResponseMessage.Headers"/>
+    /// сериализует их в своём порядке.
+    /// </remarks>
     private static void AssertPublicCache(HttpResponseMessage response)
     {
         var cacheControl = response.Headers.CacheControl
             ?? throw new InvalidOperationException("Cache-Control header is missing.");
 
         Assert.True(cacheControl.Public);
-        Assert.Equal(TimeSpan.FromDays(1), cacheControl.MaxAge);
+        Assert.Equal(TimeSpan.Zero, cacheControl.MaxAge);
+        Assert.True(cacheControl.MustRevalidate);
         Assert.False(cacheControl.NoStore);
     }
 

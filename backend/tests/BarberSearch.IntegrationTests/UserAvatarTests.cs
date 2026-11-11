@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Application.Users;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Users.Admin;
@@ -615,6 +616,267 @@ public sealed class UserAvatarTests
     }
 
     /// <summary>
+    /// Одобренный аватар отдаёт WebP-вариант с честным кэшем, сильным ETag и <c>304</c>
+    /// на повторный условный запрос; неизвестный размер — <c>404</c> + <c>no-store</c>.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Approved_avatar_variant_serves_webp_with_honest_cache_etag_and_not_modified()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var user = await app.CreateUserAsync(NewEmail("avatar-variant"));
+        await app.AuthenticateAsync(user.Email);
+
+        // Настоящий JPEG: минимальный PNG декодер не примет, и вариант не появится.
+        var avatarUrl = await UploadAvatarAsync(
+            app.Client,
+            MediaTestImage.Jpeg(512, 512),
+            fileName: "avatar.jpg",
+            contentType: "image/jpeg");
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, user.Id);
+
+        var mediaId = MediaIdFromUrl(avatarUrl);
+        var smallUrl = avatarUrl + "?size=sm";
+
+        using var anonymous = app.CreateClient();
+        string smallEntityTag;
+
+        using (var small = await anonymous.GetAsync(smallUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, small.StatusCode);
+            Assert.Equal("image/webp", small.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(small);
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(small.Headers.GetValues("X-Content-Type-Options")));
+            Assert.Contains("bytes", small.Headers.AcceptRanges);
+            AssertNoVary(small);
+
+            smallEntityTag = RequireEntityTag(small);
+            Assert.Equal($"\"{mediaId:N}-sm\"", smallEntityTag);
+
+            var dimensions = MediaTestImage.Dimensions(
+                await small.Content.ReadAsByteArrayAsync());
+            Assert.Equal(
+                MediaTestImage.VariantDimensions(
+                    512,
+                    512,
+                    PhotoVariantWidths.AVATAR_SMALL),
+                dimensions);
+        }
+
+        // Тот же ETag: 304 без тела, но с ETag и Cache-Control.
+        using (var notModified = await GetWithIfNoneMatchAsync(
+                   anonymous,
+                   smallUrl,
+                   smallEntityTag))
+        {
+            Assert.Equal(HttpStatusCode.NotModified, notModified.StatusCode);
+            Assert.Empty(await notModified.Content.ReadAsByteArrayAsync());
+            Assert.Equal(smallEntityTag, RequireEntityTag(notModified));
+            AssertPublicCache(notModified);
+            AssertNoVary(notModified);
+        }
+
+        using (var wildcard = await GetWithIfNoneMatchAsync(anonymous, smallUrl, "*"))
+        {
+            Assert.Equal(HttpStatusCode.NotModified, wildcard.StatusCode);
+            Assert.Empty(await wildcard.Content.ReadAsByteArrayAsync());
+        }
+
+        using (var foreign = await GetWithIfNoneMatchAsync(
+                   anonymous,
+                   smallUrl,
+                   $"\"{Guid.CreateVersion7():N}-sm\""))
+        {
+            Assert.Equal(HttpStatusCode.OK, foreign.StatusCode);
+            Assert.Equal("image/webp", foreign.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(foreign);
+        }
+
+        // Средний и большой варианты — свои ширины и суффиксы ETag.
+        foreach (var (suffix, width) in new[]
+                 {
+                     ("md", PhotoVariantWidths.AVATAR_MEDIUM),
+                     ("lg", PhotoVariantWidths.AVATAR_LARGE)
+                 })
+        {
+            using var variant = await anonymous.GetAsync($"{avatarUrl}?size={suffix}");
+
+            Assert.Equal(HttpStatusCode.OK, variant.StatusCode);
+            Assert.Equal("image/webp", variant.Content.Headers.ContentType?.MediaType);
+            Assert.Equal($"\"{mediaId:N}-{suffix}\"", RequireEntityTag(variant));
+            AssertPublicCache(variant);
+
+            var dimensions = MediaTestImage.Dimensions(
+                await variant.Content.ReadAsByteArrayAsync());
+            Assert.Equal(
+                MediaTestImage.VariantDimensions(512, 512, width),
+                dimensions);
+        }
+
+        foreach (var query in new[] { "?size=xx", "?size=", "?size=sm&size=md" })
+        {
+            using var invalid = await anonymous.GetAsync(avatarUrl + query);
+
+            Assert.Equal(HttpStatusCode.NotFound, invalid.StatusCode);
+            Assert.Contains(
+                "avatarMedia.notFound",
+                await invalid.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+            AssertNoStore(invalid);
+            AssertNoVary(invalid);
+        }
+    }
+
+    /// <summary>
+    /// Неодобренный аватар виден владельцу как превью (<c>private, no-store</c>), а после
+    /// блокировки не отдаётся даже ему; администратор видит файл всегда.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Pending_and_blocked_avatar_variants_follow_the_visibility_rules()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var user = await app.CreateUserAsync(NewEmail("avatar-variant-visibility"));
+        await app.AuthenticateAsync(user.Email);
+
+        var avatarUrl = await UploadAvatarAsync(
+            app.Client,
+            MediaTestImage.Jpeg(512, 512),
+            fileName: "avatar.jpg",
+            contentType: "image/jpeg");
+
+        var mediaId = MediaIdFromUrl(avatarUrl);
+        var variantUrl = avatarUrl + "?size=md";
+
+        using var anonymous = app.CreateClient();
+
+        using (var pendingAnonymous = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, pendingAnonymous.StatusCode);
+            Assert.Contains(
+                "avatarMedia.notFound",
+                await pendingAnonymous.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+            AssertNoStore(pendingAnonymous);
+        }
+
+        using (var pendingOwner = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, pendingOwner.StatusCode);
+            Assert.Equal("image/webp", pendingOwner.Content.Headers.ContentType?.MediaType);
+            AssertPrivateNoStore(pendingOwner);
+            Assert.Equal($"\"{mediaId:N}-md\"", RequireEntityTag(pendingOwner));
+        }
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, user.Id);
+
+        using (var approvedAnonymous = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, approvedAnonymous.StatusCode);
+            Assert.Equal("image/webp", approvedAnonymous.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(approvedAnonymous);
+        }
+
+        await AvatarModerationApi.BlockAsync(admin, user.Id);
+
+        // Блокировка сильнее владения: владельцу тот же 404, администратору — превью.
+        using (var blockedAnonymous = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, blockedAnonymous.StatusCode);
+            AssertNoStore(blockedAnonymous);
+        }
+
+        using (var blockedOwner = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, blockedOwner.StatusCode);
+            AssertNoStore(blockedOwner);
+        }
+
+        using var blockedAdmin = await admin.Client.GetAsync(variantUrl);
+        Assert.Equal(HttpStatusCode.OK, blockedAdmin.StatusCode);
+        Assert.Equal("image/webp", blockedAdmin.Content.Headers.ContentType?.MediaType);
+        AssertPrivateNoStore(blockedAdmin);
+    }
+
+    /// <summary>
+    /// Замена и удаление аватара убирают исходник и все варианты: старые <c>?size=</c>-URL
+    /// сразу отвечают <c>404</c>, а не отдают файл из хранилища.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Replacing_and_deleting_avatar_remove_variants_and_old_size_urls()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var user = await app.CreateUserAsync(NewEmail("avatar-variant-replace"));
+        await app.AuthenticateAsync(user.Email);
+
+        var firstUrl = await UploadAvatarAsync(
+            app.Client,
+            MediaTestImage.Jpeg(512, 512),
+            fileName: "avatar.jpg",
+            contentType: "image/jpeg");
+
+        var firstMediaId = MediaIdFromUrl(firstUrl);
+        var firstFileName = firstUrl[(firstUrl.LastIndexOf('/') + 1)..];
+        var firstPath = Path.Combine(
+            app.StorageRootPath,
+            "avatars",
+            $"{user.Id:N}",
+            firstFileName);
+
+        Assert.True(File.Exists(firstPath));
+        Assert.Equal(3, VariantFiles(app, user.Id, firstMediaId).Length);
+
+        var secondUrl = await UploadAvatarAsync(
+            app.Client,
+            MediaTestImage.Jpeg(512, 512),
+            fileName: "avatar.jpg",
+            contentType: "image/jpeg");
+
+        Assert.NotEqual(firstUrl, secondUrl);
+
+        // Старый кадр заменён: ни исходника, ни вариантов, ни рабочего ?size=.
+        Assert.False(File.Exists(firstPath));
+        Assert.Empty(VariantFiles(app, user.Id, firstMediaId));
+
+        using var anonymous = app.CreateClient();
+
+        using (var stale = await anonymous.GetAsync(firstUrl + "?size=sm"))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
+            Assert.Contains(
+                "avatarMedia.notFound",
+                await stale.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+            AssertNoStore(stale);
+        }
+
+        // Новый кадр ещё ждёт проверки: владелец видит превью с private/no-store.
+        var secondMediaId = MediaIdFromUrl(secondUrl);
+
+        using (var pendingVariant = await app.Client.GetAsync(secondUrl + "?size=sm"))
+        {
+            Assert.Equal(HttpStatusCode.OK, pendingVariant.StatusCode);
+            Assert.Equal("image/webp", pendingVariant.Content.Headers.ContentType?.MediaType);
+            AssertPrivateNoStore(pendingVariant);
+            Assert.Equal($"\"{secondMediaId:N}-sm\"", RequireEntityTag(pendingVariant));
+        }
+
+        using (var delete = await app.Client.DeleteAsync("api/users/me/avatar"))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+        }
+
+        Assert.Empty(VariantFiles(app, user.Id, secondMediaId));
+
+        using var deleted = await anonymous.GetAsync(secondUrl + "?size=sm");
+        Assert.Equal(HttpStatusCode.NotFound, deleted.StatusCode);
+        AssertNoStore(deleted);
+    }
+
+    /// <summary>
     /// POST multipart с одним файлом в поле <c>file</c>; статус проверяет вызывающий.
     /// </summary>
     private static async Task<HttpResponseMessage> SendAvatarAsync(
@@ -635,9 +897,17 @@ public sealed class UserAvatarTests
     /// <summary>
     /// Загрузка с проверкой <c>201</c>: возвращает относительный URL нового аватара.
     /// </summary>
-    private static async Task<string> UploadAvatarAsync(HttpClient client, byte[] content)
+    private static async Task<string> UploadAvatarAsync(
+        HttpClient client,
+        byte[] content,
+        string fileName = "avatar.png",
+        string contentType = "image/png")
     {
-        using var response = await SendAvatarAsync(client, content);
+        using var response = await SendAvatarAsync(
+            client,
+            content,
+            fileName: fileName,
+            contentType: contentType);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -682,17 +952,105 @@ public sealed class UserAvatarTests
     }
 
     /// <summary>
-    /// Проверяет публичное суточное кэширование кадра, доступного всем.
+    /// Проверяет честный кэш публичного аватара: <c>public, max-age=0, must-revalidate</c>.
     /// </summary>
+    /// <remarks>
+    /// Суточного <c>max-age</c> больше нет: скрытый или заменённый аватар обязан исчезать
+    /// после перезагрузки, а повторный показ даёт <c>304</c>. Директивы проверяются флагами:
+    /// <see cref="HttpResponseMessage.Headers"/> сериализует их в своём порядке.
+    /// </remarks>
     private static void AssertPublicCache(HttpResponseMessage response)
     {
         var cacheControl = response.Headers.CacheControl
             ?? throw new InvalidOperationException("Cache-Control header is missing.");
 
         Assert.True(cacheControl.Public);
-        Assert.Equal(TimeSpan.FromDays(1), cacheControl.MaxAge);
+        Assert.Equal(TimeSpan.Zero, cacheControl.MaxAge);
+        Assert.True(cacheControl.MustRevalidate);
         Assert.False(cacheControl.NoStore);
     }
+
+    /// <summary>
+    /// Проверяет запрет кэширования отказа: <c>Cache-Control: no-store</c>.
+    /// </summary>
+    private static void AssertNoStore(HttpResponseMessage response)
+    {
+        var cacheControl = response.Headers.CacheControl
+            ?? throw new InvalidOperationException("Cache-Control header is missing.");
+
+        Assert.True(cacheControl.NoStore);
+        Assert.False(cacheControl.Public);
+    }
+
+    /// <summary>
+    /// Проверяет сильный <c>ETag</c> и возвращает его значение вместе с кавычками.
+    /// </summary>
+    private static string RequireEntityTag(HttpResponseMessage response)
+    {
+        var entityTag = response.Headers.ETag
+            ?? throw new InvalidOperationException("ETag header is missing.");
+
+        Assert.False(entityTag.IsWeak);
+
+        return entityTag.Tag.ToString();
+    }
+
+    /// <summary>
+    /// Проверяет, что ответ не объявляет <c>Vary</c>: представление выбирает URL, не <c>Accept</c>.
+    /// </summary>
+    private static void AssertNoVary(HttpResponseMessage response)
+        => Assert.False(
+            response.Headers.Contains("Vary"),
+            "The media response must not carry a Vary header.");
+
+    /// <summary>
+    /// GET с заголовком <c>If-None-Match</c>: условный запрос к тому же URL.
+    /// </summary>
+    private static async Task<HttpResponseMessage> GetWithIfNoneMatchAsync(
+        HttpClient client,
+        string url,
+        string entityTag)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("If-None-Match", entityTag);
+
+        return await client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Идентификатор медиа из URL аватара: из него собираются имена вариантов и <c>ETag</c>.
+    /// </summary>
+    private static Guid MediaIdFromUrl(string url)
+    {
+        if (!UserAvatarMediaUrl.TryParse(url, out _, out var mediaId, out _))
+        {
+            throw new InvalidOperationException($"Unexpected avatar media URL: {url}");
+        }
+
+        return mediaId;
+    }
+
+    /// <summary>
+    /// Файлы вариантов аватара на диске теста.
+    /// </summary>
+    private static string[] VariantFiles(TestApp app, Guid userId, Guid mediaId)
+    {
+        var directoryPath = Path.Combine(app.StorageRootPath, "avatars", $"{userId:N}");
+
+        return Directory.Exists(directoryPath)
+            ? Directory.GetFiles(directoryPath, PhotoVariantWidths.FilePattern(mediaId))
+            : [];
+    }
+
+    /// <summary>
+    /// Путь производного файла: <c>{mediaId:N}-{suffix}.webp</c> рядом с исходником.
+    /// </summary>
+    private static string VariantPath(TestApp app, Guid userId, Guid mediaId, string suffix)
+        => Path.Combine(
+            app.StorageRootPath,
+            "avatars",
+            $"{userId:N}",
+            $"{mediaId:N}-{suffix}.webp");
 
     /// <summary>
     /// Минимальный PNG с настоящими сигнатурой и <c>IHDR</c>: инспектор читает размеры
