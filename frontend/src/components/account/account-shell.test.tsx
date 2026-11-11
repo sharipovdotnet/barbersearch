@@ -3,6 +3,9 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { AccountShell } from '@/components/account/account-shell'
+import { ProfileProvider } from '@/components/profile-provider'
+import { SessionContext, type SessionContextValue } from '@/hooks/use-session'
+import type { SessionUser } from '@/lib/auth'
 import type { MyProfile } from '@/lib/my-profile'
 import { server } from '@/test/msw/server'
 import { stubImageLoading } from '@/test/image'
@@ -29,21 +32,34 @@ function profile(
 }
 
 function renderShell(value: MyProfile) {
+  const user: SessionUser = {
+    id: value.id,
+    email: value.email,
+    role: value.role,
+    barberProfileId: value.barberProfileId,
+    isEmailVerified: value.isEmailVerified,
+  }
+  const session: SessionContextValue = {
+    status: 'authenticated',
+    user,
+    signIn: async () => user,
+    signOut: async () => {},
+    retrySession: () => {},
+  }
+
   return render(
-    <AccountShell
-      user={{
-        id: value.id,
-        email: value.email,
-        role: value.role,
-        barberProfileId: value.barberProfileId,
-        isEmailVerified: value.isEmailVerified,
-      }}
-      section="security"
-      title="Безопасность"
-      description="Пароль и вход"
-    >
-      <p>Содержимое раздела</p>
-    </AccountShell>
+    <SessionContext.Provider value={session}>
+      <ProfileProvider>
+        <AccountShell
+          user={user}
+          section="security"
+          title="Безопасность"
+          description="Пароль и вход"
+        >
+          <p>Содержимое раздела</p>
+        </AccountShell>
+      </ProfileProvider>
+    </SessionContext.Provider>
   )
 }
 

@@ -120,7 +120,7 @@ function AccountShellBody({
   description: string
   children: ReactNode
 }) {
-  const profile = useMyProfile(user.id)
+  const profile = useMyProfile()
 
   return (
     <AccountProfileContext.Provider value={profile}>

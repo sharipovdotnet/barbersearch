@@ -49,6 +49,12 @@ test.describe('аватар кабинета: мутации', () => {
     page,
   }) => {
     const profile = new AccountProfilePage(page)
+    const headerImage = page.locator(
+      'button[aria-label="Меню аккаунта"] [data-slot="avatar-image"]'
+    )
+    const headerFallback = page.locator(
+      'button[aria-label="Меню аккаунта"] [data-slot="avatar-fallback"]'
+    )
 
     await profile.goto()
     await profile.waitForReady()
@@ -56,6 +62,9 @@ test.describe('аватар кабинета: мутации', () => {
     // Сид держит аватар пустым: сцена начинается с инициалов.
     await expect(profile.avatarFallback).toContainText(INITIALS)
     await expect(profile.avatarImage).toHaveCount(0)
+    // Шапка читает тот же профиль: до загрузки — инициалы, без отдельного запроса.
+    await expect(headerFallback).toHaveAttribute('data-initials', INITIALS)
+    await expect(headerImage).toHaveCount(0)
 
     await profile.uploadAvatar(AVATAR_PATH)
 
@@ -80,8 +89,11 @@ test.describe('аватар кабинета: мутации', () => {
       )
       .toBeGreaterThan(0)
 
-    // Каркас кабинета показывает тот же кадр, а не инициалы.
+    // Каркас кабинета и шапка показывают тот же кадр без перезагрузки:
+    // общий `ProfileProvider` обновил всех подписчиков через `setAvatar`.
     await expect(profile.identityAvatarImage).toHaveAttribute('src', src ?? '')
+    await expect(headerImage).toHaveAttribute('src', src ?? '')
+    await expect(headerImage).toHaveAttribute('alt', '')
 
     // axe на 1280: карточка и каркас в реальном состоянии, без исключений.
     await expectNoBlockingViolations(
@@ -94,6 +106,7 @@ test.describe('аватар кабинета: мутации', () => {
     await profile.waitForReady()
 
     await expect(profile.avatarImage).toHaveAttribute('src', src ?? '')
+    await expect(headerImage).toHaveAttribute('src', src ?? '')
   })
 
   test('админская карточка пользователя видит тот же src', async ({
@@ -167,10 +180,17 @@ test.describe('аватар кабинета: мутации', () => {
     expect(avatarSrc).not.toBeNull()
 
     const profile = new AccountProfilePage(page)
+    const headerImage = page.locator(
+      'button[aria-label="Меню аккаунта"] [data-slot="avatar-image"]'
+    )
+    const headerFallback = page.locator(
+      'button[aria-label="Меню аккаунта"] [data-slot="avatar-fallback"]'
+    )
 
     await profile.goto()
     await profile.waitForReady()
     await expect(profile.avatarImage).toBeVisible()
+    await expect(headerImage).toBeVisible()
 
     await profile.openAvatarDeleteDialog()
 
@@ -187,6 +207,9 @@ test.describe('аватар кабинета: мутации', () => {
     await expect(profile.avatarImage).toHaveCount(0)
     await expect(profile.avatarFallback).toContainText(INITIALS)
     await expect(profile.identityAvatarImage).toHaveCount(0)
+    // Шапка тоже сразу возвращается к инициалам, без перезагрузки.
+    await expect(headerImage).toHaveCount(0)
+    await expect(headerFallback).toHaveAttribute('data-initials', INITIALS)
 
     const response = await page.request.get(avatarSrc ?? '')
 

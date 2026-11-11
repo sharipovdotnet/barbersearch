@@ -1,11 +1,12 @@
 import { useState, type MouseEvent } from 'react'
 import { LogOut, Scissors, ShieldCheck, UserRound } from 'lucide-react'
 
+import { useMyProfile } from '@/hooks/use-my-profile'
 import { useSession } from '@/hooks/use-session'
 import { useI18n } from '@/i18n'
 import { LoginDialog } from '@/components/login-dialog'
 import { SessionRetryButton } from '@/components/session-unavailable'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { BARBER_CABINET_PATH, isBarberCabinetPath } from '@/lib/barber-cabinet-path'
+import { profileInitials } from '@/lib/my-profile'
 import { navigate, useLocation } from '@/lib/router'
 
 /**
@@ -33,6 +35,9 @@ import { navigate, useLocation } from '@/lib/router'
 export function HeaderAuth() {
   const { t } = useI18n()
   const { status, user, signOut } = useSession()
+  // Профиль приходит из общего провайдера: после `setAvatar` в кабинете шапка
+  // обновляется без перезагрузки, второго запроса из шапки нет.
+  const { profile } = useMyProfile()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const location = useLocation()
   const pathname = location.split('?')[0] ?? ''
@@ -65,6 +70,10 @@ export function HeaderAuth() {
   const isAccount = isAccountPath(pathname)
   const isBarberCabinet = isBarberCabinetPath(pathname)
   const isAdmin = isAdminPath(pathname)
+  // До загрузки профиля — первая буква email, как было; после — инициалы имени.
+  const initials = profile
+    ? profileInitials(profile)
+    : user.email.slice(0, 1).toUpperCase()
 
   async function handleSignOut() {
     setIsSigningOut(true)
@@ -102,7 +111,15 @@ export function HeaderAuth() {
         }
       >
         <Avatar size="sm" aria-hidden>
-          <AvatarFallback>{user.email.slice(0, 1).toUpperCase()}</AvatarFallback>
+          {/* Фото декоративно: имя кнопки — «Меню аккаунта», аватар не отдельная кнопка. */}
+          {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
+          {/* Инициалы рисуются `::before`, а не текстовым узлом: иначе у кнопки с
+              именем «Меню аккаунта» появляется видимый текст, которого нет в имени,
+              и axe валит каждую страницу по `label-content-name-mismatch`. */}
+          <AvatarFallback
+            data-initials={initials}
+            className="before:content-[attr(data-initials)]"
+          />
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">

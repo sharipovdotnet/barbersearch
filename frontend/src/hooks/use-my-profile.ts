@@ -1,175 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useContext } from 'react'
 
-import { ApiError } from '@/lib/api'
-import { describeApiFailure } from '@/lib/errors'
-import { useI18n } from '@/i18n'
-import {
-  fetchMyProfile,
-  updateMyProfile,
-  type MyProfile,
-  type UpdateMyProfileInput,
-} from '@/lib/my-profile'
+import type { MyProfile, UpdateMyProfileInput } from '@/lib/my-profile'
 
 /**
- * Профиль кабинета: одно чтение `GET api/users/me` на сессию.
+ * Профиль текущего пользователя для всех поверхностей приложения.
  *
- * Кэш модульный, поэтому переход между разделами кабинета не повторяет запрос. Ключ
- * кэша — id пользователя: после выхода и входа другим аккаунтом старый профиль не
- * должен показываться. `save` и `setAvatar` обновляют кэш и состояние без второго `GET`.
+ * Читается из `ProfileProvider` (`src/components/profile-provider.tsx`), который
+ * смонтирован один раз в `main.tsx`: шапка и кабинет видят один и тот же профиль,
+ * поэтому загрузка или удаление аватара сразу меняет обе поверхности. Отдельного
+ * модульного кэша больше нет — иначе шапка о мутации не узнала бы.
  */
 
-type ProfileState = {
-  status: 'loading' | 'ready' | 'error'
+export type ProfileStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+export type ProfileState = {
+  /** `idle` — сессии нет или она ещё не проверена; запроса в этом состоянии нет. */
+  status: ProfileStatus
   profile: MyProfile | null
   error: string | null
+  /** `401` на `GET users/me`: сессией владеет `SessionProvider`, провайдер её не трогает. */
   requiresSignIn: boolean
 }
 
-let cachedProfile: MyProfile | null = null
-
-function readCache(userId: string): MyProfile | null {
-  return cachedProfile?.id === userId ? cachedProfile : null
+export type ProfileContextValue = ProfileState & {
+  /** Повторное чтение профиля; при уже идущем запросе отдаёт его же (single-flight). */
+  reload: () => Promise<void>
+  /** Сохраняет личные данные и возвращает обновлённый профиль; второй `GET` не нужен. */
+  save: (input: UpdateMyProfileInput) => Promise<MyProfile>
+  /** Новый аватар после загрузки/удаления — общий для всех подписчиков, без `GET`. */
+  setAvatar: (avatarUrl: string | null) => void
 }
 
-export function useMyProfile(userId: string) {
-  const { t } = useI18n()
-  const [state, setState] = useState<ProfileState>(() => {
-    const cached = readCache(userId)
+export const ProfileContext = createContext<ProfileContextValue | null>(null)
 
-    return cached
-      ? { status: 'ready', profile: cached, error: null, requiresSignIn: false }
-      : { status: 'loading', profile: null, error: null, requiresSignIn: false }
-  })
+/** Состояние профиля для шапки, кабинета и формы. Вне провайдера — ошибка. */
+export function useMyProfile(): ProfileContextValue {
+  const value = useContext(ProfileContext)
 
-  // Номер поколения отсекает поздний ответ прошлого пользователя или размонтирования.
-  const generation = useRef(0)
-
-  const load = useCallback(async () => {
-    const current = ++generation.current
-
-    setState((previous) => ({
-      status: 'loading',
-      // Профиль прошлого аккаунта не показываем даже на время загрузки.
-      profile:
-        readCache(userId) ??
-        (previous.profile?.id === userId ? previous.profile : null),
-      error: null,
-      requiresSignIn: false,
-    }))
-
-    try {
-      const profile = await fetchMyProfile()
-
-      if (current !== generation.current) {
-        return
-      }
-
-      cachedProfile = profile
-      setState({
-        status: 'ready',
-        profile,
-        error: null,
-        requiresSignIn: false,
-      })
-    } catch (error) {
-      if (current !== generation.current) {
-        return
-      }
-
-      const requiresSignIn = error instanceof ApiError && error.status === 401
-
-      setState({
-        status: 'error',
-        profile: readCache(userId),
-        error: requiresSignIn
-          ? t('Сессия истекла: войдите снова, чтобы увидеть профиль.')
-          : describeApiFailure(error, 'Не удалось загрузить профиль.'),
-        requiresSignIn,
-      })
-    }
-  }, [t, userId])
-
-  useEffect(() => {
-    if (readCache(userId)) {
-      return
-    }
-
-    // oxlint-disable-next-line react/set-state-in-effect -- профиль грузится после монтирования каркаса
-    void load()
-
-    return () => {
-      generation.current += 1
-    }
-  }, [load, userId])
-
-  const save = useCallback(
-    async (input: UpdateMyProfileInput): Promise<MyProfile> => {
-      const currentProfile = cachedProfile
-
-      if (!currentProfile || currentProfile.id !== userId) {
-        throw new Error('Профиль ещё не загружен.')
-      }
-
-      const next: MyProfile = {
-        ...currentProfile,
-        firstName: input.firstName.trim(),
-        lastName: input.lastName.trim(),
-        phoneNumber: input.phoneNumber?.trim() || null,
-      }
-
-      await updateMyProfile(currentProfile.id, {
-        firstName: next.firstName,
-        lastName: next.lastName,
-        phoneNumber: next.phoneNumber,
-        // PUT заменяет поле целиком: отправляем текущий аватар, включая только что
-        // загруженный `setAvatar`, иначе сохранение имени стёрло бы его.
-        avatarUrl: currentProfile.avatarUrl,
-      })
-
-      cachedProfile = next
-      setState({
-        status: 'ready',
-        profile: next,
-        error: null,
-        requiresSignIn: false,
-      })
-
-      return next
-    },
-    [userId]
-  )
-
-  /**
-   * Новый аватар после загрузки или удаления — без второго `GET users/me`.
-   *
-   * Пишет и модульный кэш, и состояние: следующий раздел кабинета получит уже
-   * новый URL, а `save()` отправит его обратно в `PUT profile`.
-   */
-  const setAvatar = useCallback(
-    (avatarUrl: string | null): void => {
-      const currentProfile = cachedProfile
-
-      if (!currentProfile || currentProfile.id !== userId) {
-        return
-      }
-
-      const next: MyProfile = { ...currentProfile, avatarUrl }
-
-      cachedProfile = next
-      setState({
-        status: 'ready',
-        profile: next,
-        error: null,
-        requiresSignIn: false,
-      })
-    },
-    [userId]
-  )
-
-  return {
-    ...state,
-    reload: load,
-    save,
-    setAvatar,
+  if (!value) {
+    throw new Error('useMyProfile must be used inside ProfileProvider')
   }
+
+  return value
 }
