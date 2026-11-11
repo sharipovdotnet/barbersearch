@@ -125,5 +125,8 @@
   "Телефон": "Phone",
   "[телефон]": "[phone]",
   "11.2. По всем вопросам, связанным с обработкой персональных данных, можно обратиться по адресу, указанному выше.": "11.2. For all questions related to the processing of personal data, you can contact us at the address indicated above.",
+  "фотография профиля (аватар), которую пользователь загружает сам; у барбера она публикуется в открытой карточке;": "a profile photo (avatar) uploaded by the user; for a barber it is published on the public card;",
+  "Фотография профиля.": "Profile photo.",
+  "Аватар показывается в кабинете, а у барбера — в открытой карточке. Данные: изображение профиля. Срок: до удаления пользователем или блокировки аккаунта.": "The avatar is shown in the account and, for a barber, on the public card. Data: the profile image. Period: until the user deletes it or the account is blocked.",
   "Не HttpOnly (читается клиентом), Secure на https, SameSite=Lax, Path=/": "Not HttpOnly (read by the client), Secure on https, SameSite=Lax, Path=/"
 }

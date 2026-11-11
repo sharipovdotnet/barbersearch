@@ -69,6 +69,8 @@ export type BarberProfileSpecialization = {
 export type BarberProfile = {
   id: string
   userId: string
+  /** Аватар владельца профиля: `null`, пока он не загружен; инициалы — fallback. */
+  avatarUrl: string | null
   displayName: string
   grade: BarberGrade
   bio: string | null

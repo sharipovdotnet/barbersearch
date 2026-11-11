@@ -44,6 +44,7 @@ import type {
   AdminUserRow,
 } from '@/lib/admin-users'
 import type { SessionUser } from '@/lib/auth'
+import type { AvatarUploadResponse } from '@/lib/avatars'
 import type {
   BarberRequest,
   BarberRequestStatus,
@@ -272,6 +273,22 @@ export function isCreatedId(value: unknown): value is { id: string } {
 
 /** Имя из спецификации #84 для `201 { id }`, в том числе загрузки фото. */
 export const isCreatedResource: Guard<{ id: string }> = isCreatedId
+
+/**
+ * `201 { avatarUrl }` загрузки аватара.
+ *
+ * Значение — только относительный URL раздачи `/api/media/avatars/...`: абсолютный
+ * внешний адрес здесь означал бы, что клиент покажет чужой файл вместо загруженного.
+ */
+export function isAvatarUploadResponse(
+  value: unknown
+): value is AvatarUploadResponse {
+  return (
+    isRecord(value) &&
+    typeof value.avatarUrl === 'string' &&
+    value.avatarUrl.startsWith('/api/media/avatars/')
+  )
+}
 
 /** `{ token }` из `GET api/auth/csrf`. */
 export function isCsrfToken(value: unknown): value is { token: string } {
@@ -634,6 +651,7 @@ export function isBarberProfile(value: unknown): value is BarberProfile {
     isRecord(value) &&
     isNonEmptyString(value.id) &&
     isNonEmptyString(value.userId) &&
+    isNullableString(value.avatarUrl) &&
     isString(value.displayName) &&
     isBarberGrade(value.grade) &&
     isNullableString(value.bio) &&

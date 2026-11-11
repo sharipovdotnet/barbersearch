@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   ImagePrepError,
+  prepareAvatarImage,
   preparePortfolioImage,
 } from '@/lib/image-prep'
+import {
+  AVATAR_MAX_BYTES,
+  AVATAR_SIDE,
+  AVATAR_SOURCE_MAX_BYTES,
+} from '@/lib/avatars'
 import {
   MAX_PHOTO_BYTES,
   MAX_SOURCE_PHOTO_BYTES,
@@ -28,6 +34,7 @@ function fakeBitmap(width: number, height: number): FakeBitmap {
 /** jsdom не рисует: подменяем ровно те члены контекста, которые читает библиотека. */
 function stubCanvas(blobs: Blob[]): {
   qualities: number[]
+  sizes: { width: number; height: number }[]
   context: FakeContext
 } {
   const context: FakeContext = {
@@ -36,19 +43,21 @@ function stubCanvas(blobs: Blob[]): {
     drawImage: vi.fn(),
   }
   const qualities: number[] = []
+  const sizes: { width: number; height: number }[] = []
 
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
     () => context as unknown as CanvasRenderingContext2D
   )
 
   vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(
-    (callback, _type, quality) => {
+    function (this: HTMLCanvasElement, callback, _type, quality) {
+      sizes.push({ width: this.width, height: this.height })
       qualities.push(Number(quality))
       callback(blobs.shift() ?? new Blob(['prepared'], { type: 'image/jpeg' }))
     }
   )
 
-  return { qualities, context }
+  return { qualities, sizes, context }
 }
 
 /** Размер без пятимегабайтной аллокации: свойство `size` перекрывается на экземпляре. */
@@ -303,5 +312,169 @@ describe('preparePortfolioImage, декодирование', () => {
 
     expect(error.code).toBe('decodeFailed')
     expect(bitmap.close).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('prepareAvatarImage, проверки до декодирования', () => {
+  it('отвергает неподдерживаемый тип, не вызывая createImageBitmap', async () => {
+    const create = stubBitmap(async () => fakeBitmap(800, 600) as ImageBitmap)
+
+    const error = await prepErrorOf(prepareAvatarImage(photoFile('image/gif')))
+
+    expect(error.code).toBe('unsupportedType')
+    expect(error.message).toBe('Поддерживаются только JPEG, PNG и WebP.')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('отбрасывает исходник больше 15 МБ до чтения в память', async () => {
+    const create = stubBitmap(async () => fakeBitmap(800, 600) as ImageBitmap)
+
+    const error = await prepErrorOf(
+      prepareAvatarImage(photoFile('image/png', AVATAR_SOURCE_MAX_BYTES + 1))
+    )
+
+    expect(error.code).toBe('tooLarge')
+    expect(error.message).toBe('Файл больше 15 МБ. Выберите фото поменьше.')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('принимает ровно 15 МБ: лимит включительный', async () => {
+    stubBitmap(async () => fakeBitmap(800, 600) as ImageBitmap)
+    stubCanvas([new Blob(['prepared'], { type: 'image/jpeg' })])
+
+    await expect(
+      prepareAvatarImage(photoFile('image/png', AVATAR_SOURCE_MAX_BYTES))
+    ).resolves.toBeInstanceOf(File)
+  })
+})
+
+describe('prepareAvatarImage, квадратный центр-кроп и масштаб', () => {
+  it('1200×800: сторона 800 по центру и ровно 512×512', async () => {
+    const bitmap = fakeBitmap(1200, 800)
+    stubBitmap(async () => bitmap as unknown as ImageBitmap)
+    const { context, sizes } = stubCanvas([
+      new Blob(['prepared'], { type: 'image/jpeg' }),
+    ])
+
+    const result = await prepareAvatarImage(photoFile())
+
+    // Смещение по X — (1200 - 800) / 2 = 200, по Y — 0: кроп по центру.
+    expect(context.drawImage).toHaveBeenCalledWith(
+      bitmap,
+      200,
+      0,
+      800,
+      800,
+      0,
+      0,
+      AVATAR_SIDE,
+      AVATAR_SIDE
+    )
+    expect(context.fillStyle).toBe('#ffffff')
+    expect(context.fillRect).toHaveBeenCalledWith(
+      0,
+      0,
+      AVATAR_SIDE,
+      AVATAR_SIDE
+    )
+    expect(sizes).toStrictEqual([{ width: 512, height: 512 }])
+    expect(bitmap.close).toHaveBeenCalledTimes(1)
+    expect(result.name).toBe('avatar.jpg')
+    expect(result.type).toBe('image/jpeg')
+  })
+
+  it('800×1200: смещение по центру считается и по Y', async () => {
+    const bitmap = fakeBitmap(800, 1200)
+    stubBitmap(async () => bitmap as unknown as ImageBitmap)
+    const { context } = stubCanvas([
+      new Blob(['prepared'], { type: 'image/jpeg' }),
+    ])
+
+    await prepareAvatarImage(photoFile())
+
+    expect(context.drawImage).toHaveBeenCalledWith(
+      bitmap,
+      0,
+      200,
+      800,
+      800,
+      0,
+      0,
+      AVATAR_SIDE,
+      AVATAR_SIDE
+    )
+  })
+
+  it('300×300 увеличивается до 512: серверный минимум 300 px выполняется', async () => {
+    const bitmap = fakeBitmap(300, 300)
+    stubBitmap(async () => bitmap as unknown as ImageBitmap)
+    const { context, sizes } = stubCanvas([
+      new Blob(['prepared'], { type: 'image/jpeg' }),
+    ])
+
+    await prepareAvatarImage(photoFile())
+
+    expect(context.drawImage).toHaveBeenCalledWith(
+      bitmap,
+      0,
+      0,
+      300,
+      300,
+      0,
+      0,
+      AVATAR_SIDE,
+      AVATAR_SIDE
+    )
+    expect(sizes).toStrictEqual([{ width: 512, height: 512 }])
+  })
+
+  it('кодирует JPEG quality 0.85 и не повторяет, если файл лёгок', async () => {
+    stubBitmap(async () => fakeBitmap(1200, 800) as ImageBitmap)
+    const { qualities } = stubCanvas([
+      new Blob(['prepared'], { type: 'image/jpeg' }),
+    ])
+
+    await prepareAvatarImage(photoFile())
+
+    expect(qualities).toStrictEqual([0.85])
+  })
+
+  it('если JPEG больше 5 МБ — повторяет с quality 0.7', async () => {
+    stubBitmap(async () => fakeBitmap(1200, 800) as ImageBitmap)
+    const { qualities } = stubCanvas([
+      blobOfSize(AVATAR_MAX_BYTES + 1),
+      new Blob(['prepared'], { type: 'image/jpeg' }),
+    ])
+
+    const result = await prepareAvatarImage(photoFile())
+
+    expect(qualities).toStrictEqual([0.85, 0.7])
+    expect(result.size).toBeLessThanOrEqual(AVATAR_MAX_BYTES)
+  })
+
+  it('если и 0.7 больше 5 МБ — отказ tooLarge', async () => {
+    stubBitmap(async () => fakeBitmap(1200, 800) as ImageBitmap)
+    const { qualities } = stubCanvas([
+      blobOfSize(AVATAR_MAX_BYTES + 1),
+      blobOfSize(AVATAR_MAX_BYTES + 1),
+    ])
+
+    const error = await prepErrorOf(prepareAvatarImage(photoFile()))
+
+    expect(error.code).toBe('tooLarge')
+    expect(error.message).toBe(
+      'Не удалось уменьшить фото до 5 МБ. Выберите другое.'
+    )
+    expect(qualities).toStrictEqual([0.85, 0.7])
+  })
+
+  it('отказ декодирования — decodeFailed, наружу не летит', async () => {
+    stubBitmap(async () => {
+      throw new Error('decode failed')
+    })
+
+    const error = await prepErrorOf(prepareAvatarImage(photoFile()))
+
+    expect(error.code).toBe('decodeFailed')
   })
 })

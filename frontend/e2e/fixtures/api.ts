@@ -89,6 +89,32 @@ async function csrfToken(request: APIRequestContext): Promise<string> {
   return body.token
 }
 
+/**
+ * Уборка аватара после упавшей сцены: `DELETE` идемпотентен и отвечает `204`,
+ * даже когда файла уже нет. `request` приходит из теста, поэтому удаляется аватар
+ * того аккаунта, чей `storageState` у сценария.
+ */
+export async function deleteMyAvatar(
+  request: APIRequestContext
+): Promise<void> {
+  const csrf = await request.get('/api/auth/csrf')
+
+  if (csrf.status() !== 200) {
+    return
+  }
+
+  const { token } = (await csrf.json()) as { token: string }
+
+  const response = await request.delete('/api/users/me/avatar', {
+    headers: { 'X-CSRF-TOKEN': token },
+  })
+
+  expect(
+    [204, 401],
+    `DELETE /api/users/me/avatar: ${response.status()}`
+  ).toContain(response.status())
+}
+
 /** Возвращает id созданного отзыва. */
 export async function createReview(
   request: APIRequestContext,

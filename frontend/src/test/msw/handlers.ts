@@ -35,6 +35,7 @@ export const notificationSettings = {
 export const testBarberProfile: BarberProfile = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   userId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  avatarUrl: null,
   displayName: 'Иван Петров',
   grade: 'SeniorBarber',
   bio: 'Стригу с 2015 года.',

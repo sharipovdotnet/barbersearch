@@ -45,6 +45,74 @@ export class AccountProfilePage {
     return this.page.locator('aside')
   }
 
+  /**
+   * Карточка аватара — первая на `/account/profile`, поэтому у секции есть
+   * собственный `aria-labelledby`: иначе её не отличить от карточки личных данных.
+   */
+  get avatarSection(): Locator {
+    return this.page.locator('section[aria-labelledby="account-avatar-heading"]')
+  }
+
+  /** Загруженный аватар карточки: реальный `<img>`, а не подложка-инициалы. */
+  get avatarImage(): Locator {
+    return this.avatarSection.locator('[data-slot="avatar-image"]')
+  }
+
+  get avatarFallback(): Locator {
+    return this.avatarSection.locator('[data-slot="avatar-fallback"]')
+  }
+
+  /** Тот же аватар в каркасе кабинета (`AccountIdentity`). */
+  get identityAvatarImage(): Locator {
+    return this.identity.locator('[data-slot="avatar-image"]')
+  }
+
+  get avatarFileInput(): Locator {
+    return this.avatarSection.locator('input[type="file"]')
+  }
+
+  get uploadAvatarButton(): Locator {
+    return this.avatarSection.getByRole('button', {
+      name: /^(Загрузить|Изменить) фото$/,
+    })
+  }
+
+  get deleteAvatarButton(): Locator {
+    return this.avatarSection.getByRole('button', {
+      name: 'Удалить',
+      exact: true,
+    })
+  }
+
+  get avatarStatus(): Locator {
+    return this.avatarSection.getByRole('status')
+  }
+
+  get deleteAvatarDialog(): Locator {
+    return this.page.getByRole('alertdialog', { name: 'Удалить аватар?' })
+  }
+
+  get deleteAvatarConfirm(): Locator {
+    return this.deleteAvatarDialog.getByRole('button', {
+      name: 'Удалить',
+      exact: true,
+    })
+  }
+
+  /** Выбор файла: кнопка открывает скрытый input, поэтому файл кладём прямо в него. */
+  async uploadAvatar(filePath: string): Promise<void> {
+    await this.avatarFileInput.setInputFiles(filePath)
+  }
+
+  async openAvatarDeleteDialog(): Promise<void> {
+    await this.deleteAvatarButton.click()
+    await expect(this.deleteAvatarDialog).toBeVisible()
+  }
+
+  async confirmAvatarDelete(): Promise<void> {
+    await this.deleteAvatarConfirm.click()
+  }
+
   /** Ждём профиль, а не скелетон: поле имени заполнено из API. */
   async waitForReady(): Promise<void> {
     await expect(this.heading).toBeVisible()

@@ -35,5 +35,6 @@
   "Фото не найдено. Обновите страницу.": "Photo not found. Refresh the page.",
   "Нет доступа к портфолио этого барбера.": "You don't have access to this barber's portfolio.",
   "Не удалось сохранить файл. Попробуйте ещё раз.": "Could not save the file. Try again.",
-  "Не удалось выполнить действие с фото. Попробуйте ещё раз.": "Could not complete the photo action. Try again."
+  "Не удалось выполнить действие с фото. Попробуйте ещё раз.": "Could not complete the photo action. Try again.",
+  "Не удалось изменить аватар. Попробуйте ещё раз.": "Could not change the avatar. Try again."
 }

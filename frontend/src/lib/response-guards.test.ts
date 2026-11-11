@@ -4,6 +4,7 @@ import {
   isAdminBarber,
   isAdminSalonRow,
   isAdminUser,
+  isAvatarUploadResponse,
   isBarberBooking,
   isBarberBookingOptions,
   isBarberNotification,
@@ -596,5 +597,54 @@ describe('isCreatedResource', () => {
     expect(isCreatedResource({})).toBe(false)
     expect(isCreatedResource(null)).toBe(false)
     expect(isCreatedResource([{ id: 'photo-1' }])).toBe(false)
+  })
+})
+
+/** Ответ загрузки аватара: только относительный URL раздачи, с непустым значением. */
+describe('isAvatarUploadResponse', () => {
+  const AVATAR_URL =
+    '/api/media/avatars/9e000000-0000-4000-8000-000000000004/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+  it('принимает URL раздачи и игнорирует лишние поля', () => {
+    expect(isAvatarUploadResponse({ avatarUrl: AVATAR_URL })).toBe(true)
+    expect(isAvatarUploadResponse({ avatarUrl: AVATAR_URL, extra: 1 })).toBe(
+      true
+    )
+  })
+
+  it('отвергает пустой, чужой префикс, не-строку и не-объект', () => {
+    expect(isAvatarUploadResponse({ avatarUrl: '' })).toBe(false)
+    expect(
+      isAvatarUploadResponse({ avatarUrl: '/api/media/portfolio/x.jpg' })
+    ).toBe(false)
+    expect(
+      isAvatarUploadResponse({ avatarUrl: 'https://example.com/avatar.jpg' })
+    ).toBe(false)
+    expect(isAvatarUploadResponse({ avatarUrl: 1 })).toBe(false)
+    expect(isAvatarUploadResponse({})).toBe(false)
+    expect(isAvatarUploadResponse(null)).toBe(false)
+    expect(isAvatarUploadResponse([])).toBe(false)
+  })
+})
+
+/** `BarberProfile.avatarUrl` — новое nullable-поле публичной карточки (#85). */
+describe('avatarUrl в публичной карточке барбера', () => {
+  it('принимает null и относительный URL', () => {
+    expect(isBarberProfile(testBarberProfile)).toBe(true)
+    expect(
+      isBarberProfile({
+        ...testBarberProfile,
+        avatarUrl:
+          '/api/media/avatars/9e000000-0000-4000-8000-000000000004/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg',
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает карточку без avatarUrl и с нестроковым значением', () => {
+    const { avatarUrl, ...withoutAvatar } = testBarberProfile
+
+    expect(avatarUrl).toBeNull()
+    expect(isBarberProfile(withoutAvatar)).toBe(false)
+    expect(isBarberProfile({ ...testBarberProfile, avatarUrl: 1 })).toBe(false)
   })
 })

@@ -201,5 +201,14 @@
   "Не удалось загрузить ещё записи.": "Could not load more bookings.",
   "Сессия истекла: войдите снова, чтобы увидеть профиль.": "Session expired: sign in again to see your profile.",
   "Не удалось загрузить профиль.": "Could not load the profile.",
-  "Не удалось загрузить следующие отзывы.": "Could not load the next reviews."
+  "Не удалось загрузить следующие отзывы.": "Could not load the next reviews.",
+  "Аватар": "Avatar",
+  "Фото профиля видят вы и администратор. У барбера оно показывается в открытой карточке.": "You and the administrator can see the profile photo. For a barber it is shown on the public card.",
+  "Загрузить фото": "Upload photo",
+  "Изменить фото": "Change photo",
+  "Удалить аватар?": "Delete avatar?",
+  "Аватар исчезнет из карточки и кабинета. Файл удаляется безвозвратно.": "The avatar will disappear from the card and the account. The file is deleted permanently.",
+  "Аватар обновлён.": "Avatar updated.",
+  "Аватар удалён.": "Avatar deleted.",
+  "JPEG, PNG или WebP до 5 МБ. Квадрат 512×512 подготовит браузер.": "JPEG, PNG or WebP up to 5 MB. The browser prepares a 512×512 square."
 }

@@ -1,6 +1,6 @@
 import { BadgeCheck, MapPin, Star } from 'lucide-react'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BarberProfile } from '@/lib/catalog'
@@ -17,8 +17,10 @@ import { placeKindCaption } from '@/lib/place-kind'
 /**
  * Шапка публичной карточки.
  *
- * Аватара в контракте нет — только инициалы. Основной салон показывается здесь,
- * а полный адрес и расписание живут в секции салонов.
+ * Раньше аватара в контракте не было — карточка показывала только инициалы. Теперь
+ * `avatarUrl` приходит с сервера, а инициалы остаются fallback'ом: пока файл грузится
+ * или если аватара нет. Основной салон показывается здесь, а полный адрес и
+ * расписание живут в секции салонов.
  */
 export function BarberHero({ profile }: { profile: BarberProfile }) {
   const { t } = useI18n()
@@ -32,6 +34,7 @@ export function BarberHero({ profile }: { profile: BarberProfile }) {
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <Avatar size="lg" className="size-16" aria-hidden>
+          {profile.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
           <AvatarFallback className="text-lg">
             {getInitials(profile.displayName)}
           </AvatarFallback>
