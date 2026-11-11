@@ -8,6 +8,7 @@ import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminBooking } from '@/lib/admin-bookings'
 import { problemDetails, unauthorized } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
+import { stubImageLoading } from '@/test/image'
 
 /**
  * Экран броней: список, фильтры и состояния.
@@ -34,10 +35,12 @@ const BOOKING: AdminBooking = {
     lastName: 'Волкова',
     email: 'e2e-bookings@barbersearch.test',
     phoneNumber: '+70000000009',
+    avatarUrl: null,
   },
   barber: {
     profileId: '9e100000-0000-4000-8000-000000000001',
     displayName: 'Артём Соколов',
+    avatarUrl: null,
   },
   service: { name: 'Стрижка' },
   salon: {
@@ -134,6 +137,53 @@ describe('BookingsScreen', () => {
     expect(link).toHaveAttribute('href', `/admin/bookings/${BOOKING.id}`)
   })
 
+  it('показывает аватары клиента и барбера в строке списка', async () => {
+    const customerAvatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000009/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const barberAvatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+    stubImageLoading()
+    mockList([
+      {
+        ...BOOKING,
+        customer: { ...BOOKING.customer, avatarUrl: customerAvatarUrl },
+        barber: { ...BOOKING.barber, avatarUrl: barberAvatarUrl },
+      },
+    ])
+
+    const { container } = render(<BookingsScreen bookingId={null} />)
+
+    const list = await screen.findByRole('list', { name: 'Список броней' })
+
+    await waitFor(() => {
+      expect(
+        list.querySelectorAll('[data-slot="avatar-image"]')
+      ).toHaveLength(2)
+    })
+    expect(
+      container.querySelector(`[data-slot="avatar-image"][src="${customerAvatarUrl}"]`)
+    ).not.toBeNull()
+    expect(
+      container.querySelector(`[data-slot="avatar-image"][src="${barberAvatarUrl}"]`)
+    ).not.toBeNull()
+    // Имена остаются текстом рядом с декоративными изображениями.
+    expect(within(list).getByText('Ирина Волкова')).toBeInTheDocument()
+    expect(within(list).getByText('Артём Соколов')).toBeInTheDocument()
+  })
+
+  it('без фото показывает инициалы клиента и барбера', async () => {
+    mockList([BOOKING])
+
+    render(<BookingsScreen bookingId={null} />)
+
+    const list = await screen.findByRole('list', { name: 'Список броней' })
+
+    expect(within(list).getByText('ИВ')).toBeInTheDocument()
+    expect(within(list).getByText('АС')).toBeInTheDocument()
+    expect(list.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+
   it('в широкой колонке показывает таблицу с ценами и статусами', async () => {
     mockList([BOOKING])
     const notify = stubListWidth(600)
@@ -153,6 +203,34 @@ describe('BookingsScreen', () => {
     expect(
       screen.queryByRole('list', { name: 'Список броней' })
     ).not.toBeInTheDocument()
+  })
+
+  it('в таблице показывает аватары клиента и барбера', async () => {
+    const avatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+    stubImageLoading()
+    mockList([
+      {
+        ...BOOKING,
+        customer: { ...BOOKING.customer, avatarUrl },
+        barber: { ...BOOKING.barber, avatarUrl },
+      },
+    ])
+    const notify = stubListWidth(600)
+
+    render(<BookingsScreen bookingId={null} />)
+
+    await screen.findByRole('list', { name: 'Список броней' })
+    notify()
+
+    const table = await screen.findByRole('table', { name: 'Список броней' })
+
+    await waitFor(() => {
+      expect(
+        table.querySelectorAll('[data-slot="avatar-image"]')
+      ).toHaveLength(2)
+    })
   })
 
   it('в узкой колонке оставляет карточки вместо таблицы', async () => {
@@ -180,6 +258,7 @@ describe('BookingsScreen', () => {
           lastName: 'Смирнова',
           email: null,
           phoneNumber: '+79991112233',
+          avatarUrl: null,
         },
       },
     ])

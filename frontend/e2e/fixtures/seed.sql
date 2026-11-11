@@ -27,7 +27,9 @@
 --   B14 (9e100000-…-0014)        профиль БЕЗ подтверждения, без услуг и салона: единственная
 --                               строка блока «Барберы без подтверждения» в `/admin/summary`
 --   profileBarber (…-0015)       отдельный подтверждённый барбер `/barber/profile`: без услуг,
---                               специализаций и броней; его услуги мутирует только #83
+--                               специализаций и броней; дополнительная услуга `E2E поиск` —
+--                               маркер изолированной карточки в поиске (#86); его услуги
+--                               мутирует только #83
 --   2 отзыва на модерации       вкладка «На модерации» админки
 --   e2e-applicant               клиент без заявки «Стать барбером» (#46): спек подаёт
 --                               заявку с нуля, админ отклоняет её с причиной; секция 1
@@ -613,7 +615,7 @@ WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 INSERT INTO barber_profiles
     (id, user_id, display_name, grade, bio, languages, years_of_experience,
      certificates_and_training, rating, reviews_count, achievements,
-     payment_methods, communication_format, goodies, late_policy,
+     payment_methods, communication_format, goodies, additional_services, late_policy,
      is_active, is_verified, created_at, updated_at)
 VALUES
     ('9e100000-0000-4000-8000-000000000015',
@@ -630,6 +632,7 @@ VALUES
      ARRAY[1, 2],
      ARRAY['Friendly'],
      ARRAY['Coffee'],
+     ARRAY['E2E поиск'],
      '10 minutes',
      true,
      true,
@@ -647,6 +650,7 @@ ON CONFLICT (id) DO UPDATE SET
     achievements = EXCLUDED.achievements,
     communication_format = EXCLUDED.communication_format,
     goodies = EXCLUDED.goodies,
+    additional_services = EXCLUDED.additional_services,
     rating = EXCLUDED.rating,
     reviews_count = EXCLUDED.reviews_count,
     is_active = EXCLUDED.is_active,

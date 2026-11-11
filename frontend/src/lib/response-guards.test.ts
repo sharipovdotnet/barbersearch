@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isAdminBarber,
+  isAdminBooking,
   isAdminSalonRow,
   isAdminUser,
   isAvatarUploadResponse,
@@ -108,7 +109,7 @@ const BARBER_BOOKING = {
   customerNote: null,
   barberNote: null,
   cancellationReason: 'Барбер заболел',
-  customer: { displayName: 'Иван Петров', phoneNumber: null },
+  customer: { displayName: 'Иван Петров', phoneNumber: null, avatarUrl: null },
   service: { name: 'Стрижка' },
   salon: {
     name: 'Салон',
@@ -189,6 +190,7 @@ const SEARCH_ITEM = {
   primaryPlaceKind: 'Home',
   city: 'Москва',
   additionalServices: [],
+  avatarUrl: null,
 }
 
 const ADMIN_SALON = {
@@ -646,5 +648,132 @@ describe('avatarUrl в публичной карточке барбера', () =
     expect(avatarUrl).toBeNull()
     expect(isBarberProfile(withoutAvatar)).toBe(false)
     expect(isBarberProfile({ ...testBarberProfile, avatarUrl: 1 })).toBe(false)
+  })
+})
+
+const BOOKING_AVATAR_URL =
+  '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+const ADMIN_BOOKING = {
+  id: '88888888-8888-4888-8888-888888888888',
+  status: 'Confirmed',
+  startAt: '2026-12-01T10:00:00Z',
+  endAt: '2026-12-01T10:30:00Z',
+  price: 45,
+  customerNote: null,
+  barberNote: null,
+  cancellationReason: null,
+  createdAt: '2026-11-01T10:00:00Z',
+  customer: {
+    id: null,
+    firstName: 'Гость',
+    lastName: '',
+    email: null,
+    phoneNumber: '+79990000000',
+    avatarUrl: null,
+  },
+  barber: {
+    profileId: '99999999-9999-4999-8999-999999999999',
+    displayName: 'Тимур Барберов',
+    avatarUrl: null,
+  },
+  service: { name: 'Стрижка' },
+  salon: {
+    id: '66666666-6666-4666-8666-666666666666',
+    name: 'Салон',
+    address: 'ул. Тестовая, 1',
+    city: 'Москва',
+    timeZoneId: 'Europe/Moscow',
+  },
+}
+
+/**
+ * `avatarUrl` — обязательное nullable-поле трёх чтений #86: выдачи поиска,
+ * броней барбера и админских броней. Пропущенное поле роняет guard, потому что
+ * сервер обещает его всегда, а карточка иначе молча теряет фото.
+ */
+describe('avatarUrl в guard-ах поиска и броней', () => {
+  it('принимает avatarUrl: null во всех трёх группах', () => {
+    expect(isBarberSearchItem(SEARCH_ITEM)).toBe(true)
+    expect(isBarberBooking(BARBER_BOOKING)).toBe(true)
+    expect(isAdminBooking(ADMIN_BOOKING)).toBe(true)
+  })
+
+  it('принимает строку avatarUrl во всех трёх группах', () => {
+    expect(
+      isBarberSearchItem({ ...SEARCH_ITEM, avatarUrl: BOOKING_AVATAR_URL })
+    ).toBe(true)
+    expect(
+      isBarberBooking({
+        ...BARBER_BOOKING,
+        customer: {
+          ...BARBER_BOOKING.customer,
+          avatarUrl: BOOKING_AVATAR_URL,
+        },
+      })
+    ).toBe(true)
+    expect(
+      isAdminBooking({
+        ...ADMIN_BOOKING,
+        customer: { ...ADMIN_BOOKING.customer, avatarUrl: BOOKING_AVATAR_URL },
+        barber: { ...ADMIN_BOOKING.barber, avatarUrl: BOOKING_AVATAR_URL },
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает отсутствие avatarUrl во всех трёх группах', () => {
+    const { avatarUrl: searchAvatar, ...searchWithoutAvatar } = SEARCH_ITEM
+    const { avatarUrl: customerAvatar, ...customerWithoutAvatar } =
+      BARBER_BOOKING.customer
+    const { avatarUrl: adminCustomerAvatar, ...adminCustomerWithoutAvatar } =
+      ADMIN_BOOKING.customer
+    const { avatarUrl: adminBarberAvatar, ...adminBarberWithoutAvatar } =
+      ADMIN_BOOKING.barber
+
+    expect(searchAvatar).toBeNull()
+    expect(customerAvatar).toBeNull()
+    expect(adminCustomerAvatar).toBeNull()
+    expect(adminBarberAvatar).toBeNull()
+    expect(isBarberSearchItem(searchWithoutAvatar)).toBe(false)
+    expect(
+      isBarberBooking({
+        ...BARBER_BOOKING,
+        customer: customerWithoutAvatar,
+      })
+    ).toBe(false)
+    expect(
+      isAdminBooking({
+        ...ADMIN_BOOKING,
+        customer: adminCustomerWithoutAvatar,
+      })
+    ).toBe(false)
+    expect(
+      isAdminBooking({
+        ...ADMIN_BOOKING,
+        barber: adminBarberWithoutAvatar,
+      })
+    ).toBe(false)
+  })
+
+  it('отвергает нестроковый avatarUrl во всех трёх группах', () => {
+    expect(isBarberSearchItem({ ...SEARCH_ITEM, avatarUrl: 1 })).toBe(false)
+    expect(
+      isBarberBooking({
+        ...BARBER_BOOKING,
+        customer: { ...BARBER_BOOKING.customer, avatarUrl: {} },
+      })
+    ).toBe(false)
+    expect(
+      isAdminBooking({
+        ...ADMIN_BOOKING,
+        customer: { ...ADMIN_BOOKING.customer, avatarUrl: 42 },
+      })
+    ).toBe(false)
+    expect(
+      isAdminBooking({
+        ...ADMIN_BOOKING,
+        barber: { ...ADMIN_BOOKING.barber, avatarUrl: false },
+      })
+    ).toBe(false)
   })
 })

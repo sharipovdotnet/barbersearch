@@ -57,11 +57,15 @@ export type AdminBookingCustomer = {
   email: string | null
   /** Телефон — PII: показывается только на карточке брони. */
   phoneNumber: string | null
+  /** Аватар клиента; `null` у гостя и у клиента без фото. */
+  avatarUrl: string | null
 }
 
 export type AdminBookingBarber = {
   profileId: string
   displayName: string
+  /** Аватар владельца профиля барбера; `null`, если не загружен. */
+  avatarUrl: string | null
 }
 
 export type AdminBookingService = {

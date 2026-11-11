@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { BarberCard } from '@/components/home/barber-card'
 import { setCurrentLocale } from '@/i18n'
 import type { BarberSearchItem } from '@/lib/barber-search'
+import { stubImageLoading } from '@/test/image'
 
 const BARBER: BarberSearchItem = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -19,6 +20,7 @@ const BARBER: BarberSearchItem = {
   primaryPlaceKind: 'Salon',
   city: 'Екатеринбург',
   additionalServices: [],
+  avatarUrl: null,
 }
 
 /**
@@ -91,5 +93,36 @@ describe('BarberCard: тип места', () => {
       'Experience: 8 years'
     )
     expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+  })
+})
+
+const AVATAR_URL =
+  '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+describe('BarberCard: аватар', () => {
+  it('показывает изображение профиля, когда avatarUrl задан', async () => {
+    stubImageLoading()
+
+    const { container } = render(
+      <BarberCard barber={{ ...BARBER, avatarUrl: AVATAR_URL }} />
+    )
+
+    await waitFor(() => {
+      const image = container.querySelector('[data-slot="avatar-image"]')
+
+      expect(image).toHaveAttribute('src', AVATAR_URL)
+      // Изображение декоративно: имя рядом текстом, `alt` пустой.
+      expect(image).toHaveAttribute('alt', '')
+    })
+
+    // Инициалы не дублируют фото.
+    expect(screen.queryByText('ТБ')).not.toBeInTheDocument()
+  })
+
+  it('без аватара показывает инициалы и не рендерит изображение', () => {
+    render(<BarberCard barber={BARBER} />)
+
+    expect(screen.getByText('ТБ')).toBeInTheDocument()
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 })

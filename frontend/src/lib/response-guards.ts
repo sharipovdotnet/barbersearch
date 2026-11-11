@@ -408,6 +408,7 @@ export function isBarberBooking(value: unknown): value is BarberBooking {
     isRecord(value.customer) &&
     isString(value.customer.displayName) &&
     isNullableString(value.customer.phoneNumber) &&
+    isNullableString(value.customer.avatarUrl) &&
     isRecord(value.service) &&
     isString(value.service.name) &&
     isRecord(value.salon) &&
@@ -466,7 +467,8 @@ export function isBarberSearchItem(value: unknown): value is BarberSearchItem {
     isNullableString(value.primarySalonName) &&
     isNullable(isPlaceKind)(value.primaryPlaceKind) &&
     isNullableString(value.city) &&
-    isArrayOf(isString)(value.additionalServices)
+    isArrayOf(isString)(value.additionalServices) &&
+    isNullableString(value.avatarUrl)
   )
 }
 
@@ -1060,7 +1062,8 @@ function isAdminBookingCustomer(value: unknown): value is AdminBookingCustomer {
     isString(value.firstName) &&
     isString(value.lastName) &&
     (value.email === null || isString(value.email)) &&
-    isNullableString(value.phoneNumber)
+    isNullableString(value.phoneNumber) &&
+    isNullableString(value.avatarUrl)
   )
 }
 
@@ -1068,7 +1071,8 @@ function isAdminBookingBarber(value: unknown): value is AdminBookingBarber {
   return (
     isRecord(value) &&
     isNonEmptyString(value.profileId) &&
-    isString(value.displayName)
+    isString(value.displayName) &&
+    isNullableString(value.avatarUrl)
   )
 }
 

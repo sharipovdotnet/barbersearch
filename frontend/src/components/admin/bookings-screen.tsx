@@ -16,6 +16,7 @@ import {
 } from '@/components/admin/booking-detail'
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { ListPager } from '@/components/list-pager'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -38,7 +39,7 @@ import {
 } from '@/lib/admin-bookings'
 import { bookingsPath } from '@/lib/admin-path'
 import { bookingStatusLabel, bookingStatusStyle } from '@/lib/booking-status'
-import { formatClockTime, formatPrice } from '@/lib/format'
+import { formatClockTime, formatPrice, getInitials } from '@/lib/format'
 import { formatPageRange } from '@/lib/paging'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -46,11 +47,12 @@ import { cn } from '@/lib/utils'
 /**
  * Минимальная ширина колонки списка для таблицы.
  *
- * Сумма ширин её колонок — 544 px. В узкой колонке split-view шесть колонок не
+ * Сумма ширин её колонок — 596 px. В узкой колонке split-view шесть колонок не
  * помещаются: слова ломаются посередине, а плашка статуса наезжает на цену,
- * поэтому ниже порога список показывает карточки вместо таблицы.
+ * поэтому ниже порога список показывает карточки вместо таблицы. Клиент и
+ * барбер шире остальных на 28 px: перед именем стоит аватар 24 px с отступом.
  */
-const BOOKINGS_TABLE_MIN_WIDTH = 544
+const BOOKINGS_TABLE_MIN_WIDTH = 596
 
 /**
  * `/admin/bookings` — рабочий стол поддержки: список всех броней и карточка.
@@ -425,9 +427,9 @@ function BookingsTable({
       <colgroup>
         <col className="w-19" />
         {/* Клиенту нужен запас шире остальных: «Абдуллаев» не должен ломаться
-            по буквам, а в равных долях слово не помещается. */}
-        <col className="w-23" />
-        <col className="w-19" />
+            по буквам, а аватару перед именем нужно ещё 30 px. */}
+        <col className="w-30" />
+        <col className="w-25" />
         <col className="w-22" />
         <col className="w-34" />
         <col className="w-19" />
@@ -475,18 +477,42 @@ function BookingsTable({
                 </a>
               </td>
               <td className="border-b px-2 py-2">
-                <span className="block font-medium break-words">
-                  {customerName}
-                </span>
-                <span
-                  className="block truncate text-xs text-muted-foreground"
-                  title={getAdminBookingCustomerContact(booking.customer)}
-                >
-                  {getAdminBookingCustomerContact(booking.customer)}
-                </span>
+                <div className="flex min-w-0 items-start gap-1.5">
+                  <Avatar size="sm" aria-hidden>
+                    {booking.customer.avatarUrl && (
+                      <AvatarImage src={booking.customer.avatarUrl} alt="" />
+                    )}
+                    <AvatarFallback className="text-xs">
+                      {getInitials(customerName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <span className="block font-medium break-words">
+                      {customerName}
+                    </span>
+                    <span
+                      className="block truncate text-xs text-muted-foreground"
+                      title={getAdminBookingCustomerContact(booking.customer)}
+                    >
+                      {getAdminBookingCustomerContact(booking.customer)}
+                    </span>
+                  </div>
+                </div>
               </td>
-              <td className="border-b px-2 py-2 break-words">
-                {booking.barber.displayName}
+              <td className="border-b px-2 py-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Avatar size="sm" aria-hidden>
+                    {booking.barber.avatarUrl && (
+                      <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                    )}
+                    <AvatarFallback className="text-xs">
+                      {getInitials(booking.barber.displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 break-words">
+                    {booking.barber.displayName}
+                  </span>
+                </div>
               </td>
               <td className="border-b px-2 py-2 break-words">
                 {booking.service.name}
@@ -558,19 +584,48 @@ function BookingCards({
                     {t('Клиент')}
                   </dt>
                   <dd>
-                    <span className="block break-words font-medium">
-                      {customerName}
-                    </span>
-                    <span className="block text-xs break-all text-muted-foreground">
-                      {getAdminBookingCustomerContact(booking.customer)}
-                    </span>
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Avatar size="sm" aria-hidden>
+                        {booking.customer.avatarUrl && (
+                          <AvatarImage
+                            src={booking.customer.avatarUrl}
+                            alt=""
+                          />
+                        )}
+                        <AvatarFallback className="text-xs">
+                          {getInitials(customerName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <span className="block break-words font-medium">
+                          {customerName}
+                        </span>
+                        <span className="block text-xs break-all text-muted-foreground">
+                          {getAdminBookingCustomerContact(booking.customer)}
+                        </span>
+                      </div>
+                    </div>
                   </dd>
                 </div>
                 <div className="min-w-0">
                   <dt className="text-xs text-muted-foreground">
                     {t('Барбер')}
                   </dt>
-                  <dd className="break-words">{booking.barber.displayName}</dd>
+                  <dd>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar size="sm" aria-hidden>
+                        {booking.barber.avatarUrl && (
+                          <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                        )}
+                        <AvatarFallback className="text-xs">
+                          {getInitials(booking.barber.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0 break-words">
+                        {booking.barber.displayName}
+                      </span>
+                    </div>
+                  </dd>
                 </div>
                 <div className="min-w-0">
                   <dt className="text-xs text-muted-foreground">

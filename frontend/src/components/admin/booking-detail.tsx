@@ -2,6 +2,7 @@ import { useState, type ReactNode, type RefObject } from 'react'
 import { ArrowLeft, Circle, Loader2, TriangleAlert } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,6 +32,7 @@ import {
   formatDuration,
   formatPrice,
   formatShortDateTime,
+  getInitials,
 } from '@/lib/format'
 
 export type BookingActionKind = 'cancel' | 'noShow'
@@ -206,26 +208,48 @@ export function BookingDetail({
           <ContextItem label={t('Цена')}>{formatPrice(booking.price)}</ContextItem>
 
           <ContextItem label={t('Клиент')}>
-            <span className="block break-words">{customerName}</span>
-            <span className="block break-all text-muted-foreground">
-              {getAdminBookingCustomerContact(booking.customer)}
-            </span>
-            {booking.customer.phoneNumber &&
-              booking.customer.phoneNumber !==
-                getAdminBookingCustomerContact(booking.customer) && (
-                <span className="block text-muted-foreground tabular-nums">
-                  {booking.customer.phoneNumber}
+            <div className="flex min-w-0 items-start gap-2.5">
+              <Avatar size="sm" aria-hidden>
+                {booking.customer.avatarUrl && (
+                  <AvatarImage src={booking.customer.avatarUrl} alt="" />
+                )}
+                <AvatarFallback>{getInitials(customerName)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <span className="block break-words">{customerName}</span>
+                <span className="block break-all text-muted-foreground">
+                  {getAdminBookingCustomerContact(booking.customer)}
                 </span>
-              )}
-            {booking.customer.id === null && (
-              <span className="mt-1 block text-xs text-muted-foreground">
-                {t('Записан без аккаунта')}
-              </span>
-            )}
+                {booking.customer.phoneNumber &&
+                  booking.customer.phoneNumber !==
+                    getAdminBookingCustomerContact(booking.customer) && (
+                    <span className="block text-muted-foreground tabular-nums">
+                      {booking.customer.phoneNumber}
+                    </span>
+                  )}
+                {booking.customer.id === null && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {t('Записан без аккаунта')}
+                  </span>
+                )}
+              </div>
+            </div>
           </ContextItem>
 
           <ContextItem label={t('Барбер')}>
-            <span className="break-words">{booking.barber.displayName}</span>
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Avatar size="sm" aria-hidden>
+                {booking.barber.avatarUrl && (
+                  <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                )}
+                <AvatarFallback>
+                  {getInitials(booking.barber.displayName)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 break-words">
+                {booking.barber.displayName}
+              </span>
+            </div>
           </ContextItem>
 
           <ContextItem label={t('Услуга')}>

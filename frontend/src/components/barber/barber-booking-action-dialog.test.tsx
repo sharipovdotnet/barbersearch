@@ -14,7 +14,7 @@ const BOOKING: BarberBooking = {
   customerNote: null,
   barberNote: null,
   cancellationReason: null,
-  customer: { displayName: 'Иван Петров', phoneNumber: null },
+  customer: { displayName: 'Иван Петров', phoneNumber: null, avatarUrl: null },
   service: { name: 'Стрижка' },
   salon: {
     name: 'Салон',

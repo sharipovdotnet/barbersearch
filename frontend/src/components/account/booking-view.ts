@@ -17,6 +17,8 @@ import {
 export type BookingView = {
   booking: Booking
   barberName: string
+  /** Аватар барбера из уже загруженной карточки; `null`, если фото нет. */
+  barberAvatarUrl: string | null
   serviceName: string
   salonName: string
   salonAddress: string
@@ -42,6 +44,8 @@ export function buildBookingView(
   return {
     booking,
     barberName: profile?.displayName ?? t('Барбер'),
+    // BookingResponse намеренно не несёт аватара: источник — карточка барбера.
+    barberAvatarUrl: profile?.avatarUrl ?? null,
     serviceName: service?.name ?? t('Услуга'),
     salonName: salon?.name ?? t('Салон'),
     salonAddress: salon?.address ?? '',

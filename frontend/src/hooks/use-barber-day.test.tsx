@@ -39,7 +39,7 @@ function booking(
     customerNote: null,
     barberNote: null,
     cancellationReason: null,
-    customer: { displayName: 'Анна Петрова', phoneNumber: null },
+    customer: { displayName: 'Анна Петрова', phoneNumber: null, avatarUrl: null },
     service: { name: 'Стрижка' },
     salon: {
       name: 'Салон на Ленина',

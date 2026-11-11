@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { BookingRow } from '@/components/account/booking-row'
 import type { BookingView } from '@/components/account/booking-view'
+import { stubImageLoading } from '@/test/image'
 
 const VIEW: BookingView = {
   booking: {
@@ -23,6 +24,7 @@ const VIEW: BookingView = {
     hasReview: false,
   },
   barberName: 'Барбер Номер 1',
+  barberAvatarUrl: null,
   serviceName: 'Стрижка',
   salonName: 'Салон',
   salonAddress: 'ул. Тестовая, 1',
@@ -41,6 +43,19 @@ function renderRow(
       <BookingRow
         view={{ ...VIEW, booking: { ...VIEW.booking, ...overrides } }}
         isReviewed={isReviewed}
+        onRequestCancel={vi.fn()}
+        onRequestReview={vi.fn()}
+      />
+    </ul>
+  )
+}
+
+function renderView(overrides: Partial<BookingView> = {}) {
+  return render(
+    <ul>
+      <BookingRow
+        view={{ ...VIEW, ...overrides }}
+        isReviewed={false}
         onRequestCancel={vi.fn()}
         onRequestReview={vi.fn()}
       />
@@ -73,6 +88,32 @@ describe('BookingRow, отзыв', () => {
       screen.queryByRole('button', { name: /Оставить отзыв о визите/ })
     ).not.toBeInTheDocument()
     expect(screen.getByText('Отзыв отправлен')).toBeInTheDocument()
+  })
+})
+
+describe('BookingRow, аватар барбера', () => {
+  const AVATAR_URL =
+    '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+  it('показывает фото барбера, когда оно есть', async () => {
+    stubImageLoading()
+
+    const { container } = renderView({ barberAvatarUrl: AVATAR_URL })
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', AVATAR_URL)
+    })
+    expect(screen.getByText('Барбер Номер 1')).toBeInTheDocument()
+    expect(screen.queryByText('БН')).not.toBeInTheDocument()
+  })
+
+  it('без фото показывает инициалы барбера', () => {
+    renderView()
+
+    expect(screen.getByText('БН')).toBeInTheDocument()
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 })
 

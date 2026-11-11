@@ -82,6 +82,8 @@ export type BarberSearchItem = {
   city: string | null
   /** Дополнительные услуги: карточка показывает, чем ещё занимается барбер. */
   additionalServices: string[]
+  /** Аватар владельца профиля; `null`, если не загружен. */
+  avatarUrl: string | null
 }
 
 /** Ровно 3 колонки × 4 ряда на десктопе. */
