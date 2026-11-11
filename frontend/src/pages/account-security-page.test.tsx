@@ -30,6 +30,8 @@ function profile(
     phoneNumber: null,
     avatarUrl: null,
     isAvatarBlocked: false,
+    avatarModerationStatus: 'Approved',
+    avatarRejectionReason: null,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified,

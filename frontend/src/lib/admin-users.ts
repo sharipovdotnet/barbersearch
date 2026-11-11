@@ -6,6 +6,7 @@ import {
 } from '@/lib/avatar-moderation'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import {
   isAdminUser,
   isAdminUserPage,
@@ -73,6 +74,8 @@ export type AdminUserRow = {
   /** Сырой URL: админ видит и скрытое администратором фото. */
   avatarUrl: string | null
   isAvatarBlocked: boolean
+  /** Статус премодерации аватара: бейдж «На проверке» рядом с «Фото скрыто». */
+  avatarModerationStatus: PhotoModerationStatus
   role: AdminUserRole
   isActive: boolean
   isEmailVerified: boolean
@@ -98,6 +101,10 @@ export type AdminUserDetail = {
   avatarUrl: string | null
   /** Флаг модерации: карточка показывает бейдж и кнопку «Вернуть фото». */
   isAvatarBlocked: boolean
+  /** Статус премодерации аватара; причина отказа — только в карточке. */
+  avatarModerationStatus: PhotoModerationStatus
+  /** Причина отказа администратора; `null`, пока кадр не отклонён. */
+  avatarRejectionReason: string | null
   role: AdminUserRole
   isActive: boolean
   isEmailVerified: boolean

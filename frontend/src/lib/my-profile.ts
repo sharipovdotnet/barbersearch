@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { getInitials } from '@/lib/format'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { isMyProfile } from '@/lib/response-guards'
 
 /**
@@ -22,11 +23,19 @@ export type MyProfile = {
   /**
    * Сырой URL, даже если фото скрыто администратором: `save()` отправляет его
    * обратно в `PUT users/{id}/profile`, и `null` стёр бы фото при сохранении имени.
-   * Рендерить изображение можно только при `isAvatarBlocked === false`.
+   * Рендерить изображение можно только при `isAvatarBlocked === false` и статусе
+   * `Pending`/`Approved` (`canRenderAvatarPreview` из `lib/photo-moderation`).
    */
   avatarUrl: string | null
   /** Фото скрыто администратором: файл и URL остаются, публично его не видно. */
   isAvatarBlocked: boolean
+  /**
+   * Статус премодерации аватара. `Rejected` — кадр не показывается даже в шапке
+   * (вместо него инициалы), причина лежит в `avatarRejectionReason`.
+   */
+  avatarModerationStatus: PhotoModerationStatus
+  /** Причина отказа администратора; `null`, пока кадр не отклонён. */
+  avatarRejectionReason: string | null
   role: MyProfileRole
   barberProfileId: string | null
   isEmailVerified: boolean

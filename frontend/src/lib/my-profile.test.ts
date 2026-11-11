@@ -15,6 +15,8 @@ const PROFILE: MyProfile = {
   phoneNumber: '+70000000003',
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,

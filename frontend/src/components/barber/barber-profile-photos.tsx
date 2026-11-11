@@ -30,6 +30,7 @@ import {
   unpublishPortfolioPhoto,
   type PortfolioPhoto,
 } from '@/lib/portfolio-photos'
+import { photoModerationLabel } from '@/lib/photo-moderation'
 
 /**
  * «Фотографии» в кабинете барбера (§5.3).
@@ -321,11 +322,34 @@ function PhotoCard({
           {caption === '' ? t('Без подписи') : caption}
         </p>
 
-        {photo.isBlocked && (
+        {photo.isBlocked ? (
           <Badge variant="destructive">{t('Скрыто администратором')}</Badge>
-        )}
-        {!photo.isBlocked && !photo.isPublished && (
-          <Badge variant="secondary">{t('Скрыто')}</Badge>
+        ) : photo.moderationStatus === 'Pending' ? (
+          <div className="space-y-1">
+            <Badge variant="secondary">
+              {photoModerationLabel('Pending')}
+            </Badge>
+            <p className="text-xs text-muted-foreground">
+              {t('Кадр виден только вам, пока администратор его не одобрит.')}
+            </p>
+          </div>
+        ) : photo.moderationStatus === 'Rejected' ? (
+          <div className="space-y-1">
+            <Badge variant="destructive">
+              {photoModerationLabel('Rejected')}
+            </Badge>
+            {photo.rejectionReason !== null && (
+              <p className="text-sm break-words">
+                {t('Причина: {reason}', {
+                  reason: photo.rejectionReason,
+                })}
+              </p>
+            )}
+          </div>
+        ) : (
+          !photo.isPublished && (
+            <Badge variant="secondary">{t('Скрыто')}</Badge>
+          )
         )}
       </div>
 
@@ -366,27 +390,31 @@ function PhotoCard({
             >
               {t('Изменить подпись')}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-11 sm:h-8"
-              aria-label={ariaLabel(
-                photo.isPublished ? t('Скрыть') : t('Вернуть')
-              )}
-              disabled={isPending}
-              aria-busy={isPending || undefined}
-              onClick={onTogglePublication}
-            >
-              {isPending && (
-                <Loader2
-                  data-icon="inline-start"
-                  aria-hidden
-                  className="animate-spin"
-                />
-              )}
-              {photo.isPublished ? t('Скрыть') : t('Вернуть')}
-            </Button>
+            {/* У неодобренного кадра «Скрыть/Вернуть» не имеет публичного
+                смысла: публичность всё равно решает статус модерации. */}
+            {photo.moderationStatus === 'Approved' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-11 sm:h-8"
+                aria-label={ariaLabel(
+                  photo.isPublished ? t('Скрыть') : t('Вернуть')
+                )}
+                disabled={isPending}
+                aria-busy={isPending || undefined}
+                onClick={onTogglePublication}
+              >
+                {isPending && (
+                  <Loader2
+                    data-icon="inline-start"
+                    aria-hidden
+                    className="animate-spin"
+                  />
+                )}
+                {photo.isPublished ? t('Скрыть') : t('Вернуть')}
+              </Button>
+            )}
           </>
         )}
         <Button

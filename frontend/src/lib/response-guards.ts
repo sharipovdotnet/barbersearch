@@ -10,6 +10,10 @@ import type {
   AdminBookingSalon,
   AdminBookingService,
 } from '@/lib/admin-bookings'
+import type {
+  AdminAvatarPhoto,
+  AdminPortfolioPhoto,
+} from '@/lib/admin-photos'
 import type { AdminReview } from '@/lib/admin-reviews'
 import type {
   AdminBarberRequest,
@@ -87,6 +91,7 @@ import type { MyReview, UpdateMyReviewResult } from '@/lib/my-reviews'
 import type { MyProfile } from '@/lib/my-profile'
 import type { Page } from '@/lib/paging'
 import { isPlaceKind } from '@/lib/place-kind'
+import { isPhotoModerationStatus } from '@/lib/photo-moderation'
 import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import type { Review } from '@/lib/reviews'
 import { isSalonModerationStatus } from '@/lib/salon-moderation'
@@ -275,10 +280,12 @@ export function isCreatedId(value: unknown): value is { id: string } {
 export const isCreatedResource: Guard<{ id: string }> = isCreatedId
 
 /**
- * `201 { avatarUrl }` загрузки аватара.
+ * `201 { avatarUrl, moderationStatus }` загрузки аватара.
  *
- * Значение — только относительный URL раздачи `/api/media/avatars/...`: абсолютный
- * внешний адрес здесь означал бы, что клиент покажет чужой файл вместо загруженного.
+ * Значение `avatarUrl` — только относительный URL раздачи `/api/media/avatars/...`:
+ * абсолютный внешний адрес здесь означал бы, что клиент покажет чужой файл вместо
+ * загруженного. Статус — известное имя: без него шапка не знает, можно ли рендерить
+ * кадр до одобрения.
  */
 export function isAvatarUploadResponse(
   value: unknown
@@ -286,7 +293,8 @@ export function isAvatarUploadResponse(
   return (
     isRecord(value) &&
     typeof value.avatarUrl === 'string' &&
-    value.avatarUrl.startsWith('/api/media/avatars/')
+    value.avatarUrl.startsWith('/api/media/avatars/') &&
+    isPhotoModerationStatus(value.moderationStatus)
   )
 }
 
@@ -310,8 +318,9 @@ export function isSessionUser(value: unknown): value is SessionUser {
  * Профиль кабинета: имя, телефон, роль и подтверждения.
  *
  * `phoneNumber`, `avatarUrl` и `lastLoginAt` контракт допускает `null`; остальные
- * строки обязательны. `isAvatarBlocked` — обязательный флаг: без него шапка и
- * кабинет не знают, можно ли рендерить сырой `avatarUrl`. Даты не разбираются —
+ * строки обязательны. `isAvatarBlocked` и `avatarModerationStatus` — обязательные
+ * поля: без них шапка и кабинет не знают, можно ли рендерить сырой `avatarUrl`;
+ * `avatarRejectionReason` — `null` или текст администратора. Даты не разбираются —
  * как и в других guard'ах, строка остаётся строкой.
  */
 export function isMyProfile(value: unknown): value is MyProfile {
@@ -324,6 +333,8 @@ export function isMyProfile(value: unknown): value is MyProfile {
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
     isBoolean(value.isAvatarBlocked) &&
+    isPhotoModerationStatus(value.avatarModerationStatus) &&
+    isNullableString(value.avatarRejectionReason) &&
     isUserRole(value.role) &&
     (value.barberProfileId === null || isNonEmptyString(value.barberProfileId)) &&
     isBoolean(value.isEmailVerified) &&
@@ -633,7 +644,9 @@ function isSpecialization(
 /**
  * Фотография портфолио: `url` — непустая строка (относительный `/api/media/...`
  * или абсолютный внешний URL), подпись и миниатюра — `null` или строка, флаги
- * публикации и блокировки — boolean. `sortOrder` — число, не «почти число».
+ * публикации и блокировки — boolean, `sortOrder` — число, не «почти число».
+ * `moderationStatus` и `rejectionReason` обязательны и в публичном ответе: сервер
+ * всегда шлёт там `Approved` и `null`, а пропуск поля скрыл бы нарушение контракта.
  */
 export function isPortfolioPhoto(value: unknown): value is PortfolioPhoto {
   return (
@@ -644,7 +657,9 @@ export function isPortfolioPhoto(value: unknown): value is PortfolioPhoto {
     isNullableString(value.description) &&
     isNumber(value.sortOrder) &&
     isBoolean(value.isPublished) &&
-    isBoolean(value.isBlocked)
+    isBoolean(value.isBlocked) &&
+    isPhotoModerationStatus(value.moderationStatus) &&
+    isNullableString(value.rejectionReason)
   )
 }
 
@@ -854,6 +869,7 @@ export function isAdminBarberRow(value: unknown): value is AdminBarber {
     isString(value.email) &&
     isNullableString(value.avatarUrl) &&
     isBoolean(value.isAvatarBlocked) &&
+    isPhotoModerationStatus(value.avatarModerationStatus) &&
     isBarberGrade(value.grade) &&
     isNullable(isNumber)(value.rating) &&
     isNumber(value.reviewsCount) &&
@@ -874,6 +890,8 @@ export function isAdminBarber(value: unknown): value is AdminBarberDetail {
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
     isBoolean(value.isAvatarBlocked) &&
+    isPhotoModerationStatus(value.avatarModerationStatus) &&
+    isNullableString(value.avatarRejectionReason) &&
     isBarberGrade(value.grade) &&
     isNullableString(value.bio) &&
     isNumber(value.yearsOfExperience) &&
@@ -911,6 +929,7 @@ export function isAdminUserRow(value: unknown): value is AdminUserRow {
     isString(value.lastName) &&
     isNullableString(value.avatarUrl) &&
     isBoolean(value.isAvatarBlocked) &&
+    isPhotoModerationStatus(value.avatarModerationStatus) &&
     isUserRole(value.role) &&
     isBoolean(value.isActive) &&
     isBoolean(value.isEmailVerified) &&
@@ -931,6 +950,8 @@ export function isAdminUser(value: unknown): value is AdminUserDetail {
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
     isBoolean(value.isAvatarBlocked) &&
+    isPhotoModerationStatus(value.avatarModerationStatus) &&
+    isNullableString(value.avatarRejectionReason) &&
     isUserRole(value.role) &&
     isBoolean(value.isActive) &&
     isBoolean(value.isEmailVerified) &&
@@ -949,6 +970,53 @@ export function isAdminUser(value: unknown): value is AdminUserDetail {
 }
 
 export const isAdminUserPage = isPageOf(isAdminUserRow)
+
+/**
+ * Строка очереди аватаров (`AdminAvatarPhotoResponse`).
+ *
+ * Очередь содержит только `Pending` с непустым `avatarUrl`, поэтому URL обязателен
+ * и непуст: карточке нечего было бы показать. `moderationStatus` — известное имя,
+ * иначе новый серверный статус должен стать ошибкой экрана, а не сломанной строкой.
+ */
+export function isAdminAvatarPhoto(value: unknown): value is AdminAvatarPhoto {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.userId) &&
+    isString(value.firstName) &&
+    isString(value.lastName) &&
+    isString(value.email) &&
+    isNonEmptyString(value.avatarUrl) &&
+    isPhotoModerationStatus(value.moderationStatus) &&
+    isString(value.submittedAt)
+  )
+}
+
+export const isAdminAvatarPhotoPage = isPageOf(isAdminAvatarPhoto)
+
+/**
+ * Строка очереди портфолио (`AdminPortfolioPhotoResponse`).
+ *
+ * `description` может быть `null`; `isPublished` — намерение владельца, а не
+ * видимость: одобренный кадр всё равно скрыт, если владелец снял его с публикации.
+ */
+export function isAdminPortfolioPhoto(
+  value: unknown
+): value is AdminPortfolioPhoto {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.photoId) &&
+    isNonEmptyString(value.barberProfileId) &&
+    isString(value.barberDisplayName) &&
+    isString(value.ownerEmail) &&
+    isNonEmptyString(value.url) &&
+    isNullableString(value.description) &&
+    isBoolean(value.isPublished) &&
+    isPhotoModerationStatus(value.moderationStatus) &&
+    isString(value.submittedAt)
+  )
+}
+
+export const isAdminPortfolioPhotoPage = isPageOf(isAdminPortfolioPhoto)
 
 /** Строка админского справочника услуг: полный DTO формы и счётчик барберов. */
 export function isAdminHairServiceRow(value: unknown): value is AdminHairService {
@@ -1151,28 +1219,33 @@ function isAdminSummaryOldestReview(
 }
 
 /**
- * Тело админской сводки: три обязательных блока и неотрицательные целые счётчики.
+ * Тело админской сводки: четыре обязательных блока и неотрицательные целые счётчики.
  *
- * `oldest` — `null` (очередь пуста) или компактная строка. Лишние поля игнорируются:
- * `total`/`nextCursor` контракт не обещает, но и не запрещает; guard их не требует.
+ * `oldest` — `null` (очередь пуста) или компактная строка. Блок `photos` — две
+ * очереди премодерации; число считает сервер, клиент его не пересчитывает.
+ * Лишние поля игнорируются: `total`/`nextCursor` контракт не обещает, но и не
+ * запрещает; guard их не требует.
  */
 export function isAdminSummary(value: unknown): value is AdminSummary {
   if (
     !isRecord(value) ||
     !isRecord(value.reviews) ||
     !isRecord(value.barbers) ||
-    !isRecord(value.salons)
+    !isRecord(value.salons) ||
+    !isRecord(value.photos)
   ) {
     return false
   }
 
-  const { reviews, barbers, salons } = value
+  const { reviews, barbers, salons, photos } = value
 
   return (
     isNonNegativeInteger(reviews.pendingCount) &&
     (reviews.oldest === null || isAdminSummaryOldestReview(reviews.oldest)) &&
     isNonNegativeInteger(barbers.unverifiedCount) &&
-    isNonNegativeInteger(salons.inactiveCount)
+    isNonNegativeInteger(salons.inactiveCount) &&
+    isNonNegativeInteger(photos.pendingAvatarsCount) &&
+    isNonNegativeInteger(photos.pendingPortfolioCount)
   )
 }
 

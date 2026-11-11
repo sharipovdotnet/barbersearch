@@ -190,6 +190,24 @@ export const handlers = [
     '/api/barber-profiles/:id/specializations/:specializationId',
     () => noContent()
   ),
+  // Очередь премодерации фото: по умолчанию обе вкладки пусты, решения отвечают
+  // `204`. Строки, отказы и конфликты собираются в тестах через `server.use`.
+  http.get('/api/admin/photos/avatars', () =>
+    HttpResponse.json({ items: [], nextCursor: null })
+  ),
+  http.get('/api/admin/photos/portfolio', () =>
+    HttpResponse.json({ items: [], nextCursor: null })
+  ),
+  http.post('/api/admin/users/:userId/avatar/approval', () => noContent()),
+  http.post('/api/admin/users/:userId/avatar/rejection', () => noContent()),
+  http.post(
+    '/api/barber-profiles/:barberProfileId/photos/:photoId/approval',
+    () => noContent()
+  ),
+  http.post(
+    '/api/barber-profiles/:barberProfileId/photos/:photoId/rejection',
+    () => noContent()
+  ),
   // Публичные справочники для диалогов профиля: маленькие, без пагинации.
   http.get('/api/hair-services', () =>
     HttpResponse.json([catalogueHairService])

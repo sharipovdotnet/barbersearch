@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2 } from 'lucide-react'
 
 import { useAccountProfile } from '@/components/account/account-profile-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -23,7 +24,7 @@ import {
   AVATAR_SOURCE_MAX_BYTES,
   deleteAvatar,
   describeAvatarError,
-  uploadAvatar,
+  uploadAvatarWithStatus,
 } from '@/lib/avatars'
 import { invalidateBarberProfile } from '@/lib/catalog'
 import {
@@ -32,6 +33,10 @@ import {
   prepareAvatarImage,
 } from '@/lib/image-prep'
 import { profileInitials, type MyProfile } from '@/lib/my-profile'
+import {
+  canRenderAvatarCardPreview,
+  photoModerationLabel,
+} from '@/lib/photo-moderation'
 
 /**
  * Карточка аватара в `/account/profile`.
@@ -45,6 +50,11 @@ import { profileInitials, type MyProfile } from '@/lib/my-profile'
  * `setAvatar` правит кэш профиля без второго `GET users/me`, а публичная карточка
  * барбера сбрасывается через `invalidateBarberProfile`: иначе «Открыть, как видят
  * клиенты» показал бы старый кадр.
+ *
+ * С премодерацией загруженный кадр виден только владельцу: карточка показывает
+ * превью и бейдж «На проверке». Отклонённый кадр тоже рендерится — вместе с
+ * причиной отказа, — чтобы было понятно, что именно не прошло проверку. Удаление
+ * доступно в любом статусе.
  *
  * Удаление необратимо, поэтому идёт через `alertdialog`, а фокус после закрытия
  * возвращается на кнопку загрузки: кнопки «Удалить» после успеха уже нет.
@@ -89,15 +99,15 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
 
     try {
       const prepared = await prepareAvatarImage(file)
-      const avatarUrl = await uploadAvatar(prepared)
+      const uploaded = await uploadAvatarWithStatus(prepared)
 
-      setAvatar(avatarUrl)
+      setAvatar(uploaded.avatarUrl, uploaded.moderationStatus)
 
       if (profile.barberProfileId !== null) {
         invalidateBarberProfile(profile.barberProfileId)
       }
 
-      setAnnouncement(t('Аватар обновлён.'))
+      setAnnouncement(t('Аватар загружен и ждёт проверки.'))
     } catch (cause) {
       if (cause instanceof ImagePrepError) {
         setClientError(cause.message)
@@ -127,7 +137,7 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
     try {
       await deleteAvatar()
 
-      setAvatar(null)
+      setAvatar(null, 'Approved')
 
       if (profile.barberProfileId !== null) {
         invalidateBarberProfile(profile.barberProfileId)
@@ -167,11 +177,13 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <Avatar size="lg" className="size-24" aria-hidden>
-              {/* Скрытое фото не рендерим даже при сыром `avatarUrl`: браузер
-                  показал бы старый кадр из 24-часового кэша. */}
-              {profile.avatarUrl && !profile.isAvatarBlocked && (
-                <AvatarImage src={profile.avatarUrl} alt="" />
-              )}
+              {/* Заблокированный кадр не рендерим даже при сыром `avatarUrl`:
+                  браузер показал бы старый кадр из 24-часового кэша. Отклонённый
+                  кадр в кабинете виден — рядом с ним причина отказа. */}
+              {profile.avatarUrl !== null &&
+                canRenderAvatarCardPreview(profile) && (
+                  <AvatarImage src={profile.avatarUrl} alt="" />
+                )}
               <AvatarFallback className="text-2xl">
                 {profileInitials(profile)}
               </AvatarFallback>
@@ -185,11 +197,46 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {t(
-                      'Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.'
+                      'Его не видно публично. Новое фото появится публично после проверки, а вернуть старое может только администратор.'
                     )}
                   </p>
                 </div>
               )}
+
+              {!profile.isAvatarBlocked &&
+                profile.avatarModerationStatus === 'Pending' && (
+                  <div className="space-y-1">
+                    <Badge variant="secondary">
+                      {photoModerationLabel('Pending')}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Кадр виден только вам, пока администратор его не одобрит.'
+                      )}
+                    </p>
+                  </div>
+                )}
+
+              {!profile.isAvatarBlocked &&
+                profile.avatarModerationStatus === 'Rejected' && (
+                  <div className="space-y-1">
+                    <Badge variant="destructive">
+                      {photoModerationLabel('Rejected')}
+                    </Badge>
+                    {profile.avatarRejectionReason !== null && (
+                      <p className="text-sm break-words">
+                        {t('Причина: {reason}', {
+                          reason: profile.avatarRejectionReason,
+                        })}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Кадр не прошёл проверку. Загрузите другое фото или удалите его.'
+                      )}
+                    </p>
+                  </div>
+                )}
 
               <input
                 ref={fileInputRef}
@@ -220,7 +267,8 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
                       className="animate-spin"
                     />
                   )}
-                  {profile.isAvatarBlocked
+                  {profile.isAvatarBlocked ||
+                  profile.avatarModerationStatus === 'Rejected'
                     ? t('Загрузить другое фото')
                     : profile.avatarUrl
                       ? t('Изменить фото')

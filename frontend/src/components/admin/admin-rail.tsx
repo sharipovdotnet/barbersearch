@@ -6,6 +6,7 @@ const SECTIONS = [
   { href: '/admin/summary', label: 'Сводка' },
   { href: '/admin/statistics', label: 'Статистика' },
   { href: '/admin/reviews', label: 'Отзывы' },
+  { href: '/admin/photos', label: 'Фото' },
   { href: '/admin/barbers', label: 'Барберы' },
   { href: '/admin/users', label: 'Пользователи' },
   { href: '/admin/barber-requests', label: 'Заявки' },

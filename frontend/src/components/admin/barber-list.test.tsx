@@ -20,6 +20,7 @@ const BARBER: AdminBarber = {
   email: 'artem@barbersearch.test',
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
   grade: 'ArtDirector',
   rating: 4.5,
   reviewsCount: 29,
@@ -66,5 +67,40 @@ describe('BarberIdentity: аватар', () => {
     )
 
     expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+  })
+
+  it('у кадра «На проверке» показывает бейдж рядом с именем', () => {
+    render(
+      <BarberIdentity barber={{ ...BARBER, avatarModerationStatus: 'Pending' }} />
+    )
+
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(screen.queryByText('Фото скрыто')).not.toBeInTheDocument()
+  })
+
+  it('у отклонённого кадра показывает «Отклонено»', () => {
+    render(
+      <BarberIdentity
+        barber={{ ...BARBER, avatarModerationStatus: 'Rejected' }}
+      />
+    )
+
+    expect(screen.getByText('Отклонено')).toBeInTheDocument()
+  })
+
+  it('приоритет бейджей: скрыто важнее отклонения и проверки', () => {
+    render(
+      <BarberIdentity
+        barber={{
+          ...BARBER,
+          isAvatarBlocked: true,
+          avatarModerationStatus: 'Rejected',
+        }}
+      />
+    )
+
+    expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+    expect(screen.queryByText('Отклонено')).not.toBeInTheDocument()
+    expect(screen.queryByText('На проверке')).not.toBeInTheDocument()
   })
 })

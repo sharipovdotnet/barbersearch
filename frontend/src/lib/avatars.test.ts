@@ -5,7 +5,7 @@ import { ApiError } from '@/lib/api'
 import {
   deleteAvatar,
   describeAvatarError,
-  uploadAvatar,
+  uploadAvatarWithStatus,
 } from '@/lib/avatars'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
@@ -32,8 +32,8 @@ function avatarFile(): File {
   return new File(['avatar-bytes'], 'avatar.jpg', { type: 'image/jpeg' })
 }
 
-describe('uploadAvatar', () => {
-  it('шлёт multipart с единственным полем file, свежий CSRF и возвращает avatarUrl', async () => {
+describe('uploadAvatarWithStatus', () => {
+  it('шлёт multipart с единственным полем file, свежий CSRF и возвращает URL со статусом', async () => {
     const append = vi.spyOn(FormData.prototype, 'append')
     const file = avatarFile()
     let method = ''
@@ -48,11 +48,17 @@ describe('uploadAvatar', () => {
         csrf = request.headers.get('X-CSRF-TOKEN')
         contentType = request.headers.get('content-type')
 
-        return HttpResponse.json({ avatarUrl: AVATAR_URL }, { status: 201 })
+        return HttpResponse.json(
+          { avatarUrl: AVATAR_URL, moderationStatus: 'Pending' },
+          { status: 201 }
+        )
       })
     )
 
-    await expect(uploadAvatar(file)).resolves.toBe(AVATAR_URL)
+    await expect(uploadAvatarWithStatus(file)).resolves.toStrictEqual({
+      avatarUrl: AVATAR_URL,
+      moderationStatus: 'Pending',
+    })
 
     expect(method).toBe('POST')
     expect(url).toBe('/api/users/me/avatar')
@@ -85,11 +91,17 @@ describe('uploadAvatar', () => {
           )
         }
 
-        return HttpResponse.json({ avatarUrl: AVATAR_URL }, { status: 201 })
+        return HttpResponse.json(
+          { avatarUrl: AVATAR_URL, moderationStatus: 'Pending' },
+          { status: 201 }
+        )
       })
     )
 
-    await expect(uploadAvatar(avatarFile())).resolves.toBe(AVATAR_URL)
+    await expect(uploadAvatarWithStatus(avatarFile())).resolves.toStrictEqual({
+      avatarUrl: AVATAR_URL,
+      moderationStatus: 'Pending',
+    })
 
     expect(csrfCalls()).toBe(2)
     expect(posts).toStrictEqual([{ csrf: 'csrf-1' }, { csrf: 'csrf-2' }])
@@ -104,6 +116,8 @@ describe('uploadAvatar', () => {
       { avatarUrl: '/api/media/portfolio/x.jpg' },
       { avatarUrl: 'https://example.com/avatar.jpg' },
       { avatarUrl: 1 },
+      { avatarUrl: AVATAR_URL },
+      { avatarUrl: AVATAR_URL, moderationStatus: 'Queued' },
     ]) {
       server.use(
         http.post('/api/users/me/avatar', () =>
@@ -111,7 +125,7 @@ describe('uploadAvatar', () => {
         )
       )
 
-      const error = await apiErrorOf(uploadAvatar(avatarFile()))
+      const error = await apiErrorOf(uploadAvatarWithStatus(avatarFile()))
 
       expect(error.status).toBe(201)
       expect(error.message).toBe('Сервер вернул неожиданный ответ.')

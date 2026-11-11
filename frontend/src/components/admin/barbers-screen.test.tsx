@@ -26,6 +26,7 @@ const VERIFIED: AdminBarber = {
   email: 'artem@barbersearch.test',
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
   grade: 'ArtDirector',
   rating: 4.5,
   reviewsCount: 29,
@@ -58,6 +59,8 @@ const PHOTO: PortfolioPhoto = {
   sortOrder: 0,
   isPublished: true,
   isBlocked: false,
+  moderationStatus: 'Approved',
+  rejectionReason: null,
 }
 
 function toDetail(row: AdminBarber): AdminBarberDetail {
@@ -66,6 +69,7 @@ function toDetail(row: AdminBarber): AdminBarberDetail {
     userId: `9e800000-0000-4000-8000-00000000000${row.id.at(-1)}`,
     phoneNumber: null,
     avatarUrl: null,
+    avatarRejectionReason: null,
     bio: null,
     yearsOfExperience: 5,
     readiness: {

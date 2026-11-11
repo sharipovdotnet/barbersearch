@@ -36,6 +36,8 @@ const PROFILE: MyProfile = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,
@@ -268,6 +270,50 @@ describe('HeaderAuth: аватар', () => {
       ).toHaveAttribute('data-initials', 'СС')
     })
 
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+
+  it('кадр «На проверке» показывается владельцу в шапке', async () => {
+    stubImageLoading()
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json({
+          ...PROFILE,
+          avatarUrl,
+          avatarModerationStatus: 'Pending',
+        })
+      )
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', avatarUrl)
+    })
+  })
+
+  it('отклонённый кадр в шапке заменяется инициалами', async () => {
+    stubImageLoading()
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json({
+          ...PROFILE,
+          avatarUrl,
+          avatarModerationStatus: 'Rejected',
+          avatarRejectionReason: 'Кадр размыт.',
+        })
+      )
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="avatar-fallback"]')
+      ).toHaveAttribute('data-initials', 'СС')
+    })
     expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isAdminAvatarPhoto,
   isAdminBarber,
   isAdminBarberRow,
   isAdminBooking,
+  isAdminPortfolioPhoto,
   isAdminSalonRow,
+  isAdminSummary,
   isAdminUser,
   isAdminUserRow,
   isAvatarUploadResponse,
@@ -40,6 +43,8 @@ const DETAIL = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   isActive: true,
   isEmailVerified: false,
@@ -469,6 +474,8 @@ const PORTFOLIO_PHOTO = {
   sortOrder: 0,
   isPublished: true,
   isBlocked: false,
+  moderationStatus: 'Approved',
+  rejectionReason: null,
 }
 
 /**
@@ -531,6 +538,8 @@ const ADMIN_BARBER_DETAIL = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   grade: 'ArtDirector',
   bio: null,
   yearsOfExperience: 5,
@@ -607,30 +616,65 @@ describe('isCreatedResource', () => {
   })
 })
 
-/** Ответ загрузки аватара: только относительный URL раздачи, с непустым значением. */
+/** Ответ загрузки аватара: относительный URL раздачи и статус премодерации. */
 describe('isAvatarUploadResponse', () => {
   const AVATAR_URL =
     '/api/media/avatars/9e000000-0000-4000-8000-000000000004/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
 
-  it('принимает URL раздачи и игнорирует лишние поля', () => {
-    expect(isAvatarUploadResponse({ avatarUrl: AVATAR_URL })).toBe(true)
-    expect(isAvatarUploadResponse({ avatarUrl: AVATAR_URL, extra: 1 })).toBe(
-      true
-    )
+  it('принимает URL раздачи и статус, лишние поля игнорирует', () => {
+    expect(
+      isAvatarUploadResponse({
+        avatarUrl: AVATAR_URL,
+        moderationStatus: 'Pending',
+      })
+    ).toBe(true)
+    expect(
+      isAvatarUploadResponse({
+        avatarUrl: AVATAR_URL,
+        moderationStatus: 'Pending',
+        extra: 1,
+      })
+    ).toBe(true)
   })
 
   it('отвергает пустой, чужой префикс, не-строку и не-объект', () => {
-    expect(isAvatarUploadResponse({ avatarUrl: '' })).toBe(false)
     expect(
-      isAvatarUploadResponse({ avatarUrl: '/api/media/portfolio/x.jpg' })
+      isAvatarUploadResponse({ avatarUrl: '', moderationStatus: 'Pending' })
     ).toBe(false)
     expect(
-      isAvatarUploadResponse({ avatarUrl: 'https://example.com/avatar.jpg' })
+      isAvatarUploadResponse({
+        avatarUrl: '/api/media/portfolio/x.jpg',
+        moderationStatus: 'Pending',
+      })
     ).toBe(false)
-    expect(isAvatarUploadResponse({ avatarUrl: 1 })).toBe(false)
+    expect(
+      isAvatarUploadResponse({
+        avatarUrl: 'https://example.com/avatar.jpg',
+        moderationStatus: 'Pending',
+      })
+    ).toBe(false)
+    expect(
+      isAvatarUploadResponse({ avatarUrl: 1, moderationStatus: 'Pending' })
+    ).toBe(false)
     expect(isAvatarUploadResponse({})).toBe(false)
     expect(isAvatarUploadResponse(null)).toBe(false)
     expect(isAvatarUploadResponse([])).toBe(false)
+  })
+
+  it('требует известный moderationStatus: без него шапка не знает, что рендерить', () => {
+    expect(isAvatarUploadResponse({ avatarUrl: AVATAR_URL })).toBe(false)
+    expect(
+      isAvatarUploadResponse({
+        avatarUrl: AVATAR_URL,
+        moderationStatus: 'Queued',
+      })
+    ).toBe(false)
+    expect(
+      isAvatarUploadResponse({
+        avatarUrl: AVATAR_URL,
+        moderationStatus: null,
+      })
+    ).toBe(false)
   })
 })
 
@@ -791,6 +835,8 @@ const PROFILE = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,
@@ -806,6 +852,7 @@ const ADMIN_USER_ROW = {
   lastName: 'Клиентова',
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
   role: 'Customer',
   isActive: true,
   isEmailVerified: true,
@@ -821,6 +868,7 @@ const ADMIN_BARBER_ROW = {
   email: 'artem@barbersearch.test',
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
   grade: 'ArtDirector',
   rating: null,
   reviewsCount: 0,
@@ -880,5 +928,187 @@ describe('avatarUrl и isAvatarBlocked в контрактах #87', () => {
   it('отвергает нестроковый avatarUrl админских строк', () => {
     expect(isAdminUserRow({ ...ADMIN_USER_ROW, avatarUrl: 1 })).toBe(false)
     expect(isAdminBarberRow({ ...ADMIN_BARBER_ROW, avatarUrl: {} })).toBe(false)
+  })
+})
+
+/**
+ * Премодерация фото (#89): статус и причина — обязательные поля всех контрактов,
+ * где кадр или аватар отдаётся наружу. Пропущенное поле роняет guard: иначе
+ * владелец не увидел бы «На проверке»/«Отклонено», а админ — причину отказа.
+ */
+describe('поля премодерации в контрактах #89', () => {
+  const ADMIN_SUMMARY = {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0 },
+    photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 5 },
+  }
+
+  const ADMIN_AVATAR_PHOTO = {
+    userId: '9e000000-0000-4000-8000-000000000003',
+    firstName: 'Ева',
+    lastName: 'Клиентова',
+    email: 'eva@barbersearch.test',
+    avatarUrl:
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000003/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg',
+    moderationStatus: 'Pending',
+    submittedAt: '2026-11-11T10:00:00Z',
+  }
+
+  const ADMIN_PORTFOLIO_PHOTO = {
+    photoId: '9e200000-0000-4000-8000-000000000001',
+    barberProfileId: '9e100000-0000-4000-8000-000000000015',
+    barberDisplayName: 'Артём Соколов',
+    ownerEmail: 'artem@barbersearch.test',
+    url: '/api/media/portfolio/9e100000-0000-4000-8000-000000000015/9e200000000040008000000000000001.jpg',
+    description: null,
+    isPublished: true,
+    moderationStatus: 'Pending',
+    submittedAt: '2026-11-11T10:00:00Z',
+  }
+
+  it('принимает новые обязательные поля во всех контрактах', () => {
+    expect(isPortfolioPhoto(PORTFOLIO_PHOTO)).toBe(true)
+    expect(isMyProfile(PROFILE)).toBe(true)
+    expect(isAdminUserRow(ADMIN_USER_ROW)).toBe(true)
+    expect(isAdminUser(DETAIL)).toBe(true)
+    expect(isAdminBarberRow(ADMIN_BARBER_ROW)).toBe(true)
+    expect(isAdminBarber(ADMIN_BARBER_DETAIL)).toBe(true)
+    expect(isAdminSummary(ADMIN_SUMMARY)).toBe(true)
+    expect(isAdminAvatarPhoto(ADMIN_AVATAR_PHOTO)).toBe(true)
+    expect(isAdminPortfolioPhoto(ADMIN_PORTFOLIO_PHOTO)).toBe(true)
+  })
+
+  it('отвергает портфолио без moderationStatus или rejectionReason', () => {
+    const { moderationStatus, ...withoutStatus } = PORTFOLIO_PHOTO
+    const { rejectionReason, ...withoutReason } = PORTFOLIO_PHOTO
+
+    expect(moderationStatus).toBe('Approved')
+    expect(rejectionReason).toBeNull()
+    expect(isPortfolioPhoto(withoutStatus)).toBe(false)
+    expect(isPortfolioPhoto(withoutReason)).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, moderationStatus: 'Queued' })
+    ).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, rejectionReason: 42 })
+    ).toBe(false)
+  })
+
+  it('публичный ответ портфолио несёт Approved и null', () => {
+    expect(
+      isPortfolioPhoto({
+        ...PORTFOLIO_PHOTO,
+        moderationStatus: 'Approved',
+        rejectionReason: null,
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает профиль кабинета без статуса или причины аватара', () => {
+    const { avatarModerationStatus, ...withoutStatus } = PROFILE
+    const { avatarRejectionReason, ...withoutReason } = PROFILE
+
+    expect(avatarModerationStatus).toBe('Approved')
+    expect(avatarRejectionReason).toBeNull()
+    expect(isMyProfile(withoutStatus)).toBe(false)
+    expect(isMyProfile(withoutReason)).toBe(false)
+    expect(
+      isMyProfile({ ...PROFILE, avatarModerationStatus: 'Queued' })
+    ).toBe(false)
+    expect(
+      isMyProfile({ ...PROFILE, avatarRejectionReason: { text: 'нет' } })
+    ).toBe(false)
+  })
+
+  it('админская строка пользователя требует статус, карточка — ещё и причину', () => {
+    const { avatarModerationStatus, ...rowWithoutStatus } = ADMIN_USER_ROW
+    const { avatarModerationStatus: _detailStatus, ...detailWithoutStatus } =
+      DETAIL
+    const { avatarRejectionReason, ...detailWithoutReason } = DETAIL
+
+    expect(avatarModerationStatus).toBe('Approved')
+    expect(_detailStatus).toBe('Approved')
+    expect(avatarRejectionReason).toBeNull()
+    expect(isAdminUserRow(rowWithoutStatus)).toBe(false)
+    expect(isAdminUser(detailWithoutStatus)).toBe(false)
+    expect(isAdminUser(detailWithoutReason)).toBe(false)
+  })
+
+  it('админская строка барбера требует статус, карточка — ещё и причину', () => {
+    const { avatarModerationStatus, ...rowWithoutStatus } = ADMIN_BARBER_ROW
+    const { avatarModerationStatus: _detailStatus, ...detailWithoutStatus } =
+      ADMIN_BARBER_DETAIL
+    const { avatarRejectionReason, ...detailWithoutReason } = ADMIN_BARBER_DETAIL
+
+    expect(avatarModerationStatus).toBe('Approved')
+    expect(_detailStatus).toBe('Approved')
+    expect(avatarRejectionReason).toBeNull()
+    expect(isAdminBarberRow(rowWithoutStatus)).toBe(false)
+    expect(isAdminBarber(detailWithoutStatus)).toBe(false)
+    expect(isAdminBarber(detailWithoutReason)).toBe(false)
+  })
+
+  it('сводка требует блок photos с двумя неотрицательными целыми', () => {
+    const { photos, ...withoutPhotos } = ADMIN_SUMMARY
+
+    expect(photos).toStrictEqual({
+      pendingAvatarsCount: 2,
+      pendingPortfolioCount: 5,
+    })
+    expect(isAdminSummary(withoutPhotos)).toBe(false)
+    expect(
+      isAdminSummary({
+        ...ADMIN_SUMMARY,
+        photos: { pendingAvatarsCount: -1, pendingPortfolioCount: 0 },
+      })
+    ).toBe(false)
+    expect(
+      isAdminSummary({
+        ...ADMIN_SUMMARY,
+        photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 1.5 },
+      })
+    ).toBe(false)
+    expect(
+      isAdminSummary({
+        ...ADMIN_SUMMARY,
+        photos: { pendingAvatarsCount: 0 },
+      })
+    ).toBe(false)
+  })
+
+  it('очередь аватаров отвергает строку без статуса или URL', () => {
+    const { moderationStatus, ...withoutStatus } = ADMIN_AVATAR_PHOTO
+    const { avatarUrl, ...withoutUrl } = ADMIN_AVATAR_PHOTO
+
+    expect(moderationStatus).toBe('Pending')
+    expect(avatarUrl).toContain('/api/media/avatars/')
+    expect(isAdminAvatarPhoto(withoutStatus)).toBe(false)
+    expect(isAdminAvatarPhoto(withoutUrl)).toBe(false)
+    expect(
+      isAdminAvatarPhoto({ ...ADMIN_AVATAR_PHOTO, moderationStatus: 'Queued' })
+    ).toBe(false)
+    expect(
+      isAdminAvatarPhoto({ ...ADMIN_AVATAR_PHOTO, submittedAt: 1 })
+    ).toBe(false)
+  })
+
+  it('очередь портфолио отвергает строку без статуса или с неверным isPublished', () => {
+    const { moderationStatus, ...withoutStatus } = ADMIN_PORTFOLIO_PHOTO
+    const { isPublished, ...withoutPublished } = ADMIN_PORTFOLIO_PHOTO
+
+    expect(moderationStatus).toBe('Pending')
+    expect(isPublished).toBe(true)
+    expect(isAdminPortfolioPhoto(withoutStatus)).toBe(false)
+    expect(isAdminPortfolioPhoto(withoutPublished)).toBe(false)
+    expect(
+      isAdminPortfolioPhoto({
+        ...ADMIN_PORTFOLIO_PHOTO,
+        moderationStatus: 'Queued',
+      })
+    ).toBe(false)
+    expect(
+      isAdminPortfolioPhoto({ ...ADMIN_PORTFOLIO_PHOTO, description: 42 })
+    ).toBe(false)
   })
 })

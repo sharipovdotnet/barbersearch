@@ -21,6 +21,7 @@ import {
   type MyProfile,
   type UpdateMyProfileInput,
 } from '@/lib/my-profile'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 
 /**
  * Общий профиль приложения: один `GET users/me` на авторизованную загрузку.
@@ -195,7 +196,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       }
 
       // `...current` сохраняет `isAvatarBlocked`: сервер снимает флаг только при
-      // реальной смене URL, а сохранение имени его не трогает.
+      // реальной смене URL, а сохранение имени его не трогает. Статус модерации
+      // и причина отказа тоже приходят из профиля и здесь не меняются.
       const next: MyProfile = {
         ...current,
         firstName: input.firstName.trim(),
@@ -226,10 +228,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
    * Общий для всех подписчиков новый URL — без второго `GET users/me`.
    *
    * Новая загрузка или удаление — это новый файл либо пустота, поэтому флаг
-   * модерации снимается: блокировка относилась к прежнему кадру.
+   * модерации снимается: блокировка относилась к прежнему кадру. Статус приходит
+   * от загрузки (`Pending`) или удаления (`Approved`), а причина отказа прежнего
+   * кадра больше не относится к новому.
    */
   const setAvatar = useCallback(
-    (avatarUrl: string | null): void => {
+    (avatarUrl: string | null, status: PhotoModerationStatus): void => {
       const current = stateRef.current.profile
 
       if (!current || current.id !== userId) {
@@ -238,7 +242,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       applyState({
         status: 'ready',
-        profile: { ...current, avatarUrl, isAvatarBlocked: false },
+        profile: {
+          ...current,
+          avatarUrl,
+          isAvatarBlocked: false,
+          avatarModerationStatus: status,
+          avatarRejectionReason: null,
+        },
         error: null,
         requiresSignIn: false,
       })

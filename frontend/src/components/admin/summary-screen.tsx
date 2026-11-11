@@ -9,7 +9,7 @@ import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useNow } from '@/hooks/use-now'
 import { useI18n } from '@/i18n'
 import type { AdminSummaryOldestReview } from '@/lib/admin-summary'
-import { cataloguePath, reviewsPath } from '@/lib/admin-path'
+import { cataloguePath, photosPath, reviewsPath } from '@/lib/admin-path'
 import {
   formatClockTime,
   formatProfilesCount,
@@ -20,7 +20,7 @@ import {
 import { navigate } from '@/lib/router'
 
 /**
- * `/admin/summary` — «Что требует внимания»: три блока очередей одной страницей.
+ * `/admin/summary` — «Что требует внимания»: четыре блока очередей одной страницей.
  *
  * Числа считает сервер (`GET api/admin/summary`) теми же предикатами, что фильтры
  * разделов, поэтому сводка не расходится с очередями. «Самый старый» отзыв —
@@ -120,6 +120,12 @@ export function SummaryScreen() {
             <ReviewsBlock reviews={summary.summary.reviews} now={now} />
             <BarbersBlock count={summary.summary.barbers.unverifiedCount} />
             <SalonsBlock count={summary.summary.salons.inactiveCount} />
+            <PhotosBlock
+              pendingAvatarsCount={summary.summary.photos.pendingAvatarsCount}
+              pendingPortfolioCount={
+                summary.summary.photos.pendingPortfolioCount
+              }
+            />
           </div>
         )}
       </div>
@@ -327,7 +333,97 @@ function SalonsBlock({ count }: { count: number }) {
   )
 }
 
-/** Скелетон-силуэт трёх блоков: только первая загрузка. */
+/**
+ * Очереди премодерации фото: два числа и ссылки в обе вкладки `/admin/photos`.
+ *
+ * Счётчики приходят с сервера теми же предикатами, что чтения очередей; клиент
+ * их не складывает и не пересчитывает. Ссылки — настоящие `href`, поэтому средний
+ * клик открывает вкладку в новом окне. При нуле обеих очередей ссылок нет:
+ * открывать нечего.
+ */
+function PhotosBlock({
+  pendingAvatarsCount,
+  pendingPortfolioCount,
+}: {
+  pendingAvatarsCount: number
+  pendingPortfolioCount: number
+}) {
+  const { t } = useI18n()
+  const isEmpty = pendingAvatarsCount === 0 && pendingPortfolioCount === 0
+  const avatarsPath = photosPath('avatars')
+  const portfolioPath = photosPath('portfolio')
+
+  return (
+    <section
+      aria-labelledby="summary-photos-heading"
+      className="space-y-3 py-5 last:pb-4"
+    >
+      <div className="space-y-1">
+        <h2
+          id="summary-photos-heading"
+          className="font-heading text-lg font-semibold tracking-tight"
+        >
+          {t('Фотографии на проверке')}
+        </h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {t(
+            'Новые аватары и работы не видны публично, пока администратор их не одобрит.'
+          )}
+        </p>
+      </div>
+
+      {isEmpty ? (
+        <p className="text-sm font-medium">{t('Все фотографии проверены.')}</p>
+      ) : (
+        <div className="space-y-3">
+          <dl className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border p-3">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {t('Аватары')}
+              </dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">
+                {pendingAvatarsCount}
+              </dd>
+            </div>
+            <div className="rounded-lg border p-3">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {t('Портфолио')}
+              </dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">
+                {pendingPortfolioCount}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <a
+              href={avatarsPath}
+              className="inline-flex min-h-11 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-8"
+              onClick={(event) => {
+                event.preventDefault()
+                navigate(avatarsPath)
+              }}
+            >
+              {t('Открыть аватары')}
+            </a>
+            <a
+              href={portfolioPath}
+              className="inline-flex min-h-11 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-8"
+              onClick={(event) => {
+                event.preventDefault()
+                navigate(portfolioPath)
+              }}
+            >
+              {t('Открыть портфолио')}
+            </a>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Скелетон-силуэт четырёх блоков: только первая загрузка. */
 function SummarySkeleton() {
   const { t } = useI18n()
 
@@ -347,6 +443,10 @@ function SummarySkeleton() {
       </div>
       <div className="space-y-3" aria-hidden>
         <Skeleton className="h-5 w-44" />
+        <Skeleton className="h-4 w-full max-w-sm" />
+      </div>
+      <div className="space-y-3" aria-hidden>
+        <Skeleton className="h-5 w-52" />
         <Skeleton className="h-4 w-full max-w-sm" />
       </div>
     </div>

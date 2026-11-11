@@ -21,6 +21,8 @@ const BASE_USER: AdminUserDetail = {
   phoneNumber: null,
   avatarUrl: null,
   isAvatarBlocked: false,
+  avatarModerationStatus: 'Approved',
+  avatarRejectionReason: null,
   role: 'Customer',
   isActive: true,
   isEmailVerified: false,
@@ -173,6 +175,57 @@ describe('UserDetail, модерация аватара', () => {
     const button = screen.getByRole('button', { name: 'Скрываем…' })
 
     expect(button).toBeDisabled()
+  })
+
+  it('кадр «На проверке» показывает решение вместо блокировки', () => {
+    renderDetail({
+      ...BASE_USER,
+      avatarUrl: AVATAR_URL,
+      avatarModerationStatus: 'Pending',
+    })
+
+    expect(screen.getByText('На проверке')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Одобрить' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Отклонить' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть фото' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('отклонённый кадр показывает причину и не предлагает решения', () => {
+    renderDetail({
+      ...BASE_USER,
+      avatarUrl: AVATAR_URL,
+      avatarModerationStatus: 'Rejected',
+      avatarRejectionReason: 'Кадр размыт.',
+    })
+
+    expect(screen.getByText('Отклонено')).toBeInTheDocument()
+    expect(screen.getByText('Причина: Кадр размыт.')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Одобрить' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Отклонить' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть фото' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('скрытый кадр приоритетнее статуса проверки', () => {
+    renderDetail({
+      ...BASE_USER,
+      avatarUrl: AVATAR_URL,
+      isAvatarBlocked: true,
+      avatarModerationStatus: 'Pending',
+    })
+
+    expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+    expect(screen.queryByText('На проверке')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Вернуть фото' })
+    ).toBeInTheDocument()
   })
 
   it('ошибку действия показывает в role="alert"', () => {

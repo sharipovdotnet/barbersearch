@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
+import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { isCreatedResource } from '@/lib/response-guards'
 
 /**
@@ -29,6 +30,14 @@ export type PortfolioPhoto = {
   sortOrder: number
   isPublished: boolean
   isBlocked: boolean
+  /**
+   * Допуск кадра к публикации. Публичная карточка отдаёт только `Approved`
+   * (в её ответе поле всегда `Approved`, причина — `null`), своя и админская —
+   * реальный статус.
+   */
+  moderationStatus: PhotoModerationStatus
+  /** Текст администратора при отказе; `null`, пока кадр не отклонён. */
+  rejectionReason: string | null
 }
 
 /** Доменный лимит портфолио: одиннадцатая фотография — `409`. */
