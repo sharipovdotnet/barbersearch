@@ -94,9 +94,9 @@ jobs:
       - name: Install dotnet-ef
         run: dotnet tool install --global dotnet-ef --version 10.0.10
 
-      - name: Install psql
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
+      # psql не ставится из apt: зеркала Ubuntu на раннере могут быть недоступны, и
+      # job падал до первого теста. Образ postgres:18 уже поднят как сервис-контейнер,
+      # поэтому seed выполняется его клиентом; --network host даёт доступ к порту 5432.
       - name: Build API
         working-directory: backend
         run: dotnet build BarberSearch/BarberSearch.sln --nologo
@@ -113,10 +113,15 @@ jobs:
       # отзывы, записи). seed.sql сам откажется работать не с barbersearch_e2e.
       - name: Seed database
         run: |
-          psql -h localhost -p 5432 -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 \
-            -q -f backend/load/seed/minimal.sql
-          psql -h localhost -p 5432 -U postgres -d barbersearch_e2e -v ON_ERROR_STOP=1 \
-            -q -f frontend/e2e/fixtures/seed.sql
+          seed() {
+            docker run --rm --network host \
+              -e PGPASSWORD \
+              -v "$GITHUB_WORKSPACE:/work:ro" \
+              postgres:18 psql -h localhost -p 5432 -U postgres -d barbersearch_e2e \
+              -v ON_ERROR_STOP=1 -q -f "$1"
+          }
+          seed /work/backend/load/seed/minimal.sql
+          seed /work/frontend/e2e/fixtures/seed.sql
 
       # Ключ подписи токенов приходит только из окружения (backend/AGENT.md §5.5);
       # для одноразового стенда он генерируется на месте и нигде не хранится.
@@ -164,7 +169,12 @@ jobs:
 
       - name: Install Chromium
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright install chromium
+          # Системные библиотеки на образе раннера уже есть: apt — best-effort,
+          # чтобы недоступность зеркал Ubuntu не валила job до первого теста.
+          npx playwright install-deps chromium \
+            || echo "::warning::install-deps failed, relying on preinstalled libraries"
 
       - name: Run E2E
         working-directory: frontend
