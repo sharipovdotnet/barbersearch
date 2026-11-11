@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Mail;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.FavoriteBarbers;
 using CSharpFunctionalExtensions;
@@ -179,7 +178,7 @@ public class User : AggregateRoot
     /// для входа (R-03).
     /// </remarks>
     public static string NormalizeEmail(string? email)
-        => email?.Trim().ToLowerInvariant() ?? string.Empty;
+        => EmailAddress.Normalize(email);
 
     public UnitResult<Failure> UpdateProfile(
         string firstName,
@@ -393,6 +392,54 @@ public class User : AggregateRoot
             nameof(avatarUrl),
             required: false,
             out normalized);
+    }
+
+    /// <summary>
+    /// Меняет адрес электронной почты после подтверждения владения новым адресом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Один доменный шаг: адрес нормализуется и проверяется, затем помечается подтверждённым
+    /// (<see cref="IsEmailVerified"/> остаётся мягким флагом — вход он не блокирует), а отпечаток
+    /// учётных данных ротируется, поэтому все выданные cookie и access-токены перестают
+    /// проходить проверку. Отзыв refresh-токенов — задача Application: у домена нет доступа
+    /// к чужому агрегату.
+    /// </para>
+    /// <para>
+    /// Синтаксис проверяется до сравнения с текущим адресом: кривой ввод не должен получать
+    /// ответ «адрес совпадает». При ошибке адрес, флаг и stamp не меняются.
+    /// </para>
+    /// </remarks>
+    /// <param name="email">Новый адрес; нормализуется внутри.</param>
+    public UnitResult<Failure> ChangeEmail(string email)
+    {
+        var normalized = EmailAddress.Normalize(email);
+
+        var emailError = EmailAddress.Validate(
+            normalized,
+            "user.changeEmail.newEmail",
+            "newEmail");
+        if (emailError is not null)
+        {
+            return new Failure(emailError);
+        }
+
+        if (string.Equals(Email, normalized, StringComparison.Ordinal))
+        {
+            return new Failure(Error.Validation(
+                "user.changeEmail.sameEmail",
+                "The new email is the same as the current one.",
+                "newEmail"));
+        }
+
+        Email = normalized;
+        IsEmailVerified = true;
+
+        // Ротация stamp — единственный механизм, который гасит уже выданные cookie и
+        // access-токены; без неё старая сессия пережила бы смену адреса (AGENT.md §17.10).
+        RotateSecurityStamp();
+
+        return DomainErrors.Ok();
     }
 
     public UnitResult<Failure> MarkEmailAsVerified()
@@ -678,39 +725,6 @@ public class User : AggregateRoot
         return TimeSpan.FromMinutes(minutes);
     }
 
-    /// <summary>
-    /// Синтаксическая проверка канонического адреса.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="MailAddress.TryCreate(string, out MailAddress)"/> разбирает адрес по RFC,
-    /// а не по регулярному выражению. Сравнение <c>Address</c> с исходной строкой отсекает
-    /// форму с отображаемым именем (<c>Иван &lt;ivan@example.com&gt;</c>), которую он тоже
-    /// принимает. Домен обязан содержать точку: <c>a@b</c> синтаксически допустим для
-    /// <see cref="MailAddress"/>, но не является адресом публичного сервиса.
-    /// </remarks>
-    private static bool IsValidEmail(string email)
-    {
-        if (email.Length is < Constants.MIN_EMAIL_LENGTH or > Constants.MAX_EMAIL_LENGTH)
-        {
-            return false;
-        }
-
-        if (!MailAddress.TryCreate(email, out var parsed) ||
-            !string.Equals(parsed.Address, email, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var at = email.LastIndexOf('@');
-        var dot = email.IndexOf('.', at + 1);
-
-        return at > 0 &&
-               dot > at + 1 &&
-               dot < email.Length - 1 &&
-               !email.Contains("..", StringComparison.Ordinal) &&
-               !email.EndsWith('.');
-    }
-
     private static void Validate(
         string email,
         string? passwordHash,
@@ -719,13 +733,10 @@ public class User : AggregateRoot
         UserRole role,
         List<Error> errors)
     {
-        if (!IsValidEmail(email))
+        var emailError = EmailAddress.Validate(email, "user.email", nameof(email));
+        if (emailError is not null)
         {
-            errors.Add(Error.Validation(
-                "user.email",
-                $"Email must be a valid address between {Constants.MIN_EMAIL_LENGTH} " +
-                $"and {Constants.MAX_EMAIL_LENGTH} characters.",
-                nameof(email)));
+            errors.Add(emailError);
         }
 
         if (string.IsNullOrWhiteSpace(passwordHash))

@@ -897,4 +897,136 @@ public class UserTests
         Assert.Null(user.LockoutEnd);
         Assert.False(user.IsLockedOut(afterPause));
     }
+
+    [Fact]
+    public void ChangeEmail_WithValidAddress_NormalizesAndApplies()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ChangeEmail("  New.Address@Example.COM  ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("new.address@example.com", user.Email);
+    }
+
+    [Fact]
+    public void ChangeEmail_MarksNewAddressVerified()
+    {
+        var user = CreateValidUser();
+        Assert.False(user.IsEmailVerified);
+
+        var result = user.ChangeEmail("new@example.com");
+
+        Assert.True(result.IsSuccess);
+
+        // Флаг остаётся мягким (§3.1): владение адресом доказано ссылкой из письма,
+        // но вход он по-прежнему не блокирует.
+        Assert.True(user.IsEmailVerified);
+    }
+
+    [Fact]
+    public void ChangeEmail_RotatesSecurityStamp()
+    {
+        var user = CreateValidUser();
+        var before = user.SecurityStamp;
+
+        var result = user.ChangeEmail("new@example.com");
+
+        Assert.True(result.IsSuccess);
+
+        // Ротация — единственный механизм, гасящий уже выданные cookie и access-токены.
+        Assert.NotEqual(before, user.SecurityStamp);
+        Assert.False(string.IsNullOrWhiteSpace(user.SecurityStamp));
+    }
+
+    [Fact]
+    public void ChangeEmail_WithSameAddress_ReturnsSameEmailFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ChangeEmail("barber@example.com");
+
+        Assert.True(result.IsFailure);
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal(ErrorType.VALIDATION, error.Type);
+        Assert.Equal("user.changeEmail.sameEmail", error.Code);
+        Assert.Equal("newEmail", error.InvalidField);
+    }
+
+    [Fact]
+    public void ChangeEmail_WithSameAddressInAnotherCase_ReturnsSameEmailFailure()
+    {
+        var user = CreateValidUser();
+
+        // «Barber@Example.COM» после нормализации совпадает с текущим адресом.
+        var result = user.ChangeEmail("  Barber@Example.COM  ");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.changeEmail.sameEmail", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void ChangeEmail_WithSameAddress_KeepsEmailFlagAndStamp()
+    {
+        var user = CreateValidUser();
+        var beforeStamp = user.SecurityStamp;
+        var beforeUpdatedAt = user.UpdatedAt;
+
+        var result = user.ChangeEmail("barber@example.com");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barber@example.com", user.Email);
+        Assert.False(user.IsEmailVerified);
+        Assert.Equal(beforeStamp, user.SecurityStamp);
+        Assert.Equal(beforeUpdatedAt, user.UpdatedAt);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-an-email")]
+    [InlineData("a@b")]
+    [InlineData("a@b@c")]
+    [InlineData("Ivan <ivan@example.com>")]
+    public void ChangeEmail_WithBrokenAddress_ReturnsNewEmailValidation(string email)
+    {
+        var user = CreateValidUser();
+
+        var result = user.ChangeEmail(email);
+
+        Assert.True(result.IsFailure);
+        var error = Assert.Single(result.Error.Errors);
+        Assert.Equal(ErrorType.VALIDATION, error.Type);
+        Assert.Equal("user.changeEmail.newEmail", error.Code);
+        Assert.Equal("newEmail", error.InvalidField);
+    }
+
+    [Fact]
+    public void ChangeEmail_WithBrokenAddress_KeepsEmailFlagAndStamp()
+    {
+        var user = CreateValidUser();
+        var beforeStamp = user.SecurityStamp;
+        var beforeUpdatedAt = user.UpdatedAt;
+
+        var result = user.ChangeEmail("not-an-email");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("barber@example.com", user.Email);
+        Assert.False(user.IsEmailVerified);
+        Assert.Equal(beforeStamp, user.SecurityStamp);
+        Assert.Equal(beforeUpdatedAt, user.UpdatedAt);
+    }
+
+    [Fact]
+    public void ChangeEmail_WithTooLongAddress_ReturnsNewEmailValidation()
+    {
+        var user = CreateValidUser();
+        var email = new string('a', 243) + "@example.com";
+
+        var result = user.ChangeEmail(email);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.changeEmail.newEmail", result.Error.Errors[0].Code);
+        Assert.Equal("barber@example.com", user.Email);
+    }
 }

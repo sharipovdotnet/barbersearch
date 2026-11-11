@@ -35,6 +35,18 @@ const REQUEST_TIMEOUT_MS = 3_000
  */
 export const PASSWORD_RESET_SUBJECT = 'Сброс пароля — BarberSearch'
 
+/**
+ * Тема письма подтверждения смены email (backend `EmailChangeConfirmationMessage.SUBJECT`).
+ *
+ * На новый адрес приходит ровно это письмо; на старый — уведомление с другой темой.
+ */
+export const EMAIL_CHANGE_SUBJECT =
+  'Подтвердите новый адрес электронной почты — BarberSearch'
+
+/** Тема уведомления о смене email на старый адрес (`EmailChangeNoticeMessage.SUBJECT`). */
+export const EMAIL_CHANGE_NOTICE_SUBJECT =
+  'Запрошена смена адреса электронной почты — BarberSearch'
+
 /** Дополнительный признак письма, когда на адрес приходит несколько писем. */
 export type WaitForMessageOptions = {
   /** Тема целиком: письма с другой темой игнорируются. */
@@ -123,6 +135,43 @@ export async function waitForPasswordResetMessage(
   address: string
 ): Promise<MailpitMessage> {
   return waitForMessageTo(address, { subject: PASSWORD_RESET_SUBJECT })
+}
+
+/**
+ * Ждёт письмо подтверждения смены email — по теме, а не по порядку в инбоксе.
+ */
+export async function waitForEmailChangeMessage(
+  address: string
+): Promise<MailpitMessage> {
+  return waitForMessageTo(address, { subject: EMAIL_CHANGE_SUBJECT })
+}
+
+/**
+ * Ждёт уведомление о запрошенной смене адреса, которое уходит на старый адрес.
+ */
+export async function waitForEmailChangeNoticeMessage(
+  address: string
+): Promise<MailpitMessage> {
+  return waitForMessageTo(address, { subject: EMAIL_CHANGE_NOTICE_SUBJECT })
+}
+
+/**
+ * Достаёт токен смены email из ссылки `/confirm-email-change?token=…`.
+ */
+export function extractEmailChangeToken(message: MailpitMessage): string {
+  const link = /confirm-email-change\?token=([A-Za-z0-9_-]+)/
+
+  for (const body of [message.HTML, message.Text]) {
+    const match = link.exec(body)
+
+    if (match?.[1]) {
+      return decodeURIComponent(match[1])
+    }
+  }
+
+  throw new Error(
+    `В письме «${message.Subject}» нет ссылки /confirm-email-change?token=…: проверь текст письма (EmailChangeConfirmationMessage).`
+  )
 }
 
 /**

@@ -2,6 +2,8 @@ using System.Net;
 using System.Security.Claims;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.EmailChanges.ConfirmEmailChange;
+using BarberSearch.Application.EmailChanges.RequestEmailChange;
 using BarberSearch.Application.EmailVerifications.ConfirmEmailVerification;
 using BarberSearch.Application.EmailVerifications.RequestEmailVerification;
 using BarberSearch.Application.PasswordResets.ConfirmPasswordReset;
@@ -16,6 +18,7 @@ using BarberSearch.Application.Users.LoginUser;
 using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Contracts.Auth.ChangePassword;
 using BarberSearch.Contracts.Auth.Csrf;
+using BarberSearch.Contracts.Auth.EmailChange;
 using BarberSearch.Contracts.Auth.EmailVerification;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Logout;
@@ -171,6 +174,87 @@ public class AuthController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new ConfirmEmailVerificationCommand(request.Token ?? string.Empty),
+            cancellationToken));
+
+    /// <summary>
+    /// Запрашивает смену адреса электронной почты: ссылка-подтверждение на новый адрес и
+    /// уведомление на текущий.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Это cookie-мутация вошедшего пользователя, поэтому antiforgery-фильтр не отключается:
+    /// запрос обязан нести <c>X-CSRF-TOKEN</c>. Пользователь берётся из claims, а не из тела.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c> означает «оба письма поставлены в outbox», а не «адрес изменён»:
+    /// адрес меняется только переходом по ссылке. Отказы: <c>400 user.changeEmail.newEmail</c>
+    /// и <c>400 user.changeEmail.sameEmail</c> с <c>invalidField = "newEmail"</c>,
+    /// <c>400 auth.emailChange.invalidCurrentPassword</c> с
+    /// <c>invalidField = "currentPassword"</c>, <c>409 user.changeEmail.emailTaken</c>,
+    /// <c>409 auth.emailChange.cooldown</c> (повтор раньше 60 секунд) и
+    /// <c>409 auth.emailChange.unavailable</c> (почта не настроена или пуст
+    /// <c>App:PublicUrl</c>). Отдельного <c>503</c> нет: в маппере ошибок нет такого
+    /// <c>ErrorType</c>, поэтому недоступность почты — конфликт состояния сервера.
+    /// </para>
+    /// </remarks>
+    [Authorize]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    [HttpPost("email-change")]
+    public async Task<ActionResult> RequestEmailChange(
+        [FromBody] RequestEmailChangeRequest request,
+        [FromServices] ICurrentUser currentUser,
+        [FromServices] ICommandHandler<RequestEmailChangeCommand> handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.RequireUserId();
+        if (userId.IsFailure)
+        {
+            return FailureProblemDetails.CreateResult(userId.Error);
+        }
+
+        return ToActionResult(await handler.Handle(
+            new RequestEmailChangeCommand(
+                userId.Value,
+                request.NewEmail ?? string.Empty,
+                request.CurrentPassword ?? string.Empty),
+            cancellationToken));
+    }
+
+    /// <summary>
+    /// Подтверждает смену адреса по одноразовой ссылке из письма и завершает все сессии.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Действие анонимное: ссылку открывают в любом браузере, возможно без входа, а секрет —
+    /// сам токен. Antiforgery отключён осознанно: у запроса нет ambient-идентичности, к
+    /// которой его можно привязать (тот же случай, что у подтверждения email и сброса пароля).
+    /// </para>
+    /// <para>
+    /// Успех — <c>204</c> без тела, в том числе на повторный клик по уже применённой ссылке:
+    /// операция идемпотентна. Битая, неизвестная, просроченная, использованная или отозванная
+    /// ссылка — <c>400 auth.emailChange.invalid</c>. Адрес, занятый другим аккаунтом, —
+    /// <c>409 user.changeEmail.emailTaken</c>, в том числе когда его успел занять
+    /// параллельный запрос (гонка с уникальным индексом <c>ux_users_email</c>). Почему
+    /// <c>409</c>, а не <c>503</c>: занятость — конфликт состояния, а не недоступность сервиса.
+    /// </para>
+    /// <para>
+    /// Подтверждение меняет адрес, ставит <c>IsEmailVerified</c>, ротирует
+    /// <c>SecurityStamp</c> и отзывает все refresh-токены в одной транзакции, поэтому все
+    /// сессии, включая текущую, завершаются. Автоматического входа нет: клиент входит заново
+    /// новым адресом с прежним паролем.
+    /// </para>
+    /// </remarks>
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.AuthPolicyName)]
+    // Секрет — одноразовый токен из письма; ambient-идентичности у запроса нет.
+    [SkipCookieAntiforgery]
+    [HttpPost("email-change/confirm")]
+    public async Task<ActionResult> ConfirmEmailChange(
+        [FromBody] ConfirmEmailChangeRequest request,
+        [FromServices] ICommandHandler<ConfirmEmailChangeCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ConfirmEmailChangeCommand(request.Token ?? string.Empty),
             cancellationToken));
 
     /// <summary>

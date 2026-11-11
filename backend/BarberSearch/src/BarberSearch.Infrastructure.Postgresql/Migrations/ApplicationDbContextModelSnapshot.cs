@@ -509,6 +509,76 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BarberSearch.Domain.EmailChanges.EmailChangeToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<string>("NewEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("new_email");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_email_change_tokens");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_email_change_tokens_expires_at");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_email_change_tokens_hash");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_email_change_tokens_active")
+                        .HasFilter("consumed_at IS NULL AND revoked_at IS NULL");
+
+                    b.ToTable("email_change_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_email_change_tokens_new_email", "position('@' in new_email) > 1");
+
+                            t.HasCheckConstraint("ck_email_change_tokens_new_email_length", "char_length(new_email) BETWEEN 3 AND 254");
+
+                            t.HasCheckConstraint("ck_email_change_tokens_token_hash", "char_length(token_hash) = 64");
+                        });
+                });
+
             modelBuilder.Entity("BarberSearch.Domain.EmailOutbox.EmailOutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1888,6 +1958,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_barber_specializations_specializations_specialization_id");
 
                     b.Navigation("BarberProfile");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.EmailChanges.EmailChangeToken", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_email_change_tokens_users_user_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.EmailVerifications.EmailVerificationToken", b =>

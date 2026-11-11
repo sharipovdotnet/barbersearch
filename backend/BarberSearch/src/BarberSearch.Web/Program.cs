@@ -117,6 +117,10 @@ try
     builder.Services.AddSingleton<PasswordResetTokenCleanupService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<PasswordResetTokenCleanupService>());
 
+    // Уборка токенов смены адреса email: та же ретенция 30 дней, что у подтверждения email.
+    builder.Services.AddSingleton<EmailChangeTokenCleanupService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailChangeTokenCleanupService>());
+
     // При остановке хоста Kestrel перестаёт принимать новые соединения и ждёт in-flight запросы
     // не дольше этого таймаута. Оркестратор должен давать pod'у не меньше времени.
     builder.Services.Configure<HostOptions>(options =>

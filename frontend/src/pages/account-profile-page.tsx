@@ -8,6 +8,7 @@ import {
 import { AccountShell } from '@/components/account/account-shell'
 import { useAccountProfile } from '@/components/account/account-profile-context'
 import { AvatarCard } from '@/components/account/avatar-card'
+import { EmailCard } from '@/components/account/email-card'
 import { ProfileForm } from '@/components/account/profile-form'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,9 +30,9 @@ import {
 /**
  * «Профиль» личного кабинета.
  *
- * Аватар, имя, фамилия и телефон редактируются здесь; email остаётся логином и
- * меняется отдельным сценарием. Данные читает каркас кабинета из `GET api/users/me`,
- * поэтому форма и карточка аватара не делают собственный запрос.
+ * Аватар, email, имя, фамилия и телефон редактируются здесь; email меняется в
+ * отдельной карточке с подтверждением по ссылке. Данные читает каркас кабинета
+ * из `GET api/users/me`, поэтому карточки и форма не делают собственный запрос.
  */
 export function AccountProfilePage() {
   const { locale, t } = useI18n()
@@ -53,7 +54,7 @@ export function AccountProfilePage() {
           section="profile"
           title={t('Профиль')}
           description={t(
-            'Имя, телефон и данные аккаунта. Email и пароль меняются в соседних разделах.'
+            'Имя, телефон и данные аккаунта. Email меняется в карточке выше, пароль — в разделе «Безопасность».'
           )}
         >
           <ProfileScreen />
@@ -121,6 +122,7 @@ function ProfileScreen() {
   return (
     <div className="space-y-5">
       <AvatarCard profile={profile} />
+      <EmailCard profile={profile} />
       <ProfileForm profile={profile} />
       <AccountDetails profile={profile} />
     </div>

@@ -13,6 +13,7 @@ import { AccountProfilePage } from '../pages/account-profile-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { BarberProfilePage } from '../pages/barber-profile-page'
 import { CabinetPage } from '../pages/cabinet-page'
+import { ConfirmEmailChangePage } from '../pages/confirm-email-change-page'
 import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { ProfilePage } from '../pages/profile-page'
 import { ResetPasswordPage } from '../pages/reset-password-page'
@@ -106,6 +107,28 @@ test.describe('axe: 320 px, публичный профиль', () => {
     await expectNoBlockingViolations(
       page,
       '/verify-email (недействительная ссылка) @320',
+      test.info()
+    )
+  })
+
+  test('смена email: карточка ошибки на 320', async ({ page }) => {
+    const confirm = new ConfirmEmailChangePage(page)
+
+    await confirm.goto('broken-token-from-axe')
+    await confirm.waitForInvalid()
+
+    // Длинный текст ошибки и ссылка «На главную» переносятся, а не дают scroll.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/confirm-email-change (недействительная ссылка) @320',
       test.info()
     )
   })

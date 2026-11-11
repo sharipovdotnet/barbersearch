@@ -243,6 +243,11 @@ public sealed class TestApp : IAsyncDisposable
                 .GetRequiredService<PasswordResetTokenCleanupService>();
             await passwordResetCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
+            // Уборка токенов смены email — тот же стартовый прогон и тот же риск гонки.
+            var emailChangeCleanup = factory.Services
+                .GetRequiredService<EmailChangeTokenCleanupService>();
+            await emailChangeCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
             // Старт создал каталог хранилища — проверяем, что это временный путь, а не
             // App_Data репозитория: иначе прогон оставлял бы файлы в рабочем дереве.
             AssertStorageIsIsolated(factory, storageRootPath);

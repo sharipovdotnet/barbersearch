@@ -15,7 +15,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldTitle,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useAccountProfile } from '@/components/account/account-profile-context'
@@ -27,8 +26,8 @@ import type { MyProfile } from '@/lib/my-profile'
 /**
  * Личные данные профиля.
  *
- * Редактируются только имя, фамилия и телефон: email — это логин, и его смена
- * требует отдельного подтверждения, которого у API пока нет. Кнопка сохранения
+ * Редактируются только имя, фамилия и телефон: email — это логин, и он меняется
+ * в отдельной карточке «Email» с подтверждением по ссылке. Кнопка сохранения
  * включается только при изменении, чтобы «Сохранить» не выглядело обязательным.
  */
 
@@ -227,24 +226,6 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
               <FieldDescription>
                 {t(
                   'Необязательно. По этому номеру с вами может связаться салон.'
-                )}
-              </FieldDescription>
-            </Field>
-
-            <Field>
-              <FieldTitle>Email</FieldTitle>
-              <p
-                id="profile-email"
-                className="rounded-lg border border-input bg-muted/40 px-2.5 py-2 text-sm break-all"
-              >
-                {profile.email}
-              </p>
-              <FieldDescription id="profile-email-hint">
-                {profile.isEmailVerified
-                  ? t('Адрес подтверждён.')
-                  : t('Адрес не подтверждён.')}{' '}
-                {t(
-                  'Email используется для входа; его смена появится отдельным сценарием с подтверждением.'
                 )}
               </FieldDescription>
             </Field>

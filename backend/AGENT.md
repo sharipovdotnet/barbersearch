@@ -4,7 +4,7 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **474 domain + 761 application + 235 infrastructure + 248 integration (1718 total)**;
+> Tests: **548 domain + 815 application + 252 infrastructure + 257 integration (1872 total)**;
 > the three unit projects are green locally (2026-11-11), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
@@ -843,7 +843,7 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 474 domain + 761 application + 235 infrastructure + 248 integration (1718 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 548 domain + 815 application + 252 infrastructure + 257 integration (1872 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 139 обработчиков (103 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
@@ -851,7 +851,7 @@ The rules below were pushed to the application layer because the aggregate canno
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (34):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (35):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -861,7 +861,8 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
 `AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`,
-`AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`, `AddUserAvatarBlocked`.
+`AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`, `AddUserAvatarBlocked`,
+`AddEmailChangeTokens`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -1060,6 +1061,20 @@ max-age=86400` и `X-Content-Type-Options: nosniff`, скрытый у адми�
 (`boolean NOT NULL DEFAULT false`): существующие строки получают `false`, то есть фото остаётся
 видимым, backfill не нужен. Индексов миграция не добавляет — все новые чтения идут по
 `users_pkey` (§15.2). `Down` удаляет колонку; `avatar_url` и файл при этом не трогаются.
+
+**`AddEmailChangeTokens` (2026-11-11, issue-88).** Новая таблица `email_change_tokens`:
+`id` UUIDv7 PK, `user_id` FK → `users` `ON DELETE CASCADE`, `new_email`
+(`varchar(254)`, checks `position('@' in new_email) > 1` и
+`char_length(new_email) BETWEEN 3 AND 254`), `token_hash` (`text`, check `char_length = 64`),
+`issued_at`, `expires_at`, `consumed_at`, `revoked_at`, `created_at`, `updated_at`. Индексы:
+`ux_email_change_tokens_hash` (unique), `ux_email_change_tokens_active`
+(`UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL`) и
+`ix_email_change_tokens_expires_at`. Открытый токен не хранится — только SHA-256; TTL 24 часа,
+кулдаун повторной заявки 60 секунд, ретенция уборки 30 дней (`EmailChangeLifetime`). Backfill не
+нужен: таблица новая, `users.email` меняется только при подтверждении. Новых ключей
+конфигурации нет: переиспользуются `Email:*` и `App:PublicUrl`. `Down` удаляет таблицу.
+Проверено накатом, откатом и повторным накатом на локальной `barbersearch`;
+`has-pending-model-changes` — чисто (§17.13).
 
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
@@ -1549,6 +1564,9 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `password_reset_tokens` | `UNIQUE (token_hash)` — `ux_password_reset_tokens_hash`, migration `AddPasswordResetTokens` | The only defence against a CSPRNG collision: the table stores SHA-256, never the open token, so lookup by hash is the confirm path. A collision is `500 internal.database`, not a business error |
 | `password_reset_tokens` | `UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` — `ux_password_reset_tokens_active` | One active reset link per user: the 60-second precheck covers the common case, the partial index closes the race between two simultaneous resends. The loser is a silent `204` in `request` (internal `passwordResetToken.issue.conflict`), never `500`; `user_id` is a FK to `users` with `ON DELETE CASCADE` |
 | `password_reset_tokens` | `(expires_at)` — `ix_password_reset_tokens_expires_at` | Background cleanup range predicate (`expires_at` or `consumed_at` older than 30 days); no user+expiry query exists, so no composite index |
+| `email_change_tokens` | `UNIQUE (token_hash)` — `ux_email_change_tokens_hash`, migration `AddEmailChangeTokens` | The only defence against a CSPRNG collision: the table stores SHA-256, never the open token, so lookup by hash is the confirm path. A collision is `500 internal.database`, not a business error |
+| `email_change_tokens` | `UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` — `ux_email_change_tokens_active` | One active change request per user: the 60-second precheck covers the common case, the partial index closes the race between two simultaneous requests. The loser gets `409 auth.emailChange.cooldown`, never `500` |
+| `email_change_tokens` | `(expires_at)` — `ix_email_change_tokens_expires_at` | Background cleanup range predicate (`expires_at` or `consumed_at` older than 30 days); no user+expiry query exists, so no composite index |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -3091,6 +3109,8 @@ activity of the barber service and takes the price from it.
 | POST | `api/auth/register` | аноним, rate limit | создаёт `Customer`; роль из тела не принимается; обязателен `consentVersion` (`auth.register.consentRequired` / `auth.register.consentVersion`), сервер сам ставит UTC-время и IP; после успешного создания сам заказывает письмо, сбой почты не меняет `201 { id }` |
 | POST | `api/auth/email-verification` | аутентификация, rate limit, antiforgery | высылает письмо со ссылкой `/verify-email?token=…`; `409 auth.emailVerification.cooldown` / `unavailable`; письмо пишется в outbox в транзакции с токеном и уходит через диспетчер (§19) |
 | POST | `api/auth/email-verification/confirm` | аноним, rate limit, без antiforgery | подтверждает адрес по токену из тела: `204`; битый/истёкший/использованный токен — `400 auth.emailVerification.invalid`; повторный клик и уже подтверждённый адрес — `204` |
+| POST | `api/auth/email-change` | аутентификация, rate limit, antiforgery | `{ newEmail, currentPassword }` → `204`; в outbox в одной транзакции с токеном пишутся два письма: ссылка `/confirm-email-change?token=…` на новый адрес и уведомление без токена на текущий; `400 user.changeEmail.newEmail` / `user.changeEmail.sameEmail` (`invalidField = "newEmail"`), `400 auth.emailChange.invalidCurrentPassword` (`invalidField = "currentPassword"`), `409 user.changeEmail.emailTaken`, `409 auth.emailChange.cooldown` / `auth.emailChange.unavailable`; адрес меняется только после перехода по ссылке |
+| POST | `api/auth/email-change/confirm` | аноним, rate limit, без antiforgery | `{ token }` → `204`; идемпотентен: повторный клик по уже применённой ссылке — тоже `204`; битый/неизвестный/просроченный/использованный/отозванный токен — `400 auth.emailChange.invalid`; занятый адрес — `409 user.changeEmail.emailTaken`; меняет адрес, помечает его подтверждённым, ротирует security stamp и отзывает все refresh-токены (все сессии завершаются, авто-входа нет) |
 | POST | `api/auth/password-reset` | аноним, rate limit, без antiforgery | `{ email }` → `204` для любого адреса (существующего, неизвестного, неактивного, пустого, кривого); тихие кулдаун 60 с и сбой SMTP — тоже `204`; `409 auth.passwordReset.unavailable` (почта или `App:PublicUrl` не настроены), `429`; письмо со ссылкой `/reset-password?token=…` действует 30 минут |
 | POST | `api/auth/password-reset/confirm` | аноним, rate limit, без antiforgery | `{ token, newPassword }` → `204`; одноразовый: повторный/неизвестный/истёкший/отозванный токен, отсутствующий или неактивный пользователь — `400 auth.passwordReset.invalid`; пароль вне политики — `400 auth.password.*` (`invalidField = "newPassword"`), токен остаётся рабочим; завершает все сессии, авто-входа нет |
 | POST | `api/auth/login` | аноним, rate limit | 200 + `accessToken` (JWT, 15 минут) + `refreshToken` (тело, `Auth:RefreshTokenDays`) |
@@ -3883,6 +3903,113 @@ antiforgery-пару не к чему: это тот же случай, что `
 `isEmailVerified = true`. Итог: domain **374**, application **672**, infrastructure **158**,
 integration **200** — всего **1404** теста, `dotnet build` — 0 warnings, 0 errors (§5.3, §8).
 
+### 17.13 Смена email (added 2026-11-11)
+
+**Зачем.** `PUT api/users/{id}/profile` намеренно не принимал email, а кабинет показывал адрес
+только для чтения: смена адреса — отдельный сценарий с подтверждением владения **новым**
+ящиком. Срез добавляет два эндпоинта (§17.2): заявка из кабинета (новый адрес + текущий пароль)
+и анонимное подтверждение по ссылке из письма. Существующие чтения и правка профиля не
+меняются, `pendingEmail` в `GET api/users/me` не появляется — это осознанный долг (§9.13 в
+frontend/AGENT.md).
+
+**Схема.** Таблица `email_change_tokens` (миграция `AddEmailChangeTokens`, §8) повторяет шаблон
+`email_verification_tokens`, но держит ещё и запрошенный адрес: `id` UUIDv7 PK, `user_id` FK →
+`users` `ON DELETE CASCADE`, `new_email` (`varchar(254)`, checks `position('@' in new_email) > 1`
+и `char_length(new_email) BETWEEN 3 AND 254`), `token_hash` (`text`, `CHECK char_length = 64`),
+`issued_at` / `expires_at` / `consumed_at` / `revoked_at`, `created_at` / `updated_at`. Индексы —
+§15.2. Открытый токен в базе не хранится: 32 случайных байта → base64url, в таблице только
+SHA-256 в нижнем регистре (`EmailChangeTokenGenerator` делегирует в проверенный генератор
+подтверждения email — формат один и тот же). `issued_at` — бизнес-время из `TimeProvider`: по
+нему считается кулдаун. Сроки — `EmailChangeLifetime`: TTL **24 часа**, кулдаун повторной
+заявки **60 секунд**, ретенция уборки **30 дней**.
+
+**Одна проверка синтаксиса.** `Domain/Users/EmailAddress.cs` — единственное место с правилами
+(`MailAddress.TryCreate`, точка в домене, 3..254): `Normalize`, `IsValid`, `Validate(email, code,
+field)`. `User.NormalizeEmail`, `User.Create`/`UpdateProfile` (`user.email`) и новый
+`User.ChangeEmail` (`user.changeEmail.newEmail`) используют его, поэтому поведение и коды
+регистрации/профиля не изменились.
+
+**Поток `POST api/auth/email-change`.** Cookie-мутация вошедшего пользователя: antiforgery
+включён (`X-CSRF-TOKEN`), пользователь из `ICurrentUser.RequireUserId()`. Порядок проверок
+фиксирован: 1) пользователь по `sub`; 2) нормализация и синтаксис нового адреса
+(`400 user.changeEmail.newEmail`, `invalidField = "newEmail"`); 3) совпадение с текущим
+(`400 user.changeEmail.sameEmail`); 4) **текущий пароль** (`IPasswordService.Verify` →
+`400 auth.emailChange.invalidCurrentPassword`, `invalidField = "currentPassword"`) — самая
+дорогая проверка (PBKDF2), но до запроса занятости: ответ «адрес занят» не должен доставаться
+тому, кто не подтвердил личность; 5) занятость (`409 user.changeEmail.emailTaken`); 6) почта не
+настроена или пуст `App:PublicUrl` (`409 auth.emailChange.unavailable`); 7) активный токен
+моложе 60 секунд (`409 auth.emailChange.cooldown`, сравнение строгое — ровно через 60 секунд
+разрешено); 8) одна транзакция `IUnitOfWork`: отозвать активный токен, вставить новый, положить
+**два** письма в `email_outbox`; 9) `204`. Сбой диспетчера/транспорта на ответ не влияет (§19).
+Гонка двух заявок упирается в `ux_email_change_tokens_active`; репозиторий переводит именно это
+нарушение в `409 auth.emailChange.cooldown`, коллизию хеша оставляет `500 internal.database`.
+Ключи дедупликации outbox: id токена для ссылки и `email-change-notice:{tokenId}` (≤ 128) для
+уведомления — второе письмо той же операции не должно столкнуться с первым. В лог пишутся
+`userId` и коды ошибок; адрес, открытый токен и тело письма не логируются.
+
+**Письма.** Ссылка собирается в одном месте:
+`{App:PublicUrl.TrimEnd('/')}/confirm-email-change?token=…` (`Uri.EscapeDataString`). Тема 1 —
+«Подтвердите новый адрес электронной почты — BarberSearch», уходит на **новый** адрес: HTML +
+текстовый дубль, имя через `WebUtility.HtmlEncode`, без картинок и трекинга, токен только внутри
+ссылки. Тема 2 — «Запрошена смена адреса электронной почты — BarberSearch», уходит на **текущий**
+адрес: какой адрес запрошен и что делать, если это были не вы; **токена и ссылки подтверждения в
+нём нет** — уведомление не является вторым каналом подтверждения.
+
+**Поток `POST api/auth/email-change/confirm`.** Анонимный, `[SkipCookieAntiforgery]`, политика
+`auth`. Порядок: 1) формат токена (≤ 128, `[A-Za-z0-9_-]`) → иначе `400 auth.emailChange.invalid`;
+2) `GetByHashAsync` → нет → тот же код, прочие ошибки репозитория не маскируются; 3) пользователь
+по `token.UserId` → нет → тот же код; 4) **идемпотентность**: `user.Email == token.NewEmail` →
+`204` (проверка раньше срока токена — повторный клик не отвечает 400); 5) токен
+просрочен/использован/отозван → `400`; 6) адрес занят → `409 user.changeEmail.emailTaken`;
+7) одна транзакция: `user.ChangeEmail(token.NewEmail)` (нормализация, `IsEmailVerified = true`,
+`RotateSecurityStamp()`), `token.Consume(now)`, сохранение пользователя и токена,
+`IRefreshTokenRepository.RevokeAllForUserAsync`; 8) `204`. Ротация stamp мгновенно гасит cookie и
+access-токены (§17.10), отзыв refresh не даёт продлить сессию: завершаются **все** сессии,
+включая текущую. Авто-входа нет — страница подтверждения разлогинивает и предлагает войти
+новым адресом. `User.IsActive` не проверяется: владение адресом не зависит от состояния
+аккаунта, а деактивированный пользователь всё равно не войдёт (то же решение, что у
+подтверждения email). Гонки: занятый адрес переводится из `user.update.uniqueViolation` в
+`409 user.changeEmail.emailTaken`; проигранный на `xmin` `SaveChanges` перечитывает
+пользователя, и если адрес уже применён — ответ `204`, а не `500`.
+
+**Почему `409`, а не `503`, и почему confirm без CSRF.** Причины те же, что у подтверждения
+email и сброса пароля: в `FailureProblemDetails` нет `ErrorType` «сервис недоступен», поэтому
+недоступная почта — `409`; у анонимного confirm нет ambient-идентичности, а секрет — сам
+одноразовый токен, тогда как `request` — cookie-мутация и antiforgery у неё не отключается.
+
+**Ограничения (осознанные).** 0) `IsEmailVerified` остаётся мягким флагом сигнала доверия:
+подтверждение смены его включает, но ни один эндпоинт не закрыт политикой `VerifiedEmail`, и
+вход/запись/отзывы по-прежнему работают без подтверждения. 1) Активные verification-токены **старого** адреса не отзываются:
+после смены адрес уже подтверждён, а проверка `IsEmailVerified` стоит раньше срока токена,
+поэтому повторный клик по старой ссылке отвечает `204` и ничего не меняет. 2) Ожидающий адрес в
+профиле не показывается: `pendingEmail` не добавляется, отмены заявки и предзаполнения логина нет
+— успех объявляется `role="status"` в карточке и локальным кулдауном (долг frontend §14).
+3) Третьего письма «адрес изменён» на старый адрес после confirm нет: уведомления при заявке
+достаточно. 4) Проигранная гонка confirm за занятый адрес даёт `409`, а не `500`.
+
+**Аудит.** `User.Email` и `User.SecurityStamp` уже в allowlist `AuditTrail`, поэтому смена пишется
+сама как `user.updated` с `actorUserId = null` («Система»: confirm анонимный) и diff'ом `email` +
+`securityStamp`. Отдельных записей срез не добавляет; адрес (PII) виден в админском журнале — это
+следствие существующего allowlist, новых решений о приватности не требуется.
+
+**Уборка.** `EmailChangeTokenCleanupService` (`Web/Auth`, по образцу
+`EmailVerificationTokenCleanupService`) вызывает `CleanupEmailChangeTokensHandler` сразу на старте
+и далее каждые 60 минут; удаляются строки, у которых `expires_at` или `consumed_at` старше
+30 дней. Активная строка и недавняя использованная остаются: по первой считается кулдаун,
+вторая нужна идемпотентному повторному клику. `DELETE` идемпотентен, ошибки БД логируются и не
+роняют хост.
+
+**Тесты.** Domain: `EmailChangeToken` (`Create`, границы, идемпотентные `Consume`/`Revoke`,
+просроченный/отозванный) и `User.ChangeEmail` (нормализация, `sameEmail`, `IsEmailVerified`,
+ротация stamp, отсутствие ротации при ошибке). Application: request (все коды и порядок
+проверок, транзакция с токеном и двумя письмами, письмо на старый адрес без токена, кулдаун
+59/60/61 c, недоступная почта, пустой `PublicUrl`, откат при сбое вставки), confirm (успех,
+идемпотентный повтор, битый/просроченный/использованный/отозванный/неизвестный токен, занятый
+адрес, гонка `xmin`, неактивный пользователь), cleanup. Infrastructure: EF-конфигурация,
+индексы/check/FK, маппинг ограничений и миграция. Integration: полный сценарий на реальной
+PostgreSQL (запрос → два письма в outbox → confirm → старый email `401`, новый `200`, старая
+cookie `401`, строка `audit_log`), занятый адрес, битый токен, кулдаун. Команды — §5.2/§5.3.
+
 ---
 
 ## 18. Logging: Serilog, file sink (added 2026-11-05)
@@ -3965,12 +4092,16 @@ Bootstrap-логгер в начале `Program.cs` пишет в консоль
 
 ### 19.2 Поток
 
-1. `RequestEmailVerificationHandler` / `RequestPasswordResetHandler` выполняют прежние
-   проверки (пользователь, активность, почта настроена, `App:PublicUrl`, кулдаун 60 с) —
-   `409 …unavailable` и `409 …cooldown` остались на своих местах и до записи в outbox.
+1. `RequestEmailVerificationHandler` / `RequestPasswordResetHandler` /
+   `RequestEmailChangeHandler` выполняют прежние проверки (пользователь, активность, почта
+   настроена, `App:PublicUrl`, кулдаун 60 с) — `409 …unavailable` и `409 …cooldown` остались
+   на своих местах и до записи в outbox.
 2. Внутри `IUnitOfWork.ExecuteAsync` одной транзакцией: отзыв прежнего активного токена,
    вставка нового токена и строка `email_outbox` с `deduplication_key = token.Id`.
-   Откат транзакции не оставляет ни токена, ни письма.
+   Откат транзакции не оставляет ни токена, ни письма. Смена email пишет **две** строки:
+   `deduplication_key = token.Id` для ссылки на новый адрес и
+   `deduplication_key = "email-change-notice:{tokenId}"` для уведомления на текущий адрес —
+   у одной операции два разных письма, и ключ не должен совпадать.
 3. Хендлер только пишет в лог факт постановки в очередь — отправки из запроса нет.
 4. `EmailDispatchService.RunTickAsync` → `DispatchPendingEmailsHandler`: пачка готовых строк
    (`sent_at IS NULL AND failed_at IS NULL AND next_attempt_at <= now`) читается
@@ -3984,7 +4115,7 @@ Bootstrap-логгер в начале `Program.cs` пишет в консоль
 | Колонка | Тип | Смысл |
 |---|---|---|
 | `id` | uuid PK | UUIDv7 из домена (`Entity`) |
-| `deduplication_key` | varchar(128), unique | id выпущенного токена: одно письмо — одна строка |
+| `deduplication_key` | varchar(128), unique | id выпущенного токена: одно письмо — одна строка; у смены email второе письмо получает `email-change-notice:{tokenId}` |
 | `to_email` | varchar(254) | получатель (PII — в лог не попадает) |
 | `subject` | varchar(256) | тема |
 | `html_body`, `text_body` | text | готовые тела (вариант A, см. 19.6) |
