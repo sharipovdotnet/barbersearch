@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 
 /**
- * `/admin/summary` — «Что требует внимания»: три блока очередей.
+ * `/admin/summary` — «Что требует внимания»: четыре блока очередей.
  *
  * Блоки — `<section aria-labelledby>`, поэтому опознаются ролью `region` и именем
  * заголовка. Ссылки внутри блока — настоящие `href`, поэтому спека сравнивает адрес
@@ -59,6 +59,28 @@ export class AdminSummaryPage {
 
   get salonsBlock(): Locator {
     return this.region('Выключенные салоны')
+  }
+
+  /** Четвёртый блок #89: очередь премодерации фото. */
+  get photosBlock(): Locator {
+    return this.region('Фотографии на проверке')
+  }
+
+  /** «Все фотографии проверены.» — честный ноль обеих вкладок. */
+  get emptyPhotos(): Locator {
+    return this.photosBlock.getByText('Все фотографии проверены.', {
+      exact: true,
+    })
+  }
+
+  /** Ссылка в очередь аватаров: адрес по умолчанию — `/admin/photos`. */
+  get photosAvatarsLink(): Locator {
+    return this.photosBlock.getByRole('link', { name: 'Открыть аватары' })
+  }
+
+  /** Ссылка в очередь портфолио: вкладка живёт в `?tab=portfolio`. */
+  get photosPortfolioLink(): Locator {
+    return this.photosBlock.getByRole('link', { name: 'Открыть портфолио' })
   }
 
   get oldestReviewLink(): Locator {

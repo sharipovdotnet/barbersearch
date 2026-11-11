@@ -11,25 +11,30 @@ import {
 } from '../fixtures/accounts'
 import { deleteMyAvatar } from '../fixtures/api'
 import { AccountProfilePage } from '../pages/account-profile-page'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { LandingPage } from '../pages/landing-page'
 import { ProfilePage } from '../pages/profile-page'
 
 /**
- * Публичный аватар барбера (#85): кабинет → `GET /api/barbers/{id}` → герой.
+ * Публичный аватар барбера (#85, #89): кабинет → премодерация → `GET /api/barbers/{id}`
+ * → герой и карточка поиска.
  *
  * Изолированный `profileBarber` подтверждён и активен, поэтому его карточка
  * доступна анониму. Витринного барбера (`…0001`) не трогаем: на нём держатся
- * поиск, отзывы и брони. `seed.sql` сбрасывает `avatar_url` этого профиля, так что
- * второй прогон без пересева начинается с инициалов.
+ * поиск, отзывы и брони. `seed.sql` сбрасывает `avatar_url` и статус
+ * премодерации этого профиля, так что второй прогон без пересева начинается
+ * с инициалов.
  *
- * Успешная загрузка передаёт `src` сцене удаления; `afterEach` при падении убирает
- * аватар API-вызовом, чтобы строка не дожила до следующего прогона.
+ * Премодерация (#89): после загрузки кадр ждёт проверки, поэтому публичные
+ * контракты (`GET /api/barbers/{id}`, `GET /api/barbers?…`) отдают
+ * `avatarUrl: null`, а герой и карточка поиска — инициалы. Публичным кадр
+ * становится только после «Одобрить» в `/admin/photos?tab=avatars`. Сцены #87
+ * (hide/unhide) и удаление идут после одобрения: блокировать имеет смысл только
+ * одобренный кадр.
  *
- * Сцены #87: админ скрывает фото владельца, поиск и публичная карточка показывают
- * инициалы, а контракт `GET /api/barbers?additionalService=…` — `avatarUrl: null`.
- * Возврат возвращает и `src`, и контракт до сцены удаления. Упавшая сцена могла
- * оставить `profileBarber` скрытым для следующих спеков, поэтому `afterEach`
- * снимает флаг админским контекстом.
+ * Успешная загрузка передаёт `src` следующим сценам; `afterEach` при падении
+ * убирает аватар API-вызовом и снимает флаг блокировки админским контекстом,
+ * чтобы строка не дожила до следующего прогона.
  */
 const AVATAR_PATH = fileURLToPath(
   new URL('../fixtures/portfolio-photo.png', import.meta.url)
@@ -37,12 +42,19 @@ const AVATAR_PATH = fileURLToPath(
 const PROFILE_ID = fixtures.profileBarber.profileId
 const PROFILE_USER_ID = fixtures.profileBarber.userId
 const PROFILE_NAME = 'E2E Барбер Кабинета'
+// Email владельца профиля: по нему очередь аватаров ищет свою строку.
+const PROFILE_EMAIL = 'e2e-profile-barber@barbersearch.test'
+// Имя владельца в очереди — из аккаунта («Профиль Барберов»), а не displayName
+// профиля: очередь показывает пользователя, а не карточку барбера.
+const OWNER_NAME = 'Профиль Барберов'
 const SEARCH_MARKER = 'E2E поиск'
 // Кабинет считает инициалы по имени и фамилии аккаунта («Профиль Барберов»),
 // а герой карточки — по displayName профиля («E2E Барбер Кабинета»): это разные
-// источники, поэтому и константы разные.
+// источники, поэтому и константы разные. Первая буква героя — латинская `E`
+// из «E2E», а не кириллическая «Е»: escape-последовательность не даёт
+// юникод-омоглифу превратиться в невидимую опечатку.
 const ACCOUNT_INITIALS = 'ПБ'
-const HERO_INITIALS = 'EБ'
+const HERO_INITIALS = 'E\u0411'
 const HIDE_PHOTO = 'Скрыть фото'
 const SHOW_PHOTO = 'Вернуть фото'
 
@@ -95,7 +107,9 @@ test.describe('публичный аватар барбера: мутации', 
     }
   })
 
-  test('загрузка видна в контракте карточки и в герое', async ({ page }) => {
+  test('загрузка ждёт проверки: публично `null`, герой и поиск — инициалы', async ({
+    page,
+  }) => {
     const account = new AccountProfilePage(page)
 
     await account.goto()
@@ -106,15 +120,93 @@ test.describe('публичный аватар барбера: мутации', 
 
     await account.uploadAvatar(AVATAR_PATH)
 
+    // Премодерация: успех — это «ждёт проверки», а не «обновлён».
     await expect(
-      account.avatarStatus.filter({ hasText: 'Аватар обновлён.' })
+      account.avatarStatus.filter({
+        hasText: 'Аватар загружен и ждёт проверки.',
+      })
     ).toBeVisible()
     await expect(account.avatarImage).toBeVisible()
+    await expect(
+      account.avatarSection.getByText('На проверке', { exact: true })
+    ).toBeVisible()
 
     const src = await account.avatarImage.getAttribute('src')
 
     expect(src).toMatch(/^\/api\/media\/avatars\//)
     avatarSrc = src
+
+    // Публичная карточка: контракт отдаёт `null`, герой — инициалы. Кадр
+    // владельца при этом существует: его видит только владелец и админ.
+    const publicProfile = new ProfilePage(page)
+
+    await page.goto(`/barbers/${PROFILE_ID}`)
+    await expect(
+      page.getByRole('heading', { name: PROFILE_NAME, level: 1 })
+    ).toBeVisible()
+
+    await expect(publicProfile.heroAvatarImage).toHaveCount(0)
+    await expect(publicProfile.heroInitials).toContainText(HERO_INITIALS)
+
+    const response = await page.request.get(`/api/barbers/${PROFILE_ID}`)
+
+    expect(response.status(), 'GET /api/barbers/{id}').toBe(200)
+
+    const body = (await response.json()) as { avatarUrl: string | null }
+
+    expect(body.avatarUrl, 'публичный контракт не отдаёт неодобренный кадр').toBeNull()
+
+    // Поиск (#86): маркер изолирует карточку, в ней — инициалы.
+    const card = await searchMarkerCard(page)
+
+    await expect(card.locator('img')).toHaveCount(0)
+    await expect(card.locator('[data-slot="avatar-fallback"]')).toContainText(
+      HERO_INITIALS
+    )
+
+    expect(await searchMarkerAvatarUrl(page)).toBeNull()
+  })
+
+  test('админ одобряет кадр: контракты и поверхности отдают URL', async ({
+    browser,
+    page,
+  }) => {
+    expect(avatarSrc).not.toBeNull()
+
+    const adminContext = await openAdminContext(browser)
+
+    try {
+      const adminPage = await adminContext.newPage()
+      const photos = new AdminPhotosPage(adminPage)
+
+      await photos.goto('avatars')
+      await photos.searchFor(PROFILE_EMAIL)
+
+      // Своя строка по email владельца: размер очереди не проверяем.
+      const row = photos.row(PROFILE_EMAIL)
+
+      await expect(row).toHaveCount(1)
+      await expect(row).toContainText(OWNER_NAME)
+
+      await photos.approve(row)
+
+      await expect(photos.announcement('Фото одобрено.')).toBeVisible()
+      await expect(row).toHaveCount(0)
+    } finally {
+      await adminContext.close()
+    }
+
+    // Одобрение — единственное, что делает кадр публичным: контракты отдают URL.
+    const profileResponse = await page.request.get(`/api/barbers/${PROFILE_ID}`)
+
+    expect(profileResponse.status(), 'GET /api/barbers/{id}').toBe(200)
+
+    const profileBody = (await profileResponse.json()) as {
+      avatarUrl: string | null
+    }
+
+    expect(profileBody.avatarUrl).toBe(avatarSrc)
+    expect(await searchMarkerAvatarUrl(page)).toBe(avatarSrc)
 
     const publicProfile = new ProfilePage(page)
 
@@ -125,7 +217,7 @@ test.describe('публичный аватар барбера: мутации', 
 
     await expect(publicProfile.heroAvatarImage).toHaveAttribute(
       'src',
-      src ?? ''
+      avatarSrc ?? ''
     )
     await expect
       .poll(() =>
@@ -135,32 +227,17 @@ test.describe('публичный аватар барбера: мутации', 
       )
       .toBeGreaterThan(0)
 
-    // Контракт публичной карточки отдаёт тот же относительный URL.
-    const response = await page.request.get(`/api/barbers/${PROFILE_ID}`)
-
-    expect(response.status(), 'GET /api/barbers/{id}').toBe(200)
-
-    const body = (await response.json()) as { avatarUrl: string | null }
-
-    expect(body.avatarUrl).toBe(src)
-
-    // Поиск (#86): маркер изолирует карточку, в ней — тот же `src`, что в кабинете.
     const card = await searchMarkerCard(page)
     const cardImage = card.locator('img')
 
-    await expect(cardImage).toHaveAttribute(
-      'src',
-      /^\/api\/media\/avatars\//
-    )
-    await expect(cardImage).toHaveAttribute('src', src ?? '')
+    await expect(cardImage).toHaveAttribute('src', /^\/api\/media\/avatars\//)
+    await expect(cardImage).toHaveAttribute('src', avatarSrc ?? '')
     await expect(cardImage).toHaveAttribute('alt', '')
     await expect
       .poll(() =>
         cardImage.evaluate((node) => (node as HTMLImageElement).naturalWidth)
       )
       .toBeGreaterThan(0)
-
-    expect(await searchMarkerAvatarUrl(page)).toBe(src)
   })
 
   test('админ скрывает фото: поиск и карточка — инициалы, контракт — null', async ({
@@ -183,6 +260,11 @@ test.describe('публичный аватар барбера: мутации', 
         'src',
         avatarSrc ?? ''
       )
+
+      // Кадр одобрен: блокировка доступна, статуса «На проверке» уже нет.
+      await expect(
+        detail.getByText('На проверке', { exact: true })
+      ).toHaveCount(0)
 
       await detail.getByRole('button', { name: HIDE_PHOTO }).click()
 

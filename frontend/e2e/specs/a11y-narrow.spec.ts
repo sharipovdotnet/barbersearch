@@ -5,6 +5,7 @@ import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminStatisticsPage } from '../pages/admin-statistics-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
@@ -582,6 +583,38 @@ test.describe('axe: 320 px, админка без выбранной строк�
     await expectNoBlockingViolations(
       page,
       '/admin/barber-requests @320',
+      test.info()
+    )
+  })
+
+  // Очередь фото (#89) на 320: вкладки — две ссылки 44 px, поиск во всю ширину,
+  // пустое состояние не расширяет страницу. Скан идёт по дефолтной вкладке;
+  // строку «карточкой» проверяет мутирующая сцена аватара, где кадр реален.
+  test('фотографии: пустая очередь на 320', async ({ page }) => {
+    const photos = new AdminPhotosPage(page)
+
+    await photos.goto('avatars')
+    await expect(photos.heading).toBeVisible()
+    await expect(photos.tab('Аватары')).toBeVisible()
+    await expect(photos.search).toBeVisible()
+    await expect(photos.emptyQueue).toBeVisible()
+
+    // Кнопки вкладок на 320 — 44 px, а не десктопные 28.
+    const box = await photos.tab('Аватары').boundingBox()
+
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/photos @320',
       test.info()
     )
   })

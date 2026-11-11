@@ -171,6 +171,14 @@ ON CONFLICT (id) DO UPDATE SET
     phone_number = EXCLUDED.phone_number,
     avatar_url = EXCLUDED.avatar_url,
     is_avatar_blocked = false,
+    -- Премодерация фото (#89): без сброса второй прогон унаследовал бы
+    -- «На проверке»/«Отклонено» и причину отказа от прошлого прогона, а очередь
+    -- `/admin/photos?tab=avatars` начиналась бы не с пустого состояния.
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -215,7 +223,15 @@ ON CONFLICT (id) DO UPDATE SET
     first_name = EXCLUDED.first_name,
     last_name = EXCLUDED.last_name,
     phone_number = EXCLUDED.phone_number,
+    -- Аватар сбрасывается вместе со статусом премодерации (#89): без URL кадр
+    -- не может быть «На проверке», и второй прогон начинается с чистого листа.
+    avatar_url = EXCLUDED.avatar_url,
     is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -255,6 +271,11 @@ ON CONFLICT (id) DO UPDATE SET
     -- грузит его на этом профиле, и второй прогон без пересева начинал бы не с нуля.
     avatar_url = EXCLUDED.avatar_url,
     is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -290,6 +311,11 @@ FROM generate_series(1, 12) AS n
 ON CONFLICT (id) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
     is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     updated_at = now();
 
@@ -321,6 +347,11 @@ FROM generate_series(1, 8) AS n
 ON CONFLICT (id) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
     is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     updated_at = now();
@@ -609,11 +640,17 @@ WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 DELETE FROM barber_specializations
 WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 
--- Портфолио #84: мутирующий спек загружает настоящий PNG, а удаление фотографии
--- необратимо. Строки удаляются до вставки фикстур, чтобы повторный прогон
--- начинался с пустой секции «Фотографии», даже если предыдущий упал. Сами файлы
--- лежат вне PostgreSQL (`Storage:RootPath`), на прогон не влияют и в коммит не
--- попадают (README, «Portfolio photos»).
+-- Портфолио #84/#89: мутирующий спек загружает настоящий PNG, а удаление
+-- фотографии необратимо. Строки удаляются до вставки фикстур, чтобы повторный
+-- прогон начинался с пустой секции «Фотографии», даже если предыдущий упал. Сами
+-- файлы лежат вне PostgreSQL (`Storage:RootPath`), на прогон не влияют и в коммит
+-- не попадают (README, «Portfolio photos»).
+--
+-- Премодерация (#89): у `portfolio_photos.moderation_status` дефолт `2`
+-- (`Approved`), поэтому любая вставка без явного статуса сразу публична. Удаление
+-- здесь — единственный сид-путь этих строк: кадры создаёт только `POST` загрузки,
+-- и он ставит `Pending`. Повторный прогон не наследует ни `Pending`, ни `Rejected`:
+-- строк прошлого прогона к моменту вставки фикстур уже нет.
 DELETE FROM portfolio_photos
 WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 
@@ -964,6 +1001,11 @@ ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     password_hash = EXCLUDED.password_hash,
     is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,

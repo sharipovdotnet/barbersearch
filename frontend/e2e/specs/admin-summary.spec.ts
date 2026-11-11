@@ -2,16 +2,23 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
+import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { AdminReviewsPage } from '../pages/admin-reviews-page'
 import { AdminSummaryPage } from '../pages/admin-summary-page'
 
 /**
  * `/admin/summary` — «Что требует внимания»: рейл, счётчики против разделов,
- * самый старый отзыв, чтение без действий и гейт `401`.
+ * самый старый отзыв, блок фото, чтение без действий и гейт `401`.
  *
  * Числа фикстур (14/1/1) верны только на пересеянной базе: мутирующие спеки правят
  * отзывы, поэтому сводку проверяем в читающих проектах и сравниваем счётчики
  * с самими разделами, а не только с `accounts.ts`.
+ *
+ * Блок «Фотографии на проверке» (#89) проверяется здесь в честном нуле: сид
+ * удаляет фото портфолио и сбрасывает аватары, поэтому обе вкладки `/admin/photos`
+ * пусты, а сводка показывает «Все фотографии проверены.» и **не** рисует ссылки —
+ * открывать нечего. Прямые `href` в очередь проверяются там, где кадр реально
+ * ждёт проверки: в мутирующей сцене аватара, без мока API.
  */
 test.use({ storageState: storageStatePath('admin') })
 
@@ -98,6 +105,47 @@ test.describe('админка: сводка', () => {
 
     await expect(
       catalogue.row(fixtures.catalogueLabels.hiddenSalon).first()
+    ).toBeVisible()
+  })
+
+  test('блок «Фотографии на проверке»: честный ноль и пустые вкладки очереди', async ({
+    page,
+  }) => {
+    const summary = new AdminSummaryPage(page)
+
+    await summary.goto()
+
+    // Четвёртый блок на месте и объясняет, почему кадры непубличны.
+    await expect(summary.photosBlock).toBeVisible()
+    await expect(
+      summary.photosBlock.getByText(
+        'Новые аватары и работы не видны публично, пока администратор их не одобрит.'
+      )
+    ).toBeVisible()
+    await expect(
+      summary.photosBlock.getByRole('heading', {
+        name: 'Фотографии на проверке',
+        level: 2,
+      })
+    ).toBeVisible()
+
+    // На пересеянной базе очередь пуста: ноль вместо чисел и ни одной ссылки —
+    // открывать нечего. Счётчики сервер считает теми же предикатами, что вкладки.
+    await expect(summary.emptyPhotos).toBeVisible()
+    await expect(summary.photosAvatarsLink).toHaveCount(0)
+    await expect(summary.photosPortfolioLink).toHaveCount(0)
+
+    const photos = new AdminPhotosPage(page)
+
+    await photos.goto('avatars')
+    await expect(photos.emptyQueue).toBeVisible()
+
+    await page.goto('/admin/photos?tab=portfolio')
+    await expect(
+      page.getByRole('tab', { name: 'Портфолио', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
+    await expect(
+      page.getByText('Очередь пуста — все фото проверены.', { exact: true })
     ).toBeVisible()
   })
 
