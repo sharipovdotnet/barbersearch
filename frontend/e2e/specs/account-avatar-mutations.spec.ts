@@ -59,6 +59,25 @@ test.describe.configure({ mode: 'serial' })
 test.describe('аватар кабинета: мутации', () => {
   // `src` передаётся из сцены загрузки в админскую, 320-ю и сцену удаления.
   let avatarSrc: string | null = null
+  // URL варианта `sm` с `srcset` шапки: после замены, скрытия и удаления он
+  // обязан отвечать `404`, иначе браузер покажет старый кадр из кэша.
+  let avatarVariantUrl: string | null = null
+
+  /** Первый URL из `srcset` аватара (`?size=sm 1x, …`). */
+  function firstAvatarVariant(srcSet: string | null): string {
+    expect(srcSet).not.toBeNull()
+    expect(srcSet).toContain('?size=sm 1x')
+    expect(srcSet).toContain('?size=md 2x')
+    expect(srcSet).toContain('?size=lg 3x')
+
+    const url = srcSet?.split(',')[0]?.trim().split(' ')[0]
+
+    expect(url).toMatch(
+      /^\/api\/media\/avatars\/[0-9a-f-]+\/[0-9a-f]{32}\.jpg\?size=sm$/
+    )
+
+    return url ?? ''
+  }
 
   test.afterEach(async ({ browser, request }, testInfo) => {
     // Упавшая сцена могла оставить и аватар, и флаг блокировки: снимаем флаг
@@ -130,6 +149,16 @@ test.describe('аватар кабинета: мутации', () => {
     await expect(profile.identityAvatarImage).toHaveAttribute('src', src ?? '')
     await expect(headerImage).toHaveAttribute('src', src ?? '')
     await expect(headerImage).toHaveAttribute('alt', '')
+
+    // Шапка 32 px просит плотности 1x/2x/3x, а не 512×512 исходник.
+    avatarVariantUrl = firstAvatarVariant(
+      await headerImage.getAttribute('srcset')
+    )
+
+    const variant = await page.request.get(avatarVariantUrl)
+
+    expect(variant.status(), 'GET аватара ?size=sm').toBe(200)
+    expect(variant.headers()['content-type']).toBe('image/webp')
 
     // Контракт: `users/me` — единственное чтение с сырым URL, и он же отдаёт
     // статус проверки. `Pending` здесь обязателен: кадр ещё не публичен.
@@ -462,6 +491,13 @@ test.describe('аватар кабинета: мутации', () => {
         'GET media владельцем'
       ).toBe(404)
 
+      // Вариант скрытого кадра подчиняется тому же правилу: владелец — `404`.
+      expect(avatarVariantUrl).not.toBeNull()
+      expect(
+        (await page.request.get(avatarVariantUrl ?? '')).status(),
+        'GET ?size=-варианта скрытого аватара'
+      ).toBe(404)
+
       const adminMedia = await adminPage.request.get(avatarSrc ?? '')
 
       expect(adminMedia.status(), 'GET media админом').toBe(200)
@@ -586,7 +622,16 @@ test.describe('аватар кабинета: мутации', () => {
         expect(
           media.headers()['cache-control'],
           'Cache-Control видимого файла'
-        ).toBe('public, max-age=86400')
+        ).toBe('public, max-age=0, must-revalidate')
+
+        // Видимый вариант перепроверяется тем же правилом, а не живёт сутки.
+        const variant = await anonymous.get(avatarVariantUrl ?? '')
+
+        expect(variant.status(), 'GET ?size=-варианта после возврата').toBe(200)
+        expect(variant.headers()['content-type']).toBe('image/webp')
+        expect(variant.headers()['cache-control']).toBe(
+          'public, max-age=0, must-revalidate'
+        )
       } finally {
         await anonymous.dispose()
       }
@@ -651,6 +696,17 @@ test.describe('аватар кабинета: мутации', () => {
     const pendingSrc = await profile.avatarImage.getAttribute('src')
 
     expect(pendingSrc).toMatch(/^\/api\/media\/avatars\//)
+
+    // Замена удаляет старый файл: его `?size=`-URL больше не отдаётся.
+    expect(avatarVariantUrl).not.toBeNull()
+    expect(
+      (await page.request.get(avatarVariantUrl ?? '')).status(),
+      'GET старого ?size=-варианта после замены'
+    ).toBe(404)
+
+    avatarVariantUrl = firstAvatarVariant(
+      await profile.avatarImage.getAttribute('srcset')
+    )
 
     const adminContext = await openAdminContext(browser)
 
@@ -815,6 +871,12 @@ test.describe('аватар кабинета: мутации', () => {
     const response = await page.request.get(avatarSrc ?? '')
 
     expect(response.status(), 'GET старый /api/media/avatars/...').toBe(404)
+
+    // Удаление уносит и варианты: старый `?size=` больше не отвечает.
+    expect(
+      (await page.request.get(avatarVariantUrl ?? '')).status(),
+      'GET старый /api/media/avatars/...?size=sm'
+    ).toBe(404)
   })
 })
 

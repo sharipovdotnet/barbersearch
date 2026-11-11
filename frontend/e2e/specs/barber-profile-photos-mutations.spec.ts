@@ -46,6 +46,24 @@ const PROFILE_NAME = 'E2E Барбер Кабинета'
 const PORTFOLIO_SECTION = 'section[aria-labelledby="barber-portfolio-heading"]'
 const ADMIN_PHOTOS_SECTION = 'section[aria-labelledby="barber-photos-title"]'
 
+// URL варианта `sm`, снятый с `srcset` карточки: проверяется в сценах одобрения,
+// скрытия и возврата, когда кадр уже виден публично.
+let portfolioVariantUrl: string | null = null
+
+/** Первый URL из `srcset` (`?size=sm 256w, …`) — вариант, который грузит браузер. */
+function firstSrcSetUrl(srcSet: string | null): string {
+  expect(srcSet).not.toBeNull()
+  expect(srcSet).toContain('?size=sm ')
+
+  const url = srcSet?.split(',')[0]?.trim().split(' ')[0]
+
+  expect(url).toMatch(
+    /^\/api\/media\/portfolio\/[0-9a-f-]+\/[0-9a-f]{32}\.jpg\?size=sm$/
+  )
+
+  return url ?? ''
+}
+
 type OwnCard = {
   photos: {
     id: string
@@ -58,6 +76,8 @@ type OwnCard = {
 type PublicCard = {
   photos: {
     id: string
+    url: string
+    thumbnailUrl: string | null
     description: string | null
     moderationStatus: string
     rejectionReason: string | null
@@ -142,10 +162,49 @@ test.describe('фотографии портфолио: мутации', () => {
       )
       .toBeGreaterThan(0)
 
+    // Сетка запрашивает WebP-вариант через `srcset`, а не многомегабайтный
+    // исходник: превью кабинета — та же раздача с `?size=`.
+    const srcSet = await image.getAttribute('srcset')
+
+    expect(srcSet).not.toBeNull()
+    expect(srcSet, 'srcset карточки кабинета').toContain(
+      '/api/media/portfolio/'
+    )
+    expect(srcSet).toContain('?size=sm 256w')
+    expect(srcSet).toContain('?size=md 512w')
+    expect(srcSet).toContain('?size=lg 1024w')
+
+    portfolioVariantUrl = firstSrcSetUrl(srcSet)
+
+    // Владелец видит свой `Pending`-кадр: вариант отдаётся как `image/webp`
+    // с честным кэшем и ETag, повторный условный запрос — `304`.
+    const variant = await page.request.get(portfolioVariantUrl)
+
+    expect(variant.status(), 'GET варианта ?size=sm').toBe(200)
+    expect(variant.headers()['content-type']).toBe('image/webp')
+
+    const etag = variant.headers()['etag']
+
+    expect(etag, 'ETag варианта').toBeTruthy()
+
+    const revalidated = await page.request.get(portfolioVariantUrl, {
+      headers: { 'If-None-Match': etag ?? '' },
+    })
+
+    expect(
+      revalidated.status(),
+      'If-None-Match с выданным ETag'
+    ).toBe(304)
+    expect(revalidated.headers()['etag']).toBe(etag)
+
     // Публично кадра ещё нет: ни галереи, ни фото в контракте. Гостевое чтение —
     // в отдельном контексте без cookie владельца.
+    // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
+    // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
+    // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
     const publicContext = await browser.newContext({
       baseURL,
+      storageState: { cookies: [], origins: [] },
       viewport: { width: 1280, height: 900 },
       reducedMotion: 'reduce',
     })
@@ -265,6 +324,23 @@ test.describe('фотографии портфолио: мутации', () => {
 
     await expect(tiles).toHaveCount(1)
 
+    // Публичная сетка тоже просит вариант: `srcset` с тремя ширинами и `sizes`
+    // сетки 2/3/4 колонки.
+    const galleryImage = gallery.getByRole('img', { name: CAPTION })
+
+    await expect(galleryImage).toHaveAttribute(
+      'srcset',
+      /\/api\/media\/portfolio\/[^?]+\?size=sm 256w/
+    )
+    await expect(galleryImage).toHaveAttribute(
+      'sizes',
+      '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw'
+    )
+
+    const originalSrc = await galleryImage.getAttribute('src')
+
+    expect(originalSrc).toMatch(/^\/api\/media\/portfolio\/.+\.jpg$/)
+
     // axe на 1280: галерея в её реальном состоянии, без исключений.
     await expectNoBlockingViolations(
       page,
@@ -275,9 +351,14 @@ test.describe('фотографии портфолио: мутации', () => {
     await tiles.first().click()
 
     const lightbox = page.getByRole('dialog', { name: 'Фото барбера' })
+    const lightboxImage = lightbox.getByRole('img', { name: CAPTION })
 
     await expect(lightbox).toBeVisible()
-    await expect(lightbox.getByRole('img', { name: CAPTION })).toBeVisible()
+    await expect(lightboxImage).toBeVisible()
+    // Лайтбокс — исходник: качество важнее трафика, `srcset` здесь не нужен.
+    await expect(lightboxImage).toHaveAttribute('src', originalSrc ?? '')
+    await expect(lightboxImage).not.toHaveAttribute('srcset')
+    await expect(lightboxImage).not.toHaveAttribute('sizes')
     await expect(lightbox.getByText('1 из 1', { exact: true })).toBeVisible()
 
     // Одно фото: обе стрелки на краях выключены, но остаются в разметке.
@@ -425,8 +506,12 @@ test.describe('фотографии портфолио: мутации', () => {
     ).toBeVisible()
 
     // Публично отклонённого кадра нет: галерея по-прежнему одна.
+    // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
+    // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
+    // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
     const publicContext = await browser.newContext({
       baseURL,
+      storageState: { cookies: [], origins: [] },
       viewport: { width: 1280, height: 900 },
       reducedMotion: 'reduce',
     })
@@ -470,8 +555,12 @@ test.describe('фотографии портфолио: мутации', () => {
       viewport: { width: 1280, height: 900 },
       reducedMotion: 'reduce',
     })
+    // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
+    // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
+    // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
     const publicContext = await browser.newContext({
       baseURL,
+      storageState: { cookies: [], origins: [] },
       viewport: { width: 1280, height: 900 },
       reducedMotion: 'reduce',
     })
@@ -500,6 +589,22 @@ test.describe('фотографии портфолио: мутации', () => {
       await expect(
         photos.getByText(`Причина: ${REJECTION_REASON}`)
       ).toBeVisible()
+
+      // Адрес варианта берём из публичного контракта: `thumbnailUrl` — это
+      // `{url}?size=md`, поэтому проверка привязана к самому кадру, а не к
+      // порядку картинок в сетке.
+      const visiblePhotos = await fetchPublicPhotos(publicContext)
+      const visiblePhoto = visiblePhotos.find(
+        (photo) => photo.description === CAPTION
+      )
+
+      expect(visiblePhoto, 'кадр в публичной карточке').toBeDefined()
+
+      const hiddenVariantUrl = visiblePhoto?.thumbnailUrl ?? ''
+
+      expect(hiddenVariantUrl, 'thumbnailUrl публичного кадра').toMatch(
+        /^\/api\/media\/portfolio\/[0-9a-f-]+\/[0-9a-f]{32}\.[a-z]+\?size=md$/
+      )
 
       await photos
         .getByRole('button', { name: `Скрыть: ${CAPTION}` })
@@ -530,6 +635,19 @@ test.describe('фотографии портфолио: мутации', () => {
       await expectPublicPortfolio(publicPage, { visible: false })
       expect((await fetchPublicPhotos(publicContext)).length).toBe(0)
 
+      // Скрытый кадр отвечает `404` и на `?size=`-URL: после перезагрузки
+      // браузер не должен показать его из кэша.
+      const hiddenVariant = await publicContext.request.get(hiddenVariantUrl)
+      const hiddenStatus = hiddenVariant.status()
+
+      expect(
+        hiddenStatus,
+        `GET ${hiddenVariantUrl} → ${hiddenStatus} ${JSON.stringify(
+          hiddenVariant.headers()
+        )}`
+      ).toBe(404)
+      expect(hiddenVariant.headers()['cache-control']).toBe('no-store')
+
       // «Разблокировать» — единственный путь вернуть кадр: владелец этого не может.
       await photos
         .getByRole('button', { name: `Разблокировать: ${CAPTION}` })
@@ -544,6 +662,18 @@ test.describe('фотографии портфолио: мутации', () => {
 
       await expectPublicPortfolio(publicPage, { visible: true })
       expect((await fetchPublicPhotos(publicContext)).length).toBe(1)
+
+      // Возврат публикует и вариант: он снова `200` и перепроверяется, а не
+      // живёт сутки в кэше.
+      const returnedVariant = await publicContext.request.get(hiddenVariantUrl)
+
+      expect(returnedVariant.status(), 'GET ?size=-варианта после возврата').toBe(
+        200
+      )
+      expect(returnedVariant.headers()['content-type']).toBe('image/webp')
+      expect(returnedVariant.headers()['cache-control']).toBe(
+        'public, max-age=0, must-revalidate'
+      )
     } finally {
       await adminContext.close()
       await publicContext.close()
@@ -584,8 +714,12 @@ test.describe('фотографии портфолио: мутации', () => {
     await expect(profile.emptyPhotos).toBeVisible()
     await expect(profile.photoCards()).toHaveCount(0)
 
+    // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
+    // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
+    // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
     const publicContext = await browser.newContext({
       baseURL,
+      storageState: { cookies: [], origins: [] },
       viewport: { width: 1280, height: 900 },
       reducedMotion: 'reduce',
     })
