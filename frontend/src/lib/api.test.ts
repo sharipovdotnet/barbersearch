@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest, setUnauthorizedHandler } from '@/lib/api'
 import { isSessionUser } from '@/lib/response-guards'
@@ -59,6 +59,38 @@ describe('apiRequest', () => {
     )
 
     await expect(apiRequest('/broken')).resolves.toBeNull()
+  })
+
+  it('оборванное тело не прячет статус: 413 остаётся 413, а не сырым TypeError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 413,
+        text: () => Promise.reject(new TypeError('terminated')),
+      }))
+    )
+
+    const error = await apiErrorOf(apiRequest('/upload', { method: 'POST' }))
+
+    expect(error.status).toBe(413)
+    expect(error.problem).toBeNull()
+    expect(error.codes).toStrictEqual([])
+  })
+
+  it('отмену запроса не превращает в пустое тело', async () => {
+    const abort = new DOMException('Aborted', 'AbortError')
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 413,
+        text: () => Promise.reject(abort),
+      }))
+    )
+
+    await expect(apiRequest('/upload', { method: 'POST' })).rejects.toBe(abort)
   })
 
   it('превращает non-2xx ProblemDetails в ApiError с кодами и текстом detail', async () => {
