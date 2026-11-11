@@ -55,9 +55,9 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | Path | Screen |
 |---|---|
 | `/` | landing page: real barber search by city, date, language, specialization, service and additional-service substring, how it works, account CTA |
-| `/barbers/{id}` | public barber profile: services, salons, weekly schedule, rating, the «Работы» portfolio gallery with a lightbox |
+| `/barbers/{id}` | public barber profile: avatar in the hero, services, salons, weekly schedule, rating, the «Работы» portfolio gallery with a lightbox |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
-| `/account/profile` | profile: first name, last name and phone; email is read-only with its verification status |
+| `/account/profile` | profile: avatar upload, change and delete, plus first name, last name and phone; email is read-only with its verification status |
 | `/account/security` | security: password change, sign out, email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) and the «Забыли пароль?» link |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: the «Сегодня» day feed by default (visits of the day, the free windows between them and a one-click booking into a window), then «Ближайшие» / «История» lists with confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
@@ -304,6 +304,77 @@ CI passes `Storage__RootPath: ${{ runner.temp }}/photos` to the API step, and a 
 orphan files in `App_Data/photos` — they do not affect the database or the tests, but the
 directory should be emptied when it grows.
 
+## Avatar
+
+A signed-in user can upload one profile photo. It is shown in the cabinet shell (the identity
+block), in the avatar card at `/account/profile`, and — for a barber — in the hero of the public
+card at `/barbers/{id}`. There is no avatar in the header, in search results, in bookings or on the
+admin screens beyond the user and barber cards that already had an `avatarUrl` field.
+
+**Cabinet card.** `/account/profile` starts with «Аватар» above «Личные данные». The card shows a
+96 px preview: `AvatarImage` when `profile.avatarUrl` is set, otherwise the user's initials. The
+hidden file input accepts `image/jpeg,image/png,image/webp`; the visible action is «Загрузить
+фото» without an avatar and «Изменить фото» with one, and «Удалить» appears only when there is
+something to delete. The hint says «JPEG, PNG или WebP до 5 МБ. Квадрат 512×512 подготовит
+браузер.», the client checks the type and the 15 MiB source limit *before* decoding, the spinner
+and `disabled` last only while a request is in flight, success is announced in `role="status"`
+(«Аватар обновлён.» / «Аватар удалён.») and a failure in `role="alert"` with Russian copy from
+`describeAvatarError` (the English `detail` is never shown). Deletion is an `alertdialog`:
+«Аватар исчезнет из карточки и кабинета. Файл удаляется безвозвратно.», and after it closes focus
+returns to the upload button, because «Удалить» no longer exists. At 320 px the buttons are 44 px
+and the card does not produce horizontal scroll.
+
+**Client preparation.** `src/lib/image-prep.ts` gained `prepareAvatarImage` next to
+`preparePortfolioImage`; both share one private encoder (JPEG quality 0.85, retry at 0.7 if the
+result is over 5 MiB) and the same pre-decode type/size gates. The avatar is a square centre crop
+(side = `min(width, height)`, centred offsets) scaled to exactly 512×512 — up-scaling included, so
+the server's 300 px minimum always holds — on a white background, named `avatar.jpg`.
+
+**Transport and cache.** `src/lib/avatars.ts` sends `POST /api/users/me/avatar` as
+`multipart/form-data` with the single field `file` through `mutateWithCsrf` (fresh `X-CSRF-TOKEN`,
+one retry with the same `FormData` on `auth.csrf.invalid`), validates the `201 { avatarUrl }` with
+`isAvatarUploadResponse` (a relative `/api/media/avatars/...` URL), and deletes through
+`DELETE /api/users/me/avatar` (`204`, idempotent). `useMyProfile.setAvatar` updates the module cache
+and React state without a second `GET /api/users/me`; a later profile save still sends
+`avatarUrl` back unchanged, and after a successful upload or delete the card calls
+`invalidateBarberProfile(profile.barberProfileId)` so «Открыть, как видят клиенты» never shows the
+old public cache.
+
+**Public card.** `BarberProfile.avatarUrl` is part of the public response; `BarberHero` renders
+`AvatarImage` when it is set and keeps the initials as the fallback. `AccountIdentity` does the
+same for the cabinet shell. The admin user and barber cards already rendered `AvatarImage` from
+their `avatarUrl` and were not changed.
+
+**Storage and URL.** The file lives on the same disk and under the same `Storage:RootPath` as the
+portfolio, at `{root}/avatars/{userId:N}/{mediaId:N}.{ext}`. `GET /api/media/avatars/{userId}/{fileName}`
+is anonymous and public by definition: it serves the file only when the URL stored in the database
+equals the requested one, otherwise `404` (never `403`/`410`, so existence is not revealed), with
+`Cache-Control: public, max-age=86400` and `X-Content-Type-Options: nosniff`. An avatar has no
+server thumbnails, no moderation queue, no `audit_log` rows and no second storage backend; those
+limits, with the single-disk backup, are debt `AGENT.md` §14 #32.
+
+**Policy.** `/privacy` §3 now names the profile photo (the user uploads it; for a barber it is
+published on the public card) and §4 sets its retention to «до удаления пользователем или
+блокировки аккаунта». The policy edition and `PRIVACY_POLICY_VERSION` are `2026-11-11`, in sync
+with the backend's `PrivacyPolicy.Version`; older consent records keep the edition they signed.
+
+**E2E.** Two serial specs in the `mutations-chromium` project, both using the real
+`e2e/fixtures/portfolio-photo.png` (a genuine 800×600 PNG) and the real API:
+
+- `e2e/specs/account-avatar-mutations.spec.ts` (`mutations` account): upload from
+  `/account/profile`, `naturalWidth > 0` and `src` starting with `/api/media/avatars/`, the same
+  `src` in `AccountIdentity`, a reload that keeps it, an admin context that sees the same `src` in
+  `/admin/users/{id}`, axe at 1280 and 320 (zero horizontal scroll, 44 px buttons), then deletion
+  through the `alertdialog` — initials return and the old media URL answers `404`.
+- `e2e/specs/public-barber-avatar-mutations.spec.ts` (`profileBarber`, the isolated profile):
+  upload in the cabinet, `GET /api/barbers/{id}` returns the same `avatarUrl`, the hero shows a
+  real image, then deletion makes the contract return `avatarUrl: null` and the hero shows the
+  initials again. The showcase barber `…0001` is never touched.
+
+Successful scenes pass the uploaded URL to the next one; `afterEach` on a failure removes the
+avatar through `DELETE /api/users/me/avatar`, and `e2e/fixtures/seed.sql` resets `avatar_url` for
+both fixture accounts, so a reseed starts from the initials.
+
 ## My reviews
 
 `/account/reviews` is a separate lazy screen inside the cabinet shell (not a tab of
@@ -346,11 +417,11 @@ press.
 ## Personal cabinet
 
 `/account`, `/account/profile`, `/account/security` and `/account/reviews` share one shell
-(`components/account/account-shell.tsx`): a sticky rail with the identity block (initials, name,
-email, role, unverified-email note), four section links and — for a `Barber` or `Admin` — a link to
-`/barber` or `/admin`. Below `lg` the rail becomes a 2×2 grid of labelled buttons, so all four
-sections stay visible at 320 px. The whole cabinet is open to every role; the old `RoleGate` that
-turned barbers and admins away is gone.
+(`components/account/account-shell.tsx`): a sticky rail with the identity block (avatar or
+initials, name, email, role, unverified-email note), four section links and — for a `Barber` or
+`Admin` — a link to `/barber` or `/admin`. Below `lg` the rail becomes a 2×2 grid of labelled
+buttons, so all four sections stay visible at 320 px. The whole cabinet is open to every role; the
+old `RoleGate` that turned barbers and admins away is gone.
 
 The shell loads `GET /api/users/me` once per session (module cache keyed by user id) and provides
 the profile to the section screens through context, so the profile form does not issue its own
@@ -389,10 +460,10 @@ next-page error in one tab does not clear the other.
 ### Profile
 
 `/account/profile` edits `firstName`, `lastName` and `phoneNumber` through the existing
-`PUT /api/users/{id}/profile` with `X-CSRF-TOKEN`; `avatarUrl` is returned unchanged because the
-endpoint replaces the whole profile, and avatar upload has no endpoint of its own yet. Email is
-read-only: the API has no self-service email-change flow, and the copy says so instead of showing
-a dead button.
+`PUT /api/users/{id}/profile` with `X-CSRF-TOKEN`; `avatarUrl` is still returned unchanged because
+the endpoint replaces the whole profile. The avatar itself is managed by the card above the form
+(see «Avatar»). Email is read-only: the API has no self-service email-change flow, and the copy
+says so instead of showing a dead button.
 The form enables «Сохранить» only when a field changed, trims values, maps
 `user.updateProfile.firstName|lastName` to the field and everything else to the form-level Russian
 error. `GET /api/users/me` supplies the initial values; the same response feeds the rail, so the
@@ -1018,7 +1089,7 @@ anonymous visitor; a signed-in user gets «Вы уже вошли» with a butto
 The form sends one `POST /api/auth/register` with `{ email, password, firstName, lastName, consentVersion }` and
 **no** `X-CSRF-TOKEN` (the action has no antiforgery filter, like booking creation). The email
 and names are trimmed; the password is not. `consentVersion` is `PRIVACY_POLICY_VERSION`
-(`src/lib/legal.ts`, `2026-11-03`) — the policy edition the checkbox names. Client checks before
+(`src/lib/legal.ts`, `2026-11-11`) — the policy edition the checkbox names. Client checks before
 the request: names are not empty, email matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at most 254
 characters, the password is 12–128 characters and differs from the email, its local part and both
 names, the repeat matches, and the **consent to personal-data processing** is given. The consent
@@ -1133,11 +1204,13 @@ needs no session and no request, and opens by a direct link.
   the service sets — session, refresh, antiforgery, the «Запомнить меня» hint and the notice's own
   acknowledgement — with purpose, lifetime and attributes. The policy renders that array, so a new
   cookie cannot appear in code without appearing in the document.
-- **The consent record.** `PRIVACY_POLICY_VERSION` equals `PRIVACY_POLICY_DATE` (`2026-11-03`) and
+- **The consent record.** `PRIVACY_POLICY_VERSION` equals `PRIVACY_POLICY_DATE` (`2026-11-11`) and
   the backend's `PrivacyPolicy.Version`; the registration form sends it and the server stores it
   with the UTC time and the IP. §2.2 of the policy states what is recorded, §4.1 that the record is
   stored with the account. Editing the policy text bumps both constants and the server constant —
-  otherwise registrations would start failing with `auth.register.consentVersion`.
+  otherwise registrations would start failing with `auth.register.consentVersion`. The
+  2026-11-11 edition also names the profile photo in §3 and its retention in §4; older records
+  keep the edition they signed.
 - **The notice** (`src/components/cookie-notice.tsx`) is informational, not a consent banner: the
   service sets only strictly necessary first-party cookies, so there is no «Отказаться» button and
   no cookie wall. It is a bar under the header with one «Понятно» action and a link to
@@ -1205,8 +1278,8 @@ and the mobile split keeps the list on its page. Role change, block/unblock and 
 confirmation update the row locally (or remove it when it leaves the active filter) before the
 quiet re-sync. The screen never shows a total count, because the API does not return one.
 
-The card has a read-only «Согласие на обработку ПД» row: «Редакция 2026-11-03 · 03.11.2026, 14:05
-UTC» for a self-registered account, or «Записи нет — аккаунт создан до 03.11.2026» for accounts
+The card has a read-only «Согласие на обработку ПД» row: «Редакция 2026-11-11 · 11.11.2026, 14:05
+UTC» for a self-registered account, or «Записи нет — аккаунт создан до 11.11.2026» for accounts
 that predate the record and for users created by an administrator. The IP of the consent is not
 returned by the API and is never displayed.
 
@@ -1576,6 +1649,19 @@ needs no API and no database, and covers:
   the cabinet section (empty, limit, blocked row without «Вернуть», dialogs) and the public
   gallery (no section when empty, alt text, lightbox counter/edges/arrows/Escape, broken image).
   `api.test.ts` proves `FormData` gets no JSON `Content-Type` while an ordinary body does.
+- `avatars`, the avatar card and the avatar in the shell/hero — `POST /api/users/me/avatar` with
+  the single `file` field and a fresh CSRF token, one retry with the same `FormData`, the
+  `201 { avatarUrl }` guard (relative `/api/media/avatars/…` only), the `DELETE` call and every
+  `describeAvatarError` branch (shared upload codes, the three new avatar codes, `413` without
+  ProblemDetails, `401`, `429`, network, `5xx`, `canRetry`). `image-prep.test.ts` covers the square
+  centre crop (1200×800 → 800 → 512 and 800×1200), up-scaling 300×300 to 512, the 0.7 retry and all
+  decode/type/size errors; `avatar-card.test.tsx` covers upload and the `role="status"`
+  announcement, the type rejection without a request, `413`, `401`, the delete `alertdialog` and
+  focus returning to the upload button, and a delete failure that keeps the dialog;
+  `account-shell.test.tsx` and `barber-hero.test.tsx` prove `AvatarImage` appears when
+  `avatarUrl` is set and initials remain the fallback; `use-my-profile.test.tsx` proves
+  `setAvatar` updates the module cache and state without a second `GET` and that `save` sends the
+  new URL.
 
 Tests are colocated with the module (`src/lib/api.test.ts`, `src/components/login-dialog.test.tsx`)
 and compare Russian copy as a whole string, saying in the test title that it is copy.
@@ -1589,12 +1675,15 @@ layer below.
 Playwright drives the real SPA against the real API and a real PostgreSQL: there is no second test
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
 admin bookings desk, the admin summary and the admin statistics, sign-in, public reviews, the
-portfolio gallery with its lightbox (axe at 1280 and 320) and the admin blocking of a photo, email
+portfolio gallery with its lightbox (axe at 1280 and 320) and the admin blocking of a photo, the
+avatar upload in the cabinet and its public hero (axe at 1280 and 320, an admin sees the same
+image, deletion restores the initials), email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
 stays separate and fast; E2E never runs inside it. After the portfolio slice the full local run is
-**281 passed, 4 skipped, 0 failed**.
+**281 passed, 4 skipped, 0 failed**. The two avatar specs below were added after that run and are
+not part of the 281.
 
 ### One-time setup
 
@@ -1644,9 +1733,9 @@ ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;
   dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
 ```
 
-`Storage__RootPath` keeps uploaded portfolio files out of the checkout; CI passes
-`${{ runner.temp }}/photos` instead. Without it the API uses `App_Data/photos`, which still works
-but pollutes the working tree and survives between runs.
+`Storage__RootPath` keeps uploaded files (portfolio photos and avatars) out of the checkout; CI
+passes `${{ runner.temp }}/photos` instead. Without it the API uses `App_Data/photos`, which still
+works but pollutes the working tree and survives between runs.
 
 Without these variables registration still returns `201`, but no letter is sent: the resend button
 honestly answers `409 auth.emailVerification.unavailable`, `POST /api/auth/password-reset` answers
@@ -1772,6 +1861,11 @@ before its fixture upsert, so `barber-profile-photos-mutations.spec.ts` starts f
 `afterAll`). Uploaded files live outside PostgreSQL in `Storage:RootPath`; orphan files from a
 failed run do not affect the seed or the tests and are ignored by the media route once their
 database row is gone.
+For avatars the seed resets `avatar_url` on every fixture account, including the isolated
+`profileBarber` (whose conflict update now clears it too) and the `mutations` customer
+`e2e-mutations@barbersearch.test`, so both avatar specs start from the initials. A failed scene
+deletes the file and the row through `DELETE /api/users/me/avatar` in `afterEach`; the showcase
+barber `…0001` is never mutated.
 All accounts use the password `e2e-password` — a test constant, not a secret, and the hash is the
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 
