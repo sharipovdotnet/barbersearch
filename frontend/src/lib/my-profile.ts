@@ -19,7 +19,14 @@ export type MyProfile = {
   firstName: string
   lastName: string
   phoneNumber: string | null
+  /**
+   * Сырой URL, даже если фото скрыто администратором: `save()` отправляет его
+   * обратно в `PUT users/{id}/profile`, и `null` стёр бы фото при сохранении имени.
+   * Рендерить изображение можно только при `isAvatarBlocked === false`.
+   */
   avatarUrl: string | null
+  /** Фото скрыто администратором: файл и URL остаются, публично его не видно. */
+  isAvatarBlocked: boolean
   role: MyProfileRole
   barberProfileId: string | null
   isEmailVerified: boolean

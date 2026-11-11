@@ -7,11 +7,11 @@ import {
   Users,
 } from 'lucide-react'
 
+import { AvatarModeration } from '@/components/admin/avatar-moderation'
 import {
   UserRoleBadge,
   UserStatusBadge,
 } from '@/components/admin/user-list'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -89,6 +89,8 @@ export function UserDetail({
   onUnblock,
   onVerifyEmail,
   onVerifyPhone,
+  onBlockAvatar,
+  onUnblockAvatar,
   onBack,
 }: {
   user: AdminUserDetail
@@ -101,10 +103,16 @@ export function UserDetail({
   onUnblock: () => void
   onVerifyEmail: () => void
   onVerifyPhone: () => void
+  onBlockAvatar: () => void
+  onUnblockAvatar: () => void
   onBack: () => void
 }) {
   const { t } = useI18n()
   const name = getUserDisplayName(user)
+  const avatarPending =
+    pendingAction === 'blockAvatar' || pendingAction === 'unblockAvatar'
+      ? pendingAction
+      : null
 
   return (
     <section
@@ -130,26 +138,28 @@ export function UserDetail({
           </div>
         </div>
 
-        <div className="flex items-start gap-3">
-          <Avatar size="lg">
-            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
-            <AvatarFallback>{getInitials(name)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <h2
-              id="user-detail-title"
-              className="font-heading text-xl leading-tight font-semibold tracking-tight"
-            >
-              {name}
-            </h2>
-            <p className="mt-0.5 text-sm break-all text-muted-foreground">
-              {user.email}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t(ADMIN_USER_ROLE_LABELS[user.role])}
-            </p>
-          </div>
-        </div>
+        <AvatarModeration
+          avatarUrl={user.avatarUrl}
+          isAvatarBlocked={user.isAvatarBlocked}
+          initials={getInitials(name)}
+          isBusy={pendingAction !== null}
+          pendingAction={avatarPending}
+          onBlock={onBlockAvatar}
+          onUnblock={onUnblockAvatar}
+        >
+          <h2
+            id="user-detail-title"
+            className="font-heading text-xl leading-tight font-semibold tracking-tight"
+          >
+            {name}
+          </h2>
+          <p className="mt-0.5 text-sm break-all text-muted-foreground">
+            {user.email}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t(ADMIN_USER_ROLE_LABELS[user.role])}
+          </p>
+        </AvatarModeration>
 
         <dl className="grid gap-4 border-t pt-4 sm:grid-cols-2">
           <ContextItem label={t('Телефон')}>

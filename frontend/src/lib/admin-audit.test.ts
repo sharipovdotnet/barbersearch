@@ -292,7 +292,13 @@ describe('подписи и константы контракта', () => {
       barberNote: 'Заметка барбера',
       cancellationReason: 'Причина отмены',
       isActive: 'Активность',
+      isAvatarBlocked: 'Фото скрыто администратором',
     })
+  })
+
+  it('флаг модерации аватара рендерится как «Да»/«Нет»', () => {
+    expect(formatAuditValue('isAvatarBlocked', false)).toBe('Нет')
+    expect(formatAuditValue('isAvatarBlocked', true)).toBe('Да')
   })
 
   it('размер страницы и лимит автора совпадают с сервером', () => {

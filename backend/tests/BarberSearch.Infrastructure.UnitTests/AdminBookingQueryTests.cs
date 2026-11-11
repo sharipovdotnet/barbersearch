@@ -48,6 +48,10 @@ public class AdminBookingQueryTests
         Assert.Equal(2, Regex.Count(sql, "LEFT JOIN", RegexOptions.IgnoreCase));
         Assert.Contains("barber_profiles", sql, StringComparison.OrdinalIgnoreCase);
 
+        // Админская поверхность показывает скрытое: флаг блокировки в запрос не попадает,
+        // второго join'а не появилось.
+        Assert.DoesNotContain("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+
         Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DESC", sql, StringComparison.OrdinalIgnoreCase);
     }

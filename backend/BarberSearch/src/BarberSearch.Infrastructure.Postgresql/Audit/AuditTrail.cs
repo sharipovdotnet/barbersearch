@@ -94,7 +94,13 @@ public sealed class AuditTrail
                     nameof(User.IsPhoneVerified),
                     nameof(User.PasswordHash),
                     nameof(User.SecurityStamp),
-                    nameof(User.BarberProfileId)
+                    nameof(User.BarberProfileId),
+
+                    // Скрытие/возврат аватара (#87): решение администратора о контенте,
+                    // а не техническая правка. AvatarUrl в allowlist не входит сознательно:
+                    // каждая загрузка давала бы строку журнала без административного смысла,
+                    // а URL — техническое имя файла.
+                    nameof(User.IsAvatarBlocked)
                 ]),
             [typeof(BarberProfile)] = new(
                 "barber_profile",

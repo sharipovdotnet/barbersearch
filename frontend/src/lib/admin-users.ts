@@ -1,5 +1,9 @@
 import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
+import {
+  describeAvatarModerationError,
+  type AvatarModerationAction,
+} from '@/lib/avatar-moderation'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
 import {
@@ -66,6 +70,9 @@ export type AdminUserRow = {
   email: string
   firstName: string
   lastName: string
+  /** Сырой URL: админ видит и скрытое администратором фото. */
+  avatarUrl: string | null
+  isAvatarBlocked: boolean
   role: AdminUserRole
   isActive: boolean
   isEmailVerified: boolean
@@ -89,6 +96,8 @@ export type AdminUserDetail = {
   lastName: string
   phoneNumber: string | null
   avatarUrl: string | null
+  /** Флаг модерации: карточка показывает бейдж и кнопку «Вернуть фото». */
+  isAvatarBlocked: boolean
   role: AdminUserRole
   isActive: boolean
   isEmailVerified: boolean
@@ -216,6 +225,7 @@ export type AdminUserAction =
   | 'unblock'
   | 'verifyEmail'
   | 'verifyPhone'
+  | AvatarModerationAction
 
 export async function changeUserRole(
   userId: string,
@@ -237,6 +247,23 @@ export async function blockUser(userId: string): Promise<void> {
 export async function unblockUser(userId: string): Promise<void> {
   await mutateWithCsrf<void>(`/users/${userId}/activation`, {
     method: 'POST',
+  })
+}
+
+/**
+ * Скрыть аватар пользователя: файл и `avatar_url` остаются на месте, меняется
+ * только маска на чтении. Идемпотентно — повторный вызов тоже `204`.
+ */
+export async function blockUserAvatar(userId: string): Promise<void> {
+  await mutateWithCsrf<void>(`/admin/users/${userId}/avatar/block`, {
+    method: 'POST',
+  })
+}
+
+/** Вернуть аватар: тот же кадр снова виден публично, `204` и на повторе. */
+export async function unblockUserAvatar(userId: string): Promise<void> {
+  await mutateWithCsrf<void>(`/admin/users/${userId}/avatar/block`, {
+    method: 'DELETE',
   })
 }
 
@@ -281,6 +308,11 @@ export function describeAdminUserActionError(
   error: unknown,
   action: AdminUserAction
 ): string {
+  // Аватар — общая мутация обеих админских карточек: тексты живут в одном helper'е.
+  if (action === 'blockAvatar' || action === 'unblockAvatar') {
+    return describeAvatarModerationError(error, action)
+  }
+
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
       return t('Раздел доступен только администратору.')

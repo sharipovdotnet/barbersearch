@@ -14,6 +14,7 @@ const PROFILE: MyProfile = {
   lastName: 'Клиентова',
   phoneNumber: '+70000000003',
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,

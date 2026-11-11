@@ -1,7 +1,7 @@
 import { useRef, type KeyboardEvent, type RefObject } from 'react'
 
 import { ListPager } from '@/components/list-pager'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import {
@@ -185,7 +185,12 @@ export function UserList({
   )
 }
 
-/** Аватар с инициалами, имя и email: одна и та же строка списка и карточки. */
+/**
+ * Аватар с инициалами, имя и email: одна и та же строка списка и карточки.
+ *
+ * Админ видит сырой `avatarUrl` и при скрытом фото — иначе он не смог бы решить,
+ * вернуть кадр или нет. Флаг показывает текстовый бейдж: цвет не единственный сигнал.
+ */
 export function UserIdentity({
   user,
   className,
@@ -194,14 +199,18 @@ export function UserIdentity({
     firstName: string
     lastName: string
     email: string
+    avatarUrl: string | null
+    isAvatarBlocked: boolean
   }
   className?: string
 }) {
+  const { t } = useI18n()
   const name = getUserDisplayName(user)
 
   return (
     <span className={cn('flex min-w-0 items-center gap-2.5', className)}>
       <Avatar size="sm">
+        {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
         <AvatarFallback className="text-xs">{getInitials(name)}</AvatarFallback>
       </Avatar>
       <span className="min-w-0">
@@ -209,6 +218,11 @@ export function UserIdentity({
         <span className="block truncate text-xs text-muted-foreground">
           {user.email}
         </span>
+        {user.isAvatarBlocked && (
+          <Badge variant="outline" className="mt-1">
+            {t('Фото скрыто')}
+          </Badge>
+        )}
       </span>
     </span>
   )

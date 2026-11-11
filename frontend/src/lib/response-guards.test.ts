@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isAdminBarber,
+  isAdminBarberRow,
   isAdminBooking,
   isAdminSalonRow,
   isAdminUser,
+  isAdminUserRow,
   isAvatarUploadResponse,
   isBarberBooking,
   isBarberBookingOptions,
@@ -16,6 +18,7 @@ import {
   isBooking,
   isCreatedResource,
   isHairServiceOption,
+  isMyProfile,
   isNotificationSettings,
   isPortfolioPhoto,
   isSalonDirectoryItem,
@@ -36,6 +39,7 @@ const DETAIL = {
   lastName: 'Иванова',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Customer',
   isActive: true,
   isEmailVerified: false,
@@ -526,6 +530,7 @@ const ADMIN_BARBER_DETAIL = {
   email: 'artem@barbersearch.test',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   grade: 'ArtDirector',
   bio: null,
   yearsOfExperience: 5,
@@ -775,5 +780,105 @@ describe('avatarUrl в guard-ах поиска и броней', () => {
         barber: { ...ADMIN_BOOKING.barber, avatarUrl: false },
       })
     ).toBe(false)
+  })
+})
+
+const PROFILE = {
+  id: '9e000000-0000-4000-8000-000000000003',
+  email: 'eva@barbersearch.test',
+  firstName: 'Ева',
+  lastName: 'Клиентова',
+  phoneNumber: null,
+  avatarUrl: null,
+  isAvatarBlocked: false,
+  role: 'Customer',
+  barberProfileId: null,
+  isEmailVerified: true,
+  isPhoneVerified: false,
+  createdAt: '2026-09-01T10:02:00+00:00',
+  lastLoginAt: null,
+}
+
+const ADMIN_USER_ROW = {
+  id: '9e000000-0000-4000-8000-000000000003',
+  email: 'eva@barbersearch.test',
+  firstName: 'Ева',
+  lastName: 'Клиентова',
+  avatarUrl: null,
+  isAvatarBlocked: false,
+  role: 'Customer',
+  isActive: true,
+  isEmailVerified: true,
+  isPhoneVerified: false,
+  barberProfileId: null,
+  lastLoginAt: null,
+  createdAt: '2026-09-01T10:02:00+00:00',
+}
+
+const ADMIN_BARBER_ROW = {
+  id: '9e800000-0000-4000-8000-000000000001',
+  displayName: 'Артём Соколов',
+  email: 'artem@barbersearch.test',
+  avatarUrl: null,
+  isAvatarBlocked: false,
+  grade: 'ArtDirector',
+  rating: null,
+  reviewsCount: 0,
+  isActive: true,
+  isVerified: false,
+  createdAt: '2026-09-28T15:12:00+00:00',
+  updatedAt: '2026-11-02T10:53:00+00:00',
+}
+
+/**
+ * `isAvatarBlocked` — обязательный флаг всех пяти контрактов #87, а `avatarUrl`
+ * у админских строк — сырой URL владельца. Забытое поле роняет guard: шапка,
+ * кабинет и админские карточки иначе молча показывали бы скрытое фото.
+ */
+describe('avatarUrl и isAvatarBlocked в контрактах #87', () => {
+  const CONTRACTS = [
+    ['MyProfile', isMyProfile, PROFILE],
+    ['AdminUserRow', isAdminUserRow, ADMIN_USER_ROW],
+    ['AdminUserDetail', isAdminUser, DETAIL],
+    ['AdminBarberRow', isAdminBarberRow, ADMIN_BARBER_ROW],
+    ['AdminBarberDetail', isAdminBarber, ADMIN_BARBER_DETAIL],
+  ] as const
+
+  it('принимает новый флаг во всех пяти контрактах', () => {
+    for (const [, guard, value] of CONTRACTS) {
+      expect(guard(value)).toBe(true)
+    }
+  })
+
+  it('отвергает отсутствие isAvatarBlocked в каждом контракте', () => {
+    for (const [name, guard, value] of CONTRACTS) {
+      const { isAvatarBlocked, ...withoutFlag } = value as Record<string, unknown>
+
+      expect(isAvatarBlocked, name).toBe(false)
+      expect(guard({ ...withoutFlag, extra: name }), name).toBe(false)
+    }
+  })
+
+  it('отвергает небулев isAvatarBlocked в каждом контракте', () => {
+    for (const [name, guard, value] of CONTRACTS) {
+      expect(guard({ ...value, isAvatarBlocked: 'true' }), name).toBe(false)
+    }
+  })
+
+  it('принимает строку avatarUrl у админских строк и карточек', () => {
+    const avatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000003/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+    expect(isAdminUserRow({ ...ADMIN_USER_ROW, avatarUrl })).toBe(true)
+    expect(isAdminUser({ ...DETAIL, avatarUrl })).toBe(true)
+    expect(isAdminBarberRow({ ...ADMIN_BARBER_ROW, avatarUrl })).toBe(true)
+    expect(
+      isAdminBarber({ ...ADMIN_BARBER_DETAIL, avatarUrl, isAvatarBlocked: true })
+    ).toBe(true)
+  })
+
+  it('отвергает нестроковый avatarUrl админских строк', () => {
+    expect(isAdminUserRow({ ...ADMIN_USER_ROW, avatarUrl: 1 })).toBe(false)
+    expect(isAdminBarberRow({ ...ADMIN_BARBER_ROW, avatarUrl: {} })).toBe(false)
   })
 })

@@ -15,7 +15,10 @@ namespace BarberSearch.Contracts.BarberProfiles.Admin;
 /// <param name="DisplayName">Отображаемое имя мастера.</param>
 /// <param name="Email">Email владельца профиля.</param>
 /// <param name="PhoneNumber">Телефон владельца профиля либо <c>null</c>.</param>
-/// <param name="AvatarUrl">Ссылка на аватар владельца либо <c>null</c>.</param>
+/// <param name="AvatarUrl">
+/// Ссылка на аватар владельца либо <c>null</c>, если он не загружен. Скрытое фото
+/// администратор видит; состояние — в <paramref name="IsAvatarBlocked"/>.
+/// </param>
 /// <param name="Grade">Грейд барбера.</param>
 /// <param name="Bio">Короткое описание о себе.</param>
 /// <param name="YearsOfExperience">Стаж в годах.</param>
@@ -30,6 +33,7 @@ namespace BarberSearch.Contracts.BarberProfiles.Admin;
 /// Все фотографии портфолио, включая скрытые и заблокированные: администратор должен видеть,
 /// что именно скрыто. Форма элемента — публичная <see cref="BarberProfilePhotoResponse"/>.
 /// </param>
+/// <param name="IsAvatarBlocked">Скрыт ли аватар владельца администратором.</param>
 public record AdminBarberDetailResponse(
     Guid Id,
     Guid UserId,
@@ -47,4 +51,5 @@ public record AdminBarberDetailResponse(
     AdminBarberReadinessResponse Readiness,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<BarberProfilePhotoResponse> Photos);
+    IReadOnlyList<BarberProfilePhotoResponse> Photos,
+    bool IsAvatarBlocked);

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Application.Users;
 using BarberSearch.Domain.Users;
@@ -21,17 +22,19 @@ namespace BarberSearch.Web.Controllers;
 /// легаси-пути администратора этим маршрутом не раздаются.
 /// </para>
 /// <para>
-/// Доступ проверяется по БД на каждый запрос (<c>GetAvatarUrlAsync</c>): файл отдаётся, только
-/// если сохранённая строка <b>совпадает</b> с запрошенным URL (Ordinal). Поэтому замена или
-/// удаление аватара сразу делает старую ссылку <c>404</c>, даже если файл ещё лежит на диске.
-/// Аватар публичен по определению: исключений «владельцу/админу» нет, и отказа с <c>403</c>
-/// или <c>410</c> тоже — существование файла не раскрывается, отказ всегда один
-/// <c>404 avatarMedia.notFound</c>.
+/// Доступ проверяется по БД на каждый запрос (<c>GetAvatarAccessAsync</c>): файл отдаётся,
+/// только если сохранённая строка <b>совпадает</b> с запрошенным URL (Ordinal). Поэтому замена
+/// или удаление аватара сразу делает старую ссылку <c>404</c>, даже если файл ещё лежит на диске.
+/// Скрытый администратором аватар отдаётся только администратору — с
+/// <c>Cache-Control: private, no-store</c>; всем остальным, включая владельца, — тот же
+/// <c>404 avatarMedia.notFound</c>. Отказа с <c>403</c> или <c>410</c> нет: существование
+/// скрытого файла не раскрывается.
 /// </para>
 /// <para>
-/// <c>Cache-Control: public, max-age=86400</c>: после замены старый кадр может ещё сутки жить
-/// в кэше другого браузера — то же ограничение, что у фотографий портфолио, и лечится оно
-/// сменой имени файла (новый <c>mediaId</c>), а не <c>no-store</c> для всех.
+/// <c>Cache-Control: public, max-age=86400</c> у видимого аватара: после замены старый кадр
+/// может ещё сутки жить в кэше другого браузера — то же ограничение, что у фотографий
+/// портфолио, и лечится оно сменой имени файла (новый <c>mediaId</c>), а не <c>no-store</c>
+/// для всех.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -48,28 +51,37 @@ public sealed partial class AvatarMediaController : ControllerBase
 
     private const string CACHE_CONTROL_HEADER = "Cache-Control";
     private const string CACHE_CONTROL_PUBLIC = "public, max-age=86400";
+    private const string CACHE_CONTROL_PRIVATE = "private, no-store";
     private const string NOSNIFF_HEADER = "X-Content-Type-Options";
     private const string NOSNIFF_VALUE = "nosniff";
 
     private readonly IUserRepository _repository;
     private readonly IPhotoStorage _storage;
+    private readonly ICurrentUser _currentUser;
 
     /// <summary>
     /// Создаёт контроллер раздачи.
     /// </summary>
-    /// <param name="repository">Проверка сохранённого URL аватара по БД.</param>
+    /// <param name="repository">Проверка сохранённого URL и блокировки аватара по БД.</param>
     /// <param name="storage">Открытие файла по media-URL.</param>
-    public AvatarMediaController(IUserRepository repository, IPhotoStorage storage)
+    /// <param name="currentUser">Текущий пользователь: администратор видит скрытый файл.</param>
+    public AvatarMediaController(
+        IUserRepository repository,
+        IPhotoStorage storage,
+        ICurrentUser currentUser)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(currentUser);
 
         _repository = repository;
         _storage = storage;
+        _currentUser = currentUser;
     }
 
     /// <summary>
-    /// Отдаёт файл аватара, если он существует и сохранённый URL совпадает с запрошенным.
+    /// Отдаёт файл аватара, если он существует, сохранённый URL совпадает с запрошенным
+    /// и файл не скрыт администратором (либо запрос пришёл от администратора).
     /// </summary>
     /// <param name="userId">Пользователь из URL.</param>
     /// <param name="fileName">Имя файла: 32 hex-символа и разрешённое расширение.</param>
@@ -96,15 +108,24 @@ public sealed partial class AvatarMediaController : ControllerBase
         var extension = fileName[33..];
         var url = UserAvatarMediaUrl.Build(userId, mediaId, extension);
 
-        var stored = await _repository.GetAvatarUrlAsync(userId, cancellationToken);
-        if (stored.IsFailure)
+        var access = await _repository.GetAvatarAccessAsync(userId, cancellationToken);
+        if (access.IsFailure)
         {
             return MediaNotFound();
         }
 
         // Точное сравнение с сохранённой строкой: заменённый или удалённый аватар —
         // это новый URL (или null), поэтому старая ссылка перестаёт работать сразу.
-        if (!string.Equals(stored.Value, url, StringComparison.Ordinal))
+        if (!string.Equals(access.Value.AvatarUrl, url, StringComparison.Ordinal))
+        {
+            return MediaNotFound();
+        }
+
+        // Скрытый файл видит только администратор; владелец и аноним получают тот же 404,
+        // что и при отсутствии файла. Порядок важен: блокировка проверяется после точного
+        // совпадения URL, иначе старая ссылка скрытого фото могла бы отдаться после замены.
+        var blocked = access.Value.IsAvatarBlocked;
+        if (blocked && !_currentUser.IsAdmin)
         {
             return MediaNotFound();
         }
@@ -115,7 +136,10 @@ public sealed partial class AvatarMediaController : ControllerBase
             return MediaNotFound();
         }
 
-        Response.Headers[CACHE_CONTROL_HEADER] = CACHE_CONTROL_PUBLIC;
+        // Видимый кадр кэшируется на сутки; скрытый (только админу) — нет: после возврата
+        // фото клиент не должен показывать устаревший «нет файла» из общего кэша.
+        Response.Headers[CACHE_CONTROL_HEADER] =
+            blocked ? CACHE_CONTROL_PRIVATE : CACHE_CONTROL_PUBLIC;
         Response.Headers[NOSNIFF_HEADER] = NOSNIFF_VALUE;
 
         var avatar = content.Value;

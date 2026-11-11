@@ -282,6 +282,57 @@ public class AdminUserReadTests
         Assert.Equal("admin.users.id", result.Error.Errors[0].Code);
     }
 
+    [Fact]
+    public async Task Get_ReturnsAvatarAndBlockedFlagFromTheRow()
+    {
+        var repository = new FakeUserRepository();
+        var row = CreateRow(Start, "WithAvatar") with
+        {
+            AvatarUrl = "https://cdn.example.com/avatar.png",
+            IsAvatarBlocked = true
+        };
+        repository.AddAdminRow(row);
+
+        var handler = new GetAdminUsersHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminUsersQuery(null, null, null, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var item = Assert.Single(result.Value.Items);
+
+        // Админский список не маскирует фото: URL остаётся сырым, состояние — во флаге.
+        Assert.Equal("https://cdn.example.com/avatar.png", item.AvatarUrl);
+        Assert.True(item.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsRawAvatarAndBlockedFlag()
+    {
+        var repository = new FakeUserRepository();
+        var user = User.Create(
+            "blocked-avatar@example.com",
+            "hash:password",
+            "Артём",
+            "Соколов").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+        repository.Add(user);
+
+        var handler = new GetAdminUserHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminUserQuery(user.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://cdn.example.com/avatar.png", result.Value.AvatarUrl);
+        Assert.True(result.Value.IsAvatarBlocked);
+    }
+
     private static AdminUserResponse CreateRow(
         DateTimeOffset createdAt,
         string name,
@@ -299,5 +350,7 @@ public class AdminUserReadTests
             false,
             null,
             null,
-            createdAt);
+            createdAt,
+            AvatarUrl: null,
+            IsAvatarBlocked: false);
 }

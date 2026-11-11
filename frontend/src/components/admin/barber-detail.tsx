@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { ArrowLeft, CheckCircle2, Circle, Loader2, Star } from 'lucide-react'
 
+import { AvatarModeration } from '@/components/admin/avatar-moderation'
 import { BarberStatusBadge } from '@/components/admin/barber-list'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -51,6 +51,8 @@ export function BarberDetail({
   photoError,
   onBlockPhoto,
   onUnblockPhoto,
+  onBlockAvatar,
+  onUnblockAvatar,
   onBack,
 }: {
   barber: AdminBarberDetail
@@ -65,9 +67,15 @@ export function BarberDetail({
   photoError: string | null
   onBlockPhoto: (photoId: string) => void
   onUnblockPhoto: (photoId: string) => void
+  onBlockAvatar: () => void
+  onUnblockAvatar: () => void
   onBack: () => void
 }) {
   const { t } = useI18n()
+  const avatarPending =
+    pendingAction === 'blockAvatar' || pendingAction === 'unblockAvatar'
+      ? pendingAction
+      : null
 
   return (
     <section
@@ -90,28 +98,28 @@ export function BarberDetail({
           <BarberStatusBadge barber={barber} className="ml-auto" />
         </div>
 
-        <div className="flex items-start gap-3">
-          <Avatar size="lg">
-            {barber.avatarUrl && (
-              <AvatarImage src={barber.avatarUrl} alt="" />
-            )}
-            <AvatarFallback>{getInitials(barber.displayName)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <h2
-              id="barber-detail-title"
-              className="font-heading text-xl leading-tight font-semibold tracking-tight"
-            >
-              {barber.displayName}
-            </h2>
-            <p className="mt-0.5 text-sm break-all text-muted-foreground">
-              {barber.email}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t(BARBER_GRADE_LABELS[barber.grade])}
-            </p>
-          </div>
-        </div>
+        <AvatarModeration
+          avatarUrl={barber.avatarUrl}
+          isAvatarBlocked={barber.isAvatarBlocked}
+          initials={getInitials(barber.displayName)}
+          isBusy={pendingAction !== null}
+          pendingAction={avatarPending}
+          onBlock={onBlockAvatar}
+          onUnblock={onUnblockAvatar}
+        >
+          <h2
+            id="barber-detail-title"
+            className="font-heading text-xl leading-tight font-semibold tracking-tight"
+          >
+            {barber.displayName}
+          </h2>
+          <p className="mt-0.5 text-sm break-all text-muted-foreground">
+            {barber.email}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t(BARBER_GRADE_LABELS[barber.grade])}
+          </p>
+        </AvatarModeration>
 
         {barber.bio ? (
           <p className="max-w-prose text-sm leading-relaxed break-words whitespace-pre-line">

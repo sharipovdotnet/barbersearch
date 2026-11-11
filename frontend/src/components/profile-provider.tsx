@@ -194,6 +194,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         throw new Error('Профиль ещё не загружен.')
       }
 
+      // `...current` сохраняет `isAvatarBlocked`: сервер снимает флаг только при
+      // реальной смене URL, а сохранение имени его не трогает.
       const next: MyProfile = {
         ...current,
         firstName: input.firstName.trim(),
@@ -220,7 +222,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     [applyState, userId]
   )
 
-  /** Общий для всех подписчиков новый URL — без второго `GET users/me`. */
+  /**
+   * Общий для всех подписчиков новый URL — без второго `GET users/me`.
+   *
+   * Новая загрузка или удаление — это новый файл либо пустота, поэтому флаг
+   * модерации снимается: блокировка относилась к прежнему кадру.
+   */
   const setAvatar = useCallback(
     (avatarUrl: string | null): void => {
       const current = stateRef.current.profile
@@ -231,7 +238,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       applyState({
         status: 'ready',
-        profile: { ...current, avatarUrl },
+        profile: { ...current, avatarUrl, isAvatarBlocked: false },
         error: null,
         requiresSignIn: false,
       })

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using BarberSearch.Infrastructure.Postgresql;
 using BarberSearch.Infrastructure.Postgresql.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -7,13 +6,13 @@ using Xunit;
 namespace BarberSearch.Infrastructure.UnitTests;
 
 /// <summary>
-/// Узкое чтение аватара для раздачи: один столбец <c>avatar_url</c> по первичному ключу,
-/// без <c>Include(FavoriteBarbers)</c> и без join'ов.
+/// Узкое чтение аватара для раздачи: <c>avatar_url</c> и <c>is_avatar_blocked</c> по первичному
+/// ключу, без <c>Include(FavoriteBarbers)</c> и без join'ов.
 /// </summary>
 /// <remarks>
 /// <c>ToQueryString()</c> не открывает соединение: проверяется трансляция EF Core / Npgsql.
-/// Поведение метода (URL, <c>null</c>, <c>NotFound</c>) проверяется интеграционным тестом на
-/// реальной PostgreSQL: в unit-проекте нет провайдера для базы в памяти, а добавлять пакет
+/// Поведение метода (URL, флаг, <c>null</c>, <c>NotFound</c>) проверяется интеграционным тестом
+/// на реальной PostgreSQL: в unit-проекте нет провайдера для базы в памяти, а добавлять пакет
 /// ради этого нельзя. Здесь фиксируется форма SQL — то, ради чего метод узкий.
 /// </remarks>
 public class UserAvatarUrlQueryTests
@@ -22,7 +21,7 @@ public class UserAvatarUrlQueryTests
         "Host=127.0.0.1;Port=59999;Database=model_only;Username=test;Password=test";
 
     [Fact]
-    public void BuildAvatarUrlQuery_SelectsOnlyAvatarUrlByPrimaryKeyWithoutJoins()
+    public void BuildAvatarUrlQuery_SelectsAvatarUrlAndBlockedFlagByPrimaryKeyWithoutJoins()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(UnreachableConnection)
@@ -32,12 +31,9 @@ public class UserAvatarUrlQueryTests
 
         var sql = UserRepository.BuildAvatarUrlQuery(context, userId).ToQueryString();
 
-        // Один столбец: проекция не тянет агрегат и избранное.
-        Assert.Matches(
-            new Regex(
-                @"select\s+[a-z]\.avatar_url\s+from\s+users\s+as\s+[a-z]",
-                RegexOptions.IgnoreCase),
-            sql);
+        // Два столбца: проекция не тянет агрегат, избранное и маску (маску применяет раздача).
+        Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("favorite_barbers", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("JOIN", sql, StringComparison.OrdinalIgnoreCase);
 

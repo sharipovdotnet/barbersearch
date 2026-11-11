@@ -34,14 +34,19 @@ const OTHER_USER: SessionUser = {
 const AVATAR_URL =
   '/api/media/avatars/11111111-1111-4111-8111-111111111111/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
 
-function profile(id: string, notice = 'Марк'): MyProfile {
+function profile(
+  id: string,
+  notice = 'Марк',
+  avatar: { avatarUrl?: string | null; isAvatarBlocked?: boolean } = {}
+): MyProfile {
   return {
     id,
     email: 'mark@barbersearch.test',
     firstName: notice,
     lastName: 'Правкин',
     phoneNumber: null,
-    avatarUrl: null,
+    avatarUrl: avatar.avatarUrl ?? null,
+    isAvatarBlocked: avatar.isAvatarBlocked ?? false,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified: true,
@@ -63,6 +68,9 @@ function ProfileProbe({ where }: { where: string }) {
       </output>
       <output aria-label={`${where}: аватар`}>
         {profile?.avatarUrl ?? 'нет'}
+      </output>
+      <output aria-label={`${where}: блокировка`}>
+        {profile?.isAvatarBlocked ? 'да' : 'нет'}
       </output>
       <output aria-label={`${where}: ошибка`}>{error ?? 'нет'}</output>
       <output aria-label={`${where}: вход`}>
@@ -295,6 +303,69 @@ describe('ProfileProvider', () => {
       expect(screen.getByLabelText('шапка: аватар').textContent).toBe('нет')
       expect(screen.getByLabelText('кабинет: аватар').textContent).toBe('нет')
     })
+  })
+
+  it('setAvatar снимает флаг блокировки у всех подписчиков', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json(
+          profile(USER.id, 'Марк', {
+            avatarUrl: AVATAR_URL,
+            isAvatarBlocked: true,
+          })
+        )
+      )
+    )
+
+    renderHarness()
+
+    await waitForStatus('шапка', 'ready')
+    expect(screen.getByLabelText('шапка: блокировка').textContent).toBe('да')
+
+    await user.click(screen.getByRole('button', { name: 'Новый аватар' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('шапка: блокировка').textContent).toBe('нет')
+      expect(screen.getByLabelText('кабинет: блокировка').textContent).toBe('нет')
+    })
+  })
+
+  it('save отправляет сырой avatarUrl и сохраняет флаг блокировки', async () => {
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | null = null
+
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json(
+          profile(USER.id, 'Марк', {
+            avatarUrl: AVATAR_URL,
+            isAvatarBlocked: true,
+          })
+        )
+      ),
+      http.put(`/api/users/${USER.id}/profile`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+
+        return noContent()
+      })
+    )
+
+    renderHarness()
+
+    await waitForStatus('шапка', 'ready')
+    await user.click(screen.getByRole('button', { name: 'Сохранить профиль' }))
+    await waitForProfile('кабинет', 'Марк Правкин')
+
+    // Сырой URL обязателен: `null` стёр бы фото при сохранении имени.
+    expect(body).toStrictEqual({
+      firstName: 'Марк',
+      lastName: 'Правкин',
+      phoneNumber: null,
+      avatarUrl: AVATAR_URL,
+    })
+    expect(screen.getByLabelText('шапка: блокировка').textContent).toBe('да')
   })
 
   it('save обновляет профиль и не делает второй GET users/me', async () => {

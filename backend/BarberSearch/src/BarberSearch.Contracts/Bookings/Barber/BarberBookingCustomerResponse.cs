@@ -9,7 +9,10 @@ namespace BarberSearch.Contracts.Bookings.Barber;
 /// </remarks>
 /// <param name="DisplayName">Имя и фамилия клиента, нормализованные пробелы.</param>
 /// <param name="PhoneNumber">Телефон клиента; <c>null</c>, если он не заполнен.</param>
-/// <param name="AvatarUrl">Аватар клиента; <c>null</c> у гостя и у клиента без фото.</param>
+/// <param name="AvatarUrl">
+/// Аватар клиента; <c>null</c> у гостя, у клиента без фото и у клиента, чьё фото
+/// скрыто администратором.
+/// </param>
 public record BarberBookingCustomerResponse(
     string DisplayName,
     string? PhoneNumber,

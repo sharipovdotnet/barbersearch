@@ -21,6 +21,11 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="BarberProfileId">Профиль барбера, если он привязан.</param>
 /// <param name="LastLoginAt">Последний вход либо <c>null</c>, если пользователь не входил.</param>
 /// <param name="CreatedAt">Когда пользователь создан.</param>
+/// <param name="AvatarUrl">
+/// Ссылка на аватар либо <c>null</c>, если он не загружен. Админская поверхность показывает
+/// и скрытое фото: значение остаётся сырым, а состояние передаёт <paramref name="IsAvatarBlocked"/>.
+/// </param>
+/// <param name="IsAvatarBlocked">Скрыт ли аватар администратором.</param>
 public record AdminUserResponse(
     Guid Id,
     string Email,
@@ -32,4 +37,6 @@ public record AdminUserResponse(
     bool IsPhoneVerified,
     Guid? BarberProfileId,
     DateTimeOffset? LastLoginAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? AvatarUrl,
+    bool IsAvatarBlocked);

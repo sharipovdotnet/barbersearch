@@ -15,13 +15,20 @@ namespace BarberSearch.Contracts.Users.Me;
 /// <param name="FirstName">Имя.</param>
 /// <param name="LastName">Фамилия.</param>
 /// <param name="PhoneNumber">Телефон либо <c>null</c>.</param>
-/// <param name="AvatarUrl">Ссылка на аватар либо <c>null</c>.</param>
+/// <param name="AvatarUrl">
+/// Ссылка на аватар либо <c>null</c>. Ссылка сохраняется, даже если фото скрыто
+/// администратором; показывать её можно только при <see cref="IsAvatarBlocked"/> == <c>false</c>.
+/// </param>
 /// <param name="Role">Роль пользователя.</param>
 /// <param name="BarberProfileId">Привязанный профиль барбера либо <c>null</c>.</param>
 /// <param name="IsEmailVerified">Подтверждён ли email.</param>
 /// <param name="IsPhoneVerified">Подтверждён ли телефон.</param>
 /// <param name="CreatedAt">Когда создан аккаунт.</param>
 /// <param name="LastLoginAt">Последний вход либо <c>null</c>.</param>
+/// <param name="IsAvatarBlocked">
+/// Скрыт ли аватар администратором. Сырой <see cref="AvatarUrl"/> отдаётся всегда, чтобы
+/// сохранение имени не стёрло фото; флаг — единственный признак того, что показывать его нельзя.
+/// </param>
 public record MyProfileResponse(
     Guid Id,
     string Email,
@@ -34,4 +41,5 @@ public record MyProfileResponse(
     bool IsEmailVerified,
     bool IsPhoneVerified,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastLoginAt);
+    DateTimeOffset? LastLoginAt,
+    bool IsAvatarBlocked);

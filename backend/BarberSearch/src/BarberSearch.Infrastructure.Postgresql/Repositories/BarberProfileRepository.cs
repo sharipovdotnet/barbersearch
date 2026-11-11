@@ -512,13 +512,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         // Аватар — свойство владельца, а не профиля: тот же приём, что у салона, — второй
         // запрос по уже урезанному набору id. Основной keyset-запрос остаётся на индексе,
         // без join'а users; количество строк по-прежнему ровно Limit.
-        var avatars = await Context.Users
-            .AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
-            .Select(u => new { u.Id, u.AvatarUrl })
+        var avatars = await BuildSearchAvatarsQuery(Context, userIds)
             .ToListAsync(cancellationToken);
 
-        var avatarUrls = avatars.ToDictionary(user => user.Id, user => user.AvatarUrl);
+        var avatarUrls = avatars.ToDictionary(user => user.UserId, user => user.AvatarUrl);
 
         return rows
             .Select(row =>
@@ -580,6 +577,40 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         PlaceKind? PrimaryPlaceKind,
         IReadOnlyList<string> AdditionalServices,
         string? AvatarUrl);
+
+    /// <summary>
+    /// Строит второй запрос поиска: аватары владельцев страницы по уже урезанному набору id.
+    /// </summary>
+    /// <remarks>
+    /// Тернарник маски попадает в SQL (<c>CASE WHEN is_avatar_blocked THEN NULL ELSE avatar_url</c>),
+    /// а не вычисляется в памяти: заблокированный пользователь не выпадает из выдачи, но его
+    /// <c>AvatarUrl</c> приходит <c>null</c>, и карточка показывает инициалы. Фильтра
+    /// <c>WHERE NOT is_avatar_blocked</c> здесь нет сознательно — иначе сломались бы счётчики
+    /// и keyset-выдача.
+    /// </remarks>
+    /// <param name="context">Контекст базы.</param>
+    /// <param name="userIds">Идентификаторы владельцев страницы.</param>
+    internal static IQueryable<BarberSearchAvatarRow> BuildSearchAvatarsQuery(
+        ApplicationDbContext context,
+        Guid[] userIds)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Users
+            .AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .Select(user => new BarberSearchAvatarRow(
+                user.Id,
+                user.IsAvatarBlocked ? null : user.AvatarUrl));
+    }
+
+    /// <summary>
+    /// Плоская строка второго запроса поиска: владелец и уже замаскированный аватар.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="UserId"/> нужен только для словаря и в контракт не попадает.
+    /// </remarks>
+    internal sealed record BarberSearchAvatarRow(Guid UserId, string? AvatarUrl);
 
     /// <summary>
     /// Предикаты публичного поиска: видимость, фильтры и keyset-курсор.
@@ -867,7 +898,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                                 && photo.IsPublished
                                 && !photo.IsBlocked),
                    profile.CreatedAt,
-                   profile.UpdatedAt);
+                   profile.UpdatedAt,
+                   user.IsAvatarBlocked);
     }
 
     private static AdminBarberDetailResponse ToAdminDetailResponse(
@@ -897,7 +929,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 PhotosCount: row.PhotosCount),
             row.CreatedAt,
             row.UpdatedAt,
-            photos);
+            photos,
+            row.IsAvatarBlocked);
 
     /// <summary>
     /// Админская выборка барберов: профиль, владелец, поиск и курсор.
@@ -922,7 +955,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Select(user => new
             {
                 user.Id,
-                user.Email
+                user.Email,
+                user.AvatarUrl,
+                user.IsAvatarBlocked
             });
 
         var joined = from profile in context.BarberProfiles.AsNoTracking()
@@ -989,7 +1024,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             row.profile.IsActive,
             row.profile.IsVerified,
             row.profile.CreatedAt,
-            row.profile.UpdatedAt));
+            row.profile.UpdatedAt,
+            row.user.AvatarUrl,
+            row.user.IsAvatarBlocked));
     }
 
     /// <summary>
@@ -1391,10 +1428,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         // карточки; отдельного join'а в тяжёлый запрос карточки (четыре Include под
         // AsSplitQuery) нет, и новых индексов не появляется. Пользователь без аватара даёт
         // null, отсутствующая строка (историческая ссылка) — тоже null: карточка не падает.
-        var avatarUrl = await Context.Users
-            .AsNoTracking()
-            .Where(user => user.Id == profile.UserId)
-            .Select(user => user.AvatarUrl)
+        // Скрытый администратором кадр маскируется в SQL (CASE), а не в памяти: наружу уходит
+        // null, поэтому карточка показывает инициалы.
+        var avatarUrl = await BuildCardAvatarQuery(Context, profile.UserId)
             .SingleOrDefaultAsync(cancellationToken);
 
         return new BarberProfileResponse(
@@ -1421,6 +1457,30 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             specializations,
             [.. profile.AdditionalServices],
             photos);
+    }
+
+    /// <summary>
+    /// Строит узкое чтение аватара владельца карточки: маска по флагу блокировки в SQL.
+    /// </summary>
+    /// <remarks>
+    /// Один <c>SELECT CASE WHEN is_avatar_blocked THEN NULL ELSE avatar_url END</c> по
+    /// первичному ключу <c>users_pkey</c>, без join'а. Тернарник обязан остаться в проекции:
+    /// если материализовать пару значений и маскировать в памяти, EF перестанет видеть
+    /// <c>CASE</c> и транслировать маску в SQL. Вынесено в <c>internal static</c>, чтобы
+    /// unit-тест проверил трансляцию через <c>ToQueryString()</c>.
+    /// </remarks>
+    /// <param name="context">Контекст базы.</param>
+    /// <param name="userId">Владелец профиля.</param>
+    internal static IQueryable<string?> BuildCardAvatarQuery(
+        ApplicationDbContext context,
+        Guid userId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.IsAvatarBlocked ? null : user.AvatarUrl);
     }
 
     /// <summary>
@@ -1645,5 +1705,6 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         int ScheduleDaysCount,
         int PhotosCount,
         DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        bool IsAvatarBlocked);
 }

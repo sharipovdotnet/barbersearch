@@ -4,7 +4,7 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **465 domain + 747 application + 228 infrastructure + 238 integration (1678 total)**;
+> Tests: **474 domain + 761 application + 235 infrastructure + 248 integration (1718 total)**;
 > the three unit projects are green locally (2026-11-11), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
@@ -135,7 +135,7 @@ backend/                                  ← workspace root
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 24 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 33 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Migrations/               ← 34 migrations + ApplicationDbContextModelSnapshot
         │   ├── Repositories/             ← RepositoryBase<T> + 17 repository implementations
         │   ├── ApplicationDbContext.cs   ← 24 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
@@ -162,7 +162,7 @@ backend/                                  ← workspace root
             ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 30 controllers: 29 доменных (133 endpoints) + AuthController (12 actions)
+            ├── Controllers/              ← 31 контроллер: 30 доменных (138 endpoints) + AuthController (12 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -598,7 +598,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
 | `BarberProfile.BarberSpecializations` | unique `SpecializationId` |
 | `BarberProfile.Verify()` | an inactive profile cannot be verified |
-| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
+| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `IsAvatarBlocked` (`false` по умолчанию) — `BlockAvatar` требует `AvatarUrl`, `SetAvatar`/`UpdateProfile` снимают флаг только при реальной смене URL; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
@@ -673,6 +673,19 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 `customer.avatarUrl` — `null`, а имя и телефон по-прежнему берутся из снимка брони.
 `userId` в контракты не попадает: он нужен только для догрузки. `BarberProfileResponse` и
 `MyProfileResponse` в этом срезе не менялись.
+
+**Модерация аватара (2026-11-11, issue-87).** `User.IsAvatarBlocked` — состояние аккаунта, а не
+файла: колонка `users.is_avatar_blocked` (`NOT NULL DEFAULT false`), без индекса. `BlockAvatar()`
+требует непустой `AvatarUrl` (`409 user.blockAvatar.noAvatar`), идемпотентен и меняет `UpdatedAt`
+только при реальном переходе `false → true`; `UnblockAvatar()` идемпотентен. `SetAvatar` и
+`UpdateProfile` снимают флаг **только при реальной смене** `AvatarUrl`: сравнение `Ordinal`
+делается до присваивания, `null` тоже считается сменой, а повторная запись того же URL — в том
+числе сохранение имени из кабинета, которое отправляет текущий `avatarUrl` обратно, — флаг
+сохраняет. Иначе каждое сохранение профиля разблокировало бы скрытое фото. Скрытие — маска на
+чтении, а не удаление: `AvatarUrl` и файл не меняются, поэтому «Вернуть фото» отдаёт тот же кадр.
+Ни `IsActive`, ни `Role`, ни `SecurityStamp` не трогаются: это модерация контента, а не блокировка
+доступа. Публичные чтения (поиск, публичная карточка, записи барбера) отдают `null`; `users/me`
+сохраняет сырой URL и добавляет флаг; админские списки и карточки — сырой URL и флаг.
 
 ### 7.4 Statuses and enums
 
@@ -824,21 +837,21 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-10; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-11; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 465 domain + 747 application + 228 infrastructure + 238 integration (1678 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 137 обработчиков (101 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 474 domain + 761 application + 235 infrastructure + 248 integration (1718 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 139 обработчиков (103 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 31 контроллер / 148 endpoints (136 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 31 контроллер / 150 endpoints (138 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (33):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (34):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -848,7 +861,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddBookingCancellationReason`, `AddBarberRequests`, `AddSalonOwnership`, `AddGuestBookings`,
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
 `AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`,
-`AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`.
+`AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`, `AddUserAvatarBlocked`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -1031,15 +1044,22 @@ UpdateAsync → удаление предыдущего файла best-effort`,
 файл, а предыдущий не трогается, пока не сохранилась строка. Гонка двух загрузок: побеждает
 последняя запись, файл проигравшей может остаться сиротой — допустимо, версии строки у `User` нет.
 `GET api/media/avatars/{userId:guid}/{fileName}` — анонимный `reads`-лимит, имя файла
-`^[0-9a-f]{32}\.(jpg|png|webp)$`, доступ только когда `IUserRepository.GetAvatarUrlAsync(userId)`
-вернул строку, равную запрошенному URL (Ordinal); иначе `404 avatarMedia.notFound`,
-`Cache-Control: public, max-age=86400`, `X-Content-Type-Options: nosniff`, диапазоны. Публичный
+`^[0-9a-f]{32}\.(jpg|png|webp)$`, доступ только когда `IUserRepository.GetAvatarAccessAsync(userId)`
+вернул сохранённый URL, равный запрошенному (Ordinal), а для скрытого файла запрос пришёл от
+администратора; иначе `404 avatarMedia.notFound`. Видимый кадр — `Cache-Control: public,
+max-age=86400` и `X-Content-Type-Options: nosniff`, скрытый у админа — `private, no-store`
+(issue-87). Публичный
 `BarberProfileResponse` получил `avatarUrl` сразу после `userId` — одна и та же проекция карточки
 для публичного и собственного чтения; аватар читается одним индексным lookup по `users_pkey` в
 `BuildCardAsync`. Админские карточки уже отдавали аватар; `BookingResponse`, поиск и `SessionUser`
 не менялись. `audit_log` и миграции не трогались. `PrivacyPolicy.Version` поднята до
 `2026-11-11` (фотография профиля в §3 и срок хранения в §4); старые записи согласия не
 переписываются (долг #23).
+
+**`AddUserAvatarBlocked` (2026-11-11, issue-87).** Добавляет `users.is_avatar_blocked`
+(`boolean NOT NULL DEFAULT false`): существующие строки получают `false`, то есть фото остаётся
+видимым, backfill не нужен. Индексов миграция не добавляет — все новые чтения идут по
+`users_pkey` (§15.2). `Down` удаляет колонку; `avatar_url` и файл при этом не трогаются.
 
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
@@ -1573,12 +1593,13 @@ disk**: the file store is not shared and not transactional with PostgreSQL. `pg_
 PostgreSQL backup do **not** contain either directory, so both must be backed up
 separately; a shared volume or object storage for several instances is debt #31 (§12.12).
 
-**Avatar read (2026-11-11, issue-85).** `IUserRepository.GetAvatarUrlAsync` is one
-`AsNoTracking` projection of `users.avatar_url` filtered by the primary key — served by
-`users_pkey`, no `Include`, no join and **no new index/migration**. `GET api/media/avatars/…`
-calls it on every request and compares the stored string with the requested URL Ordinal, so a
-replaced avatar stops being served immediately. `BuildCardAsync` (public and own card) adds
-exactly one such PK lookup per card read to fill `BarberProfileResponse.avatarUrl`; the heavy
+**Avatar read (2026-11-11, issue-85; flag since issue-87).** `IUserRepository.GetAvatarAccessAsync`
+is one `AsNoTracking` projection of `users.avatar_url` and `users.is_avatar_blocked` filtered by the
+primary key — served by `users_pkey`, no `Include`, no join and **no new index**. `GET
+api/media/avatars/…` calls it on every request and compares the stored string with the requested
+URL Ordinal, so a replaced avatar stops being served immediately; the flag decides whether a
+non-admin gets the file. `BuildCardAsync` (public and own card) adds exactly one such PK lookup per
+card read to fill `BarberProfileResponse.avatarUrl`, masking a hidden frame in SQL; the heavy
 card query (four `Include`s under `AsSplitQuery`) does not join `users`, so its cost is one
 indexed lookup, not a wider plan.
 
@@ -1592,6 +1613,19 @@ unchanged. `GetBarberPageAsync` reuses the existing `LEFT JOIN users` and only p
 `LEFT JOIN users` on `barber_profiles.user_id`; the customer join keys on `bookings.user_id`
 and is not reused. Costs: one extra indexed query per search page and one extra join per admin
 booking row. The avatar is never part of a predicate or of the keyset order.
+
+**Avatar moderation reads (2026-11-11, issue-87).** The 34th migration adds no index: every lookup
+is still `users_pkey`. `SearchAsync` keeps its single extra `WHERE id = ANY(...)` read, now with
+`CASE WHEN is_avatar_blocked THEN NULL ELSE avatar_url END` in the projection (extracted as
+`BuildSearchAvatarsQuery` so a unit test proves the SQL through `ToQueryString`); a blocked owner
+does not leave the page, the row count and the plan are unchanged, and an empty page still makes no
+avatar query. The card lookup (`BuildCardAvatarQuery`, also `internal` for the same SQL test) is the
+same `CASE` by PK. `BuildAdminUsersQuery` reads `avatar_url` + `is_avatar_blocked` in its existing
+row, `BuildAdminBarbersQuery` takes both from its existing `join users` (no second join), and
+`BuildAdminBarberDetailQuery` adds the flag to the projection. `BuildBarberBookingsQuery` masks the
+customer's avatar in SQL; `BuildAdminBookingsQuery` deliberately stays raw — the admin surface
+shows what is hidden from the public. Query counts and joins are unchanged; there is no
+`WHERE NOT is_avatar_blocked`, so the keyset counters do not move.
 
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
@@ -2075,7 +2109,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**30 domain controllers (+ `AuthController`), 148 endpoints: 136 domain + 12 auth** — one endpoint
+**30 domain controllers (+ `AuthController`), 150 endpoints: 138 domain + 12 auth** — one endpoint
 per Application operation, plus the twelve `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2103,7 +2137,7 @@ the aggregate that owns the child entity:
 | `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
-| `AdminUsersController` | `api/admin/users` | 2 (list + by id, admin only) |
+| `AdminUsersController` | `api/admin/users` | 4 (list + by id + avatar block/unblock, admin only) |
 | `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 | `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
@@ -2216,21 +2250,26 @@ Conventions:
   `DELETE api/users/me/avatar` — `[Authorize]`, всегда `204`, в том числе когда аватара не было.
   `GET api/media/avatars/{userId:guid}/{fileName}` — анонимный (`[AllowAnonymous]` + политика
   `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; доступ — только если
-  `IUserRepository.GetAvatarUrlAsync(userId)` вернул строку, **равную** запрошенному URL
-  (Ordinal), иначе `404 avatarMedia.notFound` (ни `403`, ни `410`: существование файла не
-  раскрывается). Ответ — `File(stream, contentType, enableRangeProcessing: true)`,
-  `Cache-Control: public, max-age=86400`, `X-Content-Type-Options: nosniff`; аватар публичен по
-  определению, исключений «владельцу/админу» нет. `BarberProfileResponse` получил `avatarUrl`
-  сразу после `userId` (публичная и собственная карточки — одинаково).
+  `IUserRepository.GetAvatarAccessAsync(userId)` вернул сохранённый URL, **равный** запрошенному
+  (Ordinal), а для скрытого файла запрос пришёл от администратора; иначе `404 avatarMedia.notFound`
+  (ни `403`, ни `410`: существование файла не раскрывается). Видимый кадр —
+  `File(stream, contentType, enableRangeProcessing: true)` с `Cache-Control: public, max-age=86400`
+  и `X-Content-Type-Options: nosniff`; скрытый отдаётся только администратору с
+  `private, no-store`, все остальные, включая владельца, получают тот же `404`. `BarberProfileResponse`
+  получил `avatarUrl` сразу после `userId` (публичная и собственная карточки — одинаково; с #87
+  скрытое фото даёт `null` в обеих).
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,
-  `lastName`, `phoneNumber`, `avatarUrl`, `role`, `barberProfileId`, `isEmailVerified`,
-  `isPhoneVerified`, `createdAt`, `lastLoginAt` — from the database, not from the token. This is
-  deliberately separate from `GET api/auth/me`, which stays claims-only and is used by the session
-  bootstrap; the cabinet needs the current name and phone after `PUT api/users/{id}/profile`.
-  `GetMyProfileHandler` uses the narrow `IUserRepository.GetMyProfileAsync` projection (no
-  favorites, no password, `AsNoTracking`) and `ICurrentUser.RequireUserId`; no migration.
+  `lastName`, `phoneNumber`, `avatarUrl`, `isAvatarBlocked`, `role`, `barberProfileId`,
+  `isEmailVerified`, `isPhoneVerified`, `createdAt`, `lastLoginAt` — from the database, not from
+  the token. Since #87 `avatarUrl` stays **raw even when the photo is hidden**, because `save()`
+  sends it back to `PUT users/{id}/profile`; the flag is the only signal that it must not be
+  rendered. This is deliberately separate from `GET api/auth/me`, which stays claims-only and is
+  used by the session bootstrap; the cabinet needs the current name and phone after
+  `PUT api/users/{id}/profile`. `GetMyProfileHandler` uses the narrow
+  `IUserRepository.GetMyProfileAsync` projection (no favorites, no password, `AsNoTracking`) and
+  `ICurrentUser.RequireUserId`; no migration.
 - **`POST api/bookings` (2026-10-19).** The client comes from `sub`; the request carries no price
   (the field was removed from the contract in R-33, 2026-10-24), so `Booking.Price` is always
   copied from the barber service. The service must belong to
@@ -2391,6 +2430,22 @@ Read endpoints (added 2026-10-19):
   would leave the service without an active administrator). The last check runs inside
   `IUnitOfWork` under `pg_advisory_xact_lock('barbersearch.admins')`
   (`IUserRepository.AcquireAdminLockAsync`), so two concurrent demotions cannot both pass.
+- **Avatar moderation (2026-11-11, issue-87).** Two mutations on `AdminUsersController`:
+  `POST api/admin/users/{userId:guid}/avatar/block` hides the avatar and
+  `DELETE api/admin/users/{userId:guid}/avatar/block` restores it. Both inherit the class-level
+  `AdminOnly` and the global cookie antiforgery filter, and both handlers call `EnsureAdmin()`
+  before reading, so a direct command invocation is guarded too. Success is `204`; a repeated call
+  is also `204` (the domain does not touch `UpdatedAt`, so no second audit row).
+  `404 user.notFound` comes from the repository as is, `409 user.blockAvatar.noAvatar` means there
+  is no photo to hide; `403 auth.forbidden` / `401 auth.unauthorized` are the usual policy results.
+  Hiding is a read mask: `avatar_url` and the file stay, `MyProfileResponse` keeps the raw URL and
+  adds `isAvatarBlocked`, `AdminUserResponse`/`AdminBarberResponse` and both admin detail contracts
+  carry the raw URL plus the flag, while the public search/card and the barber's bookings return
+  `null`. `AuditTrail` records one `user.updated` row with `changes.isAvatarBlocked` in the same
+  `SaveChanges`; `AvatarUrl` is deliberately not in the allowlist. `AvatarMediaController` serves a
+  hidden file only to an admin (`private, no-store`) and answers the usual
+  `404 avatarMedia.notFound` to everyone else, the owner included. Logs carry only the user id and
+  the new state.
 - **Admin catalogue (2026-11-02).** `GET api/admin/catalogue/hair-services|specializations|salons`
   are closed by `AdminOnly` and return the **full** dictionary including hidden rows: the public
   reads (`GET api/hair-services`, `GET api/specializations`) only expose active rows and salons had

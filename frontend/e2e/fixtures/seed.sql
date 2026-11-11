@@ -170,6 +170,7 @@ ON CONFLICT (id) DO UPDATE SET
     last_name = EXCLUDED.last_name,
     phone_number = EXCLUDED.phone_number,
     avatar_url = EXCLUDED.avatar_url,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -214,6 +215,7 @@ ON CONFLICT (id) DO UPDATE SET
     first_name = EXCLUDED.first_name,
     last_name = EXCLUDED.last_name,
     phone_number = EXCLUDED.phone_number,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -252,6 +254,7 @@ ON CONFLICT (id) DO UPDATE SET
     -- Аватар сбрасывается как у остальных фикстур: `public-barber-avatar-mutations`
     -- грузит его на этом профиле, и второй прогон без пересева начинал бы не с нуля.
     avatar_url = EXCLUDED.avatar_url,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,
@@ -286,6 +289,7 @@ SELECT
 FROM generate_series(1, 12) AS n
 ON CONFLICT (id) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     updated_at = now();
 
@@ -316,6 +320,7 @@ SELECT
 FROM generate_series(1, 8) AS n
 ON CONFLICT (id) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     updated_at = now();
@@ -958,6 +963,7 @@ VALUES
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     password_hash = EXCLUDED.password_hash,
+    is_avatar_blocked = false,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,

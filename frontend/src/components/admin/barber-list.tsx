@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 
 import { ListPager } from '@/components/list-pager'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import type { AdminBarber, AdminBarberStatusFilter } from '@/lib/admin-barbers'
@@ -163,11 +163,19 @@ export function BarberList({
   )
 }
 
-/** Аватар с инициалами, имя и email: одна и та же строка в таблице и карточке. */
+/**
+ * Аватар с инициалами, имя и email: одна и та же строка в таблице и карточке.
+ *
+ * Фото владельца профиля показывается и при блокировке: это админская поверхность,
+ * а бейдж «Фото скрыто» говорит, что публично кадра нет.
+ */
 export function BarberIdentity({ barber }: { barber: AdminBarber }) {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Avatar size="sm">
+        {barber.avatarUrl && <AvatarImage src={barber.avatarUrl} alt="" />}
         <AvatarFallback className="text-xs">
           {getInitials(barber.displayName)}
         </AvatarFallback>
@@ -177,6 +185,11 @@ export function BarberIdentity({ barber }: { barber: AdminBarber }) {
         <span className="block truncate text-xs text-muted-foreground">
           {barber.email}
         </span>
+        {barber.isAvatarBlocked && (
+          <Badge variant="outline" className="mt-1">
+            {t('Фото скрыто')}
+          </Badge>
+        )}
       </span>
     </div>
   )

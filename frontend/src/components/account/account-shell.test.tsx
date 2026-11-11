@@ -22,6 +22,7 @@ function profile(
     lastName: 'Кузнецова',
     phoneNumber: null,
     avatarUrl,
+    isAvatarBlocked: false,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified,
@@ -91,6 +92,26 @@ describe('AccountShell: неподтверждённый email', () => {
     expect(
       screen.queryByRole('link', { name: 'Email не подтверждён' })
     ).not.toBeInTheDocument()
+  })
+
+  it('скрытое администратором фото не рендерит, оставляя инициалы', async () => {
+    const avatarUrl =
+      '/api/media/avatars/88888888-8888-4888-8888-888888888888/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const value = {
+      ...profile('88888888-8888-4888-8888-888888888888', true),
+      avatarUrl,
+      isAvatarBlocked: true,
+    }
+
+    stubImageLoading()
+    server.use(http.get('/api/users/me', () => HttpResponse.json(value)))
+
+    renderShell(value)
+
+    await screen.findByText('Мария Кузнецова')
+
+    expect(document.querySelector('aside [data-slot="avatar-image"]')).toBeNull()
+    expect(screen.getByText('МК')).toBeInTheDocument()
   })
 
   it('показывает загруженный аватар вместо инициалов', async () => {

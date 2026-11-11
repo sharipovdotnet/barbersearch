@@ -336,6 +336,147 @@ public class UserTests
     }
 
     [Fact]
+    public void BlockAvatar_WithoutAvatar_ReturnsConflict()
+    {
+        var user = CreateValidUser();
+
+        var result = user.BlockAvatar();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, Assert.Single(result.Error.Errors).Type);
+        Assert.Equal("user.blockAvatar.noAvatar", result.Error.Errors[0].Code);
+        Assert.False(user.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public void BlockAvatar_SetsFlagAndRepeatedCallDoesNotTouchUpdatedAt()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        var blocked = user.BlockAvatar();
+
+        Assert.True(blocked.IsSuccess);
+        Assert.True(user.IsAvatarBlocked);
+
+        // Идемпотентность: повторная блокировка не создаёт правку, иначе аудит
+        // писал бы строку без изменения флага.
+        var updatedAt = user.UpdatedAt;
+
+        Assert.True(user.BlockAvatar().IsSuccess);
+        Assert.Equal(updatedAt, user.UpdatedAt);
+        Assert.True(user.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public void UnblockAvatar_ClearsFlagAndRepeatedCallDoesNotTouchUpdatedAt()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        var unblocked = user.UnblockAvatar();
+
+        Assert.True(unblocked.IsSuccess);
+        Assert.False(user.IsAvatarBlocked);
+
+        var updatedAt = user.UpdatedAt;
+
+        Assert.True(user.UnblockAvatar().IsSuccess);
+        Assert.Equal(updatedAt, user.UpdatedAt);
+        Assert.False(user.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public void SetAvatar_WithSameUrlAfterBlock_KeepsFlag()
+    {
+        var user = CreateValidUser();
+        var avatarUrl = "https://cdn.example.com/avatar.png";
+        Assert.True(user.SetAvatar(avatarUrl).IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        // Повторная запись того же URL — не новая публикация: ранний возврат флаг не снимает.
+        Assert.True(user.SetAvatar(avatarUrl).IsSuccess);
+
+        Assert.True(user.IsAvatarBlocked);
+        Assert.Equal(avatarUrl, user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithNewUrlAfterBlock_ClearsFlag()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/first.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/second.png").IsSuccess);
+
+        Assert.False(user.IsAvatarBlocked);
+        Assert.Equal("https://cdn.example.com/second.png", user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithNullAfterBlock_ClearsFlag()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        Assert.True(user.SetAvatar(null).IsSuccess);
+
+        Assert.False(user.IsAvatarBlocked);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithSameAvatarUrlAfterBlock_KeepsFlag()
+    {
+        var user = CreateValidUser();
+        var avatarUrl = "https://cdn.example.com/avatar.png";
+        Assert.True(user.SetAvatar(avatarUrl).IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        // Сохранение имени отправляет текущий avatarUrl обратно: флаг обязан сохраниться,
+        // иначе кабинет разблокировал бы фото обычным сохранением.
+        var updated = user.UpdateProfile("Ivan", "Petrov", null, avatarUrl);
+
+        Assert.True(updated.IsSuccess);
+        Assert.True(user.IsAvatarBlocked);
+        Assert.Equal(avatarUrl, user.AvatarUrl);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithNewAvatarUrlAfterBlock_ClearsFlag()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/first.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        var updated = user.UpdateProfile(
+            "Ivan",
+            "Petrov",
+            null,
+            "https://cdn.example.com/second.png");
+
+        Assert.True(updated.IsSuccess);
+        Assert.False(user.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public void UpdateProfile_WithNullAvatarUrlAfterBlock_ClearsFlag()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        var updated = user.UpdateProfile("Ivan", "Petrov", null, null);
+
+        Assert.True(updated.IsSuccess);
+        Assert.False(user.IsAvatarBlocked);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
     public void MarkPhoneAsVerified_RequiresPhoneNumber()
     {
         var user = CreateValidUser();

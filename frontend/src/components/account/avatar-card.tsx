@@ -167,7 +167,9 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <Avatar size="lg" className="size-24" aria-hidden>
-              {profile.avatarUrl && (
+              {/* Скрытое фото не рендерим даже при сыром `avatarUrl`: браузер
+                  показал бы старый кадр из 24-часового кэша. */}
+              {profile.avatarUrl && !profile.isAvatarBlocked && (
                 <AvatarImage src={profile.avatarUrl} alt="" />
               )}
               <AvatarFallback className="text-2xl">
@@ -176,6 +178,19 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
             </Avatar>
 
             <div className="min-w-0 space-y-2">
+              {profile.isAvatarBlocked && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-warning">
+                    {t('Фото скрыто администратором')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(
+                      'Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.'
+                    )}
+                  </p>
+                </div>
+              )}
+
               <input
                 ref={fileInputRef}
                 id="account-avatar-file"
@@ -205,9 +220,11 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
                       className="animate-spin"
                     />
                   )}
-                  {profile.avatarUrl
-                    ? t('Изменить фото')
-                    : t('Загрузить фото')}
+                  {profile.isAvatarBlocked
+                    ? t('Загрузить другое фото')
+                    : profile.avatarUrl
+                      ? t('Изменить фото')
+                      : t('Загрузить фото')}
                 </Button>
 
                 {profile.avatarUrl && (

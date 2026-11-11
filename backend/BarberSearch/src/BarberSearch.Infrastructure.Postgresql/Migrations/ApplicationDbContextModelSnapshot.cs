@@ -851,7 +851,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_barber_notifications_kind", "kind IN (1, 2)");
 
-                            t.HasCheckConstraint("ck_barber_notifications_shape", "(kind = 1 AND booking_id IS NOT NULL AND start_at IS NOT NULL)\r\nOR (kind = 2 AND bookings_count IS NOT NULL AND digest_local_date IS NOT NULL)");
+                            t.HasCheckConstraint("ck_barber_notifications_shape", "(kind = 1 AND booking_id IS NOT NULL AND start_at IS NOT NULL)\nOR (kind = 2 AND bookings_count IS NOT NULL AND digest_local_date IS NOT NULL)");
                         });
                 });
 
@@ -1467,6 +1467,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsAvatarBlocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_avatar_blocked");
 
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("boolean")

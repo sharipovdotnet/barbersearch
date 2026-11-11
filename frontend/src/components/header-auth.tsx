@@ -111,8 +111,11 @@ export function HeaderAuth() {
         }
       >
         <Avatar size="sm" aria-hidden>
-          {/* Фото декоративно: имя кнопки — «Меню аккаунта», аватар не отдельная кнопка. */}
-          {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
+          {/* Скрытое администратором фото не рендерим: сервер отдаёт сырой URL,
+              но показывать его можно только при `isAvatarBlocked === false`. */}
+          {profile?.avatarUrl && !profile.isAvatarBlocked && (
+            <AvatarImage src={profile.avatarUrl} alt="" />
+          )}
           {/* Инициалы рисуются `::before`, а не текстовым узлом: иначе у кнопки с
               именем «Меню аккаунта» появляется видимый текст, которого нет в имени,
               и axe валит каждую страницу по `label-content-name-mismatch`. */}

@@ -75,14 +75,16 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
-    /// Один узкий SELECT по первичному ключу: только <c>avatar_url</c>.
+    /// Один узкий SELECT по первичному ключу: <c>avatar_url</c> и <c>is_avatar_blocked</c>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Ни <c>Include(FavoriteBarbers)</c>, ни материализации агрегата: раздаче нужен один
-    /// столбец, чтобы сверить запрошенный media-URL с сохранённым. Проекция в анонимный тип
-    /// транслируется EF Core в плоский <c>SELECT avatar_url … WHERE id = …</c>; анонимный тип
-    /// нужен, чтобы отличить «пользователя нет» (нет строки) от «аватара нет» (<c>NULL</c>).
+    /// Ни <c>Include(FavoriteBarbers)</c>, ни материализации агрегата: раздаче нужны два
+    /// столбца, чтобы сверить запрошенный media-URL с сохранённым и понять, скрыт ли файл
+    /// администратором. Проекция в <see cref="UserAvatarAccess"/> транслируется EF Core
+    /// в плоский <c>SELECT avatar_url, is_avatar_blocked … WHERE id = …</c>; позиционная
+    /// запись (не анонимный тип) нужна, чтобы отличить «пользователя нет» (нет строки)
+    /// от «аватара нет» (<c>NULL</c> в <c>avatar_url</c>).
     /// </para>
     /// <para>
     /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>:
@@ -90,7 +92,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     /// аватара — успех с <c>null</c>.
     /// </para>
     /// </remarks>
-    public async Task<Result<string?, Failure>> GetAvatarUrlAsync(
+    public async Task<Result<UserAvatarAccess, Failure>> GetAvatarAccessAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -102,20 +104,21 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             return NotFound("avatarMedia.notFound", nameof(User), userId);
         }
 
-        return Result.Success<string?, Failure>(row.AvatarUrl);
+        return row;
     }
 
     /// <summary>
-    /// Строит узкий запрос аватара: один столбец по первичному ключу, без <c>Include</c>
-    /// и без join'ов.
+    /// Строит узкий запрос доступа к аватару: два столбца по первичному ключу, без
+    /// <c>Include</c> и без join'ов.
     /// </summary>
     /// <remarks>
     /// Вынесен в <c>internal static</c>, как и запрос пары «услуга барбера — услуга справочника»
     /// (R-20): тест проверяет трансляцию через <c>ToQueryString()</c>, не открывая соединение.
+    /// Маски здесь нет: флаг нужен раздаче, чтобы решить, отдавать ли файл администратору.
     /// </remarks>
     /// <param name="context">Контекст базы.</param>
     /// <param name="userId">Идентификатор пользователя.</param>
-    internal static IQueryable<UserAvatarUrlLookup> BuildAvatarUrlQuery(
+    internal static IQueryable<UserAvatarAccess> BuildAvatarUrlQuery(
         ApplicationDbContext context,
         Guid userId)
     {
@@ -124,7 +127,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         return context.Users
             .AsNoTracking()
             .Where(user => user.Id == userId)
-            .Select(user => new UserAvatarUrlLookup(user.AvatarUrl));
+            .Select(user => new UserAvatarAccess(user.AvatarUrl, user.IsAvatarBlocked));
     }
 
     public async Task<Result<User, Failure>> GetByEmailAsync(
@@ -309,7 +312,8 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                 user.IsEmailVerified,
                 user.IsPhoneVerified,
                 user.CreatedAt,
-                user.LastLoginAt))
+                user.LastLoginAt,
+                user.IsAvatarBlocked))
             .SingleOrDefaultAsync(cancellationToken);
 
         if (profile is null)
@@ -425,7 +429,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             user.IsPhoneVerified,
             user.BarberProfileId,
             user.LastLoginAt,
-            user.CreatedAt));
+            user.CreatedAt,
+            user.AvatarUrl,
+            user.IsAvatarBlocked));
     }
 
     /// <summary>
@@ -468,7 +474,8 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                    user.CreatedAt,
                    user.UpdatedAt,
                    user.ConsentPolicyVersion,
-                   user.ConsentedAt);
+                   user.ConsentedAt,
+                   user.IsAvatarBlocked);
     }
 
     private static AdminUserDetailResponse ToAdminDetailResponse(AdminUserDetailRow row)
@@ -497,7 +504,8 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             row.CreatedAt,
             row.UpdatedAt,
             row.ConsentPolicyVersion,
-            row.ConsentedAt);
+            row.ConsentedAt,
+            row.IsAvatarBlocked);
 
     /// <summary>
     /// Шаблон <c>ILIKE</c> для поиска по имени, фамилии и email.
@@ -602,5 +610,6 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt,
         string? ConsentPolicyVersion,
-        DateTimeOffset? ConsentedAt);
+        DateTimeOffset? ConsentedAt,
+        bool IsAvatarBlocked);
 }

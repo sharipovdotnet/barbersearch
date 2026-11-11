@@ -262,5 +262,13 @@
   "Скрыть фото?": "Hide this photo?",
   "Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.": "The photo will disappear from the public card. The barber cannot bring it back themselves.",
   "Фото скрыто: его больше нет на публичной карточке.": "The photo is hidden: it is no longer on the public card.",
-  "Фото снова на публичной карточке.": "The photo is back on the public card."
+  "Фото снова на публичной карточке.": "The photo is back on the public card.",
+
+  "Фото скрыто": "Photo hidden",
+  "Скрыть фото": "Hide photo",
+  "Вернуть фото": "Restore photo",
+  "У пользователя нет фото — скрывать нечего.": "The user has no photo — there is nothing to hide.",
+  "Фото исчезнет из шапки, поиска, карточек и списков броней. Аккаунт останется активным, вернуть фото можно здесь же.": "The photo will disappear from the header, search, cards and booking lists. The account stays active, and the photo can be restored right here.",
+  "Фото скрыто: его больше нет в публичных местах.": "The photo is hidden: it is no longer visible in public places.",
+  "Фото снова видно всем.": "The photo is visible to everyone again."
 }

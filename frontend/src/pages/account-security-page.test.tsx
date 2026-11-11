@@ -29,6 +29,7 @@ function profile(
     lastName: 'Кузнецова',
     phoneNumber: null,
     avatarUrl: null,
+    isAvatarBlocked: false,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified,

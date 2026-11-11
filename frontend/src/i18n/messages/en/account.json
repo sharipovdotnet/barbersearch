@@ -210,5 +210,8 @@
   "Аватар исчезнет из карточки и кабинета. Файл удаляется безвозвратно.": "The avatar will disappear from the card and the account. The file is deleted permanently.",
   "Аватар обновлён.": "Avatar updated.",
   "Аватар удалён.": "Avatar deleted.",
+  "Загрузить другое фото": "Upload another photo",
+  "Фото скрыто администратором": "The photo is hidden by an administrator",
+  "Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.": "It is not visible publicly. A new photo is published immediately, and only an administrator can restore the old one.",
   "JPEG, PNG или WebP до 5 МБ. Квадрат 512×512 подготовит браузер.": "JPEG, PNG or WebP up to 5 MB. The browser prepares a 512×512 square."
 }

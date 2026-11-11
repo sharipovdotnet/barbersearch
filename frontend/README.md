@@ -335,6 +335,42 @@ and `disabled` last only while a request is in flight, success is announced in `
 returns to the upload button, because «Удалить» no longer exists. At 320 px the buttons are 44 px
 and the card does not produce horizontal scroll.
 
+**Moderation.** An administrator can hide or restore the photo from `/admin/users/{id}` or
+`/admin/barbers/{id}` — `POST`/`DELETE /api/admin/users/{userId}/avatar/block`, both answering `204`
+and idempotent. Hiding does not touch access: the file and `users.avatar_url` stay, so restoring
+returns the same frame, and the account, role and sessions are unchanged. Public reads hide it:
+`GET /api/barbers`, `GET /api/barbers/{id}` and `GET /api/barber/bookings` return `avatarUrl: null`
+(a barber still appears in search), and `GET /api/media/avatars/...` answers `404` to anonymous
+visitors and to the owner; an administrator gets the file with `Cache-Control: private, no-store`.
+Each decision is one `user.updated` row in `/admin/audit` with «Фото скрыто администратором:
+Нет → Да» and the admin as the author; a repeated call writes nothing. `409
+user.blockAvatar.noAvatar` means the user has no photo to hide, `404 user.notFound` means the user
+is gone.
+
+**What the owner sees.** The header, the cabinet identity block and `AvatarCard` render the initials
+instead of the image when `isAvatarBlocked` is true — the raw URL is still in the context, but it is
+never put into an `<img>`, so the 24-hour browser cache cannot bring the old frame back. The avatar
+card says «Фото скрыто администратором» and explains that the photo is not public, a new photo is
+published immediately and only an administrator can restore the old one; the upload button becomes
+«Загрузить другое фото» and «Удалить» stays available (it clears both the URL and the flag). A
+successful upload or delete calls `setAvatar`, which clears the flag locally and in every
+subscriber.
+
+**What the admin sees.** The user and barber cards keep the **raw** URL and add a «Фото скрыто»
+badge plus «Скрыть фото»/«Вернуть фото»; hiding asks for confirmation in an `alertdialog`
+(«Фото исчезнет из шапки, поиска, карточек и списков броней. Аккаунт останется активным, вернуть
+фото можно здесь же.»), restoring needs no dialog. Without a URL the card says «У пользователя нет
+фото — скрывать нечего.» and offers no action. The rows of `/admin/users` and `/admin/barbers`
+show the 24 px photo with the same badge, so a hidden photo is visible to the admin who may restore
+it.
+
+**Why `users/me` returns the raw URL.** `PUT /api/users/{id}/profile` replaces the whole profile and
+the cabinet sends the current `avatarUrl` back; if `GET /api/users/me` returned `null` for a hidden
+photo, saving a name would erase the file (#85 regression). So `users/me` keeps the raw URL and adds
+`isAvatarBlocked`, and every renderer checks the flag. The admin reads keep the raw URL for the same
+reason: an admin must see what is hidden to decide whether to restore it. Public reads are the only
+masked surface.
+
 **Client preparation.** `src/lib/image-prep.ts` gained `prepareAvatarImage` next to
 `preparePortfolioImage`; both share one private encoder (JPEG quality 0.85, retry at 0.7 if the
 result is over 5 MiB) and the same pre-decode type/size gates. The avatar is a square centre crop
@@ -354,16 +390,20 @@ old public cache.
 
 **Public card.** `BarberProfile.avatarUrl` is part of the public response; `BarberHero` renders
 `AvatarImage` when it is set and keeps the initials as the fallback. `AccountIdentity` does the
-same for the cabinet shell. The admin user and barber cards already rendered `AvatarImage` from
-their `avatarUrl` and were not changed.
+same for the cabinet shell. The admin user and barber cards render the raw `avatarUrl` (hidden or
+not) and the «Фото скрыто» badge; the `AvatarModeration` block owns the hide/restore actions. A
+hidden photo is masked on the public card and in search, but never in the admin card.
 
 **Storage and URL.** The file lives on the same disk and under the same `Storage:RootPath` as the
 portfolio, at `{root}/avatars/{userId:N}/{mediaId:N}.{ext}`. `GET /api/media/avatars/{userId}/{fileName}`
-is anonymous and public by definition: it serves the file only when the URL stored in the database
-equals the requested one, otherwise `404` (never `403`/`410`, so existence is not revealed), with
+is anonymous: it serves the file only when the URL stored in the database equals the requested one,
+and a hidden frame only to an administrator (`private, no-store`); everyone else — the owner
+included — gets `404` (never `403`/`410`, so existence is not revealed). A visible frame keeps
 `Cache-Control: public, max-age=86400` and `X-Content-Type-Options: nosniff`. An avatar has no
-server thumbnails, no moderation queue, no `audit_log` rows and no second storage backend; those
-limits, with the single-disk backup, are debt `AGENT.md` §14 #32.
+server thumbnails and no pre-moderation queue — publication stays post-moderated, and an
+administrator can hide a frame; hiding and restoring **are** written to `audit_log` as
+`user.updated` with `isAvatarBlocked`. Those limits, with the single-disk backup, are debt
+`AGENT.md` §14 #32.
 
 **Policy.** `/privacy` §3 now names the profile photo (the user uploads it; for a barber it is
 published on the public card) and §4 sets its retention to «до удаления пользователем или
@@ -377,20 +417,28 @@ with the backend's `PrivacyPolicy.Version`; older consent records keep the editi
   `/account/profile`, `naturalWidth > 0` and `src` starting with `/api/media/avatars/`, the same
   `src` in `AccountIdentity` **and in the header account menu** (the initials `data-initials`
   before it, no image), a reload that keeps both, an admin context that sees the same `src` in
-  `/admin/users/{id}`, axe at 1280 and 320 (zero horizontal scroll, 44 px buttons), then deletion
-  through the `alertdialog` — the header and the identity block return to the initials without a
-  reload and the old media URL answers `404`.
+  `/admin/users/{id}`; the admin hides the photo (the `alertdialog` is scanned by axe at 1280) —
+  the cabinet and the header show the initials, `GET /api/users/me` returns the raw `avatarUrl`
+  with `isAvatarBlocked: true`, anonymous and owner media requests answer `404`, the admin's
+  answers `200` with `private, no-store`, and the 320 px list row keeps its badge without
+  horizontal overflow; the admin restores it and the frame is back; axe at 1280 and 320 (zero
+  horizontal scroll, 44 px buttons), then deletion through the `alertdialog` — the header and the
+  identity block return to the initials without a reload and the old media URL answers `404`.
 - `e2e/specs/public-barber-avatar-mutations.spec.ts` (`profileBarber`, the isolated profile):
   upload in the cabinet, `GET /api/barbers/{id}` returns the same `avatarUrl`, the hero shows a
   real image, and a search by the `E2E поиск` marker (seeded for `…0015`) gives exactly one card
   with the same `src`, `alt=""` and `naturalWidth > 0`; the contract
-  `GET /api/barbers?additionalService=…` returns the same URL. After deletion the card and the hero
-  show the initials again and the contract returns `avatarUrl: null`. The showcase barber `…0001`
-  is never touched.
+  `GET /api/barbers?additionalService=…` returns the same URL. The admin then hides the owner's
+  photo from `/admin/barbers/{id}`: the search card and the hero show the initials, both contracts
+  return `avatarUrl: null`, and a 320 px row with the badge does not overflow; restoring brings
+  both the image and the contract back. After deletion the card and the hero show the initials
+  again and the contract returns `avatarUrl: null`. The showcase barber `…0001` is never touched.
 
 Successful scenes pass the uploaded URL to the next one; `afterEach` on a failure removes the
-avatar through `DELETE /api/users/me/avatar`, and `e2e/fixtures/seed.sql` resets `avatar_url` for
-both fixture accounts, so a reseed starts from the initials.
+avatar through `DELETE /api/users/me/avatar`, and — since the moderation slice — also lifts
+`is_avatar_blocked` through an admin context, because the `mutations` client cannot call the admin
+route. `e2e/fixtures/seed.sql` resets both `avatar_url` and `is_avatar_blocked` for the fixture
+accounts, so a reseed starts from the initials.
 
 ## My reviews
 
@@ -1286,6 +1334,14 @@ barber in the URL is not reset by a page change, and the mobile split keeps the 
 the domain. Confirming a hidden profile is rejected by the domain, so the button explains that
 the profile must be returned to search first.
 
+**Avatar.** Each row and the card show the owner's photo (24 px in the row) with initials as the
+fallback, and a «Фото скрыто» badge when the flag is set; the card offers «Скрыть фото» (an
+`alertdialog` explaining that the photo disappears from the header, search, cards and booking
+lists while the account stays active) and «Вернуть фото» without a dialog. The request is the
+shared `POST`/`DELETE /api/admin/users/{userId}/avatar/block` with `barber.userId` — the avatar
+belongs to the profile owner, not to the profile — and the row and the card update locally before
+a quiet re-read. The raw URL stays visible to the admin so the frame can be restored.
+
 ## Admin users
 
 `/admin/users` lists the users through `GET /api/admin/users` with status and role filters and a
@@ -1299,6 +1355,13 @@ The card has a read-only «Согласие на обработку ПД» row: 
 UTC» for a self-registered account, or «Записи нет — аккаунт создан до 11.11.2026» for accounts
 that predate the record and for users created by an administrator. The IP of the consent is not
 returned by the API and is never displayed.
+
+**Avatar.** The row and the card show the user's photo (initials fallback) and a «Фото скрыто»
+badge; the card's avatar block offers «Скрыть фото» behind an `alertdialog` and «Вернуть фото»
+without one, or «У пользователя нет фото — скрывать нечего.» when there is no URL. The shared
+`POST`/`DELETE /api/admin/users/{userId}/avatar/block` answers `204` and is idempotent; the row is
+updated locally, the announcement offers the opposite action, the card is re-read quietly, and the
+raw URL stays visible to the admin so the frame can be restored.
 
 ## Admin catalogue
 

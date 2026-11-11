@@ -526,6 +526,110 @@ public class AuditTrailTests
     }
 
     [Fact]
+    public void Capture_WhenUserAvatarBlocked_WritesOnlyTheFlagChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+        Assert.Equal("user", row.EntityType);
+        Assert.Equal(user.Id, row.EntityId);
+        Assert.Equal(ActorId, row.ActorUserId);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        // Только флаг: URL аватара в allowlist не входит, иначе каждая загрузка
+        // давала бы строку журнала без административного смысла.
+        Assert.Single(changes.EnumerateObject());
+
+        var blocked = changes.GetProperty("isAvatarBlocked");
+
+        Assert.False(blocked.GetProperty("from").GetBoolean());
+        Assert.True(blocked.GetProperty("to").GetBoolean());
+        Assert.False(changes.TryGetProperty("avatarUrl", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenUserAvatarUnblocked_WritesTrueToFalse()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.UnblockAvatar().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var blocked = payload.RootElement
+            .GetProperty("changes")
+            .GetProperty("isAvatarBlocked");
+
+        Assert.True(blocked.GetProperty("from").GetBoolean());
+        Assert.False(blocked.GetProperty("to").GetBoolean());
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarBlockedAgain_WritesNoSecondRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        // Снимок уже содержит флаг true: повторная блокировка не меняет UpdatedAt,
+        // поэтому change tracker не видит Modified и строка не пишется.
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.BlockAvatar().IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarUploaded_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        // Загрузка/удаление аватара — не административное решение: AvatarUrl в allowlist
+        // не входит, поэтому строки аудита нет.
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
     public void EntityTypeNames_MatchTheAdminFilterRegistry()
     {
         var audited = AuditTrail.EntityTypeNames

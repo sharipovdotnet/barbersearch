@@ -24,6 +24,8 @@ const VERIFIED: AdminBarber = {
   id: '9e800000-0000-4000-8000-000000000001',
   displayName: 'Артём Соколов',
   email: 'artem@barbersearch.test',
+  avatarUrl: null,
+  isAvatarBlocked: false,
   grade: 'ArtDirector',
   rating: 4.5,
   reviewsCount: 29,
@@ -310,6 +312,73 @@ describe('BarbersScreen', () => {
 
     const announcement = screen.getByText(
       'Фото скрыто: его больше нет на публичной карточке.'
+    )
+    expect(announcement.closest('[role="status"]')).not.toBeNull()
+  })
+
+  it('скрытие аватара идёт по userId владельца и обновляет карточку', async () => {
+    const user = userEvent.setup()
+    const ownerId = toDetail(VERIFIED).userId
+    const avatarUrl =
+      '/api/media/avatars/9e800000-0000-4000-8000-000000000001/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    let isBlocked = false
+    let blockCalls = 0
+    let requestedUserId = ''
+
+    server.use(
+      http.get('/api/admin/barbers/:id', ({ params }) => {
+        const row = ROWS.find((item) => item.id === params.id)
+
+        return row
+          ? HttpResponse.json({
+              ...toDetail(row),
+              avatarUrl,
+              isAvatarBlocked: row.id === VERIFIED.id ? isBlocked : false,
+            })
+          : new HttpResponse(null, { status: 404 })
+      }),
+      http.post('/api/admin/users/:userId/avatar/block', ({ params }) => {
+        blockCalls += 1
+        requestedUserId = String(params.userId)
+        isBlocked = true
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    openAt('/admin/barbers?status=all')
+    render(
+      <StrictMode>
+        <AdminBarbersRoute />
+      </StrictMode>
+    )
+
+    const card = await screen.findByRole('region', {
+      name: VERIFIED.displayName,
+    })
+
+    await user.click(
+      within(card).getByRole('button', { name: 'Скрыть фото' })
+    )
+
+    const dialog = screen.getByRole('alertdialog')
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Скрыть фото' })
+    )
+
+    await waitFor(() => {
+      expect(within(card).getByText('Фото скрыто')).toBeInTheDocument()
+    })
+    expect(blockCalls).toBe(1)
+    // Аватар принадлежит владельцу профиля, а не профилю барбера.
+    expect(requestedUserId).toBe(ownerId)
+    expect(
+      within(card).getByRole('button', { name: 'Вернуть фото' })
+    ).toBeInTheDocument()
+
+    const announcement = screen.getByText(
+      'Фото скрыто: его больше нет в публичных местах.'
     )
     expect(announcement.closest('[role="status"]')).not.toBeNull()
   })
