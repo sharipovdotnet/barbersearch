@@ -14,6 +14,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
@@ -50,7 +51,7 @@ public sealed class AvatarReadSurfacesTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Search_returns_avatar_null_after_upload_and_null_again_after_delete()
+    public async Task Search_masks_a_pending_avatar_and_shows_it_only_after_approval_then_null_after_delete()
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
@@ -71,10 +72,21 @@ public sealed class AvatarReadSurfacesTests
         await app.AuthenticateAsync(barber.User.Email);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
+        // Новый кадр ждёт проверки — публичный поиск его не показывает.
         var afterUpload = await GetSearchPageAsync(anonymous, "Avatar Search City");
-        var withAvatar = Assert.Single(afterUpload.Items);
+        var pending = Assert.Single(afterUpload.Items);
+        Assert.Equal(barber.Profile.Id, pending.Id);
+        Assert.Null(pending.AvatarUrl);
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, barber.User.Id);
+
+        var afterApproval = await GetSearchPageAsync(anonymous, "Avatar Search City");
+        var withAvatar = Assert.Single(afterApproval.Items);
         Assert.Equal(barber.Profile.Id, withAvatar.Id);
         Assert.Equal(avatarUrl, withAvatar.AvatarUrl);
+
+        await app.AuthenticateAsync(barber.User.Email);
 
         using (var delete = await app.Client.DeleteAsync("api/users/me/avatar"))
         {
@@ -98,6 +110,12 @@ public sealed class AvatarReadSurfacesTests
         var customer = await app.CreateUserAsync(NewEmail("avatar-booking-customer"));
         await app.AuthenticateAsync(customer.Email);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
+
+        // Список записей барбера показывает только публичный кадр: новый аватар ждёт проверки.
+        await using (var admin = await AvatarModerationApi.StartAdminSessionAsync(app))
+        {
+            await AvatarModerationApi.ApproveAsync(admin, customer.Id);
+        }
 
         var now = DateTimeOffset.UtcNow;
         var customerBooking = await data.CreateBookingAsync(
@@ -265,6 +283,9 @@ public sealed class AvatarReadSurfacesTests
         var profile = await GetMyProfileAsync(app.Client);
         Assert.Equal("Barber", profile.LastName);
         Assert.Equal(avatarUrl, profile.AvatarUrl);
+
+        // Повторная запись того же URL не сбрасывает премодерацию: кадр всё ещё ждёт решения.
+        Assert.Equal(PhotoModerationStatus.Pending, profile.AvatarModerationStatus);
     }
 
     [Fact(Timeout = 180_000)]
@@ -282,6 +303,12 @@ public sealed class AvatarReadSurfacesTests
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, barber.User.Id);
+
+        // До блокировки одобренный кадр виден публично — иначе тест не доказывал бы маску.
+        var visibleCard = await GetPublicCardAsync(anonymous, barber.Profile.Id);
+        Assert.Equal(avatarUrl, visibleCard.AvatarUrl);
+
         await AvatarModerationApi.BlockAsync(admin, barber.User.Id);
 
         // Поиск: барбер остаётся в выдаче (счётчики и keyset не ломаются), но фото скрыто.
@@ -298,10 +325,12 @@ public sealed class AvatarReadSurfacesTests
         var userRow = await GetAdminUserRowAsync(admin.Client, barber.User.Email);
         Assert.Equal(avatarUrl, userRow.AvatarUrl);
         Assert.True(userRow.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, userRow.AvatarModerationStatus);
 
         var barberRow = await GetAdminBarberRowAsync(admin.Client, barber.Profile.Id);
         Assert.Equal(avatarUrl, barberRow.AvatarUrl);
         Assert.True(barberRow.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, barberRow.AvatarModerationStatus);
 
         using (var userDetailResponse = await admin.Client.GetAsync(
                    $"api/admin/users/{barber.User.Id}"))
@@ -359,9 +388,26 @@ public sealed class AvatarReadSurfacesTests
             BookingStatus.Confirmed);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
-        await AvatarModerationApi.BlockAsync(admin, customer.Id);
+        await AvatarModerationApi.ApproveAsync(admin, customer.Id);
 
         await app.AuthenticateAsync(barber.User.Email);
+
+        // Одобренный кадр до блокировки виден барберу — положительный контроль маски.
+        using (var visibleResponse = await app.Client.GetAsync("api/barber/bookings"))
+        {
+            Assert.Equal(HttpStatusCode.OK, visibleResponse.StatusCode);
+
+            var visiblePage = await visibleResponse.Content
+                .ReadFromJsonAsync<PagedResponse<BarberBookingResponse>>(JsonOptions);
+
+            Assert.NotNull(visiblePage);
+            Assert.Equal(
+                avatarUrl,
+                Assert.Single(visiblePage.Items, item => item.Id == booking.Id)
+                    .Customer.AvatarUrl);
+        }
+
+        await AvatarModerationApi.BlockAsync(admin, customer.Id);
 
         using (var response = await app.Client.GetAsync("api/barber/bookings"))
         {
@@ -501,7 +547,7 @@ public sealed class AvatarReadSurfacesTests
         using var response = await client.PostAsync("api/users/me/avatar", form);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>();
+        var body = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>(JsonOptions);
         Assert.NotNull(body);
 
         return body.AvatarUrl;

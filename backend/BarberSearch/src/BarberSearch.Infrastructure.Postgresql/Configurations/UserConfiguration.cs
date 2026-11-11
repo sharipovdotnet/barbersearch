@@ -1,5 +1,6 @@
 using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -39,6 +40,17 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
                 "ck_users_consent",
                 "(consent_policy_version IS NULL) = (consented_at IS NULL) " +
                 "AND (consent_policy_version IS NULL OR char_length(consent_policy_version) > 0)");
+
+            // Премодерация аватара: статус — одно из трёх значений, причина отказа не пустая
+            // и не длиннее 500 символов. Те же правила проверяет домен, ограничение —
+            // последняя линия защиты.
+            table.HasCheckConstraint(
+                "ck_users_avatar_moderation_status",
+                CheckConstraintSql.EnumIn<PhotoModerationStatus>("avatar_moderation_status"));
+            table.HasCheckConstraint(
+                "ck_users_avatar_rejection_reason",
+                FormattableString.Invariant(
+                    $"avatar_rejection_reason IS NULL OR char_length(avatar_rejection_reason) BETWEEN 1 AND {Constants.MAX_PHOTO_REJECTION_REASON_LENGTH}"));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_users");
@@ -74,6 +86,20 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("is_avatar_blocked")
             .IsRequired()
             .HasDefaultValue(false);
+
+        // Премодерация аватара: enum хранится числом в smallint (значения стабильны).
+        // Default 2 (Approved) описывает все существующие строки и аккаунты без аватара:
+        // миграция AddPhotoModeration не перепроверяет старые кадры.
+        builder.Property(x => x.AvatarModerationStatus)
+            .HasColumnName("avatar_moderation_status")
+            .HasConversion<short>()
+            .HasDefaultValue(PhotoModerationStatus.Approved);
+        builder.Property(x => x.AvatarSubmittedAt).HasColumnName("avatar_submitted_at");
+        builder.Property(x => x.AvatarReviewedAt).HasColumnName("avatar_reviewed_at");
+        builder.Property(x => x.AvatarReviewedByUserId).HasColumnName("avatar_reviewed_by_user_id");
+        builder.Property(x => x.AvatarRejectionReason)
+            .HasColumnName("avatar_rejection_reason")
+            .HasMaxLength(Constants.MAX_PHOTO_REJECTION_REASON_LENGTH);
 
         builder.Property(x => x.IsEmailVerified).HasColumnName("is_email_verified");
         builder.Property(x => x.IsPhoneVerified).HasColumnName("is_phone_verified");
@@ -115,11 +141,29 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasConstraintName("fk_users_barber_profiles_barber_profile_id")
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Кто проверил аватар: удаление аккаунта администратора обнуляет автора решения,
+        // а не удаляет пользователя.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(x => x.AvatarReviewedByUserId)
+            .HasConstraintName("fk_users_users_avatar_reviewed_by_user_id")
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(x => x.Email)
             .IsUnique()
             .HasDatabaseName("ux_users_email");
 
         builder.HasIndex(x => x.BarberProfileId)
             .HasDatabaseName("ix_users_barber_profile_id");
+
+        // Очередь модерации аватаров: только Pending, FIFO по avatar_submitted_at, id —
+        // хвост курсора. Частичный индекс: аккаунты без аватара в очередь не попадают.
+        builder.HasIndex(x => new { x.AvatarModerationStatus, x.AvatarSubmittedAt, x.Id })
+            .HasDatabaseName("ix_users_avatar_moderation_status_submitted_at")
+            .HasFilter("avatar_url IS NOT NULL");
+
+        // Индекс под FK: удаление аккаунта администратора проверяет ссылки.
+        builder.HasIndex(x => x.AvatarReviewedByUserId)
+            .HasDatabaseName("ix_users_avatar_reviewed_by_user_id");
     }
 }

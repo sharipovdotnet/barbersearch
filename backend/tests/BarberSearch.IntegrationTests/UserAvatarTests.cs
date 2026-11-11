@@ -9,6 +9,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -44,7 +45,7 @@ public sealed class UserAvatarTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Upload_stores_avatar_serves_it_and_profile_returns_the_url()
+    public async Task Upload_stores_avatar_serves_it_to_the_owner_and_publishes_it_only_after_approval()
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-upload"));
@@ -66,22 +67,46 @@ public sealed class UserAvatarTests
         Assert.True(File.Exists(filePath));
         Assert.Equal(content, await File.ReadAllBytesAsync(filePath));
 
-        // GET users/me отдаёт тот же относительный URL.
+        // GET users/me отдаёт тот же относительный URL и состояние «ждёт проверки».
         var profile = await GetMyProfileAsync(app.Client);
         Assert.Equal(avatarUrl, profile.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Pending, profile.AvatarModerationStatus);
+        Assert.Null(profile.AvatarRejectionReason);
 
-        // Раздача анонимна: файл, MIME-тип, публичный суточный кэш, nosniff и диапазоны.
+        // Пока кадр не одобрен, публично его нет: аноним получает тот же 404, что и без файла.
         using var anonymous = app.CreateClient();
+
+        using (var anonymousMedia = await anonymous.GetAsync(avatarUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, anonymousMedia.StatusCode);
+        }
+
+        // Владелец видит превью нового кадра в кабинете, но ответ нельзя кэшировать публично.
+        using (var ownerMedia = await app.Client.GetAsync(avatarUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, ownerMedia.StatusCode);
+            Assert.Equal("image/png", ownerMedia.Content.Headers.ContentType?.MediaType);
+            AssertPrivateNoStore(ownerMedia);
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(ownerMedia.Headers.GetValues("X-Content-Type-Options")));
+            Assert.Equal(content, await ownerMedia.Content.ReadAsByteArrayAsync());
+        }
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, user.Id);
+
+        var approved = await GetMyProfileAsync(app.Client);
+        Assert.Equal(avatarUrl, approved.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Approved, approved.AvatarModerationStatus);
+        Assert.Null(approved.AvatarRejectionReason);
+
+        // Одобренный кадр раздаётся анонимно: MIME-тип, публичный суточный кэш, nosniff, диапазоны.
         using var media = await anonymous.GetAsync(avatarUrl);
 
         Assert.Equal(HttpStatusCode.OK, media.StatusCode);
         Assert.Equal("image/png", media.Content.Headers.ContentType?.MediaType);
-
-        var cacheControl = media.Headers.CacheControl
-            ?? throw new InvalidOperationException("Cache-Control header is missing.");
-
-        Assert.True(cacheControl.Public);
-        Assert.Equal(TimeSpan.FromDays(1), cacheControl.MaxAge);
+        AssertPublicCache(media);
         Assert.Equal(
             "nosniff",
             Assert.Single(media.Headers.GetValues("X-Content-Type-Options")));
@@ -199,13 +224,14 @@ public sealed class UserAvatarTests
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
-        var body = await created.Content.ReadFromJsonAsync<AvatarUploadResponse>();
+        var body = await created.Content.ReadFromJsonAsync<AvatarUploadResponse>(JsonOptions);
         Assert.NotNull(body);
         Assert.StartsWith(Constants.AVATAR_MEDIA_PATH_PREFIX + "/", body.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Pending, body.ModerationStatus);
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Replacing_avatar_makes_the_old_url_not_found()
+    public async Task Replacing_avatar_makes_the_old_url_not_found_and_the_new_one_waits_for_approval()
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-replace"));
@@ -218,24 +244,42 @@ public sealed class UserAvatarTests
 
         using var anonymous = app.CreateClient();
 
+        // Точное сравнение сохранённого URL: старый файл после замены — 404 даже администратору.
         using (var oldMedia = await anonymous.GetAsync(firstUrl))
         {
             Assert.Equal(HttpStatusCode.NotFound, oldMedia.StatusCode);
         }
 
-        using (var newMedia = await anonymous.GetAsync(secondUrl))
+        // Новый кадр ещё не одобрен — анониму 404, владельцу 200 с private/no-store.
+        using (var newAnonymousMedia = await anonymous.GetAsync(secondUrl))
         {
-            Assert.Equal(HttpStatusCode.OK, newMedia.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, newAnonymousMedia.StatusCode);
         }
 
-        var profile = await GetMyProfileAsync(app.Client);
-        Assert.Equal(secondUrl, profile.AvatarUrl);
+        using (var newOwnerMedia = await app.Client.GetAsync(secondUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, newOwnerMedia.StatusCode);
+            AssertPrivateNoStore(newOwnerMedia);
+        }
+
+        var pending = await GetMyProfileAsync(app.Client);
+        Assert.Equal(secondUrl, pending.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Pending, pending.AvatarModerationStatus);
 
         // Старый файл удалён, новый лежит на диске.
         var firstFile = firstUrl[(firstUrl.LastIndexOf('/') + 1)..];
 
         Assert.False(File.Exists(
             Path.Combine(app.StorageRootPath, "avatars", $"{user.Id:N}", firstFile)));
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, user.Id);
+
+        using (var newMedia = await anonymous.GetAsync(secondUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, newMedia.StatusCode);
+            AssertPublicCache(newMedia);
+        }
     }
 
     [Fact(Timeout = 180_000)]
@@ -265,6 +309,8 @@ public sealed class UserAvatarTests
 
         var profile = await GetMyProfileAsync(app.Client);
         Assert.Null(profile.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Approved, profile.AvatarModerationStatus);
+        Assert.Null(profile.AvatarRejectionReason);
 
         // Повторное удаление — тоже 204.
         using (var repeated = await app.Client.DeleteAsync("api/users/me/avatar"))
@@ -274,7 +320,7 @@ public sealed class UserAvatarTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Public_barber_card_returns_the_owner_avatar()
+    public async Task Public_barber_card_returns_the_owner_avatar_after_approval()
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
@@ -284,6 +330,21 @@ public sealed class UserAvatarTests
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         using var anonymous = app.CreateClient();
+
+        // До одобрения публичная карточка маскирует кадр, даже если URL уже сохранён.
+        using (var pendingResponse = await anonymous.GetAsync($"api/barbers/{barber.Profile.Id}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, pendingResponse.StatusCode);
+
+            var pendingCard = await pendingResponse.Content
+                .ReadFromJsonAsync<BarberProfileResponse>(JsonOptions);
+            Assert.NotNull(pendingCard);
+            Assert.Null(pendingCard.AvatarUrl);
+        }
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(admin, barber.User.Id);
+
         using var response = await anonymous.GetAsync($"api/barbers/{barber.Profile.Id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -320,6 +381,9 @@ public sealed class UserAvatarTests
         var renamed = await GetMyProfileAsync(app.Client);
         Assert.Equal("Renamed", renamed.LastName);
         Assert.Equal(avatarUrl, renamed.AvatarUrl);
+
+        // Тот же URL — не новая загрузка: статус проверки сохраняется, кадр не уходит в очередь заново.
+        Assert.Equal(PhotoModerationStatus.Pending, renamed.AvatarModerationStatus);
 
         var foreignUrl = UserAvatarMediaUrl.Build(
             Guid.CreateVersion7(),
@@ -367,10 +431,12 @@ public sealed class UserAvatarTests
         Assert.True(withAvatar.IsSuccess);
         Assert.Equal(avatarUrl, withAvatar.Value.AvatarUrl);
         Assert.False(withAvatar.Value.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Pending, withAvatar.Value.ModerationStatus);
 
         Assert.True(empty.IsSuccess);
         Assert.Null(empty.Value.AvatarUrl);
         Assert.False(empty.Value.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, empty.Value.ModerationStatus);
 
         Assert.True(unknown.IsFailure);
         Assert.Equal("avatarMedia.notFound", Assert.Single(unknown.Error.Errors).Code);
@@ -386,6 +452,9 @@ public sealed class UserAvatarTests
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
+
+        // Блокировка имеет смысл только для одобренного кадра: сначала одобряем.
+        await AvatarModerationApi.ApproveAsync(adminSession, user.Id);
         await AvatarModerationApi.BlockAsync(adminSession, user.Id);
 
         // Аноним и владелец получают тот же 404, что и при отсутствии файла: существование
@@ -407,29 +476,23 @@ public sealed class UserAvatarTests
         {
             Assert.Equal(HttpStatusCode.OK, adminMedia.StatusCode);
 
-            var cache = adminMedia.Headers.CacheControl
-                ?? throw new InvalidOperationException("Cache-Control header is missing.");
-
-            Assert.True(cache.Private);
-            Assert.True(cache.NoStore);
-            Assert.Null(cache.MaxAge);
+            AssertPrivateNoStore(adminMedia);
             Assert.Equal(
                 "nosniff",
                 Assert.Single(adminMedia.Headers.GetValues("X-Content-Type-Options")));
         }
 
-        // Возврат отдаёт тот же файл и прежний публичный суточный кэш.
+        // Возврат отдаёт тот же файл и прежний публичный суточный кэш: статус остался Approved.
         await AvatarModerationApi.UnblockAsync(adminSession, user.Id);
+
+        var restored = await GetMyProfileAsync(app.Client);
+        Assert.Equal(PhotoModerationStatus.Approved, restored.AvatarModerationStatus);
+        Assert.False(restored.IsAvatarBlocked);
 
         using (var visible = await anonymous.GetAsync(avatarUrl))
         {
             Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
-
-            var cache = visible.Headers.CacheControl
-                ?? throw new InvalidOperationException("Cache-Control header is missing.");
-
-            Assert.True(cache.Public);
-            Assert.Equal(TimeSpan.FromDays(1), cache.MaxAge);
+            AssertPublicCache(visible);
         }
     }
 
@@ -443,6 +506,7 @@ public sealed class UserAvatarTests
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(adminSession, user.Id);
         await AvatarModerationApi.BlockAsync(adminSession, user.Id);
 
         // Асимметрия users/me: сырой URL + флаг. null здесь стёр бы фото при сохранении имени.
@@ -450,6 +514,7 @@ public sealed class UserAvatarTests
 
         Assert.Equal(avatarUrl, blocked.AvatarUrl);
         Assert.True(blocked.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, blocked.AvatarModerationStatus);
 
         // Форма кабинета отправляет текущий avatarUrl обратно: имя меняется, флаг остаётся.
         using (var update = await app.Client.PutAsJsonAsync(
@@ -477,10 +542,11 @@ public sealed class UserAvatarTests
 
         Assert.Equal(avatarUrl, restored.AvatarUrl);
         Assert.False(restored.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, restored.AvatarModerationStatus);
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Uploading_a_new_avatar_clears_the_block_and_publishes_it_immediately()
+    public async Task Uploading_a_new_avatar_clears_the_block_and_waits_for_a_new_approval()
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-reupload"));
@@ -489,6 +555,7 @@ public sealed class UserAvatarTests
         var firstUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.ApproveAsync(adminSession, user.Id);
         await AvatarModerationApi.BlockAsync(adminSession, user.Id);
 
         var secondUrl = await UploadAvatarAsync(app.Client, PngBytes(width: 600, height: 800));
@@ -497,9 +564,10 @@ public sealed class UserAvatarTests
 
         var profile = await GetMyProfileAsync(app.Client);
 
-        // Новая загрузка — новый файл и новая публикация: флаг снимается доменом.
+        // Новая загрузка — новый файл: флаг снимается доменом, но кадр снова Pending.
         Assert.Equal(secondUrl, profile.AvatarUrl);
         Assert.False(profile.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Pending, profile.AvatarModerationStatus);
 
         using var anonymous = app.CreateClient();
 
@@ -508,20 +576,42 @@ public sealed class UserAvatarTests
             Assert.Equal(HttpStatusCode.NotFound, oldMedia.StatusCode);
         }
 
-        using (var newMedia = await anonymous.GetAsync(secondUrl))
+        // Публично новый кадр не виден до решения администратора.
+        using (var newAnonymousMedia = await anonymous.GetAsync(secondUrl))
         {
-            Assert.Equal(HttpStatusCode.OK, newMedia.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, newAnonymousMedia.StatusCode);
         }
 
-        using var detailResponse = await adminSession.Client.GetAsync(
-            $"api/admin/users/{user.Id}");
-        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        using (var newOwnerMedia = await app.Client.GetAsync(secondUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, newOwnerMedia.StatusCode);
+            AssertPrivateNoStore(newOwnerMedia);
+        }
 
-        var detail = await detailResponse.Content.ReadFromJsonAsync<AdminUserDetailResponse>(
-            JsonOptions);
-        Assert.NotNull(detail);
-        Assert.Equal(secondUrl, detail.AvatarUrl);
-        Assert.False(detail.IsAvatarBlocked);
+        using (var detailResponse = await adminSession.Client.GetAsync(
+                   $"api/admin/users/{user.Id}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+
+            var detail = await detailResponse.Content.ReadFromJsonAsync<AdminUserDetailResponse>(
+                JsonOptions);
+            Assert.NotNull(detail);
+            Assert.Equal(secondUrl, detail.AvatarUrl);
+            Assert.False(detail.IsAvatarBlocked);
+            Assert.Equal(PhotoModerationStatus.Pending, detail.AvatarModerationStatus);
+        }
+
+        await AvatarModerationApi.ApproveAsync(adminSession, user.Id);
+
+        using (var publishedMedia = await anonymous.GetAsync(secondUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, publishedMedia.StatusCode);
+            AssertPublicCache(publishedMedia);
+        }
+
+        var approvedDetail = await GetMyProfileAsync(app.Client);
+        Assert.Equal(PhotoModerationStatus.Approved, approvedDetail.AvatarModerationStatus);
+        Assert.Null(approvedDetail.AvatarRejectionReason);
     }
 
     /// <summary>
@@ -551,9 +641,12 @@ public sealed class UserAvatarTests
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>();
+        var body = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>(JsonOptions);
         Assert.NotNull(body);
         Assert.False(string.IsNullOrWhiteSpace(body.AvatarUrl));
+
+        // Любая загрузка — новый кадр на проверку; постмодерации больше нет.
+        Assert.Equal(PhotoModerationStatus.Pending, body.ModerationStatus);
 
         return body.AvatarUrl;
     }
@@ -574,6 +667,32 @@ public sealed class UserAvatarTests
 
     private static string NewEmail(string prefix)
         => $"{prefix}-{Guid.NewGuid():N}@barbersearch.test";
+
+    /// <summary>
+    /// Проверяет запрет кэширования непубличного кадра (pending у владельца, blocked у админа).
+    /// </summary>
+    private static void AssertPrivateNoStore(HttpResponseMessage response)
+    {
+        var cacheControl = response.Headers.CacheControl
+            ?? throw new InvalidOperationException("Cache-Control header is missing.");
+
+        Assert.True(cacheControl.Private);
+        Assert.True(cacheControl.NoStore);
+        Assert.Null(cacheControl.MaxAge);
+    }
+
+    /// <summary>
+    /// Проверяет публичное суточное кэширование кадра, доступного всем.
+    /// </summary>
+    private static void AssertPublicCache(HttpResponseMessage response)
+    {
+        var cacheControl = response.Headers.CacheControl
+            ?? throw new InvalidOperationException("Cache-Control header is missing.");
+
+        Assert.True(cacheControl.Public);
+        Assert.Equal(TimeSpan.FromDays(1), cacheControl.MaxAge);
+        Assert.False(cacheControl.NoStore);
+    }
 
     /// <summary>
     /// Минимальный PNG с настоящими сигнатурой и <c>IHDR</c>: инспектор читает размеры

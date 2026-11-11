@@ -1,3 +1,4 @@
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 
 namespace BarberSearch.Contracts.Users.Admin;
@@ -23,9 +24,14 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="CreatedAt">Когда пользователь создан.</param>
 /// <param name="AvatarUrl">
 /// Ссылка на аватар либо <c>null</c>, если он не загружен. Админская поверхность показывает
-/// и скрытое фото: значение остаётся сырым, а состояние передаёт <paramref name="IsAvatarBlocked"/>.
+/// и скрытое фото: значение остаётся сырым, а состояние передают <paramref name="IsAvatarBlocked"/>
+/// и <paramref name="AvatarModerationStatus"/>.
 /// </param>
 /// <param name="IsAvatarBlocked">Скрыт ли аватар администратором.</param>
+/// <param name="AvatarModerationStatus">
+/// Состояние проверки аватара. Админская строка показывает бейдж «На проверке» рядом
+/// с «Фото скрыто»; URL при этом остаётся сырым.
+/// </param>
 public record AdminUserResponse(
     Guid Id,
     string Email,
@@ -39,4 +45,5 @@ public record AdminUserResponse(
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
     string? AvatarUrl,
-    bool IsAvatarBlocked);
+    bool IsAvatarBlocked,
+    PhotoModerationStatus AvatarModerationStatus);

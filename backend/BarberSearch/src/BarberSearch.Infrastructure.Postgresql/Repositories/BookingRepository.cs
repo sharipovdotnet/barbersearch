@@ -299,9 +299,13 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 user.LastName,
                 user.PhoneNumber,
 
-                // Скрытый администратором аватар маскируется в SQL: барбер видит инициалы,
-                // а строка записи остаётся. Маска — только для показа, сама бронь не меняется.
-                AvatarUrl = user.IsAvatarBlocked ? null : user.AvatarUrl
+                // Скрытый администратором или неодобренный аватар маскируется в SQL: барбер
+                // видит инициалы, а строка записи остаётся. Маска — только для показа,
+                // сама бронь не меняется.
+                AvatarUrl = user.IsAvatarBlocked
+                            || user.AvatarModerationStatus != PhotoModerationStatus.Approved
+                    ? null
+                    : user.AvatarUrl
             });
 
         var barberServices = context.BarberServices

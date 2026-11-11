@@ -6,8 +6,9 @@ using Xunit;
 namespace BarberSearch.Infrastructure.UnitTests;
 
 /// <summary>
-/// Узкое чтение аватара для раздачи: <c>avatar_url</c> и <c>is_avatar_blocked</c> по первичному
-/// ключу, без <c>Include(FavoriteBarbers)</c> и без join'ов.
+/// Узкое чтение аватара для раздачи: <c>avatar_url</c>, <c>is_avatar_blocked</c> и
+/// <c>avatar_moderation_status</c> по первичному ключу, без <c>Include(FavoriteBarbers)</c>
+/// и без join'ов.
 /// </summary>
 /// <remarks>
 /// <c>ToQueryString()</c> не открывает соединение: проверяется трансляция EF Core / Npgsql.
@@ -31,11 +32,13 @@ public class UserAvatarUrlQueryTests
 
         var sql = UserRepository.BuildAvatarUrlQuery(context, userId).ToQueryString();
 
-        // Два столбца: проекция не тянет агрегат, избранное и маску (маску применяет раздача).
+        // Три столбца: проекция не тянет агрегат, избранное и маску (маску применяет раздача).
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("favorite_barbers", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("JOIN", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
 
         // Фильтр — первичный ключ, а не поиск по URL или пользователю из другого столбца.
         Assert.Contains("id =", sql, StringComparison.OrdinalIgnoreCase);

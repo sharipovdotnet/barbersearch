@@ -533,6 +533,13 @@ public sealed class AdminAuditCoverageTests
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
 
+        // Решение администратора по кадру в allowlist не входит: строка аудита не появляется.
+        await AvatarModerationApi.ApproveAsync(admin, user.Id);
+
+        Assert.DoesNotContain(
+            await data.ReadAuditRowsAsync(),
+            row => row.EntityType == "user" && row.EntityId == user.Id);
+
         await AvatarModerationApi.BlockAsync(admin, user.Id);
 
         var blockRow = Assert.Single(

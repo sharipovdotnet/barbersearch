@@ -1,10 +1,13 @@
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Photos.Admin;
 using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -75,16 +78,17 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
-    /// Один узкий SELECT по первичному ключу: <c>avatar_url</c> и <c>is_avatar_blocked</c>.
+    /// Один узкий SELECT по первичному ключу: <c>avatar_url</c>, <c>is_avatar_blocked</c>
+    /// и <c>avatar_moderation_status</c>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Ни <c>Include(FavoriteBarbers)</c>, ни материализации агрегата: раздаче нужны два
+    /// Ни <c>Include(FavoriteBarbers)</c>, ни материализации агрегата: раздаче нужны три
     /// столбца, чтобы сверить запрошенный media-URL с сохранённым и понять, скрыт ли файл
-    /// администратором. Проекция в <see cref="UserAvatarAccess"/> транслируется EF Core
-    /// в плоский <c>SELECT avatar_url, is_avatar_blocked … WHERE id = …</c>; позиционная
-    /// запись (не анонимный тип) нужна, чтобы отличить «пользователя нет» (нет строки)
-    /// от «аватара нет» (<c>NULL</c> в <c>avatar_url</c>).
+    /// администратором и одобрен ли он. Проекция в <see cref="UserAvatarAccess"/> транслируется
+    /// EF Core в плоский <c>SELECT avatar_url, is_avatar_blocked, avatar_moderation_status
+    /// … WHERE id = …</c>; позиционная запись (не анонимный тип) нужна, чтобы отличить
+    /// «пользователя нет» (нет строки) от «аватара нет» (<c>NULL</c> в <c>avatar_url</c>).
     /// </para>
     /// <para>
     /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>:
@@ -108,13 +112,14 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
-    /// Строит узкий запрос доступа к аватару: два столбца по первичному ключу, без
+    /// Строит узкий запрос доступа к аватару: три столбца по первичному ключу, без
     /// <c>Include</c> и без join'ов.
     /// </summary>
     /// <remarks>
     /// Вынесен в <c>internal static</c>, как и запрос пары «услуга барбера — услуга справочника»
     /// (R-20): тест проверяет трансляцию через <c>ToQueryString()</c>, не открывая соединение.
-    /// Маски здесь нет: флаг нужен раздаче, чтобы решить, отдавать ли файл администратору.
+    /// Маски здесь нет: раздача решает по флагу блокировки и статусу проверки, отдавать ли
+    /// файл администратору, владельцу или публично.
     /// </remarks>
     /// <param name="context">Контекст базы.</param>
     /// <param name="userId">Идентификатор пользователя.</param>
@@ -127,7 +132,10 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         return context.Users
             .AsNoTracking()
             .Where(user => user.Id == userId)
-            .Select(user => new UserAvatarAccess(user.AvatarUrl, user.IsAvatarBlocked));
+            .Select(user => new UserAvatarAccess(
+                user.AvatarUrl,
+                user.IsAvatarBlocked,
+                user.AvatarModerationStatus));
     }
 
     public async Task<Result<User, Failure>> GetByEmailAsync(
@@ -287,6 +295,136 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
+    /// Страница очереди аватаров: только <c>Pending</c>-кадры, FIFO по времени поступления.
+    /// </summary>
+    /// <remarks>
+    /// Предикат, порядок и курсор вынесены в <see cref="BuildAdminAvatarPhotosQuery"/>:
+    /// тест проверяет трансляцию через <c>ToQueryString()</c> без базы, а счётчик сводки
+    /// использует те же условия (<see cref="CountPendingAvatarsAsync"/>).
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<AdminAvatarPhotoResponse>, Failure>>
+        GetAdminAvatarPhotosPageAsync(
+            AdminPhotoCursor? cursor,
+            string? search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.AdminPhotos.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminAvatarPhotosQuery(Context, search, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Строит очередь аватаров: предикат <c>Pending</c> + непустые URL и метка поступления,
+    /// поиск по имени/фамилии/email, keyset-курсор и FIFO-порядок.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прежний аватар при новой загрузке заменяется сразу, поэтому в очереди стоит ровно
+    /// текущий кадр: <c>avatar_url IS NOT NULL</c> отсекает удалённый аватар, а
+    /// <c>avatar_submitted_at IS NOT NULL</c> — строки, у которых метки поступления нет
+    /// (так миграция описывает аккаунт без аватара). Условия обязаны совпадать со счётчиком.
+    /// </para>
+    /// <para>
+    /// Поиск использует общий <see cref="LikePattern"/>: «%», «_» и «\» остаются литералами.
+    /// Проекция отдаёт сырой URL и статус: администратор проверяет сам кадр, публичная маска
+    /// здесь не применяется.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">Контекст базы.</param>
+    /// <param name="search">Поиск по имени, фамилии или email; <c>null</c> — без фильтра.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    internal static IQueryable<AdminAvatarPhotoResponse> BuildAdminAvatarPhotosQuery(
+        ApplicationDbContext context,
+        string? search = null,
+        AdminPhotoCursor? cursor = null,
+        int? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var query = WherePendingAvatar(context.Users.AsNoTracking());
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = LikePattern.Contains(search);
+
+            query = query.Where(user =>
+                EF.Functions.ILike(user.FirstName, pattern, "\\")
+                || EF.Functions.ILike(user.LastName, pattern, "\\")
+                || EF.Functions.ILike(user.Email, pattern, "\\"));
+        }
+
+        if (cursor is { } position)
+        {
+            // FIFO: продолжаем после последней пары (submitted_at, id). Сравнение по nullable
+            // колонке безопасно: предикат выше уже отсекает NULL-метки.
+            query = query.Where(user =>
+                user.AvatarSubmittedAt > position.SubmittedAt
+                || (user.AvatarSubmittedAt == position.SubmittedAt
+                    && user.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = query
+            .OrderBy(user => user.AvatarSubmittedAt)
+            .ThenBy(user => user.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(user => new AdminAvatarPhotoResponse(
+            user.Id,
+            user.FirstName,
+            user.LastName,
+            user.Email,
+            user.AvatarUrl!,
+            user.AvatarModerationStatus,
+            user.AvatarSubmittedAt!.Value));
+    }
+
+    /// <summary>
+    /// Предикат очереди аватаров: <c>Pending</c> при непустых URL и метке поступления.
+    /// </summary>
+    /// <remarks>
+    /// Один метод на чтение очереди и счётчик сводки: если условия разойдутся, число
+    /// в сводке перестанет совпадать с размером вкладки «Аватары».
+    /// </remarks>
+    /// <param name="users">Пользователи без отслеживания.</param>
+    internal static IQueryable<User> WherePendingAvatar(IQueryable<User> users)
+    {
+        ArgumentNullException.ThrowIfNull(users);
+
+        return users.Where(user => user.AvatarModerationStatus == PhotoModerationStatus.Pending
+                                   && user.AvatarUrl != null
+                                   && user.AvatarSubmittedAt != null);
+    }
+
+    /// <summary>
+    /// Сколько аватаров ждёт проверки — ровно предикат очереди.
+    /// </summary>
+    /// <remarks>
+    /// Те же условия, что у <see cref="BuildAdminAvatarPhotosQuery"/>: статус <c>Pending</c>
+    /// и непустые URL с меткой поступления. Добавление или снятие условия разошлось бы
+    /// с размером вкладки «Аватары».
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingAvatarsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await WherePendingAvatar(Context.Users.AsNoTracking())
+            .CountAsync(cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
+    /// <summary>
     /// Узкая проекция профиля кабинета: без избранного, пароля и служебных полей.
     /// </summary>
     /// <remarks>
@@ -313,7 +451,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                 user.IsPhoneVerified,
                 user.CreatedAt,
                 user.LastLoginAt,
-                user.IsAvatarBlocked))
+                user.IsAvatarBlocked,
+                user.AvatarModerationStatus,
+                user.AvatarRejectionReason))
             .SingleOrDefaultAsync(cancellationToken);
 
         if (profile is null)
@@ -431,7 +571,8 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             user.LastLoginAt,
             user.CreatedAt,
             user.AvatarUrl,
-            user.IsAvatarBlocked));
+            user.IsAvatarBlocked,
+            user.AvatarModerationStatus));
     }
 
     /// <summary>
@@ -475,7 +616,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                    user.UpdatedAt,
                    user.ConsentPolicyVersion,
                    user.ConsentedAt,
-                   user.IsAvatarBlocked);
+                   user.IsAvatarBlocked,
+                   user.AvatarModerationStatus,
+                   user.AvatarRejectionReason);
     }
 
     private static AdminUserDetailResponse ToAdminDetailResponse(AdminUserDetailRow row)
@@ -505,7 +648,9 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             row.UpdatedAt,
             row.ConsentPolicyVersion,
             row.ConsentedAt,
-            row.IsAvatarBlocked);
+            row.IsAvatarBlocked,
+            row.AvatarModerationStatus,
+            row.AvatarRejectionReason);
 
     /// <summary>
     /// Шаблон <c>ILIKE</c> для поиска по имени, фамилии и email.
@@ -611,5 +756,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         DateTimeOffset UpdatedAt,
         string? ConsentPolicyVersion,
         DateTimeOffset? ConsentedAt,
-        bool IsAvatarBlocked);
+        bool IsAvatarBlocked,
+        PhotoModerationStatus AvatarModerationStatus,
+        string? AvatarRejectionReason);
 }

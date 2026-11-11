@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,8 @@ public sealed class MyProfileReadTests
         Assert.Equal("+49 170 1234567", body.PhoneNumber);
         Assert.Null(body.AvatarUrl);
         Assert.False(body.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Approved, body.AvatarModerationStatus);
+        Assert.Null(body.AvatarRejectionReason);
         Assert.Equal(UserRole.Customer, body.Role);
         Assert.Null(body.BarberProfileId);
         Assert.False(body.IsEmailVerified);

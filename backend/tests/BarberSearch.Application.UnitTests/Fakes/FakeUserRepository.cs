@@ -1,10 +1,13 @@
 using System.Reflection;
+using BarberSearch.Application.Photos.Admin;
 using BarberSearch.Application.Users;
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -18,6 +21,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
 {
     private readonly Dictionary<Guid, User> _users = [];
     private readonly List<AdminUserResponse> _adminRows = [];
+    private readonly List<AdminAvatarPhotoResponse> _adminAvatarRows = [];
     private readonly HashSet<Guid> _existingIds = [];
     private readonly Dictionary<Guid, KnownBarberProfile> _barberProfiles = [];
     private Dictionary<Guid, User>? _snapshot;
@@ -44,6 +48,31 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     /// Лимит последнего админского запроса.
     /// </summary>
     public int? LastAdminLimit { get; private set; }
+
+    /// <summary>
+    /// Поиск, курсор и лимит последнего запроса очереди аватаров: тесты проверяют, что
+    /// обработчик передал обрезанную строку, разобранный курсор и pageSize + 1.
+    /// </summary>
+    public string? LastAvatarPhotoSearch { get; private set; }
+
+    public AdminPhotoCursor? LastAvatarPhotoCursor { get; private set; }
+
+    public int? LastAvatarPhotoLimit { get; private set; }
+
+    /// <summary>Ответ <see cref="CountPendingAvatarsAsync"/>: сколько аватаров ждёт проверки.</summary>
+    public int PendingAvatarsCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика очереди аватаров.</summary>
+    public Failure? CountPendingAvatarsFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик аватаров.</summary>
+    public int CountPendingAvatarsCallCount { get; private set; }
+
+    /// <summary>
+    /// Хук перед счётчиком аватаров: тест сводки проверяет, что чтения идут
+    /// последовательно — счётчик портфолио не стартует раньше этого вызова.
+    /// </summary>
+    public Action? BeforeCountPendingAvatars { get; set; }
 
     /// <summary>
     /// Сколько раз обработчик брал блокировку администраторов.
@@ -100,6 +129,12 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     /// а не по времени создания агрегата в памяти.
     /// </summary>
     public void AddAdminRow(AdminUserResponse row) => _adminRows.Add(row);
+
+    /// <summary>
+    /// Добавляет строку очереди аватаров: обработчик проверяет разбор параметров и курсор,
+    /// а фильтрацию Pending выполняет настоящий SQL, поэтому фейк хранит уже готовые строки.
+    /// </summary>
+    public void AddAdminAvatarRow(AdminAvatarPhotoResponse row) => _adminAvatarRows.Add(row);
 
     /// <summary>
     /// Регистрирует профиль барбера, чтобы админская карточка показала его имя и статусы.
@@ -201,7 +236,10 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         }
 
         return Task.FromResult<Result<UserAvatarAccess, Failure>>(
-            new UserAvatarAccess(user.AvatarUrl, user.IsAvatarBlocked));
+            new UserAvatarAccess(
+                user.AvatarUrl,
+                user.IsAvatarBlocked,
+                user.AvatarModerationStatus));
     }
 
     public Task<Result<User, Failure>> GetByEmailAsync(
@@ -356,9 +394,79 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             user.UpdatedAt,
             user.ConsentPolicyVersion,
             user.ConsentedAt,
-            user.IsAvatarBlocked);
+            user.IsAvatarBlocked,
+            user.AvatarModerationStatus,
+            user.AvatarRejectionReason);
 
         return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(detail);
+    }
+
+    /// <summary>
+    /// Очередь аватаров в памяти: те же FIFO-порядок, курсор и поиск, что у PostgreSQL,
+    /// но готовые строки задаёт тест — статус <c>Pending</c> фильтрует настоящий SQL.
+    /// </summary>
+    public Task<Result<IReadOnlyList<AdminAvatarPhotoResponse>, Failure>>
+        GetAdminAvatarPhotosPageAsync(
+            AdminPhotoCursor? cursor,
+            string? search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        LastAvatarPhotoSearch = search;
+        LastAvatarPhotoCursor = cursor;
+        LastAvatarPhotoLimit = limit;
+
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminAvatarPhotoResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.AdminPhotos.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        IEnumerable<AdminAvatarPhotoResponse> query = _adminAvatarRows;
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var needle = search.Trim();
+
+            query = query.Where(row =>
+                row.FirstName.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || row.LastName.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || row.Email.Contains(needle, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(row =>
+                row.SubmittedAt > position.SubmittedAt
+                || (row.SubmittedAt == position.SubmittedAt
+                    && row.UserId.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<AdminAvatarPhotoResponse> rows = query
+            .OrderBy(row => row.SubmittedAt)
+            .ThenBy(row => row.UserId)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminAvatarPhotoResponse>, Failure>(rows));
+    }
+
+    /// <summary>
+    /// Счётчик аватаров на проверке; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountPendingAvatarsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountPendingAvatarsCallCount++;
+        BeforeCountPendingAvatars?.Invoke();
+
+        return Task.FromResult(CountPendingAvatarsFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingAvatarsCount));
     }
 
     /// <summary>
@@ -391,7 +499,9 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
                 user.IsPhoneVerified,
                 user.CreatedAt,
                 user.LastLoginAt,
-                user.IsAvatarBlocked));
+                user.IsAvatarBlocked,
+                user.AvatarModerationStatus,
+                user.AvatarRejectionReason));
     }
 
     public Task<Result<int, Failure>> CountActiveAdminsAsync(

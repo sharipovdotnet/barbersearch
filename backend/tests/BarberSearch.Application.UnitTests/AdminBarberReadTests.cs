@@ -4,6 +4,7 @@ using BarberSearch.Application.BarberProfiles.Admin.GetAdminBarbers;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.Common;
 using Shared;
 using Xunit;
 
@@ -224,7 +225,8 @@ public class AdminBarberReadTests
         var row = CreateBarber(verified: true, active: true, Start, "WithAvatar") with
         {
             AvatarUrl = "https://cdn.example.com/avatar.png",
-            IsAvatarBlocked = true
+            IsAvatarBlocked = true,
+            AvatarModerationStatus = PhotoModerationStatus.Pending
         };
         repository.AddAdminBarber(row);
 
@@ -240,6 +242,7 @@ public class AdminBarberReadTests
 
         Assert.Equal("https://cdn.example.com/avatar.png", item.AvatarUrl);
         Assert.True(item.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Pending, item.AvatarModerationStatus);
     }
 
     [Fact]
@@ -249,7 +252,9 @@ public class AdminBarberReadTests
         var detail = CreateDetail() with
         {
             AvatarUrl = "https://cdn.example.com/avatar.png",
-            IsAvatarBlocked = true
+            IsAvatarBlocked = true,
+            AvatarModerationStatus = PhotoModerationStatus.Rejected,
+            AvatarRejectionReason = "Кадр размытый."
         };
         repository.AddAdminBarberDetail(detail);
 
@@ -262,6 +267,8 @@ public class AdminBarberReadTests
         Assert.True(result.IsSuccess);
         Assert.Equal("https://cdn.example.com/avatar.png", result.Value.AvatarUrl);
         Assert.True(result.Value.IsAvatarBlocked);
+        Assert.Equal(PhotoModerationStatus.Rejected, result.Value.AvatarModerationStatus);
+        Assert.Equal("Кадр размытый.", result.Value.AvatarRejectionReason);
     }
 
     private static AdminBarberResponse CreateBarber(
@@ -281,7 +288,8 @@ public class AdminBarberReadTests
             createdAt,
             createdAt,
             AvatarUrl: null,
-            IsAvatarBlocked: false);
+            IsAvatarBlocked: false,
+            AvatarModerationStatus: PhotoModerationStatus.Approved);
 
     private static AdminBarberDetailResponse CreateDetail()
         => new(
@@ -308,5 +316,7 @@ public class AdminBarberReadTests
             Start,
             Start,
             [],
-            IsAvatarBlocked: false);
+            IsAvatarBlocked: false,
+            AvatarModerationStatus: PhotoModerationStatus.Approved,
+            AvatarRejectionReason: null);
 }

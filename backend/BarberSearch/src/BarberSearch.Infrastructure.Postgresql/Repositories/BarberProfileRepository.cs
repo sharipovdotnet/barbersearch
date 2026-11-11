@@ -3,6 +3,8 @@ using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Photos.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
@@ -17,6 +19,7 @@ using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberSalons;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Common;
+using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
@@ -150,7 +153,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                       select new PortfolioPhotoAccess(
                           profile.UserId,
                           photo.IsPublished,
-                          photo.IsBlocked))
+                          photo.IsBlocked,
+                          photo.ModerationStatus))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -582,11 +586,11 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// Строит второй запрос поиска: аватары владельцев страницы по уже урезанному набору id.
     /// </summary>
     /// <remarks>
-    /// Тернарник маски попадает в SQL (<c>CASE WHEN is_avatar_blocked THEN NULL ELSE avatar_url</c>),
-    /// а не вычисляется в памяти: заблокированный пользователь не выпадает из выдачи, но его
+    /// Тернарник маски попадает в SQL (<c>CASE WHEN is_avatar_blocked OR
+    /// avatar_moderation_status &lt;&gt; 2 THEN NULL ELSE avatar_url END</c>), а не вычисляется
+    /// в памяти: заблокированный или неодобренный кадр не выпадает из выдачи, но его
     /// <c>AvatarUrl</c> приходит <c>null</c>, и карточка показывает инициалы. Фильтра
-    /// <c>WHERE NOT is_avatar_blocked</c> здесь нет сознательно — иначе сломались бы счётчики
-    /// и keyset-выдача.
+    /// <c>WHERE …</c> здесь нет сознательно — иначе сломались бы счётчики и keyset-выдача.
     /// </remarks>
     /// <param name="context">Контекст базы.</param>
     /// <param name="userIds">Идентификаторы владельцев страницы.</param>
@@ -601,7 +605,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Where(user => userIds.Contains(user.Id))
             .Select(user => new BarberSearchAvatarRow(
                 user.Id,
-                user.IsAvatarBlocked ? null : user.AvatarUrl));
+                user.IsAvatarBlocked
+                    || user.AvatarModerationStatus != PhotoModerationStatus.Approved
+                    ? null
+                    : user.AvatarUrl));
     }
 
     /// <summary>
@@ -797,6 +804,148 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return Result.Success<int, Failure>(count);
     }
 
+    /// <summary>
+    /// Страница очереди портфолио: только <c>Pending</c>-фотографии, FIFO по <c>created_at</c>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат, порядок и курсор вынесены в <see cref="BuildAdminPortfolioPhotosQuery"/>:
+    /// тест проверяет трансляцию через <c>ToQueryString()</c> без базы, а счётчик сводки
+    /// использует то же условие (<see cref="CountPendingPortfolioPhotosAsync"/>).
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<AdminPortfolioPhotoResponse>, Failure>>
+        GetAdminPortfolioPhotosPageAsync(
+            AdminPhotoCursor? cursor,
+            string? search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return new Failure(Error.Validation(
+                ApiErrorCodes.AdminPhotos.PageLimitInvalid,
+                Messages.PAGE_LIMIT_NOT_POSITIVE,
+                nameof(limit)));
+        }
+
+        var rows = await BuildAdminPortfolioPhotosQuery(Context, search, cursor, limit)
+            .ToListAsync(cancellationToken);
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Строит очередь портфолио: предикат <c>Pending</c>, поиск по имени барбера и email
+    /// владельца, keyset-курсор и FIFO-порядок по <c>created_at, id</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельной метки поступления у фотографии нет: кадр создаётся сразу в очередь, поэтому
+    /// FIFO строится по <c>created_at</c>. Скрытие владельцем и административная блокировка
+    /// статус не меняют — такие кадры остаются в очереди, пока администратор их не проверит.
+    /// </para>
+    /// <para>
+    /// Навигации между агрегатами нет, поэтому имя барбера и email владельца берутся явными
+    /// join'ами. Поиск использует общий <see cref="LikePattern"/>: «%», «_» и «\» остаются
+    /// литералами. URL и подпись отдаются сырыми: администратор проверяет сам кадр.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">Контекст базы.</param>
+    /// <param name="search">Поиск по имени барбера или email владельца; <c>null</c> — без фильтра.</param>
+    /// <param name="cursor">Позиция продолжения или <c>null</c> для первой страницы.</param>
+    /// <param name="limit">Сколько строк прочитать.</param>
+    internal static IQueryable<AdminPortfolioPhotoResponse> BuildAdminPortfolioPhotosQuery(
+        ApplicationDbContext context,
+        string? search = null,
+        AdminPhotoCursor? cursor = null,
+        int? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var photos = WherePendingPortfolioPhoto(context.PortfolioPhotos.AsNoTracking());
+
+        var query = from photo in photos
+                    join profile in context.BarberProfiles.AsNoTracking()
+                        on photo.BarberProfileId equals profile.Id
+                    join user in context.Users.AsNoTracking()
+                        on profile.UserId equals user.Id
+                    select new
+                    {
+                        photo,
+                        profile,
+                        user
+                    };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = LikePattern.Contains(search);
+
+            query = query.Where(row =>
+                EF.Functions.ILike(row.profile.DisplayName.Value, pattern, "\\")
+                || EF.Functions.ILike(row.user.Email, pattern, "\\"));
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(row =>
+                row.photo.CreatedAt > position.SubmittedAt
+                || (row.photo.CreatedAt == position.SubmittedAt
+                    && row.photo.Id.CompareTo(position.Id) > 0));
+        }
+
+        var ordered = query
+            .OrderBy(row => row.photo.CreatedAt)
+            .ThenBy(row => row.photo.Id);
+
+        var paged = limit is { } take ? ordered.Take(take) : ordered;
+
+        return paged.Select(row => new AdminPortfolioPhotoResponse(
+            row.photo.Id,
+            row.photo.BarberProfileId,
+            row.profile.DisplayName.Value,
+            row.user.Email,
+            row.photo.Url,
+            row.photo.Description,
+            row.photo.IsPublished,
+            row.photo.ModerationStatus,
+            row.photo.CreatedAt));
+    }
+
+    /// <summary>
+    /// Предикат очереди портфолио: только <c>Pending</c>-фотографии.
+    /// </summary>
+    /// <remarks>
+    /// Один метод на чтение очереди и счётчик сводки: <c>IsPublished</c> и <c>IsBlocked</c>
+    /// статус не меняют и в условие не входят. Если условия разойдутся, число в сводке
+    /// перестанет совпадать с размером вкладки «Портфолио».
+    /// </remarks>
+    /// <param name="photos">Фотографии без отслеживания.</param>
+    internal static IQueryable<PortfolioPhoto> WherePendingPortfolioPhoto(
+        IQueryable<PortfolioPhoto> photos)
+    {
+        ArgumentNullException.ThrowIfNull(photos);
+
+        return photos.Where(photo => photo.ModerationStatus == PhotoModerationStatus.Pending);
+    }
+
+    /// <summary>
+    /// Сколько работ портфолио ждёт проверки — ровно предикат очереди.
+    /// </summary>
+    /// <remarks>
+    /// Условие совпадает с <see cref="BuildAdminPortfolioPhotosQuery"/>:
+    /// <c>moderation_status = Pending</c>. Скрытие владельцем и блокировка статус не меняют,
+    /// поэтому добавление <c>is_published</c> или <c>is_blocked</c> разошлось бы с размером
+    /// вкладки «Портфолио».
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingPortfolioPhotosAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await WherePendingPortfolioPhoto(
+                Context.PortfolioPhotos.AsNoTracking())
+            .CountAsync(cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
     public async Task<Result<AdminBarberDetailResponse, Failure>> GetAdminByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -842,7 +991,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 photo.Description,
                 photo.SortOrder,
                 photo.IsPublished,
-                photo.IsBlocked))
+                photo.IsBlocked,
+                photo.ModerationStatus,
+                photo.RejectionReason))
             .ToListAsync(cancellationToken);
     }
 
@@ -854,8 +1005,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// подзапросами <c>COUNT</c>, поэтому карточка остаётся одним SQL-запросом.
     /// Рабочие дни схлопываются в дни недели: чек-листу нужен ответ «сколько разных дней
     /// расписано», а не число строк расписания по всем салонам. Счётчик фотографий
-    /// считает только видимые (<c>IsPublished &amp;&amp; !IsBlocked</c>): чек-лист отражает
-    /// публичную карточку, а не строки в БД.
+    /// считает только видимые и одобренные (<c>ModerationStatus == Approved &amp;&amp;
+    /// IsPublished &amp;&amp; !IsBlocked</c>): чек-лист отражает публичную карточку, а не
+    /// строки в БД.
     /// </remarks>
     internal static IQueryable<AdminBarberDetailRow> BuildAdminBarberDetailQuery(
         ApplicationDbContext context,
@@ -895,11 +1047,14 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                        .Count(),
                    context.PortfolioPhotos.Count(
                        photo => photo.BarberProfileId == profile.Id
+                                && photo.ModerationStatus == PhotoModerationStatus.Approved
                                 && photo.IsPublished
                                 && !photo.IsBlocked),
                    profile.CreatedAt,
                    profile.UpdatedAt,
-                   user.IsAvatarBlocked);
+                   user.IsAvatarBlocked,
+                   user.AvatarModerationStatus,
+                   user.AvatarRejectionReason);
     }
 
     private static AdminBarberDetailResponse ToAdminDetailResponse(
@@ -930,7 +1085,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             row.CreatedAt,
             row.UpdatedAt,
             photos,
-            row.IsAvatarBlocked);
+            row.IsAvatarBlocked,
+            row.AvatarModerationStatus,
+            row.AvatarRejectionReason);
 
     /// <summary>
     /// Админская выборка барберов: профиль, владелец, поиск и курсор.
@@ -957,7 +1114,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 user.Id,
                 user.Email,
                 user.AvatarUrl,
-                user.IsAvatarBlocked
+                user.IsAvatarBlocked,
+                user.AvatarModerationStatus
             });
 
         var joined = from profile in context.BarberProfiles.AsNoTracking()
@@ -1026,7 +1184,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             row.profile.CreatedAt,
             row.profile.UpdatedAt,
             row.user.AvatarUrl,
-            row.user.IsAvatarBlocked));
+            row.user.IsAvatarBlocked,
+            row.user.AvatarModerationStatus));
     }
 
     /// <summary>
@@ -1369,8 +1528,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// ради одного флага нельзя — карточка обязана меняться в одном месте. Флаг
     /// <paramref name="includeInactiveServices"/> уходит в <c>LoadServicesAsync</c>,
     /// <paramref name="includeHiddenPhotos"/> — в фильтр портфолио: публичная карточка
-    /// отдаёт только <c>IsPublished &amp;&amp; !IsBlocked</c>, собственная — все фотографии
-    /// с обоими флагами, чтобы барбер видел «Скрыто» и «Скрыто администратором».
+    /// отдаёт только одобренные, опубликованные и не заблокированные кадры
+    /// (<c>ModerationStatus == Approved &amp;&amp; IsPublished &amp;&amp; !IsBlocked</c>),
+    /// собственная — все фотографии с реальными флагами и статусом, чтобы барбер видел
+    /// «На проверке», «Отклонено», «Скрыто» и «Скрыто администратором».
     /// </remarks>
     private async Task<BarberProfileResponse> BuildCardAsync(
         BarberProfile profile,
@@ -1386,7 +1547,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
         var photos = profile.PortfolioPhotos
             .Where(photo => includeHiddenPhotos
-                            || (photo.IsPublished && !photo.IsBlocked))
+                            || (photo.ModerationStatus == PhotoModerationStatus.Approved
+                                && photo.IsPublished
+                                && !photo.IsBlocked))
             .OrderBy(photo => photo.SortOrder)
             .ThenBy(photo => photo.CreatedAt)
             .Select(photo => new BarberProfilePhotoResponse(
@@ -1396,7 +1559,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 photo.Description,
                 photo.SortOrder,
                 photo.IsPublished,
-                photo.IsBlocked))
+                photo.IsBlocked,
+                photo.ModerationStatus,
+                photo.RejectionReason))
             .ToList();
 
         var specializationIds = profile.BarberSpecializations
@@ -1460,14 +1625,15 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     }
 
     /// <summary>
-    /// Строит узкое чтение аватара владельца карточки: маска по флагу блокировки в SQL.
+    /// Строит узкое чтение аватара владельца карточки: маска по флагу блокировки и статусу
+    /// проверки в SQL.
     /// </summary>
     /// <remarks>
-    /// Один <c>SELECT CASE WHEN is_avatar_blocked THEN NULL ELSE avatar_url END</c> по
-    /// первичному ключу <c>users_pkey</c>, без join'а. Тернарник обязан остаться в проекции:
-    /// если материализовать пару значений и маскировать в памяти, EF перестанет видеть
-    /// <c>CASE</c> и транслировать маску в SQL. Вынесено в <c>internal static</c>, чтобы
-    /// unit-тест проверил трансляцию через <c>ToQueryString()</c>.
+    /// Один <c>SELECT CASE WHEN is_avatar_blocked OR avatar_moderation_status &lt;&gt; 2
+    /// THEN NULL ELSE avatar_url END</c> по первичному ключу <c>users_pkey</c>, без join'а.
+    /// Тернарник обязан остаться в проекции: если материализовать пару значений и маскировать
+    /// в памяти, EF перестанет видеть <c>CASE</c> и транслировать маску в SQL. Вынесено
+    /// в <c>internal static</c>, чтобы unit-тест проверил трансляцию через <c>ToQueryString()</c>.
     /// </remarks>
     /// <param name="context">Контекст базы.</param>
     /// <param name="userId">Владелец профиля.</param>
@@ -1480,7 +1646,11 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return context.Users
             .AsNoTracking()
             .Where(user => user.Id == userId)
-            .Select(user => user.IsAvatarBlocked ? null : user.AvatarUrl);
+            .Select(user =>
+                user.IsAvatarBlocked
+                    || user.AvatarModerationStatus != PhotoModerationStatus.Approved
+                    ? null
+                    : user.AvatarUrl);
     }
 
     /// <summary>
@@ -1706,5 +1876,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         int PhotosCount,
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt,
-        bool IsAvatarBlocked);
+        bool IsAvatarBlocked,
+        PhotoModerationStatus AvatarModerationStatus,
+        string? AvatarRejectionReason);
 }

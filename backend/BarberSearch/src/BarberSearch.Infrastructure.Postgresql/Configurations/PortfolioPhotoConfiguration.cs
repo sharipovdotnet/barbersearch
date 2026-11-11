@@ -1,5 +1,7 @@
 using BarberSearch.Domain;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.PortfolioPhotos;
+using BarberSearch.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,6 +22,17 @@ public class PortfolioPhotoConfiguration : IEntityTypeConfiguration<PortfolioPho
             table.HasCheckConstraint(
                 "ck_portfolio_photos_sort_order",
                 "sort_order >= 0");
+
+            // Премодерация: статус — одно из трёх значений, причина отказа не пустая и
+            // не длиннее 500 символов. Те же правила проверяет домен, ограничение —
+            // последняя линия защиты.
+            table.HasCheckConstraint(
+                "ck_portfolio_photos_moderation_status",
+                CheckConstraintSql.EnumIn<PhotoModerationStatus>("moderation_status"));
+            table.HasCheckConstraint(
+                "ck_portfolio_photos_rejection_reason",
+                FormattableString.Invariant(
+                    $"rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND {Constants.MAX_PHOTO_REJECTION_REASON_LENGTH}"));
         });
 
         builder.HasKey(x => x.Id).HasName("pk_portfolio_photos");
@@ -55,6 +68,27 @@ public class PortfolioPhotoConfiguration : IEntityTypeConfiguration<PortfolioPho
             .HasColumnName("is_blocked")
             .IsRequired();
 
+        // Премодерация: enum хранится числом в smallint (значения стабильны). Default 2
+        // (Approved) описывает все существующие строки — миграция AddPhotoModeration
+        // не перепроверяет старые кадры.
+        builder.Property(x => x.ModerationStatus)
+            .HasColumnName("moderation_status")
+            .HasConversion<short>()
+            .HasDefaultValue(PhotoModerationStatus.Approved);
+        builder.Property(x => x.RejectionReason)
+            .HasColumnName("rejection_reason")
+            .HasMaxLength(Constants.MAX_PHOTO_REJECTION_REASON_LENGTH);
+        builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
+        builder.Property(x => x.ReviewedByUserId).HasColumnName("reviewed_by_user_id");
+
+        // Кто проверил кадр: удаление аккаунта администратора не удаляет фотографию,
+        // а обнуляет автора решения.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(x => x.ReviewedByUserId)
+            .HasConstraintName("fk_portfolio_photos_users_reviewed_by_user_id")
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Ребёнок живёт только вместе с агрегатом.
         builder.HasOne(x => x.BarberProfile)
             .WithMany(profile => profile.PortfolioPhotos)
@@ -64,5 +98,13 @@ public class PortfolioPhotoConfiguration : IEntityTypeConfiguration<PortfolioPho
 
         builder.HasIndex(x => new { x.BarberProfileId, x.SortOrder })
             .HasDatabaseName("ix_portfolio_photos_barber_profile_id_sort_order");
+
+        // Очередь модерации: только Pending, FIFO по created_at, id — хвост курсора.
+        builder.HasIndex(x => new { x.ModerationStatus, x.CreatedAt, x.Id })
+            .HasDatabaseName("ix_portfolio_photos_moderation_status_created_at");
+
+        // Индекс под FK: удаление аккаунта администратора проверяет ссылки.
+        builder.HasIndex(x => x.ReviewedByUserId)
+            .HasDatabaseName("ix_portfolio_photos_reviewed_by_user_id");
     }
 }

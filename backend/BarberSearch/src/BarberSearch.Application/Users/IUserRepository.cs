@@ -1,4 +1,6 @@
+using BarberSearch.Application.Photos.Admin;
 using BarberSearch.Application.Users.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
@@ -49,8 +51,9 @@ public interface IUserRepository
     /// <para>
     /// Узкое чтение двух столбцов по первичному ключу, без <c>Include</c> и без отслеживания
     /// (как <see cref="GetSecurityStampAsync"/>). Раздача сверяет <see cref="UserAvatarAccess.AvatarUrl"/>
-    /// с запрошенным URL и решает по <see cref="UserAvatarAccess.IsAvatarBlocked"/>, отдавать ли
-    /// файл, поэтому ни файл, ни агрегат здесь не нужны.
+    /// с запрошенным URL и решает по <see cref="UserAvatarAccess.IsAvatarBlocked"/> и
+    /// <see cref="UserAvatarAccess.ModerationStatus"/>, отдавать ли файл, поэтому ни файл,
+    /// ни агрегат здесь не нужны.
     /// </para>
     /// <para>
     /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>
@@ -135,6 +138,46 @@ public interface IUserRepository
     /// <param name="cancellationToken">Токен отмены.</param>
     Task<Result<AdminUserDetailResponse, Failure>> GetAdminByIdAsync(
         Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Страница очереди «Аватары» на проверку: только <c>Pending</c>-кадры, FIFO.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Предикат ровно тот же, что у счётчика сводки:
+    /// <c>AvatarModerationStatus == Pending &amp;&amp; AvatarUrl != null &amp;&amp;
+    /// AvatarSubmittedAt != null</c> — кадр без файла или без метки поступления в очередь
+    /// не попадает и не считается. Порядок — <c>avatar_submitted_at ASC, id ASC</c>;
+    /// курсор — пара <c>(submittedAt, id)</c>.
+    /// </para>
+    /// <para>
+    /// Поиск — подстрока без учёта регистра по имени, фамилии и email, служебные символы
+    /// <c>%</c>, <c>_</c> и <c>\</c> экранируются. <paramref name="limit"/> — уже
+    /// увеличенный на единицу размер страницы: репозиторий не решает, есть ли следующая
+    /// страница, а возвращает на одну строку больше.
+    /// </para>
+    /// </remarks>
+    /// <param name="cursor">Позиция последней строки предыдущей страницы.</param>
+    /// <param name="search">Поиск по имени или email; <c>null</c> — без фильтра.</param>
+    /// <param name="limit">Сколько строк прочитать; <c>limit &lt;= 0</c> — <c>400 admin.photos.page.limit</c>.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<AdminAvatarPhotoResponse>, Failure>> GetAdminAvatarPhotosPageAsync(
+        AdminPhotoCursor? cursor,
+        string? search,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Сколько аватаров ждёт проверки.
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с чтением очереди: <c>avatar_moderation_status = Pending</c>
+    /// при непустых <c>avatar_url</c> и <c>avatar_submitted_at</c>. Иначе число в сводке
+    /// разошлось бы с размером вкладки.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingAvatarsAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>

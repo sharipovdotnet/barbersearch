@@ -1078,6 +1078,25 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_published");
 
+                    b.Property<short>("ModerationStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)2)
+                        .HasColumnName("moderation_status");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
@@ -1106,11 +1125,21 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasKey("Id")
                         .HasName("pk_portfolio_photos");
 
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_portfolio_photos_reviewed_by_user_id");
+
                     b.HasIndex("BarberProfileId", "SortOrder")
                         .HasDatabaseName("ix_portfolio_photos_barber_profile_id_sort_order");
 
+                    b.HasIndex("ModerationStatus", "CreatedAt", "Id")
+                        .HasDatabaseName("ix_portfolio_photos_moderation_status_created_at");
+
                     b.ToTable("portfolio_photos", null, t =>
                         {
+                            t.HasCheckConstraint("ck_portfolio_photos_moderation_status", "moderation_status IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_portfolio_photos_rejection_reason", "rejection_reason IS NULL OR char_length(rejection_reason) BETWEEN 1 AND 500");
+
                             t.HasCheckConstraint("ck_portfolio_photos_sort_order", "sort_order >= 0");
 
                             t.HasCheckConstraint("ck_portfolio_photos_url", "char_length(btrim(url)) > 0");
@@ -1493,6 +1522,29 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<short>("AvatarModerationStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)2)
+                        .HasColumnName("avatar_moderation_status");
+
+                    b.Property<string>("AvatarRejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("avatar_rejection_reason");
+
+                    b.Property<DateTimeOffset?>("AvatarReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("avatar_reviewed_at");
+
+                    b.Property<Guid?>("AvatarReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("avatar_reviewed_by_user_id");
+
+                    b.Property<DateTimeOffset?>("AvatarSubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("avatar_submitted_at");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
@@ -1600,6 +1652,9 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasKey("Id")
                         .HasName("pk_users");
 
+                    b.HasIndex("AvatarReviewedByUserId")
+                        .HasDatabaseName("ix_users_avatar_reviewed_by_user_id");
+
                     b.HasIndex("BarberProfileId")
                         .HasDatabaseName("ix_users_barber_profile_id");
 
@@ -1607,8 +1662,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_users_email");
 
+                    b.HasIndex("AvatarModerationStatus", "AvatarSubmittedAt", "Id")
+                        .HasDatabaseName("ix_users_avatar_moderation_status_submitted_at")
+                        .HasFilter("avatar_url IS NOT NULL");
+
                     b.ToTable("users", null, t =>
                         {
+                            t.HasCheckConstraint("ck_users_avatar_moderation_status", "avatar_moderation_status IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_users_avatar_rejection_reason", "avatar_rejection_reason IS NULL OR char_length(avatar_rejection_reason) BETWEEN 1 AND 500");
+
                             t.HasCheckConstraint("ck_users_consent", "(consent_policy_version IS NULL) = (consented_at IS NULL) AND (consent_policy_version IS NULL OR char_length(consent_policy_version) > 0)");
 
                             t.HasCheckConstraint("ck_users_email", "char_length(email) BETWEEN 3 AND 254");
@@ -2028,6 +2091,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_portfolio_photos_barber_profiles_barber_profile_id");
 
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_portfolio_photos_users_reviewed_by_user_id");
+
                     b.Navigation("BarberProfile");
                 });
 
@@ -2076,6 +2145,12 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
             modelBuilder.Entity("BarberSearch.Domain.Users.User", b =>
                 {
+                    b.HasOne("BarberSearch.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AvatarReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_users_users_avatar_reviewed_by_user_id");
+
                     b.HasOne("BarberSearch.Domain.BarberProfiles.BarberProfile", null)
                         .WithMany()
                         .HasForeignKey("BarberProfileId")

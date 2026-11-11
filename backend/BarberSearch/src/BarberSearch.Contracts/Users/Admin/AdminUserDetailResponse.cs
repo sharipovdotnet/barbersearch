@@ -1,3 +1,4 @@
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 
 namespace BarberSearch.Contracts.Users.Admin;
@@ -20,8 +21,9 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="LastName">Фамилия.</param>
 /// <param name="PhoneNumber">Телефон либо <c>null</c>.</param>
 /// <param name="AvatarUrl">
-/// Ссылка на аватар либо <c>null</c>, если он не загружен. Скрытое фото администратор видит:
-/// значение остаётся сырым, состояние — в <paramref name="IsAvatarBlocked"/>.
+/// Ссылка на аватар либо <c>null</c>, если он не загружен. Скрытое и неодобренное фото
+/// администратор видит: значение остаётся сырым, состояния — в <paramref name="IsAvatarBlocked"/>,
+/// <paramref name="AvatarModerationStatus"/> и <paramref name="AvatarRejectionReason"/>.
 /// </param>
 /// <param name="Role">Роль пользователя.</param>
 /// <param name="IsActive">Открыт ли доступ к сервису.</param>
@@ -37,6 +39,12 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="ConsentPolicyVersion">Редакция Политики, на которую дано согласие, либо <c>null</c>.</param>
 /// <param name="ConsentedAt">Когда дано согласие (UTC) либо <c>null</c>.</param>
 /// <param name="IsAvatarBlocked">Скрыт ли аватар администратором.</param>
+/// <param name="AvatarModerationStatus">
+/// Состояние проверки аватара: администратор видит, ждёт ли кадр решения, одобрен или отклонён.
+/// </param>
+/// <param name="AvatarRejectionReason">
+/// Причина отказа либо <c>null</c>. Текст администратора; в аудит и логи не попадает.
+/// </param>
 public record AdminUserDetailResponse(
     Guid Id,
     string Email,
@@ -57,4 +65,6 @@ public record AdminUserDetailResponse(
     DateTimeOffset UpdatedAt,
     string? ConsentPolicyVersion,
     DateTimeOffset? ConsentedAt,
-    bool IsAvatarBlocked);
+    bool IsAvatarBlocked,
+    PhotoModerationStatus AvatarModerationStatus,
+    string? AvatarRejectionReason);

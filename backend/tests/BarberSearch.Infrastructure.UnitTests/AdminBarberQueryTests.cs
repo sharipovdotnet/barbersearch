@@ -38,9 +38,10 @@ public class AdminBarberQueryTests
         Assert.DoesNotContain("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
 
         // Аватар и флаг берутся из уже существующего join users: второго join'а нет,
-        // маски нет — администратор видит и скрытое фото.
+        // маски нет — администратор видит и скрытое фото; статус проверки тоже приходит.
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Single(
             System.Text.RegularExpressions.Regex.Matches(
@@ -100,16 +101,21 @@ public class AdminBarberQueryTests
         }
 
         Assert.Contains("count", sql, StringComparison.OrdinalIgnoreCase);
-        // Чек-лист считает только видимые фотографии, как публичная карточка.
+        // Чек-лист считает только видимые и одобренные фотографии, как публичная карточка:
+        // Pending/Rejected в счётчик не входят.
+        Assert.Contains("moderation_status = 2", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_published", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_blocked", sql, StringComparison.OrdinalIgnoreCase);
         // Дни расписания схлопываются: пять строк по одному дню — это один день недели.
         Assert.Contains("DISTINCT", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_email_verified", sql, StringComparison.OrdinalIgnoreCase);
 
-        // Карточка уже join'ит владельца ради email: аватар и флаг приходят оттуда же.
+        // Карточка уже join'ит владельца ради email: аватар, флаг, статус и причина
+        // приходят оттуда же.
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_rejection_reason", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -1,4 +1,5 @@
 using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.Common;
 
 namespace BarberSearch.Contracts.BarberProfiles.Admin;
 
@@ -22,9 +23,14 @@ namespace BarberSearch.Contracts.BarberProfiles.Admin;
 /// <param name="UpdatedAt">Когда профиль последний раз менялся.</param>
 /// <param name="AvatarUrl">
 /// Ссылка на аватар владельца профиля либо <c>null</c>, если он не загружен. Админская
-/// поверхность показывает и скрытое фото; состояние передаёт <paramref name="IsAvatarBlocked"/>.
+/// поверхность показывает и скрытое фото; состояние передают <paramref name="IsAvatarBlocked"/>
+/// и <paramref name="AvatarModerationStatus"/>.
 /// </param>
 /// <param name="IsAvatarBlocked">Скрыт ли аватар владельца администратором.</param>
+/// <param name="AvatarModerationStatus">
+/// Состояние проверки аватара владельца. Строка списка показывает бейдж «На проверке»
+/// рядом с «Фото скрыто»; URL остаётся сырым.
+/// </param>
 public record AdminBarberResponse(
     Guid Id,
     string DisplayName,
@@ -37,4 +43,5 @@ public record AdminBarberResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? AvatarUrl,
-    bool IsAvatarBlocked);
+    bool IsAvatarBlocked,
+    PhotoModerationStatus AvatarModerationStatus);

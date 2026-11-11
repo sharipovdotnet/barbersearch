@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Admin;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,7 @@ public sealed class AdminUserReadTests
         Assert.Equal(UserRole.Barber, item.Role);
         Assert.True(item.IsActive);
         Assert.Equal(barber.Profile.Id, item.BarberProfileId);
+        Assert.Equal(PhotoModerationStatus.Approved, item.AvatarModerationStatus);
 
         // Фильтр роли: барбер не попадает в список администраторов.
         using var admins = await app.Client.GetAsync(
@@ -92,6 +94,8 @@ public sealed class AdminUserReadTests
         Assert.Equal(barber.Profile.Id, body.BarberProfile.Id);
         Assert.Equal("Admin Users Barber", body.BarberProfile.DisplayName);
         Assert.True(body.BarberProfile.IsActive);
+        Assert.Equal(PhotoModerationStatus.Approved, body.AvatarModerationStatus);
+        Assert.Null(body.AvatarRejectionReason);
     }
 
     [Fact(Timeout = 120_000)]

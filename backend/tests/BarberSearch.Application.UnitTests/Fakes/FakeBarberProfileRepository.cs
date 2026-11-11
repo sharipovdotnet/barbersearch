@@ -2,6 +2,8 @@ using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.BarberProfiles.Admin;
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.SearchBarbers;
+using BarberSearch.Application.Photos.Admin;
+using BarberSearch.Contracts.Admin;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
@@ -34,6 +36,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     private readonly List<BarberSearchItemResponse> _searchItems = [];
     private readonly Dictionary<Guid, BarberProfileResponse> _cards = [];
     private readonly List<AdminBarberResponse> _adminBarbers = [];
+    private readonly List<AdminPortfolioPhotoResponse> _adminPortfolioRows = [];
     private readonly Dictionary<Guid, AdminBarberDetailResponse> _adminDetails = [];
     private readonly List<BarberSalonSummaryResponse> _salonSummaries = [];
     private readonly List<SalonBarberResponse> _salonBarbers = [];
@@ -62,6 +65,30 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
 
     /// <summary>Подмена ошибки счётчика очереди проверки.</summary>
     public Failure? CountPendingFailure { get; set; }
+
+    /// <summary>Ответ <see cref="CountPendingPortfolioPhotosAsync"/>: работ на проверке.</summary>
+    public int PendingPortfolioCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика очереди портфолио.</summary>
+    public Failure? CountPendingPortfolioFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик портфолио.</summary>
+    public int CountPendingPortfolioCallCount { get; private set; }
+
+    /// <summary>
+    /// Хук перед счётчиком портфолио: тест сводки проверяет порядок последовательных чтений.
+    /// </summary>
+    public Action? BeforeCountPendingPortfolioPhotos { get; set; }
+
+    /// <summary>
+    /// Поиск, курсор и лимит последнего запроса очереди портфолио: тесты проверяют, что
+    /// обработчик передал обрезанную строку, разобранный курсор и pageSize + 1.
+    /// </summary>
+    public string? LastPortfolioPhotoSearch { get; private set; }
+
+    public AdminPhotoCursor? LastPortfolioPhotoCursor { get; private set; }
+
+    public int? LastPortfolioPhotoLimit { get; private set; }
 
     /// <summary>
     /// Какие узкие чтения профиля вызвал обработчик: <c>root</c>, <c>salons</c>,
@@ -133,6 +160,13 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public void AddCard(BarberProfileResponse card) => _cards[card.Id] = card;
 
     public void AddAdminBarber(AdminBarberResponse barber) => _adminBarbers.Add(barber);
+
+    /// <summary>
+    /// Строка очереди портфолио: фейк хранит уже готовые строки, потому что фильтр Pending
+    /// и joins выполняет настоящий SQL.
+    /// </summary>
+    public void AddAdminPortfolioPhotoRow(AdminPortfolioPhotoResponse row)
+        => _adminPortfolioRows.Add(row);
 
     public void AddAdminBarberDetail(AdminBarberDetailResponse barber)
         => _adminDetails[barber.Id] = barber;
@@ -324,7 +358,8 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
                 .Select(photo => new PortfolioPhotoAccess(
                     profile.UserId,
                     photo.IsPublished,
-                    photo.IsBlocked))
+                    photo.IsBlocked,
+                    photo.ModerationStatus))
                 .FirstOrDefault()
             : null;
 
@@ -482,6 +517,73 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         => Task.FromResult(CountPendingFailure is { } failure
             ? Result.Failure<int, Failure>(failure)
             : Result.Success<int, Failure>(PendingCount));
+
+    /// <summary>
+    /// Очередь портфолио в памяти: FIFO по <c>created_at, id</c>, тот же поиск по имени
+    /// барбера и email владельца, что у PostgreSQL.
+    /// </summary>
+    public Task<Result<IReadOnlyList<AdminPortfolioPhotoResponse>, Failure>>
+        GetAdminPortfolioPhotosPageAsync(
+            AdminPhotoCursor? cursor,
+            string? search,
+            int limit,
+            CancellationToken cancellationToken = default)
+    {
+        LastPortfolioPhotoSearch = search;
+        LastPortfolioPhotoCursor = cursor;
+        LastPortfolioPhotoLimit = limit;
+
+        if (limit <= 0)
+        {
+            return Task.FromResult<Result<IReadOnlyList<AdminPortfolioPhotoResponse>, Failure>>(
+                new Failure(Error.Validation(
+                    ApiErrorCodes.AdminPhotos.PageLimitInvalid,
+                    "Page limit must be positive.",
+                    nameof(limit))));
+        }
+
+        IEnumerable<AdminPortfolioPhotoResponse> query = _adminPortfolioRows;
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var needle = search.Trim();
+
+            query = query.Where(row =>
+                row.BarberDisplayName.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || row.OwnerEmail.Contains(needle, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (cursor is { } position)
+        {
+            query = query.Where(row =>
+                row.SubmittedAt > position.SubmittedAt
+                || (row.SubmittedAt == position.SubmittedAt
+                    && row.PhotoId.CompareTo(position.Id) > 0));
+        }
+
+        IReadOnlyList<AdminPortfolioPhotoResponse> rows = query
+            .OrderBy(row => row.SubmittedAt)
+            .ThenBy(row => row.PhotoId)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<AdminPortfolioPhotoResponse>, Failure>(rows));
+    }
+
+    /// <summary>
+    /// Счётчик работ на проверке; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountPendingPortfolioPhotosAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountPendingPortfolioCallCount++;
+        BeforeCountPendingPortfolioPhotos?.Invoke();
+
+        return Task.FromResult(CountPendingPortfolioFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingPortfolioCount));
+    }
 
     public Task<Result<IReadOnlyList<AdminBarberResponse>, Failure>> GetAdminPageAsync(
         AdminBarberStatus status,

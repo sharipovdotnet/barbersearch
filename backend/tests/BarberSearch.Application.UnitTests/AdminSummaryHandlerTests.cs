@@ -9,8 +9,8 @@ namespace BarberSearch.Application.UnitTests;
 
 /// <summary>
 /// Обработчик админской сводки: маппинг счётчиков и «самого старого» отзыва, переиспользование
-/// FIFO-страницы, <c>null</c> при пустой или успевшей опустеть очереди и проброс ошибок
-/// каждого из трёх репозиториев.
+/// FIFO-страницы, <c>null</c> при пустой или успевшей опустеть очереди, две очереди фотографий,
+/// последовательные чтения и проброс ошибок каждого из четырёх репозиториев.
 /// </summary>
 public class AdminSummaryHandlerTests
 {
@@ -24,15 +24,22 @@ public class AdminSummaryHandlerTests
         var oldest = CreateReview(Start, "Самый старый");
         reviews.AddAdminReview(oldest);
         reviews.AddAdminReview(CreateReview(Start.AddHours(1), "Свежее"));
-        var barbers = new FakeBarberProfileRepository { PendingCount = 2 };
+        var barbers = new FakeBarberProfileRepository
+        {
+            PendingCount = 2,
+            PendingPortfolioCount = 7
+        };
         var salons = new FakeSalonRepository { InactiveCount = 1 };
+        var users = new FakeUserRepository { PendingAvatarsCount = 4 };
 
-        var result = await HandleAsync(reviews, barbers, salons);
+        var result = await HandleAsync(reviews, barbers, salons, users);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(3, result.Value.Reviews.PendingCount);
         Assert.Equal(2, result.Value.Barbers.UnverifiedCount);
         Assert.Equal(1, result.Value.Salons.InactiveCount);
+        Assert.Equal(4, result.Value.Photos.PendingAvatarsCount);
+        Assert.Equal(7, result.Value.Photos.PendingPortfolioCount);
 
         var oldestSummary = Assert.IsType<AdminSummaryOldestReviewResponse>(result.Value.Reviews.Oldest);
         Assert.Equal(oldest.Id, oldestSummary.Id);
@@ -40,6 +47,33 @@ public class AdminSummaryHandlerTests
         Assert.Equal(oldest.UpdatedAt, oldestSummary.AwaitingSince);
         Assert.Equal(oldest.Barber.DisplayName, oldestSummary.BarberDisplayName);
         Assert.Equal(oldest.Customer.FullName, oldestSummary.CustomerDisplayName);
+    }
+
+    [Fact]
+    public async Task Handle_ReadsPhotoCountersSequentially()
+    {
+        var barbers = new FakeBarberProfileRepository { PendingPortfolioCount = 3 };
+        var users = new FakeUserRepository { PendingAvatarsCount = 2 };
+        var order = new List<string>();
+
+        users.BeforeCountPendingAvatars = () => order.Add("avatars");
+        barbers.BeforeCountPendingPortfolioPhotos = () =>
+        {
+            // К этому моменту счётчик аватаров уже прочитан: WhenAll стартовал бы оба
+            // чтения до первого результата, а один DbContext этого не допускает.
+            Assert.Equal(1, users.CountPendingAvatarsCallCount);
+            order.Add("portfolio");
+        };
+
+        var result = await HandleAsync(
+            new FakeReviewRepository(),
+            barbers,
+            users: users);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("avatars|portfolio", string.Join('|', order));
+        Assert.Equal(1, users.CountPendingAvatarsCallCount);
+        Assert.Equal(1, barbers.CountPendingPortfolioCallCount);
     }
 
     [Fact]
@@ -141,6 +175,37 @@ public class AdminSummaryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PropagatesAvatarCountFailure()
+    {
+        var users = new FakeUserRepository
+        {
+            CountPendingAvatarsFailure = ValidationFailure("summary.avatars.count")
+        };
+
+        var result = await HandleAsync(
+            new FakeReviewRepository(),
+            new FakeBarberProfileRepository(),
+            users: users);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("summary.avatars.count", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public async Task Handle_PropagatesPortfolioCountFailure()
+    {
+        var barbers = new FakeBarberProfileRepository
+        {
+            CountPendingPortfolioFailure = ValidationFailure("summary.portfolio.count")
+        };
+
+        var result = await HandleAsync(new FakeReviewRepository(), barbers);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("summary.portfolio.count", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
     public void OldestReviewContract_HasNoEmail()
     {
         // PII не добавляется: в сводке только имена. Контракт — часть обещания,
@@ -169,12 +234,14 @@ public class AdminSummaryHandlerTests
     private static Task<CSharpFunctionalExtensions.Result<AdminSummaryResponse, Failure>> HandleAsync(
         FakeReviewRepository reviews,
         FakeBarberProfileRepository? barbers = null,
-        FakeSalonRepository? salons = null)
+        FakeSalonRepository? salons = null,
+        FakeUserRepository? users = null)
     {
         var handler = new GetAdminSummaryHandler(
             reviews,
             barbers ?? new FakeBarberProfileRepository(),
-            salons ?? new FakeSalonRepository());
+            salons ?? new FakeSalonRepository(),
+            users ?? new FakeUserRepository());
 
         return handler.Handle(new GetAdminSummaryQuery(), CancellationToken.None);
     }

@@ -1,5 +1,6 @@
 using BarberSearch.Application.Users.UploadUserAvatar;
 using BarberSearch.Application.UnitTests.Fakes;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -32,8 +33,14 @@ public class UploadUserAvatarHandlerTests
         Assert.Equal(user.Id, Assert.Single(storage.SavedAvatarUserIds));
         Assert.Equal("png", Assert.Single(storage.SavedAvatarExtensions));
         Assert.Equal(content, Assert.Single(storage.SavedAvatarContents));
-        Assert.Equal(Assert.Single(storage.SavedAvatarUrls), result.Value);
-        Assert.Equal(result.Value, user.AvatarUrl);
+        Assert.Equal(Assert.Single(storage.SavedAvatarUrls), result.Value.AvatarUrl);
+        Assert.Equal(result.Value.AvatarUrl, user.AvatarUrl);
+
+        // Премодерация: загрузка создаёт Pending-кадр, и ответ это подтверждает.
+        Assert.Equal(PhotoModerationStatus.Pending, result.Value.ModerationStatus);
+        Assert.Equal(PhotoModerationStatus.Pending, user.AvatarModerationStatus);
+        Assert.NotNull(user.AvatarSubmittedAt);
+
         Assert.Equal(1, repository.UpdateCallCount);
         Assert.Empty(storage.DeletedUrls);
     }
@@ -215,7 +222,7 @@ public class UploadUserAvatarHandlerTests
 
         var newUrl = Assert.Single(storage.SavedAvatarUrls);
 
-        Assert.Equal(newUrl, result.Value);
+        Assert.Equal(newUrl, result.Value.AvatarUrl);
         Assert.Equal(previousUrl, Assert.Single(storage.DeletedUrls));
         Assert.NotEqual(newUrl, storage.DeletedUrls[0]);
     }
@@ -265,7 +272,7 @@ public class UploadUserAvatarHandlerTests
         Assert.Contains("800x600", entry.Message, StringComparison.Ordinal);
 
         // Ни URL, ни имени файла, ни пути в журнале нет.
-        Assert.DoesNotContain(result.Value, entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Value.AvatarUrl, entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(".png", entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("media/avatars", entry.Message, StringComparison.Ordinal);
     }

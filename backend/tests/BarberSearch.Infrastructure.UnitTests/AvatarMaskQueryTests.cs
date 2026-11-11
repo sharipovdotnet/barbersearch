@@ -31,7 +31,11 @@ public class AvatarMaskQueryTests
         Assert.Contains("from users", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Маска — «заблокирован ИЛИ не одобрен»: второй признак непубличности кадра.
         Assert.Contains("CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<> 2", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("NULL", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("JOIN", sql, StringComparison.OrdinalIgnoreCase);
     }
@@ -48,7 +52,9 @@ public class AvatarMaskQueryTests
         Assert.Contains("from users", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("avatar_moderation_status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<> 2", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("id =", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("JOIN", sql, StringComparison.OrdinalIgnoreCase);
     }

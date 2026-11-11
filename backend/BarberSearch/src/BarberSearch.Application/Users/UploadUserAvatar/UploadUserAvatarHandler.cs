@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.PortfolioPhotos;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -28,9 +29,14 @@ namespace BarberSearch.Application.Users.UploadUserAvatar;
 /// Гонка двух параллельных загрузок: побеждает последняя запись, файл проигравшей может
 /// остаться сиротой — это допустимо, версии строки у <see cref="User"/> нет.
 /// </para>
+/// <para>
+/// Премодерация: <c>SetAvatar</c> переводит новый кадр в <c>Pending</c>, поэтому ответ
+/// содержит и URL, и состояние проверки. Публично кадр не виден до одобрения
+/// администратором; в кабинете владелец видит превью с бейджем «На проверке».
+/// </para>
 /// </remarks>
 public sealed class UploadUserAvatarHandler
-    : ICommandHandler<string, UploadUserAvatarCommand>
+    : ICommandHandler<AvatarUploadResponse, UploadUserAvatarCommand>
 {
     private readonly IUserRepository _repository;
     private readonly IPhotoStorage _storage;
@@ -57,11 +63,11 @@ public sealed class UploadUserAvatarHandler
     }
 
     /// <summary>
-    /// Проверяет файл, сохраняет его, ставит URL аватару и возвращает этот URL.
+    /// Проверяет файл, сохраняет его, ставит URL аватару и возвращает URL со статусом проверки.
     /// </summary>
     /// <param name="command">Команда с содержимым файла.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    public async Task<Result<string, Failure>> Handle(
+    public async Task<Result<AvatarUploadResponse, Failure>> Handle(
         UploadUserAvatarCommand command,
         CancellationToken cancellationToken)
     {
@@ -138,7 +144,9 @@ public sealed class UploadUserAvatarHandler
             info.Width,
             info.Height);
 
-        return storedUrl;
+        // Состояние берётся у агрегата, а не подставляется константой: SetAvatar — источник
+        // правды о премодерации (сегодня это всегда Pending).
+        return new AvatarUploadResponse(storedUrl, user.AvatarModerationStatus);
     }
 
     /// <summary>
