@@ -142,6 +142,37 @@ public static class ApiErrorCodes
         /// в публичном контракте нет: для клиента они неотличимы от успеха.
         /// </remarks>
         public const string PasswordResetUnavailable = "auth.passwordReset.unavailable";
+
+        /// <summary>
+        /// Ссылка смены адреса недействительна: битая, неизвестная, просроченная,
+        /// использованная или отозванная; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Один код на все причины: клиент не должен различать, существует ли строка токена.
+        /// Идемпотентный повторный клик — исключение: он отвечает <c>204</c>, а не этим кодом.
+        /// </remarks>
+        public const string EmailChangeInvalid = "auth.emailChange.invalid";
+
+        /// <summary>
+        /// Текущий пароль неверен; <c>400</c>, <c>invalidField = "currentPassword"</c>.
+        /// </summary>
+        public const string EmailChangeInvalidCurrentPassword =
+            "auth.emailChange.invalidCurrentPassword";
+
+        /// <summary>
+        /// Заявка на смену адреса уже отправлена, повторная — раньше чем через 60 секунд;
+        /// <c>409</c>.
+        /// </summary>
+        public const string EmailChangeCooldown = "auth.emailChange.cooldown";
+
+        /// <summary>
+        /// Почта не настроена или пуст <c>App:PublicUrl</c>; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// В маппере ошибок нет <c>503</c> и отдельного <c>ErrorType</c>, поэтому «почта не
+        /// настроена» — конфликт состояния сервера, как у подтверждения email.
+        /// </remarks>
+        public const string EmailChangeUnavailable = "auth.emailChange.unavailable";
     }
 
     /// <summary>
@@ -488,6 +519,27 @@ public static class ApiErrorCodes
         /// Email пуст или не является корректным адресом; <c>400</c>.
         /// </summary>
         public const string EmailInvalid = "user.email.invalid";
+
+        /// <summary>
+        /// Новый адрес при смене email пуст или имеет неверный синтаксис; <c>400</c>,
+        /// <c>invalidField = "newEmail"</c>.
+        /// </summary>
+        public const string ChangeEmailNewEmail = "user.changeEmail.newEmail";
+
+        /// <summary>
+        /// Новый адрес совпадает с текущим после нормализации; <c>400</c>,
+        /// <c>invalidField = "newEmail"</c>.
+        /// </summary>
+        public const string ChangeEmailSameEmail = "user.changeEmail.sameEmail";
+
+        /// <summary>
+        /// Адрес уже занят другим пользователем; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Возвращается и на запросе, и на подтверждении, включая проигранную гонку с
+        /// уникальным индексом <c>ux_users_email</c>.
+        /// </remarks>
+        public const string ChangeEmailEmailTaken = "user.changeEmail.emailTaken";
 
         /// <summary>
         /// Номер страницы меньше единицы; <c>400</c>.
