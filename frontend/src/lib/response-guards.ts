@@ -310,8 +310,9 @@ export function isSessionUser(value: unknown): value is SessionUser {
  * Профиль кабинета: имя, телефон, роль и подтверждения.
  *
  * `phoneNumber`, `avatarUrl` и `lastLoginAt` контракт допускает `null`; остальные
- * строки обязательны. Даты не разбираются — как и в других guard'ах, строка остаётся
- * строкой.
+ * строки обязательны. `isAvatarBlocked` — обязательный флаг: без него шапка и
+ * кабинет не знают, можно ли рендерить сырой `avatarUrl`. Даты не разбираются —
+ * как и в других guard'ах, строка остаётся строкой.
  */
 export function isMyProfile(value: unknown): value is MyProfile {
   return (
@@ -322,6 +323,7 @@ export function isMyProfile(value: unknown): value is MyProfile {
     isString(value.lastName) &&
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
+    isBoolean(value.isAvatarBlocked) &&
     isUserRole(value.role) &&
     (value.barberProfileId === null || isNonEmptyString(value.barberProfileId)) &&
     isBoolean(value.isEmailVerified) &&
@@ -850,6 +852,8 @@ export function isAdminBarberRow(value: unknown): value is AdminBarber {
     isNonEmptyString(value.id) &&
     isString(value.displayName) &&
     isString(value.email) &&
+    isNullableString(value.avatarUrl) &&
+    isBoolean(value.isAvatarBlocked) &&
     isBarberGrade(value.grade) &&
     isNullable(isNumber)(value.rating) &&
     isNumber(value.reviewsCount) &&
@@ -869,6 +873,7 @@ export function isAdminBarber(value: unknown): value is AdminBarberDetail {
     isString(value.email) &&
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
+    isBoolean(value.isAvatarBlocked) &&
     isBarberGrade(value.grade) &&
     isNullableString(value.bio) &&
     isNumber(value.yearsOfExperience) &&
@@ -904,6 +909,8 @@ export function isAdminUserRow(value: unknown): value is AdminUserRow {
     isString(value.email) &&
     isString(value.firstName) &&
     isString(value.lastName) &&
+    isNullableString(value.avatarUrl) &&
+    isBoolean(value.isAvatarBlocked) &&
     isUserRole(value.role) &&
     isBoolean(value.isActive) &&
     isBoolean(value.isEmailVerified) &&
@@ -923,6 +930,7 @@ export function isAdminUser(value: unknown): value is AdminUserDetail {
     isString(value.lastName) &&
     isNullableString(value.phoneNumber) &&
     isNullableString(value.avatarUrl) &&
+    isBoolean(value.isAvatarBlocked) &&
     isUserRole(value.role) &&
     isBoolean(value.isActive) &&
     isBoolean(value.isEmailVerified) &&

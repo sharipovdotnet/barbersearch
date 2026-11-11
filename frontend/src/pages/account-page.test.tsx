@@ -26,6 +26,7 @@ const profile: MyProfile = {
   lastName: 'Админова',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Admin',
   barberProfileId: null,
   isEmailVerified: true,

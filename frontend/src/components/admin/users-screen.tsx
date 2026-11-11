@@ -31,11 +31,13 @@ import {
   ADMIN_USER_SEARCH_MAX_LENGTH,
   ADMIN_USER_STATUS_LABELS,
   blockUser,
+  blockUserAvatar,
   changeUserRole,
   describeAdminUserActionError,
   getUserDisplayName,
   isUserUnauthorized,
   unblockUser,
+  unblockUserAvatar,
   verifyUserEmail,
   verifyUserPhone,
   type AdminUserAction,
@@ -196,7 +198,9 @@ export function UsersScreen({ userId }: { userId: string | null }) {
 
   async function runAction(
     kind: AdminUserAction,
-    target: { id: string; displayName: string },
+    // `userId` — владелец аватара; здесь он совпадает с `id`, но тип общий
+    // с карточкой барбера, где аватар принадлежит владельцу профиля.
+    target: { id: string; displayName: string; userId?: string },
     payload?: { role?: AdminUserRole }
   ) {
     if (pendingAction) {
@@ -232,6 +236,12 @@ export function UsersScreen({ userId }: { userId: string | null }) {
           break
         case 'verifyPhone':
           await verifyUserPhone(target.id)
+          break
+        case 'blockAvatar':
+          await blockUserAvatar(target.userId ?? target.id)
+          break
+        case 'unblockAvatar':
+          await unblockUserAvatar(target.userId ?? target.id)
           break
       }
 
@@ -554,6 +564,18 @@ export function UsersScreen({ userId }: { userId: string | null }) {
                     displayName: getUserDisplayName(user),
                   })
                 }}
+                onBlockAvatar={() => {
+                  void runAction('blockAvatar', {
+                    id: user.id,
+                    displayName: getUserDisplayName(user),
+                  })
+                }}
+                onUnblockAvatar={() => {
+                  void runAction('unblockAvatar', {
+                    id: user.id,
+                    displayName: getUserDisplayName(user),
+                  })
+                }}
                 onBack={handleBack}
               />
             ) : userId ? (
@@ -637,6 +659,26 @@ function announcementFor(
       return { text: t('Email подтверждён: «{name}».', { name }) }
     case 'verifyPhone':
       return { text: t('Телефон подтверждён: «{name}».', { name }) }
+    case 'blockAvatar':
+      return {
+        text: t('Фото скрыто: его больше нет в публичных местах.'),
+        undo: {
+          label: t('Вернуть фото'),
+          action: 'unblockAvatar',
+          userId: target.id,
+          userName: name,
+        },
+      }
+    case 'unblockAvatar':
+      return {
+        text: t('Фото снова видно всем.'),
+        undo: {
+          label: t('Скрыть фото'),
+          action: 'blockAvatar',
+          userId: target.id,
+          userName: name,
+        },
+      }
   }
 }
 
@@ -661,6 +703,10 @@ function updatedUserRow(
       return { ...user, isEmailVerified: true }
     case 'verifyPhone':
       return { ...user, isPhoneVerified: true }
+    case 'blockAvatar':
+      return { ...user, isAvatarBlocked: true }
+    case 'unblockAvatar':
+      return { ...user, isAvatarBlocked: false }
   }
 }
 

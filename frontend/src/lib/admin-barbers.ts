@@ -1,5 +1,9 @@
 import { t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
+import {
+  describeAvatarModerationError,
+  type AvatarModerationAction,
+} from '@/lib/avatar-moderation'
 import type { BarberGrade } from '@/lib/barber-grade'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
@@ -13,6 +17,10 @@ export {
   blockPortfolioPhoto,
   unblockPortfolioPhoto,
 } from '@/lib/portfolio-photos'
+
+// Аватар принадлежит пользователю, поэтому запрос общий с карточкой пользователя:
+// здесь только реэкспорт, второго экземпляра `POST/DELETE .../avatar/block` нет.
+export { blockUserAvatar, unblockUserAvatar } from '@/lib/admin-users'
 
 /**
  * Админское чтение барберов и словари для экрана.
@@ -44,6 +52,9 @@ export type AdminBarber = {
   id: string
   displayName: string
   email: string
+  /** Сырой URL владельца: админ видит и скрытое администратором фото. */
+  avatarUrl: string | null
+  isAvatarBlocked: boolean
   grade: BarberGrade
   rating: number | null
   reviewsCount: number
@@ -70,6 +81,8 @@ export type AdminBarberDetail = {
   email: string
   phoneNumber: string | null
   avatarUrl: string | null
+  /** Флаг модерации: карточка показывает бейдж и кнопку «Вернуть фото». */
+  isAvatarBlocked: boolean
   grade: BarberGrade
   bio: string | null
   yearsOfExperience: number
@@ -174,6 +187,7 @@ export type AdminBarberAction =
   | 'grade'
   | 'hide'
   | 'show'
+  | AvatarModerationAction
 
 export async function verifyBarber(barberId: string): Promise<void> {
   await mutateWithCsrf<void>(`/barber-profiles/${barberId}/verification`, {
@@ -220,6 +234,12 @@ export function describeAdminBarberActionError(
   error: unknown,
   action: AdminBarberAction
 ): string {
+  // Аватар принадлежит владельцу профиля и блокируется тем же эндпоинтом, что
+  // и в карточке пользователя: тексты не дублируем.
+  if (action === 'blockAvatar' || action === 'unblockAvatar') {
+    return describeAvatarModerationError(error, action)
+  }
+
   if (error instanceof ApiError) {
     if (error.status === 403 || error.hasCode('auth.forbidden')) {
       return t('Раздел доступен только администратору.')

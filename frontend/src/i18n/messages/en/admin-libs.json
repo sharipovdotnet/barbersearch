@@ -110,6 +110,8 @@
   "Не удалось изменить роль. Попробуйте ещё раз.": "Could not change the role. Try again.",
   "Не удалось заблокировать пользователя. Попробуйте ещё раз.": "Could not block the user. Try again.",
   "Не удалось разблокировать пользователя. Попробуйте ещё раз.": "Could not unblock the user. Try again.",
+  "Не удалось скрыть фото. Попробуйте ещё раз.": "Could not hide the photo. Try again.",
+  "Не удалось вернуть фото. Попробуйте ещё раз.": "Could not restore the photo. Try again.",
   "Не удалось подтвердить email. Попробуйте ещё раз.": "Could not verify the email. Try again.",
   "Не удалось подтвердить телефон. Попробуйте ещё раз.": "Could not verify the phone. Try again.",
   "Не удалось создать пользователя. Попробуйте ещё раз.": "Could not create the user. Try again.",

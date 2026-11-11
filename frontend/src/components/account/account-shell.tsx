@@ -169,7 +169,9 @@ function AccountIdentity({
   return (
     <div className="flex items-center gap-3 border-b border-border pb-4">
       <Avatar size="lg" aria-hidden>
-        {profile?.avatarUrl && (
+        {/* Скрытое администратором фото остаётся в сыром `avatarUrl`, но не
+            рендерится: иначе браузер показал бы кадр из 24-часового кэша. */}
+        {profile?.avatarUrl && !profile.isAvatarBlocked && (
           <AvatarImage src={profile.avatarUrl} alt="" />
         )}
         <AvatarFallback>{initials}</AvatarFallback>

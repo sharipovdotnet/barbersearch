@@ -28,11 +28,13 @@ import {
   ADMIN_BARBER_SEARCH_MAX_LENGTH,
   ADMIN_BARBER_STATUS_LABELS,
   BARBER_GRADE_LABELS,
+  blockUserAvatar,
   changeBarberGrade,
   describeAdminBarberActionError,
   hideBarberFromSearch,
   isBarberUnauthorized,
   returnBarberToSearch,
+  unblockUserAvatar,
   unverifyBarber,
   verifyBarber,
   type AdminBarber,
@@ -69,6 +71,8 @@ type Announcement = {
     action: AdminBarberAction
     barberId: string
     barberName: string
+    /** Владелец профиля: аватар блокируется по `userId`, а не по id профиля. */
+    userId?: string
   }
 }
 
@@ -219,7 +223,9 @@ export function BarbersScreen({
 
   async function runAction(
     kind: AdminBarberAction,
-    target: { id: string; displayName: string },
+    // `userId` — владелец профиля: аватар блокируется по нему, а строка списка
+    // и открытая карточка адресуются id профиля.
+    target: { id: string; displayName: string; userId?: string },
     grade?: BarberGrade
   ) {
     if (pendingAction) {
@@ -247,6 +253,12 @@ export function BarbersScreen({
           break
         case 'show':
           await returnBarberToSearch(target.id)
+          break
+        case 'blockAvatar':
+          await blockUserAvatar(target.userId ?? target.id)
+          break
+        case 'unblockAvatar':
+          await unblockUserAvatar(target.userId ?? target.id)
           break
       }
 
@@ -348,6 +360,7 @@ export function BarbersScreen({
     await runAction(entry.undo.action, {
       id: entry.undo.barberId,
       displayName: entry.undo.barberName,
+      userId: entry.undo.userId,
     })
   }
 
@@ -623,6 +636,20 @@ export function BarbersScreen({
                 onUnblockPhoto={(photoId) => {
                   void runPhotoAction('unblock', photoId)
                 }}
+                onBlockAvatar={() => {
+                  void runAction('blockAvatar', {
+                    id: barber.id,
+                    displayName: barber.displayName,
+                    userId: barber.userId,
+                  })
+                }}
+                onUnblockAvatar={() => {
+                  void runAction('unblockAvatar', {
+                    id: barber.id,
+                    displayName: barber.displayName,
+                    userId: barber.userId,
+                  })
+                }}
                 onBack={handleBack}
               />
             ) : barberId ? (
@@ -648,7 +675,7 @@ export function BarbersScreen({
  */
 function announcementFor(
   kind: AdminBarberAction,
-  target: { id: string; displayName: string },
+  target: { id: string; displayName: string; userId?: string },
   grade?: BarberGrade
 ): Announcement {
   const name = target.displayName
@@ -704,6 +731,28 @@ function announcementFor(
             })
           : t('Грейд изменён.'),
       }
+    case 'blockAvatar':
+      return {
+        text: t('Фото скрыто: его больше нет в публичных местах.'),
+        undo: {
+          label: t('Вернуть фото'),
+          action: 'unblockAvatar',
+          barberId: target.id,
+          barberName: name,
+          userId: target.userId,
+        },
+      }
+    case 'unblockAvatar':
+      return {
+        text: t('Фото снова видно всем.'),
+        undo: {
+          label: t('Скрыть фото'),
+          action: 'blockAvatar',
+          barberId: target.id,
+          barberName: name,
+          userId: target.userId,
+        },
+      }
   }
 }
 
@@ -728,6 +777,10 @@ function updatedBarberRow(
       return { ...barber, isActive: false }
     case 'show':
       return { ...barber, isActive: true }
+    case 'blockAvatar':
+      return { ...barber, isAvatarBlocked: true }
+    case 'unblockAvatar':
+      return { ...barber, isAvatarBlocked: false }
   }
 }
 

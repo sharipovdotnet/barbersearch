@@ -11,6 +11,7 @@ import {
 } from '@/components/account/account-profile-context'
 import { prepareAvatarImage } from '@/lib/image-prep'
 import type { MyProfile } from '@/lib/my-profile'
+import { stubImageLoading } from '@/test/image'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
@@ -49,6 +50,7 @@ const BASE_PROFILE: MyProfile = {
   lastName: 'Правкин',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,
@@ -57,18 +59,29 @@ const BASE_PROFILE: MyProfile = {
   lastLoginAt: null,
 }
 
-/** Каркас кабинета не нужен: карточке важны профиль и `setAvatar` из контекста. */
+/**
+ * Каркас кабинета не нужен: карточке важны профиль и `setAvatar` из контекста.
+ *
+ * `setAvatar` повторяет провайдер: новая загрузка или удаление снимают флаг
+ * модерации, потому что блокировка относилась к прежнему кадру.
+ */
 function Harness({
   initialAvatarUrl = null,
+  initialBlocked = false,
   barberProfileId = null,
 }: {
   initialAvatarUrl?: string | null
+  initialBlocked?: boolean
   barberProfileId?: string | null
 }) {
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl)
+  const [avatar, setAvatar] = useState({
+    avatarUrl: initialAvatarUrl,
+    isAvatarBlocked: initialBlocked,
+  })
   const profile: MyProfile = {
     ...BASE_PROFILE,
-    avatarUrl,
+    avatarUrl: avatar.avatarUrl,
+    isAvatarBlocked: avatar.isAvatarBlocked,
     barberProfileId,
   }
   const value: AccountProfileValue = {
@@ -78,7 +91,8 @@ function Harness({
     requiresSignIn: false,
     reload: async () => {},
     save: async () => profile,
-    setAvatar: setAvatarUrl,
+    setAvatar: (avatarUrl: string | null) =>
+      setAvatar({ avatarUrl, isAvatarBlocked: false }),
   }
 
   return (
@@ -267,5 +281,96 @@ describe('AvatarCard: удаление', () => {
       await within(dialog).findByRole('alert')
     ).toHaveTextContent('Не удалось сохранить файл. Попробуйте ещё раз.')
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+})
+
+describe('AvatarCard: фото скрыто администратором', () => {
+  it('показывает инициалы и объяснение вместо изображения', () => {
+    const { container } = render(
+      <Harness initialAvatarUrl={AVATAR_URL} initialBlocked />
+    )
+
+    // Сырой URL у профиля остаётся, но кадр не рендерится: браузер показал бы
+    // его из 24-часового кэша даже после 404.
+    expect(container.querySelector('[data-slot="avatar-image"]')).toBeNull()
+    expect(screen.getByText('МП')).toBeInTheDocument()
+    expect(
+      screen.getByText('Фото скрыто администратором')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Его не видно публично. Новое фото опубликуется сразу, а вернуть старое может только администратор.'
+      )
+    ).toBeInTheDocument()
+    // Загрузка доступна и называется иначе: это новый кадр, а не правка старого.
+    expect(
+      screen.getByRole('button', { name: 'Загрузить другое фото' })
+    ).toBeInTheDocument()
+    // Удаление остаётся: оно снимает и URL, и флаг.
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeInTheDocument()
+  })
+
+  it('новая загрузка снимает флаг и показывает фото', async () => {
+    const user = userEvent.setup()
+    stubImageLoading()
+
+    server.use(
+      http.post('/api/users/me/avatar', () =>
+        HttpResponse.json({ avatarUrl: AVATAR_URL }, { status: 201 })
+      )
+    )
+
+    const { container } = render(
+      <Harness initialAvatarUrl={AVATAR_URL} initialBlocked />
+    )
+
+    await user.upload(screen.getByLabelText('Файл'), avatarFile())
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Аватар обновлён.'
+    )
+    expect(
+      screen.queryByText('Фото скрыто администратором')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Изменить фото' })
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', AVATAR_URL)
+    })
+  })
+
+  it('удаление снимает флаг и возвращает кнопку «Загрузить фото»', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.delete('/api/users/me/avatar', () =>
+        new HttpResponse(null, { status: 204 })
+      )
+    )
+
+    const { container } = render(
+      <Harness initialAvatarUrl={AVATAR_URL} initialBlocked />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Удалить' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: /^Удалить$/,
+      })
+    )
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Аватар удалён.'
+    )
+    expect(
+      screen.queryByText('Фото скрыто администратором')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Загрузить фото' })
+    ).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 })

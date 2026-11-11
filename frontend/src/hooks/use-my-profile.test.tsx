@@ -22,14 +22,18 @@ const USER: SessionUser = {
   isEmailVerified: true,
 }
 
-function profile(id: string): MyProfile {
+function profile(
+  id: string,
+  avatar: { avatarUrl?: string | null; isAvatarBlocked?: boolean } = {}
+): MyProfile {
   return {
     id,
     email: 'mark@barbersearch.test',
     firstName: 'Марк',
     lastName: 'Правкин',
     phoneNumber: null,
-    avatarUrl: null,
+    avatarUrl: avatar.avatarUrl ?? null,
+    isAvatarBlocked: avatar.isAvatarBlocked ?? false,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified: true,
@@ -85,6 +89,76 @@ describe('useMyProfile: аватар', () => {
 
     expect(result.current.profile?.avatarUrl).toBe(AVATAR_URL)
     expect(gets()).toBe(1)
+  })
+
+  it('setAvatar снимает флаг блокировки', async () => {
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json(
+          profile(USER.id, {
+            avatarUrl: AVATAR_URL,
+            isAvatarBlocked: true,
+          })
+        )
+      )
+    )
+
+    const { result } = renderHook(() => useMyProfile(), {
+      wrapper: wrapperFor(USER),
+    })
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.profile?.isAvatarBlocked).toBe(true)
+
+    act(() => {
+      result.current.setAvatar(AVATAR_URL)
+    })
+
+    expect(result.current.profile?.isAvatarBlocked).toBe(false)
+  })
+
+  it('save сохраняет сырой URL и флаг, не разблокируя фото', async () => {
+    let body: Record<string, unknown> | null = null
+
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json(
+          profile(USER.id, {
+            avatarUrl: AVATAR_URL,
+            isAvatarBlocked: true,
+          })
+        )
+      ),
+      http.put(`/api/users/${USER.id}/profile`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    const { result } = renderHook(() => useMyProfile(), {
+      wrapper: wrapperFor(USER),
+    })
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    await act(async () => {
+      await result.current.save({
+        firstName: 'Марк',
+        lastName: 'Правкин',
+        phoneNumber: null,
+        avatarUrl: AVATAR_URL,
+      })
+    })
+
+    expect(body).toStrictEqual({
+      firstName: 'Марк',
+      lastName: 'Правкин',
+      phoneNumber: null,
+      avatarUrl: AVATAR_URL,
+    })
+    expect(result.current.profile?.avatarUrl).toBe(AVATAR_URL)
+    expect(result.current.profile?.isAvatarBlocked).toBe(true)
   })
 
   it('save отправляет текущий avatarUrl после setAvatar', async () => {

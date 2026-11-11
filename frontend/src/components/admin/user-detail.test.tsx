@@ -1,13 +1,17 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { type ComponentProps, type ReactElement } from 'react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import { UserDetail } from '@/components/admin/user-detail'
 import type { AdminUserDetail } from '@/lib/admin-users'
 
 /**
- * Карточка пользователя с записью согласия либо без неё (старый или админский аккаунт).
+ * Карточка пользователя: запись согласия (или её отсутствие), а также модерация
+ * аватара — бейдж, кнопки, подтверждение и отсутствие фото.
  *
- * Проверяется только чтение: IP в ответе нет, редакция и время показываются в UTC.
+ * Проверяется только чтение и действия: IP в ответе нет, редакция и время
+ * показываются в UTC.
  */
 const BASE_USER: AdminUserDetail = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -16,6 +20,7 @@ const BASE_USER: AdminUserDetail = {
   lastName: 'Иванова',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Customer',
   isActive: true,
   isEmailVerified: false,
@@ -31,8 +36,16 @@ const BASE_USER: AdminUserDetail = {
   updatedAt: '2026-10-01T10:00:00Z',
 }
 
-function renderDetail(user: AdminUserDetail) {
-  render(
+const AVATAR_URL =
+  '/api/media/avatars/11111111-1111-4111-8111-111111111111/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+type DetailProps = ComponentProps<typeof UserDetail>
+
+function detailTree(
+  user: AdminUserDetail,
+  overrides: Partial<DetailProps> = {}
+): ReactElement {
+  return (
     <UserDetail
       user={user}
       isSelf={false}
@@ -43,9 +56,19 @@ function renderDetail(user: AdminUserDetail) {
       onUnblock={() => {}}
       onVerifyEmail={() => {}}
       onVerifyPhone={() => {}}
+      onBlockAvatar={() => {}}
+      onUnblockAvatar={() => {}}
       onBack={() => {}}
+      {...overrides}
     />
   )
+}
+
+function renderDetail(
+  user: AdminUserDetail,
+  overrides: Partial<DetailProps> = {}
+) {
+  return render(detailTree(user, overrides))
 }
 
 describe('UserDetail, согласие на обработку персональных данных', () => {
@@ -78,5 +101,112 @@ describe('UserDetail, согласие на обработку персонал�
     })
 
     expect(screen.queryByRole('button', { name: /соглас/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('UserDetail, модерация аватара', () => {
+  it('без фото показывает подсказку и не предлагает действий', () => {
+    renderDetail(BASE_USER)
+
+    expect(
+      screen.getByText('У пользователя нет фото — скрывать нечего.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть фото' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Вернуть фото' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('скрывает фото только после подтверждения в alertdialog', async () => {
+    const user = userEvent.setup()
+    const onBlockAvatar = vi.fn()
+
+    renderDetail(
+      { ...BASE_USER, avatarUrl: AVATAR_URL },
+      { onBlockAvatar }
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть фото' }))
+
+    const dialog = screen.getByRole('alertdialog')
+
+    expect(dialog).toHaveTextContent('Скрыть фото?')
+    expect(dialog).toHaveTextContent(
+      'Фото исчезнет из шапки, поиска, карточек и списков броней. Аккаунт останется активным, вернуть фото можно здесь же.'
+    )
+    expect(onBlockAvatar).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Скрыть фото' }))
+
+    expect(onBlockAvatar).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('скрытое фото показывает бейдж и возвращает без диалога', async () => {
+    const user = userEvent.setup()
+    const onUnblockAvatar = vi.fn()
+
+    renderDetail(
+      { ...BASE_USER, avatarUrl: AVATAR_URL, isAvatarBlocked: true },
+      { onUnblockAvatar }
+    )
+
+    expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть фото' })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Вернуть фото' }))
+
+    expect(onUnblockAvatar).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('во время скрытия показывает loader и блокирует кнопку', () => {
+    renderDetail(
+      { ...BASE_USER, avatarUrl: AVATAR_URL },
+      { pendingAction: 'blockAvatar' }
+    )
+
+    const button = screen.getByRole('button', { name: 'Скрываем…' })
+
+    expect(button).toBeDisabled()
+  })
+
+  it('ошибку действия показывает в role="alert"', () => {
+    renderDetail(
+      { ...BASE_USER, avatarUrl: AVATAR_URL },
+      { actionError: 'Не удалось скрыть фото. Попробуйте ещё раз.' }
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Не удалось скрыть фото. Попробуйте ещё раз.'
+    )
+  })
+
+  it('после ответа сервера показывает «Вернуть фото» без перезагрузки', () => {
+    const view = renderDetail({ ...BASE_USER, avatarUrl: AVATAR_URL })
+
+    expect(
+      screen.getByRole('button', { name: 'Скрыть фото' })
+    ).toBeInTheDocument()
+
+    view.rerender(
+      detailTree({
+        ...BASE_USER,
+        avatarUrl: AVATAR_URL,
+        isAvatarBlocked: true,
+      })
+    )
+
+    expect(screen.getByText('Фото скрыто')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Вернуть фото' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Скрыть фото' })
+    ).not.toBeInTheDocument()
   })
 })

@@ -35,6 +35,7 @@ const PROFILE: MyProfile = {
   lastName: 'Сессионов',
   phoneNumber: null,
   avatarUrl: null,
+  isAvatarBlocked: false,
   role: 'Customer',
   barberProfileId: null,
   isEmailVerified: true,
@@ -232,6 +233,28 @@ describe('HeaderAuth: аватар', () => {
 
     expect(trigger.querySelector('button')).toBeNull()
     expect(screen.queryByText('СС')).not.toBeInTheDocument()
+  })
+
+  it('скрытое администратором фото не рендерит, показывая инициалы', async () => {
+    stubImageLoading()
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json({
+          ...PROFILE,
+          avatarUrl,
+          isAvatarBlocked: true,
+        })
+      )
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="avatar-fallback"]')
+      ).toHaveAttribute('data-initials', 'СС')
+    })
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 
   it('без avatarUrl показывает инициалы профиля', async () => {
