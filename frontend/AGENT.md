@@ -497,71 +497,84 @@ the Mailpit step: the suite no longer proves the feature without a real inbox.
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-11-11 (email change slice, #88):**
+**Verification snapshot, 2026-11-12 (photo pre-moderation slice, #89):**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 497 files, 116 rules
-npm test      → 1260 tests in 124 files, green (baseline 1230)
-npm run check:i18n -- --strict → t() строк 1689, переводов 1995, нет перевода 0,
-                конфликтов 0, видимых русских строк в JSX 0
-npm run build → tsc -b + vite build OK, 2584 modules,
-                dist/assets/index-*.js            352.53 kB (gzip 114.27 kB)
-                dist/assets/csrf-*.js              94.04 kB (gzip  31.31 kB)  shared
-                dist/assets/router-*.js           241.30 kB (gzip  64.18 kB)  shared (router + i18n catalog)
-                dist/assets/card-*.js              57.40 kB (gzip  22.13 kB)  shared
-                dist/assets/admin-page-*.js       271.14 kB (gzip  56.88 kB)  lazy
-                dist/assets/barber-import-page-*.js 87.47 kB (gzip 26.42 kB)  lazy
+npm run lint  → 0 warnings, 0 errors, 507 files, 116 rules
+npm test      → 1366 tests in 130 files, green (baseline 1260)
+npm run check:i18n -- --strict → t() строк 1721, переводов 2030, нет перевода 0,
+                конфликтов 0, видимых русских строк в JSX 0 (вне t(): 411)
+npm run build → tsc -b + vite build OK, 2588 modules,
+                dist/assets/index-*.js            352.59 kB (gzip 114.28 kB)
+                dist/assets/router-*.js           246.83 kB (gzip  65.43 kB)  shared (router + i18n catalog)
+                dist/assets/csrf-*.js              95.65 kB (gzip  31.60 kB)  shared
+                dist/assets/card-*.js              57.19 kB (gzip  22.10 kB)  shared
+                dist/assets/admin-page-*.js       300.14 kB (gzip  61.57 kB)  lazy
+                dist/assets/barber-import-page-*.js 87.48 kB (gzip 26.43 kB)  lazy
                 dist/assets/ical-*.js              77.13 kB (gzip  23.11 kB)  lazy
-                dist/assets/barber-cabinet-page-*.js 53.29 kB (gzip 14.11 kB) lazy
+                dist/assets/barber-cabinet-page-*.js 53.30 kB (gzip 14.12 kB) lazy
                 dist/assets/barber-page-*.js       35.49 kB (gzip   9.36 kB)  lazy
-                dist/assets/barber-profile-page-*.js 30.84 kB (gzip 7.19 kB) lazy
-                dist/assets/privacy-page-*.js      30.57 kB (gzip   7.76 kB)  lazy
-                dist/assets/account-page-*.js      29.28 kB (gzip   9.14 kB)  lazy
-                dist/assets/barber-schedule-page-*.js 23.10 kB (gzip 6.52 kB) lazy
-                dist/assets/barber-salons-page-*.js 20.75 kB (gzip 5.81 kB)  lazy
-                dist/assets/salon-form-*.js        20.87 kB (gzip   6.41 kB)  shared
-                dist/assets/become-a-barber-page-*.js 18.24 kB (gzip 5.46 kB) lazy
-                dist/assets/account-reviews-page-*.js 17.49 kB (gzip 5.64 kB) lazy
-                dist/assets/barber-notifications-page-*.js 16.49 kB (gzip 5.03 kB) lazy
-                dist/assets/account-profile-page-*.js 17.62 kB (gzip 5.38 kB) lazy
+                dist/assets/barber-profile-page-*.js 31.47 kB (gzip 7.30 kB) lazy
+                dist/assets/privacy-page-*.js      30.57 kB (gzip   7.77 kB)  lazy
+                dist/assets/account-page-*.js      29.29 kB (gzip   9.14 kB)  lazy
+                dist/assets/barber-schedule-page-*.js 23.10 kB (gzip 6.53 kB) lazy
+                dist/assets/salon-form-*.js        20.88 kB (gzip   6.41 kB)  shared
+                dist/assets/barber-salons-page-*.js 20.75 kB (gzip 5.80 kB)  lazy
+                dist/assets/become-a-barber-page-*.js 18.24 kB (gzip 5.47 kB) lazy
+                dist/assets/account-profile-page-*.js 18.63 kB (gzip 5.60 kB) lazy
+                dist/assets/account-reviews-page-*.js 17.50 kB (gzip 5.64 kB) lazy
+                dist/assets/barber-notifications-page-*.js 16.48 kB (gzip 5.03 kB) lazy
+                dist/assets/barber-profile-form-*.js 12.41 kB (gzip 4.10 kB) shared
                 dist/assets/account-security-page-*.js 12.00 kB (gzip 4.04 kB) lazy
-                dist/assets/register-page-*.js     11.98 kB (gzip   4.10 kB)  lazy
+                dist/assets/register-page-*.js     11.97 kB (gzip   4.10 kB)  lazy
                 dist/assets/barber-cabinet-gates-*.js 8.97 kB (gzip 3.38 kB) shared
                 dist/assets/barber-onboarding-page-*.js 8.36 kB (gzip 2.83 kB) lazy
-                dist/assets/reset-password-page-*.js 8.11 kB (gzip 2.69 kB)  lazy
+                dist/assets/reset-password-page-*.js 8.10 kB (gzip 2.70 kB)  lazy
                 dist/assets/paging-*.js             7.37 kB (gzip   2.70 kB)  shared
                 dist/assets/barber-salon-picker-dialog-*.js 6.59 kB (gzip 2.68 kB) shared
-                dist/assets/account-shell-*.js      4.70 kB (gzip   1.95 kB)  shared
+                dist/assets/account-shell-*.js      4.71 kB (gzip   1.95 kB)  shared
                 dist/assets/forgot-password-page-*.js 5.14 kB (gzip 2.13 kB)  lazy
-                dist/assets/verify-email-page-*.js  5.14 kB (gzip   1.94 kB)  lazy
+                dist/assets/verify-email-page-*.js  5.14 kB (gzip   1.95 kB)  lazy
                 dist/assets/confirm-email-change-page-*.js 5.07 kB (gzip 1.99 kB) lazy
-                dist/assets/account-gates-*.js      4.36 kB (gzip   1.51 kB)  shared
-                dist/assets/use-barber-slots-*.js   3.63 kB (gzip   1.68 kB)  shared
-                dist/assets/use-my-barber-request-*.js 2.59 kB (gzip 1.20 kB) shared
-                dist/assets/email-verification-*.js 1.36 kB (gzip   0.69 kB)  shared
+                dist/assets/account-gates-*.js      4.36 kB (gzip   1.52 kB)  shared
+                dist/assets/image-prep-*.js         4.12 kB (gzip   1.73 kB)  shared
+                dist/assets/use-barber-slots-*.js   3.63 kB (gzip   1.69 kB)  shared
+                dist/assets/portfolio-photos-*.js   3.32 kB (gzip   1.34 kB)  shared
+                dist/assets/barber-profile-*.js     3.23 kB (gzip   1.21 kB)  shared
+                dist/assets/use-my-barber-request-*.js 2.59 kB (gzip 1.21 kB) shared
+                dist/assets/booking-changes-*.js    2.50 kB (gzip   1.15 kB)  shared
                 dist/assets/email-change-*.js       2.11 kB (gzip   0.89 kB)  shared
-                dist/assets/barber-salons-*.js      1.17 kB (gzip   0.62 kB)  shared
-                dist/assets/password-reset-*.js     1.11 kB (gzip   0.60 kB)  shared
+                dist/assets/use-barber-profile-*.js 2.08 kB (gzip   0.87 kB)  shared
+                dist/assets/barber-cabinet-nav-*.js 1.52 kB (gzip   0.87 kB)  shared
+                dist/assets/email-verification-*.js 1.36 kB (gzip   0.70 kB)  shared
+                dist/assets/barber-salons-*.js      1.17 kB (gzip   0.63 kB)  shared
+                dist/assets/password-reset-*.js     1.11 kB (gzip   0.61 kB)  shared
+                dist/assets/barber-booking-create-*.js 1.07 kB (gzip 0.64 kB) shared
+                dist/assets/booking-status-badge-*.js 1.05 kB (gzip 0.57 kB) shared
                 dist/assets/barber-slots-*.js       0.86 kB (gzip   0.49 kB)  shared
-                dist/assets/index-*.css            89.66 kB (gzip  15.35 kB)
-backend migrations → 35, last AddEmailChangeTokens; has-pending-model-changes → none
-npm run test:e2e → 294 passed, 6 skipped, 1 failed with --workers=2
-                  (2026-11-11, after the email-change slice; +4 cases for it:
-                  the journey and the broken-token scene in `email-change.spec.ts`,
-                  and `/confirm-email-change` at 1280 and 320 in the axe specs).
-                  The only failure is `account-avatar-mutations.spec.ts:340` («админ
-                  возвращает фото: кадр и публичный кэш возвращаются»): it asserts
-                  `Cache-Control: public, max-age=86400` on the media file, but the
-                  owner's browser fetch renews the auth cookie, and ASP.NET adds
-                  `no-cache,no-store` (+ `Pragma`/`Expires`) to that response. A clean
-                  cookie-less request returns the expected header (verified with curl
-                  and a fresh Playwright request context), and the slice does not touch
-                  the avatar/media/auth code — recorded as an unrelated pre-existing
-                  flake, not a regression.
-                six skips — the three mobile split-view checks (`admin-reviews` ×2,
-                `admin-users`), the desktop-only password-reset spec on mobile
-                (auth limiter; 320 px is covered by the axe scan) and the desktop-only
-                email-change spec on mobile for the same reason
+                dist/assets/index-*.css            90.01 kB (gzip  15.39 kB)
+backend migrations → 36, last AddPhotoModeration; has-pending-model-changes → none
+npm run test:e2e → 307 passed, 6 skipped, 0 failed with --workers=2
+                  (2026-11-12, after the photo pre-moderation slice; 313 tests, 6.2 min.
+                  net +12 cases (307 passed vs 294 + 1 previously failing): the approve/reject
+                  scenes in `account-avatar-mutations.spec.ts` (queue search by email, preview,
+                  approve, reject with a reason and the owner's view), the portfolio queue
+                  approve/reject in `barber-profile-photos-mutations.spec.ts`, the public avatar
+                  two-step in
+                  `public-barber-avatar-mutations.spec.ts`, the summary's fourth block in
+                  `admin-summary.spec.ts`, `/admin/photos` on both tabs at 1280 and the
+                  empty queue at 320 in the axe specs, and the queue-row axe scan inside
+                  the portfolio mutation.)
+                  six skips — the three mobile split-view checks (`admin-reviews` ×2,
+                  `admin-users`), the desktop-only password-reset spec on mobile
+                  (auth limiter; 320 px is covered by the axe scan) and the desktop-only
+                  email-change spec on mobile for the same reason.
+                  The previously documented cache flake is fixed: `playwright.request.newContext`
+                  inherited the owner's `storageState`, so "anonymous" requests carried the
+                  cookie and ASP.NET added `no-store` on top of `public, max-age=86400`.
+                  The specs now pass an explicit empty `storageState` to every guest context,
+                  and the visible media header is asserted by a real guest (no cookie), so
+                  `public, max-age=86400` is verified end-to-end.
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -1147,18 +1160,18 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/password-reset` | anonymous, 10/min per IP, **no antiforgery** | `{ email }` → `204` for any address (existing, unknown, inactive, empty, malformed) — the response must not reveal whether the account exists; the quiet 60 s cooldown and a silent SMTP failure are also `204`; `409 auth.passwordReset.unavailable` when `Email` or `App:PublicUrl` is not configured; `429`; no `GET /api/auth/csrf` and no `X-CSRF-TOKEN` |
 | `POST` | `/api/auth/password-reset/confirm` | anonymous, 10/min per IP, **no antiforgery** | `{ token, newPassword }` → `204`; one-time and not idempotent: a malformed, unknown, expired, revoked or already consumed token, a missing user and an inactive account are `400 auth.passwordReset.invalid`; a password rejected by the policy is `400 auth.password.*` with `invalidField = "newPassword"` and the token stays usable; success ends every session and returns no tokens, so the client signs in again |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
-| `GET` | `/api/users/me` | authenticated, self-only | cabinet profile from the database: `id`, `email`, `firstName`, `lastName`, `phoneNumber`, `avatarUrl`, `isAvatarBlocked`, `role`, `barberProfileId`, `isEmailVerified`, `isPhoneVerified`, `createdAt`, `lastLoginAt`; `401` for anonymous; the id comes from the `sub` claim, the route has no `userId`. `avatarUrl` is **raw even when the photo is hidden** — `save()` sends it back to `PUT users/{id}/profile`, so a `null` here would erase the file on a name edit (#85 regression); render it only while `isAvatarBlocked === false` |
+| `GET` | `/api/users/me` | authenticated, self-only | cabinet profile from the database: `id`, `email`, `firstName`, `lastName`, `phoneNumber`, `avatarUrl`, `isAvatarBlocked`, `avatarModerationStatus`, `avatarRejectionReason`, `role`, `barberProfileId`, `isEmailVerified`, `isPhoneVerified`, `createdAt`, `lastLoginAt`; `401` for anonymous; the id comes from the `sub` claim, the route has no `userId`. `avatarUrl` is **raw even when the photo is hidden or rejected** — `save()` sends it back to `PUT users/{id}/profile`, so a `null` here would erase the file on a name edit (#85 regression); render it only while `isAvatarBlocked === false` and `avatarModerationStatus !== 'Rejected'`, and keep the `Rejected` preview in the cabinet card |
 | `PUT` | `/api/users/{userId}/profile` | the user themself or an admin | `{ firstName, lastName, phoneNumber, avatarUrl }` → `204` (no body); replaces the whole profile, so `avatarUrl` must be sent back unchanged; `400 user.updateProfile.firstName` / `user.updateProfile.lastName` / `user.updateProfile.avatarUrl`; cookie mutation, sends `X-CSRF-TOKEN` |
-| `POST` | `/api/users/me/avatar` | authenticated, self-only, cookie mutation, `multipart/form-data` with `file`, 6 MiB request limit | the profile photo: `201 { avatarUrl }` — a relative `/api/media/avatars/{userId}/{fileName}` URL, no `Location`; the browser prepares a 512×512 JPEG, and the server re-checks the signature, sides and size with the same `ImageFileInspector` as the portfolio (1 KiB..5 MiB, 300..6000 px, at most 24 MP); `400 user.uploadAvatar.fileRequired` / `user.uploadAvatar.tooLarge` and the shared `barberProfile.uploadPhoto.*` codes, `500 user.uploadAvatar.storage`; Kestrel may answer `413` before the action; `X-CSRF-TOKEN` required |
+| `POST` | `/api/users/me/avatar` | authenticated, self-only, cookie mutation, `multipart/form-data` with `file`, 6 MiB request limit | the profile photo: `201 { avatarUrl, moderationStatus }` — a relative `/api/media/avatars/{userId}/{fileName}` URL and always `moderationStatus: "Pending"` (the new frame is not public until an administrator approves it), no `Location`; the browser prepares a 512×512 JPEG, and the server re-checks the signature, sides and size with the same `ImageFileInspector` as the portfolio (1 KiB..5 MiB, 300..6000 px, at most 24 MP); `400 user.uploadAvatar.fileRequired` / `user.uploadAvatar.tooLarge` and the shared `barberProfile.uploadPhoto.*` codes, `500 user.uploadAvatar.storage`; Kestrel may answer `413` before the action; `X-CSRF-TOKEN` required |
 | `DELETE` | `/api/users/me/avatar` | authenticated, self-only, cookie mutation | deletes the current avatar and answers `204`, including when there was none (idempotent); the old media URL then answers `404`; `X-CSRF-TOKEN` required |
-| `GET` | `/api/media/avatars/{userId}/{fileName}` | anonymous, 120/min per IP | the avatar file itself; `fileName` is `32 hex.{jpg\|png\|webp}` and the access check compares the database URL with the requested one (`Ordinal`), so a replaced or deleted avatar is `404` at once. A **hidden** avatar is served only to an administrator (`Cache-Control: private, no-store`); everyone else, the owner included, gets the same `404 avatarMedia.notFound` — no `403`/`410` and no existence leak. A visible avatar keeps `public, max-age=86400`, `X-Content-Type-Options: nosniff` and range requests; no thumbnails |
+| `GET` | `/api/media/avatars/{userId}/{fileName}` | anonymous, 120/min per IP | the avatar file itself; `fileName` is `32 hex.{jpg\|png\|webp}` and the access check compares the database URL with the requested one (`Ordinal`), so a replaced or deleted avatar is `404` at once. Publicly the file is served only for `Approved` and **not** `isAvatarBlocked`; a `Pending`/`Rejected` frame is served to its **owner** (cabinet preview), a frame hidden by an administrator only to an administrator, all with `Cache-Control: private, no-store`; everyone else gets the same `404 avatarMedia.notFound` — no `403`/`410` and no existence leak. A public avatar keeps `public, max-age=86400`, `X-Content-Type-Options: nosniff` and range requests; no thumbnails |
 | `POST` | `/api/auth/logout` | anonymous, rate-limited, antiforgery | revokes refresh token, clears cookies, `204` |
 | `POST` | `/api/auth/refresh` | anonymous, 10/min per IP, antiforgery in the cookie branch | rotates the pair from the HttpOnly refresh cookie; the browser branch sends `{ rememberMe }` (no token in the body) → `204` + new cookies, and `rememberMe: true` makes the access cookie persistent; `401 auth.refresh.missing/invalid/revoked/expired/inactive/reused` (the refresh cookie is deleted), `400 auth.csrf.invalid`; the body form is for non-browser clients and is not used here (§9.4) |
-| `GET` | `/api/barbers?city=&specializationId=&hairServiceId=&date=&language=&additionalService=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, one language as an enum name (`Ru`, `ru`; an unknown value is `400 barberSearch.language.invalid`), one specialization and one hair service (both `''` = no filter), and `additionalService` — a case-insensitive substring matched against any element of the barber's `additionalServices` (`''` = no filter, `%`/`_` are literals); opaque keyset `nextCursor`; each item carries `languages` and `additionalServices` for the result card, plus `primaryPlaceKind` — a `PlaceKind` name or `null` when the barber has no place yet, and `avatarUrl` — the owner's relative `/api/media/avatars/...` URL or `null` when no photo is uploaded **or it is hidden**. A hidden avatar does not remove the card from the results: the mask is applied to the field only (`CASE` in SQL), so the counters and the keyset page are unchanged; the UI sends `pageSize=12` |
+| `GET` | `/api/barbers?city=&specializationId=&hairServiceId=&date=&language=&additionalService=&cursor=&pageSize=` | anonymous, 120/min per IP | barber search: exact trimmed city, weekday filter, one language as an enum name (`Ru`, `ru`; an unknown value is `400 barberSearch.language.invalid`), one specialization and one hair service (both `''` = no filter), and `additionalService` — a case-insensitive substring matched against any element of the barber's `additionalServices` (`''` = no filter, `%`/`_` are literals); opaque keyset `nextCursor`; each item carries `languages` and `additionalServices` for the result card, plus `primaryPlaceKind` — a `PlaceKind` name or `null` when the barber has no place yet, and `avatarUrl` — the owner's relative `/api/media/avatars/...` URL or `null` when no photo is uploaded, it is hidden, or its moderation status is not `Approved`. A hidden or not-yet-approved avatar does not remove the card from the results: the mask is applied to the field only (`CASE` in SQL), so the counters and the keyset page are unchanged; the UI sends `pageSize=12` |
 | `GET` | `/api/barbers/additional-services` | anonymous, 120/min per IP | suggestions for the additional-service filter: distinct values of active and verified profiles, a bare array ordered by value, at most 100 rows, `[]` when nobody filled the field; a hint, not a dictionary — the search accepts any substring |
 | `GET` | `/api/specializations` | anonymous, 120/min per IP | active specializations for the search filter: a bare array, no pagination, ordered by name; `[]` when the catalogue is empty; `description` may be `null` |
 | `GET` | `/api/hair-services` | anonymous, 120/min per IP | active hair services for the search filter and the profile's add-service dialog: a bare array, no pagination, ordered by category then name; `[]` when the catalogue is empty; the UI reads `id`, `name`, `category` and `defaultDurationMinutes` (the dialog pre-fills the duration from it) |
-| `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules and `kind` (`Salon`/`RentalStudio`/`SoloStudio`/`Home`/`Mobile`), specializations, rating, `avatarUrl` (the owner's avatar or `null` — also `null` when the photo is hidden); `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
+| `GET` | `/api/barbers/{id}` | anonymous, 120/min per IP | public profile: profile fields, services, salons with weekly schedules and `kind` (`Salon`/`RentalStudio`/`SoloStudio`/`Home`/`Mobile`), specializations, rating, `avatarUrl` (the owner's avatar or `null` — also `null` when the photo is hidden or not `Approved`), and only photos with `moderationStatus: 'Approved'`, `isPublished` and not blocked (the public response always carries `Approved`/`null`); `404` for a missing, inactive or unverified profile, `400` for an empty GUID |
 | `GET` | `/api/barbers/{id}/slots?date=&hairServiceId=&salonId=` | anonymous, 120/min per IP | free slots for a salon-local `YYYY-MM-DD`; `date` is required, `hairServiceId` is `hair_services.id` and sets the grid step, `salonId` defaults to the primary salon; `404` for a hidden profile, unknown salon or service; `409` for a missing or unresolvable salon time zone |
 | `GET` | `/api/reviews?barberProfileId=&cursor=&pageSize=` | anonymous, 120/min per IP | published reviews of one barber, newest first, keyset `nextCursor`; `barberProfileId` is required, the UI sends `pageSize=10`; only `isPublished = true`; `400` for a missing/empty id, bad `pageSize` or a broken cursor (`review.getReviews.*`, `review.cursor.invalid`); an unknown barber returns `200` with empty `items`, never `404` |
 | `GET` | `/api/reviews/mine?cursor=&pageSize=` | authenticated, cookie | the author's own reviews in both statuses, newest first, keyset `nextCursor`; the UI sends `pageSize=10`; `401` for anonymous; `400 review.getMyReviews.pageSize` / `review.cursor.invalid`; an empty list is `200` with `items: []` |
@@ -1171,17 +1184,18 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `GET` | `/api/barber/clients?search=` | role `Barber` | registered users for the manual-booking form: active users of **any role** (client, admin, barber, …), matched by email or phone substring; trimmed, 3–100 characters (`400 barberClient.search.tooShort`/`.tooLong`), at most ten rows, ordered by name; returns `id`, first/last name, email and phone (`null` when absent) |
 | `GET` | `/api/barber/booking-options` | role `Barber` | active services and salons of the **own** profile (the same nested shapes as the public card); works for an unverified profile, unlike `GET /api/barbers/{id}`; `404 barberProfile.notFound` when the profile is gone |
 | `POST` | `/api/barber-profiles` | role `Barber`, cookie mutation | creates the profile of the **current** user (the owner comes from the token, there is no `userId` in the body): `{ displayName, yearsOfExperience, grade, bio, languages, certificatesAndTraining, achievements, paymentMethods, communicationFormat, goodies, additionalServices, latePolicy }` → `201 { id }`; `additionalServices` is a free string list (`[]` or omitted means none; the domain trims, drops blanks and collapses case-insensitive duplicates); `grade` is a grade name and defaults to `None` when omitted (old clients keep working), the form offers the ten assigned grades and excludes «Без грейда»; the profile is linked to `users.barber_profile_id` in the same transaction, so the claim appears only in the **next** access token — `/barber/onboarding` calls `refreshSession()` after the `201`; `409 barberProfile.create.alreadyExists`, `400 barberProfile.displayName` / `.displayName.tooLong` / `barberProfile.yearsOfExperience` / `barberProfile.grade.unknown` / `barberProfile.languages.unknown` / `barberProfile.paymentMethods.unknown` (an empty or `null` `languages` list is stored as `[Ru]` by the domain, but the UI requires an explicit choice); `X-CSRF-TOKEN` required |
-| `GET` | `/api/barber-profiles/{id}` | role `Barber` (owner or admin), `EnsureCanManage` | the **own** card for `/barber/profile`: the same `BarberProfileResponse` as the public card, but any `is_active`/`is_verified` state and **including hidden services** (`isActive: false`); this is why the cabinet does not reuse `GET /api/barbers/{id}`; `avatarUrl` is `null` when the owner's photo is hidden, because both cards share one projection; `404 barberProfile.notFound` for an unknown id, `403 auth.forbidden` for another barber, `401` for anonymous or a non-`Barber` |
+| `GET` | `/api/barber-profiles/{id}` | role `Barber` (owner or admin), `EnsureCanManage` | the **own** card for `/barber/profile`: the same `BarberProfileResponse` as the public card, but any `is_active`/`is_verified` state, **including hidden services** (`isActive: false`) and **all photos** (any `moderationStatus`, with `rejectionReason`), so the cabinet shows «На проверке»/«Отклонено»/«Скрыто»; this is why the cabinet does not reuse `GET /api/barbers/{id}`; `avatarUrl` is `null` when the owner's photo is hidden or not approved, because both cards share the avatar projection; `404 barberProfile.notFound` for an unknown id, `403 auth.forbidden` for another barber, `401` for anonymous or a non-`Barber` |
 | `PUT` | `/api/barber-profiles/{id}` | owner or admin, cookie mutation | the edited card: `{ displayName, yearsOfExperience, bio, languages, certificatesAndTraining, achievements, paymentMethods, communicationFormat, goodies, additionalServices, latePolicy }` → `204`; `grade` is **not** in the body (only the admin route changes it) and `latePolicy` is a string, never `null`; the usual `400 barberProfile.*` field codes, `403 auth.forbidden`; `X-CSRF-TOKEN` required |
 | `POST` | `/api/barber-profiles/{id}/services` | owner or admin, cookie mutation | adds a service to the price list: `{ hairServiceId, price, durationMinutes }` → `204`; a hidden row for the same `hairServiceId` is **reactivated** with the new price/duration, so this same call restores a hidden service; `409 barberProfile.addService.duplicate` only when the row is already active, `404 barberProfile.addService.hairServiceNotFound`, `400 barberProfile.addService.price` / `.duration` (1..1440); `X-CSRF-TOKEN` required |
 | `PUT` | `/api/barber-profiles/{id}/services/{hairServiceId}` | owner or admin, cookie mutation | changes price and duration without hiding the service: `{ price, durationMinutes }` → `204`; works for an active or a hidden row; `404 barberProfile.updateService.notFound`, `400 barberService.updatePrice` / `barberService.updateDuration`; `X-CSRF-TOKEN` required |
 | `DELETE` | `/api/barber-profiles/{id}/services/{hairServiceId}` | owner or admin, cookie mutation | **hides** the service, it does not delete the row: sets `is_active = false` and returns `204`; a repeated call is also `204`; the row stays because the customer, barber and admin booking lists join `bookings → barber_services`, so a physical delete would remove historical visits from them; `404 barberProfile.removeService.notFound` only when the row never existed; `X-CSRF-TOKEN` required |
 | `POST` | `/api/barber-profiles/{id}/specializations/{specializationId}` | owner or admin, cookie mutation | `204`; the id is in the path, there is no body; `409 barberProfile.addSpecialization.duplicate`, `404 barberProfile.addSpecialization.specializationNotFound`, `403 auth.forbidden`; `X-CSRF-TOKEN` required |
 | `DELETE` | `/api/barber-profiles/{id}/specializations/{specializationId}` | owner or admin, cookie mutation | `204`; this one is a **physical** delete — specializations take part in no booking joins and carry no history; `404 barberProfile.removeSpecialization.notFound`; `X-CSRF-TOKEN` required |
-| `POST` | `/api/barber-profiles/{id}/photos/upload` | owner or admin, cookie mutation, `multipart/form-data` with `file` and `description`, 6 MiB request limit | `201 { id }` (no `Location` and no per-photo `GET`); accepts only JPEG/PNG/WebP by signature, 1 KiB..5 MiB, 300..6000 px per side and at most 24 MP; the 11th photo is `409 barberProfile.addPhoto.limit` and the file is not written; `400 barberProfile.uploadPhoto.fileRequired/empty/tooLarge/unsupportedType/invalidImage/dimensions/url`, `400 barberProfile.addPhoto.description` (over 2000), `500 barberProfile.uploadPhoto.storage`; Kestrel may answer `413` before the action when the request exceeds 6 MiB; `X-CSRF-TOKEN` required |
+| `POST` | `/api/barber-profiles/{id}/photos/upload` | owner or admin, cookie mutation, `multipart/form-data` with `file` and `description`, 6 MiB request limit | `201 { id }` (no `Location` and no per-photo `GET`); the new photo is created `Pending` and is not public until an administrator approves it; accepts only JPEG/PNG/WebP by signature, 1 KiB..5 MiB, 300..6000 px per side and at most 24 MP; the 11th photo is `409 barberProfile.addPhoto.limit` and the file is not written; `400 barberProfile.uploadPhoto.fileRequired/empty/tooLarge/unsupportedType/invalidImage/dimensions/url`, `400 barberProfile.addPhoto.description` (over 2000), `500 barberProfile.uploadPhoto.storage`; Kestrel may answer `413` before the action when the request exceeds 6 MiB; `X-CSRF-TOKEN` required |
 | `PUT` | `/api/barber-profiles/{id}/photos/order` | owner or admin, cookie mutation | `{ photoIds }` — exactly every photo of the profile, without duplicates — → `204`; the aggregate writes `SortOrder = index`, so the UI never swaps two photos with two requests; `400 barberProfile.reorderPhotos.invalid`; the single `PUT .../photos/{photoId}/sort-order` stays for compatibility and the UI does not use it |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/photos/{photoId}/block` | admin only (`AdminOnly` + `EnsureAdmin`), cookie mutation | block / unblock a photo → `204`, idempotent; this is the only way to clear `isBlocked`, so the owner can never undo an admin block; `403 auth.forbidden` for the owner (or any non-admin), `404 portfolioPhoto.block.notFound` / `portfolioPhoto.unblock.notFound`; nothing is written to `audit_log` |
-| `GET` | `/api/media/portfolio/{barberProfileId}/{fileName}` | anonymous; a hidden/blocked file only for the profile owner or an admin | the file itself; `fileName` is `32 hex.{jpg\|png\|webp}` and is never taken from a query; visibility is read from the database on every request: `isPublished && !isBlocked` for everyone, otherwise `404` (never `403`/`410`, so the response does not reveal that the frame exists) except the owner and admins, who get it for cabinet previews; visible → `Cache-Control: public, max-age=86400`, hidden/blocked → `private, no-store`, always `X-Content-Type-Options: nosniff`; one file per request, no listing; rate-limited as a read |
+| `POST` | `/api/barber-profiles/{id}/photos/{photoId}/approval` and `/rejection` | admin only (`AdminOnly` + `EnsureAdmin`), cookie mutation | the pre-moderation decision: approval makes the frame public under the usual `isPublished`/`isBlocked` rules, rejection keeps it private and stores the owner-visible reason → `204`; only a `Pending` frame can be decided (`409 portfolioPhoto.moderation.invalidStatus`), a frame from another profile or an unknown one is `404 portfolioPhoto.moderation.notFound`, an unknown profile is `404 barberProfile.notFound`; rejection body `{ reason }` is mandatory, trimmed, 1..500 (`400 portfolioPhoto.moderation.reasonRequired` / `.reasonTooLong`); `X-CSRF-TOKEN` required, no `audit_log` row |
+| `GET` | `/api/media/portfolio/{barberProfileId}/{fileName}` | anonymous; a hidden/blocked/not-approved file only for the profile owner or an admin | the file itself; `fileName` is `32 hex.{jpg\|png\|webp}` and is never taken from a query; visibility is read from the database on every request: `Approved && isPublished && !isBlocked` for everyone, otherwise `404` (never `403`/`410`, so the response does not reveal that the frame exists) except the owner and admins, who get it for cabinet previews; public → `Cache-Control: public, max-age=86400`, hidden/blocked/unapproved → `private, no-store`, always `X-Content-Type-Options: nosniff`; one file per request, no listing; rate-limited as a read |
 | `POST` / `DELETE` | `/api/barber-profiles/{id}/photos/{photoId}/publication` | owner or admin, cookie mutation | «Скрыть» / «Вернуть»: toggles `isPublished` only and leaves `isBlocked` alone → `204`; a hidden photo disappears from the public card and from `/api/media` for strangers; `X-CSRF-TOKEN` required |
 | `PUT` | `/api/barber-profiles/{id}/photos/{photoId}/description` | owner or admin, cookie mutation | `{ description }` → `204`; trimmed, an empty string becomes `null`, over 2000 characters is `400 barberProfile.addPhoto.description`; `X-CSRF-TOKEN` required |
 | `DELETE` | `/api/barber-profiles/{id}/photos/{photoId}` | owner or admin, cookie mutation | physical delete → `204`; the row goes, the file is deleted best-effort (a failed unlink is a log warning, not a `500`, and the media route answers `404` from the database check); `X-CSRF-TOKEN` required |
@@ -1226,18 +1240,22 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `PUT` | `/api/bookings/{id}/barber-note` | owner barber | `{ note }` → `204`; the value is trimmed and an empty string is stored as `null`; more than 1000 characters — `400 booking.barberNote.tooLong` |
 | `GET` | `/api/admin/reviews?status=pending\|published` | admin | review queue / published list with barber, client and visit context; `pending` is ordered by queue entry (`updatedAt`, longest waiting first) and `published` by `createdAt` desc; each tab has its own opaque cursor |
 | `GET` | `/api/admin/reviews/{id}` | admin | one review for a direct link |
-| `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade; each row also carries the owner's raw `avatarUrl` and `isAvatarBlocked` (the admin sees a hidden photo; the row shows a «Фото скрыто» badge) |
-| `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist; `avatarUrl` is the owner's raw URL even when hidden, `isAvatarBlocked` is the state, and the card offers «Скрыть фото»/«Вернуть фото» |
-| `GET` | `/api/admin/users?status=all\|active\|blocked\|unverified&role=&search=` | admin | user list with role, access state and verifications; each row also carries the raw `avatarUrl` and `isAvatarBlocked` (hidden photos stay visible to the admin, with a «Фото скрыто» badge) |
-| `GET` | `/api/admin/users/{id}` | admin | user card with contacts, the linked barber profile and the consent record (`consentPolicyVersion`, `consentedAt`; both `null` for pre-#42 and admin-created accounts, the IP is never returned); carries the raw `avatarUrl` and `isAvatarBlocked` |
+| `GET` | `/api/admin/barbers?status=all\|pending\|hidden&search=` | admin | barber queue/list with owner email and grade; each row also carries the owner's raw `avatarUrl`, `isAvatarBlocked` and `avatarModerationStatus` (the admin sees a hidden or pending photo; the row shows a «Фото скрыто» badge or the moderation badge «На проверке»/«Отклонено») |
+| `GET` | `/api/admin/barbers/{id}` | admin | barber card with the readiness checklist; `avatarUrl` is the owner's raw URL even when hidden or pending, `isAvatarBlocked`/`avatarModerationStatus`/`avatarRejectionReason` are the state, and the card offers «Скрыть фото»/«Вернуть фото» plus «Одобрить»/«Отклонить» for a pending avatar; its «Фотографии» block shows every portfolio photo with its moderation status, the rejection reason and approve/reject actions for `Pending` frames |
+| `GET` | `/api/admin/users?status=all\|active\|blocked\|unverified&role=&search=` | admin | user list with role, access state and verifications; each row also carries the raw `avatarUrl`, `isAvatarBlocked` and `avatarModerationStatus` (hidden and pending photos stay visible to the admin, with a «Фото скрыто» badge or the moderation badge) |
+| `GET` | `/api/admin/users/{id}` | admin | user card with contacts, the linked barber profile and the consent record (`consentPolicyVersion`, `consentedAt`; both `null` for pre-#42 and admin-created accounts, the IP is never returned); carries the raw `avatarUrl`, `isAvatarBlocked`, `avatarModerationStatus` and `avatarRejectionReason`, and a pending avatar offers approve/reject in the card |
 | `POST` / `DELETE` | `/api/admin/users/{userId}/avatar/block` | admin (`AdminOnly` + `EnsureAdmin`), cookie mutation | hide / restore the user's avatar → `204`, idempotent; the file and `avatar_url` stay, so restoring returns the same frame; public reads return `avatarUrl: null` and the media route `404`s (the admin still gets the file with `private, no-store`). `404 user.notFound` for an unknown user, `409 user.blockAvatar.noAvatar` when there is nothing to hide; the change is audited as `user.updated` with `changes.isAvatarBlocked`; `X-CSRF-TOKEN` required |
+| `GET` | `/api/admin/photos/avatars?search=&cursor=&pageSize=` | admin (`AdminOnly` + `EnsureAdmin`) | the avatar pre-moderation queue: only `Pending` frames with a URL, FIFO `(avatarSubmittedAt ASC, id ASC)`; `PagedResponse<AdminAvatarPhotoResponse>` with `userId`, `firstName`, `lastName`, `email`, raw `avatarUrl`, `moderationStatus`, `submittedAt`; `search` matches name/surname/email (≤ 100), `pageSize` 1..100 defaults to 20; `400 admin.photos.search/cursor/pageSize`; no total, no history of decided frames |
+| `GET` | `/api/admin/photos/portfolio?search=&cursor=&pageSize=` | admin (`AdminOnly` + `EnsureAdmin`) | the portfolio pre-moderation queue: only `Pending` photos, FIFO `(createdAt ASC, id ASC)`; `PagedResponse<AdminPortfolioPhotoResponse>` with `photoId`, `barberProfileId`, barber display name, owner email, raw `url`, `description`, `isPublished`, `moderationStatus`, `submittedAt`; `search` matches the barber name or owner email; same parameter codes; no total |
+| `POST` | `/api/admin/users/{userId}/avatar/approval` | admin (`AdminOnly` + `EnsureAdmin`), cookie mutation | approve the pending avatar → `204`; a repeated decision is `409 user.avatarModeration.invalidStatus`, no avatar is `409 user.avatarModeration.noAvatar`, unknown user is `404 user.notFound`; `X-CSRF-TOKEN` required; the decision is stored on the user (`reviewedByUserId`/`reviewedAt`), no `audit_log` row |
+| `POST` | `/api/admin/users/{userId}/avatar/rejection` | admin (`AdminOnly` + `EnsureAdmin`), cookie mutation | reject the pending avatar with `{ reason }` (mandatory, trimmed, 1..500) → `204`; `400 user.avatarModeration.reasonRequired` / `.reasonTooLong`, the same `409`/`404` as approval; the owner sees the reason in the cabinet, the frame stays private; no `audit_log` row |
 | `GET` | `/api/admin/catalogue/hair-services?status=&search=` | admin | the **full** catalogue including hidden rows: a bare array, no pagination; `status` is `all` (default), `active` or `hidden`; every row carries `isActive` and `usageCount` (active verified barbers with an active link); order category, name, id; `400 admin.catalogue.status` / `admin.catalogue.search` |
 | `GET` | `/api/admin/catalogue/specializations?status=&search=` | admin | the same contract for specializations: `name`, `description`, `isActive`, `usageCount`; order name, id |
 | `GET` | `/api/admin/catalogue/salons?status=&search=` | admin | the same contract for salons, with every edit field (`address`, `city`, `postalCode`, `country`, `timeZoneId`, coordinates, contacts), `isActive`, `usageCount`, `kind` (the `PlaceKind` name) and `isListed` (`false` = hidden from the catalogue, skipped moderation), the moderation state (`moderationStatus` as `Pending`/`Active`/`Rejected`, `rejectionReason`, `reviewedAt`) and `ownerEmail` (left join `users`, `null` for an admin-created salon); `status` adds a fourth value `pending` — only salons have moderation: `active` = `isActive && Active`, `hidden` = `!isActive && Active`, `pending` = `Pending`, `all` = everything; hair services and specializations answer `400 admin.catalogue.status` for `pending`; search matches name **and** city; order city, name, id |
 | `GET` | `/api/admin/bookings?status=&search=&cursor=&pageSize=` | admin | support list across all customers, newest first with keyset `(start_at DESC, id ASC)`: `status` is `all` (default) or a `BookingStatus` name (`Pending`, `Confirmed`, `Completed`, `Cancelled`, `NoShow`, case-insensitive; numbers rejected), `search` is a customer-email substring (trimmed, at most 100 characters, `%`, `_` and `\` escaped) **or** an exact booking id when the value parses as a GUID — not a name, phone or id prefix; `pageSize` 1..100 defaults to 20; `PagedResponse<AdminBookingResponse>` has **no total**; `LEFT JOIN` to users (a walk-in has `customer.id`/`email` = `null` and carries the guest name/phone on the booking) gives `customer.avatarUrl` (`null` for a walk-in); the barber's `avatarUrl` comes from a second `LEFT JOIN users` on `barber_profiles.user_id`, while inner joins to barber_profiles / barber_services → hair_services / salons mean a historical row with a dangling barber, service or salon link drops out (the cabinet's documented behaviour); `400 admin.bookings.status`, `admin.bookings.search`, `admin.bookings.page.limit`, `admin.bookings.pageSize` and `admin.bookings.cursor.invalid`; the screen's filters stay in React state, not in the URL |
 | `GET` | `/api/admin/bookings/{id}` | admin | one booking with the same `AdminBookingResponse` (customer name/email/phone and `avatarUrl`; for a walk-in `customer.id`/`email`/`avatarUrl` are `null`, the name/phone come from the booking, barber with `avatarUrl`, service, salon with `timeZoneId`, price snapshot, both notes, `cancellationReason`, `createdAt`); `404 admin.bookings.notFound`; email and phone are PII and exist **only** in this admin contract — the public `BookingResponse` carries no email and its `userId` is nullable for a guest row |
 | `GET` | `/api/admin/audit?entityType=all\|user\|barber_profile\|review\|salon\|hair_service\|specialization\|booking&actor=&from=&to=&cursor=&pageSize=` | admin | read-only change journal, newest first with keyset `(occurred_at DESC, id)`: `entityType` defaults to `all` (comparison after `Trim`, case-insensitive), `actor` is a trimmed email substring of at most 100 characters with `%`, `_` and `\` escaped, `from`/`to` are inclusive **UTC days**; every entry is `{ id, occurredAt, action, entityType, entityId, actor: { id, email } \| null, changes: [{ field, from, to }] }`; `action` is `{entity}.{created\|updated\|deleted}`, `changes` is the parsed payload with fields sorted by name (creation and deletion: `from = null`), secrets stay `[redacted]`, an unreadable payload is `changes: []`; the author comes from `LEFT JOIN users` and may be `null` (deleted account or a system write); the entity name is **not** resolved; the journal covers seven types — `user`, `barber_profile`, `review`, `salon`, `hair_service`, `specialization` and `booking` (booking rows contain only `Status`/`BarberNote`/`CancellationReason` changes; booking creation is deliberately not audited, and `BarberProfile` children are not covered) — retention and export remain separate; `400 admin.audit.entityType/actor/period/pageSize/cursor.invalid` |
-| `GET` | `/api/admin/summary` | admin | the «what needs attention» aggregate: `{ reviews: { pendingCount, oldest }, barbers: { unverifiedCount }, salons: { inactiveCount } }`; no parameters, no pagination, no `total`; numbers use exactly the section predicates (`is_published = false`, `is_verified = false`, `is_active = false AND moderation_status = 2`) and `oldest` is the first FIFO row of the moderation queue (`null` when empty), whose `awaitingSince` is when the review entered the queue — not when it was created or edited; a `Pending` salon is not counted as «выключенный»; names only — no customer email or phone; read-only |
+| `GET` | `/api/admin/summary` | admin | the «what needs attention» aggregate with **four** blocks: `{ reviews: { pendingCount, oldest }, barbers: { unverifiedCount }, salons: { inactiveCount }, photos: { pendingAvatarsCount, pendingPortfolioCount } }`; no parameters, no pagination, no `total`; numbers use exactly the section predicates (`is_published = false`, `is_verified = false`, `is_active = false AND moderation_status = 2`, and the two photo queues: `Pending` avatars with a URL/submitted-at, `Pending` portfolio) and `oldest` is the first FIFO row of the moderation queue (`null` when empty), whose `awaitingSince` is when the review entered the queue — not when it was created or edited; a `Pending` salon is not counted as «выключенный»; the two photo counts equal the sizes of `/admin/photos?tab=avatars\|portfolio`; names only — no customer email or phone; read-only |
 | `GET` | `/api/admin/statistics?from=&to=&compare=true\|false` | admin | the «service statistics» aggregate: `from`/`to` are required `yyyy-MM-dd` UTC days (inclusive, `from <= to`, at most 366 days, otherwise `400 admin.statistics.period`), `compare` defaults to `false` and only then fills `period.previous` and the `previous` fields of the overview; typed sections `overview` (six metrics; `noShowRate` also carries `count` and `sample`), `series` (dense day series up to 92 days, otherwise ISO weeks from Monday; `created` by `created_at`, the rest by `start_at`), `statuses` (`pending`/`confirmed`/`completed`/`cancelled`/`noShow`/`due`/`closed`), `clients` (no user ids or names), `supply` (active/working/idle barbers, new profiles, salons by `PlaceKind`), `top` (barbers/services/cities, minimum 3 completed visits, `other` as the remainder of the period total) and `quality` (published-reviews rating/distribution, new reviews + published share, barber-request and salon moderation with approval rate and median decision hours); money is a number + `currency: "RUB"`, shares are `0..1` or `null`; no PII, no mutations, no `audit_log`, `no-store`; no schema change (`backend/AGENT.md` §15.2 records the measured cost and the proposed rollup) |
 | `PUT` | `/api/users/{id}/role` | admin | change a role; `409 user.role.self` / `user.admin.last` |
 | `POST` / `DELETE` | `/api/users/{id}/activation` | admin | unblock / block; `409 user.deactivation.self` / `user.admin.last` |
@@ -1252,48 +1270,62 @@ Every response with a body in this table is checked by the strict guards from §
 (`src/lib/response-guards.ts`); `204` actions have no body to validate.
 
 **Portfolio photos.** The card contract grew a `photos` array, not a second read.
-`GET /api/barber-profiles/{id}` (the own card) returns **all** photos with both flags, so the
-cabinet shows «Скрыто» and «Скрыто администратором»; the public `GET /api/barbers/{id}` returns
-only `isPublished && !isBlocked`, ordered by `sortOrder` then `createdAt`;
-`AdminBarberDetailResponse.photos` returns all photos too, while
-`readiness.photosCount` counts **visible** ones only, because the checklist mirrors the public
-card. Uploaded photos store a **relative** `/api/media/portfolio/...` URL (valid in `<img src>`
-because the SPA and `/api` share an origin, §5.1); the old JSON `POST .../photos` still accepts
-absolute external URLs and they keep working unchanged. `thumbnailUrl` is always `null` in this
-slice — there are no server thumbnails (§14 #31). Access is checked against the profile in the
-URL, not the caller: `EnsureCanManage` covers upload/order/description/publication/delete, and
-only `AdminOnly` reaches `block`.
+`GET /api/barber-profiles/{id}` (the own card) returns **all** photos with both flags, the real
+`moderationStatus` and `rejectionReason`, so the cabinet shows «На проверке», «Отклонено» (with
+the reason), «Скрыто» and «Скрыто администратором»; the public `GET /api/barbers/{id}` returns
+only `Approved && isPublished && !isBlocked`, ordered by `sortOrder` then `createdAt`, and its
+`BarberProfilePhotoResponse` always carries `moderationStatus: 'Approved'` and
+`rejectionReason: null`; `AdminBarberDetailResponse.photos` returns all photos too, while
+`readiness.photosCount` counts **visible and approved** ones only, because the checklist mirrors
+the public card. A new upload is created `Pending`; it becomes public only after
+`POST .../photos/{photoId}/approval` in `/admin/photos` (or the admin barber card), and
+`.../rejection` stores the owner-visible reason. Uploaded photos store a **relative**
+`/api/media/portfolio/...` URL (valid in `<img src>` because the SPA and `/api` share an origin,
+§5.1); the old JSON `POST .../photos` still accepts absolute external URLs. `thumbnailUrl` is
+always `null` in this slice — there are no server thumbnails (§14 #31). Access is checked against
+the profile in the URL, not the caller: `EnsureCanManage` covers
+upload/order/description/publication/delete, and only `AdminOnly` reaches `block` and the two
+moderation decisions.
 
 **User avatar.** The profile photo is one nullable `users.avatar_url` column, not a child entity:
 the browser prepares a 512×512 JPEG (`prepareAvatarImage`) and sends one multipart
 `POST /api/users/me/avatar`; the API re-uses `ImageFileInspector`, stores the file under the same
-`Storage:RootPath` (`{root}/avatars/{userId:N}/{mediaId:N}.{ext}`) and returns the **relative**
+`Storage:RootPath` (`{root}/avatars/{userId:N}/{mediaId:N}.{ext}`) and returns
+`201 { avatarUrl, moderationStatus: "Pending" }` with the **relative**
 `/api/media/avatars/{userId}/{fileName}` URL. The domain (`User.SetAvatar`) accepts only that own
 media URL or an absolute legacy `http(s)` URL, so returning the field on `PUT /api/users/{id}/profile`
 keeps working. The media route serves the file only when the URL stored on the user equals the
-requested one, otherwise `404 avatarMedia.notFound`; a visible avatar keeps `public, max-age=86400`
-and `nosniff`.
-Moderation is a **read mask**, not a deletion (#87): `users.is_avatar_blocked` stays
-`false` by default, `POST /api/admin/users/{userId}/avatar/block` hides the photo and `DELETE`
-restores it, and neither `avatar_url` nor the file changes — the 34th migration adds only the flag.
-Public search, the public barber card and the barber's booking list return `avatarUrl: null` when
-the flag is set (the card itself stays in the results); the admin lists, the admin cards and the
-admin booking read keep the raw URL plus the flag, and `GET /api/users/me` is the other raw
-surface — deliberately, because `save()` sends `avatarUrl` back and a `null` would erase the photo.
+requested one, otherwise `404 avatarMedia.notFound`; a public avatar (`Approved`, not blocked)
+keeps `public, max-age=86400` and `nosniff`.
+Two independent states now decide visibility (#87, #89). `users.is_avatar_blocked` stays a
+**read mask**: `POST /api/admin/users/{userId}/avatar/block` hides the photo and `DELETE`
+restores it, neither `avatar_url` nor the file changes. `users.avatar_moderation_status` is
+**pre-moderation**: an upload makes the new frame `Pending`, so it is not public until
+`POST /api/admin/users/{userId}/avatar/approval`; `.../rejection` with a mandatory 1..500 reason
+keeps it private and shows the reason to the owner. A real upload replaces the old frame
+**immediately** — the old media URL stops being served and the public surfaces show initials
+until approval; saving a name with the same `avatarUrl` is a no-op and keeps both the status and
+the block flag. Public search, the public barber card and the barber's booking list return
+`avatarUrl: null` when the frame is blocked or not `Approved` (the card itself stays in the
+results); the admin lists, the admin cards and the admin booking read keep the raw URL plus the
+flags, and `GET /api/users/me` is the other raw surface — deliberately, because `save()` sends
+`avatarUrl` back and a `null` would erase the photo.
 The profile is owned by the single `ProfileProvider` mounted in `main.tsx` inside `SessionProvider`:
 the header and the cabinet read one context, so exactly one `GET users/me` is made per authenticated
-page load (none for an anonymous visitor), and `setAvatar` updates every subscriber without a
-second read.
-The header, `AccountIdentity` and `AvatarCard` check `isAvatarBlocked` and render initials instead,
-so a hidden frame is neither requested nor shown from the 24-hour cache. The decision is written to
-`audit_log` as `user.updated` with `changes.isAvatarBlocked`; the profile cache still sends the raw
-URL on a name save and `setAvatar` clears the flag on a real upload or delete. The search cards, the
-client and barber booking lists and the admin booking list/detail read the `avatarUrl` fields;
-`BarberHero` and `AccountIdentity` render it with the initials as the fallback. There are no server
-thumbnails, no pre-moderation queue, no hidden-avatar counter or filter and no second storage
-backend; the 24-hour browser cache means a replaced, deleted or hidden frame may survive in another
-browser for a day, and an open tab learns about a block only on its next load — the same limitations
-as the portfolio (§14 #32).
+page load (none for an anonymous visitor), and `setAvatar(url, status)` updates every
+subscriber without a second read (it also clears the old block flag and rejection reason).
+The header and `AccountIdentity` render the frame only for `Approved`/`Pending` and never for
+`Rejected` or a blocked photo; `AvatarCard` is the one place that also previews a `Rejected` frame,
+next to the badge «Отклонено» and the reason, because the owner must understand what was refused.
+The block decision is written to `audit_log` as `user.updated` with `changes.isAvatarBlocked`;
+the two pre-moderation decisions are **not** audited and live only in
+`reviewedByUserId`/`reviewedAt`/`rejectionReason` — remaining debt (§14 #32). The admin user and
+barber cards take the same decisions (`AvatarModeration` block) and the two lists show textual
+«На проверке»/«Отклонено» badges, so the queue is the fast path rather than the only one. There
+are no server thumbnails, no `avatar=blocked` filter and no second storage backend; the 24-hour
+browser cache means a replaced, deleted or hidden frame may survive in another browser for a day,
+and an open tab learns about a block only on its next load — the same limitations as the portfolio
+(§14 #31/#32).
 
 **Email verification.** The flag is soft: no screen blocks sign-in, booking or reviews on
 `isEmailVerified`, and the API does not apply the `VerifiedEmail` policy in this slice. The
@@ -1752,6 +1784,20 @@ of WCAG conformance.
   (the trigger stays focusable during the countdown: `aria-disabled`, not `disabled`). The
   `/confirm-email-change` landing focuses the result heading, announces the `checking` skeleton
   with `role="status"` and keeps «На главную» plus the login trigger in every settled state.
+- `/admin/photos` is a real `tablist` of two links (`aria-selected`, arrow/Home/End, `href`),
+  one `tabpanel`, and a `<ul>` of rows. Each row is a `<li>` with an 80 px preview button named
+  «Открыть фото крупно: <name>», textual owner/email/description/waiting time, and the two
+  decisions named «Одобрить: <name>» / «Отклонить: <name>» — the visible word starts the
+  accessible name (WCAG 2.5.3), and a portfolio row adds the caption because one barber may have
+  several frames. The rejection is an `alertdialog` with a labelled `Textarea` (`aria-invalid`,
+  `aria-describedby`, `FieldError`), client validation before the request, Escape closes it and
+  focus returns to the trigger; the preview is a `Dialog` that returns focus to the thumbnail.
+  After a decision the row disappears, focus moves to the next (or previous) row, or to the `h1`
+  when the queue empties, and the result is announced in `role="status"`. The 44 px rule holds
+  at 320 px (the tabs and both buttons), the empty queue and the empty search result are
+  different texts, and axe scans both tabs at 1280 and the empty queue at 320; the row with a
+  real frame (including the rejection dialog) is scanned inside the portfolio mutation, because
+  the seeded read-only queue is empty.
 - `focus-visible` rings are preserved by the component styles.
 
 **Rules for new UI**
@@ -1783,56 +1829,57 @@ contrast on screens outside the axe matrix.
 
 ## 12. Performance
 
-### 12.1 Current build (2026-11-11)
+### 12.1 Current build (2026-11-12)
 
 | Asset | Raw | Gzip |
 |---|---|---|
-| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit, React and the shared `ProfileProvider` | 352.18 kB | 114.15 kB |
-| `router-*.js` — shared router + i18n catalog chunk (the #72 English catalog dominates it) | 241.30 kB | 64.18 kB |
-| `card-*.js` — shared UI primitives (card, dialog, field, avatar, …), modulepreloaded with the entry | 57.40 kB | 22.13 kB |
-| `csrf-*.js` — shared request/CSRF chunk that `index.html` modulepreloads with the entry | 94.04 kB | 31.31 kB |
-| `admin-page-*.js` — lazy `/admin/**` (summary, statistics, reviews, barbers, users, barber requests, catalogue, bookings, audit) | 271.14 kB | 56.88 kB |
-| `barber-import-page-*.js` — lazy `/barber/import` with both sources: the text parser, the `.ics` form, the skipped-event list, the preview and the report | 87.47 kB | 26.42 kB |
+| `index-*.js` — shell, landing, search, session (incl. silent refresh and the unavailable card), response guards, UI kit, React and the shared `ProfileProvider` | 352.59 kB | 114.28 kB |
+| `router-*.js` — shared router + i18n catalog chunk (the #72 English catalog dominates it) | 246.83 kB | 65.43 kB |
+| `card-*.js` — shared UI primitives (card, dialog, field, avatar, …), modulepreloaded with the entry | 57.19 kB | 22.10 kB |
+| `csrf-*.js` — shared request/CSRF chunk that `index.html` modulepreloads with the entry | 95.65 kB | 31.60 kB |
+| `admin-page-*.js` — lazy `/admin/**` (summary, statistics, reviews, photos, barbers, users, barber requests, catalogue, bookings, audit) | 300.14 kB | 61.57 kB |
+| `barber-import-page-*.js` — lazy `/barber/import` with both sources: the text parser, the `.ics` form, the skipped-event list, the preview and the report | 87.48 kB | 26.43 kB |
 | `ical-*.js` — lazy `ical.js`, fetched only when a calendar file is parsed; the pasted-list path never loads it | 77.13 kB | 23.11 kB |
-| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 53.29 kB | 14.12 kB |
-| `barber-page-*.js` — lazy `/barbers/{id}` with the hero avatar, slots, booking, portfolio gallery and reviews | 35.49 kB | 9.37 kB |
-| `barber-profile-page-*.js` — lazy `/barber/profile` with the price list, specializations and the portfolio section (the card form is the shared `barber-profile-form` chunk) | 30.84 kB | 7.19 kB |
-| `privacy-page-*.js` — lazy `/privacy` with the policy sections and the cookie registry | 30.57 kB | 7.76 kB |
-| `account-page-*.js` — lazy `/account` with the hero, two server tabs, the request card and the dialogs | 29.28 kB | 9.15 kB |
-| `barber-schedule-page-*.js` — lazy `/barber/schedule` with the week, exceptions and time offs | 23.10 kB | 6.52 kB |
-| `salon-form-*.js` — shared salon fields for the admin and owner dialogs | 20.87 kB | 6.41 kB |
-| `barber-salons-page-*.js` — lazy `/barber/salons` with the places, owner edits and the salon-barbers dialog | 20.75 kB | 5.81 kB |
-| `become-a-barber-page-*.js` — lazy `/become-a-barber` with the marketing copy, the request form and the status card | 18.24 kB | 5.46 kB |
-| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 17.49 kB | 5.64 kB |
-| `barber-notifications-page-*.js` — lazy `/barber/notifications` with the settings and the inbox | 16.49 kB | 5.03 kB |
-| `barber-profile-form-*.js` — shared create/edit form of the barber card, used by onboarding and `/barber/profile` | 12.40 kB | 4.09 kB |
-| `account-profile-page-*.js` — lazy `/account/profile` with the avatar card and the profile form | 12.93 kB | 4.33 kB |
-| `account-security-page-*.js` — lazy `/account/security` with the password, sign-out, email-verification and «Забыли пароль?» cards | 12.00 kB | 4.05 kB |
-| `register-page-*.js` — lazy `/register` with the form and the success card | 11.98 kB | 4.10 kB |
-| `barber-cabinet-gates-*.js` — shared barber gates, skeleton and notification bell | 8.97 kB | 3.39 kB |
-| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 8.36 kB | 2.84 kB |
-| `reset-password-page-*.js` — lazy `/reset-password` with the token-once form, success and invalid cards | 8.11 kB | 2.69 kB |
+| `barber-cabinet-page-*.js` — lazy `/barber` with tabs, rows, dialogs and the client-booking form | 53.30 kB | 14.12 kB |
+| `barber-page-*.js` — lazy `/barbers/{id}` with the hero avatar, slots, booking, portfolio gallery and reviews | 35.49 kB | 9.36 kB |
+| `barber-profile-page-*.js` — lazy `/barber/profile` with the price list, specializations and the portfolio section with its moderation badges (the card form is the shared `barber-profile-form` chunk) | 31.47 kB | 7.30 kB |
+| `privacy-page-*.js` — lazy `/privacy` with the policy sections and the cookie registry | 30.57 kB | 7.77 kB |
+| `account-page-*.js` — lazy `/account` with the hero, two server tabs, the request card and the dialogs | 29.29 kB | 9.14 kB |
+| `barber-schedule-page-*.js` — lazy `/barber/schedule` with the week, exceptions and time offs | 23.10 kB | 6.53 kB |
+| `salon-form-*.js` — shared salon fields for the admin and owner dialogs | 20.88 kB | 6.41 kB |
+| `barber-salons-page-*.js` — lazy `/barber/salons` with the places, owner edits and the salon-barbers dialog | 20.75 kB | 5.80 kB |
+| `become-a-barber-page-*.js` — lazy `/become-a-barber` with the marketing copy, the request form and the status card | 18.24 kB | 5.47 kB |
+| `account-profile-page-*.js` — lazy `/account/profile` with the avatar card (pre-moderation badge and reason), the profile form and the Email card | 18.63 kB | 5.60 kB |
+| `account-reviews-page-*.js` — lazy `/account/reviews` with rows and dialogs | 17.50 kB | 5.64 kB |
+| `barber-notifications-page-*.js` — lazy `/barber/notifications` with the settings and the inbox | 16.48 kB | 5.03 kB |
+| `barber-profile-form-*.js` — shared create/edit form of the barber card, used by onboarding and `/barber/profile` | 12.41 kB | 4.10 kB |
+| `account-security-page-*.js` — lazy `/account/security` with the password, sign-out, email-verification and «Забыли пароль?» cards | 12.00 kB | 4.04 kB |
+| `register-page-*.js` — lazy `/register` with the form and the success card | 11.97 kB | 4.10 kB |
+| `barber-cabinet-gates-*.js` — shared barber gates, skeleton and notification bell | 8.97 kB | 3.38 kB |
+| `barber-onboarding-page-*.js` — lazy `/barber/onboarding` with the profile form and the session cards | 8.36 kB | 2.83 kB |
+| `reset-password-page-*.js` — lazy `/reset-password` with the token-once form, success and invalid cards | 8.10 kB | 2.70 kB |
 | `paging-*.js` — shared cursor pager used by the row lists | 7.37 kB | 2.70 kB |
-| `account-shell-*.js` — cabinet shell shared by the four account screens | 4.70 kB | 1.95 kB |
 | `barber-salon-picker-dialog-*.js` — shared salon picker | 6.59 kB | 2.68 kB |
 | `verify-email-page-*.js` — lazy `/verify-email` with the four states and the session-claim refresh | 5.14 kB | 1.95 kB |
 | `forgot-password-page-*.js` — lazy `/forgot-password` with the form, the generic sent card and the local resend cooldown | 5.14 kB | 2.13 kB |
-| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.36 kB | 1.51 kB |
-| `image-prep-*.js` — shared client preparation of portfolio photos and avatars (decode, canvas, JPEG 0.85/0.7) | 4.14 kB | 1.74 kB |
+| `account-shell-*.js` — cabinet shell shared by the four account screens | 4.71 kB | 1.95 kB |
+| `account-gates-*.js` — sign-in/role gates shared by the account screens | 4.36 kB | 1.52 kB |
+| `image-prep-*.js` — shared client preparation of portfolio photos and avatars (decode, canvas, JPEG 0.85/0.7) | 4.12 kB | 1.73 kB |
 | `use-barber-slots-*.js` — shared slot hook | 3.63 kB | 1.69 kB |
 | `portfolio-photos-*.js` — shared portfolio DTO, transport and error mapping | 3.32 kB | 1.34 kB |
-| `barber-profile-*.js` — shared own-profile transport and error copy | 3.23 kB | 1.22 kB |
+| `barber-profile-*.js` — shared own-profile transport and error copy | 3.23 kB | 1.21 kB |
 | `use-my-barber-request-*.js` — the one `GET /barber-requests/mine` read shared by the page and the account card | 2.59 kB | 1.21 kB |
 | `booking-changes-*.js` — announcement copy for the auto-refreshed cabinets | 2.50 kB | 1.15 kB |
-| `use-barber-profile-*.js` — public/own profile read hook | 2.08 kB | 0.86 kB |
+| `email-change-*.js` — shared email-change transport and error mapping | 2.11 kB | 0.89 kB |
+| `use-barber-profile-*.js` — public/own profile read hook | 2.08 kB | 0.87 kB |
 | `barber-cabinet-nav-*.js` — shared four-item cabinet navigation | 1.52 kB | 0.87 kB |
-| `email-verification-*.js` — shared email-verification transport and error mapping | 1.36 kB | 0.69 kB |
+| `email-verification-*.js` — shared email-verification transport and error mapping | 1.36 kB | 0.70 kB |
 | `barber-salons-*.js` — shared salon DTO | 1.17 kB | 0.63 kB |
 | `password-reset-*.js` — shared password-reset transport and error mapping | 1.11 kB | 0.61 kB |
-| `barber-booking-create-*.js` — manual client booking transport | 1.08 kB | 0.64 kB |
+| `barber-booking-create-*.js` — manual client booking transport | 1.07 kB | 0.64 kB |
 | `booking-status-badge-*.js` — status badge shared by the account, the profile, the cabinet and the admin booking card | 1.05 kB | 0.57 kB |
-| Smaller shared modules: `barber-slots` 0.86 / 0.49, `use-media-query` 0.71 / 0.42, `textarea` 0.70 / 0.39, `catalog` 0.67 / 0.37, `bookings` 0.59 / 0.34, `use-auto-refresh` 0.59 / 0.36, `review-stars` 0.48 / 0.36, `use-now` 0.25 / 0.19 kB, plus 16 lucide icon modules (0.18–0.52 kB raw each) | — | — |
-| `index-*.css` | 89.66 kB | 15.35 kB |
+| Smaller shared modules: `barber-slots` 0.86 / 0.49, `use-media-query` 0.71 / 0.42, `textarea` 0.70 / 0.40, `catalog` 0.67 / 0.37, `bookings` 0.59 / 0.34, `use-auto-refresh` 0.59 / 0.37, `review-stars` 0.48 / 0.37, `use-now` 0.25 / 0.20 kB, plus the small lucide icon modules (0.18–0.52 kB raw each) | — | — |
+| `index-*.css` | 90.01 kB | 15.39 kB |
 | Geist woff2 (5 subsets) | 76.41 kB total | — |
 | `index.html` | 0.90 kB | — |
 
@@ -1957,6 +2004,22 @@ now keeps the flag and the header/identity conditions live in already-shared mod
 `account-shell` is 4.70 / 1.95 kB (+0.02 / +0.01) and `card` reads 22.13 kB gzip (rounding).
 The build is 2580 modules; no new dependency and no `ui/**` change.
 
+The photo pre-moderation build (#89) added the queue and its decisions to the lazy admin chunk:
+`admin-page` grew from 271.14 / 56.88 to 300.14 / 61.57 kB (+29.00 / +4.69 — `PhotosScreen`
+with the two tabs, search, pager, preview dialog and the rejection `alertdialog`, the fourth
+summary block with its two counters and links, the approve/reject block in both admin cards
+(`AvatarModeration` with four action kinds) and the textual «На проверке»/«Отклонено» badges in
+the user/barber rows). `router` moved to 246.83 / 65.43 kB (+5.53 / +1.25) and `csrf` to
+95.65 / 31.60 kB (+1.61 / +0.29) because of the new English catalog strings and the shared
+`photo-moderation` helpers (labels, client validation, preview predicates); `card` reads
+57.19 / 22.10 kB (−0.21 / −0.03, rounding). `account-profile-page` is 18.63 / 5.60 kB
+(17.62 / 5.38 in the #88 build: the avatar moderation badge, the rejection reason and the
+«Загрузить другое фото» state), `barber-profile-page` 31.47 / 7.30 kB (+0.63 / +0.11: the
+portfolio moderation badges and the reason line), `privacy-page` 30.57 / 7.77 kB (rounding),
+`index` 352.59 / 114.28 kB (+0.06 / +0.01, the new guards/route helpers) and `index-*.css`
+90.01 / 15.39 kB (+0.35 / +0.04: the two-tab rail and the queue rows). The build is 2588
+modules; no new dependency and no `ui/**` change.
+
 ### 12.2 Rules
 
 1. **Measure before optimizing.** The build prints every asset; record meaningful changes in
@@ -2024,14 +2087,15 @@ The build is 2580 modules; no new dependency and no `ui/**` change.
 | Barber notifications | ✅ `/barber/notifications`: инбокс напоминаний — утилита кабинета, а не пятый раздел навигации (вход — колокольчик 44×44 в `BarberCabinetHeading` на всех четырёх страницах). Четвёртую ячейку навигации занимает «Профиль», поэтому на 320 px `BarberCabinetNav` — сетка 2×2 с ячейками 44 px, а с `sm:` — прежняя строка; уведомления остаются за колокольчиком. Колокольчик живёт на `useUnreadNotifications`: один `GET` при монтировании, тихий тик раз в 60 с и на `visibilitychange`/`focus`, при ошибке бейджа нет; имя «Уведомления, непрочитанных: N», бейдж `99+`, live-регион объявляет счётчик. Экран: карточка настроек (два `Checkbox`, `<input type="time" step=900>` 06:00–12:00, селект 15/30/60; одна `PUT` через 500 мс после последней правки, `400 notificationSettings.*` у поля, сохранённое значение переживает перезагрузку) и инбокс на `usePagedList` (20 строк, «Уведомлений пока нет.», Upcoming — время в поясе салона, услуга и салон, Digest — «Сегодня N записей» и «Первая в HH:mm»; клик по строке отмечает прочитанным и открывает `/barber`; «Прочитать все» — идемпотентный `read-all`, тихий reload, `role="status"` и disabled на нуле). Telegram — необязательный канал: при `botConfigured: false` текст «Telegram не настроен. Уведомления будут видны только здесь.» и disabled «Подключить», при `true` — код и ссылка `t.me`, «Отключить». Гейты общие с кабинетом (сессия, роль, привязанный профиль) и не делают запросов. Axe на 1280 и 320, E2E — бейдж, обе строки, read-all и `leadMinutes = 60` |
 | Admin `/admin` | ✅ role gate + rail; `/admin` → `/admin/reviews` canonical redirect |
 | Admin reviews | ✅ pending/published tabs, URL-selected detail, publish/hide with undo, empty/error states, shared cursor pager (twenty rows), quiet «Обновить», 30-second polling of the list and the open card |
-| Admin barbers | ✅ pending/all/hidden filter in `?status=` (the card is in the path, the filter is in the query, so a reload keeps both and the card never belongs to another filter), name/email search (React state, reset with the filter; an applied search drops the previous selection), URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить», 30-second polling of the list and the open card. The card also has the «Фотографии» block after the readiness checklist: every photo of `AdminBarberDetailResponse.photos` (including hidden and blocked), a 96×96 preview, the caption or «Без подписи», a status badge «Опубликовано» / «Скрыто владельцем» / «Скрыто администратором» (blocking wins), «Скрыть» behind an `alertdialog` («Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.») and «Разблокировать» for a blocked row; the screen owns the two calls (`POST`/`DELETE .../block`), `pendingPhotoId` disables only that row, «Разблокируем…» carries a loader, a `role="alert"` line shows the code-mapped error, and after `204` the card is quietly re-read (`detail.reload()` keeps the open card) with `role="status"` «Фото скрыто: его больше нет на публичной карточке.» / «Фото снова на публичной карточке.». `invalidateBarberProfile(id)` drops the public cache, and `readiness.photosCount` here counts visible photos only, so blocking one can flip that checklist item to «не готово». The owner's avatar sits above the name in the card and as a 24 px image in every row, with a «Фото скрыто» badge when hidden; «Скрыть фото» (behind an `alertdialog`) and «Вернуть фото» call the shared `POST`/`DELETE api/admin/users/{userId}/avatar/block` with `barber.userId`, update the open card and the cached rows locally, then re-sync quietly; the announcement offers the opposite action. |
-| Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить». Rows and the card show the user's raw avatar (initials fallback) and a «Фото скрыто» badge when the flag is set; the card's avatar block offers «Скрыть фото» (an `alertdialog` that explains the photo disappears from the header, search, cards and booking lists while the account stays active) and «Вернуть фото» without a dialog, or the «У пользователя нет фото — скрывать нечего.» hint when there is no URL. The action goes by `user.id`, updates the row and the card locally, announces «Фото скрыто: его больше нет в публичных местах.» / «Фото снова видно всем.» with an undo action, and re-syncs through `detail.reload()`. |
+| Admin photos | ✅ `/admin/photos`: the photo pre-moderation queue, the fourth rail item (after «Отзывы»). Two tabs in `?tab=avatars\|portfolio` (`avatars` by default, an unknown value falls back to avatars, the tab is a real `tablist` of two links with arrows/Home/End); each tab is its own server list read from `GET /api/admin/photos/avatars\|portfolio`, only `Pending` frames in FIFO (oldest first), twenty rows through the shared `ListPager`, 300 ms debounced search by name/email (max 100), quiet «Обновить» and 30-second auto-refresh paused while a dialog is open or a decision is in flight. A row is a preview button («Открыть фото крупно: …» → lightbox `Dialog`), the owner name/email (portfolio also the barber name and caption), «ждёт с <date>» and «Одобрить: <name>» / «Отклонить: <name>»; approval is one `POST .../approval` and the row disappears immediately, rejection opens an `alertdialog` with a mandatory reason (1..500, client validation before the request) and `POST .../rejection`. After `204` the row is removed locally and the queue is quietly re-read, `role="status"` announces «Фото одобрено.»/«Фото отклонено.», and a `409` means someone already decided: the row disappears and the list is re-read. Focus moves to the next/previous row or the `h1` when the queue empties; empty queue and empty search have different texts; `401` shows the sign-in gate, `403` the role text; loading/error/refresh-error states. No card per row, no history of decided frames, no status filter and no bulk actions. Axe: both tabs at 1280 and the empty queue at 320; the row with a real frame is scanned in the portfolio mutation |
+| Admin barbers | ✅ pending/all/hidden filter in `?status=` (the card is in the path, the filter is in the query, so a reload keeps both and the card never belongs to another filter), name/email search (React state, reset with the filter; an applied search drops the previous selection), URL-selected card, readiness checklist, verify/grade/hide with undo, shared cursor pager (twenty rows), quiet «Обновить», 30-second polling of the list and the open card. The card also has the «Фотографии» block after the readiness checklist: every photo of `AdminBarberDetailResponse.photos` (including hidden and blocked), a 96×96 preview, the caption or «Без подписи», a status badge «Опубликовано» / «На проверке» / «Отклонено» / «Скрыто владельцем» / «Скрыто администратором» (blocking wins), the rejection reason for a `Rejected` row, «Одобрить»/«Отклонить» for a `Pending` row (rejection behind the shared reason `alertdialog`, `POST .../approval|rejection`), «Скрыть» behind an `alertdialog` («Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.») and «Разблокировать» for a blocked row; the screen owns the two calls (`POST`/`DELETE .../block`), `pendingPhotoId` disables only that row, «Разблокируем…» carries a loader, a `role="alert"` line shows the code-mapped error, and after `204` the card is quietly re-read (`detail.reload()` keeps the open card) with `role="status"` «Фото скрыто: его больше нет на публичной карточке.» / «Фото снова на публичной карточке.». `invalidateBarberProfile(id)` drops the public cache, and `readiness.photosCount` here counts visible photos only, so blocking one can flip that checklist item to «не готово». The owner's avatar sits above the name in the card and as a 24 px image in every row, with a «Фото скрыто» badge when hidden and a textual «На проверке»/«Отклонено» badge for the moderation state; a pending avatar offers «Одобрить»/«Отклонить» in the card, and the shared `POST .../avatar/approval|rejection` updates the card and rows locally before a quiet re-read; «Скрыть фото» (behind an `alertdialog`) and «Вернуть фото» call the shared `POST`/`DELETE api/admin/users/{userId}/avatar/block` with `barber.userId`, update the open card and the cached rows locally, then re-sync quietly; the announcement offers the opposite action. |
+| Admin users | ✅ status/role filters, name/email search, URL-selected card, role change, block/unblock, email/phone confirmation, create with one-time password, shared cursor pager (twenty rows), quiet «Обновить». Rows and the card show the user's raw avatar (initials fallback) and a «Фото скрыто» badge when the flag is set; the card's avatar block offers «Скрыть фото» (an `alertdialog` that explains the photo disappears from the header, search, cards and booking lists while the account stays active) and «Вернуть фото» without a dialog, or the «У пользователя нет фото — скрывать нечего.» hint when there is no URL. A `Pending` avatar shows the badge «На проверке» and the same block offers «Одобрить»/«Отклонить» (`POST .../avatar/approval|rejection`, rejection with a mandatory 1..500 reason); a `Rejected` one keeps the raw preview, shows «Отклонено» and the reason, and no decision buttons. Rows carry the same textual moderation badge. The action goes by `user.id`, updates the row and the card locally, announces «Фото скрыто: его больше нет в публичных местах.» / «Фото снова видно всем.» with an undo action, and re-syncs through `detail.reload()`. |
 | Admin catalogue | ✅ `/admin/catalogue`: three tabs in `?tab=` (services/specializations/salons), full dictionary including hidden rows, status filter and debounced search, `usageCount` per row, create/edit dialogs on the existing endpoints (salon dialog = thin wrapper over the shared `SalonDialogForm`), hide/return with an `alertdialog` that explains the consequence and the barber count, status as text, adaptive tables (no horizontal scroll at 320), quiet «Обновить», no timer — refreshed when the tab becomes visible; the «Салоны» tab adds the fourth filter «На проверке» (`status=pending`, not offered on the other tabs), the owner email and moderation badge in the row, and «Одобрить»/«Отклонить» in an `alertdialog` (rejection requires a reason ≤ 500); after `204` the row is removed from the pending filter or replaced in `all`, then the list is silently re-read, a `409 salon.review.invalidStatus` re-reads it; activation is hidden for a non-approved salon; **no pagination** (dictionaries are small, see §9.3) and no delete — the domain only deactivates. Catalogue edits **are written to `audit_log`** as `salon.*`/`hair_service.*`/`specialization.*`, and an approval/rejection appears as `salon.updated` with `moderationStatus` (see «Admin audit»); retention and export remain separate decisions |
 | Admin bookings | ✅ `/admin/bookings`: search by customer email (300 ms debounce, `maxLength` 100) or exact booking id, status filter (six options incl. «Все статусы»), «Сбросить фильтры», table on `lg` and cards on narrow screens, shared cursor pager (twenty rows, cached pages, «Назад» without a request), split-view detail at `/admin/bookings/{id}` (full screen on mobile) with the time in `salon.timeZoneId`, customer (name/email/phone; for a walk-in — name/phone and «Записан без аккаунта», no email), barber, service, salon, price, both notes, `cancellationReason`, `createdAt` and the booking id; «Отменить бронь» (Pending/Confirmed) and «Отметить неявку» (Confirmed and `startAt <= now`) behind an `alertdialog`, success in `role="status"`, errors in `role="alert"`; loading/«Броней нет»/«Ничего не найдено»/first-page error/next-page error/`401`/`403`/`404` detail states, 30-second polling of the list and the open card. No totals, no «Показать ещё», no create/reschedule/edit/delete and no row action buttons. Filters stay in React state, not in the URL (the email is PII; only the booking id is in the path). **Admin cancellation and no-show are written to `audit_log`** as `booking.updated` (the `Booking` allowlist records `Status`/`BarberNote`/`CancellationReason`; booking creation is deliberately not audited) |
 | Admin audit | ✅ `/admin/audit`: read-only change journal from `GET /api/admin/audit`, filters by entity type, author email (debounced 300 ms, `maxLength` 100) and two UTC dates, reset control, shared cursor pager (twenty rows, «Назад» without a request), expandable per-row `diff` with Russian field labels (`Роль: Клиент → Администратор`), «Система» for a row without an actor and «Удалённый пользователь» for a deleted one, entity type + 8-character id (full id in `title`), skeleton/empty/first-page error/next-page error/`401`/`403`, quiet «Обновить», no timer — refreshed when the tab becomes visible; the filters stay in React state, not in the URL (the email is PII). **No actions on an entry**: the journal is immutable (`AuditTrail` writes it, there is no write endpoint), so there is no delete, edit or clear. The screen says in its subtitle that entries are not editable. The journal covers seven entity types — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking` (booking rows carry only `Status`/`BarberNote`/`CancellationReason` changes; booking creation is deliberately not audited) — and offers the four new filters with Russian labels «Салон», «Услуга», «Специализация», «Бронь», Russian values for `status`/`category` and «Активность» for `isActive`; retention, export and partitioning remain separate |
-| Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`; a salon waiting for moderation is not «выключенный», the server counts only `!isActive && Active`); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить», 30-second polling while the screen is open; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
+| Admin summary | ✅ `/admin/summary`: the first rail item and the «what needs attention» screen from `GET api/admin/summary` — «Отзывы на модерации» (`pendingCount` + «самый старый» with waiting time, rating, client and barber, a link to the review card, a link to the queue), «Барберы без подтверждения» (`unverifiedCount`, link to `/admin/barbers`) and «Выключенные салоны» (`inactiveCount`, link to `/admin/catalogue?tab=salons`; a salon waiting for moderation is not «выключенный», the server counts only `!isActive && Active`), «Фотографии на проверке» (`photos.pendingAvatarsCount` + `photos.pendingPortfolioCount`, links «Открыть аватары» → `/admin/photos` and «Открыть портфолио» → `/admin/photos?tab=portfolio`; honest zero «Все фотографии проверены.» and no links); counters come from the same predicates as the sections, so a number is exactly the queue size; honest zeros («Очередь пуста…», «Все профили подтверждены.», «Выключенных салонов нет.», «Все фотографии проверены.»); skeleton/first-page error with «Повторить»/refresh error as a `role="alert"` line that keeps the blocks/`401` gate/`403` text; «Обновлено в …» and the only button «Обновить», 30-second polling while the screen is open; no charts, KPI tiles, periods, trends, «Показать ещё», actions or mutations. `/admin` still opens the review queue, not the summary |
 | Admin statistics | ✅ `/admin/statistics`: the second rail item and the «service statistics» screen from `GET api/admin/statistics`. Period: presets 7/30/90/365 days, two native date inputs and «Сравнить с прошлым периодом»; the period lives in `?from=&to=&compare=1`, an invalid/too-long URL opens the last 30 UTC days without an error, the server still validates (`400 admin.statistics.period` → «Проверьте период: максимум — 366 дней.»). Header with «Обновлено в …» and the only write-less action «Обновить» (quiet refresh, error as a `role="alert"` line, no auto-refresh). Six overview tiles in one `dl` strip with `divide` lines: completed visits, turnover («по завершённым визитам» — not revenue), average check, new accounts, no-show rate (absolute numbers when `sample < 10`, deltas in п.п.) and stuck bookings (no previous). «Записи»: own SVG line chart (created vs completed) with legend, 3 Y-grid lines, 3–4 X labels, a text summary and a `<details>` table duplicate; status bar with a 100 % SVG strip and legend with numbers; «Закрыто визитов: … из …». «Клиенты» and «Предложение» in two columns on `lg` and stacked on 320; «Лидеры»: barbers/services/cities tables with a minimum of 3 visits, an «Остальные» footer row and the minimum note; «Качество и модерация»: rating/distribution/novel reviews/published share plus request and salon moderation with approval rate and median hours; «Как считаем» is a `<details>` with formulas and the «Оборот — сумма цен завершённых визитов. Это не выручка…» disclaimer. States: skeleton, empty period («За этот период данных нет. Попробуйте расширить период.»), first-page error with «Повторить», refresh error keeping the data, `401` gate, `403`/`429`/`400` Russian texts; one `h1`, section `h2`s, chart `role="img"` with `aria-label`, `aria-busy`, `role="status"` for the quiet refresh, `role="alert"` for errors; 44 px controls and zero horizontal scroll at 320 |
-| Other admin sections | ✅ all built: summary, statistics, reviews, barbers, users, barber requests, the catalogue, the bookings and the journal (§13) |
+| Other admin sections | ✅ all built: summary, statistics, reviews, photos, barbers, users, barber requests, the catalogue, the bookings and the journal (§13) |
 | Admin barber requests | ✅ `/admin/barber-requests`: queue (`?status=pending`, oldest first) and all requests (`?status=all`, every request newest first) in one screen, filter in the URL and the card in the path, split-view detail (full screen on mobile) with the applicant (name/email), answers, submission/review dates and the rejection reason; «Одобрить» behind an `alertdialog` that says the role change ends **all** of the applicant's sessions and that the profile is created after signing in again, «Отклонить» behind an `alertdialog` with a **required** reason (≤ 500, empty never sent); after a decision the row is updated locally (queue: removed) and both list and card are silently re-read, with `role="status"`/`role="alert"` feedback, 30-second polling of the queue and the open card, and a `404` on the action removes the row silently; empty states «Заявок нет» / «Заявок с таким статусом нет», no counts — `ListPager` shows the range; `401` gate and `403` text. **Requests are deliberately not audited**: the row keeps `about`/`city` and the decision, and the journal only sees the `user.updated` role change (§9.3) |
 | Registration | ✅ `/register`: self-registration form (client and server validation, Russian copy, the required consent checkbox with the policy edition and a link to `/privacy`), one `POST /api/auth/register` without CSRF that carries `consentVersion` from `PRIVACY_POLICY_VERSION`, automatic sign-in with the same password and `/account/security?verification=sent` on success (the letter is sent by the server during registration, so the landing explains it and then strips the query), «Вы уже вошли» gate for a signed-in user, links from the login dialog and the sign-in gates; `auth.register.consentRequired` maps to the existing checkbox error, `auth.register.consentVersion` to a form-level «Политика обновилась» alert |
 | Email verification | ✅ `/verify-email`: the anonymous confirmation landing from the letter. Reads `token` from the query **once** into state, sends exactly one `POST /api/auth/email-verification/confirm` under `StrictMode`, strips the token with `navigate(VERIFY_EMAIL_PATH, { replace: true })` after success or failure, and has four honest states — `checking` (skeleton, `role="status"`), `confirmed`, `invalid` (`400 auth.emailVerification.invalid`) and `error` (network/`5xx`); a missing token is «Ссылка неполная» with no request. A signed-in visitor gets `refreshSession()` → `retrySession()` after success so the `email_verified` claim is refreshed; a `terminal`/`transient` refresh never turns the success into an error. Anonymous success offers «Войти», every state links home. The cabinet card resends through `mutateWithCsrf` (empty body), counts down 60 seconds locally, announces success/error in `aria-live`, maps `409 cooldown`/`409 unavailable`/`429` to Russian copy, and after `204` re-reads `GET /api/users/me` instead of guessing the flag. No hard gate: sign-in, booking and reviews keep working with an unverified address |
@@ -2041,11 +2105,11 @@ The build is 2580 modules; no new dependency and no `ui/**` change.
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization, service and an additional-service substring, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail), and the additional-service input gets `<datalist>` suggestions best-effort; the result card and the hero show the place with its type (`Барбершоп на Ленина · Екатеринбург · Барбершоп`), while `Home`/`Mobile` read «На дому в <город>» / «Выезд по городу» and a barber without a place keeps «Салон не указан»; `/barbers/{id}` shows the public card (hero with the owner's `AvatarImage` and initials fallback, about including additional services, services with prices, specializations, places with their type and a «Не в каталоге» badge for `Home`/`Mobile`, the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and place controls, the place select reads «Название · Тип»; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states); a profile without a place renders the section with the explanation «Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.» and makes no `/slots` request. The public card also has the «Работы» gallery between the hero and the slots grid: `photos.length === 0` renders no section at all, otherwise a 2/3/4-column grid (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) of `aspect-square object-cover` images, the first `loading="eager" fetchPriority="high"`, the rest `lazy` with `decoding="async"`, meaningful `alt` from the caption or «Работа барбера <имя>, фото N», and a button named «Открыть фото: …». A click opens the Base UI `Dialog` lightbox with the full image (`object-contain`, `max-h-[75vh]`), caption, «2 из 5» counter, «Назад»/«Дальше» disabled at the edges, ArrowLeft/ArrowRight on the content and Escape from the dialog; focus returns to the triggering button (Base UI). A failed image becomes a muted `role="img"` placeholder with the same `alt` instead of disappearing. The gallery is a read-only client-side view of `photos`; hidden and blocked photos never arrive in the public response. |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the personal cabinet on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager); editing the **text** of a published review returns it to moderation — the row flips to «На модерации» from the `PUT` response, while a rating-only edit applies immediately and the dialog says which one will happen |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/become-a-barber`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/barber/salons`, `/barber/profile`, `/barber/import`, `/barber/notifications`, `/forgot-password`, `/reset-password`, `/register`, `/verify-email`, `/confirm-email-change`, `/privacy`, `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `BarberSalonsPage`, `BarberProfilePage`, `BarberImportPage`, `BarberNotificationsPage`, `BecomeABarberPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ConfirmEmailChangePage`, `RegisterPage`, `VerifyEmailPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/become-a-barber`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/barber/salons`, `/barber/profile`, `/barber/import`, `/barber/notifications`, `/forgot-password`, `/reset-password`, `/register`, `/verify-email`, `/confirm-email-change`, `/privacy`, `/admin/**` (summary, statistics, reviews, photos, barbers, users, barber requests, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `BarberSalonsPage`, `BarberProfilePage`, `BarberImportPage`, `BarberNotificationsPage`, `BecomeABarberPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ConfirmEmailChangePage`, `RegisterPage`, `VerifyEmailPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 13 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 1260 tests in 124 files: the avatar-moderation suites are in §15, the email-verification and password-reset transport/mapping and their screens are in §15, the i18n core and switch (`i18n.test.ts`, `language-switcher.test.tsx`), the localized date input (`ui/input.test.tsx`), English formatting in `format.test.ts`, the import suites (`import-parse.test.ts` table cases: phone-first parsing, `14.05` as a date, date-header lines, pipe-separated rows, weekday vs explicit date, truncated phone, ambiguous service, inactive service, salon by city, `noDate`/`noTime`/`badTime`/`past`/`badPhone`/`badDate`, the five-minute tolerance, year-less dates, the 50-line limit and the header row; `salon-time.test.ts`: Yekaterinburg, Berlin summer/winter, the DST hole, the repeated hour, a broken zone; `use-barber-import.test.tsx`: summary counts, duplicates, sequential POSTs, one idempotency key per row, `409` → slots → applied time, `429` → «Продолжить», `401`, network stop, unmount stops the batch, plus the calendar-import suites: `ics-decode.test.ts` (BOM/UTF-8/UTF-16, the 2 MB limit, the `BEGIN:VCALENDAR` gate), `ics-parse.test.ts` (recurrence, `VTIMEZONE`, floating time, skips and limits), `ics-map.test.ts` (matchers, hints and default inclusion), `ics-identity.test.ts` (the stable `UID` key) and `ics-rows.test.ts` (duration and overlap recomputation)), the day-feed suites (the three-tab `tablist` and its keys, `isSameLocalDay`/`mergeDayBookings`/`findDayGaps`/`findNextBooking`, `formatGapsCount`, the `useBarberDay` controller: two reads on mount, routed actions, the second list reloaded after a terminal action, `401` from either list and the partial-error split, the day feed itself: row/window order, the header counters, «Занять» with its window, the empty-day CTA and the three header states, and the dialog pre-selection from `preferredStartAt` with a service change), the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error), the reminder inbox (`barber-notifications.test.ts` — list URL and cursor, CSRF `read`/`read-all`, the settings `GET` and full `PUT` body, Telegram link/unlink, the strict guards and the Russian error mappings; `useBarberNotifications` — paging, one local read, read-all + quiet reload, the `401` gate; `useUnreadNotifications` — mount/timer/focus reads and a hidden badge on error; `useNotificationSettings` — the 500 ms debounce, the normalized body, both `400` fields and a read error that keeps the form; `BarberUnreadBell` — badge, `99+`, zero and error; `barber-cabinet-path` — the new predicate never opens the cabinet; `BarberNotificationsPage` — gates, both row kinds, read-all and the three Telegram states)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 1366 tests in 130 files: the photo pre-moderation suites (`photo-moderation.test.ts`, `admin-photos.test.ts`, `photos-screen.test.tsx`, the avatar/portfolio moderation tests in both admin cards and lists, `summary-screen.test.tsx`, `admin-path.test.ts`, the guard tests) are in §15, the avatar-moderation suites are in §15, the email-verification and password-reset transport/mapping and their screens are in §15, the i18n core and switch (`i18n.test.ts`, `language-switcher.test.tsx`), the localized date input (`ui/input.test.tsx`), English formatting in `format.test.ts`, the import suites (`import-parse.test.ts` table cases: phone-first parsing, `14.05` as a date, date-header lines, pipe-separated rows, weekday vs explicit date, truncated phone, ambiguous service, inactive service, salon by city, `noDate`/`noTime`/`badTime`/`past`/`badPhone`/`badDate`, the five-minute tolerance, year-less dates, the 50-line limit and the header row; `salon-time.test.ts`: Yekaterinburg, Berlin summer/winter, the DST hole, the repeated hour, a broken zone; `use-barber-import.test.tsx`: summary counts, duplicates, sequential POSTs, one idempotency key per row, `409` → slots → applied time, `429` → «Продолжить», `401`, network stop, unmount stops the batch, plus the calendar-import suites: `ics-decode.test.ts` (BOM/UTF-8/UTF-16, the 2 MB limit, the `BEGIN:VCALENDAR` gate), `ics-parse.test.ts` (recurrence, `VTIMEZONE`, floating time, skips and limits), `ics-map.test.ts` (matchers, hints and default inclusion), `ics-identity.test.ts` (the stable `UID` key) and `ics-rows.test.ts` (duration and overlap recomputation)), the day-feed suites (the three-tab `tablist` and its keys, `isSameLocalDay`/`mergeDayBookings`/`findDayGaps`/`findNextBooking`, `formatGapsCount`, the `useBarberDay` controller: two reads on mount, routed actions, the second list reloaded after a terminal action, `401` from either list and the partial-error split, the day feed itself: row/window order, the header counters, «Занять» with its window, the empty-day CTA and the three header states, and the dialog pre-selection from `preferredStartAt` with a service change), the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error), the reminder inbox (`barber-notifications.test.ts` — list URL and cursor, CSRF `read`/`read-all`, the settings `GET` and full `PUT` body, Telegram link/unlink, the strict guards and the Russian error mappings; `useBarberNotifications` — paging, one local read, read-all + quiet reload, the `401` gate; `useUnreadNotifications` — mount/timer/focus reads and a hidden badge on error; `useNotificationSettings` — the 500 ms debounce, the normalized body, both `400` fields and a read error that keeps the form; `BarberUnreadBell` — badge, `99+`, zero and error; `barber-cabinet-path` — the new predicate never opens the cabinet; `BarberNotificationsPage` — gates, both row kinds, read-all and the three Telegram states)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ✅ ru/en: header switch, persisted choice, `t()` over Russian source strings, English JSON catalogs, locale-aware dates/numbers/plurals, `npm run check:i18n` gate |
 | API typing | ✅ hand-written types + strict response guards |
@@ -2075,6 +2139,23 @@ decision is one `user.updated` row with `changes.isAvatarBlocked` («Фото с
 Нет → Да») and the admin as the author; a repeated call changes nothing and writes nothing. The
 avatar moderation is masked only on public reads — search, the public barber card and the barber's
 booking list — while the admin lists, cards and bookings stay raw.
+
+**Photo pre-moderation (#89).** A new frame is no longer public when it is uploaded: the avatar
+and every portfolio photo are created `Pending` and become visible only after an administrator
+approves them in the new `/admin/photos` queue (tabs «Аватары» and «Портфолио», FIFO, search,
+20-row pager, preview dialog, approve and reject with a mandatory reason). The fourth
+`/admin/summary` block shows both queue sizes with direct links into the tabs; decisive actions
+also exist in the admin user and barber cards. The owner sees «На проверке» in the avatar card
+and in each portfolio card, and «Отклонено» with the administrator's reason after a rejection;
+the header and the cabinet identity keep showing the new frame while it is pending (owner-only
+preview through the media route) but fall back to the initials for a rejected or blocked one.
+A real upload replaces the old public frame immediately, so the public card/search show initials
+until approval; saving a name with the same `avatarUrl` changes nothing. The queue counts use the
+same predicates as the tab reads, `409` on a repeated decision re-reads the list, and the public
+`avatarUrl`/photo list apply `Approved` together with the existing `isPublished`/`isBlocked`/
+`isAvatarBlocked` rules. One migration (`AddPhotoModeration`, 36 total, four indexes); no
+`audit_log` types were added — the decision lives in `reviewedByUserId`/`reviewedAt`/
+`rejectionReason`, which is the remaining debt (§14 #31/#32).
 
 **Email change (#88).** The address is no longer read-only. `/account/profile` starts with the
 «Аватар» card, then the «Email» card (`components/account/email-card.tsx`), then the personal-data
@@ -2125,8 +2206,8 @@ the feature grows; **P3** cosmetic/structural.
 | 28 | P2 | The schedule editor writes the week and date exceptions without checking active bookings, and `GET /api/barbers?date=` still filters by weekday only. The page says so, but a shortened day can leave a booking outside the new hours, and a barber on a date exception can still appear in search. A lunch break is also inexpressible: one `WorkingSchedule` row per weekday. Time offs are profile-wide and their dates are entered in the primary salon zone, so a multi-zone barber gets one absolute interval | Add a conflict preview/`409` with the affected bookings, teach search about `ScheduleOverride`/`TimeOff`, decide on multiple intervals, and keep the time-off limitation documented until a per-salon model exists |
 | 29 | P3 | Кабинеты и админские очереди обновляются **опросом**, а не push: запись появляется в пределах 30 секунд, каждый тик — это запрос, даже если на сервере ничего не изменилось, а ответ, прочитанный до коммита мутации, может на один тик вернуть строке прошлый статус (следующий тик исправляет; на время мутации и открытого диалога опрос выключен). Новая запись, ставшая первой, сдвигает строки под курсором — строка под рукой может переехать. Каталог и журнал по таймеру не опрашиваются, только при возврате на вкладку | SSE/SignalR — отдельный backend-слайс, если «мгновенно» станет продуктовым требованием; до тех пор пауза на скрытой вкладке, пауза на время мутаций и сравнение страниц — сознательный компромисс |
 | 30 | P2 | Правки карточки барбера (`displayName`, `bio`, `latePolicy`, списки) и его прайса (цена, длительность, скрытие и возврат услуги) не попадают в `audit_log`: allowlist `BarberProfile` покрывает только `UserId/Grade/IsActive/IsVerified/Rating/ReviewsCount`, а `BarberService` — дочерняя сущность, как `BarberSalon`. Расширение allowlist свободным текстом (bio 2000, latePolicy 500) и ценами — отдельное решение о приватности и объёме журнала. Портфолио больше не «фото без хранилища»: файл готовит браузер, API проверяет его и кладёт в локальное хранилище, публичная карточка показывает галерею (#84); ограничения этого решения — в #31 | Решить, что из карточки и прайса журналируется (и с какой редакцией/сроком хранения), затем расширить allowlist и добавить интеграционные тесты |
-| 31 | P2 | Портфолио #84 принято с ограничениями: **постмодерация** — фото публикуется сразу, очереди «на проверке» и счётчика в `/admin/summary` нет, админ реагирует блокировкой; **нет серверных миниатюр** — `thumbnailUrl` всегда `null`, галерея грузит подготовленный JPEG, нет `srcset`, WebP/AVIF и кропа; **EXIF/GPS** вычищается только браузерным клиентом (canvas-перекодирование), сервер не перекодирует файл и не обещает очистку метаданных для небраузерных клиентов; публичный кадр кэшируется на 24 часа (`Cache-Control: public, max-age=86400`), поэтому после блокировки браузер может показать его из кэша до истечения суток, хотя публичная карточка его уже не содержит; файлы лежат **вне backup PostgreSQL** — `Storage:RootPath` (`App_Data/photos`) нужно бэкапить отдельно; хранилище рассчитано на **один инстанс API и один диск** — общий volume или object storage появятся позже; действия с фото (загрузка, подпись, порядок, скрытие, блокировка) **не пишутся в `audit_log`**, потому что `PortfolioPhoto` — дочерняя сущность, а allowlist не расширяем | Осознанный MVP: `IPhotoStorage` позволит заменить локальный диск на S3/MinIO без смены домена. Аватар пользователя сделан отдельным срезом #85 на том же хранилище и с тем же инспектором; его собственные ограничения — #32. Отдельными срезами: серверный pipeline миниатюр/`srcset`/WebP/AVIF, премодерация с очередью и счётчиком, облачное хранилище и общий volume, решение об аудите фотографий |
-| 32 | P2 | Аватар #87 получил модерацию и аудит: администратор скрывает и возвращает фото, не трогая доступ, действия пишутся в `audit_log` как `user.updated` с `isAvatarBlocked`, админские списки и карточки пользователей и барберов показывают сырой URL, флаг и бейдж «Фото скрыто», а `users/me` отдаёт сырой URL + флаг. Осталось: премодерации и очереди «на проверке» нет — публикация по-прежнему постмодерация, обход — новая загрузка; счётчика скрытых аватаров в `/admin/summary` и фильтра `avatar=blocked` в списках нет; серверных миниатюр, `srcset`, WebP/AVIF и серверного кропа нет; файл кэшируется на 24 часа (`Cache-Control: public, max-age=86400`), поэтому после замены, удаления или скрытия старый кадр может ещё сутки жить в чужом браузере, а открытая вкладка владельца узнаёт о блокировке только при следующей загрузке; `avatars/` лежит на том же одном диске и входит в тот же бэкап, что `portfolio/` | Отдельные срезы: премодерация и очередь, счётчик/фильтр скрытых аватаров, серверные миниатюры/`srcset`, S3/MinIO и общий volume для нескольких инстансов |
+| 31 | P2 | Портфолио #84: с #89 фото создаётся `Pending` — очередь `/admin/photos?tab=portfolio` и счётчик в `/admin/summary` есть, а блокировка остаётся постмодерационной маской для уже одобренных кадров. Осталось: **нет серверных миниатюр** — `thumbnailUrl` всегда `null`, галерея грузит подготовленный JPEG, нет `srcset`, WebP/AVIF и кропа; **EXIF/GPS** вычищается только браузерным клиентом (canvas-перекодирование), сервер не перекодирует файл; публичный кадр кэшируется на 24 часа (`Cache-Control: public, max-age=86400`), поэтому после блокировки браузер может показать его из кэша до истечения суток; файлы лежат **вне backup PostgreSQL** и рассчитаны на **один инстанс и один диск**; действия с фото (загрузка, подпись, порядок, скрытие, блокировка, одобрение/отклонение) **не пишутся в `audit_log`** — у `PortfolioPhoto` нет allowlist, а решение #89 хранится только в `reviewed_by_user_id`/`reviewed_at`/`rejection_reason`; старого кадра «до одобрения нового» нет — новый заменяет его сразу | Отдельные срезы: серверный pipeline миниатюр/`srcset`/WebP/AVIF, аудит решений о фото (объём и приватность), облачное хранилище и общий volume. `IPhotoStorage` позволит заменить локальный диск без смены домена |
+| 32 | P2 | Аватар #87 получил блокировку и аудит (`user.updated` с `isAvatarBlocked`), а #89 — премодерацию: новый кадр `Pending`, очередь `/admin/photos?tab=avatars`, счётчик в сводке, одобрение/отклонение с обязательной причиной, статус и причина в `users/me`, админских списках и карточках. Осталось: **фильтра `avatar=blocked` в списках нет** (и отдельного фильтра по статусу модерации тоже); решения премодерации **не пишутся в `audit_log`** — только `reviewed_by_user_id`/`reviewed_at`/`rejectionReason`; **старый аватар не сохраняется публичным до одобрения нового** — новый заменяет его сразу, публично видны инициалы (отдельный срез с `pendingAvatarUrl`); нет серверных миниатюр, `srcset`, WebP/AVIF и серверного кропа; файл кэшируется на 24 часа, поэтому после замены, удаления или скрытия старый кадр может ещё сутки жить в чужом браузере, а открытая вкладка владельца узнаёт о блокировке только при следующей загрузке; `avatars/` лежит на том же одном диске и входит в тот же бэкап, что `portfolio/` | Отдельные срезы: фильтр `avatar=blocked` (и статус модерации) в админских списках, аудит решений о фото, сохранение старого кадра до одобрения нового, серверные миниатюры/`srcset`, S3/MinIO и общий volume для нескольких инстансов |
 | 33 | P2 | Смена email #88 принята с ограничениями: **ожидающий адрес не показывается** — `GET /api/users/me` не отдаёт `pendingEmail`, поэтому карточка «Email» показывает только текущий адрес и после отправки письма живёт локальным `role="status"` + кулдауном 60 с (перезагрузка страницы забывает о заявке); **отменить заявку нельзя** и вписать сразу несколько адресов тоже; после подтверждения **все сессии завершаются** (ротация security stamp и отзыв refresh — как в сбросе пароля), поэтому страница `/confirm-email-change` честно разлогинивает и предлагает вход, а не сохраняет текущую сессию; **третьего письма «адрес изменён» на старый адрес нет** — уведомление при заявке единственное, и в нём намеренно нет ссылки на действие; **старые verification-токены старого адреса не отзываются** — после смены адрес уже подтверждён, и повторный клик по старой ссылке отвечает `204`, ничего не меняя; вход после смены — только с новым адресом и прежним паролем, предзаполнения логина нет, а PII (адрес) появляется в админском журнале как `user.updated` — это следствие существующего allowlist `User.Email`, нового решения о приватности не требуется | Отдельные срезы: `pendingEmail` + отмена заявки и подсказка «подтвердите новый адрес»; сохранение текущей сессии (перевыпуск cookie и claims); третье письмо-подтверждение; отзыв verification-токенов старого адреса вместе с уведомлением |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
@@ -2155,7 +2236,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32), 1260 tests in 124 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 1366 tests in 130 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -2184,7 +2265,11 @@ booking delete. The file is `serial`: both scenes count the same upcoming rows),
 the day feed in `a11y-narrow.spec.ts`, `/barber/schedule`
 (the seven-day week from the API, both cabinet links, local 09:00–18:00 time inputs and the axe
 scan on desktop, mobile and 320 px), `/admin/reviews` and
-`/admin/users` paging, filters and URL-held selection, `/admin/catalogue` (three tabs, `?tab=` in
+`/admin/users` paging, filters and URL-held selection, `/admin/photos` (both tabs, `?tab=` in the
+URL, FIFO rows with name/email/caption, search by email or barber name, the preview dialog, approve
+and reject with a reason; the mutations project runs the real upload → queue → decision scenes in
+the avatar and portfolio specs, and the read-only specs check the empty queue and the summary's
+honest zero), `/admin/catalogue` (three tabs, `?tab=` in
 the URL and across a reload, status filter, name and city search, `usageCount` from the API, no
 pager), the catalogue mutations (hide an active service with the barber count in the
 `alertdialog`, rename a hidden specialization, edit salon contacts through both `PUT`s, and an
@@ -2211,13 +2296,14 @@ through the `alertdialog`, then «Оставить как есть» closing the
 the 320 px pager, and an axe scan of every screen and role at 1280 (`/`,
 `/barbers/{id}`, `/register`, `/privacy` with the cookie notice shown and dismissed, the open login
 dialog, `/account`, `/account/reviews`, `/barber`,
-`/admin/reviews` pending and published, `/admin/barbers`, `/admin/users`, `/admin/catalogue` on the
+`/admin/reviews` pending and published, `/admin/barbers`, `/admin/users`, `/admin/photos` on both
+tabs (empty queue; the populated queue row is scanned inside the portfolio mutation), `/admin/catalogue` on the
 services tab and `/admin/catalogue?tab=salons` with the edit form open, `/admin/audit` with the
 role-change diff expanded, `/admin/bookings` with a booking card selected, plus the split-view
 detail cards) and at 320 (`/barbers/{id}`, `/privacy`, `/admin/reviews`, `/admin/users` without a
 detail panel,
 `/admin/catalogue?tab=salons`, `/admin/audit` with the date filter, `/admin/bookings` filtered
-through the UI so rows exist and `/admin/summary`, all also asserting zero horizontal overflow).
+through the UI so rows exist, `/admin/photos` (empty queue, 44 px tabs) and `/admin/summary`, all also asserting zero horizontal overflow).
 The admin summary
 spec (desktop and mobile) covers the first rail item and `aria-current`, the counters against the
 sections themselves (the moderation tab, the «На проверке» queue with the pending fixture profile
@@ -2251,17 +2337,24 @@ dot and disables the button, then the badge is gone on `/barber` and two more `r
 still answer `204`; `leadMinutes = 60` is one debounced `PUT` whose body carries
 `leadMinutes: 60`, the value survives a reload and the scene restores 30. The axe matrix adds the
 route at 1280 and 320, and the 320 scene also asserts zero horizontal scroll and a 44×44 bell
-that does not shrink. Last fully green run (2026-11-11, after the avatar moderation E2E slice):
-293 passed, 4 skipped, 0 failed with `--workers=2` (~6 min). The four skips are still the three
-mobile split-view checks (`admin-reviews` ×2 and `admin-users`) plus the desktop-only
-password-reset spec on `mobile-chromium` (the auth limiter; 320 px is covered by the axe scan);
-the slice added no skips and no axe exclusions (zero `critical`/`serious`). Its six new cases are
-the hide/restore scenes in both avatar specs (two each: the owner's initials in the cabinet and
-header with the media `404`/`private` matrix, then the restore) and two axe scenes — the direct
-`/admin/users/{id}` card without a photo at 1280 and `/admin/barbers` at 320 (with the added
-`/admin/users` 320 overflow assertion inside that existing scan). The badge and confirm-dialog
-axe scans themselves live in `account-avatar-mutations.spec.ts`, because the seeded read-only
-fixtures have no avatars and the a11y gate must not mutate them. The previous full run
+that does not shrink. Last fully green run (2026-11-12, after the photo pre-moderation E2E slice):
+**307 passed, 6 skipped, 0 failed** with `--workers=2` (313 tests, 6.2 min). The six skips are still
+the three mobile split-view checks (`admin-reviews` ×2 and `admin-users`), the desktop-only
+password-reset spec on `mobile-chromium` (the auth limiter; 320 px is covered by the axe scan) and
+the desktop-only email-change spec on mobile for the same reason. The slice added no skips and no
+axe exclusions (zero `critical`/`serious`); its net +12 cases are the two-step public avatar (upload →
+initials until approval → approve in `/admin/photos?tab=avatars` → hero/search/contract URL), the
+avatar queue scenes (search by email, preview dialog, approve, reject with a reason and the owner
+seeing «Отклонено» + reason), the portfolio queue scenes (upload is not public, approve publishes,
+a second frame is rejected with a reason and the public gallery keeps only the first), the
+summary's fourth block in honest zero (`admin-summary.spec.ts`), `/admin/photos` on both tabs at
+1280 and the empty queue at 320 in the axe specs, and the queue-row axe scan inside the portfolio
+mutation (a real frame with a caption). The previously documented cache flake is fixed:
+`playwright.request.newContext` inherited the scenario's `storageState`, so an "anonymous" media
+request carried the owner's cookie and ASP.NET added `no-store`; every guest context now passes
+`storageState: { cookies: [], origins: [] }` and the public `Cache-Control: public,
+max-age=86400` is asserted by a real guest. The previous full run (2026-11-11, after the
+email-change slice) was 294 passed, 6 skipped, 1 failed (that cache flake), and the run before it
 (2026-11-11, after the avatar surfaces E2E slice) was 287 passed, 4 skipped, 0 failed; it added
 the header assertions inside `account-avatar-mutations.spec.ts` and the search scenario inside
 `public-barber-avatar-mutations.spec.ts`. The run before that (2026-11-11, after the portfolio
@@ -2380,7 +2473,7 @@ text); and `BookingDetail` (the salon-zone time, the actions shown by status, bo
 texts, the `204` result and the Russian error); `admin-summary` (exactly one parameterless
 `GET /api/admin/summary`, the strict guard rejecting a negative or fractional counter, a missing
 block and a malformed `oldest` while accepting `oldest: null` and extra fields, and the `403`/`429`/
-fallback error mapping); `SummaryScreen` (the three blocks with their numbers, `href`s and copy, the
+fallback error mapping); `SummaryScreen` (the four blocks with their numbers, `href`s and copy, the
 honest zeros, the `401` gate, the first-page error with «Повторить», the refresh error that keeps
 the blocks, exactly one request per «Обновить» and the «Обновлено в …» label); and the
 `formatProfilesCount`/`formatSalonsCount` plural forms; `admin-statistics` (the period URL,
@@ -2683,6 +2776,28 @@ hidden photo renders no image), `profile-provider.test.tsx` and `use-my-profile.
 (`setAvatar` clears the flag for every subscriber; `save` sends the raw `avatarUrl` and keeps the
 flag), and `admin-audit.test.ts` (`isAvatarBlocked` labelled «Фото скрыто администратором» and
 rendered as «Да»/«Нет»).
+
+**The photo pre-moderation (#89) adds** `photo-moderation.test.ts` (the three status labels,
+`canRenderAvatarPreview`/`canRenderAvatarCardPreview` for `null`/blocked/`Rejected`, rejection
+reason validation at 0/1/500/501) and `admin-photos.test.ts` (both list URLs with
+`pageSize=20`, search/cursor only when set, the four decision calls with `X-CSRF-TOKEN` and the
+rejection body, every public code mapped: role, `401`, missing user/photo, `noAvatar`, repeated
+decision, reason required/too long, `429`, fallback). `admin/photos-screen.test.tsx` covers the
+two tabs, search debounce, rows, preview dialog, approve (row disappears, announcement, quiet
+re-read), reject (dialog, client validation, reason body, `409` removes the row), `401` gate,
+empty queue vs empty search and the loading/error states; `admin/avatar-moderation.test.tsx`
+covers the two extra action kinds and the badge/reason states; `admin/user-list.test.tsx`,
+`admin/barber-list.test.tsx`, `admin/user-detail.test.tsx` and `admin/barber-detail.test.tsx`
+cover the textual «На проверке»/«Отклонено» badges, the pending decisions, the rejection reason
+and the local update; `account/avatar-card.test.tsx` covers the pending badge, the rejected
+preview with the reason, `setAvatar` clearing the old state and deletion; `header-auth.test.tsx`
+and `account-shell.test.tsx` assert that a `Rejected`/blocked photo is not rendered in the header
+or identity block; `barber/barber-profile-photos.test.tsx` covers the portfolio badges and the
+reason; `admin/summary-screen.test.tsx` covers the fourth block with both counters, the links and
+the honest zero; `admin-path.test.ts` covers `?tab=`, the fallback to `avatars` and the canonical
+`/admin/photos`; `response-guards.test.ts` covers `isAvatarUploadResponse` (`Pending` required),
+the new `avatarModerationStatus`/`avatarRejectionReason` fields and both queue page guards;
+`admin-summary.test.ts` covers the two `photos` counters.
 
 **What is not covered yet:** most screens and the hooks (the admin queues, some cabinet screens) — the
 audit, admin-bookings, reviews and barbers screens, `AuditEntry` / `BookingDetail` and
@@ -3247,6 +3362,20 @@ in 121 files, backend to 1718 (0 failed), and E2E to 293 passed / 4 skipped / 0 
 pre-moderation and the hidden-avatar counter/filter, server thumbnails/`srcset`, S3/shared
 volume — debt #32.
 
+**Completed 2026-11-12:** photo pre-moderation (#89) — new avatars and portfolio photos are
+created `Pending` and are not public until an administrator approves them in the new
+`/admin/photos` queue (tabs «Аватары»/«Портфолио», FIFO, 20-row pager, search, preview, approve,
+reject with a mandatory 1..500 reason) that also appears as the fourth `/admin/summary` block.
+The owner sees «На проверке»/«Отклонено» + reason in the cabinet (the avatar card and each
+portfolio card); a new avatar replaces the old frame immediately and the public surfaces show
+initials until approval. Decisions are available in the queue and in both admin cards, a repeated
+decision is `409` and re-reads the list, and public reads apply `Approved` together with
+`isPublished`/`isBlocked`/`isAvatarBlocked`. One migration (`AddPhotoModeration`, 36 total, four
+indexes); no `audit_log` types. Unit tests grew to 1366 in 130 files, backend to 1997, E2E to
+307 passed / 6 skipped / 0 failed. Remaining: server thumbnails/`srcset`/WebP, S3/shared volume
+and the 24-hour cache (#31/#32), an `avatar=blocked` filter in the admin lists, auditing photo
+decisions and keeping the old avatar public until the new one is approved — separate slices.
+
 Roadmap numbers are stable for links: completed items 1–5 were removed, the remaining numbers
 do not shift.
 
@@ -3327,6 +3456,18 @@ do not shift.
     authenticated reads a minute per open cabinet, needs no backend change and pauses on a hidden
     tab; push pays off when many cabinets are open at once or when «мгновенно» becomes a product
     requirement.
+15. **Photo pre-moderation (decided 2026-11-12, #89):** the six open questions are closed as
+    follows. (1) The rejection reason is **mandatory**, 1..500 characters, and is shown to the
+    owner in the cabinet; there is no binary "rejected" without a reason. (2) A new avatar
+    becomes the only stored frame immediately — the old one is not kept public until approval —
+    and the public surfaces show initials until the administrator approves; keeping the previous
+    frame is a separate slice (`pendingAvatarUrl`). (3) Existing frames are **not** re-reviewed:
+    the migration marks them `Approved`. (4) The audit allowlist is **not** extended in this
+    slice: decisions live only in `reviewedByUserId`/`reviewedAt`/`rejectionReason` (debt #31/
+    #32). (5) Pre-moderation applies to **everyone**, including administrators; the endpoints
+    allow self-review. (6) A rejected frame stays visible to its owner in the cabinet with the
+    reason, but is not rendered in the header or the public surfaces; initials are used publicly.
+    Changing any of these later is a new decision, not a bug fix.
 
 ---
 
@@ -3336,6 +3477,14 @@ do not shift.
 - **Contract-first with the backend.** The API shape is owned by `../backend` (`backend/AGENT.md`
   §16–§17). Do not invent endpoints, rename fields client-side, or fork response types. If a
   contract must change, change the backend first and update frontend types in the same PR.
+- **Pre-moderation is server-owned.** A photo status changes only through the four admin
+  endpoints (`.../avatar/approval|rejection`, `.../photos/{photoId}/approval|rejection`); never
+  derive `Approved` on the client from `isPublished`/`isBlocked`, and never edit a status in
+  local state without the server answer. After a decision the queue removes the row and re-reads
+  the server list; a `409` means another administrator already decided. The media route is the
+  source of truth for what may be rendered: a `Rejected` frame may appear in the owner's
+  `AvatarCard` and portfolio cards, never in the header or a public surface; `Pending` is shown
+  to the owner only.
 - **Branch base — mandatory.** Every new branch is created **from `main`**, and from the freshly
   fetched `origin/main`, never from a sibling `features/issue-*` branch and never from a stale
   local `main`: `git fetch origin && git checkout -b features/issue-N origin/main`. If a branch
@@ -3443,6 +3592,13 @@ Copy this into the PR description and check every item that applies:
       anonymous registration (§9.4);
 - [ ] API errors mapped by `status` / `errorCodes`, Russian fallback, no raw `detail`;
 - [ ] loading, empty and error states implemented;
+- [ ] pre-moderation (when the change touches photos): the queue and the summary use the same
+      predicate, only `Pending` is decidable, a rejection reason is mandatory 1..500 and visible
+      to the owner, a repeated decision (`409`) removes the row and re-reads the list, public
+      surfaces never render `Pending`/`Rejected`, and the owner sees «На проверке»/«Отклонено»;
+- [ ] E2E scenes that upload or decide a photo clean up through the owner API and the seed resets
+      `avatar_url`/`avatar_moderation_status`/`rejection_reason` (and deletes fixture portfolio
+      rows), so a second run starts from initials and an empty queue;
 - [ ] identity/session actions (password change, email change, password reset) explain what ends and
       where the user signs in again; `signOut()` only after the server already ended the sessions;
 - [ ] 320 px / tablet / desktop checked; no horizontal scroll;

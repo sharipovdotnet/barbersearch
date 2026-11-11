@@ -4,8 +4,8 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **548 domain + 815 application + 252 infrastructure + 257 integration (1872 total)**;
-> the three unit projects are green locally (2026-11-11), integration runs on PostgreSQL
+> Tests: **588 domain + 873 application + 267 infrastructure + 269 integration (1997 total)**;
+> the three unit projects are green locally (2026-11-12), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
@@ -46,10 +46,10 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-6` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 231 xunit tests) |
-| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 440 xunit tests, fakes instead of a database) |
-| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 116 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 148 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 588 xunit tests) |
+| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 873 xunit tests, fakes instead of a database) |
+| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 267 xunit tests, no database) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 269 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -98,6 +98,7 @@ backend/                                  ← workspace root
         │   ├── Common/
         │   │   ├── Entity.cs             ← base: Id (UUIDv7), CreatedAt/UpdatedAt, MarkUpdated()
         │   │   ├── AggregateRoot.cs      ← empty marker : Entity
+        │   │   ├── PhotoModerationStatus.cs ← Pending/Approved/Rejected для фото и аватара
         │   │   └── DomainErrors.cs       ← Collect() / Ok() / Fail() helpers
         │   ├── Users/{User.cs, UserRole.cs}                      (AR)
         │   ├── BarberRequests/{BarberRequest.cs, BarberRequestStatus.cs}  (AR)
@@ -124,6 +125,7 @@ backend/                                  ← workspace root
         │   └── BarberProfiles/
         │       ├── CreateBarberProfile/BarberProfileCreateRequest.cs   ← пришли из домена
         │       └── UpdateBarberProfile/BarberProfileUpdateRequest.cs   ← (были *Data)
+        │   └── Photos/RejectPhotoRequest.cs  ← причина отказа для аватара и портфолио
         │
         ├── BarberSearch.Application/     ← BarberSearch.Application.csproj → Contracts, Domain, Shared
         │   ├── Abstractions/             ← ICommand / ICommandHandler<> / IQuery / IQueryHandler<,>
@@ -131,11 +133,11 @@ backend/                                  ← workspace root
         │   └── {Entity}/                 ← one folder per domain entity (Users/, BarberProfiles/, …)
         │       ├── I{Entity}Repository.cs  ← repository abstraction of that entity (10 in total;
         │       │                             Reviews/ also holds ReviewRatingSummary)
-        │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (110)
+        │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (145)
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 24 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 34 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Migrations/               ← 36 migrations + ApplicationDbContextModelSnapshot
         │   ├── Repositories/             ← RepositoryBase<T> + 17 repository implementations
         │   ├── ApplicationDbContext.cs   ← 24 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
@@ -162,7 +164,7 @@ backend/                                  ← workspace root
             ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
-            ├── Controllers/              ← 31 контроллер: 30 доменных (138 endpoints) + AuthController (12 actions)
+            ├── Controllers/              ← 32 контроллера: 31 доменный (144 endpoints) + AuthController (12 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -454,8 +456,9 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-09 (срез email-outbox): domain **393**, application **677**,
-infrastructure **192**, integration **210** — всего **1472**, все зелёные на локальной PostgreSQL.
+Актуальный baseline на 2026-11-12 (срез премодерации фото): domain **588**, application
+**873**, infrastructure **267**, integration **269** — всего **1997**, все зелёные на
+локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
@@ -592,13 +595,13 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberProfile.Languages` / `PaymentMethods` | every element is defined in `Language`/`PaymentMethod`; unknown values are rejected (R-23) |
 | `BarberProfile.AdditionalServices` | normalized on write: every entry is trimmed, blank entries are dropped and case-insensitive duplicates collapse to the first occurrence; the order is kept. No upper bound, like the other free-text profile lists |
 | `BarberProfile.PortfolioPhotos` | at most 10 items (`Constants.MAX_PHOTOS_COUNT`); `AddPhoto` accepts only an absolute `http`/`https` URI with a host, no `userinfo`, trimmed, ≤ 2048 chars — `UrlValidator` is **not** relaxed; an uploaded file is added only by `AddUploadedPhoto` and gets a root-relative URL matching `PortfolioMediaUrl` (see below); `ThumbnailUrl` — same rule, optional (blank → `null`); `Description` ≤ 2000 |
-| `PortfolioPhoto` | `IsBlocked` — admin-only, separate from `IsPublished`; `Block`/`Unblock` are idempotent and end with `MarkUpdated`; `SortOrder` — `max + 1` for a new photo, bulk `ReorderPhotos` assigns `index` over the complete set |
+| `PortfolioPhoto` | `IsBlocked` — admin-only, separate from `IsPublished`; `Block`/`Unblock` are idempotent and end with `MarkUpdated`; `ModerationStatus` — премодерация: `AddUploadedPhoto` creates it `Pending`, `Approve`/`Reject` move only `Pending → Approved` or `Rejected` (`portfolioPhoto.moderation.invalidStatus` on a repeated decision), `RejectionReason` is trimmed and 1..500 only in `Rejected` (`portfolioPhoto.moderation.reasonRequired` / `.reasonTooLong`), and approval clears the reason; `SortOrder` — `max + 1` for a new photo, bulk `ReorderPhotos` assigns `index` over the complete set |
 | `BarberProfile.TimeOffs` | `EndAt > StartAt`, intervals do not overlap (touching is allowed) |
 | `BarberProfile.Salons` | unique `SalonId`; at most one `IsPrimary` |
 | `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
 | `BarberProfile.BarberSpecializations` | unique `SpecializationId` |
 | `BarberProfile.Verify()` | an inactive profile cannot be verified |
-| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `IsAvatarBlocked` (`false` по умолчанию) — `BlockAvatar` требует `AvatarUrl`, `SetAvatar`/`UpdateProfile` снимают флаг только при реальной смене URL; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
+| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `IsAvatarBlocked` (`false` по умолчанию) — `BlockAvatar` требует `AvatarUrl`, `SetAvatar`/`UpdateProfile` снимают флаг только при реальной смене URL; `AvatarModerationStatus` (`Pending=1`, `Approved=2`, `Rejected=3`; по умолчанию `Approved`) — реальная смена `AvatarUrl` переводит кадр в `Pending` и пишет `AvatarSubmittedAt`, `null` возвращает `Approved` и чистит метки, повторная запись того же URL не меняет ни статус, ни флаг, ни метки; `ApproveAvatar`/`RejectAvatar` двигают только `Pending` (`409 user.avatarModeration.noAvatar` без URL, `.invalidStatus` на повторное решение), причина отказа тримится и обязательна 1..500 (`user.avatarModeration.reasonRequired` / `.reasonTooLong`), решение пишет `AvatarReviewedAt`/`AvatarReviewedByUserId`; публичный кадр — `Approved && !IsAvatarBlocked`; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
@@ -687,6 +690,22 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 доступа. Публичные чтения (поиск, публичная карточка, записи барбера) отдают `null`; `users/me`
 сохраняет сырой URL и добавляет флаг; админские списки и карточки — сырой URL и флаг.
 
+**Премодерация фото (2026-11-12, issue-89).** Над двумя прежними флагами появился третий,
+общий для аватара и портфолио: `PhotoModerationStatus` (`Pending=1`, `Approved=2`,
+`Rejected=3`). Это **не видимость**: у портфолио публичность по-прежнему решают
+`IsPublished && !IsBlocked`, у аватара — `!IsAvatarBlocked`, а `Approved` лишь допускает кадр
+к этим правилам. `PortfolioPhoto.AddUploadedPhoto` создаёт кадр `Pending`; `Approve`/`Reject`
+принимают только `Pending` (повтор — `409`), причина отказа 1..500 хранится в
+`RejectionReason`, одобрение её очищает. У `User` семантика аватара такая: **реальная** смена
+`AvatarUrl` (Ordinal, до присваивания) → `Pending` + `AvatarSubmittedAt`, снятие аватара
+(`null`) → `Approved` и пустые метки, повторная запись того же URL — no-op: ни статус, ни
+`IsAvatarBlocked`, ни `AvatarRejectionReason`, ни время не меняются (кабинет отправляет
+текущий `avatarUrl` обратно при сохранении имени). `ApproveAvatar`/`RejectAvatar` двигают
+только `Pending`; у отклонённого кадра причина видна владельцу, но публично он не
+показывается. `IsAvatarBlocked` и `Rejected` — разные вещи: блокировка скрывает уже
+опубликованный кадр, отказ — решение о новом. Миграция `AddPhotoModeration` не перепроверяет
+историю: существующие строки получают `Approved`. Очереди, маршруты и видимость — §17.14.
+
 ### 7.4 Statuses and enums
 
 All persisted enums have **explicit numeric values** (§10.10).
@@ -714,6 +733,11 @@ All persisted enums have **explicit numeric values** (§10.10).
   имена (`allowIntegerValues: false`, R-23); значение вне enum, дошедшее до домена, —
   `400 salon.kind.unknown`. `Salon`/`RentalStudio` обязаны быть в каталоге, `Home`/`Mobile` —
   не могут (`400 salon.isListed.kind`).
+- `PhotoModerationStatus`: `Pending=1, Approved=2, Rejected=3` — допуск кадра к публикации,
+  общий для `PortfolioPhoto.ModerationStatus` и `User.AvatarModerationStatus`; numeric values
+  закреплены check-ограничениями `ck_portfolio_photos_moderation_status` и
+  `ck_users_avatar_moderation_status`. Публичность дополнительно требует
+  `IsPublished`/`IsBlocked` (портфолио) или `IsAvatarBlocked` (аватар). JSON — только имена.
 - `UserRole`: `Customer=1, Barber=2, Admin=3`.
 - `Language`/`PaymentMethod` in `BarberProfile.Languages`/`PaymentMethods` are checked element by
   element with `Enum.IsDefined` in `Create`/`UpdateProfile`: an unknown number is rejected
@@ -837,21 +861,21 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-11; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-12; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 548 domain + 815 application + 252 infrastructure + 257 integration (1872 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 139 обработчиков (103 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Domain | ✅ 26 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 588 domain + 873 application + 267 infrastructure + 269 integration (1997 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 31 контроллер / 150 endpoints (138 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 32 контроллера / 156 endpoints (144 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (35):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (36):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -862,7 +886,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
 `AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`,
 `AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`, `AddUserAvatarBlocked`,
-`AddEmailChangeTokens`.
+`AddEmailChangeTokens`, `AddPhotoModeration`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -1076,6 +1100,24 @@ max-age=86400` и `X-Content-Type-Options: nosniff`, скрытый у адми�
 Проверено накатом, откатом и повторным накатом на локальной `barbersearch`;
 `has-pending-model-changes` — чисто (§17.13).
 
+**`AddPhotoModeration` (2026-11-12, issue-89).** Премодерация двух видов кадров. В `users`
+добавлены `avatar_moderation_status` (`smallint NOT NULL DEFAULT 2` — `Approved`),
+`avatar_rejection_reason` (`varchar(500)`, check `NULL OR 1..500`), `avatar_submitted_at`,
+`avatar_reviewed_at` и `avatar_reviewed_by_user_id` (FK `users`, `ON DELETE SET NULL`); check
+`avatar_moderation_status IN (1,2,3)`. В `portfolio_photos` — `moderation_status`
+(`smallint NOT NULL DEFAULT 2`), `rejection_reason` (`varchar(500)`, тот же check),
+`reviewed_at` и `reviewed_by_user_id` (FK `users`, `ON DELETE SET NULL`); check
+`moderation_status IN (1,2,3)`. Backfill: существующие кадры **не перепроверяются** — дефолт
+`2` уже `Approved`, а `avatar_submitted_at = updated_at` проставляется только строкам с
+непустым `avatar_url` (другой технической метки у строки нет; аккаунты без аватара остаются
+с `NULL`). Индексы: `ix_users_avatar_moderation_status_submitted_at`
+(`avatar_moderation_status, avatar_submitted_at, id` — partial `WHERE avatar_url IS NOT NULL`),
+`ix_users_avatar_reviewed_by_user_id`, `ix_portfolio_photos_moderation_status_created_at`
+(`moderation_status, created_at, id`) и `ix_portfolio_photos_reviewed_by_user_id` (§15.2).
+`Down` снимает FK, индексы, check'и и колонки; `avatar_url`, файлы и строки портфолио не
+трогаются. Проверено накатом, откатом и повторным накатом на локальной `barbersearch`;
+`has-pending-model-changes` — чисто (§17.14).
+
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
 `Web` — контроллеры, DI, error mapping и auth. Владение ресурсом проверяется в обработчиках
@@ -1229,7 +1271,7 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
    **Partly done:** the project exists (→ `Domain`, `Shared`), declares ten repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries **110 handlers (78 command + 32 query)** in per-entity
+   `Reviews/IReviewRepository.cs` — and carries **145 handlers (107 command + 38 query)** in per-entity
    folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
    `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
@@ -1278,6 +1320,12 @@ Suggested order:
 `PUT api/bookings/{id}/barber-note` получил предел длины. Следующий срез — фронтенд `/barber`
 (issue-23) поверх этого чтения и существующих действий подтверждения, завершения, неявки
 и отмены; новых backend-эндпоинтов ему не нужно.
+
+**Премодерация фото (2026-11-12, issue-89).** Завершённый срез: аватар и работа портфолио
+создаются `Pending`, очередь `/admin/photos` и решения администратора описаны в §17.14,
+миграция `AddPhotoModeration` — в §8, индексы — в §15.2, маршруты — в §16. Публичная выдача
+требует `Approved` вместе с прежними флагами; решения по фото в `audit_log` не пишутся —
+это остаётся отдельным долгом (frontend §14 #31/#32).
 
 ---
 
@@ -1364,13 +1412,14 @@ Suggested order:
     адрес приёма, у `Mobile` — зона обслуживания, `City` — база; `Address` не делаем nullable.
     Выезд с онлайн-записью (адрес клиента в `Booking`) — отдельный срез, как и перевод скрытого
     места в публичное (нужна повторная модерация).
-12. **Portfolio photos: local disk, post-moderation and caching** — **decided and implemented
+12. **Portfolio photos: local disk, pre-moderation and caching** — **decided and implemented
     2026-11-11 (issue-84); долг #31 открыт.** Файлы лежат на локальном диске за
     `IPhotoStorage`: один инстанс API и один диск, фотографии **не** входят в backup
     PostgreSQL и каталог бэкапится отдельно (§15.2). Несколько инстансов требуют общего
     volume или object storage (S3/MinIO) с CDN и подписанными URL — это отдельный срез.
-    Премодерации нет: загруженная фотография публикуется сразу, администратор реагирует
-    блокировкой (`isBlocked`); очереди «на проверке» и счётчика в `/admin/summary` тоже нет.
+    Премодерация реализована в #89: новая фотография создаётся `Pending`, очередь
+    `/admin/photos?tab=portfolio` и счётчик в `/admin/summary` появились, а блокировка
+    (`isBlocked`) осталась маской для уже одобренных кадров (§17.14).
     Серверных миниатюр/`srcset` и перекодирования нет — клиент готовит JPEG ≤ 1600 px, а для
     небраузерных клиентов сервер метаданные не чистит, включая EXIF/GPS. Публичный кадр
     кэшируется браузером на сутки (`Cache-Control: public, max-age=86400`), поэтому сразу
@@ -1567,6 +1616,10 @@ private constructor (§9.3), and `Entity.Id` is UUIDv7 (§7.2).
 | `email_change_tokens` | `UNIQUE (token_hash)` — `ux_email_change_tokens_hash`, migration `AddEmailChangeTokens` | The only defence against a CSPRNG collision: the table stores SHA-256, never the open token, so lookup by hash is the confirm path. A collision is `500 internal.database`, not a business error |
 | `email_change_tokens` | `UNIQUE (user_id) WHERE consumed_at IS NULL AND revoked_at IS NULL` — `ux_email_change_tokens_active` | One active change request per user: the 60-second precheck covers the common case, the partial index closes the race between two simultaneous requests. The loser gets `409 auth.emailChange.cooldown`, never `500` |
 | `email_change_tokens` | `(expires_at)` — `ix_email_change_tokens_expires_at` | Background cleanup range predicate (`expires_at` or `consumed_at` older than 30 days); no user+expiry query exists, so no composite index |
+| `users` | `(avatar_moderation_status, avatar_submitted_at, id) WHERE avatar_url IS NOT NULL` — `ix_users_avatar_moderation_status_submitted_at`, migration `AddPhotoModeration` | The avatar queue: equality on `Pending`, then the exact FIFO order `avatar_submitted_at ASC, id ASC`. The partial predicate matches `WHERE avatar_url IS NOT NULL` of the queue/summary and keeps accounts without a photo out; a count with the same predicate is an index-only scan |
+| `users` | `(avatar_reviewed_by_user_id)` — `ix_users_avatar_reviewed_by_user_id`, migration `AddPhotoModeration` | The FK `users → users` with `ON DELETE SET NULL`: deleting an administrator must not scan the whole `users` table to clear the decisions they made |
+| `portfolio_photos` | `(moderation_status, created_at, id)` — `ix_portfolio_photos_moderation_status_created_at`, migration `AddPhotoModeration` | The portfolio queue: equality on `Pending`, then FIFO `created_at ASC, id ASC` (no separate submitted-at column — a photo enters the queue when it is created) |
+| `portfolio_photos` | `(reviewed_by_user_id)` — `ix_portfolio_photos_reviewed_by_user_id`, migration `AddPhotoModeration` | The FK `portfolio_photos → users` with `ON DELETE SET NULL`, same reason as the avatar reviewer index |
 | `salons` | `(city, is_active)` | City filter |
 | `salons` | GiST on `geography(Point,4326)` | Radius / nearest-first search. `Latitude`/`Longitude` are already `double` (§9.13 fixed) |
 | `barber_profiles` | `(((rating IS NULL)), rating DESC, id) WHERE is_active AND is_verified` — partial, `ix_barber_profiles_search_keyset` | Search order `(rating IS NULL), rating DESC, id`; the expression matches `ORDER BY` term for term and the partial predicate matches the visibility filter. Since R-38 it is the **only** search index on the table |
@@ -1644,6 +1697,26 @@ row, `BuildAdminBarbersQuery` takes both from its existing `join users` (no seco
 customer's avatar in SQL; `BuildAdminBookingsQuery` deliberately stays raw — the admin surface
 shows what is hidden from the public. Query counts and joins are unchanged; there is no
 `WHERE NOT is_avatar_blocked`, so the keyset counters do not move.
+
+**Photo moderation queues (2026-11-12, issue-89).** Both queue reads are keyset pages of
+`pageSize + 1` rows without a `COUNT`: `BuildAdminAvatarPhotosQuery` filters with
+`WherePendingAvatar` (`avatar_moderation_status = 1`, `avatar_url IS NOT NULL`,
+`avatar_submitted_at IS NOT NULL`) and orders `avatar_submitted_at, id`, served by
+`ix_users_avatar_moderation_status_submitted_at` (the partial predicate is the same, so the
+index is usable and the extra `avatar_url` check is a heap filter on at most the page);
+`BuildAdminPortfolioPhotosQuery` joins `portfolio_photos → barber_profiles → users` for the
+barber name and owner email, filters `moderation_status = 1` and orders `created_at, id`, served
+by `ix_portfolio_photos_moderation_status_created_at`; the profile join is by
+`barber_profiles_pkey`, the owner email by `users_pkey`. The summary reuses the same predicates
+through `WherePendingAvatar`/`WherePendingPortfolioPhoto`, so its two counts are exactly the
+queue sizes. The search is an `ILIKE` substring on the joined name/email with the existing
+escape helper — no trigram index, because a queue is small and every row still arrives in FIFO
+order. Decisions are primary-key updates of the aggregate plus one row in `users`/`portfolio_photos`;
+`reviewed_by_user_id` is covered by its index only for the FK cleanup, not for a read.
+The public reads reuse their existing plans: the search/card avatar masks now add
+`avatar_moderation_status <> 2` to the same `CASE`, and the public card filters photos in memory
+after loading the (at most ten) rows, so no new query appears. `readiness.photosCount` keeps
+counting `Approved && IsPublished && !IsBlocked`.
 
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
@@ -2127,7 +2200,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**30 domain controllers (+ `AuthController`), 150 endpoints: 138 domain + 12 auth** — one endpoint
+**31 domain controllers (+ `AuthController`), 156 endpoints: 144 domain + 12 auth** — one endpoint
 per Application operation, plus the twelve `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2135,7 +2208,7 @@ the aggregate that owns the child entity:
 |---|---|---|
 | `UsersController` | `api/users` | 14 |
 | `BarberProfilesController` | `api/barber-profiles` | 26 |
-| `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 5 |
+| `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 7 (publication publish/hide, description, block/unblock, approve/reject) |
 | `PortfolioMediaController` | `api/media/portfolio` | 1 (anonymous media delivery) |
 | `AvatarMediaController` | `api/media/avatars` | 1 (anonymous avatar delivery) |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
@@ -2155,7 +2228,8 @@ the aggregate that owns the child entity:
 | `ReviewsController` | `api/reviews` | 8 (5 write + public list + moderation queue + author list) |
 | `AdminReviewsController` | `api/admin/reviews` | 2 (list + by id, admin only) |
 | `AdminBarbersController` | `api/admin/barbers` | 2 (list + by id, admin only) |
-| `AdminUsersController` | `api/admin/users` | 4 (list + by id + avatar block/unblock, admin only) |
+| `AdminUsersController` | `api/admin/users` | 6 (list + by id + avatar block/unblock + avatar approve/reject, admin only) |
+| `AdminPhotosController` | `api/admin/photos` | 2 (avatar and portfolio pre-moderation queues, admin only) |
 | `AdminCatalogueController` | `api/admin/catalogue` | 3 (hair services, specializations, salons — admin only, full dictionaries) |
 | `AdminAuditController` | `api/admin/audit` | 1 (read-only journal, admin only) |
 | `AdminBookingsController` | `api/admin/bookings` | 2 (list + by id, admin only, read-only) |
@@ -2174,7 +2248,7 @@ Conventions:
   the handler, and hands the `Result` to `ToActionResult` / `ToCreatedResult` (204 / 200 / 201).
 - Identifiers always come from the route, everything else from the body (`XxxRequest`) or query
   string (read endpoints), so the shape of an operation is visible in its signature. A body is used
-  only when the payload is more than a single identifier — 36 request records cover all write
+  only when the payload is more than a single identifier — 37 request records cover all write
   operations; read endpoints take query parameters.
 - `FailureProblemDetails.CreateResult` maps `ErrorType` to a status code and returns ProblemDetails;
   validation failures become `ValidationProblemDetails` with errors keyed by `Error.InvalidField`
@@ -2276,6 +2350,31 @@ Conventions:
   `private, no-store`, все остальные, включая владельца, получают тот же `404`. `BarberProfileResponse`
   получил `avatarUrl` сразу после `userId` (публичная и собственная карточки — одинаково; с #87
   скрытое фото даёт `null` в обеих).
+- **Премодерация фото: очередь и решения (2026-11-12, issue-89).**
+  `GET api/admin/photos/avatars` и `GET api/admin/photos/portfolio` — два независимых
+  чтения `PagedResponse<AdminAvatarPhotoResponse>` / `PagedResponse<AdminPortfolioPhotoResponse>`
+  под `AdminOnly` (+ `EnsureAdmin` в обработчике, потому что ответ содержит email владельцев).
+  Параметры: `search` (подстрока по имени/фамилии/email владельца; у портфолио — по имени
+  барбера и email владельца; пусто — без фильтра, > 100 — `400 admin.photos.search`),
+  `cursor` (непрозрачный, битый — `400 admin.photos.cursor`) и `pageSize` 1..100 по умолчанию
+  20 (`400 admin.photos.pageSize`). Очередь — только `Pending`: аватары
+  `avatar_submitted_at ASC, id ASC`, портфолио `created_at ASC, id ASC` (FIFO; отдельной метки
+  поступления у портфолио нет). Курсор принадлежит своей вкладке; истории проверенных кадров
+  нет — статус виден в админских карточках.
+  `POST api/admin/users/{userId:guid}/avatar/approval|rejection` и
+  `POST api/barber-profiles/{barberProfileId:guid}/photos/{photoId:guid}/approval|rejection` —
+  `AdminOnly` + глобальный antiforgery, `EnsureAdmin` в обработчике, ответ всегда `204`.
+  Одобрение/отклонение принимаются только у `Pending`: повторное решение —
+  `409 user.avatarModeration.invalidStatus` / `portfolioPhoto.moderation.invalidStatus`
+  (а не `204`), отсутствующий аватар — `409 user.avatarModeration.noAvatar`, чужой/неизвестный
+  кадр — `404 portfolioPhoto.moderation.notFound` (профиля нет — `404 barberProfile.notFound`).
+  Тело отказа — `RejectPhotoRequest { reason }`: причина обязательна, тримится, 1..500
+  (`400 …reasonRequired` / `…reasonTooLong`, `invalidField = "reason"`); одобрение чистит
+  причину. `audit_log` новых типов не получает: решение пишется только в
+  `reviewed_by_user_id`/`reviewed_at`/`rejection_reason` самой сущности (§17.14).
+  Публичная видимость: аватар — `Approved && !IsAvatarBlocked`, портфолио —
+  `Approved && IsPublished && !IsBlocked`; владелец и админ видят неодобренный кадр, файл
+  отдаётся с `private, no-store`, публичный — с `public, max-age=86400` (§7.3, §17.14).
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,
@@ -4009,6 +4108,135 @@ email и сброса пароля: в `FailureProblemDetails` нет `ErrorType
 индексы/check/FK, маппинг ограничений и миграция. Integration: полный сценарий на реальной
 PostgreSQL (запрос → два письма в outbox → confirm → старый email `401`, новый `200`, старая
 cookie `401`, строка `audit_log`), занятый адрес, битый токен, кулдаун. Команды — §5.2/§5.3.
+
+---
+
+### 17.14 Премодерация фото (added 2026-11-12)
+
+**Зачем.** До среза #89 аватар и работа портфолио публиковались сразу: администратор мог
+только убрать уже показанный кадр (`is_avatar_blocked`, `portfolio_photos.is_blocked`), а
+новый файл жил публично до реакции. Срез добавляет **премодерацию**: новый кадр создаётся
+`Pending`, публично не виден и попадает в очередь `/admin/photos`; публичным его делает
+только решение администратора. Это касается **всех ролей**, включая администратора: своего
+исключения «доверенного» автора нет, self-review эндпоинт не запрещает. Старые кадры не
+перепроверяются — миграция ставит им `Approved` (иначе публичные карточки опустели бы в день
+выката).
+
+**Модель состояний.** Один общий enum `Domain/Common/PhotoModerationStatus`:
+`Pending=1` — ждёт решения, публично не виден; `Approved=2` — допущен к публикации;
+`Rejected=3` — отклонён, причина в `RejectionReason`/`AvatarRejectionReason`, публично не
+виден. Это **допуск**, а не видимость: у портфолио остаются `IsPublished` (намерение
+владельца) и `IsBlocked` (административная маска), у аватара — `IsAvatarBlocked`. Публичный
+кадр — это `Approved` **и** обычные флаги: аватар `Approved && !IsAvatarBlocked`, портфолио
+`Approved && IsPublished && !IsBlocked`. `Rejected` и `Blocked` — разные вещи и не
+превращаются друг в друга: `Rejected` — решение о новом кадре, `Blocked` — действие над уже
+опубликованным; владелец не может снять ни то, ни другое. `Block`/`Unblock` не меняют
+`ModerationStatus`, а `Approve`/`Reject` не трогают `IsBlocked`/`IsAvatarBlocked`.
+
+**Схема и миграция.** `AddPhotoModeration` (36-я, §8) добавляет в `users`
+`avatar_moderation_status` (`smallint NOT NULL DEFAULT 2`), `avatar_rejection_reason`
+(`varchar(500)`, check `NULL OR 1..500`), `avatar_submitted_at`, `avatar_reviewed_at`,
+`avatar_reviewed_by_user_id` (FK → `users`, `ON DELETE SET NULL`) с check `IN (1,2,3)`; в
+`portfolio_photos` — `moderation_status` (`smallint NOT NULL DEFAULT 2`), `rejection_reason`
+(`varchar(500)`, тот же check), `reviewed_at`, `reviewed_by_user_id` (FK → `users`,
+`ON DELETE SET NULL`) с check `IN (1,2,3)`. Backfill: `avatar_submitted_at = updated_at` только
+для строк с непустым `avatar_url` — другой технической метки у строки нет; аккаунты без
+аватара остаются с `NULL`. Индексы — §15.2: `ix_users_avatar_moderation_status_submitted_at`
+(partial `WHERE avatar_url IS NOT NULL`), `ix_users_avatar_reviewed_by_user_id`,
+`ix_portfolio_photos_moderation_status_created_at`, `ix_portfolio_photos_reviewed_by_user_id`.
+`Down` снимает колонки, check'и, FK и индексы; `avatar_url`, файлы и строки портфолио не
+трогаются. Накат → откат → повторный накат проверены на локальной `barbersearch`;
+`has-pending-model-changes` — чисто.
+
+**Семантика аватара.** `User.SetAvatar` и `User.UpdateProfile` вызывают один приватный
+`ApplyAvatarChange`: сравнение `Ordinal` **до** присваивания. Реальная смена URL — новый файл:
+`Pending`, `AvatarSubmittedAt`, очистка прошлого решения (`ReviewedAt`/`ReviewedByUserId`/
+`RejectionReason`) и снятие `IsAvatarBlocked` (новый кадр ещё не публиковался). `null` —
+удаление: `Approved` и пустые метки, проверять нечего. Повторная запись **того же** URL —
+no-op: ни статус, ни `IsAvatarBlocked`, ни причина, ни `UpdatedAt`; именно поэтому сохранение
+имени в кабинете (оно отправляет текущий `avatarUrl` обратно в `PUT users/{id}/profile`) не
+сбрасывает ни проверку, ни блокировку. Публичный кадр после загрузки заменяется **сразу**:
+старый файл больше не отдаётся (точное сравнение сохранённого URL), а до одобрения нового
+публично видны инициалы. Хранить старый кадр публичным до одобрения нового — отдельный срез
+(frontend §14 #32): это потребовало бы `pendingAvatarUrl` и переключения после approve.
+У `Rejected` владелец видит превью и причину в кабинете, но не в шапке; публично и в
+админских чтениях статус виден всегда.
+
+**Очередь и курсоры.** `GET api/admin/photos/avatars` читает `PagedResponse` по
+`avatar_submitted_at ASC, id ASC`, `GET api/admin/photos/portfolio` — по
+`created_at ASC, id ASC`: FIFO по поступлению, а не по `updated_at`. Обе — только `Pending`;
+истории «одобренные/отклонённые» и фильтра по статусу в этом срезе нет — статус конкретного
+кадра виден в админских карточках пользователя и барбера. `search` — подстрока по имени,
+фамилии или email владельца (у портфолио — по имени барбера и email владельца), тримится,
+пусто = без фильтра, > 100 — `400 admin.photos.search`; `pageSize` 1..100 по умолчанию 20 —
+`400 admin.photos.pageSize`; курсор непрозрачный, кодирует `(SubmittedAt, Id)` и принадлежит
+своей вкладке, битый — `400 admin.photos.cursor`. Репозиторий читает `pageSize + 1` строку,
+чтобы понять, есть ли следующая страница, без `COUNT`; `nextCursor` строится по последней
+строке урезанной страницы. Оба чтения закрыты `AdminOnly` **и** `EnsureAdmin` в обработчике:
+ответ содержит email владельцев, и прямой вызов команды не должен обходить политику.
+`GET api/admin/summary` получил `photos: { pendingAvatarsCount, pendingPortfolioCount }` —
+те же предикаты (`WherePendingAvatar`/`WherePendingPortfolioPhoto`), поэтому число в сводке
+ровно совпадает с размером вкладки; общего «всего фото» нет, вкладки разные.
+
+**Решения и 409.** Четыре маршрута (§16): `POST api/admin/users/{userId:guid}/avatar/approval`
+и `/rejection` на `AdminUsersController`; `POST api/barber-profiles/{barberProfileId:guid}/photos/{photoId:guid}/approval` и `/rejection` на
+`PortfolioPhotosController`. Все — `AdminOnly` + глобальный antiforgery (`X-CSRF-TOKEN`),
+обработчик дополнительно вызывает `EnsureAdmin`, ответ `204` без тела. Одна транзакция
+`IUnitOfWork` на решение: загрузить агрегат, доменный `Approve`/`Reject` с `adminId` и
+`TimeProvider.GetUtcNow()`, сохранить. Домен принимает только `Pending`: повторное решение —
+`409 user.avatarModeration.invalidStatus` / `portfolioPhoto.moderation.invalidStatus`, а не
+`204`; у аватара без URL — `409 user.avatarModeration.noAvatar`; фото не из этого профиля —
+`404 portfolioPhoto.moderation.notFound`, неизвестный профиль — `404 barberProfile.notFound`,
+неизвестный пользователь — `404 user.notFound`. Причина отказа — `RejectPhotoRequest { reason }`:
+обязательна, тримится, 1..500, коды `…reasonRequired` / `…reasonTooLong` с
+`invalidField = "reason"`; одобрение очищает прошлую причину. Логи — только `userId`/`photoId`
+и решение: URL, путь, причина и тела файлов не логируются.
+
+**Видимость и маски.** Публичные поверхности: `GET api/barbers` и `GET api/barbers/{id}`
+(аватар и фотографии), `GET api/barber/bookings`/`GET api/bookings` (аватар клиента),
+`GET api/reviews` не менялся. Аватар маскируется в SQL (`CASE WHEN is_avatar_blocked OR
+avatar_moderation_status <> 2 THEN NULL ELSE avatar_url END`), поэтому `Pending`/`Rejected`
+не появляются в поиске и карточке, но сама карточка/строка остаётся. Фотографии публичной
+карточки фильтруются `Approved && IsPublished && !IsBlocked`; собственная и админская
+карточки отдают все строки с реальными `moderationStatus` и `rejectionReason`, а публичный
+`BarberProfilePhotoResponse` всегда `Approved`/`null` (§7.3). `users/me` — особый случай: он
+отдаёт **сырой** `avatarUrl` (иначе сохранение имени стёрло бы файл) и добавляет
+`avatarModerationStatus`/`avatarRejectionReason`; `AvatarUploadResponse` — `{ avatarUrl, moderationStatus: "Pending" }`. Админские списки и карточки пользователей/барберов получили
+`avatarModerationStatus` (в деталях ещё `avatarRejectionReason`) и остаются сырыми: админ
+должен видеть кадр, который проверяет или который скрыт. `AvatarUrl` при `Rejected` не
+обнуляется — владелец должен понимать, что именно отклонили.
+
+**Медиа.** `GET api/media/avatars/{userId}/{fileName}` и
+`GET api/media/portfolio/{profileId}/{fileName}` по-прежнему проверяют видимость по БД на
+каждый запрос и точное совпадение сохранённого URL с запрошенным (Ordinal), поэтому замена
+или удаление сразу делает старую ссылку `404`. Публичный кадр (оба условия допуска) отдаётся
+с `Cache-Control: public, max-age=86400`; непубличный — владельцу (аватар: `Pending`/
+`Rejected`, портфолио: любой статус) или администратору — с `private, no-store`; всем
+остальным — единый `404` (`avatarMedia.notFound` / `portfolioMedia.notFound`, без `403`/
+`410`). Скрытый администратором аватар не отдаётся даже владельцу — маска сильнее владения.
+Одобрение не меняет URL, поэтому кэш «до одобрения» не появляется: непубличный ответ
+помечен `no-store`.
+
+**Ограничения (осознанные).** 1) Нет серверных миниатюр, `srcset`, WebP/AVIF, кропа,
+S3/MinIO и общего volume — долги #31/#32; 24-часовой кэш публичного кадра остаётся, смена
+файла лечится новым `mediaId`, а не `no-store` для всех. 2) Нет фильтра `avatar=blocked` и
+истории решений в очереди: только `Pending`; «скрытые» по-прежнему ищутся в общих списках.
+3) `audit_log` не расширяется: `PhotoModerationStatus`/`RejectionReason` не входят в
+allowlist `User`/`BarberProfile`, решение фиксируется только полями
+`reviewed_by_user_id`/`reviewed_at`/`rejection_reason` сущности. Это остаётся долгом: объём
+и приватность журнала решений — отдельный срез. 4) Писем и push об одобрении/отказе нет:
+владелец узнаёт статус при следующем чтении кабинета. 5) Массовых действий и автоодобрения
+для админов нет. 6) Премодерация не меняет `POST/DELETE .../avatar/block` и
+`.../photos/{id}/block`, не превращает `Rejected` в `Blocked` и не трогает
+`emailVerification.*`, `passwordReset.*`, `change-password`, `user.update.*`.
+
+**Проверка.** `dotnet build` — 0 warnings / 0 errors; domain **588**, application **873**,
+infrastructure **267**, integration **269** — всего **1997**, все зелёные на локальной
+PostgreSQL; `has-pending-model-changes` чисто; миграция проверена накатом/откатом/повторным
+накатом (§5.3, §8). Тесты: domain — состояния и причины отказа, границы, no-op того же URL;
+application — очереди, курсоры, решения, 409, причина, сводка; infrastructure — EF-модель,
+индексы/check/FK, SQL очередей через `ToQueryString`; integration — полный сценарий на
+реальной PostgreSQL, включая media-матрицу и видимость. E2E-сцены — frontend §15.
 
 ---
 
