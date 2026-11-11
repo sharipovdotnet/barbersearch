@@ -89,6 +89,9 @@ public class AdminBarberQueryTests
         }
 
         Assert.Contains("count", sql, StringComparison.OrdinalIgnoreCase);
+        // Чек-лист считает только видимые фотографии, как публичная карточка.
+        Assert.Contains("is_published", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_blocked", sql, StringComparison.OrdinalIgnoreCase);
         // Дни расписания схлопываются: пять строк по одному дню — это один день недели.
         Assert.Contains("DISTINCT", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_email_verified", sql, StringComparison.OrdinalIgnoreCase);

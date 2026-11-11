@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,7 @@ import { BarbersScreen } from '@/components/admin/barbers-screen'
 import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminBarber, AdminBarberDetail } from '@/lib/admin-barbers'
 import { parseAdminPath } from '@/lib/admin-path'
+import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 import { useLocation } from '@/lib/router'
 import { server } from '@/test/msw/server'
 
@@ -46,6 +47,17 @@ const PENDING: AdminBarber = {
 /** В фикстурах нет скрытых профилей: очередь «Скрытые» пуста, как на скриншоте. */
 const ROWS = [VERIFIED, PENDING]
 
+/** Портфолио админской карточки: один опубликованный кадр, который можно скрыть. */
+const PHOTO: PortfolioPhoto = {
+  id: '9e200000-0000-4000-8000-000000000001',
+  url: '/api/media/portfolio/9e800000-0000-4000-8000-000000000001/9e200000000040008000000000000001.jpg',
+  thumbnailUrl: null,
+  description: 'Стрижка',
+  sortOrder: 0,
+  isPublished: true,
+  isBlocked: false,
+}
+
 function toDetail(row: AdminBarber): AdminBarberDetail {
   return {
     ...row,
@@ -62,6 +74,7 @@ function toDetail(row: AdminBarber): AdminBarberDetail {
       scheduleDaysCount: 0,
       photosCount: 0,
     },
+    photos: [],
   }
 }
 
@@ -237,6 +250,68 @@ describe('BarbersScreen', () => {
     expect(
       screen.queryByRole('region', { name: VERIFIED.displayName })
     ).not.toBeInTheDocument()
+  })
+
+  it('блокировка фото: alertdialog, вызов и бейдж «Скрыто администратором»', async () => {
+    const user = userEvent.setup()
+    let isBlocked = false
+    let blockCalls = 0
+
+    server.use(
+      http.get('/api/admin/barbers/:id', ({ params }) => {
+        const row = ROWS.find((item) => item.id === params.id)
+
+        return row
+          ? HttpResponse.json({
+              ...toDetail(row),
+              photos: [{ ...PHOTO, isBlocked }],
+            })
+          : new HttpResponse(null, { status: 404 })
+      }),
+      http.post(
+        `/api/barber-profiles/${VERIFIED.id}/photos/${PHOTO.id}/block`,
+        () => {
+          blockCalls += 1
+          isBlocked = true
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      )
+    )
+
+    openAt('/admin/barbers?status=all')
+    render(
+      <StrictMode>
+        <AdminBarbersRoute />
+      </StrictMode>
+    )
+
+    expect(await screen.findByText('Опубликовано')).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Скрыть: Стрижка' })
+    )
+
+    const dialog = screen.getByRole('alertdialog')
+
+    expect(
+      within(dialog).getByText(
+        'Фото исчезнет с публичной карточки. Барбер не сможет вернуть его сам.'
+      )
+    ).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Скрыть' }))
+
+    expect(await screen.findByText('Скрыто администратором')).toBeInTheDocument()
+    expect(blockCalls).toBe(1)
+    expect(
+      screen.getByRole('button', { name: 'Разблокировать: Стрижка' })
+    ).toBeInTheDocument()
+
+    const announcement = screen.getByText(
+      'Фото скрыто: его больше нет на публичной карточке.'
+    )
+    expect(announcement.closest('[role="status"]')).not.toBeNull()
   })
 
   it('через период опроса перечитывает очередь и карточку', async () => {

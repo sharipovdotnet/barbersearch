@@ -599,6 +599,14 @@ WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 DELETE FROM barber_specializations
 WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
 
+-- Портфолио #84: мутирующий спек загружает настоящий PNG, а удаление фотографии
+-- необратимо. Строки удаляются до вставки фикстур, чтобы повторный прогон
+-- начинался с пустой секции «Фотографии», даже если предыдущий упал. Сами файлы
+-- лежат вне PostgreSQL (`Storage:RootPath`), на прогон не влияют и в коммит не
+-- попадают (README, «Portfolio photos»).
+DELETE FROM portfolio_photos
+WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000015';
+
 INSERT INTO barber_profiles
     (id, user_id, display_name, grade, bio, languages, years_of_experience,
      certificates_and_training, rating, reviews_count, achievements,

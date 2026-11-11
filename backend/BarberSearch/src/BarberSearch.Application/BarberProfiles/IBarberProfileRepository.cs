@@ -259,11 +259,14 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Карточка активного и подтверждённого барбера: профиль, услуги, салоны и специализации.
+    /// Карточка активного и подтверждённого барбера: профиль, услуги, салоны, специализации
+    /// и видимые фотографии портфолио.
     /// </summary>
     /// <remarks>
     /// Читается без отслеживания. Если профиля нет, он неактивен или не подтверждён —
-    /// <c>Error.NotFound</c>; доменный граф наружу не отдаётся.
+    /// <c>Error.NotFound</c>; доменный граф наружу не отдаётся. В <c>Photos</c> попадают
+    /// только <c>IsPublished &amp;&amp; !IsBlocked</c>, порядок — <c>SortOrder</c>, затем
+    /// <c>CreatedAt</c>.
     /// </remarks>
     /// <param name="id">Идентификатор профиля барбера.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
@@ -279,8 +282,9 @@ public interface IBarberProfileRepository
     /// профиль и скрывает выключенные услуги. Кабинету нужно обратное: барбер заполняет карточку
     /// до верификации и должен видеть скрытые строки прайса, чтобы вернуть их в работу.
     /// Поэтому фильтра <c>IsActive &amp;&amp; IsVerified</c> нет, а <c>LoadServicesAsync</c>
-    /// вызывается с <c>includeInactive: true</c>. Владение проверяет обработчик; отсутствие
-    /// профиля — <c>Error.NotFound</c>.
+    /// вызывается с <c>includeInactive: true</c>. Фотографии отдаются все, включая скрытые
+    /// владельцем и заблокированные администратором. Владение проверяет обработчик;
+    /// отсутствие профиля — <c>Error.NotFound</c>.
     /// </remarks>
     /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
@@ -370,6 +374,25 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Фотография портфолио по паре (профиль, URL) — данные для проверки права на раздачу.
+    /// Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Один join фотографии с профилем: раздача файла обязана проверять видимость по БД
+    /// на каждый запрос, иначе скрытый или заблокированный кадр остался бы доступен по
+    /// известному URL. <c>null</c> означает, что такой строки нет; индекса сверх
+    /// <c>ix_portfolio_photos_barber_profile_id_sort_order</c> не нужно — на профиль
+    /// максимум <c>Constants.MAX_PHOTOS_COUNT</c> строк (см. backend/AGENT.md §15.2).
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
+    /// <param name="url">URL фотографии (относительный media-URL или абсолютная ссылка).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<PortfolioPhotoAccess?> GetPortfolioPhotoAccessAsync(
+        Guid barberProfileId,
+        string url,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Существует ли профиль с таким идентификатором.
     /// </summary>
     Task<Result<bool, Failure>> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
@@ -436,7 +459,9 @@ public interface IBarberProfileRepository
     /// <remarks>
     /// Публичное чтение <c>GetCardByIdAsync</c> отдаёт только активные и подтверждённые
     /// профили; админскому экрану нужны и остальные. Счётчики готовности считаются
-    /// подзапросами, коллекции агрегата не загружаются.
+    /// подзапросами, а фотографии читаются вторым запросом — <b>все</b>, включая скрытые
+    /// и заблокированные, чтобы администратор видел, что именно скрыто. Коллекции
+    /// профиля через <c>Include</c> не загружаются.
     /// </remarks>
     /// <param name="id">Идентификатор профиля барбера.</param>
     /// <param name="cancellationToken">Токен отмены.</param>

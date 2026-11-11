@@ -34,6 +34,7 @@ const PROFILE: BarberProfile = {
   services: [],
   salons: [],
   specializations: [],
+  photos: [],
 }
 
 const SALON = {

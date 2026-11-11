@@ -82,6 +82,8 @@ export const testBarberProfile: BarberProfile = {
       description: null,
     },
   ],
+  // Пустое портфолио: тесты с фотографиями собирают ответ через `server.use`.
+  photos: [],
 }
 
 /** Строка справочника услуг: `defaultDurationMinutes` — стартовое значение диалога. */

@@ -14,6 +14,7 @@ using BarberSearch.Infrastructure.Postgresql;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
+using BarberSearch.Web.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -84,16 +85,30 @@ public sealed class TestApp : IAsyncDisposable
 
     private readonly WebApplicationFactory<Program> _factory;
 
-    private TestApp(WebApplicationFactory<Program> factory, HttpClient client)
+    private TestApp(
+        WebApplicationFactory<Program> factory,
+        HttpClient client,
+        string storageRootPath)
     {
         _factory = factory;
         Client = client;
+        StorageRootPath = storageRootPath;
     }
 
     /// <summary>
     /// HTTP-клиент хоста. Редиректы не выполняются: статус проверяется как есть.
     /// </summary>
     public HttpClient Client { get; }
+
+    /// <summary>
+    /// Уникальный временный корень хранилища фотографий этого тестового хоста.
+    /// </summary>
+    /// <remarks>
+    /// Абсолютный путь передаётся переменной <c>Storage__RootPath</c> до старта хоста, поэтому
+    /// тесты никогда не пишут в <c>App_Data</c> репозитория. Каталог удаляется в
+    /// <see cref="DisposeAsync"/>; тест может проверить, что файл лёг именно здесь.
+    /// </remarks>
+    public string StorageRootPath { get; }
 
     /// <summary>
     /// Сервисы хоста — для сидирования через <c>ApplicationDbContext</c>.
@@ -161,8 +176,18 @@ public sealed class TestApp : IAsyncDisposable
 
         var previousEnvironment = new Dictionary<string, string?>(StringComparer.Ordinal);
 
+        // Хранилище фотографий изолировано на каждый хост: уникальный абсолютный каталог
+        // в %TEMP% вместо относительного App_Data/photos внутри дерева репозитория.
+        var storageRootPath = Path.Combine(
+            Path.GetTempPath(),
+            "barbersearch-integration-photos",
+            Guid.NewGuid().ToString("N"));
+
         // Сначала значения по умолчанию для outbox, затем конфигурация теста: она важнее.
-        var effectiveConfiguration = new Dictionary<string, string?>(EmailOutboxDefaults, StringComparer.Ordinal);
+        var effectiveConfiguration = new Dictionary<string, string?>(EmailOutboxDefaults, StringComparer.Ordinal)
+        {
+            ["Storage__RootPath"] = storageRootPath
+        };
 
         if (configuration is not null)
         {
@@ -218,7 +243,11 @@ public sealed class TestApp : IAsyncDisposable
                 .GetRequiredService<PasswordResetTokenCleanupService>();
             await passwordResetCleanup.InitialCleanupCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
-            return new TestApp(factory, client);
+            // Старт создал каталог хранилища — проверяем, что это временный путь, а не
+            // App_Data репозитория: иначе прогон оставлял бы файлы в рабочем дереве.
+            AssertStorageIsIsolated(factory, storageRootPath);
+
+            return new TestApp(factory, client, storageRootPath);
         }
         finally
         {
@@ -290,6 +319,43 @@ public sealed class TestApp : IAsyncDisposable
             });
         }
     }
+
+    /// <summary>
+    /// Проверяет изоляцию хранилища фотографий: каталог создан на старте, а путь не совпадает
+    /// с <c>App_Data/photos</c> внутри content root репозитория.
+    /// </summary>
+    /// <param name="factory">Уже запущенный тестовый хост.</param>
+    /// <param name="storageRootPath">Абсолютный путь, переданный в <c>Storage__RootPath</c>.</param>
+    private static void AssertStorageIsIsolated(
+        WebApplicationFactory<Program> factory,
+        string storageRootPath)
+    {
+        var environment = factory.Services.GetRequiredService<IWebHostEnvironment>();
+
+        var defaultStorageRoot = Path.GetFullPath(
+            Path.Combine(environment.ContentRootPath, PhotoStorageOptions.DEFAULT_ROOT_PATH));
+
+        if (PathsEqual(defaultStorageRoot, storageRootPath))
+        {
+            throw new InvalidOperationException(
+                "Integration tests must not use the repository App_Data directory "
+                + "for photo storage.");
+        }
+
+        // PhotoStorageOptions.FromConfiguration создаёт каталог при старте: отсутствие
+        // каталога означало бы, что настройка не дошла до хоста и загрузка упадёт позже.
+        if (!Directory.Exists(storageRootPath))
+        {
+            throw new InvalidOperationException(
+                "The photo storage directory was not created at host startup.");
+        }
+    }
+
+    private static bool PathsEqual(string left, string right)
+        => string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Создаёт пользователя через доменную фабрику и сохраняет его.
@@ -465,5 +531,30 @@ public sealed class TestApp : IAsyncDisposable
     {
         Client.Dispose();
         await _factory.DisposeAsync();
+
+        // Временный корень хранилища удаляется после остановки хоста: открытых файлов
+        // к этому моменту нет, а файлы-сироты не должны копиться между прогонами.
+        TryDeleteStorageDirectory();
+    }
+
+    /// <summary>
+    /// Удаляет временный каталог хранилища; ошибка файловой системы не валит тест.
+    /// </summary>
+    private void TryDeleteStorageDirectory()
+    {
+        try
+        {
+            if (Directory.Exists(StorageRootPath))
+            {
+                Directory.Delete(StorageRootPath, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // Временный каталог — не предмет проверки.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 }

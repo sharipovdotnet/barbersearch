@@ -47,6 +47,42 @@ public static class CurrentUserExtensions
     }
 
     /// <summary>
+    /// Требует администратора: анонимный запрос получает <c>401</c>, пользователь без роли —
+    /// <c>403 auth.forbidden</c>.
+    /// </summary>
+    /// <remarks>
+    /// Используется действиями, которые доступны только администратору и меняют чужой ресурс
+    /// (блокировка фотографии портфолио). Проверка роли живёт рядом с обработчиком, потому что
+    /// политика на эндпоинте — не единственный вход: команда должна отказывать и вызванная
+    /// напрямую. Сначала аутентификация, потом роль: администратор без claim'а <c>sub</c> —
+    /// всё равно аноним.
+    /// </remarks>
+    /// <param name="currentUser">Текущий пользователь запроса.</param>
+    /// <returns>
+    /// Успех для администратора; <c>Failure</c> с <see cref="ErrorType.UNAUTHORIZED"/> для
+    /// анонимного запроса; иначе <c>Failure</c> с <see cref="ErrorType.FORBIDDEN"/>.
+    /// </returns>
+    public static UnitResult<Failure> EnsureAdmin(this ICurrentUser currentUser)
+    {
+        ArgumentNullException.ThrowIfNull(currentUser);
+
+        var userId = currentUser.RequireUserId();
+        if (userId.IsFailure)
+        {
+            return userId.Error;
+        }
+
+        if (currentUser.IsAdmin)
+        {
+            return UnitResult.Success<Failure>();
+        }
+
+        return new Failure(Error.Forbidden(
+            ApiErrorCodes.Auth.Forbidden,
+            FORBIDDEN_MESSAGE));
+    }
+
+    /// <summary>
     /// Может ли текущий пользователь управлять ресурсом, принадлежащим <paramref name="ownerId"/>.
     /// Администратор может всё, владелец — свой ресурс.
     /// </summary>

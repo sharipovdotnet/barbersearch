@@ -31,6 +31,11 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// <param name="Salons">Активные салоны барбера вместе с расписанием пары (барбер, салон).</param>
 /// <param name="Specializations">Специализации барбера из справочника.</param>
 /// <param name="AdditionalServices">Дополнительные услуги, которые барбер заполнил сам.</param>
+/// <param name="Photos">
+/// Фотографии портфолио. Публичный ответ содержит только видимые (<c>IsPublished &amp;&amp;
+/// !IsBlocked</c>) и упорядочен по <c>SortOrder</c>, затем по <c>CreatedAt</c>; собственный
+/// ответ кабинета — все фотографии с обоими флагами.
+/// </param>
 public record BarberProfileResponse(
     Guid Id,
     Guid UserId,
@@ -52,4 +57,5 @@ public record BarberProfileResponse(
     IReadOnlyList<BarberProfileServiceResponse> Services,
     IReadOnlyList<BarberProfileSalonResponse> Salons,
     IReadOnlyList<BarberProfileSpecializationResponse> Specializations,
-    IReadOnlyList<string> AdditionalServices);
+    IReadOnlyList<string> AdditionalServices,
+    IReadOnlyList<BarberProfilePhotoResponse> Photos);

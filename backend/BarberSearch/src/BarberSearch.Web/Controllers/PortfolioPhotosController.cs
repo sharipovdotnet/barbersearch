@@ -1,9 +1,13 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.PortfolioPhotos.BlockPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.PublishPortfolioPhoto;
+using BarberSearch.Application.PortfolioPhotos.UnblockPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UnpublishPortfolioPhoto;
 using BarberSearch.Application.PortfolioPhotos.UpdatePortfolioPhotoDescription;
 using BarberSearch.Contracts.PortfolioPhotos.UpdatePortfolioPhotoDescription;
+using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BarberSearch.Web.Controllers;
@@ -60,5 +64,55 @@ public class PortfolioPhotosController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new UpdatePortfolioPhotoDescriptionCommand(barberProfileId, photoId, request.Description),
+            cancellationToken));
+
+    /// <summary>
+    /// Блокирует фотографию портфолио: кадр исчезает из публичной карточки и перестаёт
+    /// раздаваться по URL. Только администратор.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Блокировка — отдельное состояние от <c>IsPublished</c>: владелец снимает и возвращает
+    /// публикацию сам (<c>POST/DELETE .../publication</c>), а снять административную блокировку
+    /// не может. Поэтому действие закрыто политикой <c>AdminOnly</c>, а обработчик независимо
+    /// от неё проверяет роль через <c>EnsureAdmin</c>: команду можно вызвать и напрямую.
+    /// </para>
+    /// <para>
+    /// Ответ <c>204</c>, повторная блокировка идемпотентна. Фотографии нет в портфолио
+    /// профиля — <c>404 portfolioPhoto.block.notFound</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
+    /// <param name="photoId">Блокируемая фотография.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [HttpPost("{photoId:guid}/block")]
+    public async Task<ActionResult> Block(
+        Guid barberProfileId,
+        Guid photoId,
+        [FromServices] ICommandHandler<BlockPortfolioPhotoCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new BlockPortfolioPhotoCommand(barberProfileId, photoId),
+            cancellationToken));
+
+    /// <summary>
+    /// Снимает административную блокировку фотографии. Только администратор; повторный вызов
+    /// идемпотентен.
+    /// </summary>
+    /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
+    /// <param name="photoId">Разблокируемая фотография.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [HttpDelete("{photoId:guid}/block")]
+    public async Task<ActionResult> Unblock(
+        Guid barberProfileId,
+        Guid photoId,
+        [FromServices] ICommandHandler<UnblockPortfolioPhotoCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new UnblockPortfolioPhotoCommand(barberProfileId, photoId),
             cancellationToken));
 }

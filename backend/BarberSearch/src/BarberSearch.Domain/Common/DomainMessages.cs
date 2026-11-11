@@ -56,6 +56,28 @@ public static class DomainMessages
         "Working schedule end time must be after its start time.";
 
     /// <summary>
+    /// URL загруженной фотографии не соответствует шаблону медиа-раздачи этого профиля.
+    /// </summary>
+    public const string UPLOADED_PHOTO_URL_INVALID =
+        "The photo URL must match the portfolio media URL of this barber profile.";
+
+    /// <summary>
+    /// Список порядка фотографий не совпадает с портфолио профиля.
+    /// </summary>
+    public const string REORDER_PHOTOS_INVALID =
+        "The photo list must contain every photo of the barber profile exactly once.";
+
+    /// <summary>
+    /// В портфолио уже <see cref="Constants.MAX_PHOTOS_COUNT"/> фотографий.
+    /// </summary>
+    /// <remarks>
+    /// <c>static readonly</c> по той же причине, что и <see cref="PHOTO_DESCRIPTION_TOO_LONG"/>:
+    /// интерполяция целочисленной константы не является константным выражением.
+    /// </remarks>
+    public static readonly string PHOTO_LIMIT_REACHED =
+        $"The number of photographs in the portfolio should not exceed {Constants.MAX_PHOTOS_COUNT} pieces.";
+
+    /// <summary>
     /// Подпись к фотографии длиннее <see cref="Constants.MAX_TEXT_LENGTH"/>.
     /// </summary>
     /// <remarks>

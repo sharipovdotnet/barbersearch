@@ -1,21 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isAdminBarber,
   isAdminSalonRow,
   isAdminUser,
   isBarberBooking,
   isBarberBookingOptions,
   isBarberNotification,
   isBarberNotificationPage,
+  isBarberProfile,
   isBarberSalonSummary,
   isBarberSearchItem,
   isBooking,
+  isCreatedResource,
   isHairServiceOption,
   isNotificationSettings,
+  isPortfolioPhoto,
   isSalonDirectoryItem,
   isTelegramLink,
   isUnreadNotificationsPayload,
 } from '@/lib/response-guards'
+import { testBarberProfile } from '@/test/msw/handlers'
 
 /**
  * Строгий guard админской карточки: новые nullable-поля согласия (#42) принимаются
@@ -446,5 +451,150 @@ describe('isHairServiceOption, длительность по умолчанию'
     expect(isHairServiceOption({ ...SERVICE, defaultDurationMinutes: '45' })).toBe(
       false
     )
+  })
+})
+
+const PORTFOLIO_PHOTO = {
+  id: '9e200000-0000-4000-8000-000000000001',
+  url: '/api/media/portfolio/9e100000-0000-4000-8000-000000000015/abcdef0123456789abcdef0123456789.jpg',
+  thumbnailUrl: null,
+  description: 'Фейд',
+  sortOrder: 0,
+  isPublished: true,
+  isBlocked: false,
+}
+
+/**
+ * Фотография портфолио: все поля читает и галерея, и кабинет, и админка.
+ *
+ * `url` — непустая строка (относительный `/api/media/...` или абсолютный внешний
+ * URL), подпись и миниатюра — `null` или строка, флаги — boolean.
+ */
+describe('isPortfolioPhoto', () => {
+  it('принимает фотографию с подписью и без, лишние поля игнорирует', () => {
+    expect(isPortfolioPhoto(PORTFOLIO_PHOTO)).toBe(true)
+    expect(
+      isPortfolioPhoto({
+        ...PORTFOLIO_PHOTO,
+        description: null,
+        thumbnailUrl: 'https://example.test/thumb.jpg',
+        extra: 'поле расширения',
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает пустой url и неверные nullability', () => {
+    expect(isPortfolioPhoto({ ...PORTFOLIO_PHOTO, url: '' })).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, thumbnailUrl: undefined })
+    ).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, description: 42 })
+    ).toBe(false)
+  })
+
+  it('отвергает нечисловой sortOrder и строковые флаги', () => {
+    expect(isPortfolioPhoto({ ...PORTFOLIO_PHOTO, sortOrder: '0' })).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, isPublished: 'true' })
+    ).toBe(false)
+    expect(
+      isPortfolioPhoto({ ...PORTFOLIO_PHOTO, isBlocked: 1 })
+    ).toBe(false)
+  })
+
+  it('отвергает отсутствующие и нестроковые обязательные поля', () => {
+    const { isBlocked, ...withoutBlocked } = PORTFOLIO_PHOTO
+    const { id, ...withoutId } = PORTFOLIO_PHOTO
+
+    expect(isBlocked).toBe(false)
+    expect(id).toBe(PORTFOLIO_PHOTO.id)
+    expect(isPortfolioPhoto(withoutBlocked)).toBe(false)
+    expect(isPortfolioPhoto(withoutId)).toBe(false)
+    expect(isPortfolioPhoto(null)).toBe(false)
+    expect(isPortfolioPhoto([])).toBe(false)
+  })
+})
+
+const ADMIN_BARBER_DETAIL = {
+  id: '9e800000-0000-4000-8000-000000000001',
+  userId: '9e000000-0000-4000-8000-000000000001',
+  displayName: 'Артём Соколов',
+  email: 'artem@barbersearch.test',
+  phoneNumber: null,
+  avatarUrl: null,
+  grade: 'ArtDirector',
+  bio: null,
+  yearsOfExperience: 5,
+  rating: null,
+  reviewsCount: 0,
+  isActive: true,
+  isVerified: false,
+  readiness: {
+    isProfileFilled: false,
+    isEmailVerified: true,
+    servicesCount: 0,
+    salonsCount: 0,
+    scheduleDaysCount: 0,
+    photosCount: 0,
+  },
+  photos: [],
+  createdAt: '2026-09-28T15:12:00+00:00',
+  updatedAt: '2026-11-02T10:53:00+00:00',
+}
+
+/** `photos` — обязательное последнее поле обоих контрактов: без него карточка битая. */
+describe('photos в карточке барбера и админской карточке', () => {
+  it('isBarberProfile принимает пустое и заполненное портфолио', () => {
+    expect(isBarberProfile(testBarberProfile)).toBe(true)
+    expect(
+      isBarberProfile({ ...testBarberProfile, photos: [PORTFOLIO_PHOTO] })
+    ).toBe(true)
+  })
+
+  it('isBarberProfile отвергает карточку без photos или с битой фотографией', () => {
+    const { photos, ...withoutPhotos } = testBarberProfile
+
+    expect(photos).toStrictEqual([])
+    expect(isBarberProfile(withoutPhotos)).toBe(false)
+    expect(
+      isBarberProfile({ ...testBarberProfile, photos: [PORTFOLIO_PHOTO, null] })
+    ).toBe(false)
+    expect(isBarberProfile({ ...testBarberProfile, photos: 'битое' })).toBe(false)
+  })
+
+  it('isAdminBarber принимает photos и отвергает карточку без них', () => {
+    expect(isAdminBarber(ADMIN_BARBER_DETAIL)).toBe(true)
+    expect(
+      isAdminBarber({
+        ...ADMIN_BARBER_DETAIL,
+        photos: [{ ...PORTFOLIO_PHOTO, isBlocked: true, isPublished: true }],
+      })
+    ).toBe(true)
+
+    const { photos, ...withoutPhotos } = ADMIN_BARBER_DETAIL
+
+    expect(photos).toStrictEqual([])
+    expect(isAdminBarber(withoutPhotos)).toBe(false)
+    expect(
+      isAdminBarber({
+        ...ADMIN_BARBER_DETAIL,
+        photos: [{ ...PORTFOLIO_PHOTO, url: '' }],
+      })
+    ).toBe(false)
+  })
+})
+
+describe('isCreatedResource', () => {
+  it('принимает непустой id и лишние поля', () => {
+    expect(isCreatedResource({ id: 'photo-1' })).toBe(true)
+    expect(isCreatedResource({ id: 'photo-1', url: '/x' })).toBe(true)
+  })
+
+  it('отвергает пустой id, не-объект и массив', () => {
+    expect(isCreatedResource({ id: '' })).toBe(false)
+    expect(isCreatedResource({})).toBe(false)
+    expect(isCreatedResource(null)).toBe(false)
+    expect(isCreatedResource([{ id: 'photo-1' }])).toBe(false)
   })
 })

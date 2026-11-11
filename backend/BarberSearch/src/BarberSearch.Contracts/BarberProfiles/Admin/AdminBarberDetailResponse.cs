@@ -1,3 +1,4 @@
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Domain.BarberProfiles.Enums;
 
 namespace BarberSearch.Contracts.BarberProfiles.Admin;
@@ -25,6 +26,10 @@ namespace BarberSearch.Contracts.BarberProfiles.Admin;
 /// <param name="Readiness">Чек-лист готовности профиля.</param>
 /// <param name="CreatedAt">Когда профиль создан.</param>
 /// <param name="UpdatedAt">Когда профиль последний раз менялся.</param>
+/// <param name="Photos">
+/// Все фотографии портфолио, включая скрытые и заблокированные: администратор должен видеть,
+/// что именно скрыто. Форма элемента — публичная <see cref="BarberProfilePhotoResponse"/>.
+/// </param>
 public record AdminBarberDetailResponse(
     Guid Id,
     Guid UserId,
@@ -41,4 +46,5 @@ public record AdminBarberDetailResponse(
     bool IsVerified,
     AdminBarberReadinessResponse Readiness,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<BarberProfilePhotoResponse> Photos);

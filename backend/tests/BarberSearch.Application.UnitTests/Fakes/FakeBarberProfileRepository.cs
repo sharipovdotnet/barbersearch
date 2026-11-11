@@ -309,6 +309,28 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_profiles.ContainsKey(id));
 
+    /// <summary>
+    /// Данные фотографии по паре (профиль, URL). Фейк ищет строку в загруженном агрегате:
+    /// фильтры видимости проверяет вызывающий код, как и в настоящем репозитории.
+    /// </summary>
+    public Task<PortfolioPhotoAccess?> GetPortfolioPhotoAccessAsync(
+        Guid barberProfileId,
+        string url,
+        CancellationToken cancellationToken = default)
+    {
+        var access = _profiles.TryGetValue(barberProfileId, out var profile)
+            ? profile.PortfolioPhotos
+                .Where(photo => photo.Url == url)
+                .Select(photo => new PortfolioPhotoAccess(
+                    profile.UserId,
+                    photo.IsPublished,
+                    photo.IsBlocked))
+                .FirstOrDefault()
+            : null;
+
+        return Task.FromResult(access);
+    }
+
     public Task<Result<bool, Failure>> HasSalonAsync(
         Guid barberProfileId,
         Guid salonId,

@@ -480,3 +480,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Локальное хранилище фотографий портфолио (Storage:RootPath по умолчанию —
+# App_Data/photos относительно content root Web-проекта). Загруженные файлы не
+# коммитятся и бэкапятся отдельно от PostgreSQL.
+App_Data/
+

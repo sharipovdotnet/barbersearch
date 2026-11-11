@@ -419,14 +419,75 @@ public class BarberProfile : AggregateRoot
         {
             return new Failure(Error.Conflict(
                 "barberProfile.addPhoto.limit",
-                $"The number of photographs in the portfolio should not exceed {Constants.MAX_PHOTOS_COUNT} pieces."));
+                DomainMessages.PHOTO_LIMIT_REACHED));
         }
 
         _portfolioPhotos.Add(PortfolioPhoto.Create(
             Id,
             normalizedUrl!,
             normalizedThumbnailUrl,
-            description));
+            description,
+            NextSortOrder()));
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Добавляет фотографию, загруженную в хранилище проекта. Отличается от
+    /// <see cref="AddPhoto"/> источником URL: здесь допустим только относительный
+    /// media-URL этого профиля, а не внешняя http(s)-ссылка.
+    /// </summary>
+    /// <remarks>
+    /// Загруженная фотография публикуется сразу (постмодерация): профиль барбера уже
+    /// подтверждён, а администратор может снять кадр блокировкой. Порядок — следующий
+    /// за максимальным, как и у <see cref="AddPhoto"/>.
+    /// </remarks>
+    /// <param name="url">Относительный URL вида <c>/api/media/portfolio/{profileId:D}/…</c>.</param>
+    /// <param name="description">Подпись; пробелы обрезаются, пустая становится <c>null</c>.</param>
+    public UnitResult<Failure> AddUploadedPhoto(string url, string? description)
+    {
+        var errors = DomainErrors.Collect();
+
+        if (!PortfolioMediaUrl.TryParse(url, Id, out _, out _))
+        {
+            errors.Add(Error.Validation(
+                "barberProfile.uploadPhoto.url",
+                DomainMessages.UPLOADED_PHOTO_URL_INVALID,
+                nameof(url)));
+        }
+
+        var normalizedDescription = string.IsNullOrWhiteSpace(description)
+            ? null
+            : description.Trim();
+
+        if (normalizedDescription is not null
+            && normalizedDescription.Length > Constants.MAX_TEXT_LENGTH)
+        {
+            errors.Add(Error.Validation(
+                "barberProfile.addPhoto.description",
+                DomainMessages.PHOTO_DESCRIPTION_TOO_LONG,
+                nameof(description)));
+        }
+
+        if (errors.Count != 0)
+        {
+            return new Failure(errors);
+        }
+
+        if (_portfolioPhotos.Count >= Constants.MAX_PHOTOS_COUNT)
+        {
+            return new Failure(Error.Conflict(
+                "barberProfile.addPhoto.limit",
+                DomainMessages.PHOTO_LIMIT_REACHED));
+        }
+
+        _portfolioPhotos.Add(PortfolioPhoto.Create(
+            Id,
+            url,
+            null,
+            normalizedDescription,
+            NextSortOrder()));
         MarkUpdated();
 
         return DomainErrors.Ok();
@@ -455,6 +516,39 @@ public class BarberProfile : AggregateRoot
         }
 
         photo.Reorder(sortOrder);
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Задаёт порядок всего портфолио одним вызовом: <paramref name="photoIds"/> — полный
+    /// список фотографий профиля без дублей, порядок элементов становится <c>SortOrder</c>.
+    /// </summary>
+    /// <remarks>
+    /// Bulk-операция вместо двух одиночных перестановок: частичный сбой пары запросов
+    /// оставил бы в портфолио дубли <c>SortOrder</c>. Любое расхождение с текущим
+    /// составом портфолио — <c>400 barberProfile.reorderPhotos.invalid</c>.
+    /// </remarks>
+    /// <param name="photoIds">Полный упорядоченный список идентификаторов фотографий.</param>
+    public UnitResult<Failure> ReorderPhotos(IReadOnlyList<Guid> photoIds)
+    {
+        if (!IsCompletePhotoOrder(photoIds))
+        {
+            return new Failure(Error.Validation(
+                "barberProfile.reorderPhotos.invalid",
+                DomainMessages.REORDER_PHOTOS_INVALID,
+                nameof(photoIds)));
+        }
+
+        for (var index = 0; index < photoIds.Count; index++)
+        {
+            var photoId = photoIds[index];
+            var photo = _portfolioPhotos.First(p => p.Id == photoId);
+
+            photo.Reorder(index);
+        }
+
         MarkUpdated();
 
         return DomainErrors.Ok();
@@ -769,6 +863,34 @@ public class BarberProfile : AggregateRoot
             timeOffId,
             "barberProfile.removeTimeOff.notFound",
             "The barber time off was not found.");
+
+    /// <summary>
+    /// Следующий порядковый номер фотографии: <c>0</c> для первой, иначе максимум + 1.
+    /// </summary>
+    /// <remarks>
+    /// Считается по максимуму, а не по количеству: строки, сохранённые со старым порядком
+    /// (нули у всех фотографий), не дают дублей, а новая фотография встаёт в конец.
+    /// </remarks>
+    private int NextSortOrder()
+        => _portfolioPhotos.Count == 0
+            ? 0
+            : _portfolioPhotos.Max(photo => photo.SortOrder) + 1;
+
+    /// <summary>
+    /// Проверяет, что список — это ровно все фотографии профиля, каждая один раз.
+    /// </summary>
+    private bool IsCompletePhotoOrder(IReadOnlyList<Guid>? photoIds)
+    {
+        if (photoIds is null || photoIds.Count != _portfolioPhotos.Count)
+        {
+            return false;
+        }
+
+        var distinctIds = new HashSet<Guid>(photoIds);
+
+        return distinctIds.Count == photoIds.Count
+               && _portfolioPhotos.All(photo => distinctIds.Contains(photo.Id));
+    }
 
     private static Result<(DisplayName, YearsOfExperience), Failure> ValidateInput(
         string displayName,

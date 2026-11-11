@@ -257,5 +257,6 @@ public class AdminBarberReadTests
                 ScheduleDaysCount: 5,
                 PhotosCount: 3),
             Start,
-            Start);
+            Start,
+            []);
 }

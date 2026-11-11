@@ -1,8 +1,10 @@
 using System.Globalization;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
+using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.PortfolioPhotos;
 using CSharpFunctionalExtensions;
 using Shared;
 using Xunit;
@@ -1143,5 +1145,260 @@ public class BarberProfileTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("barberProfile.removeTimeOff.notFound", result.Error.Errors[0].Code);
+    }
+
+    [Fact]
+    public void AddPhoto_AssignsSequentialSortOrder()
+    {
+        var profile = CreateProfile();
+
+        profile.AddPhoto("https://cdn/1.jpg");
+        profile.AddPhoto("https://cdn/2.jpg");
+        profile.AddPhoto("https://cdn/3.jpg");
+
+        Assert.Equal(
+            [0, 1, 2],
+            profile.PortfolioPhotos.Select(photo => photo.SortOrder));
+    }
+
+    [Fact]
+    public void AddPhoto_UsesMaximumSortOrderInsteadOfCount()
+    {
+        // Новая фотография обязана встать после максимума даже если старые строки
+        // переупорядочены вручную: счётчик количества дал бы дубль порядка.
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+        profile.AddPhoto("https://cdn/2.jpg");
+        var first = profile.PortfolioPhotos.First();
+
+        profile.ReorderPhoto(first.Id, 5);
+
+        var result = profile.AddPhoto("https://cdn/3.jpg");
+
+        Assert.True(result.IsSuccess);
+        var added = profile.PortfolioPhotos.Last();
+        Assert.Equal(6, added.SortOrder);
+    }
+
+    [Fact]
+    public void AddUploadedPhoto_AcceptsOwnMediaUrl()
+    {
+        var profile = CreateProfile();
+        var mediaId = Guid.CreateVersion7();
+        var url = PortfolioMediaUrl.Build(profile.Id, mediaId, "jpg");
+
+        var result = profile.AddUploadedPhoto(url, "  Fade  ");
+
+        Assert.True(result.IsSuccess);
+
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.Equal(profile.Id, photo.BarberProfileId);
+        Assert.Equal(url, photo.Url);
+        Assert.Null(photo.ThumbnailUrl);
+        Assert.Equal("Fade", photo.Description);
+        Assert.Equal(0, photo.SortOrder);
+        Assert.True(photo.IsPublished);
+        Assert.False(photo.IsBlocked);
+    }
+
+    [Fact]
+    public void AddUploadedPhoto_NormalizesBlankDescriptionToNull()
+    {
+        var profile = CreateProfile();
+
+        var result = profile.AddUploadedPhoto(
+            PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png"),
+            "   ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(Assert.Single(profile.PortfolioPhotos).Description);
+    }
+
+    [Fact]
+    public void AddUploadedPhoto_RejectsUrlThatIsNotOwnMediaUrl()
+    {
+        var profile = CreateProfile();
+        var media = Guid.CreateVersion7().ToString("N");
+        var otherProfileId = Guid.CreateVersion7();
+        var prefix = Constants.PORTFOLIO_MEDIA_PATH_PREFIX;
+
+        var rejected = new[]
+        {
+            PortfolioMediaUrl.Build(otherProfileId, Guid.CreateVersion7(), "jpg"),
+            $"{prefix}/../{media}.jpg",
+            $"{prefix}/{profile.Id:D}/%2e{media}.jpg",
+            $"{prefix}/{profile.Id:D}/{media}.jpg?size=large",
+            $"{prefix}/{profile.Id:D}/{media}.JPG",
+            $"{prefix}/{profile.Id:D}/{media}.gif",
+            "javascript:alert(1)",
+            $"https://example.com{PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "jpg")}",
+            $"{prefix}/{profile.Id:D}/{media}"
+        };
+
+        foreach (var url in rejected)
+        {
+            var result = profile.AddUploadedPhoto(url, null);
+
+            Assert.True(result.IsFailure);
+
+            var error = Assert.Single(result.Error.Errors);
+
+            Assert.Equal("barberProfile.uploadPhoto.url", error.Code);
+            Assert.Equal("url", error.InvalidField);
+        }
+
+        Assert.Empty(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddUploadedPhoto_WithDescriptionAtLimitSucceedsAndLongerOneFails()
+    {
+        var profile = CreateProfile();
+
+        var accepted = profile.AddUploadedPhoto(
+            PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "webp"),
+            new string('x', Constants.MAX_TEXT_LENGTH));
+        var rejected = profile.AddUploadedPhoto(
+            PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "webp"),
+            new string('x', Constants.MAX_TEXT_LENGTH + 1));
+
+        Assert.True(accepted.IsSuccess);
+        Assert.True(rejected.IsFailure);
+
+        var error = Assert.Single(rejected.Error.Errors);
+
+        Assert.Equal("barberProfile.addPhoto.description", error.Code);
+        Assert.Equal("description", error.InvalidField);
+        Assert.Single(profile.PortfolioPhotos);
+    }
+
+    [Fact]
+    public void AddUploadedPhoto_AboveLimit_Fails()
+    {
+        var profile = CreateProfile();
+
+        for (var index = 0; index < Constants.MAX_PHOTOS_COUNT; index++)
+        {
+            var added = profile.AddUploadedPhoto(
+                PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "jpg"),
+                null);
+
+            Assert.True(added.IsSuccess);
+        }
+
+        var result = profile.AddUploadedPhoto(
+            PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "jpg"),
+            null);
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+
+        Assert.Equal("barberProfile.addPhoto.limit", error.Code);
+        Assert.Equal(ErrorType.CONFLICT, error.Type);
+    }
+
+    [Fact]
+    public void ReorderPhotos_AssignsIndexesInGivenOrder()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+        profile.AddPhoto("https://cdn/2.jpg");
+        profile.AddPhoto("https://cdn/3.jpg");
+
+        var photos = profile.PortfolioPhotos.ToList();
+        var reversed = photos.Select(photo => photo.Id).Reverse().ToArray();
+
+        var result = profile.ReorderPhotos(reversed);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, photos.Single(photo => photo.Id == reversed[0]).SortOrder);
+        Assert.Equal(1, photos.Single(photo => photo.Id == reversed[1]).SortOrder);
+        Assert.Equal(2, photos.Single(photo => photo.Id == reversed[2]).SortOrder);
+    }
+
+    [Fact]
+    public void ReorderPhotos_WithDuplicates_Fails()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+        profile.AddPhoto("https://cdn/2.jpg");
+
+        var photos = profile.PortfolioPhotos.ToList();
+
+        var result = profile.ReorderPhotos([photos[0].Id, photos[0].Id]);
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+
+        Assert.Equal("barberProfile.reorderPhotos.invalid", error.Code);
+        Assert.Equal(ErrorType.VALIDATION, error.Type);
+    }
+
+    [Fact]
+    public void ReorderPhotos_WithIncompleteOrUnknownList_Fails()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+        profile.AddPhoto("https://cdn/2.jpg");
+
+        var photos = profile.PortfolioPhotos.ToList();
+
+        var incomplete = profile.ReorderPhotos([photos[0].Id]);
+        var unknown = profile.ReorderPhotos([photos[0].Id, Guid.CreateVersion7()]);
+        var withForeignExtra = profile.ReorderPhotos(
+            [photos[0].Id, photos[1].Id, Guid.CreateVersion7()]);
+        var nullList = profile.ReorderPhotos(null!);
+
+        Assert.True(incomplete.IsFailure);
+        Assert.Equal(
+            "barberProfile.reorderPhotos.invalid",
+            incomplete.Error.Errors[0].Code);
+        Assert.True(unknown.IsFailure);
+        Assert.Equal("barberProfile.reorderPhotos.invalid", unknown.Error.Errors[0].Code);
+        Assert.True(withForeignExtra.IsFailure);
+        Assert.Equal(
+            "barberProfile.reorderPhotos.invalid",
+            withForeignExtra.Error.Errors[0].Code);
+        Assert.True(nullList.IsFailure);
+        Assert.Equal("barberProfile.reorderPhotos.invalid", nullList.Error.Errors[0].Code);
+
+        // Порядок не тронут: неудачный вызов ничего не присваивает.
+        Assert.Equal([0, 1], photos.Select(photo => photo.SortOrder).Order());
+    }
+
+    [Fact]
+    public void BlockAndUnblock_AreIdempotentAndUpdateTimestamp()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+        var photo = profile.PortfolioPhotos.Single();
+        var before = photo.UpdatedAt;
+
+        var firstBlock = photo.Block();
+        var secondBlock = photo.Block();
+
+        Assert.True(firstBlock.IsSuccess);
+        Assert.True(secondBlock.IsSuccess);
+        Assert.True(photo.IsBlocked);
+        Assert.True(photo.UpdatedAt >= before);
+
+        var firstUnblock = photo.Unblock();
+        var secondUnblock = photo.Unblock();
+
+        Assert.True(firstUnblock.IsSuccess);
+        Assert.True(secondUnblock.IsSuccess);
+        Assert.False(photo.IsBlocked);
+    }
+
+    [Fact]
+    public void NewPhoto_IsNotBlocked()
+    {
+        var profile = CreateProfile();
+        profile.AddPhoto("https://cdn/1.jpg");
+
+        Assert.False(Assert.Single(profile.PortfolioPhotos).IsBlocked);
     }
 }

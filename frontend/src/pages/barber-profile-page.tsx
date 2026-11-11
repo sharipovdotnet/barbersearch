@@ -10,6 +10,7 @@ import {
   BarberUnreadBell,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberProfileForm } from '@/components/barber/barber-profile-form'
+import { BarberProfilePhotos } from '@/components/barber/barber-profile-photos'
 import { BarberProfileServices } from '@/components/barber/barber-profile-services'
 import { BarberProfileSpecializations } from '@/components/barber/barber-profile-specializations'
 import { SessionUnavailable } from '@/components/session-unavailable'
@@ -268,6 +269,12 @@ function BarberProfileScreen({
               </CardContent>
             </Card>
           </section>
+
+          <BarberProfilePhotos
+            barberProfileId={barberProfileId}
+            photos={profile.photos}
+            onChanged={handleChanged}
+          />
 
           <BarberProfileServices
             barberProfileId={barberProfileId}

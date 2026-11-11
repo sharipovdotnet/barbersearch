@@ -10,6 +10,7 @@ using BarberSearch.Web.Deployment;
 using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
+using BarberSearch.Web.Storage;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 
@@ -43,6 +44,12 @@ try
 
     // Композиционный корень: PostgreSQL и репозитории подключаются через DependencyInjection слоя Web.
     builder.Services.AddProgramDependencies(startup.PostgresConnectionString);
+
+    // Локальное хранилище фотографий портфолио. Настройки разрешаются, а каталог создаётся и
+    // проверяется на запись прямо здесь: недоступный диск должен ронять старт, а не первую
+    // загрузку. Регистрация обязательна и для тестового хоста — обработчики Application
+    // зависят от IPhotoStorage.
+    builder.Services.AddPhotoStorage(builder.Configuration, builder.Environment);
 
     // Настройки напоминаний читаются один раз и живут синглтоном: Application не знает
     // ни про IConfiguration, ни про IOptions. Пустые секции дают значения по умолчанию
