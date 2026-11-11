@@ -43,6 +43,27 @@ public interface IUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Текущий URL аватара пользователя — для раздачи файла по media-URL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Узкое чтение одного столбца по первичному ключу, без <c>Include</c> и без отслеживания
+    /// (как <see cref="GetSecurityStampAsync"/>). Раздача сверяет возвращённую строку с
+    /// запрошенным URL, поэтому ни файл, ни агрегат здесь не нужны.
+    /// </para>
+    /// <para>
+    /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>
+    /// (тот же код, что у остальных отказов раздачи); пользователь без аватара — успех
+    /// с <c>null</c>, а не ошибка: аватар необязателен.
+    /// </para>
+    /// </remarks>
+    /// <param name="userId">Идентификатор пользователя.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<string?, Failure>> GetAvatarUrlAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Пользователь по адресу электронной почты (вход в систему).
     /// </summary>
     Task<Result<User, Failure>> GetByEmailAsync(string email, CancellationToken cancellationToken = default);

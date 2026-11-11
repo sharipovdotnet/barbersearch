@@ -222,8 +222,28 @@ function toApiError(status: number, body: unknown): ApiError {
   )
 }
 
+/**
+ * Читает тело ответа как JSON.
+ *
+ * Оборванное тело не должно прятать статус: прокси закрывает соединение после `413`,
+ * сеть рвётся на середине ответа, а mock в тестах отвечает, пока multipart ещё
+ * пишется. Статус уже известен, поэтому такое тело считаем пустым — вызывающий
+ * разберёт `413`/`401`/`5xx` по коду, а не получит сырой `TypeError` и нейтральный
+ * fallback. Отмену запроса не глотаем: `AbortError` уходит наверх как раньше.
+ */
 async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text()
+  let text: string
+
+  try {
+    text = await response.text()
+  } catch (cause) {
+    if (isAbortError(cause)) {
+      throw cause
+    }
+
+    return null
+  }
+
   if (!text) {
     return null
   }
@@ -233,6 +253,16 @@ async function readJson(response: Response): Promise<unknown> {
   } catch {
     return null
   }
+}
+
+/** Отмена запроса — не «пустой ответ»: сигнал должен дойти до вызывающего. */
+function isAbortError(cause: unknown): boolean {
+  return (
+    typeof cause === 'object' &&
+    cause !== null &&
+    'name' in cause &&
+    (cause as { name?: unknown }).name === 'AbortError'
+  )
 }
 
 /**

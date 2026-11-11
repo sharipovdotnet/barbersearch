@@ -32,7 +32,10 @@ export type UpdateMyProfileInput = {
   firstName: string
   lastName: string
   phoneNumber: string | null
-  /** Аватар пока не редактируется, но `PUT` заменяет поле целиком: его нужно вернуть. */
+  /**
+   * `PUT` заменяет поле целиком, поэтому `save()` возвращает текущий URL,
+   * в том числе только что загруженный карточкой аватара: иначе имя стёрло бы фото.
+   */
   avatarUrl: string | null
 }
 

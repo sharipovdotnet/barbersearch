@@ -74,6 +74,59 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         return stamp;
     }
 
+    /// <summary>
+    /// Один узкий SELECT по первичному ключу: только <c>avatar_url</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ни <c>Include(FavoriteBarbers)</c>, ни материализации агрегата: раздаче нужен один
+    /// столбец, чтобы сверить запрошенный media-URL с сохранённым. Проекция в анонимный тип
+    /// транслируется EF Core в плоский <c>SELECT avatar_url … WHERE id = …</c>; анонимный тип
+    /// нужен, чтобы отличить «пользователя нет» (нет строки) от «аватара нет» (<c>NULL</c>).
+    /// </para>
+    /// <para>
+    /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>:
+    /// раздача не раскрывает существование аккаунта отдельным кодом. Пользователь без
+    /// аватара — успех с <c>null</c>.
+    /// </para>
+    /// </remarks>
+    public async Task<Result<string?, Failure>> GetAvatarUrlAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await BuildAvatarUrlQuery(Context, userId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return NotFound("avatarMedia.notFound", nameof(User), userId);
+        }
+
+        return Result.Success<string?, Failure>(row.AvatarUrl);
+    }
+
+    /// <summary>
+    /// Строит узкий запрос аватара: один столбец по первичному ключу, без <c>Include</c>
+    /// и без join'ов.
+    /// </summary>
+    /// <remarks>
+    /// Вынесен в <c>internal static</c>, как и запрос пары «услуга барбера — услуга справочника»
+    /// (R-20): тест проверяет трансляцию через <c>ToQueryString()</c>, не открывая соединение.
+    /// </remarks>
+    /// <param name="context">Контекст базы.</param>
+    /// <param name="userId">Идентификатор пользователя.</param>
+    internal static IQueryable<UserAvatarUrlLookup> BuildAvatarUrlQuery(
+        ApplicationDbContext context,
+        Guid userId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new UserAvatarUrlLookup(user.AvatarUrl));
+    }
+
     public async Task<Result<User, Failure>> GetByEmailAsync(
         string email,
         CancellationToken cancellationToken = default)

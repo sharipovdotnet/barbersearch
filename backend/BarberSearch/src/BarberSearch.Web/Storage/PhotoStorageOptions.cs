@@ -1,7 +1,8 @@
 namespace BarberSearch.Web.Storage;
 
 /// <summary>
-/// Настройки локального хранилища фотографий портфолио из секции <c>Storage</c>.
+/// Настройки локального хранилища изображений из секции <c>Storage</c>: фотографий портфолио
+/// и аватаров пользователей.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,7 +19,8 @@ namespace BarberSearch.Web.Storage;
 /// </para>
 /// <para>
 /// Один инстанс API и один диск: общий volume или object storage — отдельный срез.
-/// Фотографии не попадают в backup PostgreSQL, каталог бэкапится отдельно.
+/// В корне лежат два подкаталога — <c>portfolio/</c> и <c>avatars/</c>; файлы не попадают
+/// в backup PostgreSQL, поэтому каталог бэкапится отдельно целиком.
 /// </para>
 /// </remarks>
 public sealed record PhotoStorageOptions
@@ -34,7 +36,7 @@ public sealed record PhotoStorageOptions
     public const string DEFAULT_ROOT_PATH = "App_Data/photos";
 
     /// <summary>
-    /// Абсолютный путь к каталогу, в котором лежат файлы портфолио.
+    /// Абсолютный путь к каталогу, в котором лежат файлы портфолио и аватаров.
     /// </summary>
     /// <remarks>
     /// После <see cref="FromConfiguration"/> значение всегда абсолютное: относительный путь

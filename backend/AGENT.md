@@ -4,8 +4,8 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **393 domain + 677 application + 192 infrastructure + 210 integration (1472 total)**;
-> the three unit projects are green locally (2026-11-09), integration runs on PostgreSQL
+> Tests: **465 domain + 747 application + 228 infrastructure + 238 integration (1678 total)**;
+> the three unit projects are green locally (2026-11-11), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
@@ -166,11 +166,12 @@ backend/                                  ← workspace root
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
-            ├── Storage/                  ← host-адаптер хранилища фото: PhotoStorageOptions,
-            │                               LocalPhotoStorage (IPhotoStorage), AddPhotoStorage;
+            ├── Storage/                  ← host-адаптер хранилища файлов: PhotoStorageOptions,
+            │                               LocalPhotoStorage (IPhotoStorage: portfolio + avatars);
             │                               нового проекта решения нет — см. ниже
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
-            │                               Storage:RootPath (issue-84) + Logging:LogLevel / Logging:File (§18) +
+            │                               Storage:RootPath (issue-84; portfolio и avatars, issue-85) +
+            │                               Logging:LogLevel / Logging:File (§18) +
             │                               EmailOutbox (§19) + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
@@ -182,18 +183,25 @@ backend/tests/BarberSearch.Infrastructure.UnitTests/ ← xunit project (in the .
 backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the .sln; real PostgreSQL)
 ```
 
-> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84).** Интерфейс
+> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84; аватары — issue-85).** Интерфейс
 > `IPhotoStorage` объявлен в `BarberSearch.Application/PortfolioPhotos`, а `PhotoStorageOptions`,
 > `LocalPhotoStorage` и `PhotoStorageServiceCollectionExtensions` живут в
 > `BarberSearch.Web/Storage`: файловая система — забота хоста, как Data Protection и файловый
 > лог, поэтому Application не знает про ASP.NET и диск, а новый проект решения не заводится —
-> `dotnet sln add` в этом репозитории запрещён (§5.1). `AddPhotoStorage` регистрирует настройки
+> `dotnet sln add` в этом репозитории запрещён (§5.1). С 2026-11-11 один адаптер, один корень и
+> один диск обслуживают **два вида файлов**: `portfolio/{profileId:N}/…` (issue-84) и
+> `avatars/{userId:N}/…` (issue-85); различается только подкаталог, а атомарная запись `.tmp` +
+> `File.Move`, проверка «путь внутри корня» и MIME-тип общие. `OpenReadAsync`/`DeleteAsync`
+> разбирают оба префикса — сначала `portfolio`, затем `avatars`; чужой, внешний и отсутствующий
+> URL молча игнорируются (для аватара код чтения — `avatarMedia.notFound`).
+> `AddPhotoStorage` регистрирует настройки
 > и реализацию синглтонами и вызывается из `Program.cs` после `StartupSettings.Load`;
 > конфигурация — секция `Storage` (`Storage:RootPath`, по умолчанию `App_Data/photos`:
 > относительный путь считается от `ContentRootPath`, абсолютный используется как есть;
 > `Storage__RootPath` — переопределение через окружение/тесты). Предел файла —
 > доменная константа `Constants.MAX_PHOTO_BYTES` (5 МиБ), в конфигурации его нет, чтобы не было
-> второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`.
+> второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`. Каталог `avatars/`
+> входит в тот же бэкап, что и `portfolio/`: файлы не хранятся в PostgreSQL (долг #31 остаётся).
 
 **Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
 `Infrastructure` → `Application`
@@ -590,7 +598,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
 | `BarberProfile.BarberSpecializations` | unique `SpecializationId` |
 | `BarberProfile.Verify()` | an inactive profile cannot be verified |
-| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
+| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
@@ -635,6 +643,25 @@ root-relative URL строго вида
 `barberProfile.addPhoto.description`; `400 barberProfile.reorderPhotos.invalid`;
 `404 portfolioPhoto.block.notFound` / `portfolioPhoto.unblock.notFound`;
 `403 auth.forbidden` — чужой профиль или не-админ; `401 auth.unauthorized` — аноним.
+
+**Аватар пользователя (2026-11-11, issue-85).** У `User.AvatarUrl` три допустимых состояния:
+`null`; **свой** загруженный media-URL строго вида
+`/api/media/avatars/{userId:D}/{mediaId:N}.{jpg|png|webp}` (собирается и разбирается только через
+`UserAvatarMediaUrl`, префикс — `Constants.AVATAR_MEDIA_PATH_PREFIX`, разбор такой же строгий, как у
+портфолио: ровно два сегмента, канонический Guid `D` нижнего регистра, 32 hex-символа нижнего
+регистра, запрещены `%`, `?`, `#`, `\`, пробелы и `..`); абсолютный `http`/`https` URL — легаси-путь
+администратора через `PUT users/{id}/profile`. `User.SetAvatar(string?)` принимает всё это,
+`null`/пустая строка снимают аватар, иное — `400 user.setAvatar.avatarUrl` с `invalidField =
+"avatarUrl"`; `MarkUpdated` вызывается только при реальном изменении. `UpdateProfile` принимает и
+свой media-URL (кабинет отправляет `avatarUrl` обратно), и внешнюю ссылку — общая приватная проверка
+одна, `UrlValidator` не менялся. Байты изображения домен не смотрит: сигнатуру, размеры и лимиты
+проверяет `ImageFileInspector` в Application до записи файла. Ошибки загрузки — `400
+user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие `barberProfile.uploadPhoto.*`),
+`500 user.uploadAvatar.storage`; раздача отказа — единый `404 avatarMedia.notFound`. Аватар
+публичен по определению и не имеет исключений «владельцу/админу»: файл отдаётся, только пока
+сохранённая строка совпадает с запрошенным URL (Ordinal), поэтому замена/удаление сразу делает
+старую ссылку `404`. Кэш — `public, max-age=86400`: после замены старый кадр может сутки жить в
+чужом браузере (та же цена, что у портфолио; лечится сменой `mediaId`, а не `no-store`).
 
 ### 7.4 Statuses and enums
 
@@ -792,11 +819,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 25 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 403 domain + 689 application + 192 infrastructure + 219 integration (1503 total); unit-проекты зелёные локально (2026-11-10), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 135 обработчиков (99 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Tests | ✅ 465 domain + 747 application + 228 infrastructure + 238 integration (1678 total); unit-проекты зелёные локально (2026-11-11), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 137 обработчиков (101 command + 36 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 40 request-записей; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 30 контроллеров / 145 endpoints (133 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 31 контроллер / 148 endpoints (136 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -979,6 +1006,29 @@ barberService.updatePrice` / `.updateDuration`). `DELETE .../services/{hairServi
 остаются и брони видны. `POST api/barber-profiles` — первый create-эндпоинт с заголовком
 `Location: /api/barber-profiles/{id}` (правило R-42 пересмотрено, остальные create-эндпоинты не
 менялись).
+
+**Аватар пользователя: загрузка, раздача и публичная карточка (2026-11-11, issue-85).**
+`POST api/users/me/avatar` — `multipart/form-data` с полем `file`, `[Authorize]`, 6 МиБ на запрос;
+файл 1 КиБ..5 МиБ, 300..6000 px, ≤ 24 Мп, JPEG/PNG/WebP по сигнатуре — тот же
+`ImageFileInspector`, что у портфолио (второго набора проверок нет: одна проверка — один источник
+правды). Ответ — `201 { avatarUrl }` (`AvatarUploadResponse`) без `Location`; `400
+user.uploadAvatar.fileRequired` / `.tooLarge` + существующие `barberProfile.uploadPhoto.*`,
+`500 user.uploadAvatar.storage` без пути в тексте. `DELETE api/users/me/avatar` — всегда `204`,
+идемпотентно. Файл лежит в `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{ext}` на том же
+диске, что портфолио; порядок обработчика — `RequireUserId → user → Inspect → Save → SetAvatar →
+UpdateAsync → удаление предыдущего файла best-effort`, любая ошибка после записи удаляет **новый**
+файл, а предыдущий не трогается, пока не сохранилась строка. Гонка двух загрузок: побеждает
+последняя запись, файл проигравшей может остаться сиротой — допустимо, версии строки у `User` нет.
+`GET api/media/avatars/{userId:guid}/{fileName}` — анонимный `reads`-лимит, имя файла
+`^[0-9a-f]{32}\.(jpg|png|webp)$`, доступ только когда `IUserRepository.GetAvatarUrlAsync(userId)`
+вернул строку, равную запрошенному URL (Ordinal); иначе `404 avatarMedia.notFound`,
+`Cache-Control: public, max-age=86400`, `X-Content-Type-Options: nosniff`, диапазоны. Публичный
+`BarberProfileResponse` получил `avatarUrl` сразу после `userId` — одна и та же проекция карточки
+для публичного и собственного чтения; аватар читается одним индексным lookup по `users_pkey` в
+`BuildCardAsync`. Админские карточки уже отдавали аватар; `BookingResponse`, поиск и `SessionUser`
+не менялись. `audit_log` и миграции не трогались. `PrivacyPolicy.Version` поднята до
+`2026-11-11` (фотография профиля в §3 и срок хранения в §4); старые записи согласия не
+переписываются (долг #23).
 
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
@@ -1503,13 +1553,23 @@ counters) plus a second `LoadAdminPhotosAsync` read of all photos ordered by
 `SortOrder, CreatedAt`. `readiness.photosCount` is a `COUNT` filtered by
 `IsPublished && !IsBlocked`: the checklist describes the public card, not the rows.
 
-**Photo files: local disk, not in the PostgreSQL backup (2026-11-11, issue-84).** Files are
-written to `{Storage:RootPath}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`;
+**Photo and avatar files: local disk, not in the PostgreSQL backup (2026-11-11, issue-84/85).**
+Photographs are written to `{Storage:RootPath}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`,
+avatars to `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{jpg|png|webp}`;
 `RootPath` is relative to `ContentRootPath` or absolute, the directory is created and
 write-probed at startup, and `App_Data/` is gitignored. There is **one API instance and one
 disk**: the file store is not shared and not transactional with PostgreSQL. `pg_dump` and the
-PostgreSQL backup do **not** contain photo files, so the directory must be backed up
+PostgreSQL backup do **not** contain either directory, so both must be backed up
 separately; a shared volume or object storage for several instances is debt #31 (§12.12).
+
+**Avatar read (2026-11-11, issue-85).** `IUserRepository.GetAvatarUrlAsync` is one
+`AsNoTracking` projection of `users.avatar_url` filtered by the primary key — served by
+`users_pkey`, no `Include`, no join and **no new index/migration**. `GET api/media/avatars/…`
+calls it on every request and compares the stored string with the requested URL Ordinal, so a
+replaced avatar stops being served immediately. `BuildCardAsync` (public and own card) adds
+exactly one such PK lookup per card read to fill `BarberProfileResponse.avatarUrl`; the heavy
+card query (four `Include`s under `AsSplitQuery`) does not join `users`, so its cost is one
+indexed lookup, not a wider plan.
 
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
@@ -1993,16 +2053,17 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**29 controllers, 145 endpoints: 133 domain + 12 auth** — one endpoint per Application operation,
-plus the twelve `AuthController` actions (§17). The route always names the aggregate that owns the
-child entity:
+**30 domain controllers (+ `AuthController`), 148 endpoints: 136 domain + 12 auth** — one endpoint
+per Application operation, plus the twelve `AuthController` actions (§17). The route always names
+the aggregate that owns the child entity:
 
 | Controller | Route prefix | Handlers |
 |---|---|---|
-| `UsersController` | `api/users` | 12 |
+| `UsersController` | `api/users` | 14 |
 | `BarberProfilesController` | `api/barber-profiles` | 26 |
 | `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 5 |
 | `PortfolioMediaController` | `api/media/portfolio` | 1 (anonymous media delivery) |
+| `AvatarMediaController` | `api/media/avatars` | 1 (anonymous avatar delivery) |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
@@ -2059,7 +2120,10 @@ Conventions:
   them set a `Location` header, because none has a self-URI readable right after creation. There is
   now exactly one exception, added 2026-11-10 (issue-83): `POST api/barber-profiles` answers `201`
   with `Location: /api/barber-profiles/{id}` via `CreatedAtAction(nameof(Get), …)`, because
-  `GET api/barber-profiles/{id}` reads the owner's own profile in any status. The other create
+  `GET api/barber-profiles/{id}` reads the owner's own profile in any status. `POST
+  api/users/me/avatar` (issue-85) also answers `201` **without** `Location`, but with its own body
+  `AvatarUploadResponse { avatarUrl }` instead of `{ id }`: the media URL is the value the client
+  needs right away, and there is no read-by-id resource for an avatar. The other create
   endpoints keep the old rule: `GET api/bookings` and `GET api/reviews` are lists (the new review is
   hidden until publication, R-35), `salons` have a public directory `GET api/salons` but no read by
   id (the self-service `POST api/salons/own` answers the same `201 { id }`), `users` has only the
@@ -2116,6 +2180,26 @@ Conventions:
   `AdminBarberDetailResponse.photos` содержит все, `readiness.photosCount` считает только
   видимые. Форма элемента одна — `BarberProfilePhotoResponse` с `isPublished` и `isBlocked`
   (§7.3).
+- **Аватар пользователя (2026-11-11, issue-85).** `POST api/users/me/avatar` —
+  `multipart/form-data` с единственным полем `file`, `[Authorize]` (свой аватар, id из `sub`),
+  запрос ограничен 6 МиБ (`RequestSizeLimit` + `MultipartBodyLengthLimit`), файл — 5 МиБ
+  (`Constants.MAX_PHOTO_BYTES`); поток читается порциями с пределом 5 МиБ + 1, потому что
+  `IFormFile.Length` — лишь подсказка клиента. Успех — `201 { "avatarUrl": "<относительный URL>" }`
+  (`Contracts.Users.Me.AvatarUploadResponse`) **без** `Location`: отдельного читаемого self-URI у
+  аватара нет, он читается вместе с профилем. Коды — `400 user.uploadAvatar.fileRequired`,
+  `400 user.uploadAvatar.tooLarge`, `500 user.uploadAvatar.storage` (без пути в `detail`);
+  сигнатура, размеры и формат отвечают существующими `barberProfile.uploadPhoto.*`, потому что
+  используется тот же `ImageFileInspector`. Multipart — cookie-мутация: глобальный
+  antiforgery-фильтр требует `X-CSRF-TOKEN` (Bearer-клиент его не платит, §17.5).
+  `DELETE api/users/me/avatar` — `[Authorize]`, всегда `204`, в том числе когда аватара не было.
+  `GET api/media/avatars/{userId:guid}/{fileName}` — анонимный (`[AllowAnonymous]` + политика
+  `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; доступ — только если
+  `IUserRepository.GetAvatarUrlAsync(userId)` вернул строку, **равную** запрошенному URL
+  (Ordinal), иначе `404 avatarMedia.notFound` (ни `403`, ни `410`: существование файла не
+  раскрывается). Ответ — `File(stream, contentType, enableRangeProcessing: true)`,
+  `Cache-Control: public, max-age=86400`, `X-Content-Type-Options: nosniff`; аватар публичен по
+  определению, исключений «владельцу/админу» нет. `BarberProfileResponse` получил `avatarUrl`
+  сразу после `userId` (публичная и собственная карточки — одинаково).
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,

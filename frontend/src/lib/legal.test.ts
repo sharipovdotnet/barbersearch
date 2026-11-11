@@ -22,15 +22,15 @@ describe('редакция Политики', () => {
     expect(PRIVACY_POLICY_VERSION).toBe(PRIVACY_POLICY_DATE)
   })
 
-  it('держит литерал 2026-11-03: он же в PrivacyPolicy.Version на сервере', () => {
+  it('держит литерал 2026-11-11: он же в PrivacyPolicy.Version на сервере', () => {
     // Guard от расхождения с backend-константой: компилятор два языка не сверит,
     // поэтому литерал зафиксирован здесь и в RegistrationConsentTests на сервере.
-    expect(PRIVACY_POLICY_VERSION).toBe('2026-11-03')
+    expect(PRIVACY_POLICY_VERSION).toBe('2026-11-11')
   })
 })
 
 describe('дата редакции', () => {
   it('поднята до даты правки Политики', () => {
-    expect(PRIVACY_POLICY_DATE).toBe('2026-11-03')
+    expect(PRIVACY_POLICY_DATE).toBe('2026-11-11')
   })
 })

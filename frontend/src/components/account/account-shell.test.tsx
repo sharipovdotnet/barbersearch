@@ -1,19 +1,24 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { AccountShell } from '@/components/account/account-shell'
 import type { MyProfile } from '@/lib/my-profile'
 import { server } from '@/test/msw/server'
+import { stubImageLoading } from '@/test/image'
 
-function profile(id: string, isEmailVerified: boolean): MyProfile {
+function profile(
+  id: string,
+  isEmailVerified: boolean,
+  avatarUrl: string | null = null
+): MyProfile {
   return {
     id,
     email: 'client@barbersearch.test',
     firstName: 'Мария',
     lastName: 'Кузнецова',
     phoneNumber: null,
-    avatarUrl: null,
+    avatarUrl,
     role: 'Customer',
     barberProfileId: null,
     isEmailVerified,
@@ -70,5 +75,32 @@ describe('AccountShell: неподтверждённый email', () => {
     expect(
       screen.queryByRole('link', { name: 'Email не подтверждён' })
     ).not.toBeInTheDocument()
+  })
+
+  it('показывает загруженный аватар вместо инициалов', async () => {
+    const avatarUrl =
+      '/api/media/avatars/88888888-8888-4888-8888-888888888888/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const value = profile(
+      '88888888-8888-4888-8888-888888888888',
+      true,
+      avatarUrl
+    )
+
+    stubImageLoading()
+    server.use(http.get('/api/users/me', () => HttpResponse.json(value)))
+
+    renderShell(value)
+
+    await screen.findByText('Мария Кузнецова')
+
+    await waitFor(() => {
+      const image = document.querySelector(
+        'aside [data-slot="avatar-image"]'
+      )
+
+      expect(image).toHaveAttribute('src', avatarUrl)
+    })
+
+    expect(screen.queryByText('МК')).not.toBeInTheDocument()
   })
 })

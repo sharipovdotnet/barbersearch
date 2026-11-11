@@ -1324,9 +1324,21 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             })
             .ToList();
 
+        // Аватар — это поле другого агрегата (User), поэтому оно читается отдельным узким
+        // запросом по первичному ключу. Цена — один индексный lookup `users_pkey` на чтение
+        // карточки; отдельного join'а в тяжёлый запрос карточки (четыре Include под
+        // AsSplitQuery) нет, и новых индексов не появляется. Пользователь без аватара даёт
+        // null, отсутствующая строка (историческая ссылка) — тоже null: карточка не падает.
+        var avatarUrl = await Context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == profile.UserId)
+            .Select(user => user.AvatarUrl)
+            .SingleOrDefaultAsync(cancellationToken);
+
         return new BarberProfileResponse(
             profile.Id,
             profile.UserId,
+            avatarUrl,
             profile.DisplayName.Value,
             profile.Grade,
             profile.Bio,

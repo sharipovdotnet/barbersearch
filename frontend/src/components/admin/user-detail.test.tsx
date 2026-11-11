@@ -65,7 +65,7 @@ describe('UserDetail, согласие на обработку персонал�
     renderDetail(BASE_USER)
 
     expect(
-      screen.getByText('Записи нет — аккаунт создан до 03.11.2026')
+      screen.getByText('Записи нет — аккаунт создан до 11.11.2026')
     ).toBeInTheDocument()
     expect(screen.queryByText(/Согласие не получено/)).not.toBeInTheDocument()
   })

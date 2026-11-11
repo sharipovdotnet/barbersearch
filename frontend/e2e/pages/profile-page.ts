@@ -3,7 +3,7 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import { fixtures, pageSize } from '../fixtures/accounts'
 import { ListPagerComponent } from './list-pager-component'
 
-/** Публичный профиль `/barbers/{id}` — секция «Отзывы». */
+/** Публичный профиль `/barbers/{id}` — герой-карточка и секция «Отзывы». */
 export class ProfilePage {
   readonly page: Page
   readonly pager: ListPagerComponent
@@ -19,6 +19,26 @@ export class ProfilePage {
 
   get heading(): Locator {
     return this.page.getByRole('heading', { name: 'Отзывы', level: 2 })
+  }
+
+  /**
+   * Аватар героя: карточка, в которой стоит `h1` страницы. Привязка к `h1` нужна,
+   * чтобы не поймать аватар в шапке сайта — там `Avatar` тоже есть, но без файла.
+   */
+  get heroAvatar(): Locator {
+    return this.page
+      .locator('[data-slot="card"]')
+      .filter({ has: this.page.getByRole('heading', { level: 1 }) })
+      .locator('[data-slot="avatar"]')
+      .first()
+  }
+
+  get heroAvatarImage(): Locator {
+    return this.heroAvatar.locator('[data-slot="avatar-image"]')
+  }
+
+  get heroInitials(): Locator {
+    return this.heroAvatar.locator('[data-slot="avatar-fallback"]')
   }
 
   /** Список отзывов: он же цель фокуса после смены страницы. */

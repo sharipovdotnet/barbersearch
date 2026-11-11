@@ -187,11 +187,9 @@ public class User : AggregateRoot
                 nameof(lastName)));
         }
 
-        var avatarUrlError = UrlValidator.Validate(
+        var avatarUrlError = ValidateAvatarUrl(
             avatarUrl,
             "user.updateProfile.avatarUrl",
-            nameof(avatarUrl),
-            required: false,
             out var normalizedAvatarUrl);
         if (avatarUrlError is not null)
         {
@@ -211,6 +209,93 @@ public class User : AggregateRoot
         MarkUpdated();
 
         return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Устанавливает или снимает аватар пользователя.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Принимаются три вида значения: <c>null</c> или пустая строка — аватар снимается;
+    /// <b>собственный</b> media-URL (разобранный <see cref="UserAvatarMediaUrl.TryParse"/> с
+    /// идентификатором этого пользователя) — сохраняется как есть; абсолютный <c>http(s)</c>
+    /// URL — легаси-путь администратора, который исторически умеет внешнюю ссылку, — проходит
+    /// через <see cref="UrlValidator"/>. Любое другое значение отклоняется
+    /// <c>400 user.setAvatar.avatarUrl</c> с <see cref="Error.InvalidField"/> = <c>avatarUrl</c>:
+    /// относительный путь чужого файла не должен попасть в <c>img src</c>.
+    /// </para>
+    /// <para>
+    /// Байты изображения домен не проверяет — это делает <c>ImageFileInspector</c> в
+    /// Application до сохранения файла. <see cref="Entity.UpdatedAt"/> меняется только при
+    /// реальном изменении значения: повторная запись того же URL не создаёт правку.
+    /// </para>
+    /// </remarks>
+    /// <param name="avatarUrl">Новый URL аватара либо <c>null</c>/пустая строка.</param>
+    public UnitResult<Failure> SetAvatar(string? avatarUrl)
+    {
+        var avatarUrlError = ValidateAvatarUrl(
+            avatarUrl,
+            "user.setAvatar.avatarUrl",
+            out var normalizedAvatarUrl);
+        if (avatarUrlError is not null)
+        {
+            return new Failure(avatarUrlError);
+        }
+
+        // Повторная запись того же значения — не изменение: UpdatedAt не трогаем.
+        if (string.Equals(AvatarUrl, normalizedAvatarUrl, StringComparison.Ordinal))
+        {
+            return DomainErrors.Ok();
+        }
+
+        AvatarUrl = normalizedAvatarUrl;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Проверяет аватар по общим для <see cref="SetAvatar"/> и <see cref="UpdateProfile"/>
+    /// правилам и возвращает нормализованное значение.
+    /// </summary>
+    /// <remarks>
+    /// Один приватный метод на две операции: кабинет отправляет текущий <c>avatarUrl</c> обратно
+    /// в <c>PUT users/{id}/profile</c>, и сохранение имени не должно падать на собственном
+    /// media-URL. Код ошибки передаётся вызывающим: у методов он разный и является частью
+    /// HTTP-контракта. Абсолютный URL проверяет <see cref="UrlValidator"/> — его правила
+    /// (схема, хост, <c>userinfo</c>, длина) здесь не ослабляются.
+    /// </remarks>
+    /// <param name="avatarUrl">Проверяемое значение.</param>
+    /// <param name="code">Код ошибки для недопустимого значения.</param>
+    /// <param name="normalized">
+    /// Обрезанное значение при успехе; <c>null</c> для пустого значения и при ошибке.
+    /// </param>
+    private Error? ValidateAvatarUrl(string? avatarUrl, string code, out string? normalized)
+    {
+        normalized = null;
+
+        var candidate = avatarUrl?.Trim();
+
+        if (string.IsNullOrEmpty(candidate))
+        {
+            return null;
+        }
+
+        // Свой загруженный файл: root-relative URL, собранный UserAvatarMediaUrl.Build.
+        if (UserAvatarMediaUrl.TryParse(candidate, Id, out _, out _))
+        {
+            normalized = candidate;
+
+            return null;
+        }
+
+        // Внешняя ссылка (легаси-путь администратора) — по общим правилам UrlValidator.
+        return UrlValidator.Validate(
+            candidate,
+            code,
+            nameof(avatarUrl),
+            required: false,
+            out normalized);
     }
 
     public UnitResult<Failure> MarkEmailAsVerified()

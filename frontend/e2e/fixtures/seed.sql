@@ -247,6 +247,9 @@ ON CONFLICT (id) DO UPDATE SET
     first_name = EXCLUDED.first_name,
     last_name = EXCLUDED.last_name,
     phone_number = EXCLUDED.phone_number,
+    -- Аватар сбрасывается как у остальных фикстур: `public-barber-avatar-mutations`
+    -- грузит его на этом профиле, и второй прогон без пересева начинал бы не с нуля.
+    avatar_url = EXCLUDED.avatar_url,
     is_active = EXCLUDED.is_active,
     is_email_verified = EXCLUDED.is_email_verified,
     role = EXCLUDED.role,

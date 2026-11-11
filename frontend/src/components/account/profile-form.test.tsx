@@ -45,6 +45,7 @@ function renderForm() {
     requiresSignIn: false,
     reload: vi.fn(async () => {}),
     save,
+    setAvatar: vi.fn(),
   }
 
   render(

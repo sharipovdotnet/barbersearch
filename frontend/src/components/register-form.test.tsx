@@ -12,7 +12,7 @@ import { server } from '@/test/msw/server'
 
 // Литерал, ожидаемый на сервере (PrivacyPolicy.Version): тест падает, если клиент
 // отправит другую редакцию, — иначе живые регистрации начали бы получать 400.
-const EXPECTED_CONSENT_VERSION = '2026-11-03'
+const EXPECTED_CONSENT_VERSION = '2026-11-11'
 
 /** Форма живёт внутри настоящей сессии: успех регистрации — это `signIn` из провайдера. */
 function renderForm() {

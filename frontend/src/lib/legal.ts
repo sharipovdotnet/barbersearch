@@ -20,7 +20,7 @@ export const PRIVACY_PATH = '/privacy'
 export const COOKIES_SECTION_ID = 'cookies'
 
 /** Дата редакции Политики: ISO — для `<time>`, подпись форматируется на странице. */
-export const PRIVACY_POLICY_DATE = '2026-11-03'
+export const PRIVACY_POLICY_DATE = '2026-11-11'
 
 /**
  * Редакция Политики, которую подписывает форма регистрации.
@@ -30,7 +30,7 @@ export const PRIVACY_POLICY_DATE = '2026-11-03'
  * тест клиента и тест сервера, а живой E2E-запрос ловит расхождение на API.
  * Правка текста Политики поднимает обе константы и серверную версию.
  */
-export const PRIVACY_POLICY_VERSION = '2026-11-03'
+export const PRIVACY_POLICY_VERSION = '2026-11-11'
 
 /**
  * Реквизиты Оператора.

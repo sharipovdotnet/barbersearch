@@ -15,6 +15,7 @@ const STUDIO_ID = '44444444-4444-4444-8444-444444444444'
 const PROFILE: BarberProfile = {
   id: PROFILE_ID,
   userId: USER_ID,
+  avatarUrl: null,
   displayName: 'Тимур Барберов',
   grade: 'SeniorBarber',
   bio: null,

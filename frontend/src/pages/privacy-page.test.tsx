@@ -70,4 +70,33 @@ describe('PrivacyPage', () => {
       within(purposes).getByText(/хранится вместе с учётной записью/)
     ).toBeInTheDocument()
   })
+
+  it('называет фотографию профиля в составе данных (§3)', () => {
+    render(<PrivacyPage />)
+
+    const data = screen.getByRole('region', {
+      name: /Состав обрабатываемых данных/,
+    })
+
+    expect(
+      within(data).getByText(/фотография профиля \(аватар\)/)
+    ).toBeInTheDocument()
+    expect(
+      within(data).getByText(/публикуется в открытой карточке/)
+    ).toBeInTheDocument()
+  })
+
+  it('держит аватар до удаления пользователем или блокировки аккаунта (§4)', () => {
+    render(<PrivacyPage />)
+
+    const purposes = screen.getByRole('region', {
+      name: /Цели и сроки обработки/,
+    })
+
+    expect(
+      within(purposes).getByText(
+        /до удаления пользователем или блокировки аккаунта/
+      )
+    ).toBeInTheDocument()
+  })
 })

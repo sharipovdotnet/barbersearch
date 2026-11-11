@@ -17,7 +17,7 @@ import {
   AccountProfileContext,
   type AccountProfileValue,
 } from '@/components/account/account-profile-context'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useMyProfile } from '@/hooks/use-my-profile'
 import { useI18n } from '@/i18n'
 import {
@@ -169,6 +169,9 @@ function AccountIdentity({
   return (
     <div className="flex items-center gap-3 border-b border-border pb-4">
       <Avatar size="lg" aria-hidden>
+        {profile?.avatarUrl && (
+          <AvatarImage src={profile.avatarUrl} alt="" />
+        )}
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
 

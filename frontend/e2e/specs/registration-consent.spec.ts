@@ -13,7 +13,7 @@ import { expect, test, type Page } from '../fixtures/test'
  */
 
 // Литерал совпадает с PRIVACY_POLICY_VERSION на клиенте и PrivacyPolicy.Version на сервере.
-const EXPECTED_CONSENT_VERSION = '2026-11-03'
+const EXPECTED_CONSENT_VERSION = '2026-11-11'
 
 /** Заполняет форму регистрации данными, проходящими клиентские проверки. */
 async function fillRegistrationForm(

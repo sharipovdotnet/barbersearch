@@ -1,5 +1,6 @@
 using System.Net;
 using BarberSearch.Domain.Users;
+using Shared;
 using Xunit;
 
 namespace BarberSearch.Domain.UnitTests;
@@ -14,7 +15,7 @@ public class UserTests
     {
         var consentedAt = new DateTimeOffset(2026, 11, 3, 14, 5, 0, TimeSpan.Zero);
         var consent = UserConsent.Create(
-            "2026-11-03",
+            "2026-11-11",
             consentedAt,
             IPAddress.Parse("203.0.113.7")).Value;
 
@@ -27,7 +28,7 @@ public class UserTests
             consent);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("2026-11-03", result.Value.ConsentPolicyVersion);
+        Assert.Equal("2026-11-11", result.Value.ConsentPolicyVersion);
         Assert.Equal(consentedAt, result.Value.ConsentedAt);
         Assert.Equal("203.0.113.7", result.Value.ConsentIp?.ToString());
     }
@@ -182,6 +183,156 @@ public class UserTests
 
         Assert.True(cleared.IsSuccess);
         Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void UpdateProfile_AcceptsOwnUploadedAvatarMediaUrl()
+    {
+        var user = CreateValidUser();
+        var avatarUrl = UserAvatarMediaUrl.Build(user.Id, Guid.CreateVersion7(), "jpg");
+
+        var updated = user.UpdateProfile("Ivan", "Petrov", null, avatarUrl);
+
+        Assert.True(updated.IsSuccess);
+        Assert.Equal(avatarUrl, user.AvatarUrl);
+    }
+
+    [Fact]
+    public void UpdateProfile_RejectsRelativeNonMediaAvatarUrl()
+    {
+        var user = CreateValidUser();
+        var foreignUrl = UserAvatarMediaUrl.Build(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            "png");
+
+        var updated = user.UpdateProfile("Ivan", "Petrov", null, foreignUrl);
+
+        Assert.True(updated.IsFailure);
+        Assert.Equal("user.updateProfile.avatarUrl", Assert.Single(updated.Error.Errors).Code);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithOwnMediaUrl_StoresIt()
+    {
+        var user = CreateValidUser();
+        var avatarUrl = UserAvatarMediaUrl.Build(user.Id, Guid.CreateVersion7(), "webp");
+
+        var result = user.SetAvatar(avatarUrl);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(avatarUrl, user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithAbsoluteHttpUrl_StoresIt()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetAvatar("  https://cdn.example.com/avatar.png  ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://cdn.example.com/avatar.png", user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithForeignMediaUrl_ReturnsValidationAndKeepsOldValue()
+    {
+        var user = CreateValidUser();
+        user.SetAvatar("https://cdn.example.com/avatar.png");
+
+        var foreignUrl = UserAvatarMediaUrl.Build(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            "png");
+
+        var result = user.SetAvatar(foreignUrl);
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors);
+
+        Assert.Equal("user.setAvatar.avatarUrl", error.Code);
+        Assert.Equal("avatarUrl", error.InvalidField);
+        Assert.Equal(ErrorType.VALIDATION, error.Type);
+        Assert.Equal("https://cdn.example.com/avatar.png", user.AvatarUrl);
+    }
+
+    [Theory]
+    [InlineData("avatar.png")]
+    [InlineData("/api/media/avatars/not-a-url.jpg")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("https://user:pass@cdn.example.com/avatar.png")]
+    public void SetAvatar_WithInvalidValue_ReturnsValidation(string avatarUrl)
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetAvatar(avatarUrl);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.setAvatar.avatarUrl", Assert.Single(result.Error.Errors).Code);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithOwnMediaUrlOfAnotherUser_IsRejected()
+    {
+        var user = CreateValidUser();
+        var foreignOwnerId = Guid.CreateVersion7();
+        var foreignUrl = UserAvatarMediaUrl.Build(
+            foreignOwnerId,
+            Guid.CreateVersion7(),
+            "jpg");
+
+        // Тот же формат, но первый сегмент — чужой пользователь.
+        Assert.True(UserAvatarMediaUrl.TryParse(foreignUrl, foreignOwnerId, out _, out _));
+        Assert.False(UserAvatarMediaUrl.TryParse(foreignUrl, user.Id, out _, out _));
+
+        var result = user.SetAvatar(foreignUrl);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.setAvatar.avatarUrl", Assert.Single(result.Error.Errors).Code);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithBlank_ClearsIt()
+    {
+        var user = CreateValidUser();
+        user.SetAvatar("https://cdn.example.com/avatar.png");
+
+        Assert.True(user.SetAvatar("   ").IsSuccess);
+        Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_WithSameValue_DoesNotTouchUpdatedAt()
+    {
+        var user = CreateValidUser();
+        var avatarUrl = UserAvatarMediaUrl.Build(user.Id, Guid.CreateVersion7(), "jpg");
+
+        Assert.True(user.SetAvatar(avatarUrl).IsSuccess);
+        var updatedAt = user.UpdatedAt;
+
+        Assert.True(user.SetAvatar(avatarUrl).IsSuccess);
+
+        Assert.Equal(updatedAt, user.UpdatedAt);
+        Assert.Equal(avatarUrl, user.AvatarUrl);
+    }
+
+    [Fact]
+    public void SetAvatar_ToNullTwice_DoesNotTouchUpdatedAtOnSecondCall()
+    {
+        var user = CreateValidUser();
+
+        Assert.True(user.SetAvatar(null).IsSuccess);
+        var updatedAt = user.UpdatedAt;
+
+        Assert.True(user.SetAvatar(null).IsSuccess);
+
+        Assert.Null(user.AvatarUrl);
+        Assert.Equal(updatedAt, user.UpdatedAt);
     }
 
     [Fact]

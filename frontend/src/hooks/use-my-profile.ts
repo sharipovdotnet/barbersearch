@@ -15,7 +15,7 @@ import {
  *
  * Кэш модульный, поэтому переход между разделами кабинета не повторяет запрос. Ключ
  * кэша — id пользователя: после выхода и входа другим аккаунтом старый профиль не
- * должен показываться. `save` обновляет кэш и состояние без второго `GET`.
+ * должен показываться. `save` и `setAvatar` обновляют кэш и состояние без второго `GET`.
  */
 
 type ProfileState = {
@@ -121,7 +121,8 @@ export function useMyProfile(userId: string) {
         firstName: next.firstName,
         lastName: next.lastName,
         phoneNumber: next.phoneNumber,
-        // Аватар не редактируется, но PUT заменяет поле целиком.
+        // PUT заменяет поле целиком: отправляем текущий аватар, включая только что
+        // загруженный `setAvatar`, иначе сохранение имени стёрло бы его.
         avatarUrl: currentProfile.avatarUrl,
       })
 
@@ -138,9 +139,37 @@ export function useMyProfile(userId: string) {
     [userId]
   )
 
+  /**
+   * Новый аватар после загрузки или удаления — без второго `GET users/me`.
+   *
+   * Пишет и модульный кэш, и состояние: следующий раздел кабинета получит уже
+   * новый URL, а `save()` отправит его обратно в `PUT profile`.
+   */
+  const setAvatar = useCallback(
+    (avatarUrl: string | null): void => {
+      const currentProfile = cachedProfile
+
+      if (!currentProfile || currentProfile.id !== userId) {
+        return
+      }
+
+      const next: MyProfile = { ...currentProfile, avatarUrl }
+
+      cachedProfile = next
+      setState({
+        status: 'ready',
+        profile: next,
+        error: null,
+        requiresSignIn: false,
+      })
+    },
+    [userId]
+  )
+
   return {
     ...state,
     reload: load,
     save,
+    setAvatar,
   }
 }
