@@ -184,6 +184,17 @@ ok 298 account-avatar-mutations › удаление через alertdialog во
 успевает за 10 с: доставка 2–12 с под нагрузкой) или в админских счётчиках; media-спеки в этих же
 прогонах стабильно зелёные.
 
+**CI (`ubuntu-latest`, PR #90)** — это и есть проверка Linux-ассетов SkiaSharp:
+
+```
+Build, unit and integration tests   pass  3m22s
+Lint and build                     pass  1m27s
+Playwright and axe                 pass  6m26s
+```
+
+Полный E2E-прогон в CI зелёный: локальные падения почты/счётчиков были особенностью окружения,
+а не среза.
+
 Важная находка при написании E2E: `browser.newContext()` внутри файла с
 `test.use({ storageState })` получает cookie владельца, поэтому «гостевой» контекст отдавал скрытый
 кадр владельцу с `private, no-store` (200) и сцена ложно падала. Гостевые контексты в спеке теперь
