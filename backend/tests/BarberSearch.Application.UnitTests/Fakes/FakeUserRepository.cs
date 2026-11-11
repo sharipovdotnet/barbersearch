@@ -183,6 +183,27 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             new UserSecurityStamp(user.IsActive, user.SecurityStamp));
     }
 
+    /// <summary>
+    /// URL аватара из «таблицы» пользователей; отсутствие пользователя — тот же
+    /// <c>404 avatarMedia.notFound</c>, что и в PostgreSQL-репозитории.
+    /// </summary>
+    public Task<Result<string?, Failure>> GetAvatarUrlAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_users.TryGetValue(userId, out var user))
+        {
+            return Task.FromResult<Result<string?, Failure>>(new Failure(
+                Error.NotFound(
+                    "avatarMedia.notFound",
+                    $"User '{userId}' was not found.",
+                    userId)));
+        }
+
+        return Task.FromResult<Result<string?, Failure>>(
+            Result.Success<string?, Failure>(user.AvatarUrl));
+    }
+
     public Task<Result<User, Failure>> GetByEmailAsync(
         string email,
         CancellationToken cancellationToken = default)

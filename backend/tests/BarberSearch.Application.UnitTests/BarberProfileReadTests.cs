@@ -62,6 +62,7 @@ public class BarberProfileReadTests
         => new(
             id,
             Guid.CreateVersion7(),
+            null,
             "Barber",
             Grade.MiddleBarber,
             "Bio",

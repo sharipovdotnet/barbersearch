@@ -99,6 +99,7 @@ public class BarberProfileOwnReadTests
         => new(
             id,
             userId,
+            null,
             "Barber",
             Grade.MiddleBarber,
             "Bio",

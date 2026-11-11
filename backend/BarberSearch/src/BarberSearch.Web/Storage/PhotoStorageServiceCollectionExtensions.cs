@@ -3,7 +3,7 @@ using BarberSearch.Application.PortfolioPhotos;
 namespace BarberSearch.Web.Storage;
 
 /// <summary>
-/// Регистрация локального хранилища фотографий портфолио.
+/// Регистрация локального хранилища изображений: фотографий портфолио и аватаров.
 /// </summary>
 /// <remarks>
 /// Хранилище — host-адаптер слоя Web, поэтому регистрируется здесь, а не в Application.

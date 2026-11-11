@@ -1,5 +1,6 @@
 using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Domain.PortfolioPhotos;
+using BarberSearch.Domain.Users;
 using BarberSearch.Web.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
@@ -21,6 +22,7 @@ public class LocalPhotoStorageTests : IDisposable
         Path.Combine(Path.GetTempPath(), $"bs-photos-{Guid.NewGuid():N}");
 
     private readonly Guid _profileId = Guid.CreateVersion7();
+    private readonly Guid _userId = Guid.CreateVersion7();
     private readonly LocalPhotoStorage _storage;
 
     /// <summary>
@@ -232,6 +234,174 @@ public class LocalPhotoStorageTests : IDisposable
         Assert.Equal("barberProfile.uploadPhoto.storage", emptyProfile.Error.Errors[0].Code);
     }
 
+    [Fact]
+    public async Task SaveAvatarAsync_WritesFileUnderAvatarsAndReturnsRelativeUrl()
+    {
+        var mediaId = Guid.CreateVersion7();
+        var content = CreateContent();
+
+        var saved = await _storage.SaveAvatarAsync(
+            _userId,
+            mediaId,
+            "webp",
+            content,
+            CancellationToken.None);
+
+        Assert.True(saved.IsSuccess);
+        Assert.Equal(UserAvatarMediaUrl.Build(_userId, mediaId, "webp"), saved.Value.Url);
+
+        var filePath = AvatarPath(mediaId, "webp");
+        Assert.True(File.Exists(filePath));
+        Assert.Equal(content, await File.ReadAllBytesAsync(filePath));
+
+        // Временный файл после атомарного переименования не остаётся.
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(filePath)!, "*.tmp"));
+    }
+
+    [Theory]
+    [InlineData("jpg", "image/jpeg")]
+    [InlineData("png", "image/png")]
+    [InlineData("webp", "image/webp")]
+    public async Task OpenReadAsync_AvatarContentTypeIsDerivedFromTheExtension(
+        string extension,
+        string expectedContentType)
+    {
+        var mediaId = Guid.CreateVersion7();
+
+        var saved = await _storage.SaveAvatarAsync(
+            _userId,
+            mediaId,
+            extension,
+            CreateContent(),
+            CancellationToken.None);
+
+        var opened = await _storage.OpenReadAsync(saved.Value.Url, CancellationToken.None);
+
+        Assert.True(opened.IsSuccess);
+        Assert.Equal(expectedContentType, opened.Value.ContentType);
+        Assert.Equal(CreateContent().Length, opened.Value.Length);
+
+        await opened.Value.Stream.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RemovesAvatarFileAndIsIdempotent()
+    {
+        var mediaId = Guid.CreateVersion7();
+
+        var saved = await _storage.SaveAvatarAsync(
+            _userId,
+            mediaId,
+            "png",
+            CreateContent(),
+            CancellationToken.None);
+
+        var filePath = AvatarPath(mediaId, "png");
+        Assert.True(File.Exists(filePath));
+
+        await _storage.DeleteAsync(saved.Value.Url, CancellationToken.None);
+        Assert.False(File.Exists(filePath));
+
+        await _storage.DeleteAsync(saved.Value.Url, CancellationToken.None);
+        Assert.False(File.Exists(filePath));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ForeignAvatarUrl_DoesNotDeleteTheOwnFile()
+    {
+        var mediaId = Guid.CreateVersion7();
+
+        await _storage.SaveAvatarAsync(
+            _userId,
+            mediaId,
+            "png",
+            CreateContent(),
+            CancellationToken.None);
+
+        var foreignUrl = UserAvatarMediaUrl.Build(
+            Guid.CreateVersion7(),
+            mediaId,
+            "png");
+
+        await _storage.DeleteAsync(foreignUrl, CancellationToken.None);
+
+        Assert.True(File.Exists(AvatarPath(mediaId, "png")));
+    }
+
+    [Fact]
+    public async Task OpenReadAsync_MissingAvatar_ReturnsAvatarMediaNotFound()
+    {
+        var url = UserAvatarMediaUrl.Build(_userId, Guid.CreateVersion7(), "png");
+
+        var opened = await _storage.OpenReadAsync(url, CancellationToken.None);
+
+        Assert.True(opened.IsFailure);
+
+        var error = Assert.Single(opened.Error.Errors);
+
+        Assert.Equal(ErrorType.NOT_FOUND, error.Type);
+        Assert.Equal("avatarMedia.notFound", error.Code);
+    }
+
+    [Theory]
+    [InlineData("gif")]
+    [InlineData("bmp")]
+    [InlineData("PNG")]
+    [InlineData("")]
+    public async Task SaveAvatarAsync_RejectsUnknownExtension(string extension)
+    {
+        var saved = await _storage.SaveAvatarAsync(
+            _userId,
+            Guid.CreateVersion7(),
+            extension,
+            CreateContent(),
+            CancellationToken.None);
+
+        Assert.True(saved.IsFailure);
+        Assert.Equal("user.uploadAvatar.storage", saved.Error.Errors[0].Code);
+        Assert.False(Directory.Exists(Path.Combine(_rootPath, "avatars", $"{_userId:N}")));
+    }
+
+    [Fact]
+    public async Task SaveAvatarAsync_RejectsEmptyIdentifiers()
+    {
+        var content = CreateContent();
+
+        var emptyMedia = await _storage.SaveAvatarAsync(
+            _userId,
+            Guid.Empty,
+            "png",
+            content,
+            CancellationToken.None);
+
+        var emptyUser = await _storage.SaveAvatarAsync(
+            Guid.Empty,
+            Guid.CreateVersion7(),
+            "png",
+            content,
+            CancellationToken.None);
+
+        Assert.True(emptyMedia.IsFailure);
+        Assert.True(emptyUser.IsFailure);
+        Assert.Equal("user.uploadAvatar.storage", emptyMedia.Error.Errors[0].Code);
+        Assert.Equal("user.uploadAvatar.storage", emptyUser.Error.Errors[0].Code);
+    }
+
+    [Theory]
+    [InlineData("/api/media/avatars/{0}/../../../secret.png")]
+    [InlineData("/api/media/avatars/{0}/{Guid}.PNG")]
+    [InlineData("/api/media/avatars/{0}/{Guid}.png?query=1")]
+    public async Task OpenReadAsync_RejectsTraversalAndMalformedAvatarUrls(string template)
+    {
+        var url = template.Replace("{0}", _userId.ToString("D"), StringComparison.Ordinal)
+            .Replace("{Guid}", Guid.CreateVersion7().ToString("N"), StringComparison.Ordinal);
+
+        var opened = await _storage.OpenReadAsync(url, CancellationToken.None);
+
+        Assert.True(opened.IsFailure);
+        Assert.Equal(ErrorType.NOT_FOUND, opened.Error.Errors[0].Type);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -252,6 +422,9 @@ public class LocalPhotoStorageTests : IDisposable
 
     private string PhotoPath(Guid mediaId, string extension)
         => Path.Combine(_rootPath, "portfolio", $"{_profileId:N}", $"{mediaId:N}.{extension}");
+
+    private string AvatarPath(Guid mediaId, string extension)
+        => Path.Combine(_rootPath, "avatars", $"{_userId:N}", $"{mediaId:N}.{extension}");
 
     private static byte[] CreateContent()
     {

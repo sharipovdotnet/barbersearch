@@ -4,6 +4,7 @@ using BarberSearch.Application.Users.AddUserFavorite;
 using BarberSearch.Application.Users.ChangeUserRole;
 using BarberSearch.Application.Users.CreateUser;
 using BarberSearch.Application.Users.DeactivateUser;
+using BarberSearch.Application.Users.DeleteUserAvatar;
 using BarberSearch.Application.Users.GetMyProfile;
 using BarberSearch.Application.Users.LinkUserBarberProfile;
 using BarberSearch.Application.Users.MarkUserEmailAsVerified;
@@ -12,17 +13,21 @@ using BarberSearch.Application.Users.Passwords;
 using BarberSearch.Application.Users.RecordUserLogin;
 using BarberSearch.Application.Users.RemoveUserFavorite;
 using BarberSearch.Application.Users.UpdateUserProfile;
+using BarberSearch.Application.Users.UploadUserAvatar;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.ChangeUserRole;
 using BarberSearch.Contracts.Users.CreateUser;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Contracts.Users.UpdateUserProfile;
+using BarberSearch.Domain;
 using BarberSearch.Domain.Users;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Common;
+using BarberSearch.Web.Controllers.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Shared;
 
 namespace BarberSearch.Web.Controllers;
 
@@ -38,6 +43,26 @@ namespace BarberSearch.Web.Controllers;
 [Route("api/users")]
 public class UsersController : ApiController
 {
+    /// <summary>
+    /// Предел всего multipart-запроса: 6 МиБ, чтобы обвязка формы помещалась вокруг
+    /// файла в 5 МиБ (<c>Constants.MAX_PHOTO_BYTES</c>). Kestrel отвечает <c>413</c> до
+    /// действия; клиент обрабатывает и его, и код <c>user.uploadAvatar.tooLarge</c>.
+    /// </summary>
+    private const int MAX_AVATAR_REQUEST_BYTES = 6 * 1024 * 1024;
+
+    /// <summary>
+    /// Кусок чтения потока формы: файл читается порциями, а не целиком по <c>IFormFile.Length</c>.
+    /// </summary>
+    private const int AVATAR_READ_CHUNK_BYTES = 64 * 1024;
+
+    private const string AVATAR_FILE_REQUIRED_CODE = "user.uploadAvatar.fileRequired";
+    private const string AVATAR_TOO_LARGE_CODE = "user.uploadAvatar.tooLarge";
+
+    private const string AVATAR_FILE_REQUIRED_MESSAGE = "An avatar file is required.";
+
+    private static readonly string AvatarTooLargeMessage =
+        $"The image file cannot be larger than {Constants.MAX_PHOTO_BYTES} bytes.";
+
     /// <summary>
     /// Создаёт пользователя. Доступно только администратору: самостоятельная регистрация
     /// живёт в <c>POST api/auth/register</c> и всегда создаёт <c>Customer</c>.
@@ -109,6 +134,107 @@ public class UsersController : ApiController
                 request.AvatarUrl),
             cancellationToken));
     }
+
+    /// <summary>
+    /// Загружает аватар текущего пользователя (<c>multipart/form-data</c>, поле <c>file</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Аватар всегда свой: идентификатор берётся из claim'а <c>sub</c>, чужой загрузить нечем.
+    /// Принимаются только JPEG, PNG и WebP; тип определяется по сигнатуре в
+    /// <c>ImageFileInspector</c>, а не по имени файла или <c>Content-Type</c> клиента. Поток
+    /// формы читается в память порциями с жёстким пределом <c>Constants.MAX_PHOTO_BYTES + 1</c>
+    /// байт: <c>IFormFile.Length</c> — лишь подсказка от клиента, и доверять ей как пределу
+    /// нельзя. Пустой файл — <c>400 user.uploadAvatar.fileRequired</c>, превышение —
+    /// <c>400 user.uploadAvatar.tooLarge</c>; остальные проверки файла (сигнатура, размеры)
+    /// приходят существующими кодами <c>barberProfile.uploadPhoto.*</c>.
+    /// </para>
+    /// <para>
+    /// Успех — <c>201 { "avatarUrl": "&lt;относительный URL&gt;" }</c> без <c>Location</c>:
+    /// отдельного читаемого self-URI у аватара нет. Multipart-запрос — cookie-мутация,
+    /// поэтому глобальный antiforgery-фильтр продолжает требовать <c>X-CSRF-TOKEN</c>;
+    /// отдельной политики rate limiter нет — хватает глобальных 30 записей/мин.
+    /// </para>
+    /// </remarks>
+    /// <param name="form">Форма с одним полем файла.</param>
+    /// <param name="handler">Обработчик команды загрузки.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpPost("me/avatar")]
+    [RequestSizeLimit(MAX_AVATAR_REQUEST_BYTES)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MAX_AVATAR_REQUEST_BYTES)]
+    public async Task<ActionResult<AvatarUploadResponse>> UploadAvatar(
+        [FromForm] UploadUserAvatarForm form,
+        [FromServices] ICommandHandler<string, UploadUserAvatarCommand> handler,
+        CancellationToken cancellationToken)
+    {
+        // form?.File: при запросе без form-content биндер оставляет параметр пустым,
+        // и это тот же «файла нет», а не 500.
+        var file = form?.File;
+
+        if (file is null || file.Length == 0)
+        {
+            return AvatarFileRequired();
+        }
+
+        await using var source = file.OpenReadStream();
+
+        // Начальная ёмкость ограничена пределом: даже вредоносный Length не раздует буфер.
+        using var buffer = new MemoryStream(
+            capacity: (int)Math.Min(file.Length, Constants.MAX_PHOTO_BYTES));
+
+        var chunk = new byte[AVATAR_READ_CHUNK_BYTES];
+        var totalBytes = 0;
+
+        while (true)
+        {
+            var read = await source.ReadAsync(chunk.AsMemory(), cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            totalBytes += read;
+
+            // Останавливаемся на первом же байте сверх предела: целиком 6 МиБ не читаем.
+            if (totalBytes > Constants.MAX_PHOTO_BYTES)
+            {
+                return AvatarTooLarge();
+            }
+
+            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+        }
+
+        if (totalBytes == 0)
+        {
+            return AvatarFileRequired();
+        }
+
+        var uploaded = await handler.Handle(
+            new UploadUserAvatarCommand(buffer.ToArray()),
+            cancellationToken);
+
+        return uploaded.IsSuccess
+            ? StatusCode(
+                StatusCodes.Status201Created,
+                new AvatarUploadResponse(uploaded.Value))
+            : FailureProblemDetails.CreateResult(uploaded.Error);
+    }
+
+    /// <summary>
+    /// Удаляет аватар текущего пользователя. Идемпотентно: <c>204</c> приходит и тогда,
+    /// когда аватара не было.
+    /// </summary>
+    /// <param name="handler">Обработчик команды удаления.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [Authorize]
+    [HttpDelete("me/avatar")]
+    public async Task<ActionResult> DeleteAvatar(
+        [FromServices] ICommandHandler<DeleteUserAvatarCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new DeleteUserAvatarCommand(),
+            cancellationToken));
 
     /// <summary>
     /// Меняет роль пользователя. Только администратор.
@@ -233,4 +359,24 @@ public class UsersController : ApiController
             new RemoveUserFavoriteCommand(userId, barberProfileId),
             cancellationToken));
     }
+
+    /// <summary>
+    /// <c>400 user.uploadAvatar.fileRequired</c>: файла нет или он пуст.
+    /// </summary>
+    private static ObjectResult AvatarFileRequired()
+        => FailureProblemDetails.CreateResult(
+            new Failure(Error.Validation(
+                AVATAR_FILE_REQUIRED_CODE,
+                AVATAR_FILE_REQUIRED_MESSAGE,
+                "file")));
+
+    /// <summary>
+    /// <c>400 user.uploadAvatar.tooLarge</c>: файл больше 5 МиБ.
+    /// </summary>
+    private static ObjectResult AvatarTooLarge()
+        => FailureProblemDetails.CreateResult(
+            new Failure(Error.Validation(
+                AVATAR_TOO_LARGE_CODE,
+                AvatarTooLargeMessage,
+                "file")));
 }

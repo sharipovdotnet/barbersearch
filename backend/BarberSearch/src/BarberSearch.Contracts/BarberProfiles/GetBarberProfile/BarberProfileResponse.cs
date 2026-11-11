@@ -12,6 +12,10 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// </remarks>
 /// <param name="Id">Идентификатор профиля барбера.</param>
 /// <param name="UserId">Идентификатор пользователя-владельца профиля.</param>
+/// <param name="AvatarUrl">
+/// Аватар владельца профиля либо <c>null</c>, если аватар не загружен. Публичная карточка и
+/// собственная карточка кабинета получают поле одинаково: это публичные данные мастера.
+/// </param>
 /// <param name="DisplayName">Отображаемое имя мастера.</param>
 /// <param name="Grade">Грейд барбера.</param>
 /// <param name="Bio">Короткое описание о себе.</param>
@@ -39,6 +43,7 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 public record BarberProfileResponse(
     Guid Id,
     Guid UserId,
+    string? AvatarUrl,
     string DisplayName,
     Grade Grade,
     string? Bio,

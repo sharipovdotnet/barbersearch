@@ -13,6 +13,10 @@ public static class Constants
     // раздачи: строка собирается и разбирается только через PortfolioMediaUrl.
     public const string PORTFOLIO_MEDIA_PATH_PREFIX = "/api/media/portfolio";
 
+    // Префикс публичного URL загруженного аватара. Один на домен, хранилище и контроллер
+    // раздачи: строка собирается и разбирается только через UserAvatarMediaUrl.
+    public const string AVATAR_MEDIA_PATH_PREFIX = "/api/media/avatars";
+
     // Рейтинг барбера хранится в той же шкале, что и Review.Rating: 1.00 .. 5.00.
     // Шкала 0..100 — это дело представления (фронта), в домене её нет.
     // null = отзывов ещё нет, Rating и ReviewsCount меняются только вместе.
