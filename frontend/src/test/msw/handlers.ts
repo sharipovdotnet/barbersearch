@@ -148,6 +148,11 @@ export const handlers = [
   // в тестах через `server.use`.
   http.post('/api/auth/password-reset', () => noContent()),
   http.post('/api/auth/password-reset/confirm', () => noContent()),
+  // Смена email: запрос письма и подтверждение по умолчанию успешны. Сценарии
+  // отказа (`400 sameEmail`, `400 invalidCurrentPassword`, `409 emailTaken`,
+  // `409 cooldown`, `409 unavailable`, `400 invalid`, `429`) собираются в тестах.
+  http.post('/api/auth/email-change', () => noContent()),
+  http.post('/api/auth/email-change/confirm', () => noContent()),
   // Онбординг читает заявку «Стать барбером» перед формой профиля. Без заявки
   // (роль выдана администратором вручную) имя и опыт остаются редактируемыми.
   http.get('/api/barber-requests/mine', () =>

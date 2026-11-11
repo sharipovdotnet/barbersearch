@@ -88,6 +88,69 @@ export class AccountProfilePage {
     return this.avatarSection.getByRole('status')
   }
 
+  /**
+   * Карточка «Email» — вторая на `/account/profile`, с собственным
+   * `aria-labelledby`: адрес и статус подтверждения живут здесь, а не в форме.
+   */
+  get emailSection(): Locator {
+    return this.page.locator('section[aria-labelledby="account-email-heading"]')
+  }
+
+  /** Статус подтверждения адреса внутри карточки. */
+  get emailStatus(): Locator {
+    return this.emailSection.getByText(/^Адрес (не )?подтверждён\.$/)
+  }
+
+  /** Кнопка карточки: после успеха она показывает локальный кулдаун. */
+  get changeEmailButton(): Locator {
+    return this.emailSection.getByRole('button', {
+      name: /^(Изменить email|Повторить через)/,
+    })
+  }
+
+  /** «Письмо отправлено на …» — `role="status"` карточки. */
+  get emailChangeStatus(): Locator {
+    return this.emailSection.getByRole('status')
+  }
+
+  get emailDialog(): Locator {
+    return this.page.getByRole('dialog', { name: 'Изменить email' })
+  }
+
+  get newEmailInput(): Locator {
+    return this.emailDialog.getByLabel('Новый email')
+  }
+
+  get currentPasswordInput(): Locator {
+    return this.emailDialog.getByLabel('Текущий пароль')
+  }
+
+  get submitEmailChange(): Locator {
+    return this.emailDialog.getByRole('button', {
+      name: /^(Отправить письмо|Отправляем письмо…)$/,
+    })
+  }
+
+  /** Ошибка уровня формы (`role="alert"`): кулдаун, недоступная почта, сеть. */
+  get emailChangeFormError(): Locator {
+    return this.emailDialog.getByRole('alert')
+  }
+
+  async openEmailChangeDialog(): Promise<void> {
+    await this.changeEmailButton.click()
+    await expect(this.emailDialog).toBeVisible()
+  }
+
+  /** Заполняет диалог и отправляет заявку, не дожидаясь ответа. */
+  async requestEmailChange(
+    newEmail: string,
+    currentPassword: string
+  ): Promise<void> {
+    await this.newEmailInput.fill(newEmail)
+    await this.currentPasswordInput.fill(currentPassword)
+    await this.submitEmailChange.click()
+  }
+
   get deleteAvatarDialog(): Locator {
     return this.page.getByRole('alertdialog', { name: 'Удалить аватар?' })
   }

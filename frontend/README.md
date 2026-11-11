@@ -57,7 +57,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/` | landing page: real barber search by city, date, language, specialization, service and additional-service substring, how it works, account CTA |
 | `/barbers/{id}` | public barber profile: avatar in the hero, services, salons, weekly schedule, rating, the «Работы» portfolio gallery with a lightbox |
 | `/account` | personal cabinet, «Мои записи»: «Предстоящие»/«История» as two server lists with the shared pager, hero, cancellation and the barber's cancellation reason, review |
-| `/account/profile` | profile: avatar upload, change and delete, plus first name, last name and phone; email is read-only with its verification status |
+| `/account/profile` | profile: avatar upload, change and delete, plus the «Email» card with the address, its verification status and the «Изменить email» dialog (new address + current password, confirmation link, notice to the old address), then first name, last name and phone |
 | `/account/security` | security: password change, sign out, email verification (status, resend with a 60-second cooldown, `?verification=sent` landing) and the «Забыли пароль?» link |
 | `/account/reviews` | author's own reviews: both statuses, edit and delete |
 | `/barber` | barber cabinet: the «Сегодня» day feed by default (visits of the day, the free windows between them and a one-click booking into a window), then «Ближайшие» / «История» lists with confirm / complete / no-show / cancel with a required reason / note, and «Записать клиента» for a registered user of any role or a walk-in without an account |
@@ -70,6 +70,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
 | `/register` | customer self-registration; a signed-in visitor sees the «Вы уже вошли» gate |
 | `/verify-email` | confirmation from the email link: one anonymous `POST` with the token, then «Адрес подтверждён», «Ссылка недействительна», a network error or «Ссылка неполная»; the token is removed from the address after it settles |
+| `/confirm-email-change` | email change confirmation from the letter: one anonymous `POST` with the token, then «Адрес изменён» (all sessions ended, no auto sign-in), «Ссылка недействительна», a network error or «Ссылка неполная»; the token is removed from the address after it settles |
 | `/forgot-password` | request a password-reset link: one anonymous `POST`, the generic «Проверьте почту» card for any address, a local 60-second resend cooldown, «Указать другой адрес» and the global «почта не настроена» error |
 | `/reset-password` | set a new password from the email link: the token is read once and removed from the address, then the form, «Пароль изменён» (all sessions ended, no auto sign-in) or «Ссылка недействительна» |
 | `/privacy` | Политика обработки персональных данных: полный документ (152-ФЗ), содержание, перечень cookie, реквизиты Оператора |
@@ -526,9 +527,27 @@ next-page error in one tab does not clear the other.
 
 `/account/profile` edits `firstName`, `lastName` and `phoneNumber` through the existing
 `PUT /api/users/{id}/profile` with `X-CSRF-TOKEN`; `avatarUrl` is still returned unchanged because
-the endpoint replaces the whole profile. The avatar itself is managed by the card above the form
-(see «Avatar»). Email is read-only: the API has no self-service email-change flow, and the copy
-says so instead of showing a dead button.
+the endpoint replaces the whole profile. The avatar itself is managed by its card above the form
+(see «Avatar»).
+
+Email is managed by its own card above the form too: the current address, its verification status
+and «Изменить email», which opens a dialog with the new address and the current password. The
+password is required — a stolen session must not move the account to another mailbox. A client-side
+check mirrors the login dialog (both fields non-empty, a sane address shape); the server stays the
+only authority. `POST /api/auth/email-change` with `X-CSRF-TOKEN` answers `204` once **both** letters
+are queued in the outbox: the confirmation link to the new address and a notice without any link to
+the current one. The button then counts down a local 60 seconds; the public codes map to the fields
+(`user.changeEmail.newEmail`, `user.changeEmail.sameEmail`, `auth.emailChange.invalidCurrentPassword`)
+or to the form (`user.changeEmail.emailTaken`, `auth.emailChange.cooldown`,
+`auth.emailChange.unavailable`, `429`), and success is announced in a `role="status"` region as
+«Письмо отправлено на …». Nothing changes until the link is opened:
+`/confirm-email-change?token=…` reads the token from the query once, sends exactly one anonymous
+`POST`, strips the token from the address with `replace`, and on success ends **every** session —
+the page signs the visitor out if it was signed in and offers the login dialog, so the next sign-in
+uses the new address; a repeated click on the same link is still a success (`204`). The old address
+stops working for sign-in, the password stays the same, and the pending address is not displayed
+anywhere: `GET /api/users/me` has no `pendingEmail`, so there is no cancel or edit of a request
+either (a known debt, see `AGENT.md` §14).
 The form enables «Сохранить» only when a field changed, trims values, maps
 `user.updateProfile.firstName|lastName` to the field and everything else to the form-level Russian
 error. `GET /api/users/me` supplies the initial values; the same response feeds the rail, so the
@@ -558,7 +577,8 @@ card is the landing after registration: the form navigates to
 with `replace`. The letter itself is sent by the server during registration, so a failed SMTP
 delivery does not fail registration: the notice still says the letter was sent, while the resend
 button honestly reports an unconfigured email channel. The «Email не подтверждён» line in the
-cabinet rail is a link to this section.
+cabinet rail is a link to this section. Changing the address itself is a separate flow on
+`/account/profile` (see «Profile»): this page only verifies the current one.
 
 Forgotten passwords are restored from the same page's «Забыли пароль?» link (the login dialog has
 one too). `/forgot-password` sends one anonymous `POST /api/auth/password-reset` with the email
@@ -1794,11 +1814,16 @@ The inbox UI is http://localhost:8025. `e2e/global-setup.ts` polls `GET /api/v1/
 15 seconds and fails immediately with this command if the container is missing, so the first test
 cannot flake on a not-yet-ready SMTP port.
 
-The same inbox serves both mail flows. Registration sends the verification letter to the new
+The same inbox serves all mail flows. Registration sends the verification letter to the new
 address first, so `password-reset.spec.ts` waits for the reset message **by recipient and
 subject** — «Сброс пароля — BarberSearch», `waitForPasswordResetMessage` in
 `e2e/fixtures/mail.ts` — instead of taking the first message to that address; the verification
-token extractor is unchanged. The reset spec is desktop-only: it spends several of the 10
+token extractor is unchanged. The email-change flow adds two more subjects, both constants in
+`e2e/fixtures/mail.ts`: «Подтвердите новый адрес электронной почты — BarberSearch» goes to the
+**new** address (`waitForEmailChangeMessage` + `extractEmailChangeToken`, link
+`/confirm-email-change?token=…`), and «Запрошена смена адреса электронной почты — BarberSearch»
+goes to the **old** address and deliberately contains no token
+(`waitForEmailChangeNoticeMessage`). The reset spec is desktop-only: it spends several of the 10
 auth requests per minute per IP, and the mobile project is skipped explicitly with that reason,
 while 320 px is covered by the axe scan of both forms.
 

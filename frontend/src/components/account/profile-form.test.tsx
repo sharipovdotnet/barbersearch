@@ -63,7 +63,17 @@ describe('ProfileForm', () => {
     renderForm()
 
     expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled()
-    expect(screen.getByText(PROFILE.email)).toBeVisible()
+  })
+
+  it('не показывает email: он меняется в отдельной карточке', () => {
+    renderForm()
+
+    expect(screen.queryByText(PROFILE.email)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Email используется для входа; его смена появится отдельным сценарием с подтверждением.'
+      )
+    ).not.toBeInTheDocument()
   })
 
   it('не отправляет пустое имя', async () => {

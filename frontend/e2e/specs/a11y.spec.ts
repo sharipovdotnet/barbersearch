@@ -14,6 +14,7 @@ import { AccountSecurityPage } from '../pages/account-security-page'
 import { BarberNotificationsPage } from '../pages/barber-notifications-page'
 import { BarberProfilePage } from '../pages/barber-profile-page'
 import { CabinetPage } from '../pages/cabinet-page'
+import { ConfirmEmailChangePage } from '../pages/confirm-email-change-page'
 import { ForgotPasswordPage } from '../pages/forgot-password-page'
 import { LandingPage } from '../pages/landing-page'
 import { MyReviewsPage } from '../pages/my-reviews-page'
@@ -82,8 +83,21 @@ test.describe('axe: публичные экраны', () => {
     await expectNoBlockingViolations(page, '/verify-email', test.info())
   })
 
-  test('восстановление пароля /forgot-password: форма', async ({ page }) => {
-    const forgot = new ForgotPasswordPage(page)
+  test('смена email /confirm-email-change: недействительная ссылка', async ({
+    page,
+  }) => {
+    const confirm = new ConfirmEmailChangePage(page)
+
+    // Анонимный экран: токен битый, поэтому страница сразу в состоянии `invalid`,
+    // без создания аккаунта и без валидного токена. Успех сканируется в
+    // `email-change.spec.ts` (диалог на 1280), 320 px — в `a11y-narrow.spec.ts`.
+    await confirm.goto('broken-token-from-axe')
+    await confirm.waitForInvalid()
+
+    await expectNoBlockingViolations(page, '/confirm-email-change', test.info())
+  })
+
+  test('восстановление пароля /forgot-password: форма', async ({ page }) => {    const forgot = new ForgotPasswordPage(page)
 
     // Только форма: любой submit — auth-запрос, а лимит (10/мин) общий на IP и
     // делится с функциональным спеком сброса (§6). Состояние «sent» сканируется

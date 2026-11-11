@@ -22,6 +22,7 @@ import {
   isBarberSchedulePath,
 } from '@/lib/barber-cabinet-path'
 import { matchBarberPath } from '@/lib/barber-path'
+import { isConfirmEmailChangePath } from '@/lib/email-change-path'
 import { isPrivacyPath } from '@/lib/legal'
 import {
   isForgotPasswordPath,
@@ -131,6 +132,12 @@ const ResetPasswordPage = lazy(() =>
   })),
 )
 
+const ConfirmEmailChangePage = lazy(() =>
+  import('@/pages/confirm-email-change-page').then((module) => ({
+    default: module.ConfirmEmailChangePage,
+  })),
+)
+
 const VerifyEmailPage = lazy(() =>
   import('@/pages/verify-email-page').then((module) => ({
     default: module.VerifyEmailPage,
@@ -169,6 +176,7 @@ function App() {
   const isVerifyEmail = isVerifyEmailPath(pathname)
   const isForgotPassword = isForgotPasswordPath(pathname)
   const isResetPassword = isResetPasswordPath(pathname)
+  const isConfirmEmailChange = isConfirmEmailChangePath(pathname)
   const isPrivacy = isPrivacyPath(pathname)
   const isBecomeABarber = isBecomeABarberPath(pathname)
   const barberId = matchBarberPath(pathname)
@@ -217,11 +225,13 @@ function App() {
                                   ? 'forgot-password'
                                   : isResetPassword
                                     ? 'reset-password'
-                                    : pathname === '/account'
-                                      ? 'account'
-                                      : barberId !== null
-                                        ? `barber:${barberId}`
-                                        : 'home'
+                                    : isConfirmEmailChange
+                                      ? 'confirm-email-change'
+                                      : pathname === '/account'
+                                        ? 'account'
+                                        : barberId !== null
+                                          ? `barber:${barberId}`
+                                          : 'home'
 
   useEffect(() => {
     // Смена верхнеуровневой страницы начинается сверху; выбор отзыва в админке
@@ -256,6 +266,8 @@ function App() {
               <ForgotPasswordPage />
             ) : isResetPassword ? (
               <ResetPasswordPage />
+            ) : isConfirmEmailChange ? (
+              <ConfirmEmailChangePage />
             ) : isVerifyEmail ? (
               <VerifyEmailPage />
             ) : isPrivacy ? (

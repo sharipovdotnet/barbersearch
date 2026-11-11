@@ -335,6 +335,7 @@ frontend/                              ← workspace root, NOT the git root
     │   ├── become-a-barber-page.tsx    ← /become-a-barber: copy, form/status, role links
     │   ├── register-page.tsx          ← /register: title, session gates, card and links
     │   ├── reset-password-page.tsx     ← /reset-password: token read once and stripped, form/success/invalid/missing
+    │   ├── confirm-email-change-page.tsx ← /confirm-email-change: email-change token read once and stripped, five states
     │   └── verify-email-page.tsx      ← /verify-email: one confirmation, four states, claim refresh
     ├── lib/
         ├── account-path.ts            ← /account and /account/reviews path helpers
@@ -367,6 +368,8 @@ frontend/                              ← workspace root, NOT the git root
         ├── cookie-notice.ts           ← acknowledgement of the cookie bar (own cookie)
         ├── cookies.ts                 ← client cookie read/write shared by hint and notice
         ├── csrf.ts                    ← one antiforgery-token helper for mutations
+        ├── email-change.ts            ← request/confirm email change and code→copy mapping
+        ├── email-change-path.ts       ← /confirm-email-change path helper
         ├── email-verification.ts       ← request/confirm email verification and code→copy mapping
         ├── errors.ts                  ← ProblemDetails → Russian copy
         ├── format.ts                  ← dates, money, rating, waiting time
@@ -402,6 +405,13 @@ and their colocated unit tests, `lib/password-reset.ts`, `lib/password-reset-pat
 `pages/account-security-page.test.tsx` cases. Its browser layer is
 `e2e/pages/forgot-password-page.ts`, `e2e/pages/reset-password-page.ts` and
 `e2e/specs/password-reset.spec.ts` (§15); the Mailpit fixture gained the reset subject filter.
+
+The email-change slice adds `components/account/email-card.tsx` (the «Email» card with the dialog
+on `/account/profile`, replacing the read-only field in `profile-form.tsx`),
+`pages/confirm-email-change-page.tsx`, `lib/email-change.ts`, `lib/email-change-path.ts` and their
+colocated unit tests. The browser layer is `e2e/pages/confirm-email-change-page.ts`, the email
+block of `e2e/pages/account-profile-page.ts` and `e2e/specs/email-change.spec.ts` (§15); the
+Mailpit fixture gained the confirmation and notice subjects plus `extractEmailChangeToken`.
 
 A new top-level folder (`features/`, `store/`, …) is an architectural decision, not a free
 choice — discuss it in the PR and record the outcome here. `pages/` and `components/admin/`
@@ -487,15 +497,15 @@ the Mailpit step: the suite no longer proves the feature without a real inbox.
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
-**Verification snapshot, 2026-11-11 (avatar moderation slice, #87):**
+**Verification snapshot, 2026-11-11 (email change slice, #88):**
 
 ```text
-npm run lint  → 0 warnings, 0 errors, 488 files, 116 rules
-npm test      → 1230 tests in 121 files, green (baseline 1202)
-npm run check:i18n -- --strict → t() строк 1676, переводов 1980, нет перевода 0,
+npm run lint  → 0 warnings, 0 errors, 497 files, 116 rules
+npm test      → 1260 tests in 124 files, green (baseline 1230)
+npm run check:i18n -- --strict → t() строк 1689, переводов 1995, нет перевода 0,
                 конфликтов 0, видимых русских строк в JSX 0
-npm run build → tsc -b + vite build OK, 2580 modules,
-                dist/assets/index-*.js            352.18 kB (gzip 114.15 kB)
+npm run build → tsc -b + vite build OK, 2584 modules,
+                dist/assets/index-*.js            352.53 kB (gzip 114.27 kB)
                 dist/assets/csrf-*.js              94.04 kB (gzip  31.31 kB)  shared
                 dist/assets/router-*.js           241.30 kB (gzip  64.18 kB)  shared (router + i18n catalog)
                 dist/assets/card-*.js              57.40 kB (gzip  22.13 kB)  shared
@@ -513,7 +523,7 @@ npm run build → tsc -b + vite build OK, 2580 modules,
                 dist/assets/become-a-barber-page-*.js 18.24 kB (gzip 5.46 kB) lazy
                 dist/assets/account-reviews-page-*.js 17.49 kB (gzip 5.64 kB) lazy
                 dist/assets/barber-notifications-page-*.js 16.49 kB (gzip 5.03 kB) lazy
-                dist/assets/account-profile-page-*.js 12.93 kB (gzip 4.33 kB) lazy
+                dist/assets/account-profile-page-*.js 17.62 kB (gzip 5.38 kB) lazy
                 dist/assets/account-security-page-*.js 12.00 kB (gzip 4.04 kB) lazy
                 dist/assets/register-page-*.js     11.98 kB (gzip   4.10 kB)  lazy
                 dist/assets/barber-cabinet-gates-*.js 8.97 kB (gzip 3.38 kB) shared
@@ -524,23 +534,34 @@ npm run build → tsc -b + vite build OK, 2580 modules,
                 dist/assets/account-shell-*.js      4.70 kB (gzip   1.95 kB)  shared
                 dist/assets/forgot-password-page-*.js 5.14 kB (gzip 2.13 kB)  lazy
                 dist/assets/verify-email-page-*.js  5.14 kB (gzip   1.94 kB)  lazy
+                dist/assets/confirm-email-change-page-*.js 5.07 kB (gzip 1.99 kB) lazy
                 dist/assets/account-gates-*.js      4.36 kB (gzip   1.51 kB)  shared
                 dist/assets/use-barber-slots-*.js   3.63 kB (gzip   1.68 kB)  shared
                 dist/assets/use-my-barber-request-*.js 2.59 kB (gzip 1.20 kB) shared
                 dist/assets/email-verification-*.js 1.36 kB (gzip   0.69 kB)  shared
+                dist/assets/email-change-*.js       2.11 kB (gzip   0.89 kB)  shared
                 dist/assets/barber-salons-*.js      1.17 kB (gzip   0.62 kB)  shared
                 dist/assets/password-reset-*.js     1.11 kB (gzip   0.60 kB)  shared
                 dist/assets/barber-slots-*.js       0.86 kB (gzip   0.49 kB)  shared
                 dist/assets/index-*.css            89.66 kB (gzip  15.35 kB)
-backend migrations → 34, last AddUserAvatarBlocked; has-pending-model-changes → none
-npm run test:e2e → 293 passed, 4 skipped, 0 failed with --workers=2
-                  (2026-11-11, after the avatar moderation slice; the six new cases are
-                  the hide/restore scenes in both avatar specs — two each — and the two
-                  axe scenes: /admin/users/{id} at 1280 and /admin/barbers at 320; the
-                  320 px overflow checks of the avatar rows live inside the mutation specs)
-                four skips — the three mobile split-view checks (`admin-reviews` ×2,
-                `admin-users`) and the desktop-only password-reset spec on mobile
-                (auth limiter; 320 px is covered by the axe scan)
+backend migrations → 35, last AddEmailChangeTokens; has-pending-model-changes → none
+npm run test:e2e → 294 passed, 6 skipped, 1 failed with --workers=2
+                  (2026-11-11, after the email-change slice; +4 cases for it:
+                  the journey and the broken-token scene in `email-change.spec.ts`,
+                  and `/confirm-email-change` at 1280 and 320 in the axe specs).
+                  The only failure is `account-avatar-mutations.spec.ts:340` («админ
+                  возвращает фото: кадр и публичный кэш возвращаются»): it asserts
+                  `Cache-Control: public, max-age=86400` on the media file, but the
+                  owner's browser fetch renews the auth cookie, and ASP.NET adds
+                  `no-cache,no-store` (+ `Pragma`/`Expires`) to that response. A clean
+                  cookie-less request returns the expected header (verified with curl
+                  and a fresh Playwright request context), and the slice does not touch
+                  the avatar/media/auth code — recorded as an unrelated pre-existing
+                  flake, not a regression.
+                six skips — the three mobile split-view checks (`admin-reviews` ×2,
+                `admin-users`), the desktop-only password-reset spec on mobile
+                (auth limiter; 320 px is covered by the axe scan) and the desktop-only
+                email-change spec on mobile for the same reason
 ```
 
 `npm run lint` passing is not proof that types are sound; only `npm run build` runs `tsc -b`.
@@ -746,6 +767,7 @@ Sixteen top-level areas:
 | `/barber/profile` | `BarberProfilePage` | own profile: the card form, the price list with active and hidden rows, and specializations; works before verification; owner/admin only; lazy chunk `barber-profile-page` |
 | `/register` | `RegisterPage` | customer self-registration: form for an anonymous visitor, «Вы уже вошли» gate for a signed-in one; lazy chunk `register-page` |
 | `/verify-email` | `VerifyEmailPage` | confirmation from the email link: one anonymous `POST` with the token, `checking`/`confirmed`/`invalid`/`error`, token stripped from the URL after it settles; lazy chunk `verify-email-page` |
+| `/confirm-email-change` | `ConfirmEmailChangePage` | the landing of the email-change link: reads `token` from the query once, strips it with `replace`, renders `missing`/`checking`/`changed`/`invalid`/`error` and sends one anonymous `POST /api/auth/email-change/confirm`; `signOut()` when the visitor was signed in, then offers the login dialog; lazy chunk `confirm-email-change-page` |
 | `/forgot-password` | `ForgotPasswordPage` | anonymous request for a reset link: one `POST /api/auth/password-reset`, the generic «Проверьте почту» card, a local 60-second resend cooldown and the same screen for an existing and an unknown address; lazy chunk `forgot-password-page` |
 | `/reset-password` | `ResetPasswordPage` | the landing of the reset link: reads `token` from the query once, strips it with `replace`, renders `missing`/`form`/`success`/`invalid` and sends one anonymous `POST /api/auth/password-reset/confirm`; `signOut()` if the visitor was signed in; lazy chunk `reset-password-page` |
 | `/privacy` | `PrivacyPage` | personal-data policy (152-ФЗ) and the cookie list; public, no session and no request, `#cookies` is a shared anchor; lazy chunk `privacy-page` |
@@ -875,6 +897,19 @@ visitor additionally gets `refreshSession()` → `retrySession()`, because the `
 claim in the already issued access cookie is not rewritten by the confirmation itself. A
 `terminal` or `transient` refresh does not turn the success into an error — the page stays
 «Адрес подтверждён», and the header/session shows its own state.
+
+`/confirm-email-change` is the anonymous landing of the email-change letter and repeats the
+`/verify-email` mechanics: `isConfirmEmailChangePath` matches exactly, the token is read from
+`window.location.search` **once** into state, exactly one `POST /api/auth/email-change/confirm` is
+cached in a `ref` under `StrictMode`, and the token is stripped with
+`navigate(CONFIRM_EMAIL_CHANGE_PATH, { replace: true })` for success and every failure. A missing
+token is «Ссылка неполная» without a request; `400 auth.emailChange.invalid` is the `invalid` state
+(«Ссылка недействительна»), a network/`5xx` the `error` state («Не удалось проверить ссылку»).
+Unlike verification, success ends **every** session on the server, so a signed-in visitor is signed
+out locally (`signOut()`, failure swallowed — the server session is dead already) and the page offers
+`LoginDialog` and «На главную»; a `409 user.changeEmail.emailTaken` is not an «invalid link» and is
+shown as the card's error text. Nothing is refreshed and there is no auto sign-in: the next sign-in
+uses the new address and the old password.
 
 `/forgot-password` and `/reset-password` are one flow with two public addresses.
 `isForgotPasswordPath`/`isResetPasswordPath` match exactly, so unknown nested paths fall back to
@@ -1107,6 +1142,8 @@ may change. Branch on `status` and `error.hasCode('…')`; map to Russian copy a
 | `POST` | `/api/auth/register` | anonymous, 10/min per IP, **no antiforgery** | `{ email, password, firstName, lastName, consentVersion }` → `201 { id }`; `consentVersion` is `PRIVACY_POLICY_VERSION` (`lib/legal.ts`), the server compares it with `PrivacyPolicy.Version` and stamps the UTC time and the client IP in `users`; role is always `Customer`, `isEmailVerified = false`, the account is active immediately; the server also sends the verification letter in this request and ignores its failure (the response stays `201`); `409 user.create.emailTaken`, `400 auth.register.consentRequired` (consent not sent), `400 auth.register.consentVersion` (the policy was edited — reload and confirm again), `400 auth.password.required/tooShort/tooLong/common/equalsEmail/equalsName`, `400 user.email/user.firstName/user.lastName`; no account is created on either `auth.register.*` failure |
 | `POST` | `/api/auth/email-verification` | authenticated, rate-limited, antiforgery | empty body; the user comes from the cookie → `204`; already verified is also `204` without a letter; `409 auth.emailVerification.cooldown` (an active token is younger than 60 s), `409 auth.emailVerification.unavailable` (`Email` or `App:PublicUrl` is not configured), `500 auth.emailVerification.sendFailed` (SMTP failed after the token was committed), `429` from the auth limiter; resending revokes the previous active token |
 | `POST` | `/api/auth/email-verification/confirm` | anonymous, rate-limited, **no antiforgery** | `{ token }` → `204`; idempotent: a repeated click and an already verified address are also `204`; `400 auth.emailVerification.invalid` for a malformed, unknown, expired or consumed token; `429`; the token is the only secret, so the link works in another browser and must not send `X-CSRF-TOKEN` |
+| `POST` | `/api/auth/email-change` | authenticated, rate-limited, antiforgery | `{ newEmail, currentPassword }` → `204` once **both** letters are queued in the outbox (confirmation link to the new address, notice without a link to the current one); the address changes only after the link is opened. `400 user.changeEmail.newEmail` / `user.changeEmail.sameEmail` (`invalidField = "newEmail"`), `400 auth.emailChange.invalidCurrentPassword` (`invalidField = "currentPassword"`), `409 user.changeEmail.emailTaken`, `409 auth.emailChange.cooldown` (active token younger than 60 s), `409 auth.emailChange.unavailable` (`Email` or `App:PublicUrl` is not configured), `429` from the auth limiter |
+| `POST` | `/api/auth/email-change/confirm` | anonymous, rate-limited, **no antiforgery** | `{ token }` → `204`; idempotent: a repeated click on an applied link is also `204`; `400 auth.emailChange.invalid` for a malformed, unknown, expired, consumed or revoked token; `409 user.changeEmail.emailTaken` when the address belongs to another account (including the `ux_users_email` race); success changes the address, marks it verified, rotates the security stamp and revokes every refresh token, so **all** sessions end and the client signs in again with the new address |
 | `POST` | `/api/auth/password-reset` | anonymous, 10/min per IP, **no antiforgery** | `{ email }` → `204` for any address (existing, unknown, inactive, empty, malformed) — the response must not reveal whether the account exists; the quiet 60 s cooldown and a silent SMTP failure are also `204`; `409 auth.passwordReset.unavailable` when `Email` or `App:PublicUrl` is not configured; `429`; no `GET /api/auth/csrf` and no `X-CSRF-TOKEN` |
 | `POST` | `/api/auth/password-reset/confirm` | anonymous, 10/min per IP, **no antiforgery** | `{ token, newPassword }` → `204`; one-time and not idempotent: a malformed, unknown, expired, revoked or already consumed token, a missing user and an inactive account are `400 auth.passwordReset.invalid`; a password rejected by the policy is `400 auth.password.*` with `invalidField = "newPassword"` and the token stays usable; success ends every session and returns no tokens, so the client signs in again |
 | `GET` | `/api/auth/me` | authenticated | current user, `401` when anonymous |
@@ -1708,6 +1745,13 @@ of WCAG conformance.
   that returns focus to the upload button.
 - Dialogs use Base UI, which provides focus trapping, escape-to-close and focus return; the
   title and description are wired through `DialogTitle` / `DialogDescription`.
+- The email-change dialog has two labelled inputs with `autoComplete="email"` /
+  `autoComplete="current-password"`, field errors through `aria-invalid`/`aria-describedby`, a
+  form-level `role="alert"` for cooldown/unavailable/network, a `role="status"` announcement after
+  `204`, 44 px buttons on narrow screens, Escape closes it, and focus returns to the trigger
+  (the trigger stays focusable during the countdown: `aria-disabled`, not `disabled`). The
+  `/confirm-email-change` landing focuses the result heading, announces the `checking` skeleton
+  with `role="status"` and keeps «На главную» plus the login trigger in every settled state.
 - `focus-visible` rings are preserved by the component styles.
 
 **Rules for new UI**
@@ -1997,11 +2041,11 @@ The build is 2580 modules; no new dependency and no `ui/**` change.
 | Barber search / card / slots | ✅ search is wired (`GET /api/barbers`, filters by city, date, language, specialization, service and an additional-service substring, keyset, loading/empty/error/load-more); the specialisation and service selects come from the public catalogues (hidden when empty, Russian retry when they fail), and the additional-service input gets `<datalist>` suggestions best-effort; the result card and the hero show the place with its type (`Барбершоп на Ленина · Екатеринбург · Барбершоп`), while `Home`/`Mobile` read «На дому в <город>» / «Выезд по городу» and a barber without a place keeps «Салон не указан»; `/barbers/{id}` shows the public card (hero with the owner's `AvatarImage` and initials fallback, about including additional services, services with prices, specializations, places with their type and a «Не в каталоге» badge for `Home`/`Mobile`, the weekly schedule, payment, late policy, 404/error/retry) plus the «Свободное время» section (salon-local date, service and place controls, the place select reads «Название · Тип»; slots as information chips or native radios once a service is chosen; working-day/empty/loading/error/404/409 states); a profile without a place renders the section with the explanation «Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.» and makes no `/slots` request. The public card also has the «Работы» gallery between the hero and the slots grid: `photos.length === 0` renders no section at all, otherwise a 2/3/4-column grid (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) of `aspect-square object-cover` images, the first `loading="eager" fetchPriority="high"`, the rest `lazy` with `decoding="async"`, meaningful `alt` from the caption or «Работа барбера <имя>, фото N», and a button named «Открыть фото: …». A click opens the Base UI `Dialog` lightbox with the full image (`object-contain`, `max-h-[75vh]`), caption, «2 из 5» counter, «Назад»/«Дальше» disabled at the edges, ArrowLeft/ArrowRight on the content and Escape from the dialog; focus returns to the triggering button (Base UI). A failed image becomes a muted `role="img"` placeholder with the same `alt` instead of disappearing. The gallery is a read-only client-side view of `photos`; hidden and blocked photos never arrive in the public response. |
 | Booking flow | ✅ in-card panel on `/barbers/{id}`: summary, `LoginDialog` with `redirectTo={null}`, comment with a 500-character UI limit, `POST /api/bookings` with CSRF and a per-panel UUID idempotency key, `201` confirmation with the `Pending` badge, `409` overlap/lockTimeout, `400` start window, `401`, `404`, `429` and network/`5xx` states; slots are reloaded after a write. The barber side lives at `/barber` (see «Barber cabinet») |
 | Reviews | ✅ public published list on `/barbers/{id}` (`GET /api/reviews`, ten per page with the shared `ListPager`: «Назад»/«Дальше» replace the visible page instead of growing it, opaque `nextCursor`, visited pages cached in memory, summary from `rating`/`reviewsCount`, skeleton/empty/first-page error/next-page error that keeps the cards, no names, avatars, `userId` or `bookingId` in the DOM); ✅ creation in the personal cabinet on a completed booking (`isPublished = false` until moderation); ✅ author list at `/account/reviews` (`GET /api/reviews/mine`, both statuses, «Опубликован» / «На модерации», visit context, edit and delete with CSRF, the same shared pager); editing the **text** of a published review returns it to moderation — the row flips to «На модерации» from the `PUT` response, while a rating-only edit applies immediately and the dialog says which one will happen |
-| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/become-a-barber`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/barber/salons`, `/barber/profile`, `/barber/import`, `/barber/notifications`, `/forgot-password`, `/reset-password`, `/register`, `/verify-email`, `/privacy`, `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `BarberSalonsPage`, `BarberProfilePage`, `BarberImportPage`, `BarberNotificationsPage`, `BecomeABarberPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `RegisterPage`, `VerifyEmailPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
+| Routing | ✅ hand-rolled History API over `/`, `/barbers/{id}`, `/become-a-barber`, `/account`, `/account/profile`, `/account/security`, `/account/reviews`, `/barber`, `/barber/onboarding`, `/barber/schedule`, `/barber/salons`, `/barber/profile`, `/barber/import`, `/barber/notifications`, `/forgot-password`, `/reset-password`, `/register`, `/verify-email`, `/confirm-email-change`, `/privacy`, `/admin/**` (summary, reviews, barbers, users, barber requests, catalogue, bookings, audit); `AdminPage`, `AccountPage`, `AccountProfilePage`, `AccountSecurityPage`, `AccountReviewsPage`, `BarberPage`, `BarberCabinetPage`, `BarberOnboardingPage`, `BarberSchedulePage`, `BarberSalonsPage`, `BarberProfilePage`, `BarberImportPage`, `BarberNotificationsPage`, `BecomeABarberPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ConfirmEmailChangePage`, `RegisterPage`, `VerifyEmailPage` and `PrivacyPage` are lazy chunks behind `Suspense` |
 | Design system | ✅ tokens + 13 shadcn/Base UI components; ❌ no dark toggle |
 | Accessibility | ✅ axe gate over every screen and role at 1280 and 320 (`critical`/`serious` block, `moderate`/`minor` are report annotations), zero known blocking findings, no allow-list; pager and queue names contain their visible text, header loading has a status; contrast of `destructive`/`warning` tokens tuned for their tinted badges; Lighthouse — ❌ |
 | Responsive layout | ✅ 320/375/1280 asserted by the E2E suite (no horizontal scroll, 44×44 pager buttons) |
-| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 1230 tests in 121 files: the avatar-moderation suites are in §15, the email-verification and password-reset transport/mapping and their screens are in §15, the i18n core and switch (`i18n.test.ts`, `language-switcher.test.tsx`), the localized date input (`ui/input.test.tsx`), English formatting in `format.test.ts`, the import suites (`import-parse.test.ts` table cases: phone-first parsing, `14.05` as a date, date-header lines, pipe-separated rows, weekday vs explicit date, truncated phone, ambiguous service, inactive service, salon by city, `noDate`/`noTime`/`badTime`/`past`/`badPhone`/`badDate`, the five-minute tolerance, year-less dates, the 50-line limit and the header row; `salon-time.test.ts`: Yekaterinburg, Berlin summer/winter, the DST hole, the repeated hour, a broken zone; `use-barber-import.test.tsx`: summary counts, duplicates, sequential POSTs, one idempotency key per row, `409` → slots → applied time, `429` → «Продолжить», `401`, network stop, unmount stops the batch, plus the calendar-import suites: `ics-decode.test.ts` (BOM/UTF-8/UTF-16, the 2 MB limit, the `BEGIN:VCALENDAR` gate), `ics-parse.test.ts` (recurrence, `VTIMEZONE`, floating time, skips and limits), `ics-map.test.ts` (matchers, hints and default inclusion), `ics-identity.test.ts` (the stable `UID` key) and `ics-rows.test.ts` (duration and overlap recomputation)), the day-feed suites (the three-tab `tablist` and its keys, `isSameLocalDay`/`mergeDayBookings`/`findDayGaps`/`findNextBooking`, `formatGapsCount`, the `useBarberDay` controller: two reads on mount, routed actions, the second list reloaded after a terminal action, `401` from either list and the partial-error split, the day feed itself: row/window order, the header counters, «Занять» with its window, the empty-day CTA and the three header states, and the dialog pre-selection from `preferredStartAt` with a service change), the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error), the reminder inbox (`barber-notifications.test.ts` — list URL and cursor, CSRF `read`/`read-all`, the settings `GET` and full `PUT` body, Telegram link/unlink, the strict guards and the Russian error mappings; `useBarberNotifications` — paging, one local read, read-all + quiet reload, the `401` gate; `useUnreadNotifications` — mount/timer/focus reads and a hidden badge on error; `useNotificationSettings` — the 500 ms debounce, the normalized body, both `400` fields and a read error that keeps the form; `BarberUnreadBell` — badge, `99+`, zero and error; `barber-cabinet-path` — the new predicate never opens the cabinet; `BarberNotificationsPage` — gates, both row kinds, read-all and the three Telegram states)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
+| Tests | ✅ Vitest + RTL + MSW unit suite (`npm test`, 1260 tests in 124 files: the avatar-moderation suites are in §15, the email-verification and password-reset transport/mapping and their screens are in §15, the i18n core and switch (`i18n.test.ts`, `language-switcher.test.tsx`), the localized date input (`ui/input.test.tsx`), English formatting in `format.test.ts`, the import suites (`import-parse.test.ts` table cases: phone-first parsing, `14.05` as a date, date-header lines, pipe-separated rows, weekday vs explicit date, truncated phone, ambiguous service, inactive service, salon by city, `noDate`/`noTime`/`badTime`/`past`/`badPhone`/`badDate`, the five-minute tolerance, year-less dates, the 50-line limit and the header row; `salon-time.test.ts`: Yekaterinburg, Berlin summer/winter, the DST hole, the repeated hour, a broken zone; `use-barber-import.test.tsx`: summary counts, duplicates, sequential POSTs, one idempotency key per row, `409` → slots → applied time, `429` → «Продолжить», `401`, network stop, unmount stops the batch, plus the calendar-import suites: `ics-decode.test.ts` (BOM/UTF-8/UTF-16, the 2 MB limit, the `BEGIN:VCALENDAR` gate), `ics-parse.test.ts` (recurrence, `VTIMEZONE`, floating time, skips and limits), `ics-map.test.ts` (matchers, hints and default inclusion), `ics-identity.test.ts` (the stable `UID` key) and `ics-rows.test.ts` (duration and overlap recomputation)), the day-feed suites (the three-tab `tablist` and its keys, `isSameLocalDay`/`mergeDayBookings`/`findDayGaps`/`findNextBooking`, `formatGapsCount`, the `useBarberDay` controller: two reads on mount, routed actions, the second list reloaded after a terminal action, `401` from either list and the partial-error split, the day feed itself: row/window order, the header counters, «Занять» with its window, the empty-day CTA and the three header states, and the dialog pre-selection from `preferredStartAt` with a service change), the #54 place-kind suites (labels, radio order, `isListedAllowed`/`defaultIsListed`, guards that reject an unknown `kind` and accept a nullable `primaryPlaceKind`, the form defaults and the Home/SoloStudio bodies, the `Home`/`Mobile` captions and the «Не в каталоге» badge, and the no-place empty state that makes no `/slots` request), the #48 salon suites (shared form validation in both scopes, `createOwnSalon` body/CSRF/403, cards with all three moderation statuses, owner prefill and the two independent `PUT`s, admin «На проверке» filter, approve/reject bodies and 400/409/403 mapping), the salon-barber composition transport and dialog (strict list guard, owner-only removal, debounced candidate search, attach/detach and the Russian error copy), `apiRequest`, `describeSignInError`, `LoginDialog`, `SessionProvider`, `HeaderAuth`, `ListPager`, `createBooking`, `fetchBookings` scope/cursor/signal, `refreshSession`, the admin-catalogue transport: list URLs, guards, CSRF activation with one retry, salon create body, error mapping, and the admin-audit transport, row and screen: URL rules, strict page guards, `formatAuditValue`/`formatAuditAction`, the eight entity-type labels in appended order, Russian booking `status` and service `category` values, `isActive` as «Активность», error mapping, actor labels, the expandable diff with a Russian status/name pair, the entity-type filter (including «Салон» → `entityType=salon`) and the empty/`403` states, the admin-bookings layer: the list URL (`status` always, `search`/`cursor` only when set, no `pageSize`), the exact-id search, strict booking/page guards, the salon-zone time, the action error mapping, the list screen and the detail card with both actions, the admin-summary transport and strict guard: one parameterless `GET`, non-negative integers, `oldest` shape and error mapping, the summary screen: three blocks with numbers and links, honest zeros, `401` gate, first-page error with retry, refresh error that keeps the blocks, one request per «Обновить», the `formatProfilesCount`/`formatSalonsCount` plural forms, the reviews screen tab switch that must not keep the previous tab's review, the barbers screen filter switch and applied search that must not keep the previous selection's card, `usePagedList`'s immediate reset when its source changes, the cookie notice (shown, dismissed in one click, remembered), the policy page (heading, date, every registry cookie, operator details, the recorded-consent paragraphs), the registration consent (#42: no request without the checkbox, the body carries `consentVersion`, the edition in the checkbox copy, both `auth.register.*` codes as Russian copy, the `user-detail` consent row and «Записи нет», `isAdminUser` with nullable consent fields, the barber-schedule transport and strict seven-day guard, UTC conversion of local time off dates and the `/barber/schedule` screen: gates, week save, date exception, time off, invalid ranges and a server error), the reminder inbox (`barber-notifications.test.ts` — list URL and cursor, CSRF `read`/`read-all`, the settings `GET` and full `PUT` body, Telegram link/unlink, the strict guards and the Russian error mappings; `useBarberNotifications` — paging, one local read, read-all + quiet reload, the `401` gate; `useUnreadNotifications` — mount/timer/focus reads and a hidden badge on error; `useNotificationSettings` — the 500 ms debounce, the normalized body, both `400` fields and a read error that keeps the form; `BarberUnreadBell` — badge, `99+`, zero and error; `barber-cabinet-path` — the new predicate never opens the cabinet; `BarberNotificationsPage` — gates, both row kinds, read-all and the three Telegram states)) in `frontend-ci`; Playwright + axe E2E in its own workflow; no coverage gate (§15) |
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ✅ ru/en: header switch, persisted choice, `t()` over Russian source strings, English JSON catalogs, locale-aware dates/numbers/plurals, `npm run check:i18n` gate |
 | API typing | ✅ hand-written types + strict response guards |
@@ -2032,6 +2076,32 @@ decision is one `user.updated` row with `changes.isAvatarBlocked` («Фото с
 avatar moderation is masked only on public reads — search, the public barber card and the barber's
 booking list — while the admin lists, cards and bookings stay raw.
 
+**Email change (#88).** The address is no longer read-only. `/account/profile` starts with the
+«Аватар» card, then the «Email» card (`components/account/email-card.tsx`), then the personal-data
+form: the card shows the current address and its verification status, and «Изменить email» opens a
+dialog with «Новый email» (`type="email"`, `autoComplete="email"`) and «Текущий пароль»
+(`autoComplete="current-password"`, required — a stolen session must not move the account). Client
+validation mirrors `login-dialog.tsx`; the server stays the authority. `POST /api/auth/email-change`
+goes through `mutateWithCsrf`; `204` means **both** letters are queued (confirmation link to the new
+address, notice without a link to the current one), the dialog closes, the card announces «Письмо
+отправлено на …» in `role="status"`, and the button counts down a local 60 seconds while remaining
+focusable (`aria-disabled`, not `disabled`). Codes map by field — `user.changeEmail.newEmail`,
+`user.changeEmail.sameEmail`, `auth.emailChange.invalidCurrentPassword`, `user.changeEmail.emailTaken`
+— or to the form (`auth.emailChange.cooldown`, `auth.emailChange.unavailable`, `429`, network), and
+the English `detail` is never shown. `GET /api/users/me` still has no `pendingEmail`, so the pending
+address is not displayed and there is no cancel action: that is the debt in §14.
+`/confirm-email-change` (`pages/confirm-email-change-page.tsx`, lazy) is the anonymous landing of
+the letter: the token is read from the query once, one `POST /api/auth/email-change/confirm` is
+cached in a `ref` so `StrictMode` sends it once, the token is stripped with
+`navigate(..., { replace: true })`, and the page has five honest states — `missing`, `checking`
+(skeleton, `role="status"`), `changed` («Email изменён»), `invalid` (`400 auth.emailChange.invalid`,
+«Ссылка недействительна») and `error` (network/`5xx`, «Не удалось проверить ссылку»). Success ends
+**every** session on the server (new address, `IsEmailVerified`, rotated security stamp, revoked
+refresh tokens), so the page calls `signOut()` when the visitor was `authenticated` (a failure is
+swallowed: the server session is already dead), focuses the heading, offers `LoginDialog` and «На
+главную», and there is no auto sign-in — the next sign-in uses the new address with the old
+password.
+
 ---
 
 ## 14. Technical debt and known issues
@@ -2057,6 +2127,7 @@ the feature grows; **P3** cosmetic/structural.
 | 30 | P2 | Правки карточки барбера (`displayName`, `bio`, `latePolicy`, списки) и его прайса (цена, длительность, скрытие и возврат услуги) не попадают в `audit_log`: allowlist `BarberProfile` покрывает только `UserId/Grade/IsActive/IsVerified/Rating/ReviewsCount`, а `BarberService` — дочерняя сущность, как `BarberSalon`. Расширение allowlist свободным текстом (bio 2000, latePolicy 500) и ценами — отдельное решение о приватности и объёме журнала. Портфолио больше не «фото без хранилища»: файл готовит браузер, API проверяет его и кладёт в локальное хранилище, публичная карточка показывает галерею (#84); ограничения этого решения — в #31 | Решить, что из карточки и прайса журналируется (и с какой редакцией/сроком хранения), затем расширить allowlist и добавить интеграционные тесты |
 | 31 | P2 | Портфолио #84 принято с ограничениями: **постмодерация** — фото публикуется сразу, очереди «на проверке» и счётчика в `/admin/summary` нет, админ реагирует блокировкой; **нет серверных миниатюр** — `thumbnailUrl` всегда `null`, галерея грузит подготовленный JPEG, нет `srcset`, WebP/AVIF и кропа; **EXIF/GPS** вычищается только браузерным клиентом (canvas-перекодирование), сервер не перекодирует файл и не обещает очистку метаданных для небраузерных клиентов; публичный кадр кэшируется на 24 часа (`Cache-Control: public, max-age=86400`), поэтому после блокировки браузер может показать его из кэша до истечения суток, хотя публичная карточка его уже не содержит; файлы лежат **вне backup PostgreSQL** — `Storage:RootPath` (`App_Data/photos`) нужно бэкапить отдельно; хранилище рассчитано на **один инстанс API и один диск** — общий volume или object storage появятся позже; действия с фото (загрузка, подпись, порядок, скрытие, блокировка) **не пишутся в `audit_log`**, потому что `PortfolioPhoto` — дочерняя сущность, а allowlist не расширяем | Осознанный MVP: `IPhotoStorage` позволит заменить локальный диск на S3/MinIO без смены домена. Аватар пользователя сделан отдельным срезом #85 на том же хранилище и с тем же инспектором; его собственные ограничения — #32. Отдельными срезами: серверный pipeline миниатюр/`srcset`/WebP/AVIF, премодерация с очередью и счётчиком, облачное хранилище и общий volume, решение об аудите фотографий |
 | 32 | P2 | Аватар #87 получил модерацию и аудит: администратор скрывает и возвращает фото, не трогая доступ, действия пишутся в `audit_log` как `user.updated` с `isAvatarBlocked`, админские списки и карточки пользователей и барберов показывают сырой URL, флаг и бейдж «Фото скрыто», а `users/me` отдаёт сырой URL + флаг. Осталось: премодерации и очереди «на проверке» нет — публикация по-прежнему постмодерация, обход — новая загрузка; счётчика скрытых аватаров в `/admin/summary` и фильтра `avatar=blocked` в списках нет; серверных миниатюр, `srcset`, WebP/AVIF и серверного кропа нет; файл кэшируется на 24 часа (`Cache-Control: public, max-age=86400`), поэтому после замены, удаления или скрытия старый кадр может ещё сутки жить в чужом браузере, а открытая вкладка владельца узнаёт о блокировке только при следующей загрузке; `avatars/` лежит на том же одном диске и входит в тот же бэкап, что `portfolio/` | Отдельные срезы: премодерация и очередь, счётчик/фильтр скрытых аватаров, серверные миниатюры/`srcset`, S3/MinIO и общий volume для нескольких инстансов |
+| 33 | P2 | Смена email #88 принята с ограничениями: **ожидающий адрес не показывается** — `GET /api/users/me` не отдаёт `pendingEmail`, поэтому карточка «Email» показывает только текущий адрес и после отправки письма живёт локальным `role="status"` + кулдауном 60 с (перезагрузка страницы забывает о заявке); **отменить заявку нельзя** и вписать сразу несколько адресов тоже; после подтверждения **все сессии завершаются** (ротация security stamp и отзыв refresh — как в сбросе пароля), поэтому страница `/confirm-email-change` честно разлогинивает и предлагает вход, а не сохраняет текущую сессию; **третьего письма «адрес изменён» на старый адрес нет** — уведомление при заявке единственное, и в нём намеренно нет ссылки на действие; **старые verification-токены старого адреса не отзываются** — после смены адрес уже подтверждён, и повторный клик по старой ссылке отвечает `204`, ничего не меняя; вход после смены — только с новым адресом и прежним паролем, предзаполнения логина нет, а PII (адрес) появляется в админском журнале как `user.updated` — это следствие существующего allowlist `User.Email`, нового решения о приватности не требуется | Отдельные срезы: `pendingEmail` + отмена заявки и подсказка «подтвердите новый адрес»; сохранение текущей сессии (перевыпуск cookie и claims); третье письмо-подтверждение; отзыв verification-токенов старого адреса вместе с уведомлением |
 
 Row numbers are stable: other documents and PR history link to them. Completed rows are
 removed, so #1 (demo cards), #2 (no test runner), #3 (no `401`/refresh strategy), #5 (unvalidated
@@ -2084,7 +2155,7 @@ remaining numbers do not shift.
   Projects: `desktop-chromium` (1280×900), `mobile-chromium` (375×812), `narrow-320`
   (`pager-320.spec.ts` and `a11y-narrow.spec.ts`), `mutations-chromium` (edit/delete/publish
   specs, last), plus the `auth` setup project. CI job: `.github/workflows/frontend-e2e.yml`.
-- **Unit — installed (#32), 1230 tests in 121 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
+- **Unit — installed (#32), 1260 tests in 124 files.** Vitest 5 + jsdom + Testing Library (`@testing-library/react`,
   `dom`, `user-event`, `jest-dom`) + MSW 3. `vitest.config.ts` is separate from `vite.config.ts`;
   the setup file and the MSW server/handlers live in `src/test/**`. Scripts: `npm test`
   (`vitest run`) and `npm run test:watch`; `frontend-ci` runs `npm test` between `lint` and
@@ -2239,8 +2310,31 @@ in `a11y-narrow.spec.ts`; `a11y.spec.ts` scans them at 1280 with a fake token an
 Old-password rejection and anti-enumeration stay in the backend application/integration tests and
 the page's unit test, so the browser scenario does not spend extra auth requests.
 
+**Email change adds** `email-change.spec.ts` (desktop only, the same auth-limit reason as the reset
+spec): a fresh `e2e+change-…@barbersearch.test` customer registers through the real form, the
+«Email» card on `/account/profile` shows the unverified address, the dialog opens and closes with
+`Escape` (focus returns to the button; axe scans the open dialog at 1280), the request answers `204`,
+the card announces «Письмо отправлено на …» and the button turns into a 60-second countdown. The
+Mailpit fixture waits for two messages **by subject**: «Подтвердите новый адрес электронной почты —
+BarberSearch» to the new address (`extractEmailChangeToken`, 43-character token) and «Запрошена
+смена адреса электронной почты — BarberSearch» to the old one, whose bodies must not contain
+`confirm-email-change` (the notice is not a second confirmation channel). The extracted link opens
+`/confirm-email-change`, which shows «Email изменён», strips the token and signs the visitor out —
+`GET /api/auth/me` answers `401` — then the login dialog rejects the old address with «Неверный
+email или пароль.» and accepts the new one with the old password, after which the card shows the new
+address as «Адрес подтверждён.». A second scene opens a broken token and checks the Russian
+invalid-link card, «На главную» and no «Email изменён». axe adds `/confirm-email-change` at 1280
+(`a11y.spec.ts`) and at 320 (`a11y-narrow.spec.ts`, invalid state, zero horizontal scroll).
+
 **What the unit layer covers:** `apiRequest` (bodies, `204`, broken JSON, `ProblemDetails` and the
 strict guard, transport failure, `validate`, the `401` retry rules and the `/auth/*` exception);
+`describeEmailChangeFailure` and both transports (`X-CSRF-TOKEN` on the request, no CSRF on confirm,
+`204` without a body, each public code mapped to a field or to the form, an English `detail` never
+leaked), `EmailCard` (client validation, dialog focus return and `Escape`, `user.changeEmail.emailTaken`
+and `auth.emailChange.invalidCurrentPassword` on their fields, cooldown/unavailable/`429` on the form,
+`role="status"` after `204` and the local countdown) and `ConfirmEmailChangePage` (the five states,
+one `POST` under `StrictMode`, the token stripped from the address, the conditional swallowed
+`signOut`, `LoginDialog` on success);
 `describeSignInError` (every branch, the order `429` → codes → `401`, unknown codes,
 non-`ApiError`); `LoginDialog` (client validation, pending state, success closes the dialog, mapped
 server errors, labels with `aria-invalid`/`aria-describedby`); `SessionProvider` (bootstrap
@@ -3220,11 +3314,15 @@ do not shift.
 11. **Node pinning:** `.nvmrc`, `engines`, or Volta?
 12. **shadcn updates:** track upstream (`npx shadcn@latest add --overwrite`) or freeze the
     vendored set? Freezing is safer for diffs; tracking gets fixes.
-13. **Cabinet profile completeness (avatar decided 2026-11-11):** avatar upload now has its own
-    endpoint and contract on `users` (#85): the file lives in the same local storage as the
-    portfolio (`Storage:RootPath/avatars`), `avatarUrl` is the relative media URL, and
-    `/account/profile` edits it in a separate card. What remains open is the email change with a
-    confirmation flow; the profile page keeps email read-only instead of showing a dead action.
+13. **Cabinet profile completeness (avatar decided 2026-11-11; email change decided 2026-11-11):**
+    avatar upload has its own endpoint and contract on `users` (#85): the file lives in the same
+    local storage as the portfolio (`Storage:RootPath/avatars`), `avatarUrl` is the relative media
+    URL, and `/account/profile` edits it in a separate card. Email change with confirmation is
+    **decided and implemented** (#88): `POST /api/auth/email-change` (new address + current
+    password) queues two letters, `POST /api/auth/email-change/confirm` applies the address,
+    marks it verified, rotates the security stamp and ends every session; `/account/profile` has
+    the «Email» card and `/confirm-email-change` is the anonymous landing. The open part has moved
+    to §14 #33 (no `pendingEmail`, no cancel, no third letter, confirmation ends all sessions).
 14. **Push instead of polling:** SSE or SignalR for the cabinets? Thirty-second polling costs two
     authenticated reads a minute per open cabinet, needs no backend change and pauses on a hidden
     tab; push pays off when many cabinets are open at once or when «мгновенно» becomes a product
@@ -3345,6 +3443,8 @@ Copy this into the PR description and check every item that applies:
       anonymous registration (§9.4);
 - [ ] API errors mapped by `status` / `errorCodes`, Russian fallback, no raw `detail`;
 - [ ] loading, empty and error states implemented;
+- [ ] identity/session actions (password change, email change, password reset) explain what ends and
+      where the user signs in again; `signOut()` only after the server already ended the sessions;
 - [ ] 320 px / tablet / desktop checked; no horizontal scroll;
 - [ ] axe is clean on the affected screens and roles in **both** widths (`a11y` at 1280,
       `a11y-narrow` at 320) and the keyboard path is checked: Tab order, arrows/Home/End in the
