@@ -40,6 +40,7 @@ import {
 import { bookingsPath } from '@/lib/admin-path'
 import { bookingStatusLabel, bookingStatusStyle } from '@/lib/booking-status'
 import { formatClockTime, formatPrice, getInitials } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 import { formatPageRange } from '@/lib/paging'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -480,7 +481,10 @@ function BookingsTable({
                 <div className="flex min-w-0 items-start gap-1.5">
                   <Avatar size="sm" aria-hidden>
                     {booking.customer.avatarUrl && (
-                      <AvatarImage src={booking.customer.avatarUrl} alt="" />
+                      <AvatarImage
+                        {...avatarImageSource(booking.customer.avatarUrl)}
+                        alt=""
+                      />
                     )}
                     <AvatarFallback className="text-xs">
                       {getInitials(customerName)}
@@ -503,7 +507,10 @@ function BookingsTable({
                 <div className="flex min-w-0 items-center gap-1.5">
                   <Avatar size="sm" aria-hidden>
                     {booking.barber.avatarUrl && (
-                      <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                      <AvatarImage
+                        {...avatarImageSource(booking.barber.avatarUrl)}
+                        alt=""
+                      />
                     )}
                     <AvatarFallback className="text-xs">
                       {getInitials(booking.barber.displayName)}
@@ -588,7 +595,7 @@ function BookingCards({
                       <Avatar size="sm" aria-hidden>
                         {booking.customer.avatarUrl && (
                           <AvatarImage
-                            src={booking.customer.avatarUrl}
+                            {...avatarImageSource(booking.customer.avatarUrl)}
                             alt=""
                           />
                         )}
@@ -615,7 +622,10 @@ function BookingCards({
                     <div className="flex min-w-0 items-center gap-2">
                       <Avatar size="sm" aria-hidden>
                         {booking.barber.avatarUrl && (
-                          <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                          <AvatarImage
+                            {...avatarImageSource(booking.barber.avatarUrl)}
+                            alt=""
+                          />
                         )}
                         <AvatarFallback className="text-xs">
                           {getInitials(booking.barber.displayName)}

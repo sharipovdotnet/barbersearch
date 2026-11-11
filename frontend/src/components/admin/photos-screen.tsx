@@ -49,6 +49,7 @@ import {
 import type { PhotosTab } from '@/lib/admin-path'
 import { photosPath } from '@/lib/admin-path'
 import { formatClockTime, formatShortDateTime } from '@/lib/format'
+import { avatarImageSource, portfolioPhotoSource } from '@/lib/media'
 import { formatPageRange, type Page } from '@/lib/paging'
 import {
   PHOTO_REJECTION_MAX_LENGTH,
@@ -134,6 +135,11 @@ function PhotoRowView({
     row.kind === 'avatar' ? row.photo.email : row.photo.ownerEmail
   const description =
     row.kind === 'portfolio' ? row.photo.description : null
+  // Превью 80×80: у аватара плотности 1x/2x/3x, у кадра портфолио — ширины.
+  const previewSource =
+    row.kind === 'avatar'
+      ? avatarImageSource(rowUrl(row))
+      : portfolioPhotoSource(rowUrl(row), '80px')
 
   return (
     <li className="p-3">
@@ -146,7 +152,7 @@ function PhotoRowView({
           onClick={(event) => onPreview(row, event.currentTarget)}
         >
           <img
-            src={rowUrl(row)}
+            {...previewSource}
             alt=""
             className="size-full object-cover"
             loading="lazy"

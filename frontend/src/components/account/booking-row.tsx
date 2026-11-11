@@ -14,6 +14,7 @@ import {
   formatWeekday,
   getInitials,
 } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 
 /**
  * Строка истории или предстоящего визита.
@@ -60,7 +61,10 @@ export function BookingRow({
           <div className="flex min-w-0 items-center gap-2">
             <Avatar size="sm" aria-hidden>
               {view.barberAvatarUrl && (
-                <AvatarImage src={view.barberAvatarUrl} alt="" />
+                <AvatarImage
+                  {...avatarImageSource(view.barberAvatarUrl)}
+                  alt=""
+                />
               )}
               <AvatarFallback>{getInitials(view.barberName)}</AvatarFallback>
             </Avatar>

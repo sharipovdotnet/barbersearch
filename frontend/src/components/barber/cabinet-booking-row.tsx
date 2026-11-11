@@ -14,6 +14,7 @@ import {
   type BarberActionFailure,
 } from '@/lib/errors'
 import { formatDateTime, formatPrice, getInitials } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 
 /** Что именно должно получить фокус после действия: первая кнопка, «Отменить» или «Заметка». */
 export type RowHandle = {
@@ -139,7 +140,10 @@ export function CabinetBookingRow({
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <Avatar size="sm" aria-hidden>
               {booking.customer.avatarUrl && (
-                <AvatarImage src={booking.customer.avatarUrl} alt="" />
+                <AvatarImage
+                  {...avatarImageSource(booking.customer.avatarUrl)}
+                  alt=""
+                />
               )}
               <AvatarFallback>
                 {getInitials(booking.customer.displayName)}

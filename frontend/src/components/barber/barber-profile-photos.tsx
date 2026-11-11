@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { invalidateBarberProfile } from '@/lib/catalog'
 import { ImagePrepError, preparePortfolioImage } from '@/lib/image-prep'
+import { portfolioPhotoSource } from '@/lib/media'
 import {
   describePortfolioPhotoError,
   MAX_PORTFOLIO_PHOTOS,
@@ -311,7 +312,7 @@ function PhotoCard({
       aria-busy={isPending || isReordering || undefined}
     >
       <img
-        src={photo.url}
+        {...portfolioPhotoSource(photo.url, '(min-width: 640px) 50vw, 100vw')}
         alt={caption === '' ? t('Работа {number}', { number }) : caption}
         loading="lazy"
         className="aspect-square w-full rounded-md bg-muted object-cover"

@@ -20,6 +20,7 @@ import {
   rejectAvatar,
 } from '@/lib/admin-photos'
 import type { AvatarModerationAction } from '@/lib/avatar-moderation'
+import { avatarImageSource } from '@/lib/media'
 import {
   photoModerationLabel,
   type PhotoModerationStatus,
@@ -161,7 +162,9 @@ export function AvatarModeration({
     <div className="space-y-3">
       <div className="flex items-start gap-3">
         <Avatar size="lg">
-          {avatarUrl && <AvatarImage src={avatarUrl} alt="" />}
+          {avatarUrl && (
+            <AvatarImage {...avatarImageSource(avatarUrl)} alt="" />
+          )}
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">{children}</div>

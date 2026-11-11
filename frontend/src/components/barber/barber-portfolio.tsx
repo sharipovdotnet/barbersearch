@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n'
+import { portfolioPhotoSource } from '@/lib/media'
 import type { PortfolioPhoto } from '@/lib/portfolio-photos'
 
 /**
@@ -101,7 +102,7 @@ export function BarberPortfolio({
                   />
                 ) : (
                   <img
-                    src={photo.url}
+                    {...portfolioPhotoSource(photo.url)}
                     alt={alt}
                     loading={index === 0 ? 'eager' : 'lazy'}
                     fetchPriority={index === 0 ? 'high' : undefined}
