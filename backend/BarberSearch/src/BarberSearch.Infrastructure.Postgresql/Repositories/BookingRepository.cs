@@ -253,23 +253,55 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 nameof(limit)));
         }
 
-        var bookings = Context.Bookings.AsNoTracking();
+        var rows = await BuildBarberBookingsQuery(
+                Context,
+                barberProfileId,
+                scope,
+                now,
+                cursor,
+                limit)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToBarberResponse).ToList();
+    }
+
+    /// <summary>
+    /// Собирает SQL списка записей барбера: левый join клиента, границы скоупа, keyset,
+    /// порядок и проекцию в плоскую строку.
+    /// </summary>
+    /// <remarks>
+    /// Вынесено из <see cref="GetBarberPageAsync"/>, чтобы unit-тест проверил трансляцию
+    /// <c>users.avatar_url</c> через <c>ToQueryString()</c> без базы (AGENT.md §5.4).
+    /// Соединения, условия обоих скоупов и порядок не менялись.
+    /// </remarks>
+    internal static IQueryable<BarberBookingRow> BuildBarberBookingsQuery(
+        ApplicationDbContext context,
+        Guid barberProfileId,
+        BarberBookingScope scope,
+        DateTimeOffset now,
+        BookingCursor? cursor,
+        int limit)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var bookings = context.Bookings.AsNoTracking();
 
         // Навигаций между агрегатами в домене нет, поэтому клиент, услуга и салон
         // присоединяются явными join'ами по идентификаторам. Услуга и салон — внутренние:
         // без контекста визита строка бесполезна. Клиент — LEFT JOIN, потому что у гостя
         // user_id = NULL, и гостевая строка обязана остаться в кабинете барбера.
-        var customers = Context.Users
+        var customers = context.Users
             .AsNoTracking()
             .Select(user => new
             {
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.PhoneNumber
+                user.PhoneNumber,
+                user.AvatarUrl
             });
 
-        var barberServices = Context.BarberServices
+        var barberServices = context.BarberServices
             .AsNoTracking()
             .Select(service => new
             {
@@ -277,7 +309,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 service.HairServiceId
             });
 
-        var hairServices = Context.HairServices
+        var hairServices = context.HairServices
             .AsNoTracking()
             .Select(hairService => new
             {
@@ -285,7 +317,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 hairService.Name
             });
 
-        var salons = Context.Salons
+        var salons = context.Salons
             .AsNoTracking()
             .Select(salon => new
             {
@@ -314,6 +346,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                          CustomerFirstName = customer == null ? null : customer.FirstName,
                          CustomerLastName = customer == null ? null : customer.LastName,
                          CustomerPhoneNumber = customer == null ? null : customer.PhoneNumber,
+                         CustomerAvatarUrl = customer == null ? null : customer.AvatarUrl,
                          hairService,
                          salon
                      };
@@ -353,7 +386,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 .OrderByDescending(row => row.booking.StartAt)
                 .ThenByDescending(row => row.booking.Id);
 
-        var rows = await ordered
+        return ordered
             .Take(limit)
             .Select(row => new BarberBookingRow(
                 row.booking.Id,
@@ -367,6 +400,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 row.CustomerFirstName,
                 row.CustomerLastName,
                 row.CustomerPhoneNumber,
+                row.CustomerAvatarUrl,
                 row.booking.GuestFirstName,
                 row.booking.GuestLastName,
                 row.booking.GuestPhone,
@@ -374,10 +408,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 row.salon.Name,
                 row.salon.Address,
                 row.salon.City,
-                row.salon.TimeZoneId))
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(ToBarberResponse).ToList();
+                row.salon.TimeZoneId));
     }
 
     public async Task<Result<IReadOnlyList<AdminBookingResponse>, Failure>> GetAdminPageAsync(
@@ -469,7 +500,8 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 user.FirstName,
                 user.LastName,
                 user.Email,
-                user.PhoneNumber
+                user.PhoneNumber,
+                user.AvatarUrl
             });
 
         var barberProfiles = context.BarberProfiles
@@ -477,7 +509,18 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             .Select(profile => new
             {
                 profile.Id,
+                profile.UserId,
                 DisplayName = profile.DisplayName.Value
+            });
+
+        // Аватар барбера живёт в users по barber_profiles.user_id; это отдельный join
+        // от клиентского: тот соединяется по bookings.user_id, а не по владельцу профиля.
+        var barberUsers = context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.AvatarUrl
             });
 
         var barberServices = context.BarberServices
@@ -516,6 +559,9 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                      from customer in customerJoin.DefaultIfEmpty()
                      join barberProfile in barberProfiles
                          on booking.BarberProfileId equals barberProfile.Id
+                     join barberUser in barberUsers
+                         on barberProfile.UserId equals barberUser.Id into barberUserJoin
+                     from barberUser in barberUserJoin.DefaultIfEmpty()
                      join service in barberServices on booking.BarberServiceId equals service.Id
                      join hairService in hairServices
                          on service.HairServiceId equals hairService.Id
@@ -528,7 +574,9 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                          CustomerLastName = customer == null ? null : customer.LastName,
                          CustomerEmail = customer == null ? null : customer.Email,
                          CustomerPhoneNumber = customer == null ? null : customer.PhoneNumber,
+                         CustomerAvatarUrl = customer == null ? null : customer.AvatarUrl,
                          barberProfile,
+                         BarberAvatarUrl = barberUser == null ? null : barberUser.AvatarUrl,
                          hairService,
                          salon
                      };
@@ -596,11 +644,13 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.CustomerLastName,
             row.CustomerEmail,
             row.CustomerPhoneNumber,
+            row.CustomerAvatarUrl,
             row.booking.GuestFirstName,
             row.booking.GuestLastName,
             row.booking.GuestPhone,
             row.barberProfile.Id,
             row.barberProfile.DisplayName,
+            row.BarberAvatarUrl,
             row.hairService.Name,
             row.salon.Id,
             row.salon.Name,
@@ -633,8 +683,12 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 row.CustomerFirstName ?? row.GuestFirstName ?? string.Empty,
                 row.CustomerLastName ?? row.GuestLastName ?? string.Empty,
                 row.CustomerEmail,
-                row.CustomerPhoneNumber ?? row.GuestPhone),
-            new AdminBookingBarberResponse(row.BarberProfileId, row.DisplayName),
+                row.CustomerPhoneNumber ?? row.GuestPhone,
+                row.CustomerAvatarUrl),
+            new AdminBookingBarberResponse(
+                row.BarberProfileId,
+                row.DisplayName,
+                row.BarberAvatarUrl),
             new AdminBookingServiceResponse(row.ServiceName),
             new AdminBookingSalonResponse(
                 row.SalonId,
@@ -807,7 +861,8 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
             row.CancellationReason,
             new BarberBookingCustomerResponse(
                 BuildCustomerName(firstName, lastName),
-                string.IsNullOrWhiteSpace(phone) ? null : phone.Trim()),
+                string.IsNullOrWhiteSpace(phone) ? null : phone.Trim(),
+                row.CustomerAvatarUrl),
             new BarberBookingServiceResponse(row.ServiceName),
             new BarberBookingSalonResponse(
                 row.SalonName,
@@ -853,6 +908,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string? CustomerFirstName,
         string? CustomerLastName,
         string? CustomerPhoneNumber,
+        string? CustomerAvatarUrl,
         string? GuestFirstName,
         string? GuestLastName,
         string? GuestPhone,
@@ -884,11 +940,13 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string? CustomerLastName,
         string? CustomerEmail,
         string? CustomerPhoneNumber,
+        string? CustomerAvatarUrl,
         string? GuestFirstName,
         string? GuestLastName,
         string? GuestPhone,
         Guid BarberProfileId,
         string DisplayName,
+        string? BarberAvatarUrl,
         string ServiceName,
         Guid SalonId,
         string SalonName,

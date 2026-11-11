@@ -291,8 +291,12 @@ public class AdminBookingReadHandlerTests
                 "Иван",
                 "Петров",
                 email,
-                "+7 999 123-45-67"),
-            new AdminBookingBarberResponse(Guid.CreateVersion7(), "Барбер Тестов"),
+                "+7 999 123-45-67",
+                AvatarUrl: null),
+            new AdminBookingBarberResponse(
+                Guid.CreateVersion7(),
+                "Барбер Тестов",
+                AvatarUrl: null),
             new AdminBookingServiceResponse("Стрижка"),
             new AdminBookingSalonResponse(
                 Guid.CreateVersion7(),

@@ -30,6 +30,7 @@ namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 /// Дополнительные услуги барбера: карточка показывает, чем ещё он занимается,
 /// а найденный фильтр виден прямо в выдаче.
 /// </param>
+/// <param name="AvatarUrl">Аватар владельца профиля; <c>null</c>, если не загружен.</param>
 public record BarberSearchItemResponse(
     Guid Id,
     string DisplayName,
@@ -43,4 +44,5 @@ public record BarberSearchItemResponse(
     string? PrimarySalonName,
     string? City,
     PlaceKind? PrimaryPlaceKind,
-    IReadOnlyList<string> AdditionalServices);
+    IReadOnlyList<string> AdditionalServices,
+    string? AvatarUrl);

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Infrastructure.Postgresql;
@@ -10,7 +11,8 @@ namespace BarberSearch.Infrastructure.UnitTests;
 /// <summary>
 /// Админская выборка броней должна собираться одним SQL-запросом: левый join по клиенту
 /// (у гостевой брони <c>user_id = NULL</c>), фильтр статуса, поиск через <c>ILIKE</c>
-/// и keyset-лимит.
+/// и keyset-лимит. Аватары приходят из двух разных join'ов: клиентский
+/// <c>users.avatar_url</c> и второй join по <c>barber_profiles.user_id</c>.
 /// </summary>
 /// <remarks>
 /// <c>ToQueryString()</c> не открывает соединение: проверяется трансляция EF Core / Npgsql,
@@ -22,7 +24,7 @@ public class AdminBookingQueryTests
         "Host=127.0.0.1;Port=59999;Database=model_only;Username=test;Password=test";
 
     [Fact]
-    public void BuildAdminBookingsQuery_LeftJoinsCustomers()
+    public void BuildAdminBookingsQuery_LeftJoinsCustomersAndBothAvatars()
     {
         using var context = CreateContext();
 
@@ -39,6 +41,13 @@ public class AdminBookingQueryTests
         // соединение скрыло бы её, поэтому клиент присоединяется левым join'ом.
         Assert.Contains("LEFT JOIN", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("users", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Два аватара: клиент и владелец профиля барбера. Клиентский join и join владельца
+        // профиля — разные соединения по разным ключам, поэтому строк с LEFT JOIN две.
+        Assert.Equal(2, Regex.Count(sql, "avatar_url", RegexOptions.IgnoreCase));
+        Assert.Equal(2, Regex.Count(sql, "LEFT JOIN", RegexOptions.IgnoreCase));
+        Assert.Contains("barber_profiles", sql, StringComparison.OrdinalIgnoreCase);
+
         Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DESC", sql, StringComparison.OrdinalIgnoreCase);
     }
@@ -58,10 +67,14 @@ public class AdminBookingQueryTests
                 limit: 21)
             .ToQueryString();
 
+        // Прежние условия и порядок не изменились.
         Assert.Contains("status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ILIKE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Оба аватара остаются в проекции и на отфильтрованной странице.
+        Assert.Equal(2, Regex.Count(sql, "avatar_url", RegexOptions.IgnoreCase));
     }
 
     private static ApplicationDbContext CreateContext()
