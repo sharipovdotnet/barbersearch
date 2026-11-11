@@ -62,6 +62,11 @@ public class BarberBookingQueryTests
         Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LEFT JOIN", sql, StringComparison.OrdinalIgnoreCase);
 
+        // Скрытый администратором аватар клиента маскируется в SQL: CASE … THEN NULL,
+        // а не фильтр строки и не вычисление после материализации.
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CASE", sql, StringComparison.OrdinalIgnoreCase);
+
         // Скоуп «ближайшие» и порядок keyset не изменились.
         Assert.Contains("status", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("end_at", sql, StringComparison.OrdinalIgnoreCase);

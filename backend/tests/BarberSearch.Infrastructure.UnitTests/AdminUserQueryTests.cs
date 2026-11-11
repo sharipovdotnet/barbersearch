@@ -32,6 +32,11 @@ public class AdminUserQueryTests
         Assert.Contains("DESC", sql, StringComparison.OrdinalIgnoreCase);
         // Список всегда свежими сверху, поэтому лимит без курсора не добавляется.
         Assert.DoesNotContain("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Админская строка отдаёт сырой аватар и флаг блокировки: скрытое фото админ видит.
+        Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -77,6 +82,11 @@ public class AdminUserQueryTests
         Assert.Contains("LEFT JOIN", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("barber_profiles", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("display_name", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Карточка отдаёт сырой аватар и флаг: админ должен видеть скрытое фото.
+        Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ApplicationDbContext CreateContext()

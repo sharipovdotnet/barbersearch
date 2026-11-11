@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
@@ -512,6 +514,79 @@ public sealed class AdminAuditCoverageTests
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
     }
 
+    [Fact(Timeout = 180_000)]
+    public async Task Avatar_block_and_unblock_write_one_user_updated_row_each()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var user = await app.CreateUserAsync(
+            $"audit-coverage-avatar-{Guid.NewGuid():N}@barbersearch.test");
+
+        await app.AuthenticateAsync(user.Email);
+        await UploadAvatarAsync(app.Client);
+
+        // Загрузка аватара — техническая правка: AvatarUrl в allowlist не входит,
+        // поэтому строки user.updated от неё нет.
+        Assert.DoesNotContain(
+            await data.ReadAuditRowsAsync(),
+            row => row.EntityType == "user" && row.EntityId == user.Id);
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+
+        await AvatarModerationApi.BlockAsync(admin, user.Id);
+
+        var blockRow = Assert.Single(
+            await data.ReadAuditRowsAsync(),
+            row => row.EntityType == "user" && row.EntityId == user.Id);
+
+        Assert.Equal("user.updated", blockRow.Action);
+        Assert.Equal(admin.Admin.Id, blockRow.ActorUserId);
+
+        using (var payload = JsonDocument.Parse(blockRow.Payload))
+        {
+            var changes = payload.RootElement.GetProperty("changes");
+
+            // Только флаг: URL в payload не попадает.
+            Assert.Single(changes.EnumerateObject());
+
+            var blocked = changes.GetProperty("isAvatarBlocked");
+
+            Assert.False(blocked.GetProperty("from").GetBoolean());
+            Assert.True(blocked.GetProperty("to").GetBoolean());
+        }
+
+        // Идемпотентная повторная блокировка не меняет UpdatedAt и не пишет аудит.
+        await AvatarModerationApi.BlockAsync(admin, user.Id);
+
+        Assert.Single(
+            await data.ReadAuditRowsAsync(),
+            row => row.EntityType == "user" && row.EntityId == user.Id);
+
+        await AvatarModerationApi.UnblockAsync(admin, user.Id);
+
+        var userRows = (await data.ReadAuditRowsAsync())
+            .Where(row => row.EntityType == "user" && row.EntityId == user.Id)
+            .ToList();
+
+        Assert.Equal(2, userRows.Count);
+
+        // Свежие сверху: первая строка — возврат фото.
+        var unblockRow = userRows[0];
+
+        Assert.Equal("user.updated", unblockRow.Action);
+        Assert.Equal(admin.Admin.Id, unblockRow.ActorUserId);
+
+        using (var payload = JsonDocument.Parse(unblockRow.Payload))
+        {
+            var unblocked = payload.RootElement
+                .GetProperty("changes")
+                .GetProperty("isAvatarBlocked");
+
+            Assert.True(unblocked.GetProperty("from").GetBoolean());
+            Assert.False(unblocked.GetProperty("to").GetBoolean());
+        }
+    }
+
     private static async Task<Guid> CreateSalonAsync(TestApp app, string name)
     {
         using var response = await TestApp.PostJsonAsync(
@@ -572,4 +647,41 @@ public sealed class AdminAuditCoverageTests
         string Action,
         string EntityType,
         Guid EntityId);
+
+    /// <summary>
+    /// Загружает аватар текущего пользователя настоящим multipart-запросом: только так
+    /// проверяется, что загрузка (в отличие от решения администратора) аудит не пишет.
+    /// </summary>
+    private static async Task UploadAvatarAsync(HttpClient client)
+    {
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(PngBytes());
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(file, "file", "avatar.png");
+
+        using var response = await client.PostAsync("api/users/me/avatar", form);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Минимальный PNG с настоящими сигнатурой и <c>IHDR</c>: инспектор читает размеры
+    /// из заголовка и не декодирует файл.
+    /// </summary>
+    private static byte[] PngBytes(int width = 800, int height = 600)
+    {
+        var content = new byte[2048];
+
+        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        signature.CopyTo(content);
+
+        BinaryPrimitives.WriteUInt32BigEndian(content.AsSpan(8), 13);
+        "IHDR"u8.CopyTo(content.AsSpan(12));
+        BinaryPrimitives.WriteUInt32BigEndian(content.AsSpan(16), (uint)width);
+        BinaryPrimitives.WriteUInt32BigEndian(content.AsSpan(20), (uint)height);
+        content[24] = 8;
+        content[25] = 6;
+
+        return content;
+    }
 }

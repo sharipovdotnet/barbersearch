@@ -19,7 +19,10 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="FirstName">Имя.</param>
 /// <param name="LastName">Фамилия.</param>
 /// <param name="PhoneNumber">Телефон либо <c>null</c>.</param>
-/// <param name="AvatarUrl">Ссылка на аватар либо <c>null</c>.</param>
+/// <param name="AvatarUrl">
+/// Ссылка на аватар либо <c>null</c>, если он не загружен. Скрытое фото администратор видит:
+/// значение остаётся сырым, состояние — в <paramref name="IsAvatarBlocked"/>.
+/// </param>
 /// <param name="Role">Роль пользователя.</param>
 /// <param name="IsActive">Открыт ли доступ к сервису.</param>
 /// <param name="IsEmailVerified">Подтверждён ли email.</param>
@@ -33,6 +36,7 @@ namespace BarberSearch.Contracts.Users.Admin;
 /// <param name="UpdatedAt">Когда пользователь последний раз менялся.</param>
 /// <param name="ConsentPolicyVersion">Редакция Политики, на которую дано согласие, либо <c>null</c>.</param>
 /// <param name="ConsentedAt">Когда дано согласие (UTC) либо <c>null</c>.</param>
+/// <param name="IsAvatarBlocked">Скрыт ли аватар администратором.</param>
 public record AdminUserDetailResponse(
     Guid Id,
     string Email,
@@ -52,4 +56,5 @@ public record AdminUserDetailResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? ConsentPolicyVersion,
-    DateTimeOffset? ConsentedAt);
+    DateTimeOffset? ConsentedAt,
+    bool IsAvatarBlocked);

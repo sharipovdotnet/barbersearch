@@ -4,11 +4,14 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Contracts.BarberProfiles.Admin;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Users;
@@ -262,6 +265,191 @@ public sealed class AvatarReadSurfacesTests
         var profile = await GetMyProfileAsync(app.Client);
         Assert.Equal("Barber", profile.LastName);
         Assert.Equal(avatarUrl, profile.AvatarUrl);
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Blocked_barber_avatar_is_null_in_search_and_public_card_but_raw_in_admin()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync(
+            "Blocked Avatar Barber",
+            city: "Blocked Avatar City");
+
+        using var anonymous = app.CreateClient();
+
+        await app.AuthenticateAsync(barber.User.Email);
+        var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.BlockAsync(admin, barber.User.Id);
+
+        // Поиск: барбер остаётся в выдаче (счётчики и keyset не ломаются), но фото скрыто.
+        var maskedPage = await GetSearchPageAsync(anonymous, "Blocked Avatar City");
+        var maskedItem = Assert.Single(maskedPage.Items);
+
+        Assert.Equal(barber.Profile.Id, maskedItem.Id);
+        Assert.Null(maskedItem.AvatarUrl);
+
+        var maskedCard = await GetPublicCardAsync(anonymous, barber.Profile.Id);
+        Assert.Null(maskedCard.AvatarUrl);
+
+        // Админские поверхности показывают сырой URL и флаг блокировки.
+        var userRow = await GetAdminUserRowAsync(admin.Client, barber.User.Email);
+        Assert.Equal(avatarUrl, userRow.AvatarUrl);
+        Assert.True(userRow.IsAvatarBlocked);
+
+        var barberRow = await GetAdminBarberRowAsync(admin.Client, barber.Profile.Id);
+        Assert.Equal(avatarUrl, barberRow.AvatarUrl);
+        Assert.True(barberRow.IsAvatarBlocked);
+
+        using (var userDetailResponse = await admin.Client.GetAsync(
+                   $"api/admin/users/{barber.User.Id}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, userDetailResponse.StatusCode);
+
+            var userDetail = await userDetailResponse.Content
+                .ReadFromJsonAsync<AdminUserDetailResponse>(JsonOptions);
+
+            Assert.NotNull(userDetail);
+            Assert.Equal(avatarUrl, userDetail.AvatarUrl);
+            Assert.True(userDetail.IsAvatarBlocked);
+        }
+
+        using (var barberDetailResponse = await admin.Client.GetAsync(
+                   $"api/admin/barbers/{barber.Profile.Id}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, barberDetailResponse.StatusCode);
+
+            var barberDetail = await barberDetailResponse.Content
+                .ReadFromJsonAsync<AdminBarberDetailResponse>(JsonOptions);
+
+            Assert.NotNull(barberDetail);
+            Assert.Equal(avatarUrl, barberDetail.AvatarUrl);
+            Assert.True(barberDetail.IsAvatarBlocked);
+        }
+
+        // Возврат отдаёт тот же кадр и в поиске, и в публичной карточке.
+        await AvatarModerationApi.UnblockAsync(admin, barber.User.Id);
+
+        var restoredPage = await GetSearchPageAsync(anonymous, "Blocked Avatar City");
+        Assert.Equal(avatarUrl, Assert.Single(restoredPage.Items).AvatarUrl);
+
+        var restoredCard = await GetPublicCardAsync(anonymous, barber.Profile.Id);
+        Assert.Equal(avatarUrl, restoredCard.AvatarUrl);
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Barber_bookings_mask_blocked_customer_avatar_but_admin_bookings_stay_raw()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Masked Customer Barber");
+        await LinkBarberProfileAsync(app, barber);
+
+        var customer = await app.CreateUserAsync(NewEmail("masked-booking-customer"));
+
+        await app.AuthenticateAsync(customer.Email);
+        var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
+
+        var booking = await data.CreateBookingAsync(
+            barber,
+            customer.Id,
+            DateTimeOffset.UtcNow.AddDays(2),
+            BookingStatus.Confirmed);
+
+        await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
+        await AvatarModerationApi.BlockAsync(admin, customer.Id);
+
+        await app.AuthenticateAsync(barber.User.Email);
+
+        using (var response = await app.Client.GetAsync("api/barber/bookings"))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var page = await response.Content
+                .ReadFromJsonAsync<PagedResponse<BarberBookingResponse>>(JsonOptions);
+
+            Assert.NotNull(page);
+
+            // Строка записи остаётся: маскируется только аватар клиента.
+            var row = Assert.Single(page.Items, item => item.Id == booking.Id);
+
+            Assert.Null(row.Customer.AvatarUrl);
+        }
+
+        // Админская поверхность — исключение: там аватар сырой, и для списка, и для детали.
+        using (var adminListResponse = await admin.Client.GetAsync("api/admin/bookings"))
+        {
+            Assert.Equal(HttpStatusCode.OK, adminListResponse.StatusCode);
+
+            var page = await adminListResponse.Content
+                .ReadFromJsonAsync<PagedResponse<AdminBookingResponse>>(JsonOptions);
+
+            Assert.NotNull(page);
+
+            var row = Assert.Single(page.Items, item => item.Id == booking.Id);
+
+            Assert.Equal(avatarUrl, row.Customer.AvatarUrl);
+        }
+
+        using (var adminDetailResponse = await admin.Client.GetAsync(
+                   $"api/admin/bookings/{booking.Id}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, adminDetailResponse.StatusCode);
+
+            var detail = await adminDetailResponse.Content
+                .ReadFromJsonAsync<AdminBookingResponse>(JsonOptions);
+
+            Assert.NotNull(detail);
+            Assert.Equal(avatarUrl, detail.Customer.AvatarUrl);
+        }
+    }
+
+    private static async Task<BarberProfileResponse> GetPublicCardAsync(
+        HttpClient client,
+        Guid profileId)
+    {
+        using var response = await client.GetAsync($"api/barbers/{profileId}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var card = await response.Content.ReadFromJsonAsync<BarberProfileResponse>(JsonOptions);
+        Assert.NotNull(card);
+
+        return card;
+    }
+
+    private static async Task<AdminUserResponse> GetAdminUserRowAsync(
+        HttpClient client,
+        string email)
+    {
+        using var response = await client.GetAsync(
+            $"api/admin/users?search={Uri.EscapeDataString(email)}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content
+            .ReadFromJsonAsync<PagedResponse<AdminUserResponse>>(JsonOptions);
+
+        Assert.NotNull(page);
+
+        return Assert.Single(page.Items);
+    }
+
+    private static async Task<AdminBarberResponse> GetAdminBarberRowAsync(
+        HttpClient client,
+        Guid profileId)
+    {
+        using var response = await client.GetAsync("api/admin/barbers?pageSize=100");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content
+            .ReadFromJsonAsync<PagedResponse<AdminBarberResponse>>(JsonOptions);
+
+        Assert.NotNull(page);
+
+        return Assert.Single(page.Items, item => item.Id == profileId);
     }
 
     private static async Task<PagedResponse<BarberSearchItemResponse>> GetSearchPageAsync(

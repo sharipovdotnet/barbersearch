@@ -51,6 +51,24 @@ public class User : AggregateRoot
     public string? PhoneNumber { get; private set; }
     public string? AvatarUrl { get; private set; }
 
+    /// <summary>
+    /// Скрыт ли аватар администратором.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Флаг живёт на пользователе, а не на отдельной строке файла: у аккаунта один аватар
+    /// и отдельной таблицы для него нет. Скрытие — это маска на чтении, а не удаление:
+    /// <see cref="AvatarUrl"/> и файл остаются на месте, поэтому «Вернуть фото» отдаёт
+    /// тот же кадр, а публичные чтения получают <c>null</c>.
+    /// </para>
+    /// <para>
+    /// Реальная смена <see cref="AvatarUrl"/> снимает флаг: новая загрузка — это новый
+    /// файл и новая публикация (постмодерация, как у портфолио). Повторная запись того же
+    /// URL флаг сохраняет: иначе сохранение имени в кабинете разблокировало бы скрытое фото.
+    /// </para>
+    /// </remarks>
+    public bool IsAvatarBlocked { get; private set; }
+
     public bool IsEmailVerified { get; private set; }
     public bool IsPhoneVerified { get; private set; }
 
@@ -201,10 +219,24 @@ public class User : AggregateRoot
             return new Failure(errors);
         }
 
+        // Сравнение сделано до присваивания: повторная отправка того же URL (кабинет
+        // присылает текущий avatarUrl обратно в PUT users/{id}/profile) флаг сохраняет,
+        // а реальная смена — включая переход в null — снимает блокировку: это новый кадр
+        // либо пустота, к которой прежний флаг уже не относится.
+        var avatarChanged = !string.Equals(
+            AvatarUrl,
+            normalizedAvatarUrl,
+            StringComparison.Ordinal);
+
         FirstName = firstName;
         LastName = lastName;
         PhoneNumber = phoneNumber;
         AvatarUrl = normalizedAvatarUrl;
+
+        if (avatarChanged)
+        {
+            IsAvatarBlocked = false;
+        }
 
         MarkUpdated();
 
@@ -229,6 +261,11 @@ public class User : AggregateRoot
     /// Application до сохранения файла. <see cref="Entity.UpdatedAt"/> меняется только при
     /// реальном изменении значения: повторная запись того же URL не создаёт правку.
     /// </para>
+    /// <para>
+    /// Реальная смена значения снимает <see cref="IsAvatarBlocked"/>: новый файл публикуется
+    /// сразу, а <c>null</c> означает, что скрывать больше нечего. Повторная запись того же
+    /// URL (ранний возврат ниже) флаг не трогает.
+    /// </para>
     /// </remarks>
     /// <param name="avatarUrl">Новый URL аватара либо <c>null</c>/пустая строка.</param>
     public UnitResult<Failure> SetAvatar(string? avatarUrl)
@@ -242,13 +279,73 @@ public class User : AggregateRoot
             return new Failure(avatarUrlError);
         }
 
-        // Повторная запись того же значения — не изменение: UpdatedAt не трогаем.
+        // Повторная запись того же значения — не изменение: UpdatedAt не трогаем
+        // и административную блокировку не снимаем.
         if (string.Equals(AvatarUrl, normalizedAvatarUrl, StringComparison.Ordinal))
         {
             return DomainErrors.Ok();
         }
 
         AvatarUrl = normalizedAvatarUrl;
+        IsAvatarBlocked = false;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Скрывает аватар администратором: публичные чтения отдают <c>null</c>, а раздача файла
+    /// отвечает <c>404</c> всем, кроме администратора.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Скрывать нечего, если аватар не загружен, — это конфликт
+    /// <c>user.blockAvatar.noAvatar</c>, а не успех: действие администратора ни на что
+    /// не влияет. Повторная блокировка идемпотентна и не меняет
+    /// <see cref="Entity.UpdatedAt"/>: иначе аудит писал бы строку без изменения флага.
+    /// </para>
+    /// <para>
+    /// Ни <see cref="IsActive"/>, ни <see cref="Role"/>, ни <see cref="SecurityStamp"/>
+    /// не меняются: это модерация контента, а не блокировка доступа.
+    /// </para>
+    /// </remarks>
+    public UnitResult<Failure> BlockAvatar()
+    {
+        if (AvatarUrl is null)
+        {
+            return new Failure(Error.Conflict(
+                "user.blockAvatar.noAvatar",
+                "The user has no avatar to block."));
+        }
+
+        if (IsAvatarBlocked)
+        {
+            return DomainErrors.Ok();
+        }
+
+        IsAvatarBlocked = true;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Возвращает скрытый аватар: флаг снимается, а URL и файл не менялись и остаются прежними.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен: повторный вызов — успех без <see cref="Entity.UpdatedAt"/> и без строки
+    /// аудита. Наличие URL не проверяется: скрывать без аватара нельзя
+    /// (<see cref="BlockAvatar"/>), а удаление аватара снимает флаг само, поэтому
+    /// заблокированный аккаунт без URL невозможен.
+    /// </remarks>
+    public UnitResult<Failure> UnblockAvatar()
+    {
+        if (!IsAvatarBlocked)
+        {
+            return DomainErrors.Ok();
+        }
+
+        IsAvatarBlocked = false;
         MarkUpdated();
 
         return DomainErrors.Ok();

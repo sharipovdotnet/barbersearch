@@ -217,6 +217,53 @@ public class AdminBarberReadTests
         Assert.Equal("admin.barbers.id", result.Error.Errors[0].Code);
     }
 
+    [Fact]
+    public async Task Get_ReturnsAvatarAndBlockedFlagFromTheRow()
+    {
+        var repository = new FakeBarberProfileRepository();
+        var row = CreateBarber(verified: true, active: true, Start, "WithAvatar") with
+        {
+            AvatarUrl = "https://cdn.example.com/avatar.png",
+            IsAvatarBlocked = true
+        };
+        repository.AddAdminBarber(row);
+
+        var handler = new GetAdminBarbersHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminBarbersQuery(null, null, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var item = Assert.Single(result.Value.Items);
+
+        Assert.Equal("https://cdn.example.com/avatar.png", item.AvatarUrl);
+        Assert.True(item.IsAvatarBlocked);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsRawAvatarAndBlockedFlag()
+    {
+        var repository = new FakeBarberProfileRepository();
+        var detail = CreateDetail() with
+        {
+            AvatarUrl = "https://cdn.example.com/avatar.png",
+            IsAvatarBlocked = true
+        };
+        repository.AddAdminBarberDetail(detail);
+
+        var handler = new GetAdminBarberHandler(repository);
+
+        var result = await handler.Handle(
+            new GetAdminBarberQuery(detail.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("https://cdn.example.com/avatar.png", result.Value.AvatarUrl);
+        Assert.True(result.Value.IsAvatarBlocked);
+    }
+
     private static AdminBarberResponse CreateBarber(
         bool verified,
         bool active,
@@ -232,7 +279,9 @@ public class AdminBarberReadTests
             active,
             verified,
             createdAt,
-            createdAt);
+            createdAt,
+            AvatarUrl: null,
+            IsAvatarBlocked: false);
 
     private static AdminBarberDetailResponse CreateDetail()
         => new(
@@ -258,5 +307,6 @@ public class AdminBarberReadTests
                 PhotosCount: 3),
             Start,
             Start,
-            []);
+            [],
+            IsAvatarBlocked: false);
 }

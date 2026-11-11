@@ -43,23 +43,24 @@ public interface IUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Текущий URL аватара пользователя — для раздачи файла по media-URL.
+    /// Текущий доступ к аватару пользователя — для раздачи файла по media-URL.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Узкое чтение одного столбца по первичному ключу, без <c>Include</c> и без отслеживания
-    /// (как <see cref="GetSecurityStampAsync"/>). Раздача сверяет возвращённую строку с
-    /// запрошенным URL, поэтому ни файл, ни агрегат здесь не нужны.
+    /// Узкое чтение двух столбцов по первичному ключу, без <c>Include</c> и без отслеживания
+    /// (как <see cref="GetSecurityStampAsync"/>). Раздача сверяет <see cref="UserAvatarAccess.AvatarUrl"/>
+    /// с запрошенным URL и решает по <see cref="UserAvatarAccess.IsAvatarBlocked"/>, отдавать ли
+    /// файл, поэтому ни файл, ни агрегат здесь не нужны.
     /// </para>
     /// <para>
     /// Отсутствие пользователя — <c>Error.NotFound</c> с кодом <c>avatarMedia.notFound</c>
     /// (тот же код, что у остальных отказов раздачи); пользователь без аватара — успех
-    /// с <c>null</c>, а не ошибка: аватар необязателен.
+    /// с <c>null</c> в <see cref="UserAvatarAccess.AvatarUrl"/>, а не ошибка: аватар необязателен.
     /// </para>
     /// </remarks>
     /// <param name="userId">Идентификатор пользователя.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    Task<Result<string?, Failure>> GetAvatarUrlAsync(
+    Task<Result<UserAvatarAccess, Failure>> GetAvatarAccessAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
 

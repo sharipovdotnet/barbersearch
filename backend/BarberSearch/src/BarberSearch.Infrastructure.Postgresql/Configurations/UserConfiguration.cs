@@ -67,6 +67,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.AvatarUrl)
             .HasColumnName("avatar_url")
             .HasMaxLength(Constants.MAX_URL_LENGTH);
+
+        // Административная блокировка аватара: NOT NULL с DEFAULT false — миграция
+        // AddUserAvatarBlocked. Существующие строки получают false, то есть фото видимо.
+        builder.Property(x => x.IsAvatarBlocked)
+            .HasColumnName("is_avatar_blocked")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.Property(x => x.IsEmailVerified).HasColumnName("is_email_verified");
         builder.Property(x => x.IsPhoneVerified).HasColumnName("is_phone_verified");
         builder.Property(x => x.Role).HasColumnName("role").HasConversion<int>();

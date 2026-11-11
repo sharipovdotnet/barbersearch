@@ -36,6 +36,17 @@ public class AdminBarberQueryTests
         Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DESC", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Аватар и флаг берутся из уже существующего join users: второго join'а нет,
+        // маски нет — администратор видит и скрытое фото.
+        Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(
+            System.Text.RegularExpressions.Regex.Matches(
+                sql,
+                @"\bJOIN\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
 
     [Fact]
@@ -95,6 +106,11 @@ public class AdminBarberQueryTests
         // Дни расписания схлопываются: пять строк по одному дню — это один день недели.
         Assert.Contains("DISTINCT", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("is_email_verified", sql, StringComparison.OrdinalIgnoreCase);
+
+        // Карточка уже join'ит владельца ради email: аватар и флаг приходят оттуда же.
+        Assert.Contains("avatar_url", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("is_avatar_blocked", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ApplicationDbContext CreateContext()

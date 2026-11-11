@@ -70,6 +70,7 @@ public sealed class MyProfileReadTests
         Assert.Equal("Кузнецова", body.LastName);
         Assert.Equal("+49 170 1234567", body.PhoneNumber);
         Assert.Null(body.AvatarUrl);
+        Assert.False(body.IsAvatarBlocked);
         Assert.Equal(UserRole.Customer, body.Role);
         Assert.Null(body.BarberProfileId);
         Assert.False(body.IsEmailVerified);

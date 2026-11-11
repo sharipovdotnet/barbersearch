@@ -20,6 +20,11 @@ namespace BarberSearch.Contracts.BarberProfiles.Admin;
 /// <param name="IsVerified">Подтверждён ли профиль администратором.</param>
 /// <param name="CreatedAt">Когда профиль создан.</param>
 /// <param name="UpdatedAt">Когда профиль последний раз менялся.</param>
+/// <param name="AvatarUrl">
+/// Ссылка на аватар владельца профиля либо <c>null</c>, если он не загружен. Админская
+/// поверхность показывает и скрытое фото; состояние передаёт <paramref name="IsAvatarBlocked"/>.
+/// </param>
+/// <param name="IsAvatarBlocked">Скрыт ли аватар владельца администратором.</param>
 public record AdminBarberResponse(
     Guid Id,
     string DisplayName,
@@ -30,4 +35,6 @@ public record AdminBarberResponse(
     bool IsActive,
     bool IsVerified,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? AvatarUrl,
+    bool IsAvatarBlocked);

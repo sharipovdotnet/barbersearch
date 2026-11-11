@@ -184,24 +184,24 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     }
 
     /// <summary>
-    /// URL аватара из «таблицы» пользователей; отсутствие пользователя — тот же
+    /// Доступ к аватару из «таблицы» пользователей; отсутствие пользователя — тот же
     /// <c>404 avatarMedia.notFound</c>, что и в PostgreSQL-репозитории.
     /// </summary>
-    public Task<Result<string?, Failure>> GetAvatarUrlAsync(
+    public Task<Result<UserAvatarAccess, Failure>> GetAvatarAccessAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
         if (!_users.TryGetValue(userId, out var user))
         {
-            return Task.FromResult<Result<string?, Failure>>(new Failure(
+            return Task.FromResult<Result<UserAvatarAccess, Failure>>(new Failure(
                 Error.NotFound(
                     "avatarMedia.notFound",
                     $"User '{userId}' was not found.",
                     userId)));
         }
 
-        return Task.FromResult<Result<string?, Failure>>(
-            Result.Success<string?, Failure>(user.AvatarUrl));
+        return Task.FromResult<Result<UserAvatarAccess, Failure>>(
+            new UserAvatarAccess(user.AvatarUrl, user.IsAvatarBlocked));
     }
 
     public Task<Result<User, Failure>> GetByEmailAsync(
@@ -355,7 +355,8 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             user.CreatedAt,
             user.UpdatedAt,
             user.ConsentPolicyVersion,
-            user.ConsentedAt);
+            user.ConsentedAt,
+            user.IsAvatarBlocked);
 
         return Task.FromResult<Result<AdminUserDetailResponse, Failure>>(detail);
     }
@@ -389,7 +390,8 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
                 user.IsEmailVerified,
                 user.IsPhoneVerified,
                 user.CreatedAt,
-                user.LastLoginAt));
+                user.LastLoginAt,
+                user.IsAvatarBlocked));
     }
 
     public Task<Result<int, Failure>> CountActiveAdminsAsync(
