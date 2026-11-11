@@ -1,10 +1,13 @@
 import { fileURLToPath } from 'node:url'
 
+import type { Locator, Page } from '@playwright/test'
+
 import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { deleteMyAvatar } from '../fixtures/api'
 import { AccountProfilePage } from '../pages/account-profile-page'
+import { LandingPage } from '../pages/landing-page'
 import { ProfilePage } from '../pages/profile-page'
 
 /**
@@ -23,6 +26,7 @@ const AVATAR_PATH = fileURLToPath(
 )
 const PROFILE_ID = fixtures.profileBarber.profileId
 const PROFILE_NAME = 'E2E Барбер Кабинета'
+const SEARCH_MARKER = 'E2E поиск'
 // Кабинет считает инициалы по имени и фамилии аккаунта («Профиль Барберов»),
 // а герой карточки — по displayName профиля («E2E Барбер Кабинета»): это разные
 // источники, поэтому и константы разные.
@@ -35,6 +39,39 @@ test.describe.configure({ mode: 'serial' })
 
 test.describe('публичный аватар барбера: мутации', () => {
   let avatarSrc: string | null = null
+
+  /** Карточка поиска по маркеру дополнительной услуги: она должна быть одна. */
+  async function searchMarkerCard(page: Page): Promise<Locator> {
+    const landing = new LandingPage(page)
+
+    await landing.goto()
+    await page.getByLabel('Дополнительная услуга').fill(SEARCH_MARKER)
+    await landing.submit.click()
+
+    const card = landing.cards.filter({ hasText: PROFILE_NAME })
+
+    await expect(card).toHaveCount(1)
+
+    return card
+  }
+
+  /** `avatarUrl` того же контракта поиска, что читает карточка. */
+  async function searchMarkerAvatarUrl(page: Page): Promise<string | null> {
+    const response = await page.request.get(
+      `/api/barbers?additionalService=${encodeURIComponent(SEARCH_MARKER)}`
+    )
+
+    expect(response.status(), 'GET /api/barbers?additionalService').toBe(200)
+
+    const body = (await response.json()) as {
+      items: { displayName: string; avatarUrl: string | null }[]
+    }
+
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0]?.displayName).toBe(PROFILE_NAME)
+
+    return body.items[0]?.avatarUrl ?? null
+  }
 
   test.afterEach(async ({ request }, testInfo) => {
     if (testInfo.status !== testInfo.expectedStatus) {
@@ -90,6 +127,24 @@ test.describe('публичный аватар барбера: мутации', 
     const body = (await response.json()) as { avatarUrl: string | null }
 
     expect(body.avatarUrl).toBe(src)
+
+    // Поиск (#86): маркер изолирует карточку, в ней — тот же `src`, что в кабинете.
+    const card = await searchMarkerCard(page)
+    const cardImage = card.locator('img')
+
+    await expect(cardImage).toHaveAttribute(
+      'src',
+      /^\/api\/media\/avatars\//
+    )
+    await expect(cardImage).toHaveAttribute('src', src ?? '')
+    await expect(cardImage).toHaveAttribute('alt', '')
+    await expect
+      .poll(() =>
+        cardImage.evaluate((node) => (node as HTMLImageElement).naturalWidth)
+      )
+      .toBeGreaterThan(0)
+
+    expect(await searchMarkerAvatarUrl(page)).toBe(src)
   })
 
   test('удаление возвращает инициалы и `avatarUrl: null`', async ({ page }) => {
@@ -126,5 +181,15 @@ test.describe('публичный аватар барбера: мутации', 
 
     await expect(publicProfile.heroAvatarImage).toHaveCount(0)
     await expect(publicProfile.heroInitials).toContainText(HERO_INITIALS)
+
+    // Поиск снова показывает инициалы, контракт — `avatarUrl: null`.
+    const card = await searchMarkerCard(page)
+
+    await expect(card.locator('img')).toHaveCount(0)
+    await expect(card.locator('[data-slot="avatar-fallback"]')).toContainText(
+      HERO_INITIALS
+    )
+
+    expect(await searchMarkerAvatarUrl(page)).toBeNull()
   })
 })

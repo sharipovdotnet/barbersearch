@@ -491,7 +491,8 @@ public sealed class FakeBookingRepository : IBookingRepository
                 booking.UserId is { } userId
                     ? $"Customer {userId:N}"
                     : $"{booking.GuestFirstName} {booking.GuestLastName}".Trim(),
-                booking.UserId is null ? booking.GuestPhone : null),
+                booking.UserId is null ? booking.GuestPhone : null,
+                AvatarUrl: null),
             new BarberBookingServiceResponse($"Service {booking.BarberServiceId:N}"),
             new BarberBookingSalonResponse("Fake salon", "Fake address", "Fake city", "Europe/Moscow"));
 }

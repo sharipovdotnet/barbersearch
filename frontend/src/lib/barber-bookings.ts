@@ -18,6 +18,8 @@ export type BarberBookingCustomer = {
   displayName: string
   /** Телефон — PII: только строка списка и `tel:`-ссылка. */
   phoneNumber: string | null
+  /** Аватар клиента; `null` у гостя (walk-in) и у клиента без фото. */
+  avatarUrl: string | null
 }
 
 export type BarberBooking = {

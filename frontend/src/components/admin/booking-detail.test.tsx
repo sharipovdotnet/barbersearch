@@ -9,6 +9,7 @@ import type { AdminBooking } from '@/lib/admin-bookings'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
+import { stubImageLoading } from '@/test/image'
 
 /**
  * Карточка брони: время в поясе салона, действия по статусу и подтверждения.
@@ -33,10 +34,12 @@ const BASE_BOOKING: AdminBooking = {
     lastName: 'Волкова',
     email: 'e2e-bookings@barbersearch.test',
     phoneNumber: '+70000000009',
+    avatarUrl: null,
   },
   barber: {
     profileId: '9e100000-0000-4000-8000-000000000001',
     displayName: 'Артём Соколов',
+    avatarUrl: null,
   },
   service: { name: 'Стрижка' },
   salon: {
@@ -58,7 +61,7 @@ function renderDetail(booking: AdminBooking) {
   const onBack = vi.fn()
   const onRequiresSignIn = vi.fn()
 
-  render(
+  const result = render(
     <BookingDetail
       booking={booking}
       headingRef={headingRef}
@@ -68,7 +71,13 @@ function renderDetail(booking: AdminBooking) {
     />
   )
 
-  return { headingRef, onReload, onBack, onRequiresSignIn }
+  return {
+    headingRef,
+    onReload,
+    onBack,
+    onRequiresSignIn,
+    container: result.container,
+  }
 }
 
 /** `204` для отмены или неявки: так отвечает реальный API. */
@@ -113,6 +122,48 @@ describe('BookingDetail', () => {
     expect(screen.getByText(BASE_BOOKING.id)).toBeInTheDocument()
   })
 
+  it('показывает аватары клиента и барбера', async () => {
+    const customerAvatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000009/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+    const barberAvatarUrl =
+      '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+    stubImageLoading()
+
+    const { container } = renderDetail(
+      makeBooking({
+        customer: { ...BASE_BOOKING.customer, avatarUrl: customerAvatarUrl },
+        barber: { ...BASE_BOOKING.barber, avatarUrl: barberAvatarUrl },
+      })
+    )
+
+    await waitFor(() => {
+      expect(
+        container.querySelectorAll('[data-slot="avatar-image"]')
+      ).toHaveLength(2)
+    })
+    expect(
+      container.querySelector(
+        `[data-slot="avatar-image"][src="${customerAvatarUrl}"]`
+      )
+    ).not.toBeNull()
+    expect(
+      container.querySelector(
+        `[data-slot="avatar-image"][src="${barberAvatarUrl}"]`
+      )
+    ).not.toBeNull()
+    expect(screen.getByText('Ирина Волкова')).toBeInTheDocument()
+    expect(screen.getByText('Артём Соколов')).toBeInTheDocument()
+  })
+
+  it('без фото показывает инициалы клиента и барбера', () => {
+    const { container } = renderDetail(makeBooking())
+
+    expect(screen.getByText('ИВ')).toBeInTheDocument()
+    expect(screen.getByText('АС')).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+
   it('показывает гостя без аккаунта по имени и телефону', () => {
     renderDetail(
       makeBooking({
@@ -122,6 +173,7 @@ describe('BookingDetail', () => {
           lastName: 'Смирнова',
           email: null,
           phoneNumber: '+79991112233',
+          avatarUrl: null,
         },
       })
     )

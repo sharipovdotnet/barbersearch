@@ -663,6 +663,17 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 старую ссылку `404`. Кэш — `public, max-age=86400`: после замены старый кадр может сутки жить в
 чужом браузере (та же цена, что у портфолио; лечится сменой `mediaId`, а не `no-store`).
 
+**Аватар в поиске и бронях (2026-11-11, issue-86).** Три чтения отдают аватар вместе со
+строкой, но только для показа: ни одно из них не пишет и не меняет `User.AvatarUrl`.
+`BarberSearchItemResponse`, `BarberBookingCustomerResponse`, `AdminBookingCustomerResponse` и
+`AdminBookingBarberResponse` получили `string? AvatarUrl` **последним** параметром записи;
+`null` означает «аватара нет» и не является ошибкой. Поиск отдаёт аватар владельца профиля,
+записи барбера — аватар клиента, админская строка — оба: клиента из `bookings.user_id`,
+барбера из `barber_profiles.user_id`. У гостя (walk-in) `user_id = NULL`, поэтому
+`customer.avatarUrl` — `null`, а имя и телефон по-прежнему берутся из снимка брони.
+`userId` в контракты не попадает: он нужен только для догрузки. `BarberProfileResponse` и
+`MyProfileResponse` в этом срезе не менялись.
+
 ### 7.4 Statuses and enums
 
 All persisted enums have **explicit numeric values** (§10.10).
@@ -1571,6 +1582,17 @@ exactly one such PK lookup per card read to fill `BarberProfileResponse.avatarUr
 card query (four `Include`s under `AsSplitQuery`) does not join `users`, so its cost is one
 indexed lookup, not a wider plan.
 
+**Avatar in search and bookings (2026-11-11, issue-86).** No migration and no new index:
+every new lookup is a primary-key read of `users`. `BarberProfileRepository.SearchAsync` keeps
+the keyset query on `ix_barber_profiles_search_keyset` **without** a `users` join and adds
+exactly **one** extra `WHERE id = ANY(...)` read of `users` for the page's owner ids — the same
+"fill in after the page" pattern as the primary salon, so the main plan and the row count are
+unchanged. `GetBarberPageAsync` reuses the existing `LEFT JOIN users` and only projects
+`avatar_url`. The admin list/detail (`BuildAdminBookingsQuery`) adds a **second**
+`LEFT JOIN users` on `barber_profiles.user_id`; the customer join keys on `bookings.user_id`
+and is not reused. Costs: one extra indexed query per search page and one extra join per admin
+booking row. The avatar is never part of a predicate or of the keyset order.
+
 **Cross-aggregate FKs (2026-10-21, R-02).** `AddCrossAggregateForeignKeys` adds five
 `NOT VALID` constraints: `barber_salons → salons`, `barber_services → hair_services`,
 `barber_specializations → specializations`, `favorite_barbers → barber_profiles` and
@@ -2444,7 +2466,13 @@ Read endpoints (added 2026-10-19):
   the barber, the service and the salon with `timeZoneId`. `AdminBookingCustomerResponse`
   describes both kinds: `id` and `email` are `null` for a guest, while first/last name and phone
   come from the guest snapshot; email search therefore matches registered customers only, but
-  guest rows remain in the unfiltered list. Email and phone are PII and exist **only** in this
+  guest rows remain in the unfiltered list. Since issue-86 `customer.avatarUrl` (**last** in
+  `AdminBookingCustomerResponse`) comes from that same `LEFT JOIN users` and is `null` for a
+  guest, while `barber.avatarUrl` (**last** in `AdminBookingBarberResponse`) comes from a
+  **second** `LEFT JOIN users` keyed by `barber_profiles.user_id` — not from the customer join,
+  whose key is different. The list and the `{id}` detail share this query and therefore return
+  identical avatars, and the email/phone shape does not change.
+  Email and phone are PII and exist **only** in this
   admin contract: `BookingResponse` carries no email and its `UserId` is now nullable for a guest
   row (the unfiltered admin `GET api/bookings` view can include one); the customer list still
   filters by `user_id`, so a guest row never appears there, and `GetPageAsync` /
@@ -2563,6 +2591,10 @@ Read endpoints (added 2026-10-19):
   Since issue-54 each item also carries `primaryPlaceKind` — the `PlaceKind` of the same primary
   active salon that produced `primarySalonName`/`city`, or `null` when the barber has no active
   place — so the result row can say «Кабинет», «На дому» or «Выезд».
+  Since issue-86 each item also carries `avatarUrl` (**last** in `BarberSearchItemResponse`) —
+  the owner's avatar from `users`, `null` when there is none. It is filled by one extra
+  primary-key lookup on the page's owner ids, **not** by a join in the keyset query, so the
+  index plan, the filters, the order and the row count are unchanged.
   A broken cursor or an out-of-range page size is `400`, not `500`.
 - **Additional-service suggestions (2026-11-06, issue-53).** `GET api/barbers/additional-services`
   is an anonymous `reads`-limited `IReadOnlyList<string>`: `SelectMany(p => p.AdditionalServices)`
@@ -2744,7 +2776,11 @@ Read endpoints (added 2026-10-19):
   `cancellationReason`, customer
   display name (first + last, trimmed, double spaces collapsed) and phone when filled, service name
   and salon name/address/city/`timeZoneId`. Email, `userId`, `barberProfileId`, `idempotencyKey`
-  and `createdAt` are deliberately absent. One `AsNoTracking` query with a **`LEFT JOIN`** over
+  and `createdAt` are deliberately absent. Since issue-86 the customer also carries `avatarUrl`
+  (**last** in `BarberBookingCustomerResponse`) from the existing `LEFT JOIN users`: the owner's
+  URL when the client has a photo, `null` for a guest or a client without one. The join, both
+  scopes and the guest snapshot phone are unchanged.
+  One `AsNoTracking` query with a **`LEFT JOIN`** over
   `bookings → users` (a guest booking has `user_id = NULL`, so an inner join would drop it),
   `barber_services → hair_services` and `salons`; for a guest the customer name and phone come
   from `guest_first_name` / `guest_last_name` / `guest_phone`, so guest rows stay in the barber

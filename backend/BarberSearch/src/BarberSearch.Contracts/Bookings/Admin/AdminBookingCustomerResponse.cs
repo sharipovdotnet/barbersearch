@@ -24,9 +24,11 @@ namespace BarberSearch.Contracts.Bookings.Admin;
 /// Email клиента в каноническом виде (trim и нижний регистр); <c>null</c> у гостя.
 /// </param>
 /// <param name="PhoneNumber">Телефон клиента или гостя; <c>null</c> — номер не указан.</param>
+/// <param name="AvatarUrl">Аватар клиента; <c>null</c> у гостя и у клиента без фото.</param>
 public record AdminBookingCustomerResponse(
     Guid? Id,
     string FirstName,
     string LastName,
     string? Email,
-    string? PhoneNumber);
+    string? PhoneNumber,
+    string? AvatarUrl);

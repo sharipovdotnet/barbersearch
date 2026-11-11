@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { ProfileProvider } from '@/components/profile-provider'
 import { SessionProvider } from '@/components/session-provider'
 import { I18nProvider, readStoredLocale, setCurrentLocale, translate } from '@/i18n'
 
@@ -30,7 +31,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <I18nProvider>
       <SessionProvider>
-        <App />
+        <ProfileProvider>
+          <App />
+        </ProfileProvider>
       </SessionProvider>
     </I18nProvider>
   </StrictMode>,

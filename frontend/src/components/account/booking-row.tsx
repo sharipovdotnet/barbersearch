@@ -2,6 +2,7 @@ import { Check, Star, X } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import type { BookingView } from '@/components/account/booking-view'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { canCancelBooking, canReviewBooking } from '@/lib/booking-status'
@@ -11,6 +12,7 @@ import {
   formatShortDay,
   formatTime,
   formatWeekday,
+  getInitials,
 } from '@/lib/format'
 
 /**
@@ -54,8 +56,16 @@ export function BookingRow({
       </div>
 
       <div className="col-start-2 row-start-1 min-w-0">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate text-sm font-medium">{view.barberName}</p>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Avatar size="sm" aria-hidden>
+              {view.barberAvatarUrl && (
+                <AvatarImage src={view.barberAvatarUrl} alt="" />
+              )}
+              <AvatarFallback>{getInitials(view.barberName)}</AvatarFallback>
+            </Avatar>
+            <p className="truncate text-sm font-medium">{view.barberName}</p>
+          </div>
           <span className="shrink-0 text-sm tabular-nums sm:hidden">
             {formatPrice(booking.price)}
           </span>

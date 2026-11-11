@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -6,6 +6,7 @@ import { BarberDay } from '@/components/barber/barber-day'
 import type { BarberDayController } from '@/hooks/use-barber-day'
 import type { DayGap } from '@/lib/barber-day'
 import type { BarberBooking } from '@/lib/barber-bookings'
+import { stubImageLoading } from '@/test/image'
 
 /**
  * Лента дня: порядок строк и окон, шапка дня и состояния.
@@ -35,7 +36,7 @@ function booking(
     customerNote: null,
     barberNote: null,
     cancellationReason: null,
-    customer: { displayName: 'Иван Петров', phoneNumber: null },
+    customer: { displayName: 'Иван Петров', phoneNumber: null, avatarUrl: null },
     service: { name: 'Стрижка' },
     salon: {
       name: 'Барбершоп на Ленина',
@@ -86,7 +87,7 @@ function draw(day: BarberDayController) {
     registerRow: vi.fn(),
   }
 
-  render(
+  const result = render(
     <BarberDay
       day={day}
       now={NOW}
@@ -95,7 +96,7 @@ function draw(day: BarberDayController) {
     />
   )
 
-  return callbacks
+  return { ...callbacks, container: result.container }
 }
 
 describe('BarberDay: лента дня', () => {
@@ -210,6 +211,42 @@ describe('BarberDay: следующий клиент', () => {
     draw(controller({ items: [far], nextBooking: far }))
 
     expect(screen.getByText('Следующий клиент в 18:30')).toBeVisible()
+  })
+})
+
+describe('BarberDay: аватар клиента', () => {
+  const AVATAR_URL =
+    '/api/media/avatars/9e000000-0000-4000-8000-000000000115/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+  it('показывает фото клиента, когда оно есть', async () => {
+    stubImageLoading()
+
+    const withAvatar: BarberBooking = {
+      ...booking('a', utc(10), utc(10, 30)),
+      customer: {
+        displayName: 'Иван Петров',
+        phoneNumber: null,
+        avatarUrl: AVATAR_URL,
+      },
+    }
+
+    const { container } = draw(controller({ items: [withAvatar] }))
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-slot="avatar-image"]')
+      ).toHaveAttribute('src', AVATAR_URL)
+    })
+
+    // Инициалы не дублируют фото.
+    expect(screen.queryByText('ИП')).not.toBeInTheDocument()
+  })
+
+  it('у гостя без фото остаются инициалы', () => {
+    draw(controller({ items: [booking('a', utc(10), utc(10, 30))] }))
+
+    expect(screen.getByText('ИП')).toBeInTheDocument()
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 })
 

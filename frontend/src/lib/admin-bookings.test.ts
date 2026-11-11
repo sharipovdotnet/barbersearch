@@ -29,6 +29,8 @@ import { server } from '@/test/msw/server'
 const BOOKINGS_URL = '/api/admin/bookings'
 const BOOKING_URL = `${BOOKINGS_URL}/9e900000-0000-4000-8000-000000000001`
 const BOOKING_ID = '9e900000-0000-4000-8000-000000000001'
+const CUSTOMER_AVATAR_URL =
+  '/api/media/avatars/9e000000-0000-4000-8000-000000000009/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
 
 /** Полная строка ответа: ровно то, что читает экран. */
 const BOOKING = {
@@ -47,10 +49,12 @@ const BOOKING = {
     lastName: 'Волкова',
     email: 'e2e-bookings@barbersearch.test',
     phoneNumber: '+70000000009',
+    avatarUrl: CUSTOMER_AVATAR_URL,
   },
   barber: {
     profileId: '9e100000-0000-4000-8000-000000000001',
     displayName: 'Артём Соколов',
+    avatarUrl: null,
   },
   service: { name: 'Стрижка' },
   salon: {
@@ -228,7 +232,9 @@ describe('fetchAdminBooking', () => {
 
     expect(booking.id).toBe(BOOKING_ID)
     expect(booking.customer.firstName).toBe('Ирина')
+    expect(booking.customer.avatarUrl).toBe(CUSTOMER_AVATAR_URL)
     expect(booking.barber.displayName).toBe('Артём Соколов')
+    expect(booking.barber.avatarUrl).toBeNull()
     expect(booking.service.name).toBe('Стрижка')
     expect(booking.salon.city).toBe('Москва')
   })

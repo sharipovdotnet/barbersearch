@@ -24,6 +24,7 @@ const ITEM: BarberSearchItem = {
   primaryPlaceKind: null,
   city: null,
   additionalServices: ['Бритьё головы', 'Уход за бородой'],
+  avatarUrl: null,
 }
 
 /** Фильтры с одним изменённым полем — остальные остаются «без фильтра». */

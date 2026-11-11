@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { ProfileProvider } from '@/components/profile-provider'
 import { SessionContext, type SessionContextValue } from '@/hooks/use-session'
 import type { SessionUser } from '@/lib/auth'
 import type { MyProfile } from '@/lib/my-profile'
@@ -60,7 +61,9 @@ function sessionValue(user: MyProfile): SessionContextValue {
 function renderPage(user: MyProfile) {
   return render(
     <SessionContext.Provider value={sessionValue(user)}>
-      <AccountSecurityPage />
+      <ProfileProvider>
+        <AccountSecurityPage />
+      </ProfileProvider>
     </SessionContext.Provider>
   )
 }

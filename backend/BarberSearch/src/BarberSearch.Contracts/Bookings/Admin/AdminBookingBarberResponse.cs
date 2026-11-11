@@ -9,4 +9,5 @@ namespace BarberSearch.Contracts.Bookings.Admin;
 /// </remarks>
 /// <param name="ProfileId">Идентификатор профиля барбера.</param>
 /// <param name="DisplayName">Отображаемое имя барбера.</param>
-public record AdminBookingBarberResponse(Guid ProfileId, string DisplayName);
+/// <param name="AvatarUrl">Аватар барбера; <c>null</c>, если не загружен.</param>
+public record AdminBookingBarberResponse(Guid ProfileId, string DisplayName, string? AvatarUrl);

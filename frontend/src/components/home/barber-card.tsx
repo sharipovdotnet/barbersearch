@@ -1,6 +1,6 @@
 import { Languages, MapPin, Star } from 'lucide-react'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BARBER_GRADE_LABELS } from '@/lib/barber-grade'
@@ -60,6 +60,9 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
         <CardHeader>
           <div className="flex items-start gap-3">
             <Avatar size="lg" aria-hidden>
+              {barber.avatarUrl && (
+                <AvatarImage src={barber.avatarUrl} alt="" />
+              )}
               <AvatarFallback>
                 {getInitials(barber.displayName)}
               </AvatarFallback>

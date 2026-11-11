@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type {
@@ -12,7 +13,7 @@ import {
   describeBarberBookingFailure,
   type BarberActionFailure,
 } from '@/lib/errors'
-import { formatDateTime, formatPrice } from '@/lib/format'
+import { formatDateTime, formatPrice, getInitials } from '@/lib/format'
 
 /** Что именно должно получить фокус после действия: первая кнопка, «Отменить» или «Заметка». */
 export type RowHandle = {
@@ -133,20 +134,34 @@ export function CabinetBookingRow({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium tabular-nums">{when}</p>
-          <p className="text-sm">
-            <span className="font-medium">{booking.customer.displayName}</span>
+          {/* Имя и телефон делят одну flex-строку с аватаром: на 320 px телефон
+              переносится, а не растягивает список по горизонтали. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <Avatar size="sm" aria-hidden>
+              {booking.customer.avatarUrl && (
+                <AvatarImage src={booking.customer.avatarUrl} alt="" />
+              )}
+              <AvatarFallback>
+                {getInitials(booking.customer.displayName)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 font-medium break-words">
+              {booking.customer.displayName}
+            </span>
             {phone && (
               <>
-                {' · '}
+                <span aria-hidden className="text-muted-foreground">
+                  ·
+                </span>
                 <a
                   href={`tel:${phone.replace(/[^\d+]/g, '')}`}
-                  className="break-words text-muted-foreground underline-offset-3 hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="min-w-0 break-words text-muted-foreground underline-offset-3 hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   {phone}
                 </a>
               </>
             )}
-          </p>
+          </div>
           <p className="break-words text-sm text-muted-foreground">
             {booking.service.name} · {booking.salon.name}
           </p>

@@ -461,8 +461,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .ThenByDescending(profile => profile.Rating)
             .ThenBy(profile => profile.Id)
             .Take(filter.Limit)
-            .Select(profile => new BarberSearchItemResponse(
+            .Select(profile => new BarberSearchRow(
                 profile.Id,
+                profile.UserId,
                 profile.DisplayName.Value,
                 profile.Grade,
                 profile.YearsOfExperience.Value,
@@ -474,15 +475,17 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 null,
                 null,
                 null,
-                profile.AdditionalServices.ToList()))
+                profile.AdditionalServices.ToList(),
+                null))
             .ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
         {
-            return rows;
+            return new List<BarberSearchItemResponse>();
         }
 
         var profileIds = rows.Select(row => row.Id).ToArray();
+        var userIds = rows.Select(row => row.UserId).ToArray();
 
         // Название и город основного салона — второй запрос на уже урезанный набор id.
         // Так основной запрос остаётся простым EXISTS-запросом без JOIN коллекций.
@@ -506,18 +509,77 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .GroupBy(salon => salon.BarberProfileId)
             .ToDictionary(group => group.Key, group => group.First());
 
+        // Аватар — свойство владельца, а не профиля: тот же приём, что у салона, — второй
+        // запрос по уже урезанному набору id. Основной keyset-запрос остаётся на индексе,
+        // без join'а users; количество строк по-прежнему ровно Limit.
+        var avatars = await Context.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.AvatarUrl })
+            .ToListAsync(cancellationToken);
+
+        var avatarUrls = avatars.ToDictionary(user => user.Id, user => user.AvatarUrl);
+
         return rows
-            .Select(row => primarySalons.TryGetValue(row.Id, out var salon)
-                ? row with
-                {
-                    PrimarySalonId = salon.SalonId,
-                    PrimarySalonName = salon.Name,
-                    City = salon.City,
-                    PrimaryPlaceKind = salon.Kind
-                }
-                : row)
+            .Select(row =>
+            {
+                avatarUrls.TryGetValue(row.UserId, out var avatarUrl);
+
+                // Аватар и поля салона применяются одним `with`: строка поиска обходится
+                // один раз, а `ToList` в конце — единственный.
+                var enriched = primarySalons.TryGetValue(row.Id, out var salon)
+                    ? row with
+                    {
+                        AvatarUrl = avatarUrl,
+                        PrimarySalonId = salon.SalonId,
+                        PrimarySalonName = salon.Name,
+                        City = salon.City,
+                        PrimaryPlaceKind = salon.Kind
+                    }
+                    : row with { AvatarUrl = avatarUrl };
+
+                return new BarberSearchItemResponse(
+                    enriched.Id,
+                    enriched.DisplayName,
+                    enriched.Grade,
+                    enriched.YearsOfExperience,
+                    enriched.Languages,
+                    enriched.Rating,
+                    enriched.ReviewsCount,
+                    enriched.IsVerified,
+                    enriched.PrimarySalonId,
+                    enriched.PrimarySalonName,
+                    enriched.City,
+                    enriched.PrimaryPlaceKind,
+                    enriched.AdditionalServices,
+                    enriched.AvatarUrl);
+            })
             .ToList();
     }
+
+    /// <summary>
+    /// Плоская строка keyset-выдачи поиска до догрузки салона и аватара.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="UserId"/> нужен только для второго запроса за аватаром и в контракт не попадает:
+    /// иначе идентификатор владельца утёк бы в JSON, где его нет ни у одной строки выдачи.
+    /// </remarks>
+    private sealed record BarberSearchRow(
+        Guid Id,
+        Guid UserId,
+        string DisplayName,
+        Grade Grade,
+        int YearsOfExperience,
+        IReadOnlyList<Language> Languages,
+        decimal? Rating,
+        int ReviewsCount,
+        bool IsVerified,
+        Guid? PrimarySalonId,
+        string? PrimarySalonName,
+        string? City,
+        PlaceKind? PrimaryPlaceKind,
+        IReadOnlyList<string> AdditionalServices,
+        string? AvatarUrl);
 
     /// <summary>
     /// Предикаты публичного поиска: видимость, фильтры и keyset-курсор.

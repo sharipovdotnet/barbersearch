@@ -1,18 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HeaderAuth } from '@/components/header-auth'
+import { ProfileProvider } from '@/components/profile-provider'
 import {
   SessionContext,
   type SessionContextValue,
   type SessionStatus,
 } from '@/hooks/use-session'
 import type { SessionUser } from '@/lib/auth'
+import type { MyProfile } from '@/lib/my-profile'
+import { stubImageLoading } from '@/test/image'
+import { server } from '@/test/msw/server'
 
 /**
  * Шапка без сети и без `SessionProvider`: контекст подставляется заглушкой,
  * потому что проверяются только ветки рендера по `status` и состав меню аккаунта (§4.5).
+ * `ProfileProvider` настоящий: `HeaderAuth` читает аватар из общего контекста.
  */
 const sessionUser: SessionUser = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -21,6 +27,25 @@ const sessionUser: SessionUser = {
   barberProfileId: null,
   isEmailVerified: true,
 }
+
+const PROFILE: MyProfile = {
+  id: sessionUser.id,
+  email: sessionUser.email,
+  firstName: 'Сергей',
+  lastName: 'Сессионов',
+  phoneNumber: null,
+  avatarUrl: null,
+  role: 'Customer',
+  barberProfileId: null,
+  isEmailVerified: true,
+  isPhoneVerified: false,
+  createdAt: '2026-09-01T10:00:00Z',
+  lastLoginAt: null,
+}
+
+beforeEach(() => {
+  server.use(http.get('/api/users/me', () => HttpResponse.json(PROFILE)))
+})
 
 function renderHeader({
   status,
@@ -41,7 +66,9 @@ function renderHeader({
 
   return render(
     <SessionContext.Provider value={context}>
-      <HeaderAuth />
+      <ProfileProvider>
+        <HeaderAuth />
+      </ProfileProvider>
     </SessionContext.Provider>
   )
 }
@@ -171,5 +198,95 @@ describe('HeaderAuth', () => {
         'true'
       )
     })
+  })
+})
+
+describe('HeaderAuth: аватар', () => {
+  const avatarUrl =
+    '/api/media/avatars/11111111-1111-4111-8111-111111111111/0192f0c4e5b67c8d9a0b1c2d3e4f5a6b.jpg'
+
+  it('показывает изображение профиля в единственной кнопке меню', async () => {
+    stubImageLoading()
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json({ ...PROFILE, avatarUrl })
+      )
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    // Аватар не отдельная кнопка: имя «Меню аккаунта» остаётся одно.
+    expect(
+      screen.getAllByRole('button', { name: 'Меню аккаунта' })
+    ).toHaveLength(1)
+
+    const trigger = screen.getByRole('button', { name: 'Меню аккаунта' })
+
+    await waitFor(() => {
+      const image = trigger.querySelector('[data-slot="avatar-image"]')
+
+      expect(image).toHaveAttribute('src', avatarUrl)
+      // Изображение декоративно, аватар скрыт от скринридера.
+      expect(image).toHaveAttribute('alt', '')
+    })
+
+    expect(trigger.querySelector('button')).toBeNull()
+    expect(screen.queryByText('СС')).not.toBeInTheDocument()
+  })
+
+  it('без avatarUrl показывает инициалы профиля', async () => {
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    await waitFor(() => {
+      // Инициалы рисуются `::before` из `data-initials`: текстового узла внутри
+      // кнопки нет, иначе axe ругается на видимый текст вне имени «Меню аккаунта».
+      expect(
+        document.querySelector('[data-slot="avatar-fallback"]')
+      ).toHaveAttribute('data-initials', 'СС')
+    })
+
+    expect(document.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+
+  it('до загрузки профиля показывает первую букву email', async () => {
+    // Ответ не приходит до конца теста: важен первый кадр, а не профиль.
+    server.use(
+      http.get('/api/users/me', () => new Promise<Response>(() => {}))
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    const trigger = screen.getByRole('button', { name: 'Меню аккаунта' })
+
+    expect(
+      trigger.querySelector('[data-slot="avatar-fallback"]')
+    ).toHaveAttribute('data-initials', 'S')
+    expect(trigger.querySelector('[data-slot="avatar-image"]')).toBeNull()
+  })
+
+  it('с аватаром состав меню и email не меняются', async () => {
+    stubImageLoading()
+    server.use(
+      http.get('/api/users/me', () =>
+        HttpResponse.json({ ...PROFILE, avatarUrl })
+      )
+    )
+
+    renderHeader({ status: 'authenticated', user: sessionUser })
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="avatar-image"]')
+      ).not.toBeNull()
+    })
+
+    await openAccountMenu()
+
+    expect(screen.getByText('session@barbersearch.test')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Мой кабинет' })).toHaveAttribute(
+      'href',
+      '/account'
+    )
+    expect(screen.getByRole('menuitem', { name: 'Выйти' })).toBeInTheDocument()
   })
 })

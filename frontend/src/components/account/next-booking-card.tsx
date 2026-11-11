@@ -7,7 +7,7 @@ import {
   X,
 } from 'lucide-react'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -104,6 +104,9 @@ export function NextBookingCard({
 
           <div className="flex min-w-0 items-start gap-3">
             <Avatar size="lg" aria-hidden>
+              {view.barberAvatarUrl && (
+                <AvatarImage src={view.barberAvatarUrl} alt="" />
+              )}
               <AvatarFallback>{getInitials(view.barberName)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 space-y-1">
