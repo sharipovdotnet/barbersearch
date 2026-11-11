@@ -352,6 +352,26 @@ test.describe('axe: админка', () => {
     await expectNoBlockingViolations(page, '/admin/users', test.info())
   })
 
+  test('/admin/users/{id}: карточка без фото, блок аватара', async ({ page }) => {
+    // Прямой адрес карточки: split-view на 1280 тоже открывает деталь, но гейт
+    // должен покрывать маршрут с id отдельно — бейдж и диалог аватара живут там.
+    await page.goto(`/admin/users/${fixtures.mutationsUserId}`)
+
+    await expect(page.locator('#user-detail')).toBeVisible()
+    await expect(page.locator('#user-detail-title')).toHaveText('Марк Правкин')
+    // Сид сбрасывает `avatar_url`, поэтому блок модерации показывает подсказку
+    // «скрывать нечего», а не кнопку с диалогом.
+    await expect(
+      page.getByText('У пользователя нет фото — скрывать нечего.')
+    ).toBeVisible()
+
+    await expectNoBlockingViolations(
+      page,
+      `/admin/users/${fixtures.mutationsUserId}`,
+      test.info()
+    )
+  })
+
   test('/admin/catalogue: вкладка «Услуги»', async ({ page }) => {
     const catalogue = new AdminCataloguePage(page)
 

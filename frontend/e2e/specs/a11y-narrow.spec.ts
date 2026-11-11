@@ -385,7 +385,45 @@ test.describe('axe: 320 px, админка без выбранной строк�
     await adminUsers.waitForFirstPage()
     await expect(adminUsers.heading).toBeVisible()
 
+    // Аватар 24 px и бейдж «Фото скрыто» не должны выдавливать имя из строки:
+    // карточный список не расширяет страницу (§15).
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
     await expectNoBlockingViolations(page, '/admin/users @320', test.info())
+  })
+
+  test('барберы: карточки, без горизонтального скролла', async ({ page }) => {
+    await page.goto('/admin/barbers')
+    await expect(
+      page.getByRole('heading', { name: 'Барберы', level: 1 })
+    ).toBeVisible()
+
+    // На 320 таблица скрыта, строки — карточки; по умолчанию открыта очередь
+    // «На проверке», поэтому переключаемся на «Все», как в широкой axe-матрице.
+    await page
+      .getByRole('group', { name: 'Каких барберов показать' })
+      .getByRole('button', { name: 'Все', exact: true })
+      .click()
+
+    const rows = page.locator('section[aria-label="Барберы"] ul > li')
+
+    await expect(rows.first()).toBeVisible()
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(page, '/admin/barbers @320', test.info())
   })
 
   test('каталог: салоны карточками, без горизонтального скролла', async ({ page }) => {
