@@ -229,6 +229,10 @@ describe('HeaderAuth: аватар', () => {
       const image = trigger.querySelector('[data-slot="avatar-image"]')
 
       expect(image).toHaveAttribute('src', avatarUrl)
+      expect(image).toHaveAttribute(
+        'srcset',
+        `${avatarUrl}?size=sm 1x, ${avatarUrl}?size=md 2x, ${avatarUrl}?size=lg 3x`
+      )
       // Изображение декоративно, аватар скрыт от скринридера.
       expect(image).toHaveAttribute('alt', '')
     })

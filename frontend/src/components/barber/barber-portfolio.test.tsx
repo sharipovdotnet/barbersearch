@@ -53,9 +53,22 @@ describe('BarberPortfolio', () => {
     expect(first).toHaveAttribute('fetchpriority', 'high')
     expect(first).toHaveAttribute('decoding', 'async')
     expect(first).toHaveClass('aspect-square', 'w-full', 'object-cover')
+    expect(first).toHaveAttribute('src', FIRST.url)
+    expect(first).toHaveAttribute(
+      'srcset',
+      `${FIRST.url}?size=sm 256w, ${FIRST.url}?size=md 512w, ${FIRST.url}?size=lg 1024w`
+    )
+    expect(first).toHaveAttribute(
+      'sizes',
+      '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw'
+    )
     expect(second).toHaveAttribute('loading', 'lazy')
     expect(second).not.toHaveAttribute('fetchpriority')
     expect(second).toHaveAttribute('decoding', 'async')
+    expect(second).toHaveAttribute(
+      'srcset',
+      `${SECOND.url}?size=sm 256w, ${SECOND.url}?size=md 512w, ${SECOND.url}?size=lg 1024w`
+    )
 
     expect(
       screen.getByRole('button', { name: 'Открыть фото: Стрижка' })
@@ -79,6 +92,13 @@ describe('BarberPortfolio', () => {
     await user.click(trigger)
 
     const dialog = screen.getByRole('dialog', { name: 'Фото барбера' })
+
+    // Лайтбокс показывает исходник: варианты нужны сетке, а не просмотру.
+    const lightboxImage = within(dialog).getByRole('img', { name: 'Стрижка' })
+
+    expect(lightboxImage).toHaveAttribute('src', FIRST.url)
+    expect(lightboxImage).not.toHaveAttribute('srcset')
+    expect(lightboxImage).not.toHaveAttribute('sizes')
 
     expect(within(dialog).getByText('Стрижка')).toBeInTheDocument()
     expect(within(dialog).getByText('1 из 2')).toBeInTheDocument()
@@ -139,6 +159,22 @@ describe('BarberPortfolio', () => {
         name: 'Работа барбера Иван Петров, фото 2',
       })
     ).toBeInTheDocument()
+  })
+
+  it('внешний легаси-URL показывается без srcset', () => {
+    const external: PortfolioPhoto = {
+      ...FIRST,
+      id: '9e200000-0000-4000-8000-000000000003',
+      url: 'https://cdn.example.com/works/legacy.jpg',
+    }
+
+    render(<BarberPortfolio photos={[external]} barberName="Иван Петров" />)
+
+    const image = screen.getByRole('img', { name: 'Стрижка' })
+
+    expect(image).toHaveAttribute('src', external.url)
+    expect(image).not.toHaveAttribute('srcset')
+    expect(image).not.toHaveAttribute('sizes')
   })
 
   it('сломанная картинка остаётся muted-подложкой с alt', () => {

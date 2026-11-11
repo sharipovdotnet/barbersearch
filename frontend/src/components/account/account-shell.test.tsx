@@ -141,6 +141,10 @@ describe('AccountShell: неподтверждённый email', () => {
       )
 
       expect(image).toHaveAttribute('src', avatarUrl)
+      expect(image).toHaveAttribute(
+        'srcset',
+        `${avatarUrl}?size=sm 1x, ${avatarUrl}?size=md 2x, ${avatarUrl}?size=lg 3x`
+      )
     })
 
     expect(screen.queryByText('МК')).not.toBeInTheDocument()

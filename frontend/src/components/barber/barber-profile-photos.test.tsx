@@ -86,6 +86,24 @@ describe('BarberProfilePhotos: список', () => {
     ).toBeEnabled()
   })
 
+  it('превью карточки получает srcset и sizes кабинетной сетки', () => {
+    const item = photo()
+
+    renderSection([item])
+
+    const image = screen.getByRole('img', { name: 'Стрижка' })
+
+    expect(image).toHaveAttribute('src', item.url)
+    expect(image).toHaveAttribute(
+      'srcset',
+      `${item.url}?size=sm 256w, ${item.url}?size=md 512w, ${item.url}?size=lg 1024w`
+    )
+    expect(image).toHaveAttribute(
+      'sizes',
+      '(min-width: 640px) 50vw, 100vw'
+    )
+  })
+
   it('десять фото: кнопка загрузки disabled и честный текст лимита', () => {
     const photos = Array.from({ length: 10 }, (_item, index) =>
       photo({
