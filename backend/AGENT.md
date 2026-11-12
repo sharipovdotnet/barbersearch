@@ -4,7 +4,7 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **588 domain + 873 application + 293 infrastructure + 279 integration (2033 total)**;
+> Tests: **588 domain + 878 application + 317 infrastructure + 292 integration (2075 total)**;
 > the three unit projects are green locally (2026-11-12), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
@@ -475,8 +475,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-12 (срез доставки медиа): domain **588**, application
-**873**, infrastructure **293**, integration **279** — всего **2033**, все зелёные на
+Актуальный baseline на 2026-11-12 (срез аудита фото): domain **588**, application
+**878**, infrastructure **317**, integration **292** — всего **2075**, все зелёные на
 локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
@@ -889,10 +889,10 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 26 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 588 domain + 873 application + 293 infrastructure + 279 integration (2033 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 588 domain + 878 application + 317 infrastructure + 292 integration (2075 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
+| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из восьми типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
 | Web | ✅ 32 контроллера / 156 endpoints (144 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
@@ -1199,8 +1199,8 @@ without a constructor call.
 **Закрыто:** серверные миниатюры и честный кэш — три WebP-варианта `sm/md/lg`, `?size=`,
 сильный `ETag`/`304` и `public, max-age=0, must-revalidate` вместо суточного `max-age`
 (§17.15; долги #31/#32 во frontend §14 сокращены). **Остаётся:** серверный и CDN-кэш,
-политика `srcset` для CDN, S3/MinIO и общий volume для нескольких инстансов, аудит действий
-с фото и AVIF — отдельные срезы.
+политика `srcset` для CDN, S3/MinIO и общий volume для нескольких инстансов и AVIF —
+отдельные срезы.
 
 ---
 
@@ -1355,8 +1355,8 @@ Suggested order:
 **Премодерация фото (2026-11-12, issue-89).** Завершённый срез: аватар и работа портфолио
 создаются `Pending`, очередь `/admin/photos` и решения администратора описаны в §17.14,
 миграция `AddPhotoModeration` — в §8, индексы — в §15.2, маршруты — в §16. Публичная выдача
-требует `Approved` вместе с прежними флагами; решения по фото в `audit_log` не пишутся —
-это остаётся отдельным долгом (frontend §14 #31/#32).
+требует `Approved` вместе с прежними флагами; с #91 решения по фото пишутся в `audit_log` как
+`portfolio_photo.updated`/`user.updated`, а причина отказа и reviewed-поля остаются вне payload.
 
 ---
 
@@ -2163,21 +2163,33 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 - **Аудит изменений (R-34).** Таблица `audit_log`: `occurred_at`, `actor_user_id` (nullable),
   `action`, `entity_type`, `entity_id`, `payload jsonb`. Строка аудита добавляется в тот же
   `SaveChanges`, что и изменение (`AuditTrail.Capture` в `RepositoryBase.SaveChangesAsync`),
-  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Allowlist — семь типов: `user`,
-  `barber_profile`, `review`, `salon`, `hair_service`, `specialization` и `booking`, у каждого
-  свой список свойств. `user`/`barber_profile` — роль, активность, подтверждения email/телефона,
-  привязка профиля, грейд/верификация/рейтинг; `review` — публикация, рейтинг и текст; `salon` —
-  имя (только в `values` создания: переименования салона в API нет), адрес, город, пояс,
-  координаты, контакты и `isActive`; `hair_service` — имя, описание, категория, длительность и
-  `isActive`; `specialization` — имя, описание и `isActive`; `booking` — **только** `Status`,
-  `BarberNote` и `CancellationReason`
+  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Allowlist — восемь типов: `user`,
+  `barber_profile`, `portfolio_photo`, `review`, `salon`, `hair_service`, `specialization` и
+  `booking`, у каждого свой список свойств. `user`/`barber_profile` — роль, активность,
+  подтверждения email/телефона, привязка профиля, грейд/верификация/рейтинг; `user`
+  дополнительно аудирует `avatarUrl` и `avatarModerationStatus` (загрузка/замена/удаление
+  аватара и решения администратора) вместе с прежним `isAvatarBlocked`. `portfolio_photo` —
+  создание, подпись, порядок, публикация, блокировка и решения администратора:
+  `barberProfileId`, `url`, `description`, `sortOrder`, `isPublished`, `isBlocked` и
+  `moderationStatus`; создание пишется (`AuditsCreation` — `true`, потому что кадров максимум
+  десять на профиль и объём журнала это не взрывает). `url` обязателен: `Id` кадра и `mediaId`
+  в `/api/media/portfolio/...` — разные GUID'ы, и после удаления строка иначе не назовёт файл.
+  В payload **не** попадают причина отказа (`rejectionReason`/`avatarRejectionReason`),
+  `reviewedAt`/`reviewedByUserId` и `thumbnailUrl`: это свободный текст администратора, дубли
+  `occurred_at`/`actor_user_id` и производная файла. `review` — публикация, рейтинг и текст;
+  `salon` — имя (только в `values` создания: переименования салона в API нет), адрес, город,
+  пояс, координаты, контакты и `isActive`; `hair_service` — имя, описание, категория,
+  длительность и `isActive`; `specialization` — имя, описание и `isActive`; `booking` —
+  **только** `Status`, `BarberNote` и `CancellationReason`
   (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`), потому что других изменяемых
   полей у брони сегодня нет. **Создание брони не аудируется сознательно**
   (`AuditsCreation: false`): бронь уже хранит клиента, время и цену, а строка на каждую бронь
   (1,2 млн в нагрузочной базе) раздувала бы журнал без новой информации; журнал отвечает на
   «кто отменил/подтвердил/отметил неявку», а не на «кто забронировал». Дети `BarberProfile`
-  (`BarberService`, `BarberSalon`, `WorkingSchedule`, `PortfolioPhoto`, `TimeOff`) в allowlist
-  не входят. Логины (`last_login_at`, `failed_login_attempts`, `lockout_end`), `updated_at` и
+  (`BarberService`, `BarberSalon`, `WorkingSchedule`, `TimeOff`) в allowlist не входят;
+  `PortfolioPhoto` — единственное исключение: загрузка и удаление кадра это жизненный цикл
+  контента, который администратор проверяет и блокирует. Логины (`last_login_at`,
+  `failed_login_attempts`, `lockout_end`), `updated_at` и
   `xmin` не пишутся — это шум. В `payload` (camelCase, enum'ы строками) значения свойств, имя
   которых содержит `password`, `hash`, `stamp`, `token` или `secret`, заменяются на
   `[redacted]`; строки длиннее 500 символов обрезаются с маркером; `IdempotencyKey` в allowlist
@@ -2186,8 +2198,10 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   (индекс `ix_audit_log_entity_type_entity_id`), лента одного типа —
   `SELECT * FROM audit_log WHERE entity_type = 'salon' ORDER BY occurred_at DESC, id LIMIT 20`
   (`ix_audit_log_occurred_at_id`; с issue-41 так же фильтруются `booking`, `hair_service` и
-  `specialization`), действия пользователя — по `actor_user_id`, последние события — по
-  `occurred_at DESC, id`. Ретенции, партиционирования и экспорта нет — это отдельные срезы.
+  `specialization`, а с issue-91 — `portfolio_photo`), действия пользователя — по
+  `actor_user_id`, последние события — по `occurred_at DESC, id`. Ретенции, партиционирования и
+  экспорта нет — это отдельные срезы. Миграция не нужна: `audit_log.action`/`entity_type` —
+  `varchar(64)`, `payload` — `jsonb`, новые строки помещаются без изменения схемы.
 
 ### 15.9 Order of operations
 
@@ -2344,8 +2358,9 @@ Conventions:
   `EnsureAdmin`, `204`, идемпотентно; фото не из этого профиля —
   `404 portfolioPhoto.block.notFound` / `.unblock.notFound`. `[Authorize(AdminOnly)]` отсекает
   не-администратора **до** действия, поэтому его `403` — ответ фреймворка, а `EnsureAdmin`
-  в обработчике страхует прямой вызов команды. В `audit_log` блокировка не пишется:
-  allowlist семи типов не расширяется (дочерняя сущность).
+  в обработчике страхует прямой вызов команды. Блокировка и разблокировка пишутся в
+  `audit_log` как `portfolio_photo.updated` с `isBlocked` (с #91): у кадра собственный тип,
+  хотя он остаётся ребёнком профиля; повторная блокировка — no-op и строки не даёт.
   `GET api/media/portfolio/{barberProfileId}/{fileName}` — анонимный (`[AllowAnonymous]` +
   политика `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; видимость проверяется по
   БД **на каждый запрос** (`GetPortfolioPhotoAccessAsync`) по URL без query, отказ —
@@ -2397,8 +2412,10 @@ Conventions:
   кадр — `404 portfolioPhoto.moderation.notFound` (профиля нет — `404 barberProfile.notFound`).
   Тело отказа — `RejectPhotoRequest { reason }`: причина обязательна, тримится, 1..500
   (`400 …reasonRequired` / `…reasonTooLong`, `invalidField = "reason"`); одобрение чистит
-  причину. `audit_log` новых типов не получает: решение пишется только в
-  `reviewed_by_user_id`/`reviewed_at`/`rejection_reason` самой сущности (§17.14).
+  причину. Решение администратора пишется в `audit_log`: для портфолио —
+  `portfolio_photo.updated` с `moderationStatus`, для аватара — `user.updated` с
+  `avatarModerationStatus` (с #91); причина отказа и reviewed-поля остаются на сущности и в
+  payload не входят.
   Публичная видимость: аватар — `Approved && !IsAvatarBlocked`, портфолио —
   `Approved && IsPublished && !IsBlocked`; владелец и админ видят неодобренный кадр, файл
   отдаётся с `private, no-store`, публичный — с `public, max-age=0, must-revalidate` + `ETag`
@@ -2602,7 +2619,9 @@ Read endpoints (added 2026-10-19):
   adds `isAvatarBlocked`, `AdminUserResponse`/`AdminBarberResponse` and both admin detail contracts
   carry the raw URL plus the flag, while the public search/card and the barber's bookings return
   `null`. `AuditTrail` records one `user.updated` row with `changes.isAvatarBlocked` in the same
-  `SaveChanges`; `AvatarUrl` is deliberately not in the allowlist. `AvatarMediaController` serves a
+  `SaveChanges`; at #87 `AvatarUrl` was deliberately left out of the allowlist, and since #91 it is
+  in it together with `AvatarModerationStatus`, so an upload or deletion names the frame.
+  `AvatarMediaController` serves a
   hidden file only to an admin (`private, no-store`) and answers the usual
   `404 avatarMedia.notFound` to everyone else, the owner included. Logs carry only the user id and
   the new state.
@@ -2628,7 +2647,7 @@ Read endpoints (added 2026-10-19):
   `hair_service.*`, `specialization.*` or `salon.*` rows with the allowlisted fields, and the
   journal's `entityType` filter exposes each type separately. Deleting is still not possible — the
   domain only deactivates, so the journal cannot show a catalogue delete.
-- **Admin audit (2026-11-02, issue-38; extended by issue-41).** `GET api/admin/audit?entityType=all|user|barber_profile|review|salon|hair_service|specialization|booking&actor=&from=&to=&cursor=&pageSize=`
+- **Admin audit (2026-11-02, issue-38; extended by issue-41).** `GET api/admin/audit?entityType=all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo&actor=&from=&to=&cursor=&pageSize=`
   is the first read of `audit_log` (R-34) and is closed by `AdminOnly`; there is no write action,
   and none will be added — the journal is immutable. The response is
   `PagedResponse<AdminAuditEntryResponse>`: id, `occurredAt`, `action` (`{entity}.{created|updated|deleted}`),
@@ -2649,13 +2668,17 @@ Read endpoints (added 2026-10-19):
   `admin.audit` scope tag (a cursor from another list is rejected instead of paginating a foreign
   order), and `pageSize` defaults to 20 and is capped at 100. The entity **name is deliberately
   not resolved**: the record may be renamed or deleted, so the row carries `entity_id` only.
-  The journal covers **seven entity types** — `User`, `BarberProfile`, `Review`, `Salon`,
-  `HairService`, `Specialization` and `Booking` (the last four were added by issue-41; booking
-  rows record only `Status` and `BarberNote` changes, and booking creation is deliberately not
-  audited, while `BarberProfile` children stay out of the allowlist). `entityType` therefore
-  accepts `all|user|barber_profile|review|salon|hair_service|specialization|booking`, trimmed and
-  case-insensitive; numbers and unknown strings are still `400 admin.audit.entityType`. Nothing
-  else about the read-only contract changed: there is no new endpoint and no mutation, `total`,
+  The journal covers **eight entity types** — `User`, `BarberProfile`, `PortfolioPhoto`,
+  `Review`, `Salon`, `HairService`, `Specialization` and `Booking`. The last four were added by
+  issue-41; since issue-91 `PortfolioPhoto` is the eighth and the only audited `BarberProfile`
+  child — creating, captioning, reordering, publishing, blocking and deciding a frame write
+  `portfolio_photo.created|updated|deleted`, while `BarberService`, `BarberSalon`,
+  `WorkingSchedule` and `TimeOff` stay out. Booking rows record only `Status` and `BarberNote`
+  changes, and booking creation is deliberately not audited. `entityType` therefore accepts
+  `all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo`,
+  trimmed and case-insensitive; numbers and unknown strings are still
+  `400 admin.audit.entityType`. Nothing else about the read-only contract changed: there is no
+  new endpoint and no mutation, `total`,
   `pageSize`, the cursor, the order and the payload format are untouched. Retention, export,
   partitioning and full-text search over `payload` are not part of this slice.
 - **Admin bookings (2026-11-02, issue-39).** `GET api/admin/bookings?status=&search=&cursor=&pageSize=`
@@ -4265,10 +4288,13 @@ avatar_moderation_status <> 2 THEN NULL ELSE avatar_url END`), поэтому `P
 (§17.15); остаются серверный и CDN-кэш, политика `srcset` для CDN, AVIF, S3/MinIO и общий
 volume — долги #31/#32; кропа нет по-прежнему. 2) Нет фильтра `avatar=blocked` и
 истории решений в очереди: только `Pending`; «скрытые» по-прежнему ищутся в общих списках.
-3) `audit_log` не расширяется: `PhotoModerationStatus`/`RejectionReason` не входят в
-allowlist `User`/`BarberProfile`, решение фиксируется только полями
-`reviewed_by_user_id`/`reviewed_at`/`rejection_reason` сущности. Это остаётся долгом: объём
-и приватность журнала решений — отдельный срез. 4) Писем и push об одобрении/отказе нет:
+3) Аудит решений добавлен (#91): блокировка/одобрение/отклонение пишут
+`portfolio_photo.updated` (для аватара — `user.updated`), поэтому решение видно в журнале;
+причина отказа (`RejectionReason`/`AvatarRejectionReason`) и reviewed-поля остаются на
+сущности и в payload не входят, как и `thumbnailUrl`: это свободный текст администратора,
+дубли `occurred_at`/`actor_user_id` и производная файла. Объём журнала (до десяти кадров на
+профиль) признан приемлемым; ретенция — отдельное решение. 4) Писем и push об
+одобрении/отказе нет:
 владелец узнаёт статус при следующем чтении кабинета. 5) Массовых действий и автоодобрения
 для админов нет. 6) Премодерация не меняет `POST/DELETE .../avatar/block` и
 `.../photos/{id}/block`, не превращает `Rejected` в `Blocked` и не трогает
