@@ -59,6 +59,13 @@
 
   "Расписание сохранено.": "Schedule saved.",
   "Не удалось сохранить расписание.": "Could not save the schedule.",
+  "Записи вне новых часов": "Bookings outside the new hours",
+  "Записи в нерабочем периоде": "Bookings inside the time off",
+  "Клиенты придут в назначенное время — визит можно отменить в разделе «Записи».": "Clients will arrive at the scheduled time — cancel a visit in «Записи».",
+  "Всё равно сохранить": "Save anyway",
+  "и ещё {list}": "and {list}",
+  "Расписание не сохранено: записи изменились, обновите страницу.": "The schedule was not saved: the bookings changed, refresh the page.",
+  "Расписание не сохранено: попробуйте ещё раз.": "The schedule was not saved: try again.",
   "Недельное расписание": "Weekly schedule",
   "Обычные рабочие часы салона «{name}». Время — в поясе салона": "Regular opening hours of the salon “{name}”. Times are in the salon's time zone",
   "Заполнить будни": "Fill weekdays",
@@ -79,7 +86,7 @@
   "Начало работы, {day}": "Start time, {day}",
   "Окончание работы, {day}": "End time, {day}",
   "Все дни отмечены выходными: клиенты не увидят свободное время.": "All days are marked as days off: clients will not see any available time.",
-  "Изменение графика не отменяет уже созданные записи. Если запись выйдет за новые часы, она останется в силе — проверьте её в разделе «Записи».": "Changing the schedule does not cancel existing bookings. If a booking falls outside the new hours, it stays valid — check it in the “Bookings” section.",
+  "Изменение графика не отменяет записи: если визит выйдет за новые часы, сохранение попросит подтвердить.": "Changing the schedule does not cancel bookings: if a visit falls outside the new hours, saving asks for confirmation.",
   "Сохранить расписание": "Save schedule",
   "Есть несохранённые изменения": "You have unsaved changes",
 

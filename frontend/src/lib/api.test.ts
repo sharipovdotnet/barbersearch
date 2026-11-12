@@ -159,6 +159,71 @@ describe('apiRequest', () => {
     expect(error.hasCode('fake.code')).toBe(false)
   })
 
+  it('принимает расширение conflicts: массив визитов остаётся кодам и диалогу', async () => {
+    const conflict = {
+      id: '9e100000-0000-4000-8000-000000000031',
+      startAt: '2026-11-20T09:00:00+00:00',
+      endAt: '2026-11-20T09:30:00+00:00',
+      timeZoneId: 'Asia/Yekaterinburg',
+      customerName: 'Иван Петров',
+      serviceName: 'Стрижка',
+      status: 'Confirmed',
+    }
+    const problem = {
+      ...problemDetails(409, { errorCodes: ['barberSchedule.conflict'] }),
+      conflicts: [conflict],
+    }
+
+    server.use(
+      http.put('/api/schedule', () =>
+        HttpResponse.json(problem, { status: 409 })
+      )
+    )
+
+    const error = await apiErrorOf(
+      apiRequest('/schedule', { method: 'PUT', body: '{}' })
+    )
+
+    expect(error.status).toBe(409)
+    expect(error.problem?.conflicts).toStrictEqual([conflict])
+    expect(error.hasCode('barberSchedule.conflict')).toBe(true)
+  })
+
+  it('не считает ProblemDetails битый conflicts: problem null, коды не читаются', async () => {
+    // Без этой проверки «мусорный» JSON ошибки стал бы валидным ProblemDetails,
+    // и диалог показал бы пустой список вместо общего текста (§10.9).
+    const brokenBodies = [
+      { conflicts: 'nope' },
+      { conflicts: { items: [] } },
+      { conflicts: [{ id: 'booking-1', customerName: 'Анна' }] },
+      { conflicts: [null] },
+    ]
+
+    for (const broken of brokenBodies) {
+      server.use(
+        http.put('/api/schedule', () =>
+          HttpResponse.json(
+            {
+              ...problemDetails(409, {
+                errorCodes: ['barberSchedule.conflict'],
+              }),
+              ...broken,
+            },
+            { status: 409 }
+          )
+        )
+      )
+
+      const error = await apiErrorOf(
+        apiRequest('/schedule', { method: 'PUT', body: '{}' })
+      )
+
+      expect(error.status).toBe(409)
+      expect(error.problem).toBeNull()
+      expect(error.codes).toStrictEqual([])
+    }
+  })
+
   it('на недоступной сети отдаёт статус 0 и текст про связь', async () => {
     server.use(http.get('/api/thing', () => HttpResponse.error()))
 

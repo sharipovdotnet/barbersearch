@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 
+import { ScheduleConflictsDialog } from '@/components/barber/schedule-conflicts-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useScheduleWrite } from '@/hooks/use-schedule-write'
 import { useI18n } from '@/i18n'
 import {
   addDays,
@@ -50,38 +52,47 @@ export function BarberScheduleExceptions({
   const [startTime, setStartTime] = useState('10:00')
   const [endTime, setEndTime] = useState('14:00')
   const [reason, setReason] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const hasInvalidHours = !isDayOff && endTime <= startTime
-
-  async function handleAdd() {
-    if (isSaving || date === '' || hasInvalidHours) {
-      return
-    }
-
-    setIsSaving(true)
-    setError(null)
-
-    try {
-      await setScheduleException(barberProfileId, salon.salonId, date, {
-        isDayOff,
-        startTime: isDayOff ? '00:00:00' : fromTimeInputValue(startTime),
-        endTime: isDayOff ? '00:00:00' : fromTimeInputValue(endTime),
-        reason: reason.trim() === '' ? null : reason.trim(),
-      })
-
+  const write = useScheduleWrite('hours', {
+    fallback: t('Не удалось добавить исключение.'),
+    onSaved: () => {
       setDate('')
       setReason('')
       onChanged(t('Исключение добавлено.'))
-    } catch (cause) {
-      setError(
-        describeScheduleError(cause, t('Не удалось добавить исключение.'))
-      )
-    } finally {
-      setIsSaving(false)
+    },
+  })
+  const addRef = useRef<HTMLButtonElement>(null)
+
+  const hasInvalidHours = !isDayOff && endTime <= startTime
+  const shownError = write.error ?? error
+
+  function clearErrors() {
+    write.clearError()
+    setError(null)
+  }
+
+  function handleAdd() {
+    if (write.isSaving || date === '' || hasInvalidHours) {
+      return
     }
+
+    setError(null)
+
+    void write.save((force) =>
+      setScheduleException(
+        barberProfileId,
+        salon.salonId,
+        date,
+        {
+          isDayOff,
+          startTime: isDayOff ? '00:00:00' : fromTimeInputValue(startTime),
+          endTime: isDayOff ? '00:00:00' : fromTimeInputValue(endTime),
+          reason: reason.trim() === '' ? null : reason.trim(),
+        },
+        force
+      )
+    )
   }
 
   async function handleDelete(exceptionDate: string) {
@@ -134,7 +145,7 @@ export function BarberScheduleExceptions({
               max={addDays(today, 90)}
               className="h-11 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setDate(event.target.value)
               }}
             />
@@ -149,7 +160,7 @@ export function BarberScheduleExceptions({
               value={isDayOff ? 'day-off' : 'custom'}
               className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setIsDayOff(event.target.value === 'day-off')
               }}
             >
@@ -169,7 +180,7 @@ export function BarberScheduleExceptions({
               aria-invalid={hasInvalidHours || undefined}
               className="h-11 w-32 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setStartTime(event.target.value)
               }}
             />
@@ -182,7 +193,7 @@ export function BarberScheduleExceptions({
               aria-invalid={hasInvalidHours || undefined}
               className="h-11 w-32 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setEndTime(event.target.value)
               }}
             />
@@ -206,28 +217,35 @@ export function BarberScheduleExceptions({
             placeholder={t('Например, личные дела')}
             className="h-11 sm:h-8"
             onChange={(event) => {
-              setError(null)
+              clearErrors()
               setReason(event.target.value)
             }}
           />
         </div>
 
-        {error && (
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'Изменение графика не отменяет записи: если визит выйдет за новые часы, сохранение попросит подтвердить.'
+          )}
+        </p>
+
+        {shownError && (
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {shownError}
           </p>
         )}
 
         <Button
+          ref={addRef}
           type="button"
           className="h-11 sm:h-8"
-          disabled={isSaving || date === '' || hasInvalidHours}
-          aria-busy={isSaving}
-          onClick={() => {
-            void handleAdd()
-          }}
+          disabled={write.isSaving || date === '' || hasInvalidHours}
+          aria-busy={write.isSaving}
+          onClick={handleAdd}
         >
-          {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {write.isSaving && (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          )}
           {t('Добавить исключение')}
         </Button>
 
@@ -279,6 +297,19 @@ export function BarberScheduleExceptions({
           </ul>
         )}
       </CardContent>
+
+      <ScheduleConflictsDialog
+        open={write.conflicts !== null}
+        kind="hours"
+        conflicts={write.conflicts ?? []}
+        isSaving={write.isSaving}
+        error={write.error}
+        finalFocus={addRef}
+        onCancel={write.cancel}
+        onConfirm={() => {
+          void write.confirm()
+        }}
+      />
     </Card>
   )
 }

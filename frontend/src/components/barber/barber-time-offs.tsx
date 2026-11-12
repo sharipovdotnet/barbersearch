@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 
+import { ScheduleConflictsDialog } from '@/components/barber/schedule-conflicts-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useScheduleWrite } from '@/hooks/use-schedule-write'
 import { useI18n } from '@/i18n'
 import { todayInTimeZone } from '@/lib/barber-slots'
 import {
@@ -48,36 +50,45 @@ export function BarberTimeOffs({
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [reason, setReason] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const isRangeInvalid = from !== '' && to !== '' && to < from
-
-  async function handleAdd() {
-    if (isSaving || from === '' || to === '' || isRangeInvalid) {
-      return
-    }
-
-    setIsSaving(true)
-    setError(null)
-
-    try {
-      await addTimeOff(barberProfileId, {
-        startAt: localDateToUtcIso(from, timeZoneId),
-        endAt: localDateToUtcIso(to, timeZoneId, 'end'),
-        reason: reason.trim() === '' ? null : reason.trim(),
-      })
-
+  const write = useScheduleWrite('timeOff', {
+    fallback: t('Не удалось добавить отпуск.'),
+    onSaved: () => {
       setFrom('')
       setTo('')
       setReason('')
       onChanged(t('Отпуск добавлен.'))
-    } catch (cause) {
-      setError(describeScheduleError(cause, t('Не удалось добавить отпуск.')))
-    } finally {
-      setIsSaving(false)
+    },
+  })
+  const addRef = useRef<HTMLButtonElement>(null)
+
+  const isRangeInvalid = from !== '' && to !== '' && to < from
+  const shownError = write.error ?? error
+
+  function clearErrors() {
+    write.clearError()
+    setError(null)
+  }
+
+  function handleAdd() {
+    if (write.isSaving || from === '' || to === '' || isRangeInvalid) {
+      return
     }
+
+    setError(null)
+
+    void write.save((force) =>
+      addTimeOff(
+        barberProfileId,
+        {
+          startAt: localDateToUtcIso(from, timeZoneId),
+          endAt: localDateToUtcIso(to, timeZoneId, 'end'),
+          reason: reason.trim() === '' ? null : reason.trim(),
+        },
+        force
+      )
+    )
   }
 
   async function handleDelete(timeOffId: string) {
@@ -122,7 +133,7 @@ export function BarberTimeOffs({
               min={today}
               className="h-11 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setFrom(event.target.value)
               }}
             />
@@ -138,7 +149,7 @@ export function BarberTimeOffs({
               aria-invalid={isRangeInvalid || undefined}
               className="h-11 sm:h-8"
               onChange={(event) => {
-                setError(null)
+                clearErrors()
                 setTo(event.target.value)
               }}
             />
@@ -163,28 +174,35 @@ export function BarberTimeOffs({
             placeholder={t('Например, отпуск')}
             className="h-11 sm:h-8"
             onChange={(event) => {
-              setError(null)
+              clearErrors()
               setReason(event.target.value)
             }}
           />
         </div>
 
-        {error && (
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'Изменение графика не отменяет записи: если визит выйдет за новые часы, сохранение попросит подтвердить.'
+          )}
+        </p>
+
+        {shownError && (
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {shownError}
           </p>
         )}
 
         <Button
+          ref={addRef}
           type="button"
           className="h-11 sm:h-8"
-          disabled={isSaving || from === '' || to === '' || isRangeInvalid}
-          aria-busy={isSaving}
-          onClick={() => {
-            void handleAdd()
-          }}
+          disabled={write.isSaving || from === '' || to === '' || isRangeInvalid}
+          aria-busy={write.isSaving}
+          onClick={handleAdd}
         >
-          {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {write.isSaving && (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          )}
           {t('Добавить отпуск')}
         </Button>
 
@@ -243,6 +261,19 @@ export function BarberTimeOffs({
           </ul>
         )}
       </CardContent>
+
+      <ScheduleConflictsDialog
+        open={write.conflicts !== null}
+        kind="timeOff"
+        conflicts={write.conflicts ?? []}
+        isSaving={write.isSaving}
+        error={write.error}
+        finalFocus={addRef}
+        onCancel={write.cancel}
+        onConfirm={() => {
+          void write.confirm()
+        }}
+      />
     </Card>
   )
 }

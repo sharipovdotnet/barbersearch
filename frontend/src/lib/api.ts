@@ -14,6 +14,15 @@ export type ProblemDetails = {
   detail?: string
   errors?: Record<string, string[]>
   errorCodes?: string[]
+  /**
+   * Расширение `409 barberSchedule.conflict`: затронутые визиты.
+   *
+   * Тип намеренно `unknown`: форму записи знает `lib/barber-schedule.ts`
+   * (`isScheduleConflicts`), а транспорт лишь убеждается, что это массив объектов
+   * обещанной формы. Без этой проверки «мусорный» JSON ошибки стал бы валидным
+   * `ProblemDetails`, и диалог показал бы пустой список.
+   */
+  conflicts?: unknown
 }
 
 export class ApiError extends Error {
@@ -296,6 +305,14 @@ function isProblemDetails(value: unknown): value is ProblemDetails {
     return false
   }
 
+  if (
+    candidate.conflicts !== undefined &&
+    (!Array.isArray(candidate.conflicts) ||
+      !candidate.conflicts.every(isConflictEntry))
+  ) {
+    return false
+  }
+
   if (candidate.errors !== undefined) {
     const errors = candidate.errors
 
@@ -316,4 +333,29 @@ function isProblemDetails(value: unknown): value is ProblemDetails {
   }
 
   return true
+}
+
+/**
+ * Запись расширения `conflicts`.
+ *
+ * Проверяются только типы (все семь полей — строки): имя статуса и формат даты
+ * принадлежат `isScheduleConflicts` из `response-guards.ts`. Так транспорт не
+ * пропускает мусор, но и не теряет коды ошибки из-за нового значения статуса.
+ */
+function isConflictEntry(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const entry = value as Record<string, unknown>
+
+  return (
+    typeof entry.id === 'string' &&
+    typeof entry.startAt === 'string' &&
+    typeof entry.endAt === 'string' &&
+    typeof entry.timeZoneId === 'string' &&
+    typeof entry.customerName === 'string' &&
+    typeof entry.serviceName === 'string' &&
+    typeof entry.status === 'string'
+  )
 }
