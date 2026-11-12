@@ -119,10 +119,12 @@ export function AdminRail() {
                 {t(section.label)}
                 {count > 0 && (
                   // Круг — сам бейдж, цифра живёт внутри и центрируется `flex`.
-                  // Фон непрозрачный: полупрозрачный `bg-destructive/10` в тёмной
-                  // теме давал 4.32:1, а на активном пункте — 3.67:1, ниже AA.
-                  // С `bg-background` и красной обводкой — 5.79:1 и 5.31:1 в light,
-                  // 6.84:1 и 5.23:1 в dark (второе число — активный пункт).
+                  // Заливка сплошная и одинаковая в обеих темах: `--destructive`
+                  // в тёмной теме специально светлый (это цвет текста), поэтому
+                  // залитый кружок берёт `--destructive-solid`. Плашка 10 %-й
+                  // прозрачности давала 4.32:1 в тёмной теме и 3.67:1 на активном
+                  // пункте — ниже AA; белые цифры на сплошной заливке дают 5.79:1
+                  // и от подложки не зависят.
                   // `aria-hidden`: точное число уже есть в `aria-label` ссылки.
                   // Бейдж оставлен кликабельным для курсора (без `pointer-events-none`):
                   // иначе верхние 4 px круга, выступающие над ссылкой, не считались бы
@@ -130,7 +132,7 @@ export function AdminRail() {
                   // Клик по бейджу всплывает к ссылке — переход работает как раньше.
                   <span
                     aria-hidden="true"
-                    className="absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive/40 bg-background px-1 text-[11px] leading-none font-semibold text-destructive tabular-nums select-none"
+                    className="absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive-solid bg-destructive-solid px-1 text-[11px] leading-none font-semibold text-white tabular-nums select-none"
                   >
                     {formatAdminBadgeCount(count)}
                   </span>
