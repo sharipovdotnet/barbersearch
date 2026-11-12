@@ -1,3 +1,4 @@
+using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
@@ -20,6 +21,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </summary>
 public sealed class BookingRepository : RepositoryBase<Booking>, IBookingRepository
 {
+    /// <summary>
+    /// Имя клиента в списке конфликтов, когда ни аккаунт, ни гостевая запись имени не дали.
+    /// </summary>
+    /// <remarks>
+    /// Пустая строка в диалоге подтверждения выглядела бы как ошибка загрузки, а визит всё
+    /// равно существует и его нужно показать. «Гость» — тот же текст, что уже используется
+    /// в интерфейсе для walk-in.
+    /// </remarks>
+    private const string GUEST_CUSTOMER_NAME = "Гость";
+
     public BookingRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
         : base(context, auditTrail)
     {
@@ -753,6 +764,122 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return bookings;
     }
 
+    public async Task<Result<IReadOnlyList<ScheduleConflictBooking>, Failure>> GetActiveForScheduleAsync(
+        Guid barberProfileId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await BuildScheduleBookingsQuery(Context, barberProfileId, from, to)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new ScheduleConflictBooking(
+                row.Id,
+                row.SalonId,
+                row.StartAt,
+                row.EndAt,
+                row.Status,
+                BuildConflictCustomerName(row.CustomerFirstName, row.CustomerLastName, row.GuestFirstName, row.GuestLastName),
+                row.ServiceName,
+                row.TimeZoneId))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Собирает SQL чтения броней для проверки конфликтов расписания: те же joins, что у списка
+    /// записей барбера, но без телефона и аватара и с поясом салона.
+    /// </summary>
+    /// <remarks>
+    /// Клиент — LEFT JOIN: у гостя <c>user_id</c> = <c>NULL</c>, и внутреннее соединение выкинуло
+    /// бы его из проверки. Границы — пересечение с <c>[from, to)</c>, статусы — только активные,
+    /// как у частичного индекса. Вынесено из <see cref="GetActiveForScheduleAsync"/>, чтобы
+    /// unit-тест проверил трансляцию без базы (backend/AGENT.md §5.4).
+    /// </remarks>
+    internal static IQueryable<ScheduleConflictRow> BuildScheduleBookingsQuery(
+        ApplicationDbContext context,
+        Guid barberProfileId,
+        DateTimeOffset windowStart,
+        DateTimeOffset windowEnd)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var customers = context.Users
+            .AsNoTracking()
+            .Select(user => new
+            {
+                user.Id,
+                user.FirstName,
+                user.LastName
+            });
+
+        var barberServices = context.BarberServices
+            .AsNoTracking()
+            .Select(service => new
+            {
+                service.Id,
+                service.HairServiceId
+            });
+
+        var hairServices = context.HairServices
+            .AsNoTracking()
+            .Select(hairService => new
+            {
+                hairService.Id,
+                hairService.Name
+            });
+
+        var salons = context.Salons
+            .AsNoTracking()
+            .Select(salon => new
+            {
+                salon.Id,
+                salon.TimeZoneId
+            });
+
+        return from booking in context.Bookings.AsNoTracking()
+               join customer in customers
+                   on booking.UserId equals (Guid?)customer.Id into customerJoin
+               from customer in customerJoin.DefaultIfEmpty()
+               join service in barberServices on booking.BarberServiceId equals service.Id
+               join hairService in hairServices on service.HairServiceId equals hairService.Id
+               join salon in salons on booking.SalonId equals salon.Id
+               where booking.BarberProfileId == barberProfileId
+                     && (booking.Status == BookingStatus.Pending
+                         || booking.Status == BookingStatus.Confirmed)
+                     && booking.StartAt < windowEnd
+                     && windowStart < booking.EndAt
+               orderby booking.StartAt, booking.Id
+               select new ScheduleConflictRow(
+                   booking.Id,
+                   booking.SalonId,
+                   booking.StartAt,
+                   booking.EndAt,
+                   booking.Status,
+                   customer == null ? null : customer.FirstName,
+                   customer == null ? null : customer.LastName,
+                   booking.GuestFirstName,
+                   booking.GuestLastName,
+                   hairService.Name,
+                   salon.TimeZoneId);
+    }
+
+    /// <summary>
+    /// Имя клиента для проверки конфликтов: зарегистрированный клиент или гость, пустое — «Гость».
+    /// </summary>
+    private static string BuildConflictCustomerName(
+        string? firstName,
+        string? lastName,
+        string? guestFirstName,
+        string? guestLastName)
+    {
+        var name = BuildCustomerName(
+            firstName ?? guestFirstName,
+            lastName ?? guestLastName);
+
+        return string.IsNullOrWhiteSpace(name) ? GUEST_CUSTOMER_NAME : name;
+    }
+
     public async Task<Result<bool, Failure>> HasActiveOverlapAsync(
         Guid barberProfileId,
         DateTimeOffset startAt,
@@ -779,10 +906,21 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return overlaps;
     }
 
-    public async Task<UnitResult<Failure>> AcquireBarberLockAsync(
+    public Task<UnitResult<Failure>> AcquireBarberLockAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
+        => AcquireBarberLockAsync(
+            barberProfileId,
+            ApiErrorCodes.Booking.AddLockTimeout,
+            cancellationToken);
+
+    public async Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
+        string timeoutCode,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(timeoutCode);
+
         // 50 concurrent inserts on one slot make PostgreSQL's GiST exclusion check
         // deadlock (40P01) before either transaction can commit, and under load all
         // contenders can lose, so no 201 is produced at all. Serialising inserts for
@@ -818,7 +956,11 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         {
             // 55P03: блокировку не удалось взять за lock_timeout. Транзакция уже
             // прервана, её откатит IUnitOfWork; клиенту отдаём 409, а не 500.
-            return UnitResult.Failure(MapPostgresError(exception, ApiErrorCodes.Booking.AddPrefix));
+            // Код ошибки задаёт вызывающий: у создания брони и у расписания он разный.
+            return UnitResult.Failure(new Failure(Error.Conflict(
+                timeoutCode,
+                "The database lock could not be acquired within the configured timeout. "
+                + "Retry the request.")));
         }
     }
 
@@ -944,6 +1086,27 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         string SalonName,
         string SalonAddress,
         string SalonCity,
+        string TimeZoneId);
+
+    /// <summary>
+    /// Плоская строка чтения броней для проверки конфликтов расписания.
+    /// </summary>
+    /// <remarks>
+    /// Наружу уходит уже <see cref="ScheduleConflictBooking"/>: телефон, email и заметки
+    /// в проекцию не входят, а имя клиента собирается в памяти тем же правилом, что и в списке
+    /// записей барбера.
+    /// </remarks>
+    internal sealed record ScheduleConflictRow(
+        Guid Id,
+        Guid SalonId,
+        DateTimeOffset StartAt,
+        DateTimeOffset EndAt,
+        BookingStatus Status,
+        string? CustomerFirstName,
+        string? CustomerLastName,
+        string? GuestFirstName,
+        string? GuestLastName,
+        string ServiceName,
         string TimeZoneId);
 
     /// <summary>

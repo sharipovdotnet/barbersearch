@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles.GetBarberSchedule;
+using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.BarberSalons.RemoveScheduleException;
 using BarberSearch.Application.BarberSalons.ReplaceWorkingSchedules;
 using BarberSearch.Application.BarberSalons.SetScheduleException;
@@ -43,14 +44,23 @@ public class BarberScheduleController : ApiController
     /// <summary>
     /// Полностью заменяет недельный шаблон пары (барбер, салон).
     /// </summary>
+    /// <remarks>
+    /// Если правка оставляет активные визиты вне новых часов, отвечает <c>409
+    /// barberSchedule.conflict</c> со списком затронутых визитов. <c>force=true</c> сохраняет
+    /// правку, не отключая проверку прав и существования. Невалидное значение <c>force</c>
+    /// трактуется как <c>false</c>: отдельного <c>400</c> нет.
+    /// </remarks>
+    /// <param name="force">Сохранить, даже если активные визиты выйдут за новые часы.</param>
     [HttpPut("salons/{salonId:guid}/working-schedules")]
     public async Task<ActionResult> ReplaceWorkingSchedules(
         Guid barberProfileId,
         Guid salonId,
+        [FromQuery] string? force,
         [FromBody] ReplaceWorkingSchedulesRequest request,
-        [FromServices] ICommandHandler<ReplaceWorkingSchedulesCommand> handler,
+        [FromServices] ICommandHandler<ScheduleWriteOutcome, ReplaceWorkingSchedulesCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        var result = await handler.Handle(
             new ReplaceWorkingSchedulesCommand(
                 barberProfileId,
                 salonId,
@@ -58,21 +68,41 @@ public class BarberScheduleController : ApiController
                     day.DayOfWeek,
                     day.IsDayOff,
                     day.StartTime,
-                    day.EndTime))]),
-            cancellationToken));
+                    day.EndTime))],
+                ReadForce(force)),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return FailureProblemDetails.CreateResult(result.Error);
+        }
+
+        return result.Value.Conflicts.Count > 0
+            ? FailureProblemDetails.CreateConflictResult(result.Value.Conflicts)
+            : NoContent();
+    }
 
     /// <summary>
     /// Ставит или переписывает исключение на дату.
     /// </summary>
+    /// <remarks>
+    /// Явная дата проверяется и за горизонтом 60 дней. Если на дате есть активные визиты
+    /// и правка делает их невозможными, отвечает <c>409 barberSchedule.conflict</c>.
+    /// <c>force=true</c> сохраняет правку. Невалидное значение <c>force</c> трактуется
+    /// как <c>false</c>: отдельного <c>400</c> нет.
+    /// </remarks>
+    /// <param name="force">Сохранить, даже если на дате есть активные визиты.</param>
     [HttpPut("salons/{salonId:guid}/schedule-exceptions/{date}")]
     public async Task<ActionResult> SetScheduleException(
         Guid barberProfileId,
         Guid salonId,
         DateOnly date,
+        [FromQuery] string? force,
         [FromBody] SetScheduleExceptionRequest request,
-        [FromServices] ICommandHandler<SetScheduleExceptionCommand> handler,
+        [FromServices] ICommandHandler<ScheduleWriteOutcome, SetScheduleExceptionCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        var result = await handler.Handle(
             new SetScheduleExceptionCommand(
                 barberProfileId,
                 salonId,
@@ -80,8 +110,19 @@ public class BarberScheduleController : ApiController
                 request.IsDayOff,
                 request.StartTime,
                 request.EndTime,
-                request.Reason),
-            cancellationToken));
+                request.Reason,
+                ReadForce(force)),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return FailureProblemDetails.CreateResult(result.Error);
+        }
+
+        return result.Value.Conflicts.Count > 0
+            ? FailureProblemDetails.CreateConflictResult(result.Value.Conflicts)
+            : NoContent();
+    }
 
     /// <summary>
     /// Снимает исключение с даты.

@@ -235,13 +235,16 @@ public class BarberProfileNarrowReadTests
     }
 
     [Fact]
-    public async Task AddTimeOff_LoadsOnlyTimeOffs()
+    public async Task AddTimeOff_LoadsTheScheduleAggregate()
     {
         var (profile, repository, ownerId) = CreateOwner();
         var handler = new AddBarberProfileTimeOffHandler(
             repository,
+            new FakeBookingRepository(),
+            new FakeUnitOfWork(repository),
             NullLogger<AddBarberProfileTimeOffHandler>.Instance,
-            new FakeCurrentUser(ownerId));
+            new FakeCurrentUser(ownerId),
+            new FakeTimeProvider(new DateTimeOffset(2026, 10, 30, 0, 0, 0, TimeSpan.Zero)));
         var startAt = new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero);
 
         var result = await handler.Handle(
@@ -249,7 +252,7 @@ public class BarberProfileNarrowReadTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(["timeOffs"], repository.LoadCalls);
+        Assert.Equal(["schedule"], repository.LoadCalls);
         Assert.Single(profile.TimeOffs);
     }
 

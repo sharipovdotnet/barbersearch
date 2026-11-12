@@ -1,3 +1,5 @@
+using BarberSearch.Contracts.BarberProfiles.BarberSchedule;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Shared;
@@ -22,6 +24,12 @@ public static class FailureProblemDetails
     /// не разбирая текст сообщения.
     /// </summary>
     public const string ERROR_CODES_EXTENSION = "errorCodes";
+
+    /// <summary>
+    /// Имя расширения <see cref="ProblemDetails"/>, в котором едет список затронутых визитов
+    /// ответа <c>409 barberSchedule.conflict</c>.
+    /// </summary>
+    public const string CONFLICTS_EXTENSION = "conflicts";
 
     /// <summary>
     /// Код состояния HTTP для типа доменной ошибки. Маппинг явный для каждого значения
@@ -75,6 +83,51 @@ public static class FailureProblemDetails
         problemDetails.Extensions[ERROR_CODES_EXTENSION] = errors.Select(error => error.Code).ToArray();
 
         return new ObjectResult(problemDetails);
+    }
+
+    /// <summary>
+    /// Собирает <c>409</c> расписания: заголовок и код ошибки те же, что у остальных
+    /// конфликтов, плюс расширение <c>conflicts</c> со списком затронутых визитов.
+    /// </summary>
+    /// <remarks>
+    /// Фабрика одна на все пять пишущих ручек расписания: заголовок 409 и <c>errorCodes</c>
+    /// не должны дублироваться в контроллерах. Отдельный флаг нужен из-за разного текста
+    /// <c>detail</c>: «вне новых часов» и «внутри отпуска» — разные объяснения для человека,
+    /// а клиент известные коды всё равно не показывает.
+    /// </remarks>
+    /// <param name="conflicts">Затронутые визиты; пустой список сюда не передаётся.</param>
+    /// <param name="insideTimeOff">
+    /// <c>true</c> — конфликт вызван отпуском (<c>POST time-offs</c>), иначе — новыми часами.
+    /// </param>
+    public static ObjectResult CreateConflictResult(
+        IReadOnlyList<ScheduleConflictResponse> conflicts,
+        bool insideTimeOff = false)
+    {
+        ArgumentNullException.ThrowIfNull(conflicts);
+
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = TitleFor(StatusCodes.Status409Conflict),
+            Detail = BuildConflictDetail(conflicts.Count, insideTimeOff)
+        };
+
+        problemDetails.Extensions[ERROR_CODES_EXTENSION] = new[] { ApiErrorCodes.Schedule.Conflict };
+        problemDetails.Extensions[CONFLICTS_EXTENSION] = conflicts;
+
+        return new ObjectResult(problemDetails);
+    }
+
+    /// <summary>
+    /// Английский текст конфликта: число и форма — по фактическому количеству визитов.
+    /// </summary>
+    private static string BuildConflictDetail(int count, bool insideTimeOff)
+    {
+        var bookings = count == 1 ? "1 booking" : $"{count} bookings";
+
+        return insideTimeOff
+            ? $"{bookings} {(count == 1 ? "falls" : "fall")} inside the time off."
+            : $"{bookings} {(count == 1 ? "falls" : "fall")} outside the new working hours.";
     }
 
     /// <summary>

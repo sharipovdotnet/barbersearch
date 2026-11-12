@@ -25,6 +25,8 @@ using BarberSearch.Domain.Salons;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 
 namespace BarberSearch.Infrastructure.Postgresql.Repositories;
@@ -39,9 +41,17 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// </summary>
     private const int ADDITIONAL_SERVICE_SUGGESTION_LIMIT = 100;
 
-    public BarberProfileRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
+    private readonly ILogger<BarberProfileRepository> _logger;
+
+    public BarberProfileRepository(
+        ApplicationDbContext context,
+        AuditTrail? auditTrail = null,
+        ILogger<BarberProfileRepository>? logger = null)
         : base(context, auditTrail)
     {
+        // Необязательный журнал: юнит-тесты собирают репозиторий без DI, а поиску нужен только
+        // LogDebug о пропущенном профиле с неразрешимым поясом.
+        _logger = logger ?? NullLogger<BarberProfileRepository>.Instance;
     }
 
     public Task<Result<BarberProfile, Failure>> GetRootByIdAsync(
@@ -451,9 +461,25 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 nameof(filter.Limit)));
         }
 
+        // Отпуск накрывает весь локальный день основного салона — профиль не показывается.
+        // Список читается до фильтров и только при заданной дате: в C# нужен пояс салона,
+        // а AT TIME ZONE по строке падает на исторических Windows-идентификаторах (D11).
+        IReadOnlyList<Guid>? blockedProfileIds = null;
+
+        if (filter.Date is { } searchDate)
+        {
+            var blockedResult = await GetDayBlockedProfileIdsAsync(searchDate, cancellationToken);
+            if (blockedResult.IsFailure)
+            {
+                return blockedResult.Error;
+            }
+
+            blockedProfileIds = blockedResult.Value;
+        }
+
         // Только публичная выдача, фильтры и курсор — в ApplySearchFilters: тест проверяет
         // их трансляцию через ToQueryString без базы (см. AdditionalServiceSearchQueryTests).
-        var query = ApplySearchFilters(Context.BarberProfiles.AsNoTracking(), filter);
+        var query = ApplySearchFilters(Context.BarberProfiles.AsNoTracking(), filter, blockedProfileIds);
 
         var rows = await query
             // PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок
@@ -560,6 +586,116 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     }
 
     /// <summary>
+    /// Профили, у которых отпуск накрывает весь календарный день в поясе основного салона.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Окно чтения отпусков — <c>[date − 1 day 00:00 UTC, date + 2 days 00:00 UTC)</c>:
+    /// любое реальное смещение (±14 ч) попадает внутрь, а строк <c>time_offs</c> немного.
+    /// Пояс разрешается в C#: <c>AT TIME ZONE</c> по строке салона падает на исторических
+    /// Windows-идентификаторах зон (D11).
+    /// </para>
+    /// <para>
+    /// Профиль без основного салона или с неразрешимым поясом **не** исключается: прятать
+    /// барбера из-за битой строки в данных нельзя (ловушка: «не прятать из-за неизвестного
+    /// пояса»). Такой пропуск пишется в <c>LogDebug</c> — это не ошибка запроса.
+    /// </para>
+    /// </remarks>
+    /// <param name="date">Локальная дата, на которую ищется барбер.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    public async Task<Result<IReadOnlyList<Guid>, Failure>> GetDayBlockedProfileIdsAsync(
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        var windowStart = new DateTimeOffset(
+            date.AddDays(-1).ToDateTime(TimeOnly.MinValue),
+            TimeSpan.Zero);
+        var windowEnd = new DateTimeOffset(
+            date.AddDays(2).ToDateTime(TimeOnly.MinValue),
+            TimeSpan.Zero);
+
+        var rows = await BuildDayBlockedTimeOffsQuery(Context, windowStart, windowEnd)
+            .ToListAsync(cancellationToken);
+
+        var blocked = new HashSet<Guid>();
+
+        foreach (var row in rows)
+        {
+            if (!SalonTimeZone.TryResolve(row.TimeZoneId, out var zone))
+            {
+                _logger.LogDebug(
+                    "Search date check skipped barber profile {BarberProfileId}: "
+                    + "time zone '{TimeZoneId}' could not be resolved.",
+                    row.BarberProfileId,
+                    string.IsNullOrWhiteSpace(row.TimeZoneId) ? "(missing)" : row.TimeZoneId);
+
+                continue;
+            }
+
+            var dayStart = SalonTimeZone.ToUtc(date.ToDateTime(TimeOnly.MinValue), zone);
+            var dayEnd = SalonTimeZone.ToUtc(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone);
+
+            if (dayStart is null || dayEnd is null)
+            {
+                _logger.LogDebug(
+                    "Search date check skipped barber profile {BarberProfileId}: "
+                    + "the local day boundary does not exist in time zone '{TimeZoneId}'.",
+                    row.BarberProfileId,
+                    row.TimeZoneId);
+
+                continue;
+            }
+
+            if (row.StartAt <= dayStart.Value && row.EndAt >= dayEnd.Value)
+            {
+                blocked.Add(row.BarberProfileId);
+            }
+        }
+
+        return blocked.ToList();
+    }
+
+    /// <summary>
+    /// Запрос отпусков, которые могут накрыть локальный день, вместе с поясом основного салона.
+    /// </summary>
+    /// <remarks>
+    /// Окно <c>[date − 1 day 00:00 UTC, date + 2 days 00:00 UTC)</c> покрывает любое реальное
+    /// смещение (до ±14 ч). Дата рождения строки — <c>time_offs</c>; join к основному салону
+    /// нужен только ради пояса. Вынесено в <c>internal static</c>, чтобы unit-тест проверил
+    /// трансляцию через <c>ToQueryString()</c> без базы (backend/AGENT.md §5.4).
+    /// </remarks>
+    internal static IQueryable<DayBlockedTimeOffRow> BuildDayBlockedTimeOffsQuery(
+        ApplicationDbContext context,
+        DateTimeOffset windowStart,
+        DateTimeOffset windowEnd)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return from timeOff in context.TimeOffs.AsNoTracking()
+               join link in context.BarberSalons.AsNoTracking()
+                   on timeOff.BarberProfileId equals link.BarberProfileId
+               join salon in context.Salons.AsNoTracking()
+                   on link.SalonId equals salon.Id
+               where link.IsPrimary
+                     && timeOff.StartAt < windowEnd
+                     && windowStart < timeOff.EndAt
+               select new DayBlockedTimeOffRow(
+                   timeOff.BarberProfileId,
+                   timeOff.StartAt,
+                   timeOff.EndAt,
+                   salon.TimeZoneId);
+    }
+
+    /// <summary>
+    /// Строка чтения отпусков для фильтра поиска по дате.
+    /// </summary>
+    internal sealed record DayBlockedTimeOffRow(
+        Guid BarberProfileId,
+        DateTimeOffset StartAt,
+        DateTimeOffset EndAt,
+        string TimeZoneId);
+
+    /// <summary>
     /// Плоская строка keyset-выдачи поиска до догрузки салона и аватара.
     /// </summary>
     /// <remarks>
@@ -629,9 +765,17 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// <c>EXISTS (SELECT 1 FROM unnest(additional_services) … WHERE … ILIKE …)</c>, а не
     /// клиентской фильтрацией: иначе keyset-пагинация вернула бы неполную выдачу.
     /// </remarks>
+    /// <param name="query">Исходный запрос профилей.</param>
+    /// <param name="filter">Разобранные фильтры.</param>
+    /// <param name="blockedProfileIds">
+    /// Профили, накрытые отпуском на весь локальный день основного салона (D10). Пустой список
+    /// и <c>null</c> значат «предикат не добавлять»: <c>NOT (… ANY (пусто))</c> был бы лишним
+    /// параметром в плане (ловушка #4).
+    /// </param>
     internal IQueryable<BarberProfile> ApplySearchFilters(
         IQueryable<BarberProfile> query,
-        BarberSearchFilter filter)
+        BarberSearchFilter filter,
+        IReadOnlyCollection<Guid>? blockedProfileIds = null)
     {
         // Только публичная выдача: активный и подтверждённый профиль.
         query = query.Where(profile => profile.IsActive && profile.IsVerified);
@@ -691,17 +835,33 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         {
             var dayOfWeek = date.DayOfWeek;
 
-            // Дата — это «есть рабочий день в этот день недели хотя бы в одном активном салоне».
-            // Конкретные свободные интервалы с учётом таймзоны и отпусков считает /slots.
+            // Дата — это не «день недели сам по себе», а эффективный день в конкретном салоне.
+            // Раньше здесь стояло `WorkingSchedules.Any(DayOfWeek == date && !IsDayOff)` — это
+            // был дефект: барбер с выходным исключением или отпуском продолжал показываться
+            // в поиске как «работает в этот день». Правило: исключение важнее шаблона, а профиль
+            // виден, если рабочий день хотя бы в одном активном салоне (D9). Конкретные
+            // свободные интервалы по-прежнему считает /slots.
             query = query.Where(profile => Context.BarberSalons.Any(link =>
                 link.BarberProfileId == profile.Id
                 && Context.Salons.Any(salon => salon.Id == link.SalonId
                     && salon.IsActive
                     && salon.ModerationStatus == SalonModerationStatus.Active)
-                && Context.WorkingSchedules.Any(schedule =>
-                    schedule.BarberSalonId == link.Id
-                    && schedule.DayOfWeek == dayOfWeek
-                    && !schedule.IsDayOff)));
+                && (
+                    Context.ScheduleOverrides.Any(entry =>
+                        entry.BarberSalonId == link.Id && entry.Date == date && !entry.IsDayOff)
+                    || (Context.WorkingSchedules.Any(schedule =>
+                            schedule.BarberSalonId == link.Id
+                            && schedule.DayOfWeek == dayOfWeek
+                            && !schedule.IsDayOff)
+                        && !Context.ScheduleOverrides.Any(entry =>
+                            entry.BarberSalonId == link.Id && entry.Date == date)))));
+
+            if (blockedProfileIds is { Count: > 0 })
+            {
+                // Отпуск основного салона на весь локальный день (D10). Пустой список сюда
+                // не доходит: вызывающий оставляет его пустым, и предикат не добавляется.
+                query = query.Where(profile => !blockedProfileIds.Contains(profile.Id));
+            }
         }
 
         if (filter.Cursor is { } cursor)

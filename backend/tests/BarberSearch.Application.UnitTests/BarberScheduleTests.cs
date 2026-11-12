@@ -164,12 +164,16 @@ public class BarberScheduleTests
     }
 
     [Fact]
-    public async Task ReplaceWorkingSchedules_LoadsSalonsAndUpdatesTheWeek()
+    public async Task ReplaceWorkingSchedules_LoadsTheScheduleAndUpdatesTheWeek()
     {
-        var (profile, salon, repository, _, ownerId) = CreateOwner();
+        var (profile, salon, repository, salons, ownerId) = CreateOwner();
         var handler = new ReplaceWorkingSchedulesHandler(
             repository,
+            new FakeBookingRepository(),
+            salons,
+            new FakeUnitOfWork(repository),
             new FakeCurrentUser(ownerId),
+            new FakeTimeProvider(new DateTimeOffset(2026, 11, 10, 0, 0, 0, TimeSpan.Zero)),
             NullLogger<ReplaceWorkingSchedulesHandler>.Instance);
 
         var result = await handler.Handle(
@@ -180,7 +184,7 @@ public class BarberScheduleTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(["salons+schedules"], repository.LoadCalls);
+        Assert.Equal(["schedule"], repository.LoadCalls);
         Assert.Equal(7, salon.WorkingSchedules.Count);
         Assert.True(
             salon.WorkingSchedules.Single(
@@ -190,10 +194,14 @@ public class BarberScheduleTests
     [Fact]
     public async Task SetScheduleException_LoadsTheScheduleAndUpsertsTheDate()
     {
-        var (profile, salon, repository, _, ownerId) = CreateOwner();
+        var (profile, salon, repository, salons, ownerId) = CreateOwner();
         var handler = new SetScheduleExceptionHandler(
             repository,
+            new FakeBookingRepository(),
+            salons,
+            new FakeUnitOfWork(repository),
             new FakeCurrentUser(ownerId),
+            new FakeTimeProvider(new DateTimeOffset(2026, 11, 10, 0, 0, 0, TimeSpan.Zero)),
             NullLogger<SetScheduleExceptionHandler>.Instance);
 
         var result = await handler.Handle(

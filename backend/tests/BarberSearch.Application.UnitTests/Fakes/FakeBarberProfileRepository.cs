@@ -374,6 +374,24 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             _profiles.TryGetValue(barberProfileId, out var profile)
             && profile.Salons.Any(link => link.SalonId == salonId));
 
+    /// <summary>
+    /// Профили, которые поиск по дате исключает из-за отпуска на весь локальный день.
+    /// Ответ репозитория, а не его логика: сам расчёт проверяется интеграционным тестом.
+    /// </summary>
+    public IReadOnlyList<Guid> BlockedProfileIds { get; set; } = [];
+
+    public int GetDayBlockedProfileIdsCalls { get; private set; }
+
+    public Task<Result<IReadOnlyList<Guid>, Failure>> GetDayBlockedProfileIdsAsync(
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        GetDayBlockedProfileIdsCalls++;
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<Guid>, Failure>(BlockedProfileIds));
+    }
+
     public Task<Result<BarberService, Failure>> GetServiceAsync(
         Guid barberProfileId,
         Guid barberServiceId,

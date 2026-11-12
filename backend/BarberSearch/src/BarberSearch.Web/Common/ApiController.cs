@@ -52,4 +52,17 @@ public abstract class ApiController : ControllerBase
         => result.IsSuccess
             ? StatusCode(StatusCodes.Status201Created, new CreatedResourceResponse(result.Value))
             : FailureProblemDetails.CreateResult(result.Error);
+
+    /// <summary>
+    /// Разбирает query-параметр <c>force</c> пишущих ручек расписания.
+    /// </summary>
+    /// <remarks>
+    /// Значение принимается строкой, а не <c>bool</c>: биндер <c>bool</c> на <c>?force=maybe</c>
+    /// добавляет ошибку модели и отвечает <c>400</c>, а контракт этапа требует трактовать
+    /// невалидное значение как <c>false</c> (отдельного <c>400</c> нет). Принимается только
+    /// <c>true</c> без учёта регистра; всё остальное, включая пустую строку, — <c>false</c>.
+    /// </remarks>
+    /// <param name="force">Сырое значение query-параметра или <c>null</c>.</param>
+    protected static bool ReadForce(string? force)
+        => string.Equals(force, "true", StringComparison.OrdinalIgnoreCase);
 }
