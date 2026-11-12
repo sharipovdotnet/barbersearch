@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type JsonBodyType } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -12,7 +13,7 @@ import { server } from '@/test/msw/server'
  * Числа приходят из снимка сводки, поэтому тест подменяет только её ответ: рейл
  * не считает ничего сам. Проверяем обещания бейджа: цифра живёт внутри круга,
  * при нуле бейджа нет, кап «99+», имя ссылки содержит точное число, активный
- * пункт не теряет счётчик, `href` не меняется.
+ * пункт не теряет счётчик, `href` не меняется, а подсказка объясняет смысл числа.
  */
 
 const SUMMARY_URL = '/api/admin/summary'
@@ -224,5 +225,68 @@ describe('AdminRail: счётчики очередей', () => {
         badgeOf(within(rail()).getByRole('link', { name: labelPattern('Отзывы') }))
       ).not.toBeNull()
     })
+  })
+})
+
+describe('AdminRail: подсказка к бейджу', () => {
+  it('объясняет при наведении, что означает число в кружке', async () => {
+    const user = userEvent.setup()
+    serveSummary(COUNTS)
+
+    renderRail()
+
+    const reviews = await link('Отзывы')
+
+    // До наведения подсказки нет: рейл не обрастает скрытым текстом.
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    await user.hover(reviews)
+
+    const tooltip = await screen.findByRole('tooltip')
+
+    expect(tooltip).toHaveTextContent('Скрытые отзывы ждут модерации')
+  })
+
+  it('показывает разбивку «Фото» по двум очередям', async () => {
+    const user = userEvent.setup()
+    serveSummary(COUNTS)
+
+    renderRail()
+
+    await user.hover(await link('Фото'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'На модерации: аватары — 2, портфолио — 3'
+    )
+  })
+
+  it('появляется и на клавиатурном фокусе', async () => {
+    const user = userEvent.setup()
+    serveSummary(COUNTS)
+
+    renderRail()
+
+    await user.tab()
+    await user.tab()
+    await user.tab()
+
+    const reviews = await link('Отзывы')
+
+    expect(reviews).toHaveFocus()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Скрытые отзывы ждут модерации'
+    )
+  })
+
+  it('не появляется у пункта без бейджа и у пустых очередей', async () => {
+    const user = userEvent.setup()
+    serveSummary(EMPTY)
+
+    renderRail()
+
+    await user.hover(await link('Отзывы'))
+    await user.hover(await link('Журнал'))
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })

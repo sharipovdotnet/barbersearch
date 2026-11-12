@@ -1,4 +1,10 @@
 import { useAdminQueues } from '@/hooks/use-admin-queues'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useI18n, type MessageParams } from '@/i18n'
 import {
   formatAdminBadgeCount,
@@ -74,19 +80,27 @@ export function AdminRail() {
       {/* `pt-2` — место под выступ бейджа: при `overflow-x: auto` второе измерение
           тоже становится `auto`, и отрицательный `top` обрезался бы. `lg:overflow-visible`
           снимает обрезку в колонке, где горизонтальной прокрутки и не бывает. */}
-      <ul className="flex gap-1 overflow-x-auto pt-2 lg:flex-col lg:overflow-visible">
-        {SECTIONS.map((section) => {
-          const isCurrent =
-            pathname === section.href || pathname.startsWith(`${section.href}/`)
-          const count =
-            section.count !== undefined ? (counts?.[section.count] ?? 0) : 0
-          const label =
-            section.count !== undefined && counts !== null && count > 0
-              ? sectionLabel(t, section.count, counts, count)
-              : undefined
+      {/* Общий провайдер: пока открыта одна подсказка, соседние открываются сразу —
+          так рейл не заставляет ждать задержку на каждом пункте. */}
+      <TooltipProvider>
+        <ul className="flex gap-1 overflow-x-auto pt-2 lg:flex-col lg:overflow-visible">
+          {SECTIONS.map((section) => {
+            const isCurrent =
+              pathname === section.href || pathname.startsWith(`${section.href}/`)
+            const count =
+              section.count !== undefined ? (counts?.[section.count] ?? 0) : 0
+            const label =
+              section.count !== undefined && counts !== null && count > 0
+                ? sectionLabel(t, section.count, counts, count)
+                : undefined
+            // Подсказка объясняет, что именно посчитано, и потому появляется
+            // только вместе с бейджем: у пункта без числа объяснять нечего.
+            const hint =
+              section.count !== undefined && counts !== null && count > 0
+                ? sectionHint(t, section.count, counts)
+                : null
 
-          return (
-            <li key={section.href}>
+            const link = (
               <a
                 href={section.href}
                 aria-current={isCurrent ? 'page' : undefined}
@@ -110,20 +124,76 @@ export function AdminRail() {
                   // С `bg-background` и красной обводкой — 5.79:1 и 5.31:1 в light,
                   // 6.84:1 и 5.23:1 в dark (второе число — активный пункт).
                   // `aria-hidden`: точное число уже есть в `aria-label` ссылки.
+                  // Бейдж оставлен кликабельным для курсора (без `pointer-events-none`):
+                  // иначе верхние 4 px круга, выступающие над ссылкой, не считались бы
+                  // её наведением, и подсказка закрывалась бы, стоило навести на цифру.
+                  // Клик по бейджу всплывает к ссылке — переход работает как раньше.
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive/40 bg-background px-1 text-[11px] leading-none font-semibold text-destructive tabular-nums select-none"
+                    className="absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive/40 bg-background px-1 text-[11px] leading-none font-semibold text-destructive tabular-nums select-none"
                   >
                     {formatAdminBadgeCount(count)}
                   </span>
                 )}
               </a>
-            </li>
-          )
-        })}
-      </ul>
+            )
+
+            return (
+              <li key={section.href}>
+                {/* Обёртка стоит всегда, даже без числа: иначе приход снимка сводки
+                    пересоздавал бы `<a>` — терялись бы фокус и наведение у того, кто
+                    уже навёл курсор на пункт. Без числа подсказка просто выключена. */}
+                <Tooltip disabled={hint === null}>
+                  {/* Триггер — сама ссылка: она и так в фокусе и под курсором, а
+                      отдельная кнопка внутри `<a>` была бы вложенным интерактивом. */}
+                  <TooltipTrigger render={link} />
+                  {hint !== null && (
+                    <TooltipContent side="right" align="center" sideOffset={10}>
+                      {hint}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </li>
+            )
+          })}
+        </ul>
+      </TooltipProvider>
     </nav>
   )
+}
+
+/**
+ * Подсказка к бейджу: что означает число, без повтора `aria-label`.
+ *
+ * Имя ссылки уже говорит «Отзывы, на модерации: 12» — скринридеру этого хватает.
+ * Видимая подсказка объясняет смысл очереди, иначе «12» в кружке ничего не значит
+ * для того, кто впервые открыл админку. У «Фото» в подсказке видна разбивка:
+ * бейдж там один, а очередь состоит из аватаров и портфолио.
+ */
+function sectionHint(
+  t: (source: string, params?: MessageParams) => string,
+  field: SectionCountKey,
+  counts: AdminSectionCounts
+): string {
+  switch (field) {
+    case 'reviews':
+      return t('Скрытые отзывы ждут модерации')
+    case 'photos':
+      return t('На модерации: аватары — {avatars}, портфолио — {portfolio}', {
+        avatars: counts.photosAvatars,
+        portfolio: counts.photosPortfolio,
+      })
+    case 'barbers':
+      return t('Профили ждут подтверждения и пока не видны в поиске')
+    case 'users':
+      return t('Аккаунты без подтверждённого email среди всех ролей')
+    case 'barberRequests':
+      return t('Заявки «Стать барбером» ждут решения')
+    case 'salons':
+      return t('Салоны на проверке — до одобрения их нет в поиске')
+    case 'bookings':
+      return t('Брони в статусе «Подтверждена», включая прошедшие')
+  }
 }
 
 /**
