@@ -89,6 +89,86 @@ async function csrfToken(request: APIRequestContext): Promise<string> {
   return body.token
 }
 
+/** Изменение одного поля в строке журнала: JSON-скаляр или `null`. */
+export type AdminAuditChange = {
+  field: string
+  from: string | number | boolean | null
+  to: string | number | boolean | null
+}
+
+/** Строка журнала, которую проверяют media-спеки: действие, сущность и diff. */
+export type AdminAuditRow = {
+  action: string
+  entityType: string
+  entityId: string
+  changes: AdminAuditChange[]
+}
+
+/** Изменение поля в строке журнала; `undefined` — поля не было в payload. */
+export function auditChange(
+  row: AdminAuditRow,
+  field: string
+): AdminAuditChange | undefined {
+  return row.changes.find((change) => change.field === field)
+}
+
+/** Изменение поля в найденной строке; `undefined`, если строки нет. */
+export function auditChangeOf(
+  row: AdminAuditRow | undefined,
+  field: string
+): AdminAuditChange | undefined {
+  return row === undefined ? undefined : auditChange(row, field)
+}
+
+/** Поле не должно попадать в журнал: причина отказа живёт на кадре, а не в payload. */
+export function expectNoAuditField(
+  rows: readonly AdminAuditRow[],
+  field: string
+): void {
+  const leaked = rows
+    .flatMap((row) => row.changes)
+    .filter((change) => change.field === field)
+
+  expect(leaked, `«${field}» не должен попадать в журнал`).toHaveLength(0)
+}
+
+/**
+ * Строки журнала за сегодняшние UTC-сутки по точному `entityId`.
+ *
+ * `entityType` фильтрует сервер, `entityId` — клиент: такого параметра у API нет.
+ * `pageSize=100` — максимум контракта, а строка только что выполненного действия
+ * лежит в начале ленты, поэтому одной страницы достаточно.
+ * Журнал закрыт `AdminOnly`: `request` должен быть админским контекстом.
+ */
+export async function fetchAdminAuditRows(
+  request: APIRequestContext,
+  entityType: 'portfolio_photo' | 'user',
+  entityId: string
+): Promise<AdminAuditRow[]> {
+  const query = new URLSearchParams({
+    entityType,
+    from: utcToday(),
+    to: utcToday(),
+    pageSize: '100',
+  })
+
+  const response = await request.get(`/api/admin/audit?${query.toString()}`)
+
+  expect(
+    response.status(),
+    `GET /api/admin/audit?entityType=${entityType}`
+  ).toBe(200)
+
+  const body = (await response.json()) as { items: AdminAuditRow[] }
+
+  return body.items.filter((row) => row.entityId === entityId)
+}
+
+/** Сегодняшние UTC-сутки в формате API (`yyyy-MM-dd`). */
+function utcToday(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 /**
  * Уборка аватара после упавшей сцены: `DELETE` идемпотентен и отвечает `204`,
  * даже когда файла уже нет. `request` приходит из теста, поэтому удаляется аватар
