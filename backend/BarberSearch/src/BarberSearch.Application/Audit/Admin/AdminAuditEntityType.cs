@@ -5,9 +5,11 @@ namespace BarberSearch.Application.Audit.Admin;
 /// </summary>
 /// <remarks>
 /// Значения повторяют allowlist <c>AuditTrail</c>: <c>User</c>, <c>BarberProfile</c>,
-/// <c>Review</c>, <c>Salon</c>, <c>HairService</c>, <c>Specialization</c> и <c>Booking</c>.
-/// У брони аудируются только изменения статуса и заметки барбера — создание брони строки
-/// не пишет. <see cref="All"/> — отсутствие фильтра.
+/// <c>PortfolioPhoto</c>, <c>Review</c>, <c>Salon</c>, <c>HairService</c>,
+/// <c>Specialization</c> и <c>Booking</c>. У брони аудируются только изменения статуса и
+/// заметки барбера — создание брони строки не пишет. <see cref="PortfolioPhoto"/> — ребёнок
+/// профиля, но отдельный тип: загрузка и удаление кадра это жизненный цикл контента.
+/// <see cref="All"/> — отсутствие фильтра.
 /// </remarks>
 public enum AdminAuditEntityType
 {
@@ -50,5 +52,12 @@ public enum AdminAuditEntityType
     /// <summary>
     /// Бронь: только изменения статуса и заметки барбера. Создание брони не аудируется.
     /// </summary>
-    Booking = 7
+    Booking = 7,
+
+    /// <summary>
+    /// Фотография портфолио: профиль, файл, подпись, порядок, публикация, блокировка,
+    /// статус проверки. Ребёнок профиля, но отдельный тип: загрузка и удаление кадра —
+    /// действие с контентом, а не техническая правка профиля.
+    /// </summary>
+    PortfolioPhoto = 8
 }

@@ -3,7 +3,9 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Audit.Admin;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Specializations;
@@ -22,10 +24,11 @@ namespace BarberSearch.Infrastructure.UnitTests;
 /// <remarks>
 /// <para>
 /// <see cref="AuditTrail.Capture"/> обходит только добавленные, изменённые и удалённые
-/// сущности allowlist (<c>User</c>, <c>BarberProfile</c>, <c>Review</c>, <c>Salon</c>,
-/// <c>HairService</c>, <c>Specialization</c>, <c>Booking</c>). Строки аудита кладутся
-/// в тот же контекст, поэтому проверяются через <c>context.AuditLogs.Local</c>:
-/// <c>SaveChanges</c> в тестах не вызывается, соединение с базой не открывается.
+/// сущности allowlist (<c>User</c>, <c>BarberProfile</c>, <c>PortfolioPhoto</c>,
+/// <c>Review</c>, <c>Salon</c>, <c>HairService</c>, <c>Specialization</c>, <c>Booking</c>).
+/// Строки аудита кладутся в тот же контекст, поэтому проверяются через
+/// <c>context.AuditLogs.Local</c>: <c>SaveChanges</c> в тестах не вызывается, соединение
+/// с базой не открывается.
 /// </para>
 /// <para>
 /// Для изменения сущности сначала присоединяем её как <c>Unchanged</c>: EF снимает снимок
@@ -494,8 +497,9 @@ public class AuditTrailTests
         var audit = CreateAudit();
         var profile = TrackUnchanged(context, CreateBarberProfile(), context.BarberProfiles);
 
-        // Дети BarberProfile (услуги, салоны, расписание, портфолио, отпуска) — не агрегаты:
-        // их добавление помечает корень обновлённым, но allowlist-свойств не меняет.
+        // Дети BarberProfile (услуги, салоны, расписание, отпуска) — не агрегаты: их
+        // добавление помечает корень обновлённым, но allowlist-свойств не меняет.
+        // Портфолио — единственное исключение, у него собственный тип portfolio_photo.
         Assert.True(profile.AddService(Guid.CreateVersion7(), 40.00m, 30).IsSuccess);
 
         audit.Capture(context);
@@ -550,8 +554,8 @@ public class AuditTrailTests
         using var payload = JsonDocument.Parse(row.Payload);
         var changes = payload.RootElement.GetProperty("changes");
 
-        // Только флаг: URL аватара в allowlist не входит, иначе каждая загрузка
-        // давала бы строку журнала без административного смысла.
+        // Только флаг: URL аватара не менялся, поэтому в diff его нет, хотя AvatarUrl
+        // в allowlist входит — блокировка не трогает файл.
         Assert.Single(changes.EnumerateObject());
 
         var blocked = changes.GetProperty("isAvatarBlocked");
@@ -612,7 +616,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public void Capture_WhenAvatarUploaded_WritesNoRow()
+    public void Capture_WhenAvatarUploaded_WritesAvatarUrlAndStatus()
     {
         using var context = CreateContext();
         var audit = CreateAudit();
@@ -620,13 +624,686 @@ public class AuditTrailTests
 
         user = TrackUnchanged(context, user, context.Users);
 
-        // Загрузка/удаление аватара — не административное решение: AvatarUrl в allowlist
-        // не входит, поэтому строки аудита нет.
+        // Загрузка — действие с контентом: строка называет файл и переход
+        // Approved → Pending, поэтому без URL журнал не ответил бы «какой кадр».
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+        Assert.Equal("user", row.EntityType);
+        Assert.Equal(user.Id, row.EntityId);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Equal(2, changes.EnumerateObject().Count());
+
+        var avatarUrl = changes.GetProperty("avatarUrl");
+        Assert.Equal(JsonValueKind.Null, avatarUrl.GetProperty("from").ValueKind);
+        Assert.Equal(
+            "https://cdn.example.com/avatar.png",
+            avatarUrl.GetProperty("to").GetString());
+
+        var moderationStatus = changes.GetProperty("avatarModerationStatus");
+        Assert.Equal("Approved", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Pending", moderationStatus.GetProperty("to").GetString());
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarReplaced_WritesNewUrlAndReturnsToPending()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/first.png").IsSuccess);
+        Assert.True(user.ApproveAvatar(ActorId, Now).IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        // Замена — новый файл: прошлое решение не переезжает на него.
+        Assert.True(user.SetAvatar("https://cdn.example.com/second.png").IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Equal(2, changes.EnumerateObject().Count());
+
+        var avatarUrl = changes.GetProperty("avatarUrl");
+        Assert.Equal(
+            "https://cdn.example.com/first.png",
+            avatarUrl.GetProperty("from").GetString());
+        Assert.Equal(
+            "https://cdn.example.com/second.png",
+            avatarUrl.GetProperty("to").GetString());
+
+        var moderationStatus = changes.GetProperty("avatarModerationStatus");
+        Assert.Equal("Approved", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Pending", moderationStatus.GetProperty("to").GetString());
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarDeleted_WritesNullUrlAndApprovedStatus()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        // Удаление: файла больше нет, проверять нечего — статус возвращается в Approved.
+        Assert.True(user.SetAvatar(null).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        var avatarUrl = changes.GetProperty("avatarUrl");
+        Assert.Equal(
+            "https://cdn.example.com/avatar.png",
+            avatarUrl.GetProperty("from").GetString());
+        Assert.Equal(JsonValueKind.Null, avatarUrl.GetProperty("to").ValueKind);
+
+        var moderationStatus = changes.GetProperty("avatarModerationStatus");
+        Assert.Equal("Pending", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Approved", moderationStatus.GetProperty("to").GetString());
+
+        Assert.False(changes.TryGetProperty("avatarSubmittedAt", out _));
+        Assert.False(changes.TryGetProperty("avatarReviewedAt", out _));
+        Assert.False(changes.TryGetProperty("avatarReviewedByUserId", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenSameAvatarUrlSetAgain_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        // Ранний возврат домена: та же строка — не изменение и не событие журнала.
         Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
 
         audit.Capture(context);
 
         Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarClearedWithoutAvatar_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.SetAvatar(null).IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarApproved_WritesOnlyModerationStatus()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.ApproveAvatar(ActorId, Now).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var moderationStatus = changes.GetProperty("avatarModerationStatus");
+        Assert.Equal("Pending", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Approved", moderationStatus.GetProperty("to").GetString());
+
+        // Reviewed-поля дублируют occurred_at/actor_user_id, а URL не менялся.
+        Assert.False(changes.TryGetProperty("avatarUrl", out _));
+        Assert.False(changes.TryGetProperty("avatarReviewedAt", out _));
+        Assert.False(changes.TryGetProperty("avatarReviewedByUserId", out _));
+        Assert.False(changes.TryGetProperty("avatarRejectionReason", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarRejected_WritesOnlyModerationStatusWithoutReason()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+        const string reason = "Too blurry to publish";
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        Assert.True(user.RejectAvatar(ActorId, reason, Now).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("user.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var moderationStatus = changes.GetProperty("avatarModerationStatus");
+        Assert.Equal("Pending", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Rejected", moderationStatus.GetProperty("to").GetString());
+
+        // Причина — свободный текст администратора: она живёт на кадре, а не в payload.
+        Assert.DoesNotContain(reason, row.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("avatarRejectionReason", row.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("avatarUrl", row.Payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Capture_WhenAvatarModeratedTwice_WritesNoSecondRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var user = User.Create("ivan@example.com", PasswordHash, "Ivan", "Petrov").Value;
+
+        Assert.True(user.SetAvatar("https://cdn.example.com/avatar.png").IsSuccess);
+        Assert.True(user.ApproveAvatar(ActorId, Now).IsSuccess);
+
+        user = TrackUnchanged(context, user, context.Users);
+
+        // Повторное решение — 409 и никаких изменений: писать в журнал нечего.
+        Assert.True(user.ApproveAvatar(ActorId, Now).IsFailure);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoUploaded_WritesCreatedRowWithValues()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = CreateBarberProfile();
+        var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+
+        Assert.True(profile.AddUploadedPhoto(url, "Fresh cut").IsSuccess);
+
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        // Только фотография: профиль уже существует и в этом сценарии не менялся.
+        context.PortfolioPhotos.Add(photo);
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.created", row.Action);
+        Assert.Equal("portfolio_photo", row.EntityType);
+        Assert.Equal(photo.Id, row.EntityId);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var values = payload.RootElement.GetProperty("values");
+
+        Assert.Equal(profile.Id.ToString(), values.GetProperty("barberProfileId").GetString());
+        Assert.Equal(url, values.GetProperty("url").GetString());
+        Assert.Equal("Fresh cut", values.GetProperty("description").GetString());
+        Assert.Equal(0, values.GetProperty("sortOrder").GetInt32());
+        Assert.True(values.GetProperty("isPublished").GetBoolean());
+        Assert.False(values.GetProperty("isBlocked").GetBoolean());
+        Assert.Equal("Pending", values.GetProperty("moderationStatus").GetString());
+
+        // Миниатюра — производная файла; причина и reviewed-поля не аудируются.
+        Assert.False(values.TryGetProperty("thumbnailUrl", out _));
+        Assert.False(values.TryGetProperty("rejectionReason", out _));
+        Assert.False(values.TryGetProperty("reviewedAt", out _));
+        Assert.False(values.TryGetProperty("reviewedByUserId", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoDescriptionUpdated_WritesOnlyDescription()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.UpdateDescription("New caption").IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+        Assert.Equal("portfolio_photo", row.EntityType);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var description = changes.GetProperty("description");
+        Assert.Equal("Photo 0", description.GetProperty("from").GetString());
+        Assert.Equal("New caption", description.GetProperty("to").GetString());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoDescriptionUnchanged_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        // Та же подпись — не изменение: UpdatedAt в allowlist не входит.
+        Assert.True(photo.UpdateDescription("Photo 0").IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoReordered_WritesSortOrder()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(profile.ReorderPhoto(photo.Id, 7).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+        Assert.Equal(photo.Id, row.EntityId);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var sortOrder = changes.GetProperty("sortOrder");
+        Assert.Equal(0, sortOrder.GetProperty("from").GetInt32());
+        Assert.Equal(7, sortOrder.GetProperty("to").GetInt32());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoReorderKeepsSameValue_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(profile.ReorderPhoto(photo.Id, photo.SortOrder).IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotosReordered_WritesSortOrderForEachMovedPhoto()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context, photoCount: 2);
+        var photos = profile.PortfolioPhotos.ToList();
+
+        // Обратный порядок реально сдвигает оба кадра: 0 → 1 и 1 → 0.
+        Assert.True(profile.ReorderPhotos([photos[1].Id, photos[0].Id]).IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Equal(2, context.AuditLogs.Local.Count);
+
+        foreach (var row in context.AuditLogs.Local)
+        {
+            Assert.Equal("portfolio_photo.updated", row.Action);
+
+            using var payload = JsonDocument.Parse(row.Payload);
+            var changes = payload.RootElement.GetProperty("changes");
+
+            Assert.Single(changes.EnumerateObject());
+            Assert.True(changes.TryGetProperty("sortOrder", out _));
+        }
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotosReorderedToSameOrder_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context, photoCount: 2);
+        var photos = profile.PortfolioPhotos.ToList();
+
+        Assert.True(profile.ReorderPhotos([photos[0].Id, photos[1].Id]).IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoUnpublished_WritesIsPublishedChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Unpublish().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var isPublished = changes.GetProperty("isPublished");
+        Assert.True(isPublished.GetProperty("from").GetBoolean());
+        Assert.False(isPublished.GetProperty("to").GetBoolean());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoPublished_WritesIsPublishedChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = CreateBarberProfile();
+        var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+
+        Assert.True(profile.AddUploadedPhoto(url, "Photo 0").IsSuccess);
+
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        // Снимок — уже снятый с публикации кадр; возврат даёт false → true.
+        Assert.True(photo.Unpublish().IsSuccess);
+
+        context.BarberProfiles.Add(profile);
+        context.Entry(profile).State = EntityState.Unchanged;
+        context.Entry(photo).State = EntityState.Unchanged;
+
+        Assert.True(photo.Publish().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var isPublished = payload.RootElement
+            .GetProperty("changes")
+            .GetProperty("isPublished");
+
+        Assert.False(isPublished.GetProperty("from").GetBoolean());
+        Assert.True(isPublished.GetProperty("to").GetBoolean());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoBlocked_WritesIsBlockedChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Block().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var isBlocked = changes.GetProperty("isBlocked");
+        Assert.False(isBlocked.GetProperty("from").GetBoolean());
+        Assert.True(isBlocked.GetProperty("to").GetBoolean());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoUnblocked_WritesIsBlockedChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = CreateBarberProfile();
+        var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+
+        Assert.True(profile.AddUploadedPhoto(url, "Photo 0").IsSuccess);
+
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Block().IsSuccess);
+
+        context.BarberProfiles.Add(profile);
+        context.Entry(profile).State = EntityState.Unchanged;
+        context.Entry(photo).State = EntityState.Unchanged;
+
+        Assert.True(photo.Unblock().IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var isBlocked = payload.RootElement
+            .GetProperty("changes")
+            .GetProperty("isBlocked");
+
+        Assert.True(isBlocked.GetProperty("from").GetBoolean());
+        Assert.False(isBlocked.GetProperty("to").GetBoolean());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoBlockedAgain_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = CreateBarberProfile();
+        var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+
+        Assert.True(profile.AddUploadedPhoto(url, "Photo 0").IsSuccess);
+
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Block().IsSuccess);
+
+        context.BarberProfiles.Add(profile);
+        context.Entry(profile).State = EntityState.Unchanged;
+        context.Entry(photo).State = EntityState.Unchanged;
+
+        // Идемпотентная повторная блокировка: состояние не меняется, строки нет.
+        Assert.True(photo.Block().IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoApproved_WritesOnlyModerationStatus()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Approve(ActorId, Now).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var moderationStatus = changes.GetProperty("moderationStatus");
+        Assert.Equal("Pending", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Approved", moderationStatus.GetProperty("to").GetString());
+
+        Assert.False(changes.TryGetProperty("reviewedAt", out _));
+        Assert.False(changes.TryGetProperty("reviewedByUserId", out _));
+        Assert.False(changes.TryGetProperty("rejectionReason", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoRejected_WritesOnlyModerationStatusWithoutReason()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+        const string reason = "Out of focus";
+
+        Assert.True(photo.Reject(ActorId, reason, Now).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+
+        Assert.Single(changes.EnumerateObject());
+
+        var moderationStatus = changes.GetProperty("moderationStatus");
+        Assert.Equal("Pending", moderationStatus.GetProperty("from").GetString());
+        Assert.Equal("Rejected", moderationStatus.GetProperty("to").GetString());
+
+        // Причина уже живёт на кадре и показывается владельцу; в журнал не дублируется.
+        Assert.DoesNotContain(reason, row.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("rejectionReason", row.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("reviewedAt", row.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("reviewedByUserId", row.Payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoReviewedTwice_WritesNoSecondRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+
+        Assert.True(photo.Approve(ActorId, Now).IsSuccess);
+
+        // После сохранения повторное решение — 409: домен не меняет ни одного поля.
+        Assert.True(photo.Approve(ActorId, Now).IsFailure);
+
+        audit.Capture(context);
+
+        // Обе попытки в одном контексте: строка одна — от первого решения.
+        Assert.Single(context.AuditLogs.Local);
+
+        using var payload = JsonDocument.Parse(Assert.Single(context.AuditLogs.Local).Payload);
+        Assert.Single(payload.RootElement.GetProperty("changes").EnumerateObject());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoRemoved_WritesDeletedRowWithUrl()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = TrackUnchangedProfileWithPhotos(context);
+        var photo = Assert.Single(profile.PortfolioPhotos);
+        var url = photo.Url;
+
+        Assert.True(profile.RemovePhoto(photo.Id).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("portfolio_photo.deleted", row.Action);
+        Assert.Equal("portfolio_photo", row.EntityType);
+        Assert.Equal(photo.Id, row.EntityId);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var values = payload.RootElement.GetProperty("values");
+
+        // URL переживает удаление кадра — иначе строку не связать с файлом.
+        Assert.Equal(url, values.GetProperty("url").GetString());
+        Assert.Equal(profile.Id.ToString(), values.GetProperty("barberProfileId").GetString());
+        Assert.Equal("Pending", values.GetProperty("moderationStatus").GetString());
+    }
+
+    [Fact]
+    public void Capture_WhenPortfolioPhotoDescriptionLongerThanLimit_TruncatesWithMarker()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var profile = CreateBarberProfile();
+        var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+        var description = new string('a', AuditLogEntry.MAX_PAYLOAD_STRING_LENGTH + 100);
+
+        Assert.True(profile.AddUploadedPhoto(url, description).IsSuccess);
+
+        context.PortfolioPhotos.Add(Assert.Single(profile.PortfolioPhotos));
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var stored = payload.RootElement
+            .GetProperty("values")
+            .GetProperty("description")
+            .GetString();
+
+        Assert.NotNull(stored);
+        Assert.Equal(AuditLogEntry.MAX_PAYLOAD_STRING_LENGTH, stored.Length);
+        Assert.EndsWith("...", stored, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -660,6 +1337,34 @@ public class AuditTrailTests
         context.Entry(entity).State = EntityState.Unchanged;
 
         return entity;
+    }
+
+    /// <summary>
+    /// Профиль с загруженными кадрами, присоединённый как <c>Unchanged</c>: снимок
+    /// фиксирует текущие значения, поэтому последующий доменный метод даёт настоящий
+    /// <c>Modified</c> ребёнка, а не отсоединённый граф.
+    /// </summary>
+    private static BarberProfile TrackUnchangedProfileWithPhotos(
+        ApplicationDbContext context,
+        int photoCount = 1)
+    {
+        var profile = CreateBarberProfile();
+
+        for (var index = 0; index < photoCount; index++)
+        {
+            var url = PortfolioMediaUrl.Build(profile.Id, Guid.CreateVersion7(), "png");
+            Assert.True(profile.AddUploadedPhoto(url, $"Photo {index}").IsSuccess);
+        }
+
+        context.BarberProfiles.Add(profile);
+        context.Entry(profile).State = EntityState.Unchanged;
+
+        foreach (var photo in profile.PortfolioPhotos)
+        {
+            context.Entry(photo).State = EntityState.Unchanged;
+        }
+
+        return profile;
     }
 
     private static Review CreateReview(string? text)

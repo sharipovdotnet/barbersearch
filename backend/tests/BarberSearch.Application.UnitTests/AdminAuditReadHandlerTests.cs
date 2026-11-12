@@ -67,6 +67,8 @@ public class AdminAuditReadHandlerTests
     [InlineData("Hair_Service", AdminAuditEntityType.HairService)]
     [InlineData("specialization", AdminAuditEntityType.Specialization)]
     [InlineData(" booking ", AdminAuditEntityType.Booking)]
+    [InlineData("portfolio_photo", AdminAuditEntityType.PortfolioPhoto)]
+    [InlineData(" PORTFOLIO_PHOTO ", AdminAuditEntityType.PortfolioPhoto)]
     public async Task Get_ParsesEntityTypeCaseInsensitively(
         string? value,
         AdminAuditEntityType expected)
@@ -89,6 +91,8 @@ public class AdminAuditReadHandlerTests
     [InlineData("8")]
     [InlineData("services")]
     [InlineData("bookings")]
+    [InlineData("photo")]
+    [InlineData("photos")]
     public async Task Get_WithUnknownEntityType_ReturnsValidation(string value)
     {
         var repository = new FakeAuditLogRepository();
@@ -265,7 +269,7 @@ public class AdminAuditReadHandlerTests
 
     /// <summary>
     /// Имена storage совпадают со строками, которые пишет <c>AuditTrail</c>: snake_case,
-    /// без CLR-имён и без чисел. Проверяются все семь аудируемых типов.
+    /// без CLR-имён и без чисел. Проверяются все восемь аудируемых типов.
     /// </summary>
     [Theory]
     [InlineData(AdminAuditEntityType.User, AdminAuditEntityTypes.USER)]
@@ -275,6 +279,7 @@ public class AdminAuditReadHandlerTests
     [InlineData(AdminAuditEntityType.HairService, AdminAuditEntityTypes.HAIR_SERVICE)]
     [InlineData(AdminAuditEntityType.Specialization, AdminAuditEntityTypes.SPECIALIZATION)]
     [InlineData(AdminAuditEntityType.Booking, AdminAuditEntityTypes.BOOKING)]
+    [InlineData(AdminAuditEntityType.PortfolioPhoto, AdminAuditEntityTypes.PORTFOLIO_PHOTO)]
     public void ToStorageName_MapsEveryAuditedType(
         AdminAuditEntityType entityType,
         string expected)

@@ -971,7 +971,7 @@ public sealed class PhotoModerationTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Решения_и_загрузки_не_добавляют_новых_типов_аудита()
+    public async Task Решения_и_загрузки_пишутся_под_своими_типами()
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
@@ -994,21 +994,26 @@ public sealed class PhotoModerationTests
             Assert.Equal(HttpStatusCode.NoContent, rejection.StatusCode);
         }
 
-        // Ни загрузки, ни решения администратора не входят в allowlist: журнал пуст,
-        // а новых типов сущностей (портфолио — дочерняя строка) в нём нет.
-        Assert.Empty(await data.ReadAuditRowsAsync());
-        Assert.Equal(0, await data.CountAuditRowsAsync("portfolio_photo"));
-        Assert.Equal(0, await data.CountAuditRowsAsync("user"));
+        var rows = await data.ReadAuditRowsAsync();
+
+        // Аватар остаётся под user, портфолио получает собственный тип; профиль барбера
+        // от этих действий не меняется, поэтому его строк нет.
+        Assert.DoesNotContain(rows, row => row.EntityType == "barber_profile");
+        Assert.Contains(
+            rows,
+            row => row.EntityType == "user"
+                && row.EntityId == barber.User.Id
+                && row.Action == "user.updated");
+        Assert.Contains(
+            rows,
+            row => row.EntityType == "portfolio_photo" && row.EntityId == photoId);
         Assert.Equal(0, await data.CountAuditRowsAsync("barber_profile"));
 
-        // Фильтр админского журнала по-прежнему принимает только старые типы.
-        using var unknownType = await admin.Client.GetAsync(
+        // Фильтр админского журнала принимает новый тип.
+        using var page = await admin.Client.GetAsync(
             "api/admin/audit?entityType=portfolio_photo");
 
-        await AssertErrorCodeAsync(
-            unknownType,
-            HttpStatusCode.BadRequest,
-            "admin.audit.entityType");
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
     }
 
     [Fact(Timeout = 180_000)]

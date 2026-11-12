@@ -525,39 +525,72 @@ public sealed class AdminAuditCoverageTests
         await app.AuthenticateAsync(user.Email);
         await UploadAvatarAsync(app.Client);
 
-        // Загрузка аватара — техническая правка: AvatarUrl в allowlist не входит,
-        // поэтому строки user.updated от неё нет.
-        Assert.DoesNotContain(
+        // Загрузка аватара — действие с контентом: строка называет файл и переход
+        // Approved → Pending. До #91 здесь ожидался ноль строк.
+        var uploadRow = Assert.Single(
             await data.ReadAuditRowsAsync(),
             row => row.EntityType == "user" && row.EntityId == user.Id);
+
+        Assert.Equal("user.updated", uploadRow.Action);
+        Assert.Equal(user.Id, uploadRow.ActorUserId);
+
+        using (var payload = JsonDocument.Parse(uploadRow.Payload))
+        {
+            var changes = payload.RootElement.GetProperty("changes");
+
+            Assert.Equal(2, changes.EnumerateObject().Count());
+            Assert.NotEqual(
+                JsonValueKind.Null,
+                changes.GetProperty("avatarUrl").GetProperty("to").ValueKind);
+
+            var uploadStatus = changes.GetProperty("avatarModerationStatus");
+            Assert.Equal("Approved", uploadStatus.GetProperty("from").GetString());
+            Assert.Equal("Pending", uploadStatus.GetProperty("to").GetString());
+        }
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
 
-        // Решение администратора по кадру в allowlist не входит: строка аудита не появляется.
+        // Решение администратора тоже пишется — сменой статуса проверки.
         await AvatarModerationApi.ApproveAsync(admin, user.Id);
 
-        Assert.DoesNotContain(
+        var approveRow = Assert.Single(
             await data.ReadAuditRowsAsync(),
-            row => row.EntityType == "user" && row.EntityId == user.Id);
+            row => row.EntityType == "user"
+                && row.EntityId == user.Id
+                && row.ActorUserId == admin.Admin.Id);
+
+        Assert.Equal("user.updated", approveRow.Action);
+
+        using (var payload = JsonDocument.Parse(approveRow.Payload))
+        {
+            var changes = payload.RootElement.GetProperty("changes");
+
+            Assert.Single(changes.EnumerateObject());
+
+            var approved = changes.GetProperty("avatarModerationStatus");
+            Assert.Equal("Pending", approved.GetProperty("from").GetString());
+            Assert.Equal("Approved", approved.GetProperty("to").GetString());
+        }
 
         await AvatarModerationApi.BlockAsync(admin, user.Id);
 
         var blockRow = Assert.Single(
             await data.ReadAuditRowsAsync(),
-            row => row.EntityType == "user" && row.EntityId == user.Id);
+            row => row.EntityType == "user"
+                && row.EntityId == user.Id
+                && row.ActorUserId == admin.Admin.Id
+                && row.Payload.Contains("\"isAvatarBlocked\"", StringComparison.Ordinal));
 
         Assert.Equal("user.updated", blockRow.Action);
-        Assert.Equal(admin.Admin.Id, blockRow.ActorUserId);
 
         using (var payload = JsonDocument.Parse(blockRow.Payload))
         {
             var changes = payload.RootElement.GetProperty("changes");
 
-            // Только флаг: URL в payload не попадает.
+            // Только флаг: URL и статус модерации при блокировке не меняются.
             Assert.Single(changes.EnumerateObject());
 
             var blocked = changes.GetProperty("isAvatarBlocked");
-
             Assert.False(blocked.GetProperty("from").GetBoolean());
             Assert.True(blocked.GetProperty("to").GetBoolean());
         }
@@ -565,9 +598,8 @@ public sealed class AdminAuditCoverageTests
         // Идемпотентная повторная блокировка не меняет UpdatedAt и не пишет аудит.
         await AvatarModerationApi.BlockAsync(admin, user.Id);
 
-        Assert.Single(
-            await data.ReadAuditRowsAsync(),
-            row => row.EntityType == "user" && row.EntityId == user.Id);
+        Assert.Equal(3, (await data.ReadAuditRowsAsync())
+            .Count(row => row.EntityType == "user" && row.EntityId == user.Id));
 
         await AvatarModerationApi.UnblockAsync(admin, user.Id);
 
@@ -575,7 +607,7 @@ public sealed class AdminAuditCoverageTests
             .Where(row => row.EntityType == "user" && row.EntityId == user.Id)
             .ToList();
 
-        Assert.Equal(2, userRows.Count);
+        Assert.Equal(4, userRows.Count);
 
         // Свежие сверху: первая строка — возврат фото.
         var unblockRow = userRows[0];
