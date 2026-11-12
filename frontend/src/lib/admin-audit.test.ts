@@ -220,6 +220,51 @@ describe('formatAuditValue', () => {
     expect(formatAuditValue('category', 'Massage')).toBe('Massage')
   })
 
+  it('статус проверки портфолио — подпись фото-модерации', () => {
+    expect(formatAuditValue('moderationStatus', 'Approved', 'portfolio_photo')).toBe(
+      'Одобрено'
+    )
+    expect(formatAuditValue('moderationStatus', 'Pending', 'portfolio_photo')).toBe(
+      'На проверке'
+    )
+    expect(formatAuditValue('moderationStatus', 'Rejected', 'portfolio_photo')).toBe(
+      'Отклонено'
+    )
+  })
+
+  it('статус проверки салона — русская подпись, неизвестное значение — серверная строка', () => {
+    expect(formatAuditValue('moderationStatus', 'Active', 'salon')).toBe('Одобрен')
+    expect(formatAuditValue('moderationStatus', 'Pending', 'salon')).toBe(
+      'На проверке'
+    )
+    expect(formatAuditValue('moderationStatus', 'Rejected', 'salon')).toBe('Отклонён')
+    expect(formatAuditValue('moderationStatus', 'Mystery', 'salon')).toBe('Mystery')
+  })
+
+  it('moderationStatus без известного типа сущности остаётся серверной строкой', () => {
+    expect(formatAuditValue('moderationStatus', 'Approved')).toBe('Approved')
+    expect(formatAuditValue('moderationStatus', 'Approved', 'coupon')).toBe(
+      'Approved'
+    )
+  })
+
+  it('статус проверки фото — подпись фото-модерации, неизвестное значение — как пришло', () => {
+    expect(formatAuditValue('avatarModerationStatus', 'Approved')).toBe('Одобрено')
+    expect(formatAuditValue('avatarModerationStatus', 'Pending', 'user')).toBe(
+      'На проверке'
+    )
+    expect(formatAuditValue('avatarModerationStatus', 'Queued')).toBe('Queued')
+  })
+
+  it('url и avatarUrl остаются строкой сервера', () => {
+    expect(formatAuditValue('url', '/api/media/portfolio/x/y.jpg')).toBe(
+      '/api/media/portfolio/x/y.jpg'
+    )
+    expect(formatAuditValue('avatarUrl', '/api/media/avatars/x/y.jpg')).toBe(
+      '/api/media/avatars/x/y.jpg'
+    )
+  })
+
   it('телефон, сайт и координаты остаются как пришли', () => {
     expect(formatAuditValue('phoneNumber', '+70000000009')).toBe('+70000000009')
     expect(formatAuditValue('websiteUrl', 'https://studio.test')).toBe(
@@ -247,7 +292,7 @@ describe('formatAuditAction', () => {
 })
 
 describe('подписи и константы контракта', () => {
-  it('типы сущностей — восемь значений, новые дописаны после прежних', () => {
+  it('типы сущностей — девять значений (all + восемь), новые дописаны после прежних', () => {
     expect(ADMIN_AUDIT_ENTITY_TYPES).toStrictEqual([
       'all',
       'user',
@@ -257,6 +302,7 @@ describe('подписи и константы контракта', () => {
       'hair_service',
       'specialization',
       'booking',
+      'portfolio_photo',
     ])
   })
 
@@ -270,6 +316,7 @@ describe('подписи и константы контракта', () => {
       hair_service: 'Услуга',
       specialization: 'Специализация',
       booking: 'Бронь',
+      portfolio_photo: 'Фото портфолио',
     })
   })
 
@@ -293,6 +340,17 @@ describe('подписи и константы контракта', () => {
       cancellationReason: 'Причина отмены',
       isActive: 'Активность',
       isAvatarBlocked: 'Фото скрыто администратором',
+    })
+  })
+
+  it('подписи полей фото портфолио и аватара — русские', () => {
+    expect(ADMIN_AUDIT_FIELD_LABELS).toMatchObject({
+      url: 'Файл',
+      avatarUrl: 'Фото профиля',
+      sortOrder: 'Порядок',
+      isBlocked: 'Скрыто администратором',
+      moderationStatus: 'Статус проверки',
+      avatarModerationStatus: 'Статус проверки фото',
     })
   })
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isAdminAuditPage,
   isAdminAvatarPhoto,
   isAdminBarber,
   isAdminBarberRow,
@@ -1109,6 +1110,59 @@ describe('поля премодерации в контрактах #89', () => 
     ).toBe(false)
     expect(
       isAdminPortfolioPhoto({ ...ADMIN_PORTFOLIO_PHOTO, description: 42 })
+    ).toBe(false)
+  })
+})
+
+/**
+ * Новый тип сущности не требует правки guard'а: `entityType` — непустая строка,
+ * а не закрытый список. Тест фиксирует это обещание, чтобы «девятый тип» не
+ * превратился в битый ответ на первом же фото.
+ */
+describe('isAdminAuditPage, тип сущности portfolio_photo', () => {
+  const PAGE = {
+    items: [
+      {
+        id: '9e700000-0000-4000-8000-000000000026',
+        occurredAt: '2026-09-10T10:17:00+00:00',
+        action: 'portfolio_photo.created',
+        entityType: 'portfolio_photo',
+        entityId: '9e200000-0000-4000-8000-000000000001',
+        actor: null,
+        changes: [
+          {
+            field: 'url',
+            from: null,
+            to: '/api/media/portfolio/9e100000-0000-4000-8000-000000000015/0123456789abcdef0123456789abcdef.jpg',
+          },
+          { field: 'sortOrder', from: null, to: 1 },
+        ],
+      },
+    ],
+    nextCursor: null,
+  }
+
+  it('принимает страницу с entityType portfolio_photo', () => {
+    expect(isAdminAuditPage(PAGE)).toBe(true)
+  })
+
+  it('отвергает строку без типа и не-скалярный diff', () => {
+    expect(
+      isAdminAuditPage({
+        ...PAGE,
+        items: [{ ...PAGE.items[0], entityType: '' }],
+      })
+    ).toBe(false)
+    expect(
+      isAdminAuditPage({
+        ...PAGE,
+        items: [
+          {
+            ...PAGE.items[0],
+            changes: [{ field: 'url', from: {}, to: null }],
+          },
+        ],
+      })
     ).toBe(false)
   })
 })

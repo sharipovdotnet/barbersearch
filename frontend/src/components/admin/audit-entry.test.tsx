@@ -64,6 +64,41 @@ const HAIR_SERVICE_ENTRY: AdminAuditEntry = {
   changes: [{ field: 'name', from: 'E2E Стрижка', to: 'E2E Стрижка 2' }],
 }
 
+const PORTFOLIO_ENTRY: AdminAuditEntry = {
+  ...ROLE_CHANGE,
+  id: '9e700000-0000-4000-8000-000000000026',
+  occurredAt: '2026-09-10T10:17:00+00:00',
+  action: 'portfolio_photo.created',
+  entityType: 'portfolio_photo',
+  entityId: '9e200000-0000-4000-8000-000000000001',
+  changes: [
+    {
+      field: 'url',
+      from: null,
+      to: '/api/media/portfolio/9e100000-0000-4000-8000-000000000015/0123456789abcdef0123456789abcdef.jpg',
+    },
+    { field: 'sortOrder', from: null, to: 1 },
+    { field: 'moderationStatus', from: 'Pending', to: 'Approved' },
+  ],
+}
+
+const AVATAR_ENTRY: AdminAuditEntry = {
+  ...ROLE_CHANGE,
+  id: '9e700000-0000-4000-8000-000000000027',
+  occurredAt: '2026-09-10T10:17:10+00:00',
+  action: 'user.updated',
+  entityType: 'user',
+  entityId: '9e000000-0000-4000-8000-000000000004',
+  changes: [
+    {
+      field: 'avatarUrl',
+      from: null,
+      to: '/api/media/avatars/9e000000-0000-4000-8000-000000000004/0123456789abcdef0123456789abcdef.jpg',
+    },
+    { field: 'avatarModerationStatus', from: 'Approved', to: 'Pending' },
+  ],
+}
+
 function renderEntry(entry: AdminAuditEntry): void {
   render(
     <ul>
@@ -194,6 +229,41 @@ describe('AuditEntry', () => {
 
     expect(screen.getByText('Название')).toBeVisible()
     expect(screen.getByText('E2E Стрижка → E2E Стрижка 2')).toBeVisible()
+  })
+
+  it('строка загрузки кадра показывает «Фото портфолио» и «Создано»', () => {
+    renderEntry(PORTFOLIO_ENTRY)
+
+    expect(screen.getByText('Фото портфолио')).toBeInTheDocument()
+    expect(screen.getByText('Создано')).toBeInTheDocument()
+  })
+
+  it('раскрытый diff кадра: «Файл», «Порядок» и русский статус проверки', async () => {
+    const user = userEvent.setup()
+
+    renderEntry(PORTFOLIO_ENTRY)
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('Файл')).toBeVisible()
+    expect(screen.getByText('Порядок')).toBeVisible()
+    expect(screen.getByText('Статус проверки')).toBeVisible()
+    // Значение moderationStatus переведено по типу сущности `portfolio_photo`.
+    expect(screen.getByText('На проверке → Одобрено')).toBeVisible()
+  })
+
+  it('строка аватара показывает «Фото профиля» и «Статус проверки фото»', async () => {
+    const user = userEvent.setup()
+
+    renderEntry(AVATAR_ENTRY)
+
+    expect(screen.getByText('Пользователь')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Показать изменения' }))
+
+    expect(screen.getByText('Фото профиля')).toBeVisible()
+    expect(screen.getByText('Статус проверки фото')).toBeVisible()
+    expect(screen.getByText('Одобрено → На проверке')).toBeVisible()
   })
 
   it('неизвестный тип и поле показываются строкой сервера', async () => {
