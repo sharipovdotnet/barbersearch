@@ -41,6 +41,7 @@ import {
   formatReviewsCount,
   getInitials,
 } from '@/lib/format'
+import { portfolioPhotoSource } from '@/lib/media'
 
 /**
  * Карточка барбера: контакты, статусы и чек-лист готовности.
@@ -648,7 +649,7 @@ function BarberPhotos({
                 aria-busy={isBusy || undefined}
               >
                 <img
-                  src={photo.url}
+                  {...portfolioPhotoSource(photo.url, '96px')}
                   alt={label}
                   loading="lazy"
                   className="size-24 shrink-0 rounded-lg bg-muted object-cover"

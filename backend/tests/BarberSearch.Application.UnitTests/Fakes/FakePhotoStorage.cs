@@ -103,6 +103,7 @@ public sealed class FakePhotoStorage : IPhotoStorage
 
     public Task<Result<PhotoContent, Failure>> OpenReadAsync(
         string url,
+        PhotoVariant variant,
         CancellationToken cancellationToken)
         => throw new NotSupportedException();
 

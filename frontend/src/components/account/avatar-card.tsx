@@ -32,6 +32,7 @@ import {
   SUPPORTED_IMAGE_TYPES,
   prepareAvatarImage,
 } from '@/lib/image-prep'
+import { avatarImageSource } from '@/lib/media'
 import { profileInitials, type MyProfile } from '@/lib/my-profile'
 import {
   canRenderAvatarCardPreview,
@@ -178,11 +179,11 @@ export function AvatarCard({ profile }: { profile: MyProfile }) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <Avatar size="lg" className="size-24" aria-hidden>
               {/* Заблокированный кадр не рендерим даже при сыром `avatarUrl`:
-                  браузер показал бы старый кадр из 24-часового кэша. Отклонённый
+                  браузер показал бы старый кадр из кэша. Отклонённый
                   кадр в кабинете виден — рядом с ним причина отказа. */}
               {profile.avatarUrl !== null &&
                 canRenderAvatarCardPreview(profile) && (
-                  <AvatarImage src={profile.avatarUrl} alt="" />
+                  <AvatarImage {...avatarImageSource(profile.avatarUrl)} alt="" />
                 )}
               <AvatarFallback className="text-2xl">
                 {profileInitials(profile)}

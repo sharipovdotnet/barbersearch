@@ -44,6 +44,10 @@ describe('BarberIdentity: аватар', () => {
       ).toHaveAttribute('src', AVATAR_URL)
     })
     expect(container.querySelector('[data-slot="avatar-image"]')).toHaveAttribute(
+      'srcset',
+      `${AVATAR_URL}?size=sm 1x, ${AVATAR_URL}?size=md 2x, ${AVATAR_URL}?size=lg 3x`
+    )
+    expect(container.querySelector('[data-slot="avatar-image"]')).toHaveAttribute(
       'alt',
       ''
     )

@@ -31,6 +31,7 @@ import {
   getInitials,
   relativeDayLabel,
 } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 
 /**
  * Герой кабинета: единственная запись, которую нужно увидеть сразу.
@@ -105,7 +106,10 @@ export function NextBookingCard({
           <div className="flex min-w-0 items-start gap-3">
             <Avatar size="lg" aria-hidden>
               {view.barberAvatarUrl && (
-                <AvatarImage src={view.barberAvatarUrl} alt="" />
+                <AvatarImage
+                  {...avatarImageSource(view.barberAvatarUrl)}
+                  alt=""
+                />
               )}
               <AvatarFallback>{getInitials(view.barberName)}</AvatarFallback>
             </Avatar>

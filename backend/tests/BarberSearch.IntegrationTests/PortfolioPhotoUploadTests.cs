@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Common;
@@ -84,6 +85,9 @@ public sealed class PortfolioPhotoUploadTests
         Assert.Equal(PhotoModerationStatus.Pending, ownPhoto.ModerationStatus);
         Assert.Null(ownPhoto.RejectionReason);
 
+        // Миниатюра — тот же файл в размере md: своего адреса у неё нет.
+        Assert.Equal($"{ownPhoto.Url}?size=md", ownPhoto.ThumbnailUrl);
+
         // Публичная карточка: только одобренные кадры, поэтому пусто.
         var pendingPublicCard = await GetCardAsync(
             anonymous,
@@ -125,7 +129,7 @@ public sealed class PortfolioPhotoUploadTests
         Assert.Equal(0, photo.SortOrder);
         Assert.True(photo.IsPublished);
         Assert.False(photo.IsBlocked);
-        Assert.Null(photo.ThumbnailUrl);
+        Assert.Equal($"{photo.Url}?size=md", photo.ThumbnailUrl);
         Assert.Equal(PhotoModerationStatus.Approved, photo.ModerationStatus);
         Assert.Null(photo.RejectionReason);
         Assert.StartsWith("/api/media/portfolio/", photo.Url, StringComparison.Ordinal);
@@ -650,6 +654,11 @@ public sealed class PortfolioPhotoUploadTests
             Assert.Contains(body.Photos, photo => !photo.IsPublished);
             Assert.Contains(body.Photos, photo => photo.IsBlocked);
 
+            // Админская карточка отдаёт тот же вычисляемый адрес миниатюры, что и остальные.
+            Assert.All(
+                body.Photos,
+                photo => Assert.Equal($"{photo.Url}?size=md", photo.ThumbnailUrl));
+
             // Чек-лист отражает публичную карточку: 1 видимая из 3 строк.
             Assert.Equal(1, body.Readiness.PhotosCount);
         }
@@ -698,6 +707,524 @@ public sealed class PortfolioPhotoUploadTests
         // Литеральный сегмент «..» нормализуется клиентом ещё до отправки и уводит запрос
         // с маршрута media (там отвечает fallback-политика), поэтому обход каталога
         // проверяется кодированным «..%2F» выше: он остаётся внутри имени файла и даёт 404.
+    }
+
+    /// <summary>
+    /// Видимый кадр отдаёт WebP-вариант с честным кэшем, сильным ETag и <c>304</c> на
+    /// повторный условный запрос; исходник и три ширины сосуществуют.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Visible_photo_variant_serves_webp_with_honest_cache_etag_and_not_modified()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Variant Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        // Настоящий JPEG: из минимального PNG декодер вариантов ничего не сделает.
+        var content = MediaTestImage.Jpeg(1200, 900);
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            content,
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var mediaId = MediaIdFromUrl(photo.Url);
+
+        using var anonymous = app.CreateClient();
+
+        // Исходник: прежний Content-Type, но новый честный кэш и ETag без суффикса.
+        using (var original = await anonymous.GetAsync(photo.Url))
+        {
+            Assert.Equal(HttpStatusCode.OK, original.StatusCode);
+            Assert.Equal("image/jpeg", original.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(original);
+            Assert.Equal($"\"{mediaId:N}\"", RequireEntityTag(original));
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(original.Headers.GetValues("X-Content-Type-Options")));
+            Assert.Contains("bytes", original.Headers.AcceptRanges);
+            AssertNoVary(original);
+            Assert.Equal(content, await original.Content.ReadAsByteArrayAsync());
+        }
+
+        var smallUrl = photo.Url + "?size=sm";
+        string smallEntityTag;
+
+        using (var small = await anonymous.GetAsync(smallUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, small.StatusCode);
+            Assert.Equal("image/webp", small.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(small);
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(small.Headers.GetValues("X-Content-Type-Options")));
+            Assert.Contains("bytes", small.Headers.AcceptRanges);
+            AssertNoVary(small);
+
+            smallEntityTag = RequireEntityTag(small);
+            Assert.Equal($"\"{mediaId:N}-sm\"", smallEntityTag);
+
+            var dimensions = MediaTestImage.Dimensions(
+                await small.Content.ReadAsByteArrayAsync());
+            Assert.Equal(
+                MediaTestImage.VariantDimensions(
+                    1200,
+                    900,
+                    PhotoVariantWidths.PORTFOLIO_SMALL),
+                dimensions);
+        }
+
+        // Тот же ETag: 304 без тела, но с ETag и Cache-Control.
+        using (var notModified = await GetWithIfNoneMatchAsync(
+                   anonymous,
+                   smallUrl,
+                   smallEntityTag))
+        {
+            Assert.Equal(HttpStatusCode.NotModified, notModified.StatusCode);
+            Assert.Empty(await notModified.Content.ReadAsByteArrayAsync());
+            Assert.Equal(smallEntityTag, RequireEntityTag(notModified));
+            AssertPublicCache(notModified);
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(notModified.Headers.GetValues("X-Content-Type-Options")));
+            AssertNoVary(notModified);
+        }
+
+        // «*» совпадает с любым представлением, чужой ETag — обычный 200.
+        using (var wildcard = await GetWithIfNoneMatchAsync(anonymous, smallUrl, "*"))
+        {
+            Assert.Equal(HttpStatusCode.NotModified, wildcard.StatusCode);
+            Assert.Empty(await wildcard.Content.ReadAsByteArrayAsync());
+        }
+
+        using (var foreign = await GetWithIfNoneMatchAsync(
+                   anonymous,
+                   smallUrl,
+                   $"\"{Guid.CreateVersion7():N}-sm\""))
+        {
+            Assert.Equal(HttpStatusCode.OK, foreign.StatusCode);
+            Assert.Equal("image/webp", foreign.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(foreign);
+        }
+
+        // Средний и большой варианты — те же байты в другой ширине и со своим суффиксом.
+        foreach (var (suffix, width) in new[]
+                 {
+                     ("md", PhotoVariantWidths.PORTFOLIO_MEDIUM),
+                     ("lg", PhotoVariantWidths.PORTFOLIO_LARGE)
+                 })
+        {
+            using var variant = await anonymous.GetAsync($"{photo.Url}?size={suffix}");
+
+            Assert.Equal(HttpStatusCode.OK, variant.StatusCode);
+            Assert.Equal("image/webp", variant.Content.Headers.ContentType?.MediaType);
+            Assert.Equal($"\"{mediaId:N}-{suffix}\"", RequireEntityTag(variant));
+            AssertPublicCache(variant);
+
+            var dimensions = MediaTestImage.Dimensions(
+                await variant.Content.ReadAsByteArrayAsync());
+            Assert.Equal(
+                MediaTestImage.VariantDimensions(1200, 900, width),
+                dimensions);
+        }
+    }
+
+    /// <summary>
+    /// Неизвестный, пустой и повторённый <c>size</c> — тот же <c>404</c>, что и отсутствующий
+    /// файл, и всегда <c>no-store</c>: набора размеров не существует.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Variant_with_invalid_size_returns_not_found_without_store()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Size Guard Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            MediaTestImage.Jpeg(1000, 800),
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+
+        using var anonymous = app.CreateClient();
+
+        // Видимость в порядке: валидный размер отвечает 200, значит 404 ниже — про query.
+        using (var valid = await anonymous.GetAsync(photo.Url + "?size=sm"))
+        {
+            Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
+        }
+
+        foreach (var query in new[] { "?size=xx", "?size=", "?size=sm&size=md" })
+        {
+            using var response = await anonymous.GetAsync(photo.Url + query);
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Contains(
+                "portfolioMedia.notFound",
+                await response.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+            AssertNoStore(response);
+            AssertNoVary(response);
+        }
+    }
+
+    /// <summary>
+    /// Неодобренный кадр: вариант скрыт от анонима (<c>404</c> + <c>no-store</c>), а владелец
+    /// профиля и администратор видят превью с <c>private, no-store</c>.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Pending_photo_variant_is_private_to_owner_and_admin()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Pending Variant Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        var content = MediaTestImage.Jpeg(1000, 800);
+        await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            content,
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var mediaId = MediaIdFromUrl(photo.Url);
+        var variantUrl = photo.Url + "?size=md";
+
+        using var anonymous = app.CreateClient();
+
+        using (var anonymousVariant = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, anonymousVariant.StatusCode);
+            Assert.Contains(
+                "portfolioMedia.notFound",
+                await anonymousVariant.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+            AssertNoStore(anonymousVariant);
+        }
+
+        using (var ownerVariant = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, ownerVariant.StatusCode);
+            Assert.Equal("image/webp", ownerVariant.Content.Headers.ContentType?.MediaType);
+            AssertPrivateNoStore(ownerVariant);
+            Assert.Equal($"\"{mediaId:N}-md\"", RequireEntityTag(ownerVariant));
+            Assert.Equal(
+                "nosniff",
+                Assert.Single(ownerVariant.Headers.GetValues("X-Content-Type-Options")));
+        }
+
+        var admin = await app.CreateUserAsync(
+            $"portfolio-variant-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
+        await app.AuthenticateAsync(admin.Email);
+
+        using var adminVariant = await app.Client.GetAsync(variantUrl);
+        Assert.Equal(HttpStatusCode.OK, adminVariant.StatusCode);
+        Assert.Equal("image/webp", adminVariant.Content.Headers.ContentType?.MediaType);
+        AssertPrivateNoStore(adminVariant);
+    }
+
+    /// <summary>
+    /// Скрытый владельцем и заблокированный администратором кадр: тот же <c>?size=</c> отвечает
+    /// анониму <c>404</c> + <c>no-store</c>, а владельцу и администратору — 200 + <c>private,
+    /// no-store</c>.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Hidden_and_blocked_photo_variants_follow_the_original_visibility_rules()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Hidden Variant Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            MediaTestImage.Jpeg(1000, 800),
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var variantUrl = photo.Url + "?size=md";
+
+        using var anonymous = app.CreateClient();
+
+        // Скрытие владельцем: вариант перестаёт быть публичным.
+        using (var unpublish = await app.Client.DeleteAsync(
+                   $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/publication"))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, unpublish.StatusCode);
+        }
+
+        using (var hiddenAnonymous = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, hiddenAnonymous.StatusCode);
+            AssertNoStore(hiddenAnonymous);
+        }
+
+        using (var hiddenOwner = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, hiddenOwner.StatusCode);
+            Assert.Equal("image/webp", hiddenOwner.Content.Headers.ContentType?.MediaType);
+            AssertPrivateNoStore(hiddenOwner);
+        }
+
+        var admin = await app.CreateUserAsync(
+            $"portfolio-hidden-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
+        await app.AuthenticateAsync(admin.Email);
+
+        using (var hiddenAdmin = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, hiddenAdmin.StatusCode);
+            AssertPrivateNoStore(hiddenAdmin);
+        }
+
+        // Возврат в публикацию: снова публичный кэш и всем доступный WebP.
+        await app.AuthenticateAsync(barber.User.Email);
+
+        using (var publish = await app.Client.PostAsync(
+                   $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/publication",
+                   content: null))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, publish.StatusCode);
+        }
+
+        using (var visible = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, visible.StatusCode);
+            Assert.Equal("image/webp", visible.Content.Headers.ContentType?.MediaType);
+            AssertPublicCache(visible);
+        }
+
+        // Блокировка администратором: владелец по-прежнему видит превью, аноним — нет.
+        await app.AuthenticateAsync(admin.Email);
+
+        using (var block = await app.Client.PostAsync(
+                   $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/block",
+                   content: null))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, block.StatusCode);
+        }
+
+        using (var blockedAnonymous = await anonymous.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, blockedAnonymous.StatusCode);
+            AssertNoStore(blockedAnonymous);
+        }
+
+        using (var blockedAdmin = await app.Client.GetAsync(variantUrl))
+        {
+            Assert.Equal(HttpStatusCode.OK, blockedAdmin.StatusCode);
+            AssertPrivateNoStore(blockedAdmin);
+        }
+
+        await app.AuthenticateAsync(barber.User.Email);
+
+        using var blockedOwner = await app.Client.GetAsync(variantUrl);
+        Assert.Equal(HttpStatusCode.OK, blockedOwner.StatusCode);
+        AssertPrivateNoStore(blockedOwner);
+    }
+
+    /// <summary>
+    /// Удалённый вариант догенерируется на первом чтении, а исходник при этом не меняется:
+    /// так работают кадры, загруженные до среза, и кадры с упавшей генерацией на загрузке.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Missing_variant_file_is_generated_lazily_without_touching_the_original()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Lazy Variant Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        var content = MediaTestImage.Jpeg(1200, 900);
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            content,
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var mediaId = MediaIdFromUrl(photo.Url);
+        var fileName = photo.Url[(photo.Url.LastIndexOf('/') + 1)..];
+        var originalPath = Path.Combine(
+            app.StorageRootPath,
+            "portfolio",
+            $"{barber.Profile.Id:N}",
+            fileName);
+
+        Assert.Equal(3, VariantFiles(app, barber.Profile.Id, mediaId).Length);
+
+        // Имитируем кадр, загруженный до среза: вариантов на диске нет.
+        foreach (var variantPath in VariantFiles(app, barber.Profile.Id, mediaId))
+        {
+            File.Delete(variantPath);
+        }
+
+        Assert.Empty(VariantFiles(app, barber.Profile.Id, mediaId));
+
+        using var anonymous = app.CreateClient();
+
+        using (var lazy = await anonymous.GetAsync(photo.Url + "?size=md"))
+        {
+            Assert.Equal(HttpStatusCode.OK, lazy.StatusCode);
+            Assert.Equal("image/webp", lazy.Content.Headers.ContentType?.MediaType);
+            Assert.Equal($"\"{mediaId:N}-md\"", RequireEntityTag(lazy));
+            AssertPublicCache(lazy);
+
+            var dimensions = MediaTestImage.Dimensions(
+                await lazy.Content.ReadAsByteArrayAsync());
+            Assert.Equal(
+                MediaTestImage.VariantDimensions(
+                    1200,
+                    900,
+                    PhotoVariantWidths.PORTFOLIO_MEDIUM),
+                dimensions);
+        }
+
+        // Файл варианта записан, исходник остался байт в байт прежним.
+        Assert.True(File.Exists(VariantPath(app, barber.Profile.Id, mediaId, "md")));
+        Assert.Equal(content, await File.ReadAllBytesAsync(originalPath));
+    }
+
+    /// <summary>
+    /// Исходник уже целевой ширины: вариант не создаётся, <c>?size=</c> отдаёт исходник
+    /// с его <c>Content-Type</c> и ETag, а не <c>404</c> и не растянутую картинку.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Variant_wider_than_the_source_serves_the_original_file()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Narrow Source Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        // 400 px: md (512) и lg (1024) невозможны, sm (256) возможен.
+        var content = MediaTestImage.Jpeg(400, 300);
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            content,
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var mediaId = MediaIdFromUrl(photo.Url);
+
+        using var anonymous = app.CreateClient();
+
+        foreach (var suffix in new[] { "md", "lg" })
+        {
+            using var response = await anonymous.GetAsync($"{photo.Url}?size={suffix}");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("image/jpeg", response.Content.Headers.ContentType?.MediaType);
+            Assert.Equal($"\"{mediaId:N}\"", RequireEntityTag(response));
+            AssertPublicCache(response);
+            Assert.Equal(content, await response.Content.ReadAsByteArrayAsync());
+        }
+
+        Assert.False(File.Exists(VariantPath(app, barber.Profile.Id, mediaId, "md")));
+        Assert.False(File.Exists(VariantPath(app, barber.Profile.Id, mediaId, "lg")));
+
+        using var small = await anonymous.GetAsync(photo.Url + "?size=sm");
+        Assert.Equal(HttpStatusCode.OK, small.StatusCode);
+        Assert.Equal("image/webp", small.Content.Headers.ContentType?.MediaType);
+        Assert.Equal($"\"{mediaId:N}-sm\"", RequireEntityTag(small));
+    }
+
+    /// <summary>
+    /// Удаление кадра убирает исходник и все WebP-варианты, поэтому старый <c>?size=</c>
+    /// отвечает <c>404</c> с <c>no-store</c>.
+    /// </summary>
+    [Fact(Timeout = 180_000)]
+    public async Task Delete_removes_variants_and_the_old_size_url_is_not_found()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Portfolio Delete Variants Barber");
+        await app.AuthenticateAsync(barber.User.Email);
+
+        var photoId = await UploadAsync(
+            app.Client,
+            barber.Profile.Id,
+            MediaTestImage.Jpeg(1200, 900),
+            fileName: "photo.jpg",
+            contentType: "image/jpeg");
+
+        await ApproveAsync(app, barber.Profile.Id, photoId);
+
+        var ownCard = await GetCardAsync(
+            app.Client,
+            $"api/barber-profiles/{barber.Profile.Id}");
+        var photo = Assert.Single(ownCard.Photos);
+        var mediaId = MediaIdFromUrl(photo.Url);
+        var fileName = photo.Url[(photo.Url.LastIndexOf('/') + 1)..];
+        var originalPath = Path.Combine(
+            app.StorageRootPath,
+            "portfolio",
+            $"{barber.Profile.Id:N}",
+            fileName);
+
+        Assert.Equal(3, VariantFiles(app, barber.Profile.Id, mediaId).Length);
+
+        using (var delete = await app.Client.DeleteAsync(
+                   $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}"))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+        }
+
+        Assert.False(File.Exists(originalPath));
+        Assert.Empty(VariantFiles(app, barber.Profile.Id, mediaId));
+
+        using var anonymous = app.CreateClient();
+
+        using var stale = await anonymous.GetAsync(photo.Url + "?size=md");
+        Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
+        Assert.Contains(
+            "portfolioMedia.notFound",
+            await stale.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+        AssertNoStore(stale);
     }
 
     /// <summary>
@@ -775,12 +1302,16 @@ public sealed class PortfolioPhotoUploadTests
         HttpClient client,
         Guid barberProfileId,
         byte[] content,
-        string? description = null)
+        string? description = null,
+        string fileName = "photo.png",
+        string contentType = "image/png")
     {
         using var response = await SendUploadAsync(
             client,
             barberProfileId,
             content,
+            fileName: fileName,
+            contentType: contentType,
             description: description);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -847,17 +1378,112 @@ public sealed class PortfolioPhotoUploadTests
     }
 
     /// <summary>
-    /// Проверяет публичное суточное кэширование видимого кадра.
+    /// Проверяет честный кэш видимого кадра: <c>public, max-age=0, must-revalidate</c>.
     /// </summary>
+    /// <remarks>
+    /// Суточного <c>max-age</c> больше нет: браузер обязан перепроверять кадр, иначе скрытый
+    /// или заменённый файл показывался бы из кэша. <see cref="HttpResponseMessage.Headers"/>
+    /// разбирает директивы в своём порядке, поэтому проверяются флаги, а не строка целиком.
+    /// </remarks>
     private static void AssertPublicCache(HttpResponseMessage response)
     {
         var cacheControl = response.Headers.CacheControl
             ?? throw new InvalidOperationException("Cache-Control header is missing.");
 
         Assert.True(cacheControl.Public);
-        Assert.Equal(TimeSpan.FromDays(1), cacheControl.MaxAge);
+        Assert.Equal(TimeSpan.Zero, cacheControl.MaxAge);
+        Assert.True(cacheControl.MustRevalidate);
         Assert.False(cacheControl.NoStore);
     }
+
+    /// <summary>
+    /// Проверяет запрет кэширования отказа: <c>Cache-Control: no-store</c>.
+    /// </summary>
+    private static void AssertNoStore(HttpResponseMessage response)
+    {
+        var cacheControl = response.Headers.CacheControl
+            ?? throw new InvalidOperationException("Cache-Control header is missing.");
+
+        Assert.True(cacheControl.NoStore);
+        Assert.False(cacheControl.Public);
+    }
+
+    /// <summary>
+    /// Проверяет сильный <c>ETag</c> и возвращает его значение вместе с кавычками.
+    /// </summary>
+    private static string RequireEntityTag(HttpResponseMessage response)
+    {
+        var entityTag = response.Headers.ETag
+            ?? throw new InvalidOperationException("ETag header is missing.");
+
+        Assert.False(entityTag.IsWeak);
+
+        return entityTag.Tag.ToString();
+    }
+
+    /// <summary>
+    /// Проверяет, что ответ не объявляет <c>Vary</c>: представление выбирает URL, не <c>Accept</c>.
+    /// </summary>
+    private static void AssertNoVary(HttpResponseMessage response)
+        => Assert.False(
+            response.Headers.Contains("Vary"),
+            "The media response must not carry a Vary header.");
+
+    /// <summary>
+    /// GET с заголовком <c>If-None-Match</c>: условный запрос к тому же URL.
+    /// </summary>
+    private static async Task<HttpResponseMessage> GetWithIfNoneMatchAsync(
+        HttpClient client,
+        string url,
+        string entityTag)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("If-None-Match", entityTag);
+
+        return await client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Идентификатор медиа из media-URL: из него собираются имена вариантов и <c>ETag</c>.
+    /// </summary>
+    private static Guid MediaIdFromUrl(string url)
+    {
+        if (!PortfolioMediaUrl.TryParse(url, out _, out var mediaId, out _))
+        {
+            throw new InvalidOperationException($"Unexpected portfolio media URL: {url}");
+        }
+
+        return mediaId;
+    }
+
+    /// <summary>
+    /// Файлы вариантов кадра на диске теста.
+    /// </summary>
+    private static string[] VariantFiles(TestApp app, Guid barberProfileId, Guid mediaId)
+    {
+        var directoryPath = Path.Combine(
+            app.StorageRootPath,
+            "portfolio",
+            $"{barberProfileId:N}");
+
+        return Directory.Exists(directoryPath)
+            ? Directory.GetFiles(directoryPath, PhotoVariantWidths.FilePattern(mediaId))
+            : [];
+    }
+
+    /// <summary>
+    /// Путь производного файла: <c>{mediaId:N}-{suffix}.webp</c> рядом с исходником.
+    /// </summary>
+    private static string VariantPath(
+        TestApp app,
+        Guid barberProfileId,
+        Guid mediaId,
+        string suffix)
+        => Path.Combine(
+            app.StorageRootPath,
+            "portfolio",
+            $"{barberProfileId:N}",
+            $"{mediaId:N}-{suffix}.webp");
 
     /// <summary>
     /// Минимальный PNG с настоящими сигнатурой и <c>IHDR</c>: инспектор читает размеры

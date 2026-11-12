@@ -14,6 +14,7 @@ import {
   formatReviewsCount,
   getInitials,
 } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 import { placeKindCaption } from '@/lib/place-kind'
 import { isPlainClick, navigate } from '@/lib/router'
 
@@ -61,7 +62,7 @@ export function BarberCard({ barber }: { barber: BarberSearchItem }) {
           <div className="flex items-start gap-3">
             <Avatar size="lg" aria-hidden>
               {barber.avatarUrl && (
-                <AvatarImage src={barber.avatarUrl} alt="" />
+                <AvatarImage {...avatarImageSource(barber.avatarUrl)} alt="" />
               )}
               <AvatarFallback>
                 {getInitials(barber.displayName)}

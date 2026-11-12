@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { isAccountPath } from '@/lib/account-path'
 import { isAdminPath } from '@/lib/admin-path'
 import { BARBER_CABINET_PATH, isBarberCabinetPath } from '@/lib/barber-cabinet-path'
+import { avatarImageSource } from '@/lib/media'
 import { profileInitials } from '@/lib/my-profile'
 import { canRenderAvatarPreview } from '@/lib/photo-moderation'
 import { navigate, useLocation } from '@/lib/router'
@@ -116,7 +117,7 @@ export function HeaderAuth() {
               аватар в шапке заменяют инициалы, заблокированный не виден даже
               владельцу (сервер отдаёт сырой URL, но показывать его нельзя). */}
           {profile && canRenderAvatarPreview(profile) && profile.avatarUrl !== null && (
-            <AvatarImage src={profile.avatarUrl} alt="" />
+            <AvatarImage {...avatarImageSource(profile.avatarUrl)} alt="" />
           )}
           {/* Инициалы рисуются `::before`, а не текстовым узлом: иначе у кнопки с
               именем «Меню аккаунта» появляется видимый текст, которого нет в имени,

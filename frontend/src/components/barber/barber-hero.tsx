@@ -12,6 +12,7 @@ import {
   formatReviewsCount,
   getInitials,
 } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 import { placeKindCaption } from '@/lib/place-kind'
 
 /**
@@ -34,7 +35,9 @@ export function BarberHero({ profile }: { profile: BarberProfile }) {
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <Avatar size="lg" className="size-16" aria-hidden>
-          {profile.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
+          {profile.avatarUrl && (
+            <AvatarImage {...avatarImageSource(profile.avatarUrl)} alt="" />
+          )}
           <AvatarFallback className="text-lg">
             {getInitials(profile.displayName)}
           </AvatarFallback>

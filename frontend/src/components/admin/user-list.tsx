@@ -12,6 +12,7 @@ import {
   type AdminUserRow,
 } from '@/lib/admin-users'
 import { formatShortDateTime, getInitials } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 import { formatPageRange } from '@/lib/paging'
 import type { PhotoModerationStatus } from '@/lib/photo-moderation'
 import { cn } from '@/lib/utils'
@@ -213,7 +214,9 @@ export function UserIdentity({
   return (
     <span className={cn('flex min-w-0 items-center gap-2.5', className)}>
       <Avatar size="sm">
-        {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
+        {user.avatarUrl && (
+          <AvatarImage {...avatarImageSource(user.avatarUrl)} alt="" />
+        )}
         <AvatarFallback className="text-xs">{getInitials(name)}</AvatarFallback>
       </Avatar>
       <span className="min-w-0">

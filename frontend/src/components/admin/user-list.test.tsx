@@ -36,6 +36,10 @@ describe('UserIdentity: аватар', () => {
         container.querySelector('[data-slot="avatar-image"]')
       ).toHaveAttribute('src', AVATAR_URL)
     })
+    expect(container.querySelector('[data-slot="avatar-image"]')).toHaveAttribute(
+      'srcset',
+      `${AVATAR_URL}?size=sm 1x, ${AVATAR_URL}?size=md 2x, ${AVATAR_URL}?size=lg 3x`
+    )
     // Фото декоративно: имя строки — имя и email, а не картинка.
     expect(container.querySelector('[data-slot="avatar-image"]')).toHaveAttribute(
       'alt',

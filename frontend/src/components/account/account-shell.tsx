@@ -29,6 +29,7 @@ import {
 } from '@/lib/account-path'
 import type { SessionUser } from '@/lib/auth'
 import { BARBER_CABINET_PATH } from '@/lib/barber-cabinet-path'
+import { avatarImageSource } from '@/lib/media'
 import {
   ACCOUNT_ROLE_LABELS,
   profileDisplayName,
@@ -171,11 +172,11 @@ function AccountIdentity({
     <div className="flex items-center gap-3 border-b border-border pb-4">
       <Avatar size="lg" aria-hidden>
         {/* Отклонённый аватар заменяем инициалами, а скрытый администратором не
-            рендерим вовсе: иначе браузер показал бы кадр из 24-часового кэша. */}
+            рендерим вовсе: иначе браузер показал бы старый кадр из кэша. */}
         {profile &&
           profile.avatarUrl !== null &&
           canRenderAvatarPreview(profile) && (
-            <AvatarImage src={profile.avatarUrl} alt="" />
+            <AvatarImage {...avatarImageSource(profile.avatarUrl)} alt="" />
           )}
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>

@@ -13,8 +13,13 @@ namespace BarberSearch.Web.Storage;
 public static class PhotoStorageServiceCollectionExtensions
 {
     /// <summary>
-    /// Добавляет <see cref="PhotoStorageOptions"/> и <see cref="IPhotoStorage"/> синглтонами.
+    /// Добавляет <see cref="PhotoStorageOptions"/>, <see cref="IPhotoThumbnailer"/> и
+    /// <see cref="IPhotoStorage"/> синглтонами.
     /// </summary>
+    /// <remarks>
+    /// Генератор вариантов — синглтон, потому что его семафор ограничивает декодирование
+    /// в масштабе процесса, а не запроса: два одновременных кадра — предел памяти.
+    /// </remarks>
     /// <param name="services">Коллекция сервисов приложения.</param>
     /// <param name="configuration">Конфигурация приложения (секция <c>Storage</c>).</param>
     /// <param name="environment">Окружение: относительно его content root разрешается путь.</param>
@@ -33,6 +38,9 @@ public static class PhotoStorageServiceCollectionExtensions
 
         // Настройки неизменяемы после создания: один каталог на процесс.
         services.AddSingleton(options);
+
+        // Генератор вариантов без состояния, с общим семафором на процесс.
+        services.AddSingleton<IPhotoThumbnailer, PhotoThumbnailer>();
 
         // Реализация без состояния, файлы открываются на каждый запрос — singleton.
         services.AddSingleton<IPhotoStorage, LocalPhotoStorage>();

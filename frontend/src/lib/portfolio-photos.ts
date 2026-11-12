@@ -24,7 +24,11 @@ export type PortfolioPhoto = {
   id: string
   /** Относительный `/api/media/...` или абсолютный внешний URL — готов для `<img src>`. */
   url: string
-  /** Миниатюр в этом срезе нет: поле остаётся в контракте и равно `null`. */
+  /**
+   * Превью от сервера: `{url}?size=md` для собственных `/api/media/...` URL.
+   * Для абсолютных внешних легаси-URL (`POST .../photos`) сервер файл не
+   * обслуживает, поэтому там `null`.
+   */
   thumbnailUrl: string | null
   description: string | null
   sortOrder: number

@@ -34,11 +34,17 @@ namespace BarberSearch.Web.Controllers;
 /// нет: существование кадра не раскрывается.
 /// </para>
 /// <para>
-/// <c>Cache-Control: public, max-age=86400</c> — только у публичного кадра; неодобренный
-/// (владельцу) и скрытый (администратору) отдаются с <c>private, no-store</c>: после одобрения
-/// или возврата фото клиент не должен показывать устаревший ответ из общего кэша. Ограничение
-/// 24-часового кэша публичного кадра лечится сменой имени файла (новый <c>mediaId</c>), а не
-/// <c>no-store</c> для всех.
+/// <c>Cache-Control: public, max-age=0, must-revalidate</c> + сильный <c>ETag</c> — только у
+/// публичного кадра: он обязан перепроверяться, чтобы скрытый или заменённый аватар исчезал
+/// сразу после перезагрузки страницы, а повторный показ давал <c>304</c> вместо повторной
+/// загрузки файла. Неодобренный (владельцу) и скрытый (администратору) отдаются с
+/// <c>private, no-store</c>. Политику кэша, <c>ETag</c> и <c>304</c> реализует
+/// <see cref="MediaDelivery"/> — один код на оба маршрута раздачи.
+/// </para>
+/// <para>
+/// <c>?size=sm|md|lg</c> — вариант того же файла (WebP шириной 96/192/384 px). Проверка
+/// доступа идёт по исходному URL без query, поэтому вариант подчиняется тому же правилу, что
+/// и исходник; если вариант невозможен, отдаётся исходник.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -52,12 +58,6 @@ public sealed partial class AvatarMediaController : ControllerBase
     private const string NOT_FOUND_CODE = "avatarMedia.notFound";
 
     private const string NOT_FOUND_MESSAGE = "The avatar file was not found.";
-
-    private const string CACHE_CONTROL_HEADER = "Cache-Control";
-    private const string CACHE_CONTROL_PUBLIC = "public, max-age=86400";
-    private const string CACHE_CONTROL_PRIVATE = "private, no-store";
-    private const string NOSNIFF_HEADER = "X-Content-Type-Options";
-    private const string NOSNIFF_VALUE = "nosniff";
 
     private readonly IUserRepository _repository;
     private readonly IPhotoStorage _storage;
@@ -88,10 +88,18 @@ public sealed partial class AvatarMediaController : ControllerBase
     /// и кадр доступен вызывающему: публично — только одобренный и не скрытый, владельцу —
     /// ещё и неодобренный, администратору — любой.
     /// </summary>
+    /// <remarks>
+    /// <c>?size=sm|md|lg</c> выбирает вариант того же файла; отсутствие параметра — исходник.
+    /// Недопустимое значение (пустое, неизвестное, повторённое) — тот же <c>404</c>, что и
+    /// отсутствующий файл.
+    /// </remarks>
     /// <param name="userId">Пользователь из URL.</param>
     /// <param name="fileName">Имя файла: 32 hex-символа и разрешённое расширение.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns>Файл с <c>Cache-Control</c> и <c>nosniff</c> либо <c>404</c>.</returns>
+    /// <returns>
+    /// Файл с <c>ETag</c>, <c>Cache-Control</c> и <c>nosniff</c>, <c>304</c> при совпадении
+    /// <c>If-None-Match</c> либо <c>404</c> с <c>no-store</c>.
+    /// </returns>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.ReadsPolicyName)]
     [HttpGet("{userId:guid}/{fileName}")]
@@ -100,6 +108,13 @@ public sealed partial class AvatarMediaController : ControllerBase
         string fileName,
         CancellationToken cancellationToken)
     {
+        // Представление разбирается до обращения к диску и БД: неизвестный размер — это
+        // невалидный запрос, а не повод читать файл.
+        if (!MediaDelivery.TryParseVariant(Request.Query, out var variant))
+        {
+            return MediaNotFound();
+        }
+
         // Имя проверяется регуляркой, а не «разбором как получится»: через имя файла
         // в путь к диску не должны попасть ни разделители, ни точки, ни кодирование.
         if (userId == Guid.Empty
@@ -146,29 +161,30 @@ public sealed partial class AvatarMediaController : ControllerBase
             return MediaNotFound();
         }
 
-        var content = await _storage.OpenReadAsync(url, cancellationToken);
+        // Проверка доступа идёт по исходному URL: query не участвует, поэтому вариант
+        // подчиняется тому же правилу, что и исходник.
+        var content = await _storage.OpenReadAsync(url, variant, cancellationToken);
         if (content.IsFailure)
         {
             return MediaNotFound();
         }
 
-        // Публичный кадр кэшируется на сутки; неодобренный и скрытый — нет: после одобрения
-        // или возврата фото клиент не должен показывать устаревший ответ из общего кэша.
-        Response.Headers[CACHE_CONTROL_HEADER] =
-            publicVisible ? CACHE_CONTROL_PUBLIC : CACHE_CONTROL_PRIVATE;
-        Response.Headers[NOSNIFF_HEADER] = NOSNIFF_VALUE;
-
-        var avatarContent = content.Value;
-
-        return File(avatarContent.Stream, avatarContent.ContentType, enableRangeProcessing: true);
+        // Публичный кадр перепроверяется (max-age=0 + ETag), неодобренный и скрытый
+        // не кэшируются: после одобрения или возврата фото клиент не покажет устаревший ответ.
+        return MediaDelivery.CreateFileResult(Request, Response, content.Value, publicVisible);
     }
 
     /// <summary>
-    /// Единый <c>404</c> раздачи: причина не раскрывается, тело — обычный ProblemDetails.
+    /// Единый <c>404</c> раздачи: причина не раскрывается, тело — обычный ProblemDetails,
+    /// а ответ не кэшируется.
     /// </summary>
-    private static ObjectResult MediaNotFound()
-        => FailureProblemDetails.CreateResult(
+    private ObjectResult MediaNotFound()
+    {
+        MediaDelivery.MarkNotFound(Response);
+
+        return FailureProblemDetails.CreateResult(
             new Failure(Error.NotFound(NOT_FOUND_CODE, NOT_FOUND_MESSAGE)));
+    }
 
     /// <summary>
     /// Формат имени файла: 32 hex-символа нижнего регистра, точка и <c>jpg|png|webp</c>.

@@ -149,7 +149,14 @@ describe('PhotosScreen', () => {
       name: 'Открыть фото крупно: Ирина Волкова',
     })
 
-    expect(preview.querySelector('img')).toHaveAttribute('src', AVATAR.avatarUrl)
+    const previewImage = within(preview).getByRole('presentation')
+
+    expect(previewImage).toHaveAttribute('src', AVATAR.avatarUrl)
+    expect(previewImage).toHaveAttribute(
+      'srcset',
+      `${AVATAR.avatarUrl}?size=sm 1x, ${AVATAR.avatarUrl}?size=md 2x, ${AVATAR.avatarUrl}?size=lg 3x`
+    )
+    expect(previewImage).not.toHaveAttribute('sizes')
     expect(
       screen.getByRole('button', { name: 'Одобрить: Ирина Волкова' })
     ).toBeInTheDocument()
@@ -160,6 +167,27 @@ describe('PhotosScreen', () => {
     // Массовых действий и чекбоксов в этом срезе нет.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.queryByText('Одобрить все')).not.toBeInTheDocument()
+  })
+
+  it('превью строки портфолио получает srcset с ширинами и sizes 80px', async () => {
+    window.history.replaceState(null, '', '/admin/photos?tab=portfolio')
+
+    mockAvatars([])
+    mockPortfolio([PORTFOLIO])
+
+    render(<PhotosRoute />)
+
+    const preview = await screen.findByRole('button', {
+      name: 'Открыть фото крупно: Артём Соколов',
+    })
+    const image = within(preview).getByRole('presentation')
+
+    expect(image).toHaveAttribute('src', PORTFOLIO.url)
+    expect(image).toHaveAttribute(
+      'srcset',
+      `${PORTFOLIO.url}?size=sm 256w, ${PORTFOLIO.url}?size=md 512w, ${PORTFOLIO.url}?size=lg 1024w`
+    )
+    expect(image).toHaveAttribute('sizes', '80px')
   })
 
   it('переключает вкладку мышью и с клавиатуры, не теряя href', async () => {
@@ -424,6 +452,12 @@ describe('PhotosScreen', () => {
     expect(
       within(dialog).getByRole('img', { name: 'Фото: Ирина Волкова' })
     ).toHaveAttribute('src', AVATAR.avatarUrl)
+    expect(
+      within(dialog).getByRole('img', { name: 'Фото: Ирина Волкова' })
+    ).not.toHaveAttribute('srcset')
+    expect(
+      within(dialog).getByRole('img', { name: 'Фото: Ирина Волкова' })
+    ).not.toHaveAttribute('sizes')
     expect(
       within(dialog).queryByRole('button', { name: /обрезать|увеличить/i })
     ).not.toBeInTheDocument()

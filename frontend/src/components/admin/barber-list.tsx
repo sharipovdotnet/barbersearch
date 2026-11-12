@@ -8,6 +8,7 @@ import type { AdminBarber, AdminBarberStatusFilter } from '@/lib/admin-barbers'
 import { BARBER_GRADE_LABELS } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
 import { formatRating, formatReviewsCount, getInitials } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 import { formatPageRange } from '@/lib/paging'
 import { cn } from '@/lib/utils'
 
@@ -176,7 +177,9 @@ export function BarberIdentity({ barber }: { barber: AdminBarber }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Avatar size="sm">
-        {barber.avatarUrl && <AvatarImage src={barber.avatarUrl} alt="" />}
+        {barber.avatarUrl && (
+          <AvatarImage {...avatarImageSource(barber.avatarUrl)} alt="" />
+        )}
         <AvatarFallback className="text-xs">
           {getInitials(barber.displayName)}
         </AvatarFallback>

@@ -21,6 +21,22 @@
         <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
         <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+        <!--
+            SkiaSharp — первая нативная зависимость backend: миниатюры и WebP-варианты
+            (backend/AGENT.md §17). NativeAssets.Linux.NoDependencies обязателен для
+            ubuntu-latest в backend-ci и для контейнера API: без него libSkiaSharp
+            не найдётся и генерация упадёт в рантайме, а не на сборке.
+        -->
+        <PackageReference Include="SkiaSharp" Version="4.156.0" />
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.156.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!--
+            Генератор WebP-вариантов и локальное хранилище — internal: их контракт нужен
+            только тестам, а не остальному приложению.
+        -->
+        <InternalsVisibleTo Include="BarberSearch.Infrastructure.UnitTests" />
     </ItemGroup>
 
     <ItemGroup>

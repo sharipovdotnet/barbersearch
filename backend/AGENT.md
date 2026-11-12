@@ -4,7 +4,7 @@
 > Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **588 domain + 873 application + 267 infrastructure + 269 integration (1997 total)**;
+> Tests: **588 domain + 873 application + 293 infrastructure + 279 integration (2033 total)**;
 > the three unit projects are green locally (2026-11-12), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
@@ -48,8 +48,8 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | Working branch | `features/issue-6` (default: `main`) |
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 588 xunit tests) |
 | Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 873 xunit tests, fakes instead of a database) |
-| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 267 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 269 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 293 xunit tests, no database) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 279 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -164,13 +164,15 @@ backend/                                  ← workspace root
             ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
+            │                               + MediaDelivery (разбор ?size, ETag/304, политика кэша)
             ├── Controllers/              ← 32 контроллера: 31 доменный (144 endpoints) + AuthController (12 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
             ├── Storage/                  ← host-адаптер хранилища файлов: PhotoStorageOptions,
-            │                               LocalPhotoStorage (IPhotoStorage: portfolio + avatars);
-            │                               нового проекта решения нет — см. ниже
+            │                               LocalPhotoStorage (IPhotoStorage: portfolio + avatars),
+            │                               PhotoThumbnailer/PhotoThumbnail (IPhotoThumbnailer: WebP-варианты);
+            │                               варианты лежат рядом с исходником; нового проекта решения нет — см. ниже
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
             │                               Storage:RootPath (issue-84; portfolio и avatars, issue-85) +
             │                               Logging:LogLevel / Logging:File (§18) +
@@ -203,7 +205,16 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 > `Storage__RootPath` — переопределение через окружение/тесты). Предел файла —
 > доменная константа `Constants.MAX_PHOTO_BYTES` (5 МиБ), в конфигурации его нет, чтобы не было
 > второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`. Каталог `avatars/`
-> входит в тот же бэкап, что и `portfolio/`: файлы не хранятся в PostgreSQL (долг #31 остаётся).
+> входит в тот же бэкап, что и `portfolio/`: файлы не хранятся в PostgreSQL (долг #31 остаётся
+> в части облачного хранилища и общего volume).
+>
+> С 2026-11-12 (issue-90, §17.15) **рядом с исходником** лежат производные WebP-варианты
+> `{mediaId:N}-{sm|md|lg}.webp` — в том же каталоге `portfolio/{profileId:N}/…` или
+> `avatars/{userId:N}/…`. Генератор — `PhotoThumbnailer` (`IPhotoThumbnailer`, `PhotoThumbnail`)
+> в `Web/Storage`; разбор `?size=`, `ETag`/`304` и политика кэша — `MediaDelivery` в
+> `Web/Common`; представление, ширины, имена вариантов и `thumbnailUrl` — `PhotoVariant`,
+> `PhotoVariantWidths` и `PhotoThumbnails` в `Application/PortfolioPhotos`. `DeleteAsync`
+> удаляет исходник и все `{mediaId:N}-*.webp` рядом с ним.
 
 **Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
 `Infrastructure` → `Application`
@@ -415,6 +426,14 @@ command. See §5.3 for the fallback if the workaround ever stops working.
 package fails. Cached packages (`~\.nuget\packages`) restore fine. `npm`/`npx` need their cache
 redirected: `$env:npm_config_cache = '<workspace>\.npm-cache'`.
 
+**The first native dependency (2026-11-12, issue-90).** `SkiaSharp` **4.156.0** and
+`SkiaSharp.NativeAssets.Linux.NoDependencies` **4.156.0** in `BarberSearch.Web.csproj`
+(§17.15) are the first native packages of the backend, so `restore` for them needs network
+access: cached packages restore fine, a clean restore fails in the confined shell. The Linux
+native asset package is mandatory for `ubuntu-latest` in `.github/workflows/backend-ci.yml`
+and for the API container: without it `libSkiaSharp` is missing at runtime, and the failure
+appears on the first generated variant, not on the build.
+
 ### 5.3 Running the tests in this harness (fallback: reflection runner)
 
 `dotnet test` works when the build output goes to a writable folder outside the workspace
@@ -456,8 +475,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-12 (срез премодерации фото): domain **588**, application
-**873**, infrastructure **267**, integration **269** — всего **1997**, все зелёные на
+Актуальный baseline на 2026-11-12 (срез доставки медиа): domain **588**, application
+**873**, infrastructure **293**, integration **279** — всего **2033**, все зелёные на
 локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
@@ -625,7 +644,9 @@ root-relative URL строго вида
 агрегата, имя файла — 32 hex-символа нижнего регистра, расширение — `jpg|png|webp`; `%`, `?`,
 `#`, `\`, пробелы и `..` запрещены. `PortfolioMediaUrl.Build` — единственная точка сборки URL,
 префикс — `Constants.PORTFOLIO_MEDIA_PATH_PREFIX`. Загруженная фотография создаётся с
-`IsPublished = true`, `IsBlocked = false`; `ThumbnailUrl` всегда `null` (миниатюр нет).
+`IsPublished = true`, `IsBlocked = false`; `ThumbnailUrl` в ответе вычисляется
+(`PhotoThumbnails.Of`): `{url}?size=md` для собственного media-URL, сохранённое легаси-значение,
+если оно есть, и `null` для внешней ссылки — колонка `thumbnail_url` не менялась (§17.15).
 `SortOrder` новой фотографии — `NextSortOrder()` = `0` для первой, иначе `max + 1`; лимит
 10 — `409 barberProfile.addPhoto.limit`. `ReorderPhotos(photoIds)` принимает **полный** список
 без дублей и присваивает `SortOrder = index`; неполный набор, дубли или чужие id —
@@ -636,7 +657,7 @@ root-relative URL строго вида
 
 | Состояние | Публичная карточка | Своя карточка (и админская) | Раздача `/api/media/portfolio/…` |
 |---|---|---|---|
-| `IsPublished = true`, `IsBlocked = false` | видна | видна | `200`, `Cache-Control: public, max-age=86400` |
+| `IsPublished = true`, `IsBlocked = false` | видна | видна | `200`, `Cache-Control: public, max-age=0, must-revalidate` + `ETag` |
 | `IsPublished = false`, `IsBlocked = false` | не видна | видна, `isPublished = false` | анониму и чужому — `404`; владельцу и админу — `200`, `private, no-store` |
 | `IsBlocked = true` (при любом `IsPublished`) | не видна | видна, `isBlocked = true` | анониму и чужому — `404`; владельцу и админу — `200`, `private, no-store` |
 
@@ -663,8 +684,9 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 `500 user.uploadAvatar.storage`; раздача отказа — единый `404 avatarMedia.notFound`. Аватар
 публичен по определению и не имеет исключений «владельцу/админу»: файл отдаётся, только пока
 сохранённая строка совпадает с запрошенным URL (Ordinal), поэтому замена/удаление сразу делает
-старую ссылку `404`. Кэш — `public, max-age=86400`: после замены старый кадр может сутки жить в
-чужом браузере (та же цена, что у портфолио; лечится сменой `mediaId`, а не `no-store`).
+старую ссылку `404`. Кэш — `public, max-age=0, must-revalidate` + сильный `ETag`: после
+замены или удаления старый кадр перестаёт показываться при первой перепроверке, а не через
+сутки; `?size=sm|md|lg` отдаёт WebP-вариант (§17.15).
 
 **Аватар в поиске и бронях (2026-11-11, issue-86).** Три чтения отдают аватар вместе со
 строкой, но только для показа: ни одно из них не пишет и не меняет `User.AvatarUrl`.
@@ -867,7 +889,7 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 26 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 588 domain + 873 application + 267 infrastructure + 269 integration (1997 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 588 domain + 873 application + 293 infrastructure + 279 integration (2033 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из семи типов — `User`, `BarberProfile`, `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
@@ -1072,7 +1094,8 @@ UpdateAsync → удаление предыдущего файла best-effort`,
 `^[0-9a-f]{32}\.(jpg|png|webp)$`, доступ только когда `IUserRepository.GetAvatarAccessAsync(userId)`
 вернул сохранённый URL, равный запрошенному (Ordinal), а для скрытого файла запрос пришёл от
 администратора; иначе `404 avatarMedia.notFound`. Видимый кадр — `Cache-Control: public,
-max-age=86400` и `X-Content-Type-Options: nosniff`, скрытый у админа — `private, no-store`
+max-age=0, must-revalidate` и сильный `ETag` (issue-90, §17.15), всегда
+`X-Content-Type-Options: nosniff`, скрытый у админа — `private, no-store`
 (issue-87). Публичный
 `BarberProfileResponse` получил `avatarUrl` сразу после `userId` — одна и та же проекция карточки
 для публичного и собственного чтения; аватар читается одним индексным lookup по `users_pkey` в
@@ -1170,6 +1193,14 @@ without a constructor call.
 - Test coverage follows the reworked invariants; the aggregate boundaries are partly asserted by
   reflection (`BarberSalonTests.Schedule_IsNotExposedOnTheBarberProfile`). There is no test yet
   that walks every entity and asserts "private parameterless ctor + no public ctor".
+
+### 9.14 Media delivery: closed and still open (2026-11-12, issue-90)
+
+**Закрыто:** серверные миниатюры и честный кэш — три WebP-варианта `sm/md/lg`, `?size=`,
+сильный `ETag`/`304` и `public, max-age=0, must-revalidate` вместо суточного `max-age`
+(§17.15; долги #31/#32 во frontend §14 сокращены). **Остаётся:** серверный и CDN-кэш,
+политика `srcset` для CDN, S3/MinIO и общий volume для нескольких инстансов, аудит действий
+с фото и AVIF — отдельные срезы.
 
 ---
 
@@ -1413,18 +1444,18 @@ Suggested order:
     Выезд с онлайн-записью (адрес клиента в `Booking`) — отдельный срез, как и перевод скрытого
     места в публичное (нужна повторная модерация).
 12. **Portfolio photos: local disk, pre-moderation and caching** — **decided and implemented
-    2026-11-11 (issue-84); долг #31 открыт.** Файлы лежат на локальном диске за
+    2026-11-11 (issue-84); доставка медиа — issue-90 (§17.15).** Файлы лежат на локальном диске за
     `IPhotoStorage`: один инстанс API и один диск, фотографии **не** входят в backup
     PostgreSQL и каталог бэкапится отдельно (§15.2). Несколько инстансов требуют общего
     volume или object storage (S3/MinIO) с CDN и подписанными URL — это отдельный срез.
     Премодерация реализована в #89: новая фотография создаётся `Pending`, очередь
     `/admin/photos?tab=portfolio` и счётчик в `/admin/summary` появились, а блокировка
     (`isBlocked`) осталась маской для уже одобренных кадров (§17.14).
-    Серверных миниатюр/`srcset` и перекодирования нет — клиент готовит JPEG ≤ 1600 px, а для
-    небраузерных клиентов сервер метаданные не чистит, включая EXIF/GPS. Публичный кадр
-    кэшируется браузером на сутки (`Cache-Control: public, max-age=86400`), поэтому сразу
-    после блокировки старый кадр может показаться из кэша до истечения срока — публичная
-    карточка его уже не содержит, а раздача отвечает `404`.
+    С #90 сервер сам делает WebP-варианты `sm/md/lg` (`?size=`, §17.15): исходник не
+    перекодируется, поэтому его метаданные не чистятся, а в вариантах EXIF/GPS нет по построению.
+    Публичный кадр отдаётся с `Cache-Control: public, max-age=0, must-revalidate` и сильным
+    `ETag`: после блокировки, отклонения или замены перезагрузка перепроверяет файл и получает
+    `304` либо `404`, суточного окна устаревания больше нет.
 
 ---
 
@@ -2209,8 +2240,8 @@ the aggregate that owns the child entity:
 | `UsersController` | `api/users` | 14 |
 | `BarberProfilesController` | `api/barber-profiles` | 26 |
 | `PortfolioPhotosController` | `api/barber-profiles/{id}/photos` | 7 (publication publish/hide, description, block/unblock, approve/reject) |
-| `PortfolioMediaController` | `api/media/portfolio` | 1 (anonymous media delivery) |
-| `AvatarMediaController` | `api/media/avatars` | 1 (anonymous avatar delivery) |
+| `PortfolioMediaController` | `api/media/portfolio` | 1 (anonymous media delivery; `?size=sm\|md\|lg` variants) |
+| `AvatarMediaController` | `api/media/avatars` | 1 (anonymous avatar delivery; `?size=sm\|md\|lg` variants) |
 | `BarberServicesController` | `api/barber-profiles/{id}/services` | 4 |
 | `BarberSalonsController` | `api/barber-profiles/{id}/salons/{salonId}` | 3 |
 | `WorkingSchedulesController` | `api/barber-profiles/{id}/salons/{salonId}/working-schedules` | 2 |
@@ -2317,12 +2348,10 @@ Conventions:
   allowlist семи типов не расширяется (дочерняя сущность).
   `GET api/media/portfolio/{barberProfileId}/{fileName}` — анонимный (`[AllowAnonymous]` +
   политика `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; видимость проверяется по
-  БД **на каждый запрос** (`GetPortfolioPhotoAccessAsync`), отказ —
+  БД **на каждый запрос** (`GetPortfolioPhotoAccessAsync`) по URL без query, отказ —
   `404 portfolioMedia.notFound` без различия причин (не `403` и не `410`). Владельцу профиля и
   администратору скрытый или заблокированный кадр отдаётся, иначе превью в кабинете были бы
-  битыми. Видимый кадр — `Cache-Control: public, max-age=86400`; скрытый —
-  `private, no-store`; всегда `X-Content-Type-Options: nosniff`,
-  `enableRangeProcessing: true`; листинга и приёма пути из query нет.
+  битыми. Доставка (`?size`, `ETag`/`304`, кэш) — общая для обоих маршрутов (§17.15).
   `GET api/barber-profiles/{id}` отдаёт **все** фотографии, включая скрытые и
   заблокированные, а публичная `GET api/barbers/{id}` — только `isPublished && !isBlocked`;
   `AdminBarberDetailResponse.photos` содержит все, `readiness.photosCount` считает только
@@ -2344,10 +2373,8 @@ Conventions:
   `reads`), имя файла — `^[0-9a-f]{32}\.(jpg|png|webp)$`; доступ — только если
   `IUserRepository.GetAvatarAccessAsync(userId)` вернул сохранённый URL, **равный** запрошенному
   (Ordinal), а для скрытого файла запрос пришёл от администратора; иначе `404 avatarMedia.notFound`
-  (ни `403`, ни `410`: существование файла не раскрывается). Видимый кадр —
-  `File(stream, contentType, enableRangeProcessing: true)` с `Cache-Control: public, max-age=86400`
-  и `X-Content-Type-Options: nosniff`; скрытый отдаётся только администратору с
-  `private, no-store`, все остальные, включая владельца, получают тот же `404`. `BarberProfileResponse`
+  (ни `403`, ни `410`: существование файла не раскрывается). Доставка (`?size`, `ETag`/`304`,
+  кэш) — общая для обоих маршрутов (§17.15). `BarberProfileResponse`
   получил `avatarUrl` сразу после `userId` (публичная и собственная карточки — одинаково; с #87
   скрытое фото даёт `null` в обеих).
 - **Премодерация фото: очередь и решения (2026-11-12, issue-89).**
@@ -2374,7 +2401,23 @@ Conventions:
   `reviewed_by_user_id`/`reviewed_at`/`rejection_reason` самой сущности (§17.14).
   Публичная видимость: аватар — `Approved && !IsAvatarBlocked`, портфолио —
   `Approved && IsPublished && !IsBlocked`; владелец и админ видят неодобренный кадр, файл
-  отдаётся с `private, no-store`, публичный — с `public, max-age=86400` (§7.3, §17.14).
+  отдаётся с `private, no-store`, публичный — с `public, max-age=0, must-revalidate` + `ETag`
+  (§7.3, §17.14, §17.15).
+- **Доставка media: варианты, ETag и честный кэш (2026-11-12, issue-90).**
+  Оба маршрута раздачи (`GET api/media/portfolio/{profileId}/{fileName}` и
+  `GET api/media/avatars/{userId}/{fileName}`) принимают необязательный `?size=sm|md|lg`.
+  Без параметра отдаётся исходник; `sm/md/lg` — WebP-вариант (портфолио 256/512/1024 px,
+  аватар 96/192/384 px, качество 80) либо исходник, если вариант невозможен (исходник уже
+  целевой ширины, инспектор отказал, декодер упал). Ответ `200`: `ETag`
+  (`"<mediaId:N>"` для исходника, `"<mediaId:N>-sm"`/`-md`/`-lg` для варианта),
+  `X-Content-Type-Options: nosniff`, `Accept-Ranges: bytes`; `Cache-Control` —
+  `public, max-age=0, must-revalidate` для видимого кадра и `private, no-store` для
+  непубличного (владелец/админ). `If-None-Match` (включая `*`) даёт `304` с `ETag` и
+  `Cache-Control` без тела; запрос с `Range` `304` не получает. `Vary` не ставится:
+  представление выбирает URL. Отказы — всегда `404` с `Cache-Control: no-store`:
+  недопустимый `size` (пустой, неизвестный, повторённый), чужой/внешний URL, скрытый или
+  неодобренный кадр, отсутствующий файл. Правила видимости не менялись, проверка идёт по URL
+  без query; миграции и новых ключей конфигурации нет (§17.15).
 - **`GET api/users/me` (2026-11-02).** Self-only cabinet profile under the fallback
   `[Authorize]` policy: the id comes from the `sub` claim, the route has no `userId`, and an
   anonymous caller gets `401`. Returns `MyProfileResponse` — `id`, `email`, `firstName`,
@@ -4210,16 +4253,17 @@ avatar_moderation_status <> 2 THEN NULL ELSE avatar_url END`), поэтому `P
 `GET api/media/portfolio/{profileId}/{fileName}` по-прежнему проверяют видимость по БД на
 каждый запрос и точное совпадение сохранённого URL с запрошенным (Ordinal), поэтому замена
 или удаление сразу делает старую ссылку `404`. Публичный кадр (оба условия допуска) отдаётся
-с `Cache-Control: public, max-age=86400`; непубличный — владельцу (аватар: `Pending`/
-`Rejected`, портфолио: любой статус) или администратору — с `private, no-store`; всем
-остальным — единый `404` (`avatarMedia.notFound` / `portfolioMedia.notFound`, без `403`/
-`410`). Скрытый администратором аватар не отдаётся даже владельцу — маска сильнее владения.
-Одобрение не меняет URL, поэтому кэш «до одобрения» не появляется: непубличный ответ
-помечен `no-store`.
+с `Cache-Control: public, max-age=0, must-revalidate` и сильным `ETag`; непубличный — владельцу
+(аватар: `Pending`/`Rejected`, портфолио: любой статус) или администратору — с
+`private, no-store`; всем остальным — единый `404` (`avatarMedia.notFound` /
+`portfolioMedia.notFound`, без `403`/`410`). Скрытый администратором аватар не отдаётся даже
+владельцу — маска сильнее владения. Одобрение не меняет URL, поэтому кэш «до одобрения» не
+появляется: непубличный ответ помечен `no-store`, а публичный перепроверяется по `ETag`
+(§17.15).
 
-**Ограничения (осознанные).** 1) Нет серверных миниатюр, `srcset`, WebP/AVIF, кропа,
-S3/MinIO и общего volume — долги #31/#32; 24-часовой кэш публичного кадра остаётся, смена
-файла лечится новым `mediaId`, а не `no-store` для всех. 2) Нет фильтра `avatar=blocked` и
+**Ограничения (осознанные).** 1) `srcset`/WebP-варианты и честный кэш закрыты в #90
+(§17.15); остаются серверный и CDN-кэш, политика `srcset` для CDN, AVIF, S3/MinIO и общий
+volume — долги #31/#32; кропа нет по-прежнему. 2) Нет фильтра `avatar=blocked` и
 истории решений в очереди: только `Pending`; «скрытые» по-прежнему ищутся в общих списках.
 3) `audit_log` не расширяется: `PhotoModerationStatus`/`RejectionReason` не входят в
 allowlist `User`/`BarberProfile`, решение фиксируется только полями
@@ -4230,13 +4274,69 @@ allowlist `User`/`BarberProfile`, решение фиксируется толь
 `.../photos/{id}/block`, не превращает `Rejected` в `Blocked` и не трогает
 `emailVerification.*`, `passwordReset.*`, `change-password`, `user.update.*`.
 
-**Проверка.** `dotnet build` — 0 warnings / 0 errors; domain **588**, application **873**,
+**Проверка (на момент #89).** `dotnet build` — 0 warnings / 0 errors; domain **588**, application **873**,
 infrastructure **267**, integration **269** — всего **1997**, все зелёные на локальной
 PostgreSQL; `has-pending-model-changes` чисто; миграция проверена накатом/откатом/повторным
 накатом (§5.3, §8). Тесты: domain — состояния и причины отказа, границы, no-op того же URL;
 application — очереди, курсоры, решения, 409, причина, сводка; infrastructure — EF-модель,
 индексы/check/FK, SQL очередей через `ToQueryString`; integration — полный сценарий на
 реальной PostgreSQL, включая media-матрицу и видимость. E2E-сцены — frontend §15.
+
+### 17.15 Доставка медиа: варианты, `srcset` и честный кэш (added 2026-11-12)
+
+**Зачем.** До #90 сервер отдавал исходник: галерея 150–300 px грузила подготовленный
+JPEG ≤ 1600 px, аватар 32 px — квадрат 512×512, а суточный `Cache-Control`
+разрешал браузеру показывать скрытый, отклонённый или заменённый кадр ещё день. Срез #90
+доставляет **тот же ресурс в другом представлении** и заменяет суточный кэш на
+перепроверяемый; правил видимости, владения и «отказ всегда `404`» он не меняет.
+
+**Библиотека.** `SkiaSharp` **4.156.0** + `SkiaSharp.NativeAssets.Linux.NoDependencies`
+**4.156.0** в `BarberSearch.Web.csproj` — первая нативная зависимость backend (MIT;
+`restore` требует сети, §5.2; Linux-ассеты обязательны для `ubuntu-latest` в
+`backend-ci.yml` и для контейнера API). Владелец отклонил ImageSharp (Six Labors Split
+License) и Magick.NET (тяжёлый). `SkiaSharp` живёт только в Web-адаптере
+`Web/Storage/PhotoThumbnailer.cs`; Application и домен о нём не знают.
+
+**Ширины и качество.** Единственный источник правды — `Application/PortfolioPhotos/PhotoVariantWidths.cs`:
+портфолио `sm/md/lg` = **256/512/1024 px** по ширине, аватар — **96/192/384 px**; всегда WebP
+качества **80**. Апскейла и кропа нет: вариант шире исходника не создаётся. Перекодирование
+идёт из пикселей, поэтому EXIF/GPS в вариантах отсутствуют; прозрачность PNG заливается
+белым. Те же числа продублированы в `frontend/src/lib/media.ts` как дескрипторы `srcset` —
+это **часть контракта** (frontend `AGENT.md` §12.2).
+
+**Файлы и удаление.** Вариант лежит **рядом с исходником**:
+`{mediaId:N}-{sm|md|lg}.webp` в `portfolio/{profileId:N}/…` или `avatars/{userId:N}/…`.
+Запись атомарная (`.tmp` + `File.Move`); `IPhotoStorage.DeleteAsync` удаляет исходник и все
+`{mediaId:N}-*.webp` по маске в его каталоге. Исходник никогда не перекодируется.
+
+**Генерация.** После успешной записи исходника (best effort: сбой генерации пишет `Warning`,
+загрузка всё равно успешна) и лениво на первом чтении `?size=` — для файлов, загруженных до
+среза, и после падения между записью исходника и вариантов. Глобальный `SemaphoreSlim(2)`
+вокруг декодирования/кодирования; если вариант невозможен (исходник уже целевой ширины,
+инспектор отказал, декодер упал), отдаётся **исходник** с `200`, его `Content-Type` и его
+`ETag` — битой ссылки в `srcset` быть не может.
+
+**Раздача.** `GET /api/media/portfolio/{profileId}/{fileName}` и
+`GET /api/media/avatars/{userId}/{fileName}` принимают `?size=sm|md|lg`; без `size` — исходник;
+пустое, неизвестное или повторённое значение — обычный `404`. Проверка доступа идёт по URL
+**без query**. `ETag` сильный: `"<mediaId:N>"` у исходника, `"<mediaId:N>-sm"`/`-md`/`-lg` у
+варианта; `If-None-Match` (включая `*`) даёт `304` с `ETag` и `Cache-Control` и без тела, но
+запрос с `Range` `304` не получает. `Cache-Control`: видимый кадр
+`public, max-age=0, must-revalidate`, непубличный (владелец/админ) `private, no-store`,
+любой `404` — `no-store`. `X-Content-Type-Options: nosniff` и `Accept-Ranges: bytes` (на
+`200`) остаются; `Vary` не ставится вовсе — представление выбирает URL. Длинный `max-age`
+вернётся только с версионированными immutable-URL и CDN (отдельный срез).
+
+**`thumbnailUrl`.** `BarberProfilePhotoResponse.ThumbnailUrl` теперь вычисляется
+(`PhotoThumbnails.Of`): `{url}?size=md` для собственных media-URL, сохранённое легаси-значение,
+если оно есть, и `null` для внешних ссылок. **Миграции нет** — схема и колонка
+`portfolio_photos.thumbnail_url` не менялись; новых ключей конфигурации тоже нет.
+
+**Проверка.** `dotnet build` — 0 warnings / 0 errors; infrastructure **293** (новые
+`PhotoThumbnailerTests`, `MediaDeliveryTests`, расширенные `LocalPhotoStorageTests`),
+integration **279** (новые сценарии в `PortfolioPhotoUploadTests`, `UserAvatarTests`,
+`PhotoModerationTests`, helper `MediaTestImage.cs`); всего **2033** зелёных;
+`has-pending-model-changes` чисто. Frontend-тесты и бандл — frontend `AGENT.md` §15.
 
 ---
 

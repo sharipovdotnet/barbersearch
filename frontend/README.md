@@ -270,7 +270,7 @@ keep their absolute external URLs.
 
 | State | Public card | `GET /api/media/portfolio/...` |
 |---|---|---|
-| `moderationStatus: 'Approved'`, `isPublished: true`, `isBlocked: false` | shown | `200`, `Cache-Control: public, max-age=86400` |
+| `moderationStatus: 'Approved'`, `isPublished: true`, `isBlocked: false` | shown | `200`, `Cache-Control: public, max-age=0, must-revalidate`, strong `ETag` |
 | `moderationStatus: 'Pending'` or `'Rejected'` | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
 | `isPublished: false` («Скрыть») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
 | `isBlocked: true` («Скрыто администратором») | absent | `404` for strangers, `200` for the owner/admin with `private, no-store` |
@@ -286,9 +286,28 @@ moderation status. `GET api/barber-profiles/{id}` (the own card) returns all pho
 flags, the real `moderationStatus` and `rejectionReason`; the public card only
 `Approved && isPublished && !isBlocked` (its response always says `Approved`/`null`), and
 `AdminBarberDetailResponse.photos` all of them while `readiness.photosCount` counts visible and
-approved rows only. Photos have no server thumbnails in this slice: `thumbnailUrl` is always
-`null`, and there is no `srcset`/WebP/AVIF (see `AGENT.md` §14 #31).
+approved rows only.
 
+**Variants and delivery.** A photo is delivered in the size it is shown. `thumbnailUrl` is now
+computed: `{url}?size=md` for own media URLs, the stored legacy value if present, and `null` for
+external legacy URLs. `GET /api/media/portfolio/...` accepts `?size=sm|md|lg` and answers with a
+WebP variant (256/512/1024 px wide, quality 80); when a variant is impossible (the source is
+already narrower than the target, the inspector refused, the decoder failed) the original is
+served with `200`, its own `Content-Type` and its own `ETag`. Variants are written next to the
+original as `{mediaId:N}-{sm|md|lg}.webp` at upload (best effort — a generation failure only logs
+a warning and the upload still succeeds) and lazily on the first `?size=` read, so frames uploaded
+before this slice start serving variants after the first request; deleting the photo removes the
+original and every `{mediaId:N}-*.webp`. The gallery, the cabinet previews, the admin photo queue
+rows and the admin barber card preview request variants through `srcset`/`sizes` from
+`src/lib/media.ts`; the lightbox and the admin
+big preview keep the original. A visible file is `public, max-age=0, must-revalidate` with a strong
+`ETag`; `If-None-Match` answers `304` without a body (never for a request with `Range`); a
+non-public preview is `private, no-store`, and every refusal is `404` with `no-store`. There is no
+`Vary` header. There is still no AVIF and no crop (`AGENT.md` §14 #31).
+
+- `src/lib/media.ts` — `portfolioPhotoSource`/`avatarImageSource`, `MediaSource` and
+  `PORTFOLIO_WIDTHS`/`AVATAR_WIDTHS`; the widths are part of the contract with backend
+  `PhotoVariantWidths`.
 - `src/lib/portfolio-photos.ts` — DTO, the eight mutations, the `FormData` upload and
   `describePortfolioPhotoError`.
 - `src/lib/image-prep.ts` — `preparePortfolioImage` and its `ImagePrepError` codes.
@@ -306,7 +325,11 @@ its own preview with the «На проверке» badge and the explanation tha
 the public card has no «Работы» section and `GET /api/barbers/{id}` returns no photos. The admin
 opens `/admin/photos?tab=portfolio`, searches by the barber's name, previews the frame, approves
 it, and the public gallery + contract return exactly one `Approved` photo (axe scans that queue row
-with a caption at 1280). The next scene opens the public card: the «Работы» gallery, a click opens
+with a caption at 1280). The cabinet preview requests the `?size=sm` variant: the owner's
+`Pending` frame answers `image/webp` with an `ETag`, and a conditional repeat is `304`. In the
+public gallery the grid image carries a `srcset`; blocking the approved frame makes the same
+`?size=` URL answer `404` with `no-store` and restoring it answers `200` with
+`public, max-age=0, must-revalidate`. The next scene opens the public card: the «Работы» gallery, a click opens
 the lightbox with «1 из 1» and both arrows disabled at the edges (the scenario has one photo —
 multi-photo paging is covered by the `barber-portfolio.test.tsx` unit test), Escape closes it and
 focus returns; axe scans the gallery and the open lightbox at 1280, then a 320 reload checks
@@ -387,7 +410,8 @@ is gone.
 **What the owner sees.** The header and the cabinet identity block render the photo only while it
 is `Approved` or `Pending` and not blocked; for `Rejected` or a blocked frame they render the
 initials. The raw URL is still in the context, but it is not put into an `<img>` when it must not
-be shown, so the 24-hour browser cache cannot bring an old frame back. `AvatarCard` is the one
+be shown, so the browser cache cannot bring an old frame back: a visible file revalidates with
+`ETag` and a hidden one answers `404` with `no-store`. `AvatarCard` is the one
 exception: it keeps the rejected preview with «Отклонено» and the reason, because the owner must
 understand what failed. A blocked photo shows «Фото скрыто администратором» and the explanation;
 the upload button becomes «Загрузить другое фото» and «Удалить» stays available (it clears the
@@ -442,15 +466,21 @@ masked on the public card and in search, but never in the admin card.
 **Storage and URL.** The file lives on the same disk and under the same `Storage:RootPath` as the
 portfolio, at `{root}/avatars/{userId:N}/{mediaId:N}.{ext}`. `GET /api/media/avatars/{userId}/{fileName}`
 is anonymous: it serves the file only when the URL stored in the database equals the requested one.
-A public frame (`Approved`, not blocked) keeps `Cache-Control: public, max-age=86400` and
-`X-Content-Type-Options: nosniff`; a `Pending`/`Rejected` frame is served only to its **owner**
+A public frame (`Approved`, not blocked) keeps `Cache-Control: public, max-age=0, must-revalidate`,
+a strong `ETag` and `X-Content-Type-Options: nosniff`; `?size=sm|md|lg` returns a WebP variant
+(96/192/384 px wide, quality 80) or the original when a variant is impossible; `If-None-Match`
+answers `304` without a body (never for a request with `Range`), and there is no `Vary`. Variants
+live next to the original as `{mediaId:N}-{sm|md|lg}.webp`, are generated at upload and lazily on
+the first `?size=` read, and are removed together with the avatar; every `AvatarImage` requests
+them through `avatarImageSource` (`1x/2x/3x`). A `Pending`/`Rejected` frame is served only to its
+**owner**
 (cabinet preview) with `private, no-store`; a blocked frame is served only to an administrator with
 the same `private, no-store`; everyone else — including the owner for a blocked frame — gets `404`
-(never `403`/`410`, so existence is not revealed). An avatar has no server thumbnails and no
-`srcset`; there is no `avatar=blocked` filter in the admin lists. Hiding and
+(never `403`/`410`, so existence is not revealed). There is no `avatar=blocked` filter in the admin
+lists. Hiding and
 restoring **are** written to `audit_log` as `user.updated` with `isAvatarBlocked`; the two
 pre-moderation decisions are not, they live on the user row (`reviewedByUserId`/`reviewedAt`/
-`rejectionReason`). Those limits, with the single-disk backup and the 24-hour public cache, are
+`rejectionReason`). Those limits, with the single-disk backup, are
 debt `AGENT.md` §14 #32.
 
 **Policy.** `/privacy` §3 now names the profile photo (the user uploads it; for a barber it is
@@ -470,8 +500,8 @@ with the backend's `PrivacyPolicy.Version`; older consent records keep the editi
   проверке» badge in `/admin/users/{id}`. The admin then opens `/admin/photos?tab=avatars`,
   searches by the customer email, previews the frame, approves it (the row disappears, «Фото
   одобрено.»), and the owner's `users/me` answers `Approved`; the media file is now `200` to a
-  **real guest** context with `Cache-Control: public, max-age=86400` (the empty `storageState`
-  fix). The admin hides the photo (the `alertdialog` is scanned by axe at 1280) — the cabinet and
+  **real guest** context with `Cache-Control: public, max-age=0, must-revalidate` and `ETag` (the empty `storageState`
+  fix); the header avatar exposes a `srcset`, and its `?size=sm` URL returns `image/webp`. The admin hides the photo (the `alertdialog` is scanned by axe at 1280) — the cabinet and
   the header show the initials, `users/me` keeps the raw `avatarUrl` with `isAvatarBlocked: true`,
   anonymous and owner media requests answer `404`, the admin's answers `200` with `private,
   no-store`, and the 320 px list row keeps its badge without horizontal overflow; restoring brings
@@ -1818,12 +1848,18 @@ needs no API and no database, and covers:
   empty period, the first-page error with «Повторить», the `403`/`429`/`400` texts, the `401`
   gate and exactly one quiet refresh that keeps the sections. `formatPercent`, `formatDelta`,
   `formatCount` and `formatNumber` are covered in `format.test.ts`.
+- `media` — `src/lib/media.test.ts`: `portfolioPhotoSource` keeps the original in `src` and builds
+  the `256w/512w/1024w` candidates plus the gallery `sizes` (or a custom value); `avatarImageSource`
+  builds `1x/2x/3x`; external `http(s)`, `data:`/`blob:` and URLs that already carry `?`/`#` get
+  `src` only.
 - `portfolio-photos`, `image-prep`, `BarberProfilePhotos`, `BarberPortfolio` — the multipart
   upload with a fresh CSRF token and one retry with the same `FormData`, the `201 { id }` guard,
   caption/order/publication/delete/block calls, the `413`/409/404/403/storage error mapping, the
   type and 15 MiB gates before decoding, the 1600 px white-background JPEG with the 0.7 retry,
-  the cabinet section (empty, limit, blocked row without «Вернуть», dialogs) and the public
-  gallery (no section when empty, alt text, lightbox counter/edges/arrows/Escape, broken image).
+  the cabinet section (empty, limit, blocked row without «Вернуть», dialogs, preview `srcSet`)
+  and the public gallery (no section when empty, `srcSet` with the three width descriptors and
+  `sizes`, alt text, lightbox counter/edges/arrows/Escape keeping the original `src` and no
+  `srcset`, broken image).
   `api.test.ts` proves `FormData` gets no JSON `Content-Type` while an ordinary body does.
 - `avatars`, the avatar card and the avatar in the shell/hero — `POST /api/users/me/avatar` with
   the single `file` field and a fresh CSRF token, one retry with the same `FormData`, the
@@ -1854,18 +1890,24 @@ Playwright drives the real SPA against the real API and a real PostgreSQL: there
 stack and no mocked success responses. The suite covers the paged lists, the admin journal, the
 admin bookings desk, the admin summary (including the photo queues' fourth block) and the admin
 statistics, sign-in, public reviews, the portfolio gallery with its lightbox (axe at 1280 and 320)
-and the admin approve/reject/block of a photo, the avatar upload in the cabinet, its
-pre-moderation queue, its header and search appearances and its public hero (axe at 1280 and 320,
+and its `srcset`/`?size=` WebP variants (`ETag`/`304`, the honest cache), the admin
+approve/reject/block of a photo, the avatar upload in the cabinet, its
+pre-moderation queue, its header and search appearances, its `srcset` WebP variant and its public
+hero (axe at 1280 and 320,
 an admin sees the same image, deletion restores the initials), email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
 stays separate and fast; E2E never runs inside it. The last full local run (2026-11-12, after the
 photo pre-moderation slice) is **307 passed, 6 skipped, 0 failed** — 313 tests in 6.2 min with
-`--workers=2`; the queue page object is `e2e/pages/admin-photos-page.ts`. The previously documented
+`--workers=2`; the queue page object is `e2e/pages/admin-photos-page.ts`. The #90 media scenes
+extend the two existing mutation specs (gallery/cabinet `srcset`, the `?size=` WebP response,
+`ETag`/`304`, the hidden-frame `404` and the new cache header), so the figures above remain the
+last recorded full run. The previously documented
 cache flake is fixed: a guest `playwright.request.newContext` inherited the owner's `storageState`,
 so "anonymous" requests carried the cookie and ASP.NET added `no-store`; every guest context now
-passes an explicit empty `storageState`, and `public, max-age=86400` is asserted by a real guest.
+passes an explicit empty `storageState`, and a real guest asserts
+`public, max-age=0, must-revalidate` and `ETag` on the visible media file.
 
 ### One-time setup
 

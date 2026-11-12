@@ -34,6 +34,7 @@ import {
   formatShortDateTime,
   getInitials,
 } from '@/lib/format'
+import { avatarImageSource } from '@/lib/media'
 
 export type BookingActionKind = 'cancel' | 'noShow'
 
@@ -211,7 +212,10 @@ export function BookingDetail({
             <div className="flex min-w-0 items-start gap-2.5">
               <Avatar size="sm" aria-hidden>
                 {booking.customer.avatarUrl && (
-                  <AvatarImage src={booking.customer.avatarUrl} alt="" />
+                  <AvatarImage
+                    {...avatarImageSource(booking.customer.avatarUrl)}
+                    alt=""
+                  />
                 )}
                 <AvatarFallback>{getInitials(customerName)}</AvatarFallback>
               </Avatar>
@@ -240,7 +244,10 @@ export function BookingDetail({
             <div className="flex min-w-0 items-center gap-2.5">
               <Avatar size="sm" aria-hidden>
                 {booking.barber.avatarUrl && (
-                  <AvatarImage src={booking.barber.avatarUrl} alt="" />
+                  <AvatarImage
+                    {...avatarImageSource(booking.barber.avatarUrl)}
+                    alt=""
+                  />
                 )}
                 <AvatarFallback>
                   {getInitials(booking.barber.displayName)}
