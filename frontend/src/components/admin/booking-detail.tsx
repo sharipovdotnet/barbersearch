@@ -25,6 +25,7 @@ import {
   markAdminBookingNoShow,
   type AdminBooking,
 } from '@/lib/admin-bookings'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { ApiError } from '@/lib/api'
 import { canCancelBooking } from '@/lib/booking-status'
 import {
@@ -118,6 +119,8 @@ export function BookingDetail({
       setAnnouncement(
         kind === 'cancel' ? t('Бронь отменена.') : t('Неявка отмечена.')
       )
+      // Обе операции уводят бронь из `Confirmed` — счётчик раздела меняется.
+      notifyAdminQueuesChanged()
       onReload()
 
       // Кнопка-триггер исчезает вместе со старым статусом: фокус возвращаем

@@ -133,6 +133,24 @@ export function noContent() {
   return new HttpResponse(null, { status: 204 })
 }
 
+/**
+ * Снимок админской сводки с честными нулями.
+ *
+ * Рейл «Разделы» читает сводку на любой странице `/admin/*`, поэтому без этого
+ * обработчика строгий `onUnhandledFrame: 'error'` валил бы все админские тесты.
+ * Нули означают «работы нет»: бейджей не будет, и имена ссылок остаются текстом
+ * пункта, на который опираются существующие проверки.
+ */
+export const emptyAdminSummary = {
+  reviews: { pendingCount: 0, oldest: null },
+  barbers: { unverifiedCount: 0 },
+  salons: { inactiveCount: 0, pendingModerationCount: 0 },
+  photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+  users: { unverifiedCount: 0 },
+  barberRequests: { pendingCount: 0 },
+  bookings: { confirmedCount: 0 },
+} as const
+
 export const handlers = [
   http.get('/api/auth/me', () => unauthorized()),
   http.get('/api/auth/csrf', () => HttpResponse.json({ token: 'csrf-token' })),
@@ -190,6 +208,9 @@ export const handlers = [
     '/api/barber-profiles/:id/specializations/:specializationId',
     () => noContent()
   ),
+  // Рейл админки читает сводку на каждой странице `/admin/*`. По умолчанию —
+  // нули: бейджей нет. Непустые снимки собираются в тестах через `server.use`.
+  http.get('/api/admin/summary', () => HttpResponse.json(emptyAdminSummary)),
   // Очередь премодерации фото: по умолчанию обе вкладки пусты, решения отвечают
   // `204`. Строки, отказы и конфликты собираются в тестах через `server.use`.
   http.get('/api/admin/photos/avatars', () =>

@@ -28,6 +28,7 @@ import {
   type AdminBarberRequestFilter,
 } from '@/lib/admin-barber-requests'
 import { barberRequestsPath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { formatClockTime } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -177,6 +178,7 @@ export function BarberRequestsScreen({
         list.replaceItem(updated.id, updated)
       }
 
+      notifyAdminQueuesChanged()
       detail.reload()
       list.refresh()
 

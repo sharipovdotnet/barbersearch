@@ -45,6 +45,7 @@ import {
   type SalonModerationAction,
 } from '@/lib/admin-catalogue'
 import { cataloguePath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { ApiError } from '@/lib/api'
 import { formatClockTime } from '@/lib/format'
 import { navigate } from '@/lib/router'
@@ -282,6 +283,8 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
         list.replaceRow(updated)
       }
 
+      // Меняется очередь «Салоны на проверке»; включение/выключение строки — нет.
+      notifyAdminQueuesChanged()
       list.refresh()
 
       return null

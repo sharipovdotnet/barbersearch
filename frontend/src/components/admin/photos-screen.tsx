@@ -48,6 +48,7 @@ import {
 } from '@/lib/admin-photos'
 import type { PhotosTab } from '@/lib/admin-path'
 import { photosPath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { formatClockTime, formatShortDateTime } from '@/lib/format'
 import { avatarImageSource, portfolioPhotoSource } from '@/lib/media'
 import { formatPageRange, type Page } from '@/lib/paging'
@@ -474,6 +475,7 @@ export function PhotosScreen({ tab }: { tab: PhotosTab }) {
       }
 
       setAnnouncement(t('Фото одобрено.'))
+      notifyAdminQueuesChanged()
       removeReviewedRow(row)
     } catch (cause) {
       if (isAdminPhotoUnauthorized(cause)) {
@@ -522,6 +524,7 @@ export function PhotosScreen({ tab }: { tab: PhotosTab }) {
       }
 
       setAnnouncement(t('Фото отклонено.'))
+      notifyAdminQueuesChanged()
       setRejecting(null)
       removeReviewedRow(row)
 

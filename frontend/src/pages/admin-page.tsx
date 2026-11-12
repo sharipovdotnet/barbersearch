@@ -7,6 +7,7 @@ import {
   AdminSignInGate,
 } from '@/components/admin/admin-gate'
 import { AdminRail } from '@/components/admin/admin-rail'
+import { AdminQueuesProvider } from '@/components/admin/admin-queues-provider'
 import { AuditScreen } from '@/components/admin/audit-screen'
 import { BarberRequestsScreen } from '@/components/admin/barber-requests-screen'
 import { BarbersScreen } from '@/components/admin/barbers-screen'
@@ -233,6 +234,14 @@ export function AdminPage() {
   )
 }
 
+/**
+ * Каркас раздела администрирования: рейл и экран.
+ *
+ * Внутри — `AdminQueuesProvider`: один опрос сводки обслуживает и счётчики рейла,
+ * и экран «Сводка». Провайдер стоит здесь, а не на каждом экране, потому что
+ * переходы между разделами не должны заводить новый запрос; ветки `AdminPage`
+ * возвращают один и тот же `AdminShell`, поэтому его состояние переживает навигацию.
+ */
 function AdminShell({
   children,
   hideRailOnMobile = false,
@@ -241,13 +250,15 @@ function AdminShell({
   hideRailOnMobile?: boolean
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:py-8">
-      {/* `min-w-0` на обоих столбцах: без него горизонтальный рейл растягивает
-          grid-элемент по min-content, и страница получает горизонтальный скролл на 320. */}
-      <div className={hideRailOnMobile ? 'hidden min-w-0 lg:block' : 'min-w-0'}>
-        <AdminRail />
+    <AdminQueuesProvider>
+      <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:py-8">
+        {/* `min-w-0` на обоих столбцах: без него горизонтальный рейл растягивает
+            grid-элемент по min-content, и страница получает горизонтальный скролл на 320. */}
+        <div className={hideRailOnMobile ? 'hidden min-w-0 lg:block' : 'min-w-0'}>
+          <AdminRail />
+        </div>
+        <div className="min-w-0">{children}</div>
       </div>
-      <div className="min-w-0">{children}</div>
-    </div>
+    </AdminQueuesProvider>
   )
 }

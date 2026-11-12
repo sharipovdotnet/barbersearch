@@ -43,6 +43,7 @@ import {
   type BarberGrade,
 } from '@/lib/admin-barbers'
 import { barbersPath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { invalidateBarberProfile } from '@/lib/catalog'
 import { formatClockTime } from '@/lib/format'
 import {
@@ -263,6 +264,12 @@ export function BarbersScreen({
       }
 
       setAnnouncement(announcementFor(kind, target, grade))
+
+      // Подтверждение и снятие подтверждения меняют очередь «На проверке»;
+      // блокировка аватара и грейд — нет, поэтому сигнал только у этих двух.
+      if (kind === 'verify' || kind === 'unverify') {
+        notifyAdminQueuesChanged()
+      }
 
       // Сервер — источник правды для карточки: рейтинг, статусы и чек-лист
       // пересчитываются на его стороне. Строку списка правим локально сразу,

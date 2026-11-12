@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminUser } from '@/hooks/use-admin-user'
 import { useAdminUserList } from '@/hooks/use-admin-user-list'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useSession } from '@/hooks/use-session'
 import { t, useI18n } from '@/i18n'
@@ -47,6 +48,7 @@ import {
   type AdminUserStatusFilter,
 } from '@/lib/admin-users'
 import { usersPath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { formatClockTime } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -141,6 +143,18 @@ export function UsersScreen({ userId }: { userId: string | null }) {
       : null
   const currentPendingAction =
     user && pendingAction?.userId === user.id ? pendingAction.kind : null
+
+  // «Пользователи» — единственный раздел, который до сих пор не опрашивался сам:
+  // новый аккаунт появлялся только после ручного «Обновить». Таймер молчит, пока
+  // открыт диалог действия: ответ, пришедший посреди клика, сбросил бы выбор.
+  useAutoRefresh({
+    enabled:
+      list.status === 'ready' &&
+      !list.requiresSignIn &&
+      !requiresSignIn &&
+      pendingAction === null,
+    onRefresh: list.refresh,
+  })
 
   // На широком экране первая строка открывается сразу: пустая правая колонка
   // выглядит как ошибка загрузки.
@@ -248,6 +262,12 @@ export function UsersScreen({ userId }: { userId: string | null }) {
       setAnnouncement(
         announcementFor(kind, target, previousRole, nextRole)
       )
+
+      // Подтверждение email уменьшает очередь «без подтверждения»; роль, блокировка
+      // и аватар это число не меняют, поэтому сигнал только у этого действия.
+      if (kind === 'verifyEmail') {
+        notifyAdminQueuesChanged()
+      }
 
       // Сервер — источник правды для карточки. Строку списка правим локально
       // сразу, поэтому результат действия виден, даже если тихое обновление
@@ -384,7 +404,14 @@ export function UsersScreen({ userId }: { userId: string | null }) {
               )}
               {list.isRefreshing ? t('Обновляем…') : t('Обновить')}
             </Button>
-            <CreateUserDialog onCreated={list.refresh} />
+            <CreateUserDialog
+              onCreated={() => {
+                // Новый аккаунт почти всегда без подтверждения email — очередь
+                // рейла меняется сразу, не дожидаясь тика сводки.
+                notifyAdminQueuesChanged()
+                list.refresh()
+              }}
+            />
           </div>
         </header>
       )}
