@@ -46,6 +46,28 @@ export class AdminReviewsPage {
     return this.page.getByRole('button', { name: 'Обновить' })
   }
 
+  /** Рейл «Разделы» слева: ссылки с числом очереди в `aria-label`. */
+  get rail(): Locator {
+    return this.page.getByRole('navigation', {
+      name: 'Разделы администрирования',
+    })
+  }
+
+  /**
+   * Бейдж очереди отзывов в рейле.
+   *
+   * Цифра живёт внутри круга (`span[aria-hidden]`), а сам круг — сосед ссылки
+   * внутри пункта `<li>`, а не её ребёнок: иначе видимый текст ссылки («Отзывы14»)
+   * не совпадал бы с её доступным именем и axe валил бы проверку. При `count = 0`
+   * бейджа нет, и локатор не найдёт ничего.
+   */
+  get reviewsBadge(): Locator {
+    return this.rail
+      .locator('li')
+      .filter({ has: this.page.getByRole('link', { name: /^Отзывы/ }) })
+      .locator('span[aria-hidden="true"]')
+  }
+
   async openTab(name: 'На модерации' | 'Опубликованные'): Promise<void> {
     await this.tab(name).click()
   }

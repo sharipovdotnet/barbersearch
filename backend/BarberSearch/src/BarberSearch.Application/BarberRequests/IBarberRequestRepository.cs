@@ -85,6 +85,19 @@ public interface IBarberRequestRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько заявок ждёт решения: ровно очередь <c>AdminBarberRequestStatus.Pending</c>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>status = Pending</c> совпадает с фильтром раздела — это контракт,
+    /// а не деталь реализации: очередь по умолчанию у <c>GET api/admin/barber-requests</c>
+    /// и счётчик сводки обязаны показывать одно число. Одобренные и отклонённые заявки
+    /// в очередь не входят.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Одна заявка любого статуса для администраторской карточки.
     /// </summary>
     /// <param name="id">Идентификатор заявки.</param>

@@ -466,6 +466,27 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
     }
 
     /// <summary>
+    /// Сколько броней подтверждено — ровно фильтр «Подтверждена» админского списка.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>status = Confirmed</c> — тот же, что у <see cref="GetAdminPageAsync"/>
+    /// с фильтром <c>Confirmed</c>: число в сводке обязано совпадать с размером раздела.
+    /// Прошедшие визиты тоже считаются: ограничение «только предстоящие» разошлось бы
+    /// с фильтром. Это контракт, а не деталь реализации.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountConfirmedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.Bookings
+            .AsNoTracking()
+            .CountAsync(
+                booking => booking.Status == BookingStatus.Confirmed,
+                cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
+    /// <summary>
     /// Собирает SQL админского чтения броней: соединения, фильтры, keyset, порядок
     /// и проекцию в плоскую строку.
     /// </summary>

@@ -49,6 +49,20 @@ public sealed class FakeBarberRequestRepository
     /// </summary>
     public Func<BarberRequest, UnitResult<Failure>>? UpdateBehavior { get; set; }
 
+    /// <summary>Ответ <see cref="CountPendingAsync"/>: сколько заявок в очереди.</summary>
+    public int PendingCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика заявок в очереди.</summary>
+    public Failure? CountPendingFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик заявок в очереди.</summary>
+    public int CountPendingCallCount { get; private set; }
+
+    /// <summary>
+    /// Хук перед счётчиком заявок: тест сводки проверяет порядок последовательных чтений.
+    /// </summary>
+    public Action? BeforeCountPending { get; set; }
+
     public void Add(BarberRequest request) => _requests[request.Id] = request;
 
     /// <summary>
@@ -158,6 +172,20 @@ public sealed class FakeBarberRequestRepository
             .ToList();
 
         return Task.FromResult<Result<IReadOnlyList<AdminBarberRequestResponse>, Failure>>(rows);
+    }
+
+    /// <summary>
+    /// Счётчик заявок в очереди; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountPendingCallCount++;
+        BeforeCountPending?.Invoke();
+
+        return Task.FromResult(CountPendingFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingCount));
     }
 
     public Task<Result<AdminBarberRequestResponse, Failure>> GetAdminByIdAsync(

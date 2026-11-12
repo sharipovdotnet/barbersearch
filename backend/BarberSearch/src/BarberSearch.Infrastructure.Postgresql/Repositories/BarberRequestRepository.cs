@@ -114,6 +114,28 @@ public sealed class BarberRequestRepository
         return rows.Select(ToAdminResponse).ToList();
     }
 
+    /// <summary>
+    /// Сколько заявок ждёт решения — ровно очередь <c>AdminBarberRequestStatus.Pending</c>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>status = Pending</c> — тот же, что у <see cref="GetAdminPageAsync"/>
+    /// со статусом <c>Pending</c> (очередь по умолчанию): число в сводке обязано совпадать
+    /// с размером раздела «Заявки». Это контракт, а не деталь реализации; одобренные
+    /// и отклонённые заявки в счётчик не входят.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Частичный индекс ux_barber_requests_pending_user обслуживает этот предикат.
+        var count = await Context.BarberRequests
+            .AsNoTracking()
+            .CountAsync(
+                request => request.Status == BarberRequestStatus.Pending,
+                cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
     /// <inheritdoc />
     public async Task<Result<AdminBarberRequestResponse, Failure>> GetAdminByIdAsync(
         Guid id,

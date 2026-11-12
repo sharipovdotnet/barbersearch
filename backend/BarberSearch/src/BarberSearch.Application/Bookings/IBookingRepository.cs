@@ -148,6 +148,18 @@ public interface IBookingRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько броней подтверждено — ровно фильтр «Подтверждена» админского списка.
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с фильтром раздела — это контракт, а не деталь реализации:
+    /// <c>status = Confirmed</c>, включая прошедшие визиты. Ограничение «только предстоящие»
+    /// (<c>start_at &gt;= now</c>) разошлось бы с размером раздела.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountConfirmedAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Активные брони барбера, пересекающиеся с интервалом, — вход для расчёта свободных слотов.
     /// Читается без отслеживания.
     /// </summary>

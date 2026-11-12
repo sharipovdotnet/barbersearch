@@ -181,6 +181,19 @@ public interface IUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько пользователей не подтвердило email.
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с фильтром раздела — это контракт, а не деталь реализации:
+    /// <c>is_email_verified = false</c> у всех ролей, включая заблокированных, — ровно
+    /// <c>AdminUserStatus.Unverified</c> при <c>role=all</c>. Добавление роли или условия
+    /// <c>is_active</c> разошлось бы с очередью «Без подтверждения».
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountUnverifiedAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Профиль текущего пользователя для кабинета: имя, телефон, роль и подтверждения.
     /// </summary>
     /// <remarks>

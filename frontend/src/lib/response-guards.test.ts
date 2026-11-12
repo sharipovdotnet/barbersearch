@@ -941,8 +941,11 @@ describe('поля премодерации в контрактах #89', () => 
   const ADMIN_SUMMARY = {
     reviews: { pendingCount: 0, oldest: null },
     barbers: { unverifiedCount: 0 },
-    salons: { inactiveCount: 0 },
+    salons: { inactiveCount: 0, pendingModerationCount: 0 },
     photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 5 },
+    users: { unverifiedCount: 0 },
+    barberRequests: { pendingCount: 0 },
+    bookings: { confirmedCount: 0 },
   }
 
   const ADMIN_AVATAR_PHOTO = {
@@ -1111,6 +1114,78 @@ describe('поля премодерации в контрактах #89', () => 
     expect(
       isAdminPortfolioPhoto({ ...ADMIN_PORTFOLIO_PHOTO, description: 42 })
     ).toBe(false)
+  })
+})
+
+/**
+ * Счётчики разделов рейла (#93): `users`, `barberRequests`, `bookings` и второй
+ * счётчик салонов обязательны, как и прежние блоки. Пропущенное или битое поле —
+ * ошибка экрана, а не «0»: иначе рейл молча показал бы «работы нет» там, где она есть.
+ */
+describe('счётчики разделов в админской сводке #93', () => {
+  const SUMMARY = {
+    reviews: { pendingCount: 3, oldest: null },
+    barbers: { unverifiedCount: 4 },
+    salons: { inactiveCount: 1, pendingModerationCount: 2 },
+    photos: { pendingAvatarsCount: 5, pendingPortfolioCount: 6 },
+    users: { unverifiedCount: 7 },
+    barberRequests: { pendingCount: 8 },
+    bookings: { confirmedCount: 9 },
+  }
+
+  it('принимает полный снимок', () => {
+    expect(isAdminSummary(SUMMARY)).toBe(true)
+  })
+
+  it('требует блоки users, barberRequests и bookings', () => {
+    const { users, ...withoutUsers } = SUMMARY
+    const { barberRequests, ...withoutRequests } = SUMMARY
+    const { bookings, ...withoutBookings } = SUMMARY
+
+    expect(users.unverifiedCount).toBe(7)
+    expect(barberRequests.pendingCount).toBe(8)
+    expect(bookings.confirmedCount).toBe(9)
+    expect(isAdminSummary(withoutUsers)).toBe(false)
+    expect(isAdminSummary(withoutRequests)).toBe(false)
+    expect(isAdminSummary(withoutBookings)).toBe(false)
+  })
+
+  it('требует pendingModerationCount у салонов', () => {
+    expect(
+      isAdminSummary({
+        ...SUMMARY,
+        salons: { inactiveCount: 1 },
+      })
+    ).toBe(false)
+  })
+
+  it('отвергает отрицательные, дробные и нечисловые значения', () => {
+    const broken: readonly [string, unknown][] = [
+      [
+        'users отрицательный',
+        { ...SUMMARY, users: { unverifiedCount: -1 } },
+      ],
+      [
+        'barberRequests дробный',
+        { ...SUMMARY, barberRequests: { pendingCount: 1.5 } },
+      ],
+      [
+        'bookings строкой',
+        { ...SUMMARY, bookings: { confirmedCount: '9' } },
+      ],
+      [
+        'салоны отрицательные',
+        { ...SUMMARY, salons: { inactiveCount: 1, pendingModerationCount: -2 } },
+      ],
+      [
+        'bookings без confirmedCount',
+        { ...SUMMARY, bookings: {} },
+      ],
+    ]
+
+    for (const [name, body] of broken) {
+      expect(isAdminSummary(body), name).toBe(false)
+    }
   })
 })
 

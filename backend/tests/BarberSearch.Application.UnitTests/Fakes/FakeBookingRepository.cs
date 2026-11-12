@@ -49,6 +49,21 @@ public sealed class FakeBookingRepository : IBookingRepository
     /// </summary>
     public Failure? ForcedAdminFailure { get; set; }
 
+    /// <summary>Ответ <see cref="CountConfirmedAsync"/>: сколько броней подтверждено.</summary>
+    public int ConfirmedCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика подтверждённых броней.</summary>
+    public Failure? CountConfirmedFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик подтверждённых броней.</summary>
+    public int CountConfirmedCallCount { get; private set; }
+
+    /// <summary>
+    /// Хук перед счётчиком подтверждённых броней: тест сводки проверяет порядок
+    /// последовательных чтений.
+    /// </summary>
+    public Action? BeforeCountConfirmed { get; set; }
+
     /// <summary>
     /// Подмена поведения вставки — для проверки гонки, которую в памяти не воспроизвести.
     /// </summary>
@@ -366,6 +381,20 @@ public sealed class FakeBookingRepository : IBookingRepository
                     $"Booking '{id}' was not found.",
                     id)))
                 : Result.Success<AdminBookingResponse, Failure>(row));
+    }
+
+    /// <summary>
+    /// Счётчик подтверждённых броней; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountConfirmedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountConfirmedCallCount++;
+        BeforeCountConfirmed?.Invoke();
+
+        return Task.FromResult(CountConfirmedFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(ConfirmedCount));
     }
 
     public Task<Result<IReadOnlyList<Booking>, Failure>> GetActiveByBarberAsync(

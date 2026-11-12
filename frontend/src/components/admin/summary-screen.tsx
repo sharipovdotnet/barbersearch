@@ -2,10 +2,9 @@ import { Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useRef } from 'react'
 
 import { AdminSignInGate } from '@/components/admin/admin-gate'
+import { useAdminQueues } from '@/hooks/use-admin-queues'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAdminSummary } from '@/hooks/use-admin-summary'
-import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useNow } from '@/hooks/use-now'
 import { useI18n } from '@/i18n'
 import type { AdminSummaryOldestReview } from '@/lib/admin-summary'
@@ -20,12 +19,16 @@ import {
 import { navigate } from '@/lib/router'
 
 /**
- * `/admin/summary` — «Что требует внимания»: четыре блока очередей одной страницей.
+ * `/admin/summary` — «Что требует внимания»: блоки очередей одной страницей.
  *
  * Числа считает сервер (`GET api/admin/summary`) теми же предикатами, что фильтры
  * разделов, поэтому сводка не расходится с очередями. «Самый старый» отзыв —
  * первая строка FIFO-очереди модерации; ожидание показывается словами, а не датой:
  * это не визит, и пояс салона здесь не применяется.
+ *
+ * Данные и опрос берутся из `AdminQueuesProvider`: тот же снимок рисует счётчики
+ * рейла, поэтому своего таймера у экрана нет — иначе на `/admin/summary` работали
+ * бы два одинаковых опроса и числа могли разойтись.
  *
  * Экран только читает. Кнопка одна — «Обновить»; действий, графиков, периодов
  * и трендов нет: API не хранит историю агрегатов, а выдуманные числа запрещены.
@@ -33,17 +36,10 @@ import { navigate } from '@/lib/router'
  * и «Открыть в новой вкладке».
  */
 export function SummaryScreen() {
-  const summary = useAdminSummary()
+  const summary = useAdminQueues()
   const now = useNow()
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const { t } = useI18n()
-
-  // Сводка — очередь: пока она открыта, числа должны совпадать с разделами.
-  // Ошибка первой загрузки не опрашивается: у неё есть «Повторить».
-  useAutoRefresh({
-    enabled: summary.status === 'ready' && !summary.requiresSignIn,
-    onRefresh: summary.refresh,
-  })
 
   if (summary.requiresSignIn) {
     return (

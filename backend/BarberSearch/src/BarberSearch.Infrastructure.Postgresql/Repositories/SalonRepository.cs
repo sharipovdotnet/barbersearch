@@ -155,6 +155,28 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
         return Result.Success<int, Failure>(count);
     }
 
+    /// <summary>
+    /// Сколько салонов ждёт модерации — ровно <see cref="AdminCatalogueStatus.Pending"/>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат <c>moderation_status = Pending</c> — тот же, что у
+    /// <see cref="GetAdminListAsync"/> со статусом <c>Pending</c>: число в сводке обязано
+    /// совпадать с разделом «На проверке». Это не <see cref="CountInactiveAsync"/>:
+    /// Pending-салон тоже неактивен, но он не выключен администратором, и условия
+    /// <c>is_active</c> здесь нет.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountPendingModerationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.Salons
+            .AsNoTracking()
+            .CountAsync(
+                salon => salon.ModerationStatus == SalonModerationStatus.Pending,
+                cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
     public async Task<Result<Salon, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)

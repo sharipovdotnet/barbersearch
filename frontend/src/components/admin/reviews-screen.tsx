@@ -32,6 +32,7 @@ import {
 } from '@/lib/admin-reviews'
 import type { AdminTab } from '@/lib/admin-path'
 import { reviewsPath } from '@/lib/admin-path'
+import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { formatClockTime } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
@@ -191,6 +192,7 @@ export function ReviewsScreen({
           reviewId: target.id,
         },
       })
+      notifyAdminQueuesChanged()
       list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {
@@ -232,6 +234,7 @@ export function ReviewsScreen({
           reviewId: target.id,
         },
       })
+      notifyAdminQueuesChanged()
       list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {
@@ -277,6 +280,7 @@ export function ReviewsScreen({
             ? t('Отзыв снова опубликован.')
             : t('Отзыв снова скрыт и вернулся в очередь.'),
       })
+      notifyAdminQueuesChanged()
       list.refresh()
     } catch (cause) {
       if (isUnauthorized(cause)) {

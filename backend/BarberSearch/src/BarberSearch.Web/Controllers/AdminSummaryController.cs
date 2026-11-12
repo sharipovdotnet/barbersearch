@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BarberSearch.Web.Controllers;
 
 /// <summary>
-/// Админская сводка «что требует внимания»: очереди отзывов, барберов и салонов.
+/// Админская сводка «что требует внимания»: счётчики очередей разделов.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,9 +20,12 @@ namespace BarberSearch.Web.Controllers;
 /// <para>
 /// Число каждой очереди совпадает с фильтром её раздела: <c>is_published = false</c>
 /// («На модерации», включая скрытые администратором отзывы — в домене это один флаг),
-/// <c>is_verified = false</c> (<c>AdminBarberStatus.Pending</c>) и <c>is_active = false</c>
-/// (<c>AdminCatalogueStatus.Hidden</c> для салонов). Порядок и глубина очередей остаются
-/// за <c>GET api/admin/reviews</c>, <c>GET api/admin/barbers</c> и админским каталогом.
+/// <c>is_verified = false</c> (<c>AdminBarberStatus.Pending</c>), <c>is_active = false</c>
+/// (<c>AdminCatalogueStatus.Hidden</c> для салонов) и <c>moderation_status = Pending</c>
+/// (<c>AdminCatalogueStatus.Pending</c> для салонов), две очереди фотографий,
+/// <c>is_email_verified = false</c> (<c>AdminUserStatus.Unverified</c>),
+/// <c>barber_requests.status = Pending</c> и <c>bookings.status = Confirmed</c>. Порядок
+/// и глубина очередей остаются за админскими чтениями разделов.
 /// </para>
 /// <para>
 /// Сводка только читает: действий, мутаций и записи в <c>audit_log</c> у неё нет. Email
@@ -36,7 +39,7 @@ namespace BarberSearch.Web.Controllers;
 public class AdminSummaryController : ApiController
 {
     /// <summary>
-    /// Возвращает счётчики трёх очередей и самый старый отзыв модерации.
+    /// Возвращает счётчики очередей разделов и самый старый отзыв модерации.
     /// </summary>
     /// <param name="handler">Обработчик запроса.</param>
     /// <param name="cancellationToken">Токен отмены.</param>

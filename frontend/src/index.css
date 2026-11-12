@@ -25,6 +25,7 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-destructive-solid: var(--destructive-solid);
     --color-success: var(--success);
     --color-warning: var(--warning);
     --color-accent-foreground: var(--accent-foreground);
@@ -71,6 +72,11 @@
        (бейдж «Заблокирован» в /admin/users, «Неявка» в кабинетах) — ниже AA.
        0.51 даёт 4.82:1 на плашке и 5.79:1 на белом (issue #34, §11). */
     --destructive: oklch(0.51 0.245 27.325);
+    /* Заливка счётчиков очередей (рейл админки). Отдельный токен нужен потому,
+       что `--destructive` — цвет *текста* на тёмном фоне, а залитый кружок должен
+       быть красным в обеих темах: значение задано только здесь и в `.dark`
+       не переопределяется. Белые цифры дают 5.79:1 (issue #93, §5). */
+    --destructive-solid: oklch(0.51 0.245 27.325);
     --success: oklch(0.5 0.12 155);
     /* 0.55 давал 4.41:1 для `text-warning` на `bg-warning/10` (бейдж
        «Ждёт подтверждения») — ниже AA. 0.52 даёт 4.92:1 на плашке

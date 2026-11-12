@@ -75,6 +75,23 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
     public Action? BeforeCountPendingAvatars { get; set; }
 
     /// <summary>
+    /// Ответ <see cref="CountUnverifiedAsync"/>: сколько пользователей без подтверждения email.
+    /// </summary>
+    public int UnverifiedCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика пользователей без подтверждения email.</summary>
+    public Failure? CountUnverifiedFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик пользователей без подтверждения email.</summary>
+    public int CountUnverifiedCallCount { get; private set; }
+
+    /// <summary>
+    /// Хук перед счётчиком неподтверждённых пользователей: тест сводки проверяет порядок
+    /// последовательных чтений.
+    /// </summary>
+    public Action? BeforeCountUnverified { get; set; }
+
+    /// <summary>
     /// Сколько раз обработчик брал блокировку администраторов.
     /// </summary>
     public int AcquireAdminLockCallCount { get; private set; }
@@ -467,6 +484,20 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         return Task.FromResult(CountPendingAvatarsFailure is { } failure
             ? Result.Failure<int, Failure>(failure)
             : Result.Success<int, Failure>(PendingAvatarsCount));
+    }
+
+    /// <summary>
+    /// Счётчик пользователей без подтверждения email; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountUnverifiedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountUnverifiedCallCount++;
+        BeforeCountUnverified?.Invoke();
+
+        return Task.FromResult(CountUnverifiedFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(UnverifiedCount));
     }
 
     /// <summary>

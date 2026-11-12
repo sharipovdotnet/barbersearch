@@ -1219,10 +1219,13 @@ function isAdminSummaryOldestReview(
 }
 
 /**
- * Тело админской сводки: четыре обязательных блока и неотрицательные целые счётчики.
+ * Тело админской сводки: семь обязательных блоков и неотрицательные целые счётчики.
  *
  * `oldest` — `null` (очередь пуста) или компактная строка. Блок `photos` — две
  * очереди премодерации; число считает сервер, клиент его не пересчитывает.
+ * Блоки `users`, `barberRequests` и `bookings` — счётчики соответствующих пунктов
+ * рейла: без них рейл молча показал бы меньше чисел, чем обещает раздел.
+ * Guard строгий: пропуск или битое значение — ошибка экрана, а не «0».
  * Лишние поля игнорируются: `total`/`nextCursor` контракт не обещает, но и не
  * запрещает; guard их не требует.
  */
@@ -1232,20 +1235,35 @@ export function isAdminSummary(value: unknown): value is AdminSummary {
     !isRecord(value.reviews) ||
     !isRecord(value.barbers) ||
     !isRecord(value.salons) ||
-    !isRecord(value.photos)
+    !isRecord(value.photos) ||
+    !isRecord(value.users) ||
+    !isRecord(value.barberRequests) ||
+    !isRecord(value.bookings)
   ) {
     return false
   }
 
-  const { reviews, barbers, salons, photos } = value
+  const {
+    reviews,
+    barbers,
+    salons,
+    photos,
+    users,
+    barberRequests,
+    bookings,
+  } = value
 
   return (
     isNonNegativeInteger(reviews.pendingCount) &&
     (reviews.oldest === null || isAdminSummaryOldestReview(reviews.oldest)) &&
     isNonNegativeInteger(barbers.unverifiedCount) &&
     isNonNegativeInteger(salons.inactiveCount) &&
+    isNonNegativeInteger(salons.pendingModerationCount) &&
     isNonNegativeInteger(photos.pendingAvatarsCount) &&
-    isNonNegativeInteger(photos.pendingPortfolioCount)
+    isNonNegativeInteger(photos.pendingPortfolioCount) &&
+    isNonNegativeInteger(users.unverifiedCount) &&
+    isNonNegativeInteger(barberRequests.pendingCount) &&
+    isNonNegativeInteger(bookings.confirmedCount)
   )
 }
 

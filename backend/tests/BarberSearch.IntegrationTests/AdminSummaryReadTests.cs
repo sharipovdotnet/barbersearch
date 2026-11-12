@@ -1,10 +1,15 @@
 using System.Net;
 using System.Text.Json;
+using BarberSearch.Domain.BarberRequests;
+using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.PortfolioPhotos;
+using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
+using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Shared;
 using Xunit;
 
 namespace BarberSearch.IntegrationTests;
@@ -17,7 +22,10 @@ namespace BarberSearch.IntegrationTests;
 /// <remarks>
 /// <para>
 /// База общая на прогон и очищается между тестами, поэтому счётчики проверяются дельтами,
-/// а не абсолютными числами: у сводки нет параметров, которые сузили бы выборку.
+/// а не абсолютными числами: у сводки нет параметров, которые сузили бы выборку. Числа
+/// счётчиков дополнительно сверяются с размерами очередей list-эндпоинтов — это и есть
+/// контракт «счётчик = фильтр раздела». Сид меньше страницы (20 по умолчанию, 100 максимум),
+/// поэтому пагинация не мешает.
 /// </para>
 /// <para>
 /// DTO чтения объявлены локально: тест проверяет контракт и должен компилироваться до того,
@@ -84,10 +92,20 @@ public sealed class AdminSummaryReadTests
         Assert.NotNull(summary.Barbers);
         Assert.NotNull(summary.Salons);
         Assert.NotNull(summary.Photos);
+        Assert.NotNull(summary.Users);
+        Assert.NotNull(summary.BarberRequests);
+        Assert.NotNull(summary.Bookings);
 
         // Чистая база: ни аватаров, ни работ на проверке.
         Assert.Equal(0, summary.Photos.PendingAvatarsCount);
         Assert.Equal(0, summary.Photos.PendingPortfolioCount);
+        Assert.Equal(0, summary.Salons.PendingModerationCount);
+        Assert.Equal(0, summary.BarberRequests.PendingCount);
+        Assert.Equal(0, summary.Bookings.ConfirmedCount);
+
+        // В базе ровно три засеянных пользователя (клиент, барбер, администратор),
+        // и ни у одного email не подтверждён.
+        Assert.Equal(3, summary.Users.UnverifiedCount);
     }
 
     [Fact(Timeout = 180_000)]
@@ -139,15 +157,105 @@ public sealed class AdminSummaryReadTests
         // Числа сводки — ровно размеры вкладок очереди, а не отдельный подсчёт.
         Assert.Equal(
             after.Photos.PendingAvatarsCount,
-            await GetQueueCountAsync(app, "api/admin/photos/avatars"));
+            await GetPagedCountAsync(app, "api/admin/photos/avatars?pageSize=100"));
         Assert.Equal(
             after.Photos.PendingPortfolioCount,
-            await GetQueueCountAsync(app, "api/admin/photos/portfolio"));
+            await GetPagedCountAsync(app, "api/admin/photos/portfolio?pageSize=100"));
 
         // Опубликованный отзыв счётчик не двигает: вкладка «На модерации» его не показывает.
         var queued = await GetQueueIdsAsync(app);
         Assert.All(queued, id => Assert.NotEqual(Guid.Empty, id));
         Assert.Equal(after.Reviews.PendingCount, queued.Count);
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Section_counters_match_the_admin_queue_sizes()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+
+        // Барбер и администратор созданы до снятия «до»: их аккаунты тоже без подтверждения
+        // email, и дельта пользователей не должна их считать.
+        var barber = await data.CreateBookableBarberAsync("Summary Counters Barber");
+        var admin = await app.CreateUserAsync(
+            $"admin-summary-counters-admin-{Guid.NewGuid():N}@barbersearch.test",
+            UserRole.Admin);
+        await app.AuthenticateAsync(admin.Email);
+
+        var before = await GetSummaryAsync(app);
+
+        // Два новых пользователя без подтверждения email. Они же заявители и владельцы
+        // салонов, поэтому других пользователей в сценарии не появляется.
+        var firstApplicant = await app.CreateUserAsync(
+            $"admin-summary-counters-first-{Guid.NewGuid():N}@barbersearch.test");
+        var secondApplicant = await app.CreateUserAsync(
+            $"admin-summary-counters-second-{Guid.NewGuid():N}@barbersearch.test");
+
+        // Очередь заявок — две Pending-заявки от разных пользователей.
+        await SeedPendingBarberRequestAsync(app, firstApplicant.Id);
+        await SeedPendingBarberRequestAsync(app, secondApplicant.Id);
+
+        // Очередь модерации салонов — два Pending-салона.
+        await SeedPendingSalonAsync(app, firstApplicant.Id, "Summary Moderation Salon One");
+        await SeedPendingSalonAsync(app, secondApplicant.Id, "Summary Moderation Salon Two");
+
+        // Подтверждённые брони: три в разные слоты, иначе exclusion-ограничение барбера
+        // не пропустит две брони подряд. Плюс одна Pending — она в счётчик не входит.
+        var startAt = DateTimeOffset.UtcNow.AddDays(3);
+        await data.CreateBookingAsync(
+            barber,
+            firstApplicant.Id,
+            startAt,
+            BookingStatus.Confirmed);
+        await data.CreateBookingAsync(
+            barber,
+            secondApplicant.Id,
+            startAt.AddHours(1),
+            BookingStatus.Confirmed);
+        await data.CreateBookingAsync(
+            barber,
+            firstApplicant.Id,
+            startAt.AddHours(2),
+            BookingStatus.Confirmed);
+        await data.CreateBookingAsync(
+            barber,
+            secondApplicant.Id,
+            startAt.AddHours(3),
+            BookingStatus.Pending);
+
+        var after = await GetSummaryAsync(app);
+
+        Assert.Equal(before.Users.UnverifiedCount + 2, after.Users.UnverifiedCount);
+        Assert.Equal(before.BarberRequests.PendingCount + 2, after.BarberRequests.PendingCount);
+        Assert.Equal(
+            before.Salons.PendingModerationCount + 2,
+            after.Salons.PendingModerationCount);
+        Assert.Equal(before.Bookings.ConfirmedCount + 3, after.Bookings.ConfirmedCount);
+
+        // Pending-салон неактивен, но он не «выключен администратором»: другой счётчик
+        // салонов остаётся прежним.
+        Assert.Equal(before.Salons.InactiveCount, after.Salons.InactiveCount);
+
+        // Числа сводки — ровно размеры очередей соответствующих list-эндпоинтов.
+        // «Пользователи» — все роли без подтверждения email (role=all по умолчанию).
+        Assert.Equal(
+            after.Users.UnverifiedCount,
+            await GetPagedCountAsync(
+                app,
+                "api/admin/users?status=unverified&role=all&pageSize=100"));
+        Assert.Equal(
+            after.BarberRequests.PendingCount,
+            await GetPagedCountAsync(
+                app,
+                "api/admin/barber-requests?status=pending&pageSize=100"));
+        Assert.Equal(
+            after.Salons.PendingModerationCount,
+            await GetArrayCountAsync(app, "api/admin/catalogue/salons?status=pending"));
+        Assert.Equal(
+            after.Bookings.ConfirmedCount,
+            await GetPagedCountAsync(
+                app,
+                "api/admin/bookings?status=Confirmed&pageSize=100"));
     }
 
     [Fact(Timeout = 180_000)]
@@ -263,9 +371,15 @@ public sealed class AdminSummaryReadTests
         using var summaryDocument = JsonDocument.Parse(rawBody);
         var root = summaryDocument.RootElement;
 
+        // JSON аддитивный: старые поля на месте, новые — в конце, PII ни в одном нет.
         Assert.True(root.TryGetProperty("reviews", out _));
         Assert.True(root.TryGetProperty("barbers", out _));
         Assert.True(root.TryGetProperty("salons", out _));
+        Assert.True(root.TryGetProperty("photos", out _));
+        Assert.True(root.TryGetProperty("users", out _));
+        Assert.True(root.TryGetProperty("barberRequests", out _));
+        Assert.True(root.TryGetProperty("bookings", out _));
+        Assert.True(root.GetProperty("salons").TryGetProperty("pendingModerationCount", out _));
         Assert.False(root.TryGetProperty("total", out _));
         Assert.False(root.TryGetProperty("nextCursor", out _));
     }
@@ -312,17 +426,83 @@ public sealed class AdminSummaryReadTests
     }
 
     /// <summary>
-    /// Размер админской очереди фотографий: число строк первой страницы (до 100).
+    /// Добавляет заявку в статусе <c>Pending</c> — строку очереди «Заявки».
     /// </summary>
-    private static async Task<int> GetQueueCountAsync(TestApp app, string path)
+    private static async Task<Guid> SeedPendingBarberRequestAsync(TestApp app, Guid userId)
     {
-        using var response = await app.Client.GetAsync($"{path}?pageSize=100");
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var request = Require(BarberRequest.Create(
+            userId,
+            "Summary Applicant",
+            5,
+            "Berlin",
+            null,
+            hasSalon: false,
+            DateTimeOffset.UtcNow));
+
+        db.BarberRequests.Add(request);
+        await db.SaveChangesAsync();
+
+        return request.Id;
+    }
+
+    /// <summary>
+    /// Добавляет салон на модерации доменной фабрикой владельца: он сразу
+    /// <c>Pending</c> и неактивен — ровно строка очереди «На проверке».
+    /// </summary>
+    private static async Task<Guid> SeedPendingSalonAsync(
+        TestApp app,
+        Guid ownerUserId,
+        string name)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var salon = Require(Salon.SubmitByOwner(
+            ownerUserId,
+            name,
+            "Teststrasse 2",
+            "Berlin",
+            "Germany",
+            "Europe/Berlin",
+            52.5200,
+            13.4050));
+
+        db.Salons.Add(salon);
+        await db.SaveChangesAsync();
+
+        return salon.Id;
+    }
+
+    /// <summary>
+    /// Размер paged-очереди: число строк первой страницы (до 100). Сид теста меньше
+    /// страницы, поэтому пагинация не мешает.
+    /// </summary>
+    private static async Task<int> GetPagedCountAsync(TestApp app, string path)
+    {
+        using var response = await app.Client.GetAsync(path);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
         return document.RootElement.GetProperty("items").GetArrayLength();
+    }
+
+    /// <summary>
+    /// Размер очереди, которая отдаётся голым JSON-массивом (салоны каталога).
+    /// </summary>
+    private static async Task<int> GetArrayCountAsync(TestApp app, string path)
+    {
+        using var response = await app.Client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        return document.RootElement.GetArrayLength();
     }
 
     private static async Task<Summary> GetSummaryAsync(TestApp app)
@@ -365,11 +545,25 @@ public sealed class AdminSummaryReadTests
         return page.Items.Select(item => item.Id).ToList();
     }
 
+    private static T Require<T>(Result<T, Failure> result)
+    {
+        if (result.IsFailure)
+        {
+            throw new InvalidOperationException(
+                $"Seeding failed: {string.Join("; ", result.Error.Errors.Select(error => $"{error.Code}: {error.Message}"))}");
+        }
+
+        return result.Value;
+    }
+
     private sealed record Summary(
         SummaryReviews Reviews,
         SummaryBarbers Barbers,
         SummarySalons Salons,
-        SummaryPhotos Photos);
+        SummaryPhotos Photos,
+        SummaryUsers Users,
+        SummaryBarberRequests BarberRequests,
+        SummaryBookings Bookings);
 
     private sealed record SummaryReviews(int PendingCount, SummaryOldest? Oldest);
 
@@ -382,9 +576,15 @@ public sealed class AdminSummaryReadTests
 
     private sealed record SummaryBarbers(int UnverifiedCount);
 
-    private sealed record SummarySalons(int InactiveCount);
+    private sealed record SummarySalons(int InactiveCount, int PendingModerationCount);
 
     private sealed record SummaryPhotos(int PendingAvatarsCount, int PendingPortfolioCount);
+
+    private sealed record SummaryUsers(int UnverifiedCount);
+
+    private sealed record SummaryBarberRequests(int PendingCount);
+
+    private sealed record SummaryBookings(int ConfirmedCount);
 
     private sealed record ReviewPage(IReadOnlyList<ReviewRow> Items, string? NextCursor);
 

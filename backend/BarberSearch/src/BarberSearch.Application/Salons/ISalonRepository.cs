@@ -47,6 +47,19 @@ public interface ISalonRepository
     Task<Result<int, Failure>> CountInactiveAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сколько салонов ждёт модерации — ровно <see cref="AdminCatalogueStatus.Pending"/>.
+    /// </summary>
+    /// <remarks>
+    /// Предикат совпадает с фильтром раздела — это контракт, а не деталь реализации:
+    /// <c>moderation_status = Pending</c>, тот же, что у раздела «На проверке» админского
+    /// каталога. Это не <see cref="CountInactiveAsync"/>: Pending-салон тоже неактивен,
+    /// но он ждёт решения, а не выключен администратором, поэтому счётчики независимы.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<int, Failure>> CountPendingModerationAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Салон по идентификатору.
     /// </summary>
     Task<Result<Salon, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
