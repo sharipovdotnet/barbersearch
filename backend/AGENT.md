@@ -1214,14 +1214,12 @@ without a constructor call.
   ("Failed to determine the https port for redirect" warning).
 - `Review` has no "one review per booking" invariant — that needs a unique index (or a check in
   the application layer).
-- Schedule writes (week and date overrides) check no active bookings: shortening a day or marking
-  a date off leaves an existing booking in force and only removes the slots. A conflict preview or
-  a `409` with the affected bookings is still open; the frontend says so explicitly.
-- `GET api/barbers?date=` still filters by `DayOfWeek` only and ignores `ScheduleOverride` /
-  `TimeOff`, so a barber on a date exception can still appear in search. The exact free time is
-  `/slots`, which does honour both.
 - One `WorkingSchedule` row per weekday is still the rule: a lunch break or a split shift cannot
   be expressed. Multiple intervals would change the unique index and the slot loop.
+- Time off excludes a barber from `GET api/barbers?date=` only when it covers the whole local day
+  in the **primary salon's** time zone (D10). A barber who works in several zones can differ at
+  the edges of the day; the exact per-salon answer is `/slots`, which uses each salon's own zone.
+  This is a documented compromise, not a promise of per-zone search.
 - Test coverage follows the reworked invariants; the aggregate boundaries are partly asserted by
   reflection (`BarberSalonTests.Schedule_IsNotExposedOnTheBarberProfile`). There is no test yet
   that walks every entity and asserts "private parameterless ctor + no public ctor".
@@ -1701,6 +1699,25 @@ Since R-38 (2026-10-24, migration `DropRedundantBarberProfileIndexes`) only
 dropped after `EXPLAIN (ANALYZE, BUFFERS)` and `pg_stat_user_indexes` showed zero scans for them
 over 47 real search requests. The keyset order is a superset of `rating DESC NULLS LAST, id` and
 the predicate is identical, so one index serves every search query.
+
+**Search by date and schedule-conflict reads (2026-11-13, issue-94).** The `filter.Date` branch
+of `ApplySearchFilters` now needs `schedule_overrides` (exception beats the template) and
+`working_schedules`, and the search additionally reads `time_offs` joined to the primary
+`barber_salons` row for the whole-local-day exclusion. `EXPLAIN (ANALYZE, BUFFERS)` on
+`barbersearch_load` (12 000 profiles, 168 000 working schedules, 4 000 overrides, 1.2M bookings;
+details and the full plans: `verification/issue-94-explain-search.txt` and
+`issue-94-explain-timeoffs.txt`) shows the keyset index is still the outer path:
+`Index Scan using ix_barber_profiles_search_keyset`, `LIMIT 21`, then one
+`ux_barber_salons_barber_profile_id_salon_id` lookup per returned row plus
+`ux_working_schedules_barber_salon_id_day_of_week` and
+`ux_schedule_overrides_barber_salon_id_date` (the override lookup is an index-only scan for the
+`NOT EXISTS`). 1.5 ms / ~1.2k shared buffers per page; the non-empty `blockedProfileIds` adds a
+plain array `Filter` on the same index (0.55 ms). No new index and no migration: the existing
+unique indexes already serve every new `EXISTS`/`NOT EXISTS`. The new conflict read
+(`GetActiveForScheduleAsync`) is a partial-index scan
+`ix_bookings_barber_profile_id_start_at_active` with an `Incremental Sort` on `start_at`, and the
+time-off read is a 4.9 ms hash join over 600 `time_offs` and 12 000 primary links — both below
+the point where an index would pay for itself.
 
 **Own card read (2026-11-10, issue-83).** `BarberProfileRepository.GetOwnCardByIdAsync` is a
 primary-key lookup (`WHERE id = @id`, **no** visibility predicate) with three `Include`s under
@@ -3007,8 +3024,25 @@ Read endpoints (added 2026-10-19):
   for a missing date). The slot context resolves the effective day as **override → weekly
   template**: an override day off makes `isWorkingDay = false`, custom hours replace the weekly
   bounds. `TimeOff` stays profile-wide and is subtracted after that. The schedule writes are
-  **not** in `audit_log`, do not check existing bookings, and `GET api/barbers?date=` still filters
-  only by weekday — those are open gaps from §9.13, not hidden behaviour.
+  **not** in `audit_log`. Since issue-94 (2026-11-13) every write also checks active bookings:
+  shortening hours, a day off, custom hours, a weekly replace or a time off returns
+  `409 barberSchedule.conflict` with a `conflicts` extension (id, start/end, `timeZoneId`,
+  customer name, service name, status) when a future (`StartAt > now`) `Pending`/`Confirmed`
+  visit would fall outside the new effective day. `?force=true` on all five actions saves the
+  edit anyway (ownership and existence are still checked); an invalid `force` value binds as
+  `false`. Check and write run in one `IUnitOfWork` transaction under the same advisory lock as
+  booking creation (`AcquireBarberLockAsync` overload with `barberSchedule.lockTimeout`), and the
+  aggregate is loaded **after** the lock. Only changed rows are checked: a weekday whose
+  `(IsDayOff, Start, End)` did not change, a date shadowed by an exception, and deletes are not
+  checked. Repeating weekdays are enumerated over `Constants.SCHEDULE_CONFLICT_HORIZON_DAYS`
+  (60) from today in the salon zone; an explicit exception date is checked at any depth, even
+  beyond the horizon (a booking on day 75 still blocks a day off on that date). `GET
+  api/barbers?date=` now uses the effective day (exception beats the weekly template) in at
+  least one active salon and excludes a whole-local-day time off in the primary salon's zone
+  (D10); a partial-day time off and custom hours do not hide the barber. New error codes:
+  `barberSchedule.conflict` (409) and `barberSchedule.lockTimeout` (409). The writes are still
+  **not** in `audit_log`. Plans: `verification/issue-94-explain-search.txt` and
+  `issue-94-explain-timeoffs.txt`; no migration and no new index.
 - **Cancellation reason (2026-11-04, issue-44).** `POST api/bookings/{id}/cancellation` now takes
   an optional `{ reason }` body (`[FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]`), so the
   customer and admin calls without a body keep working. `CancelBookingCommand` carries
