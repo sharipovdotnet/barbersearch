@@ -141,12 +141,25 @@ npx tsc -p tsconfig.e2e.json --noEmit  0
 
 ### E2E
 
-Полный прогон локально не запускался: порт `5243` занят другим экземпляром API общего dev-
-окружения, а подменять его в чужой сессии нельзя. Обязательный CI-workflow `frontend-e2e`
-переключён на MinIO (§7.3), поэтому media-сценарии (`account-avatar-mutations`,
-`barber-profile-photos-mutations`, `public-barber-avatar-mutations`) проверяют S3-ветку
-в CI. Ручной HTTP-сценарий §11.4 пройден полностью против MinIO — он и есть доказательство
-для этого окружения.
+Три media-сценария прогнаны против **MinIO** (API на `Storage:Provider=S3`, Vite с
+`VITE_API_PROXY_TARGET` на этот API, база `barbersearch_e2e`):
+
+```text
+npx playwright test --project=auth --project=mutations-chromium --no-deps --workers=1 \
+  account-avatar-mutations barber-profile-photos-mutations public-barber-avatar-mutations
+
+20 passed (1.4m)
+```
+
+Они покрывают загрузку аватара и фото портфолио, `srcset`/`?size=`, `304` и `private`/`public`
+кэш, `404` для скрытого кадра, очередь модерации, блокировку/возврат и удаление — то есть
+S3-адаптер проверен через реальный HTTP и реальный object storage.
+
+Полный локальный прогон всего набора в этом окружении недостоверен: база e2e общая и не
+сброшена под текущие фикстуры (падают далёкие от media страницы: счётчики админки, письма,
+кабинеты), а порт `5243` занят другим экземпляром API общего dev-окружения. Полный набор
+запускает CI-workflow `frontend-e2e`, который переключён на MinIO (§7.3), поэтому в CI те же
+media-сценарии идут против S3 на чистой базе.
 
 ## Что не проверено и почему
 

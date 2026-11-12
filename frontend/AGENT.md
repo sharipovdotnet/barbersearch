@@ -499,6 +499,11 @@ the Mailpit step: the suite no longer proves the feature without a real inbox.
 `npm run test:e2e` is **not** part of `npm test` and never runs in `frontend-ci`; the separate
 `frontend-e2e` workflow owns it. `playwright-report/`, `test-results/` and `e2e/.auth/` are ignored.
 
+On 2026-11-12 the three media mutation specs (`account-avatar-mutations`,
+`barber-profile-photos-mutations`, `public-barber-avatar-mutations`) were rerun against MinIO with
+`Storage:Provider=S3` (#92): 20 passed. That is the S3 path of the suite; CI runs the full set
+against MinIO.
+
 **Verification snapshot, 2026-11-12 (photo pre-moderation slice, #89).** The build and unit
 numbers below belong to that slice; the current ones are in §12.1 and §15.
 
