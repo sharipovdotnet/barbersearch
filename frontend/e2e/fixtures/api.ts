@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { expect, type APIRequestContext } from '@playwright/test'
 
-import { baseURL, fixtures, storageStatePath } from './accounts'
+import { baseURL, fixtures, storageStatePath, type Role } from './accounts'
 
 /**
  * Подготовка состояния через API для мутирующих сцен.
@@ -317,6 +317,18 @@ export type GuestBookingRequest = {
   lastName: string
 }
 
+/**
+ * Чей кабинет создаёт гостевые записи.
+ *
+ * По умолчанию — витринный барбер: так сцена ленты дня не меняет поведение.
+ * Сцена конфликтов расписания (#94) передаёт своего барбера и его услугу/салон.
+ */
+export type GuestBookingTarget = {
+  role?: Role
+  barberServiceId?: string
+  salonId?: string
+}
+
 /** Полчаса — шаг сдвига при `409`: сдвиг не должен выйти за пределы дня. */
 const GUEST_SHIFT_MINUTES = 30
 const GUEST_MAX_ATTEMPTS = 4
@@ -330,11 +342,12 @@ const GUEST_MAX_ATTEMPTS = 4
  */
 export async function createGuestBookings(
   playwright: PlaywrightApi,
-  requests: readonly GuestBookingRequest[]
+  requests: readonly GuestBookingRequest[],
+  target: GuestBookingTarget = {}
 ): Promise<GuestBooking[]> {
   const context = await playwright.request.newContext({
     baseURL,
-    storageState: storageStatePath('barber'),
+    storageState: storageStatePath(target.role ?? 'barber'),
   })
 
   const created: GuestBooking[] = []
@@ -343,7 +356,7 @@ export async function createGuestBookings(
     const token = await csrfToken(context)
 
     for (const request of requests) {
-      const booking = await createGuestBooking(context, token, request)
+      const booking = await createGuestBooking(context, token, request, target)
 
       if (booking === null) {
         throw new Error(
@@ -363,7 +376,8 @@ export async function createGuestBookings(
 async function createGuestBooking(
   context: APIRequestContext,
   token: string,
-  request: GuestBookingRequest
+  request: GuestBookingRequest,
+  target: GuestBookingTarget
 ): Promise<GuestBooking | null> {
   const endOfDay = new Date(request.startAt)
   endOfDay.setHours(23, 59, 59, 0)
@@ -386,8 +400,8 @@ async function createGuestBooking(
         guestFirstName: 'E2E',
         guestLastName: request.lastName,
         guestPhone: '+79990000000',
-        barberServiceId: fixtures.barberServiceId,
-        salonId: fixtures.salonId,
+        barberServiceId: target.barberServiceId ?? fixtures.barberServiceId,
+        salonId: target.salonId ?? fixtures.salonId,
         startAt: start.toISOString(),
         endAt: end.toISOString(),
         idempotencyKey: `e2e-day-${randomUUID()}`,
@@ -422,7 +436,8 @@ async function createGuestBooking(
  */
 export async function cancelGuestBookings(
   playwright: PlaywrightApi,
-  ids: readonly string[]
+  ids: readonly string[],
+  role: Role = 'barber'
 ): Promise<void> {
   if (ids.length === 0) {
     return
@@ -430,7 +445,7 @@ export async function cancelGuestBookings(
 
   const context = await playwright.request.newContext({
     baseURL,
-    storageState: storageStatePath('barber'),
+    storageState: storageStatePath(role),
   })
 
   try {
@@ -493,6 +508,50 @@ export async function cancelBookingsByGuestName(
       [204, 404, 409],
       `POST /api/bookings/{id}/cancellation: ${response.status()}`
     ).toContain(response.status())
+  }
+}
+
+/**
+ * День недели в теле `PUT .../working-schedules` — как его ждёт API.
+ */
+export type WorkingDayPayload = {
+  dayOfWeek: string
+  isDayOff: boolean
+  startTime: string
+  endTime: string
+}
+
+/**
+ * Полная замена недели через API — уборка мутирующей сцены расписания (#94).
+ *
+ * `?force=true`: уборка не должна зависеть от того, успела ли отмениться гостевая
+ * запись. Сам сценарий проверяет `409` и `force` через интерфейс; здесь важна
+ * только идемпотентность фикстуры.
+ */
+export async function putWorkingSchedules(
+  playwright: PlaywrightApi,
+  target: { role: Role; barberProfileId: string; salonId: string },
+  days: readonly WorkingDayPayload[]
+): Promise<void> {
+  const context = await playwright.request.newContext({
+    baseURL,
+    storageState: storageStatePath(target.role),
+  })
+
+  try {
+    const token = await csrfToken(context)
+
+    const response = await context.put(
+      `/api/barber-profiles/${target.barberProfileId}/salons/${target.salonId}/working-schedules?force=true`,
+      { headers: { 'X-CSRF-TOKEN': token }, data: { days } }
+    )
+
+    expect(
+      response.status(),
+      'PUT /api/barber-profiles/{id}/salons/{salonId}/working-schedules'
+    ).toBe(204)
+  } finally {
+    await context.dispose()
   }
 }
 
