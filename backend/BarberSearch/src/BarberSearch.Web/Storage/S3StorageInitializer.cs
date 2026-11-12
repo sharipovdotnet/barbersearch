@@ -67,11 +67,11 @@ internal sealed class S3StorageInitializer : IHostedService
         {
             exists = await AmazonS3Util.DoesS3BucketExistV2Async(_client, _options.Bucket);
         }
-        catch (Exception exception) when (exception is AmazonServiceException or AmazonClientException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             LogFailure(exception);
 
-            throw new InvalidOperationException(START_FAILURE_MESSAGE, exception);
+            throw new InvalidOperationException(START_FAILURE_MESSAGE);
         }
 
         if (!exists && _options.EnsureBucket)
@@ -84,11 +84,11 @@ internal sealed class S3StorageInitializer : IHostedService
 
                 exists = true;
             }
-            catch (Exception exception) when (exception is AmazonServiceException or AmazonClientException)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 LogFailure(exception);
 
-                throw new InvalidOperationException(START_FAILURE_MESSAGE, exception);
+                throw new InvalidOperationException(START_FAILURE_MESSAGE);
             }
         }
 
@@ -102,7 +102,7 @@ internal sealed class S3StorageInitializer : IHostedService
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Пишет статус и код ошибки S3: имени бакета, эндпоинта и ключей здесь нет.
+    /// Пишет статус, код ошибки и тип исключения: бакета, эндпоинта и ключей здесь нет.
     /// </summary>
     private void LogFailure(Exception exception)
     {
@@ -111,9 +111,13 @@ internal sealed class S3StorageInitializer : IHostedService
             : 0;
         var errorCode = (exception as AmazonServiceException)?.ErrorCode;
 
+        // Недоступный эндпоинт приходит как HttpRequestException, и его сообщение содержит
+        // адрес — поэтому печатается только тип, без message и вложенного исключения.
         _logger.LogWarning(
-            "Object storage bucket check failed with status {StatusCode} and error code {ErrorCode}.",
+            "Object storage bucket check failed with status {StatusCode}, error code {ErrorCode} "
+            + "and exception type {ExceptionType}.",
             status,
-            errorCode);
+            errorCode,
+            exception.GetType().Name);
     }
 }

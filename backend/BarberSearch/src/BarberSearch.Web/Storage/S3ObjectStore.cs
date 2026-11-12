@@ -75,7 +75,7 @@ internal sealed class S3ObjectStore : IPhotoObjectStore
         {
             return null;
         }
-        catch (Exception exception) when (exception is AmazonServiceException or AmazonClientException)
+        catch (Exception exception) when (IsStorageFailure(exception))
         {
             throw StorageFailure(exception);
         }
@@ -104,7 +104,7 @@ internal sealed class S3ObjectStore : IPhotoObjectStore
 
             await _client.PutObjectAsync(request, cancellationToken);
         }
-        catch (Exception exception) when (exception is AmazonServiceException or AmazonClientException)
+        catch (Exception exception) when (IsStorageFailure(exception))
         {
             throw StorageFailure(exception);
         }
@@ -123,7 +123,7 @@ internal sealed class S3ObjectStore : IPhotoObjectStore
         {
             // S3 идемпотентен: удаление отсутствующего ключа — успех.
         }
-        catch (Exception exception) when (exception is AmazonServiceException or AmazonClientException)
+        catch (Exception exception) when (IsStorageFailure(exception))
         {
             throw StorageFailure(exception);
         }
@@ -136,6 +136,22 @@ internal sealed class S3ObjectStore : IPhotoObjectStore
         => exception.StatusCode == HttpStatusCode.NotFound;
 
     /// <summary>
+    /// Отличает сбой хранилища от ошибки кода: SDK, транспорт и разбор ответа.
+    /// </summary>
+    /// <remarks>
+    /// Недоступный эндпоинт приходит как <see cref="HttpRequestException"/>, а не как
+    /// <c>AmazonS3Exception</c>: без этой ветки исключение ушло бы в путь запроса мимо
+    /// контракта <see cref="IPhotoObjectStore"/>, а его сообщение содержало бы адрес.
+    /// Отмена (<see cref="OperationCanceledException"/>) не перехватывается.
+    /// </remarks>
+    private static bool IsStorageFailure(Exception exception)
+        => exception is AmazonServiceException
+            or AmazonClientException
+            or HttpRequestException
+            or WebException
+            or IOException;
+
+    /// <summary>
     /// Переводит ошибку SDK в <see cref="IOException"/> без ключа, бакета и эндпоинта.
     /// </summary>
     private IOException StorageFailure(Exception exception)
@@ -145,10 +161,14 @@ internal sealed class S3ObjectStore : IPhotoObjectStore
             : 0;
         var errorCode = (exception as AmazonServiceException)?.ErrorCode;
 
+        // Тип исключения помогает отличить недоступную сеть от отказа доступа, но ни
+        // сообщение, ни вложенное исключение не печатаются: в них бывают адрес и ключ.
         _logger.LogWarning(
-            "Object storage request failed with status {StatusCode} and error code {ErrorCode}.",
+            "Object storage request failed with status {StatusCode}, error code {ErrorCode} "
+            + "and exception type {ExceptionType}.",
             status,
-            errorCode);
+            errorCode,
+            exception.GetType().Name);
 
         return new IOException("The object storage request failed.");
     }
