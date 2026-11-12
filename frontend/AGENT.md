@@ -501,8 +501,8 @@ the Mailpit step: the suite no longer proves the feature without a real inbox.
 
 On 2026-11-12 the three media mutation specs (`account-avatar-mutations`,
 `barber-profile-photos-mutations`, `public-barber-avatar-mutations`) were rerun against MinIO with
-`Storage:Provider=S3` (#92): 20 passed. That is the S3 path of the suite; CI runs the full set
-against MinIO.
+`Storage:Provider=S3` (#92): 20 passed. The full suite then passed in CI against MinIO too:
+309 passed / 6 skipped (`frontend-e2e` run 43267210317).
 
 **Verification snapshot, 2026-11-12 (photo pre-moderation slice, #89).** The build and unit
 numbers below belong to that slice; the current ones are in §12.1 and §15.

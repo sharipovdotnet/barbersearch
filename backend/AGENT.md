@@ -4423,7 +4423,8 @@ License) и Magick.NET (тяжёлый). `SkiaSharp` живёт только в 
 **Проверка.** `dotnet build` — 0 warnings / 0 errors; infrastructure **344** (новые
 `S3PhotoStorageTests` и `PhotoStorageOptionsTests`), integration **292** (Local без правок
 сценариев); всего **2102** зелёных; `has-pending-model-changes` чисто (миграций нет).
-Frontend-тесты и бандл — frontend `AGENT.md` §15.
+E2E в CI против MinIO — **309 passed / 6 skipped** (`frontend-e2e`); frontend-тесты и бандл —
+frontend `AGENT.md` §15.
 
 ---
 
