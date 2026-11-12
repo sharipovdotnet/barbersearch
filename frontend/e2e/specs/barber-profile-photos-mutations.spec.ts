@@ -4,11 +4,18 @@ import { expect, test } from '../fixtures/test'
 
 import type {
   APIRequestContext,
+  Browser,
   BrowserContext,
   Page,
 } from '@playwright/test'
 
 import { baseURL, fixtures, storageStatePath } from '../fixtures/accounts'
+import {
+  auditChange,
+  auditChangeOf,
+  expectNoAuditField,
+  fetchAdminAuditRows,
+} from '../fixtures/api'
 import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AdminPhotosPage } from '../pages/admin-photos-page'
 import { BarberProfilePage } from '../pages/barber-profile-page'
@@ -49,6 +56,10 @@ const ADMIN_PHOTOS_SECTION = 'section[aria-labelledby="barber-photos-title"]'
 // URL варианта `sm`, снятый с `srcset` карточки: проверяется в сценах одобрения,
 // скрытия и возврата, когда кадр уже виден публично.
 let portfolioVariantUrl: string | null = null
+
+// Id одобренного кадра с подписью `CAPTION`: по нему журнал фильтруется в
+// сценах одобрения, скрытия и удаления. `PortfolioPhoto.Id` ≠ `mediaId` из URL.
+let approvedPhotoId: string | null = null
 
 /** Первый URL из `srcset` (`?size=sm 256w, …`) — вариант, который грузит браузер. */
 function firstSrcSetUrl(srcSet: string | null): string {
@@ -230,16 +241,49 @@ test.describe('фотографии портфолио: мутации', () => {
     expect(own.photos).toHaveLength(1)
     expect(own.photos[0]?.moderationStatus).toBe('Pending')
     expect(own.photos[0]?.rejectionReason).toBeNull()
+
+    approvedPhotoId = own.photos[0]?.id ?? null
+
+    expect(approvedPhotoId, 'id загруженного кадра').not.toBeNull()
+
+    // Журнал: загрузка — `portfolio_photo.created` с `url` кадра. Читаем из
+    // админского контекста: `page.request` владельца получает `403 AdminOnly`.
+    const adminContext = await openAdminContext(browser)
+
+    try {
+      const audit = await fetchAdminAuditRows(
+        adminContext.request,
+        'portfolio_photo',
+        approvedPhotoId ?? ''
+      )
+      const created = audit.find(
+        (row) => row.action === 'portfolio_photo.created'
+      )
+
+      expect(
+        created,
+        'журнал: загрузка кадра — portfolio_photo.created'
+      ).toBeDefined()
+      expect(
+        auditChangeOf(created, 'url')?.to,
+        'url кадра в строке создания'
+      ).toMatch(/^\/api\/media\/portfolio\//)
+      expect(
+        auditChangeOf(created, 'moderationStatus')?.to,
+        'новый кадр создаётся Pending'
+      ).toBe('Pending')
+      expectNoAuditField(audit, 'rejectionReason')
+    } finally {
+      await adminContext.close()
+    }
   })
 
   test('очередь портфолио: поиск по имени барбера и «Одобрить»', async ({
     browser,
-  }) => {    const adminContext = await browser.newContext({
-      baseURL,
-      storageState: storageStatePath('admin'),
-      viewport: { width: 1280, height: 900 },
-      reducedMotion: 'reduce',
-    })
+  }) => {
+    expect(approvedPhotoId).not.toBeNull()
+
+    const adminContext = await openAdminContext(browser)
 
     try {
       const adminPage = await adminContext.newPage()
@@ -298,6 +342,25 @@ test.describe('фотографии портфолио: мутации', () => {
       } finally {
         await publicContext.close()
       }
+
+      // Журнал: решение — `portfolio_photo.updated` с `Pending → Approved`.
+      const audit = await fetchAdminAuditRows(
+        adminContext.request,
+        'portfolio_photo',
+        approvedPhotoId ?? ''
+      )
+
+      expect(
+        audit.some(
+          (row) =>
+            row.action === 'portfolio_photo.updated' &&
+            auditChange(row, 'moderationStatus')?.from === 'Pending' &&
+            auditChange(row, 'moderationStatus')?.to === 'Approved'
+        ),
+        'журнал: одобрение кадра — Pending → Approved'
+      ).toBe(true)
+      // Причина отказа не дублируется в журнале: она остаётся на кадре.
+      expectNoAuditField(audit, 'rejectionReason')
     } finally {
       await adminContext.close()
     }
@@ -549,12 +612,9 @@ test.describe('фотографии портфолио: мутации', () => {
   test('админ скрывает фото, публичная карточка теряет галерею, затем возвращает', async ({
     browser,
   }) => {
-    const adminContext = await browser.newContext({
-      baseURL,
-      storageState: storageStatePath('admin'),
-      viewport: { width: 1280, height: 900 },
-      reducedMotion: 'reduce',
-    })
+    expect(approvedPhotoId).not.toBeNull()
+
+    const adminContext = await openAdminContext(browser)
     // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
     // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
     // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
@@ -648,6 +708,23 @@ test.describe('фотографии портфолио: мутации', () => {
       ).toBe(404)
       expect(hiddenVariant.headers()['cache-control']).toBe('no-store')
 
+      // Журнал: скрытие — `portfolio_photo.updated` с `isBlocked: false → true`.
+      const hiddenAudit = await fetchAdminAuditRows(
+        adminContext.request,
+        'portfolio_photo',
+        approvedPhotoId ?? ''
+      )
+
+      expect(
+        hiddenAudit.some(
+          (row) =>
+            row.action === 'portfolio_photo.updated' &&
+            auditChange(row, 'isBlocked')?.from === false &&
+            auditChange(row, 'isBlocked')?.to === true
+        ),
+        'журнал: скрытие кадра — isBlocked: false → true'
+      ).toBe(true)
+
       // «Разблокировать» — единственный путь вернуть кадр: владелец этого не может.
       await photos
         .getByRole('button', { name: `Разблокировать: ${CAPTION}` })
@@ -674,6 +751,24 @@ test.describe('фотографии портфолио: мутации', () => {
       expect(returnedVariant.headers()['cache-control']).toBe(
         'public, max-age=0, must-revalidate'
       )
+
+      // Журнал: возврат — `portfolio_photo.updated` с `isBlocked: true → false`.
+      const returnedAudit = await fetchAdminAuditRows(
+        adminContext.request,
+        'portfolio_photo',
+        approvedPhotoId ?? ''
+      )
+
+      expect(
+        returnedAudit.some(
+          (row) =>
+            row.action === 'portfolio_photo.updated' &&
+            auditChange(row, 'isBlocked')?.from === true &&
+            auditChange(row, 'isBlocked')?.to === false
+        ),
+        'журнал: возврат кадра — isBlocked: true → false'
+      ).toBe(true)
+      expectNoAuditField(returnedAudit, 'rejectionReason')
     } finally {
       await adminContext.close()
       await publicContext.close()
@@ -684,6 +779,8 @@ test.describe('фотографии портфолио: мутации', () => {
     browser,
     page,
   }) => {
+    expect(approvedPhotoId).not.toBeNull()
+
     const profile = new BarberProfilePage(page)
 
     await profile.goto()
@@ -714,6 +811,33 @@ test.describe('фотографии портфолио: мутации', () => {
     await expect(profile.emptyPhotos).toBeVisible()
     await expect(profile.photoCards()).toHaveCount(0)
 
+    // Журнал: удаление — `portfolio_photo.deleted` с `url` кадра. Строка переживает
+    // сам кадр, иначе после удаления файл было бы не с чем связать.
+    const adminContext = await openAdminContext(browser)
+
+    try {
+      const audit = await fetchAdminAuditRows(
+        adminContext.request,
+        'portfolio_photo',
+        approvedPhotoId ?? ''
+      )
+      const deleted = audit.find(
+        (row) => row.action === 'portfolio_photo.deleted'
+      )
+
+      expect(
+        deleted,
+        'журнал: удаление кадра — portfolio_photo.deleted'
+      ).toBeDefined()
+      expect(
+        auditChangeOf(deleted, 'url')?.to,
+        'url кадра в строке удаления'
+      ).toMatch(/^\/api\/media\/portfolio\//)
+      expectNoAuditField(audit, 'rejectionReason')
+    } finally {
+      await adminContext.close()
+    }
+
     // Явно пустой storageState: `test.use` задаёт cookie владельца профиля, а
     // гостевая проверка обязана идти без них — иначе скрытый кадр отдаётся
     // владельцу с `private, no-store` и «скрытие» на самом деле не проверяется.
@@ -734,6 +858,21 @@ test.describe('фотографии портфолио: мутации', () => {
     }
   })
 })
+
+/**
+ * Админский контекст для чтения журнала.
+ *
+ * `page.request` владельца профиля получает `403 AdminOnly`, поэтому API-ассерты
+ * журнала идут из контекста администратора, а не из сессии барбера.
+ */
+function openAdminContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext({
+    baseURL,
+    storageState: storageStatePath('admin'),
+    viewport: { width: 1280, height: 900 },
+    reducedMotion: 'reduce',
+  })
+}
 
 /**
  * Публичная карточка в свежем контексте: галерея есть или её нет вовсе.

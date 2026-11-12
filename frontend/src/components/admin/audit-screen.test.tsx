@@ -215,6 +215,53 @@ describe('AuditScreen', () => {
     expect(requests.at(-1)?.has('cursor')).toBe(false)
   })
 
+  it('смена фильтра на «Фото портфолио» отправляет entityType=portfolio_photo и начинает первую страницу без курсора', async () => {
+    const user = userEvent.setup()
+    const requests: URLSearchParams[] = []
+
+    server.use(
+      http.get('/api/admin/audit', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        requests.push(params)
+
+        if (params.get('entityType') === 'portfolio_photo') {
+          return HttpResponse.json({ items: [], nextCursor: null })
+        }
+
+        return HttpResponse.json({
+          items: ENTRIES.all,
+          nextCursor: 'cursor-2',
+        })
+      })
+    )
+
+    render(<AuditScreen />)
+
+    await screen.findByRole('list', { name: 'Записи журнала' })
+
+    // Уходим на вторую страницу: курсор не должен пережить смену фильтра.
+    await user.click(
+      screen.getByRole('button', { name: 'Дальше — следующая страница' })
+    )
+
+    await waitFor(() => {
+      expect(requests.at(-1)?.get('cursor')).toBe('cursor-2')
+    })
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Тип сущности' }),
+      'portfolio_photo'
+    )
+
+    await waitFor(() => {
+      expect(requests.at(-1)?.get('entityType')).toBe('portfolio_photo')
+    })
+
+    // Новый тип — девятая опция в конце списка, запрос идёт с первой страницы.
+    expect(requests.at(-1)?.has('cursor')).toBe(false)
+    expect(await screen.findByText('Ничего не найдено')).toBeInTheDocument()
+  })
+
   it('пустой ответ без фильтров показывает «Журнал пуст»', async () => {
     mockAuditPage([])
 

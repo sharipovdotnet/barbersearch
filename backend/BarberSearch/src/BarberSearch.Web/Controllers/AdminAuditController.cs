@@ -19,12 +19,13 @@ namespace BarberSearch.Web.Controllers;
 /// Записи пишет сервер при сохранении изменений, а не клиент.
 /// </para>
 /// <para>
-/// В журнал попадают <c>User</c>, <c>BarberProfile</c>, <c>Review</c>, <c>Salon</c>,
-/// <c>HairService</c>, <c>Specialization</c> и <c>Booking</c> — allowlist <c>AuditTrail</c>.
-/// У брони пишутся только изменения статуса и заметки барбера: создание брони не аудируется
-/// сознательно (бронь уже хранит владельца, время и цену, а строка на каждую бронь раздувает
-/// журнал без новой информации). Дети <c>BarberProfile</c> — отдельный вопрос и в allowlist
-/// не входят.
+/// В журнал попадают восемь типов: <c>User</c>, <c>BarberProfile</c>, <c>PortfolioPhoto</c>,
+/// <c>Review</c>, <c>Salon</c>, <c>HairService</c>, <c>Specialization</c> и <c>Booking</c> —
+/// allowlist <c>AuditTrail</c>. У брони пишутся только изменения статуса и заметки барбера:
+/// создание брони не аудируется сознательно (бронь уже хранит владельца, время и цену, а
+/// строка на каждую бронь раздувает журнал без новой информации). <c>PortfolioPhoto</c> —
+/// ребёнок профиля, но отдельный тип: загрузка и удаление кадра это жизненный цикл
+/// контента; остальные дети <c>BarberProfile</c> в allowlist не входят.
 /// </para>
 /// <para>
 /// Имя сущности не резолвится: запись хранит <c>entity_type</c> и <c>entity_id</c>, а имя
@@ -42,8 +43,8 @@ public class AdminAuditController : ApiController
     /// Возвращает страницу журнала с фильтрами типа сущности, автора и периода.
     /// </summary>
     /// <param name="entityType">Тип сущности: <c>all</c> (по умолчанию), <c>user</c>,
-    /// <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
-    /// <c>specialization</c> или <c>booking</c>.</param>
+    /// <c>barber_profile</c>, <c>portfolio_photo</c>, <c>review</c>, <c>salon</c>,
+    /// <c>hair_service</c>, <c>specialization</c> или <c>booking</c>.</param>
     /// <param name="actor">Подстрока email автора; пустое значение — без фильтра.</param>
     /// <param name="from">Начальная дата UTC-суток включительно в формате <c>yyyy-MM-dd</c>.</param>
     /// <param name="to">Последняя дата UTC-суток включительно в формате <c>yyyy-MM-dd</c>.</param>

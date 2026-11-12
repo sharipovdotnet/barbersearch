@@ -58,7 +58,7 @@ public sealed class GetAdminAuditLogHandler
                 ApiErrorCodes.AdminAudit.EntityTypeInvalid,
                 """
                 Entity type must be one of 'all', 'user', 'barber_profile', 'review',
-                'salon', 'hair_service', 'specialization' or 'booking'.
+                'salon', 'hair_service', 'specialization', 'booking' or 'portfolio_photo'.
                 """,
                 nameof(query.EntityType)));
         }

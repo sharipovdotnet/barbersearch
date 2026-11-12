@@ -29,8 +29,8 @@ public sealed class AuditLogEntry
 
     /// <summary>
     /// Предел длины <see cref="EntityType"/>: стабильные имена allowlist аудита
-    /// (<c>user</c>, <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
-    /// <c>specialization</c>, <c>booking</c>).
+    /// (<c>user</c>, <c>barber_profile</c>, <c>portfolio_photo</c>, <c>review</c>, <c>salon</c>,
+    /// <c>hair_service</c>, <c>specialization</c>, <c>booking</c>).
     /// </summary>
     public const int MAX_ENTITY_TYPE_LENGTH = 64;
 
@@ -58,9 +58,10 @@ public sealed class AuditLogEntry
     public string Action { get; private set; } = null!;
 
     /// <summary>
-    /// Тип сущности стабильным именем (<c>user</c>, <c>barber_profile</c>, <c>review</c>,
-    /// <c>salon</c>, <c>hair_service</c>, <c>specialization</c>, <c>booking</c>),
-    /// а не CLR-именем: переименование класса не должно менять историю.
+    /// Тип сущности стабильным именем (<c>user</c>, <c>barber_profile</c>,
+    /// <c>portfolio_photo</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
+    /// <c>specialization</c>, <c>booking</c>), а не CLR-именем: переименование класса
+    /// не должно менять историю.
     /// </summary>
     public string EntityType { get; private set; } = null!;
 

@@ -134,7 +134,8 @@ public class AdminUsersController : ApiController
     /// <para>
     /// Ответ <c>204</c>. Нет пользователя — <c>404 user.notFound</c>, аватара нет —
     /// <c>409 user.avatarModeration.noAvatar</c>. Решение пишется в поля самой сущности
-    /// (<c>reviewedByUserId</c>, <c>reviewedAt</c>); <c>audit_log</c> новых типов не получает.
+    /// (<c>reviewedByUserId</c>, <c>reviewedAt</c>), а строка <c>user.updated</c> фиксирует
+    /// смену <c>avatarModerationStatus</c>.
     /// </para>
     /// </remarks>
     /// <param name="userId">Пользователь, чей аватар одобряется.</param>
@@ -157,7 +158,7 @@ public class AdminUsersController : ApiController
     /// Причина — текст администратора для владельца кадра: домен тримит её, требует 1..500
     /// символов и возвращает <c>400 user.avatarModeration.reasonRequired</c> /
     /// <c>.reasonTooLong</c> с <c>invalidField = "reason"</c>. В <c>audit_log</c> причина не
-    /// попадает: решение фиксируется полями сущности, а журнал новых типов не получает.
+    /// попадает: строка <c>user.updated</c> хранит только <c>avatarModerationStatus</c>.
     /// </para>
     /// <para>
     /// Ответ <c>204</c>. Нет пользователя — <c>404 user.notFound</c>, аватара нет —

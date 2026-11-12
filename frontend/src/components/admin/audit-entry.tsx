@@ -122,9 +122,9 @@ export function AuditEntry({ entry }: { entry: AdminAuditEntry }) {
                   {fieldLabel(change.field)}
                 </dt>
                 <dd className="min-w-0 break-words text-muted-foreground">
-                  {formatAuditValue(change.field, change.from)}
+                  {formatAuditValue(change.field, change.from, entry.entityType)}
                   {' → '}
-                  {formatAuditValue(change.field, change.to)}
+                  {formatAuditValue(change.field, change.to, entry.entityType)}
                 </dd>
               </div>
             ))}

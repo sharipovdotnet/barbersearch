@@ -9,7 +9,13 @@ import {
   fixtures,
   storageStatePath,
 } from '../fixtures/accounts'
-import { deleteMyAvatar } from '../fixtures/api'
+import {
+  auditChange,
+  auditChangeOf,
+  deleteMyAvatar,
+  expectNoAuditField,
+  fetchAdminAuditRows,
+} from '../fixtures/api'
 import { expectNoBlockingViolations } from '../fixtures/axe'
 import { AccountProfilePage } from '../pages/account-profile-page'
 import { AdminPhotosPage } from '../pages/admin-photos-page'
@@ -89,6 +95,7 @@ test.describe('аватар кабинета: мутации', () => {
   })
 
   test('загрузка: превью «На проверке», объявление, каркас и reload', async ({
+    browser,
     page,
   }) => {
     const profile = new AccountProfilePage(page)
@@ -177,6 +184,34 @@ test.describe('аватар кабинета: мутации', () => {
       'Pending'
     )
     expect(meBody.avatarRejectionReason).toBeNull()
+
+    // Журнал: загрузка — `user.updated` с `avatarUrl` и `Pending`. Читаем из
+    // админского контекста: `page.request` клиента получает `403 AdminOnly`.
+    const auditContext = await openAdminContext(browser)
+
+    try {
+      const audit = await fetchAdminAuditRows(
+        auditContext.request,
+        'user',
+        MUTATIONS_USER_ID
+      )
+      const uploaded = audit.find(
+        (row) => auditChange(row, 'avatarUrl')?.to === src
+      )
+
+      expect(
+        uploaded?.action,
+        'журнал: загрузка аватара — user.updated с avatarUrl'
+      ).toBe('user.updated')
+      expect(
+        auditChangeOf(uploaded, 'avatarModerationStatus')?.to,
+        'новый аватар ждёт проверки'
+      ).toBe('Pending')
+      // Причина отказа не дублируется в журнале: она остаётся на кадре.
+      expectNoAuditField(audit, 'avatarRejectionReason')
+    } finally {
+      await auditContext.close()
+    }
 
     // axe на 1280: карточка и каркас в реальном состоянии, без исключений.
     await expectNoBlockingViolations(
@@ -327,6 +362,24 @@ test.describe('аватар кабинета: мутации', () => {
       expect(meBody.avatarModerationStatus).toBe('Approved')
       expect(meBody.avatarUrl).toBe(avatarSrc)
       expect(meBody.avatarRejectionReason).toBeNull()
+
+      // Журнал: решение — `user.updated` с `avatarModerationStatus: Pending → Approved`.
+      const audit = await fetchAdminAuditRows(
+        adminContext.request,
+        'user',
+        MUTATIONS_USER_ID
+      )
+
+      expect(
+        audit.some(
+          (row) =>
+            row.action === 'user.updated' &&
+            auditChange(row, 'avatarModerationStatus')?.from === 'Pending' &&
+            auditChange(row, 'avatarModerationStatus')?.to === 'Approved'
+        ),
+        'журнал: одобрение аватара — Pending → Approved'
+      ).toBe(true)
+      expectNoAuditField(audit, 'avatarRejectionReason')
 
       // Файл стал публичным только после решения: аноним получает `200`.
       // Пустой `storageState` обязателен: `playwright.request.newContext`
@@ -832,6 +885,7 @@ test.describe('аватар кабинета: мутации', () => {
   })
 
   test('удаление через alertdialog возвращает инициалы и отдаёт 404', async ({
+    browser,
     page,
   }) => {
     expect(avatarSrc).not.toBeNull()
@@ -877,6 +931,30 @@ test.describe('аватар кабинета: мутации', () => {
       (await page.request.get(avatarVariantUrl ?? '')).status(),
       'GET старый /api/media/avatars/...?size=sm'
     ).toBe(404)
+
+    // Журнал: удаление — `user.updated` с `avatarUrl: {src} → null`.
+    const auditContext = await openAdminContext(browser)
+
+    try {
+      const audit = await fetchAdminAuditRows(
+        auditContext.request,
+        'user',
+        MUTATIONS_USER_ID
+      )
+
+      expect(
+        audit.some(
+          (row) =>
+            row.action === 'user.updated' &&
+            auditChange(row, 'avatarUrl')?.from === avatarSrc &&
+            auditChange(row, 'avatarUrl')?.to === null
+        ),
+        'журнал: удаление аватара — avatarUrl → null'
+      ).toBe(true)
+      expectNoAuditField(audit, 'avatarRejectionReason')
+    } finally {
+      await auditContext.close()
+    }
   })
 })
 

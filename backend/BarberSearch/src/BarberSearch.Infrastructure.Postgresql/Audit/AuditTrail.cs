@@ -5,6 +5,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Specializations;
@@ -31,16 +32,19 @@ namespace BarberSearch.Infrastructure.Postgresql.Audit;
 /// и не может получить scoped <see cref="ICurrentUser"/>.
 /// </para>
 /// <para>
-/// Аудируются <see cref="User"/>, <see cref="BarberProfile"/>, <see cref="Review"/>,
-/// <see cref="Salon"/>, <see cref="HairService"/>, <see cref="Specialization"/> и
-/// <see cref="Booking"/>, и только свойства из allowlist. У брони пишутся только изменения
-/// (<see cref="Booking.Status"/> и <see cref="Booking.BarberNote"/>): создание брони —
-/// действие клиента, а строка аудита на каждую бронь раздувала бы журнал без новой
-/// информации, которую бронь уже не хранит. Логины (<c>LastLoginAt</c>,
-/// <c>FailedLoginAttempts</c>) и правки профиля без административного смысла не пишутся:
-/// иначе таблица превращается в шум, в котором не видно смены роли и скрытия отзыва.
-/// Дети <see cref="BarberProfile"/> (услуги, салоны, расписание, портфолио, отпуска) —
-/// не отдельные агрегаты и в allowlist не входят: их правки строки не дают.
+/// Аудируются восемь типов: <see cref="User"/>, <see cref="BarberProfile"/>,
+/// <see cref="PortfolioPhoto"/>, <see cref="Review"/>, <see cref="Salon"/>,
+/// <see cref="HairService"/>, <see cref="Specialization"/> и <see cref="Booking"/>, и только
+/// свойства из allowlist. У брони пишутся только изменения (<see cref="Booking.Status"/> и
+/// <see cref="Booking.BarberNote"/>): создание брони — действие клиента, а строка аудита на
+/// каждую бронь раздувала бы журнал без новой информации, которую бронь уже не хранит.
+/// Логины (<c>LastLoginAt</c>, <c>FailedLoginAttempts</c>) и правки профиля без
+/// административного смысла не пишутся: иначе таблица превращается в шум, в котором не видно
+/// смены роли и скрытия отзыва. Дети <see cref="BarberProfile"/> — услуги, салоны,
+/// расписание и отпуска — не отдельные агрегаты и в allowlist не входят: их правки строки
+/// не дают. Исключение одно — <see cref="PortfolioPhoto"/>: загрузка, скрытие и удаление
+/// кадра — это жизненный цикл контента, который администратор проверяет и блокирует, поэтому
+/// у фотографии собственный тип <c>portfolio_photo</c>, хотя она остаётся ребёнком профиля.
 /// </para>
 /// <para>
 /// Секреты не попадают в БД в открытом виде: значения свойств, имя которых содержит
@@ -97,9 +101,15 @@ public sealed class AuditTrail
                     nameof(User.BarberProfileId),
 
                     // Скрытие/возврат аватара (#87): решение администратора о контенте,
-                    // а не техническая правка. AvatarUrl в allowlist не входит сознательно:
-                    // каждая загрузка давала бы строку журнала без административного смысла,
-                    // а URL — техническое имя файла.
+                    // а не техническая правка. AvatarUrl добавлен вместе с
+                    // AvatarModerationStatus: Id кадра и mediaId в URL — разные GUID'ы,
+                    // поэтому без URL строка загрузки или удаления не называет файл.
+                    // AvatarModerationStatus меняется при загрузке (Approved → Pending),
+                    // так что строка появляется в любом случае — пусть в ней будет и URL.
+                    // Причина отказа и reviewed-метки не входят: это свободный текст
+                    // администратора и дубли occurred_at/actor_user_id.
+                    nameof(User.AvatarUrl),
+                    nameof(User.AvatarModerationStatus),
                     nameof(User.IsAvatarBlocked)
                 ]),
             [typeof(BarberProfile)] = new(
@@ -111,6 +121,25 @@ public sealed class AuditTrail
                     nameof(BarberProfile.IsVerified),
                     nameof(BarberProfile.Rating),
                     nameof(BarberProfile.ReviewsCount)
+                ]),
+
+            // Портфолио — единственный ребёнок BarberProfile в allowlist: загрузка и удаление
+            // кадра — действие с контентом, а не техническая правка профиля. AuditsCreation
+            // остаётся true: кадров максимум десять на профиль, объём журнала это не взрывает.
+            // Url обязателен: PortfolioPhoto.Id и mediaId в /api/media/portfolio/... — разные
+            // GUID'ы, поэтому после удаления строку иначе не связать с файлом.
+            // RejectionReason, ReviewedAt/ReviewedByUserId и ThumbnailUrl не входят: свободный
+            // текст администратора, дубли occurred_at/actor_user_id и производная файла.
+            [typeof(PortfolioPhoto)] = new(
+                "portfolio_photo",
+                [
+                    nameof(PortfolioPhoto.BarberProfileId),
+                    nameof(PortfolioPhoto.Url),
+                    nameof(PortfolioPhoto.Description),
+                    nameof(PortfolioPhoto.SortOrder),
+                    nameof(PortfolioPhoto.IsPublished),
+                    nameof(PortfolioPhoto.IsBlocked),
+                    nameof(PortfolioPhoto.ModerationStatus)
                 ]),
             [typeof(Review)] = new(
                 "review",

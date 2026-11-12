@@ -6,10 +6,10 @@ namespace BarberSearch.Application.Audit.Admin;
 /// <remarks>
 /// Наружу и в <c>audit_log</c> типы ходят стабильными строками (<c>user</c>,
 /// <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
-/// <c>specialization</c>, <c>booking</c>), а не именами CLR-типов и не числами: переименование
-/// класса не должно менять историю. Разбор нечувствителен к регистру и обрезает пробелы
-/// по краям, но числа (<c>0</c>, <c>8</c>) отвергаются — иначе клиент мог бы прислать
-/// «тип» числом.
+/// <c>specialization</c>, <c>booking</c>, <c>portfolio_photo</c>), а не именами CLR-типов
+/// и не числами: переименование класса не должно менять историю. Разбор нечувствителен
+/// к регистру и обрезает пробелы по краям, но числа (<c>0</c>, <c>8</c>) отвергаются —
+/// иначе клиент мог бы прислать «тип» числом.
 /// </remarks>
 public static class AdminAuditEntityTypes
 {
@@ -47,6 +47,11 @@ public static class AdminAuditEntityTypes
     /// Стабильное имя брони в журнале.
     /// </summary>
     public const string BOOKING = "booking";
+
+    /// <summary>
+    /// Стабильное имя фотографии портфолио в журнале.
+    /// </summary>
+    public const string PORTFOLIO_PHOTO = "portfolio_photo";
 
     /// <summary>
     /// Разбирает параметр <c>entityType</c>: <c>null</c>, пустая строка и <c>all</c> —
@@ -116,6 +121,12 @@ public static class AdminAuditEntityTypes
             return true;
         }
 
+        if (trimmed.Equals(PORTFOLIO_PHOTO, StringComparison.OrdinalIgnoreCase))
+        {
+            entityType = AdminAuditEntityType.PortfolioPhoto;
+            return true;
+        }
+
         return false;
     }
 
@@ -133,6 +144,7 @@ public static class AdminAuditEntityTypes
             AdminAuditEntityType.HairService => HAIR_SERVICE,
             AdminAuditEntityType.Specialization => SPECIALIZATION,
             AdminAuditEntityType.Booking => BOOKING,
+            AdminAuditEntityType.PortfolioPhoto => PORTFOLIO_PHOTO,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(entityType),
                 entityType,

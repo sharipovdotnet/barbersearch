@@ -10,7 +10,15 @@ import {
 import { bookingStatusLabel } from '@/lib/booking-status'
 import type { BookingStatus } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
+import {
+  photoModerationLabel,
+  type PhotoModerationStatus,
+} from '@/lib/photo-moderation'
 import { isAdminAuditPage } from '@/lib/response-guards'
+import {
+  SALON_MODERATION_LABELS,
+  type SalonModerationStatus,
+} from '@/lib/salon-moderation'
 
 /**
  * Админское чтение журнала изменений (`GET api/admin/audit`).
@@ -20,17 +28,20 @@ import { isAdminAuditPage } from '@/lib/response-guards'
  * имя могло быть переименовано или удалено, и «актуальное» имя рядом с историческим
  * diff'ом только вводило бы в заблуждение.
  *
- * Аудит покрывает семь типов (`allowlist` `AuditTrail`): `User`, `BarberProfile`,
- * `Review`, `Salon`, `HairService`, `Specialization` и `Booking`; у брони
- * пишутся только смена статуса и заметка барбера. Создание брони сознательно
+ * Аудит покрывает восемь типов (`allowlist` `AuditTrail`): `User`, `BarberProfile`,
+ * `Review`, `Salon`, `HairService`, `Specialization`, `Booking` и `PortfolioPhoto`;
+ * у брони пишутся только смена статуса и заметка барбера. Создание брони сознательно
  * не аудируется — бронь уже хранит владельца, время и цену, а строка на каждую
- * бронь раздувала бы журнал без новой информации. Дети `BarberProfile` в allowlist
- * не входят. Ретенции, партиционирования и экспорта нет, поэтому журнал растёт
- * монотонно и читается страницами. Удалений каталога в API нет, и экран не
- * обещает «настоящую» историю удалений.
+ * бронь раздувала бы журнал без новой информации. `PortfolioPhoto` — исключение
+ * среди детей `BarberProfile`: у кадра отдельный тип, потому что загрузка и
+ * удаление — это жизненный цикл контента, а `BarberService`, `BarberSalon`,
+ * `WorkingSchedule` и `TimeOff` в allowlist не входят. Ретенции,
+ * партиционирования и экспорта нет, поэтому журнал растёт монотонно и читается
+ * страницами. Удалений каталога в API нет, и экран не обещает «настоящую»
+ * историю удалений.
  */
 
-/** Тип сущности фильтра: `all` — без фильтра, остальные семь — allowlist аудита. */
+/** Тип сущности фильтра: `all` — без фильтра, остальные восемь — allowlist аудита. */
 export type AdminAuditEntityType =
   | 'all'
   | 'user'
@@ -40,6 +51,7 @@ export type AdminAuditEntityType =
   | 'hair_service'
   | 'specialization'
   | 'booking'
+  | 'portfolio_photo'
 
 /** Порядок опций фильтра: прежние значения не сдвигаются, новые дописаны. */
 export const ADMIN_AUDIT_ENTITY_TYPES: readonly AdminAuditEntityType[] = [
@@ -51,6 +63,7 @@ export const ADMIN_AUDIT_ENTITY_TYPES: readonly AdminAuditEntityType[] = [
   'hair_service',
   'specialization',
   'booking',
+  'portfolio_photo',
 ]
 
 export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
@@ -62,6 +75,7 @@ export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
   hair_service: 'Услуга',
   specialization: 'Специализация',
   booking: 'Бронь',
+  portfolio_photo: 'Фото портфолио',
 }
 
 /**
@@ -102,6 +116,14 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   bookingId: 'Бронь',
   text: 'Текст отзыва',
   isPublished: 'Опубликован',
+  // Поля кадра: URL показывается как есть — по нему администратор находит файл.
+  // `thumbnailUrl`, причина отказа и reviewed-поля в payload не входят.
+  url: 'Файл',
+  sortOrder: 'Порядок',
+  isBlocked: 'Скрыто администратором',
+  moderationStatus: 'Статус проверки',
+  avatarUrl: 'Фото профиля',
+  avatarModerationStatus: 'Статус проверки фото',
   name: 'Название',
   description: 'Описание',
   category: 'Категория',
@@ -179,13 +201,16 @@ export function formatAuditAction(action: string): string {
  * Значение поля diff'а для показа.
  *
  * `null` — прочерк (для создания и удаления это честно), boolean — «Да»/«Нет»,
- * `[redacted]` — «скрыто». Роль, грейд, статус брони и категория услуги получают
- * русские подписи, но неизвестное значение остаётся исходной строкой. Никакой
- * HTML не собирается.
+ * `[redacted]` — «скрыто». Роль, грейд, статус брони, категория услуги и статусы
+ * проверки получают русские подписи. Для `moderationStatus` подпись зависит от
+ * типа сущности: `salon` — `SALON_MODERATION_LABELS`, `portfolio_photo` —
+ * `PHOTO_MODERATION_LABELS`, остальные типы — прежнее поведение. Неизвестное
+ * значение остаётся исходной строкой сервера. Никакой HTML не собирается.
  */
 export function formatAuditValue(
   field: string,
-  value: AdminAuditScalar | null
+  value: AdminAuditScalar | null,
+  entityType?: string
 ): string {
   if (value === null) {
     return '—'
@@ -205,6 +230,24 @@ export function formatAuditValue(
 
   if (field === 'grade') {
     return t(BARBER_GRADE_LABELS[value as BarberGrade] ?? String(value))
+  }
+
+  // Статус проверки фото общий у портфолио и аватара: подпись не зависит от типа.
+  if (field === 'avatarModerationStatus' && typeof value === 'string') {
+    return photoModerationLabel(value as PhotoModerationStatus)
+  }
+
+  if (field === 'moderationStatus' && typeof value === 'string') {
+    if (entityType === 'salon') {
+      return t(SALON_MODERATION_LABELS[value as SalonModerationStatus] ?? value)
+    }
+
+    if (entityType === 'portfolio_photo') {
+      return photoModerationLabel(value as PhotoModerationStatus)
+    }
+
+    // Прочие типы сущностей показывают серверную строку, как раньше.
+    return value
   }
 
   // Проверяемый каст: обе функции сами возвращают исходную строку для

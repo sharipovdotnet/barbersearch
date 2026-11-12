@@ -133,8 +133,8 @@ public class PortfolioPhotosController : ApiController
     /// <para>
     /// Ответ <c>204</c>. Профиля нет — <c>404 barberProfile.notFound</c>, фотографии нет в этом
     /// профиле — <c>404 portfolioPhoto.moderation.notFound</c>. Решение пишется в поля самой
-    /// сущности (<c>reviewedByUserId</c>, <c>reviewedAt</c>); <c>audit_log</c> новых типов
-    /// не получает.
+    /// сущности (<c>reviewedByUserId</c>, <c>reviewedAt</c>), а строка
+    /// <c>portfolio_photo.updated</c> фиксирует смену <c>moderationStatus</c>.
     /// </para>
     /// </remarks>
     /// <param name="barberProfileId">Профиль, которому принадлежит фотография.</param>
@@ -160,7 +160,7 @@ public class PortfolioPhotosController : ApiController
     /// Причина — текст администратора для владельца профиля: домен тримит её, требует 1..500
     /// символов и возвращает <c>400 portfolioPhoto.moderation.reasonRequired</c> /
     /// <c>.reasonTooLong</c> с <c>invalidField = "reason"</c>. В <c>audit_log</c> причина
-    /// не попадает: решение фиксируется полями сущности, а журнал новых типов не получает.
+    /// не попадает: строка <c>portfolio_photo.updated</c> хранит только <c>moderationStatus</c>.
     /// </para>
     /// <para>
     /// Ответ <c>204</c>. Профиля нет — <c>404 barberProfile.notFound</c>, фотографии нет —

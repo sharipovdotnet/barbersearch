@@ -393,7 +393,9 @@ the user has no photo. `GET /api/users/me` returns `avatarModerationStatus` and
 `avatarRejectionReason` next to the raw URL; public `avatarUrl` is `null` unless the status is
 `Approved` and the frame is not blocked. A new upload **replaces** the old frame immediately — it
 is not kept public while the new one waits — so the public header, search and cards show initials
-until approval. The two decisions do **not** write to `audit_log` (see `AGENT.md` §14 #31/#32).
+until approval. Both decisions are written to the journal as `user.updated` with
+`avatarModerationStatus`; the rejection reason stays on the user row and is not in the payload
+(see `AGENT.md` §14 #32).
 
 **Blocking.** An administrator can hide or restore an approved photo from `/admin/users/{id}` or
 `/admin/barbers/{id}` — `POST`/`DELETE /api/admin/users/{userId}/avatar/block`, both answering `204`
@@ -477,11 +479,11 @@ them through `avatarImageSource` (`1x/2x/3x`). A `Pending`/`Rejected` frame is s
 (cabinet preview) with `private, no-store`; a blocked frame is served only to an administrator with
 the same `private, no-store`; everyone else — including the owner for a blocked frame — gets `404`
 (never `403`/`410`, so existence is not revealed). There is no `avatar=blocked` filter in the admin
-lists. Hiding and
-restoring **are** written to `audit_log` as `user.updated` with `isAvatarBlocked`; the two
-pre-moderation decisions are not, they live on the user row (`reviewedByUserId`/`reviewedAt`/
-`rejectionReason`). Those limits, with the single-disk backup, are
-debt `AGENT.md` §14 #32.
+lists. Hiding and restoring **are** written to `audit_log` as `user.updated` with `isAvatarBlocked`;
+since #91 the upload, replacement and deletion of the frame are written as `user.updated` with
+`avatarUrl`/`avatarModerationStatus`, and the two pre-moderation decisions as `user.updated` with
+`avatarModerationStatus` — the rejection reason lives on the user row and is not in the payload.
+Those limits, with the single-disk backup, are debt `AGENT.md` §14 #32.
 
 **Policy.** `/privacy` §3 now names the profile photo (the user uploads it; for a barber it is
 published on the public card) and §4 sets its retention to «до удаления пользователем или
@@ -1741,8 +1743,10 @@ is `noindex` like the rest of the admin.
   `_FIELD_LABELS`, `formatAuditAction` (the label comes from the tail after the last dot of
   `user.updated`), `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто»,
   Russian role, grade, booking-status and service-category labels with the raw string as a
-  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`), `fetchAdminAuditEntries` and
-  `describeAdminAuditError`.
+  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`; `moderationStatus` is Russian by
+  entity type — `SALON_MODERATION_LABELS` for `salon`, `PHOTO_MODERATION_LABELS` for
+  `portfolio_photo` — and `avatarModerationStatus` always uses the photo labels),
+  `fetchAdminAuditEntries` and `describeAdminAuditError`.
 - `src/lib/response-guards.ts` — `isAdminAuditEntry`/`isAdminAuditPage`: non-empty ids and action,
   a nullable actor with a string id and nullable email, and changes whose `from`/`to` are JSON
   scalars or `null`. Extra fields are ignored.
@@ -1755,8 +1759,9 @@ is `noindex` like the rest of the admin.
 What it does:
 
 - Filters: a native `<select>` for the entity type («Все сущности», «Пользователь», «Барбер»,
-  «Отзыв», «Салон», «Услуга», «Специализация», «Бронь»), a debounced (300 ms) author email search
-  capped at 100 characters, and «С даты» / «По дату». The two dates are **inclusive UTC days** —
+  «Отзыв», «Салон», «Услуга», «Специализация», «Бронь», «Фото портфолио» — the last option),
+  a debounced (300 ms) author email search capped at 100 characters, and «С даты» / «По дату».
+  The two dates are **inclusive UTC days** —
   the visible hint says so — while a row's time is shown in the browser's local time zone.
   «Сбросить фильтры» appears only when at least one filter is off its default. The filters live in
   React state and are **not** written to `?…`: the author email is PII and does not belong in
@@ -1771,8 +1776,10 @@ What it does:
   `action`. «Показать изменения» / «Скрыть изменения» is the only button in a row: it carries
   `aria-expanded` and `aria-controls`, keeps the focus and expands a `<dl>` of `field: from → to`
   with Russian field names («Роль: Клиент → Администратор», «Телефон: +70000000009 →
-  +70000000010», «Статус: Подтверждена → Неявка»). Booking statuses and service categories are
-  rendered in Russian, and `isActive` is «Активность» (it serves both a user and a catalogue row).
+  +70000000010», «Статус: Подтверждена → Неявка», «Файл», «Фото профиля», «Статус проверки
+  фото»). Booking statuses and service categories are rendered in Russian, `moderationStatus` is
+  Russian for salons and portfolio photos («На проверке → Одобрено»), and `isActive` is
+  «Активность» (it serves both a user and a catalogue row).
   An unreadable payload is honest: «Изменения не записаны.» Rows expand independently.
 - States: skeleton with `aria-busy`, «Журнал пуст» without filters / «Ничего не найдено» with
   them, a first-page error with its reason and «Повторить» (never the English `detail` or the
@@ -1781,12 +1788,17 @@ What it does:
 - The journal is **immutable**: there is no write endpoint, no «Изменить», «Выключить», «Удалить»
   or «Очистить журнал», and no «Показать ещё». `AuditTrail` writes the table on every
   `SaveChanges`; the screen only reads.
-- The journal covers **seven** entity types — `User`, `BarberProfile`, `Review`, `Salon`,
-  `HairService`, `Specialization` and `Booking`. Booking rows carry only `Status` and `BarberNote`
-  changes: creating a booking is deliberately not audited (`AuditsCreation: false`), and
-  `BarberProfile` children (services, salons, schedules, photos, time off) are not covered either.
-  The journal stays immutable and read-only; retention, partitioning and export are still separate
-  slices, and catalogue deletes do not exist in the API.
+- The journal covers **eight** entity types — `User`, `BarberProfile`, `PortfolioPhoto`, `Review`,
+  `Salon`, `HairService`, `Specialization` and `Booking`. Booking rows carry only `Status`,
+  `BarberNote` and `CancellationReason` changes: creating a booking is deliberately not audited
+  (`AuditsCreation: false`). `PortfolioPhoto` is the only audited `BarberProfile` child: upload,
+  caption, order, publication, block/unblock and approve/reject write
+  `portfolio_photo.created|updated|deleted` (the field diff carries `url`, `description`,
+  `sortOrder`, `isPublished`, `isBlocked`, `moderationStatus`; the rejection reason,
+  `reviewedAt`/`reviewedByUserId` and `thumbnailUrl` are not in the payload). Services, salons,
+  schedules and time offs are still not covered. Avatar uploads, deletions and decisions appear
+  under `User` as `user.updated`. The journal stays immutable and read-only; retention,
+  partitioning and export are still separate slices, and catalogue deletes do not exist in the API.
 
 ## Testing
 
@@ -1812,16 +1824,22 @@ needs no API and no database, and covers:
 - `admin-audit` — the URL contract (`entityType` always, `actor`/`from`/`to` only when non-empty,
   the cursor last and no `pageSize`), the strict page guard accepting extra fields and rejecting a
   broken body and a non-scalar `from`, `formatAuditValue` (`null`, booleans, `[redacted]`, role and
-  grade labels, the five Russian booking statuses, the service categories, unknown values),
-  `formatAuditAction` by the action tail, the exact order of the eight entity types and their
-  labels (the new four are appended), and the error mapping for `403`, `429` and
+  grade labels, the five Russian booking statuses, the service categories, `moderationStatus` in
+  Russian for `salon` («Одобрен») and `portfolio_photo` («Одобрено»), `avatarModerationStatus`,
+  `url` as a string, unknown values and an unknown entity type), `formatAuditAction` by the action
+  tail, the exact order of the nine entity values (`all` plus the eight types) and their labels
+  (the new values are appended; «Фото портфолио» is last), and the error mapping for `403`, `429` and
   `admin.audit.cursor.invalid`. `AuditEntry` (colocated with the component) covers `<time>`, the
   short id with the full id in `title`, «Система» and «Удалённый пользователь», the expandable
   `<dl>` diff «Роль: Клиент → Администратор», «Активность» for `isActive`, the booking diff
-  «Статус: Ждёт подтверждения → Отменена», the service «Название: … → …» diff, the empty-diff
-  text and independent expansion; `AuditScreen` is an MSW-backed screen test: the loaded rows and
+  «Статус: Ждёт подтверждения → Отменена», the service «Название: … → …» diff, the
+  `portfolio_photo.created` row «Фото портфолио»/«Создано» with «Файл», «Порядок» and «Статус
+  проверки: На проверке → Одобрено», the avatar `user.updated` row with «Фото профиля» and
+  «Статус проверки фото», the empty-diff text and independent expansion; `AuditScreen` is an
+  MSW-backed screen test: the loaded rows and
   pager range, the entity-type filter starting a new first page without a cursor, a switch to
-  «Салон» sending `entityType=salon`, «Журнал пуст» and the `403` text.
+  «Салон» sending `entityType=salon`, a switch to «Фото портфолио» sending
+  `entityType=portfolio_photo`, «Журнал пуст» and the `403` text.
 - `admin-bookings` — the list URL (`status` always, `search` and `cursor` only when set, no
   `pageSize`), the detail read by id, the CSRF `POST`s for cancellation and no-show, the strict
   guards (a bad status, a string price or a missing salon time zone is a broken body; extra fields
@@ -1899,11 +1917,14 @@ verification (registration → letter in Mailpit → link → confirmed cabinet)
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
 stays separate and fast; E2E never runs inside it. The last full local run (2026-11-12, after the
-photo pre-moderation slice) is **307 passed, 6 skipped, 0 failed** — 313 tests in 6.2 min with
+photo-audit slice) is **309 passed, 6 skipped, 0 failed** — 315 tests in 6.3 min with
 `--workers=2`; the queue page object is `e2e/pages/admin-photos-page.ts`. The #90 media scenes
 extend the two existing mutation specs (gallery/cabinet `srcset`, the `?size=` WebP response,
-`ETag`/`304`, the hidden-frame `404` and the new cache header), so the figures above remain the
-last recorded full run. The previously documented
+`ETag`/`304`, the hidden-frame `404` and the new cache header). The #91 scenes add the
+«Фото портфолио» filter to `admin-audit.spec.ts`
+(it sends `entityType=portfolio_photo` and finds nothing under the fixture date) and one
+audit-API assert, made from the admin context, to each of the two media mutation specs (exact
+`entityId`, `action` and `changes`, no rejection reason). The previously documented
 cache flake is fixed: a guest `playwright.request.newContext` inherited the owner's `storageState`,
 so "anonymous" requests carried the cookie and ASP.NET added `no-store`; every guest context now
 passes an explicit empty `storageState`, and a real guest asserts

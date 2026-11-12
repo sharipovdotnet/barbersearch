@@ -7,8 +7,8 @@ namespace BarberSearch.Contracts.Audit.Admin;
 /// <para>
 /// <see cref="Action"/> — <c>{entity}.{created|updated|deleted}</c>, например
 /// <c>user.updated</c>. <see cref="EntityType"/> — стабильное имя из allowlist аудита
-/// (<c>user</c>, <c>barber_profile</c>, <c>review</c>, <c>salon</c>, <c>hair_service</c>,
-/// <c>specialization</c>, <c>booking</c>), а не имя CLR-типа.
+/// (<c>user</c>, <c>barber_profile</c>, <c>portfolio_photo</c>, <c>review</c>, <c>salon</c>,
+/// <c>hair_service</c>, <c>specialization</c>, <c>booking</c>), а не имя CLR-типа.
 /// </para>
 /// <para>
 /// Имя сущности намеренно не резолвится: <see cref="EntityId"/> — идентификатор изменённой

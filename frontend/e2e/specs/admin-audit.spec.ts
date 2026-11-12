@@ -173,6 +173,37 @@ test.describe('админка: журнал', () => {
     )
   })
 
+  test('фильтр «Фото портфолио»: запрос entityType=portfolio_photo и «Ничего не найдено»', async ({
+    page,
+  }) => {
+    const audit = new AdminAuditPage(page)
+
+    await audit.goto()
+    await audit.filterByDate(DAY)
+    await audit.waitForFirstPage()
+
+    // За 2026-09-10 фото-строк нет: фикстуры их не добавляют, а мутирующие спеки
+    // пишут свои строки «сегодня», поэтому под датой фикстур выборка пуста.
+    await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url())
+
+        return (
+          url.pathname === '/api/admin/audit' &&
+          url.searchParams.get('entityType') === 'portfolio_photo' &&
+          response.status() === 200
+        )
+      }),
+      audit.selectEntityType('Фото портфолио'),
+    ])
+
+    await expect(page.getByText('Ничего не найдено')).toBeVisible()
+    await expect(
+      page.getByText('Под выбранные фильтры записей нет.')
+    ).toBeVisible()
+    await expect(audit.rows).toHaveCount(0)
+  })
+
   test('фильтр автора: системная запись не находится, «%» — литерал', async ({
     page,
   }) => {
