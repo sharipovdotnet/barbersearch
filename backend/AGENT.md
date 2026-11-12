@@ -169,12 +169,14 @@ backend/                                  ← workspace root
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
-            ├── Storage/                  ← host-адаптер хранилища файлов: PhotoStorageOptions,
-            │                               LocalPhotoStorage (IPhotoStorage: portfolio + avatars),
+            ├── Storage/                  ← host-адаптер хранилища файлов: PhotoStorageOptions/Provider,
+            │                               LocalPhotoStorage и S3PhotoStorage (IPhotoStorage: portfolio + avatars),
+            │                               PhotoMediaKeys/PhotoContentTypes (общая раскладка и MIME),
+            │                               IPhotoObjectStore/S3ObjectStore + S3StorageInitializer (бакет),
             │                               PhotoThumbnailer/PhotoThumbnail (IPhotoThumbnailer: WebP-варианты);
             │                               варианты лежат рядом с исходником; нового проекта решения нет — см. ниже
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
-            │                               Storage:RootPath (issue-84; portfolio и avatars, issue-85) +
+            │                               Storage:Provider/RootPath (issue-84; avatars — issue-85; S3 — issue-92) +
             │                               Logging:LogLevel / Logging:File (§18) +
             │                               EmailOutbox (§19) + AllowedHosts
             ├── appsettings.Development.json
@@ -187,26 +189,35 @@ backend/tests/BarberSearch.Infrastructure.UnitTests/ ← xunit project (in the .
 backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the .sln; real PostgreSQL)
 ```
 
-> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84; аватары — issue-85).** Интерфейс
-> `IPhotoStorage` объявлен в `BarberSearch.Application/PortfolioPhotos`, а `PhotoStorageOptions`,
-> `LocalPhotoStorage` и `PhotoStorageServiceCollectionExtensions` живут в
-> `BarberSearch.Web/Storage`: файловая система — забота хоста, как Data Protection и файловый
-> лог, поэтому Application не знает про ASP.NET и диск, а новый проект решения не заводится —
-> `dotnet sln add` в этом репозитории запрещён (§5.1). С 2026-11-11 один адаптер, один корень и
-> один диск обслуживают **два вида файлов**: `portfolio/{profileId:N}/…` (issue-84) и
-> `avatars/{userId:N}/…` (issue-85); различается только подкаталог, а атомарная запись `.tmp` +
-> `File.Move`, проверка «путь внутри корня» и MIME-тип общие. `OpenReadAsync`/`DeleteAsync`
-> разбирают оба префикса — сначала `portfolio`, затем `avatars`; чужой, внешний и отсутствующий
-> URL молча игнорируются (для аватара код чтения — `avatarMedia.notFound`).
+> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84; аватары — issue-85;
+> S3/MinIO — issue-92).** Интерфейс `IPhotoStorage` объявлен в
+> `BarberSearch.Application/PortfolioPhotos`, а настройки и оба адаптера живут в
+> `BarberSearch.Web/Storage`: файловая система и object storage — забота хоста, как Data Protection
+> и файловый лог, поэтому Application не знает про ASP.NET и диск, а новый проект решения
+> не заводится — `dotnet sln add` в этом репозитории запрещён (§5.1). Провайдер выбирает
+> `Storage:Provider` (`Local` по умолчанию или `S3`); раскладка общая — `PhotoMediaKeys`:
+> `portfolio/{profileId:N}/{mediaId:N}.{ext}` и `avatars/{userId:N}/{mediaId:N}.{ext}`, варианты
+> `{mediaId:N}-{sm|md|lg}.webp` рядом. Поэтому публичные URL, `?size=`, ETag и коды ошибок от
+> провайдера не зависят. `LocalPhotoStorage` пишет атомарно (`.tmp` + `File.Move`), проверяет
+> «путь внутри корня» и обслуживает два вида файлов; `S3PhotoStorage` делает то же поверх ключей
+> и `IPhotoObjectStore` (`S3ObjectStore` прячет AWS SDK: `AWSSDK.S3`, MinIO через `ServiceURL` +
+> `ForcePathStyle`). `OpenReadAsync`/`DeleteAsync` разбирают оба префикса — сначала `portfolio`,
+> затем `avatars`; чужой, внешний и отсутствующий URL молча игнорируются (для аватара код
+> чтения — `avatarMedia.notFound`).
 > `AddPhotoStorage` регистрирует настройки
 > и реализацию синглтонами и вызывается из `Program.cs` после `StartupSettings.Load`;
 > конфигурация — секция `Storage` (`Storage:RootPath`, по умолчанию `App_Data/photos`:
 > относительный путь считается от `ContentRootPath`, абсолютный используется как есть;
 > `Storage__RootPath` — переопределение через окружение/тесты). Предел файла —
 > доменная константа `Constants.MAX_PHOTO_BYTES` (5 МиБ), в конфигурации его нет, чтобы не было
-> второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`. Каталог `avatars/`
-> входит в тот же бэкап, что и `portfolio/`: файлы не хранятся в PostgreSQL (долг #31 остаётся
-> в части облачного хранилища и общего volume).
+> второго источника правды; `App_Data/` добавлен в `BarberSearch/.gitignore`. Для `Provider=S3`
+> обязательны `Storage:S3:{Bucket,ServiceUrl,AccessKey,SecretKey}` (значения секретов в тексты
+> ошибок не попадают), регион по умолчанию `us-east-1`, `ForcePathStyle=true` для MinIO.
+> Существование бакета проверяет `S3StorageInitializer` на старте (при `EnsureBucket=true` —
+> создаёт), поэтому недоступное хранилище роняет старт, а не первую загрузку. Каталог `avatars/`
+> входит в тот же бэкап, что и `portfolio/`: файлы не хранятся в PostgreSQL; при S3 бэкапится
+> бакет, а уже загруженные файлы переносятся операторской операцией (`mc mirror` /
+> `aws s3 sync`), не кодом.
 >
 > С 2026-11-12 (issue-90, §17.15) **рядом с исходником** лежат производные WebP-варианты
 > `{mediaId:N}-{sm|md|lg}.webp` — в том же каталоге `portfolio/{profileId:N}/…` или
@@ -308,12 +319,32 @@ CI and the API image:
 
 # Docker image, build context = backend/ (multi-stage, non-root $APP_UID, port 8080)
 docker build -t barbersearch-api:local -f Dockerfile .
+# Локальный провайдер (по умолчанию): фото и аватары лежат в томе, иначе они исчезнут
+# вместе с контейнером. Каталог создан в образе и принадлежит $APP_UID.
 docker run --rm -p 18080:8080 `
   -e Auth__SigningKey='<at least 32 characters>' `
   -e DataProtection__KeysPath=/tmp/keys `
   -e ConnectionStrings__Postgres="Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD" `
+  -v barbersearch-photos:/app/App_Data/photos `
+  -e Storage__RootPath=/app/App_Data/photos `
   barbersearch-api:local
 curl.exe -fsS http://127.0.0.1:18080/health/live
+
+# Тот же образ против MinIO (docker compose up -d minio): том не нужен, файлы в бакете.
+# EnsureBucket=true удобен для локального стенда; в проде бакет создаётся заранее.
+docker run --rm -p 18080:8080 `
+  -e Auth__SigningKey='<at least 32 characters>' `
+  -e DataProtection__KeysPath=/tmp/keys `
+  -e ConnectionStrings__Postgres="Host=host.docker.internal;Port=5432;Database=barbersearch;Username=postgres;Password=$env:POSTGRES_PASSWORD" `
+  -e Storage__Provider=S3 `
+  -e Storage__S3__ServiceUrl=http://host.docker.internal:9000 `
+  -e Storage__S3__Bucket=barbersearch `
+  -e Storage__S3__Region=us-east-1 `
+  -e Storage__S3__ForcePathStyle=true `
+  -e Storage__S3__EnsureBucket=true `
+  -e Storage__S3__AccessKey=$env:MINIO_ROOT_USER `
+  -e Storage__S3__SecretKey=$env:MINIO_ROOT_PASSWORD `
+  barbersearch-api:local
 ```
 
 `global.json` pins SDK `10.0.303` with `rollForward: latestFeature`; `dotnet --version` from
@@ -1085,8 +1116,9 @@ barberService.updatePrice` / `.updateDuration`). `DELETE .../services/{hairServi
 правды). Ответ — `201 { avatarUrl }` (`AvatarUploadResponse`) без `Location`; `400
 user.uploadAvatar.fileRequired` / `.tooLarge` + существующие `barberProfile.uploadPhoto.*`,
 `500 user.uploadAvatar.storage` без пути в тексте. `DELETE api/users/me/avatar` — всегда `204`,
-идемпотентно. Файл лежит в `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{ext}` на том же
-диске, что портфолио; порядок обработчика — `RequireUserId → user → Inspect → Save → SetAvatar →
+изменению идемпотентно. Файл лежит в `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{ext}` у
+локального провайдера или по ключу `avatars/{userId:N}/{mediaId:N}.{ext}` в бакете (S3, issue-92);
+порядок обработчика — `RequireUserId → user → Inspect → Save → SetAvatar →
 UpdateAsync → удаление предыдущего файла best-effort`, любая ошибка после записи удаляет **новый**
 файл, а предыдущий не трогается, пока не сохранилась строка. Гонка двух загрузок: побеждает
 последняя запись, файл проигравшей может остаться сиротой — допустимо, версии строки у `User` нет.
@@ -1194,13 +1226,15 @@ without a constructor call.
   reflection (`BarberSalonTests.Schedule_IsNotExposedOnTheBarberProfile`). There is no test yet
   that walks every entity and asserts "private parameterless ctor + no public ctor".
 
-### 9.14 Media delivery: closed and still open (2026-11-12, issue-90)
+### 9.14 Media delivery: closed and still open (2026-11-12, issue-90; S3 — issue-92)
 
 **Закрыто:** серверные миниатюры и честный кэш — три WebP-варианта `sm/md/lg`, `?size=`,
 сильный `ETag`/`304` и `public, max-age=0, must-revalidate` вместо суточного `max-age`
-(§17.15; долги #31/#32 во frontend §14 сокращены). **Остаётся:** серверный и CDN-кэш,
-политика `srcset` для CDN, S3/MinIO и общий volume для нескольких инстансов и AVIF —
-отдельные срезы.
+(§17.15; долги #31/#32 во frontend §14 сокращены); второе хранилище — S3-совместимый бакет
+(`Storage:Provider=S3`, MinIO в compose и CI; issue-92, §17.15 «Провайдеры хранилища»).
+**Остаётся:** серверный и CDN-кэш, политика `srcset` для CDN, AVIF, ретенция файлов,
+автоматический перенос уже загруженных файлов в бакет (операторская `mc mirror`/`aws s3 sync`)
+и общий volume как альтернатива S3 — отдельные срезы.
 
 ---
 
@@ -1443,11 +1477,14 @@ Suggested order:
     адрес приёма, у `Mobile` — зона обслуживания, `City` — база; `Address` не делаем nullable.
     Выезд с онлайн-записью (адрес клиента в `Booking`) — отдельный срез, как и перевод скрытого
     места в публичное (нужна повторная модерация).
-12. **Portfolio photos: local disk, pre-moderation and caching** — **decided and implemented
-    2026-11-11 (issue-84); доставка медиа — issue-90 (§17.15).** Файлы лежат на локальном диске за
-    `IPhotoStorage`: один инстанс API и один диск, фотографии **не** входят в backup
-    PostgreSQL и каталог бэкапится отдельно (§15.2). Несколько инстансов требуют общего
-    volume или object storage (S3/MinIO) с CDN и подписанными URL — это отдельный срез.
+12. **Portfolio photos: storage provider, pre-moderation and caching** — **decided and
+    implemented 2026-11-11 (issue-84); доставка медиа — issue-90 (§17.15); S3/MinIO — issue-92.**
+    Файлы лежат за `IPhotoStorage`; провайдер выбирается `Storage:Provider` (`Local` по
+    умолчанию — каталог, `S3` — приватный бакет). Local рассчитан на один инстанс и один диск:
+    фотографии **не** входят в backup PostgreSQL, каталог бэкапится отдельно (§15.2), а несколько
+    инстансов требуют общего volume. S3 снимает оба ограничения: один бакет обслуживает несколько
+    инстансов и переживает переезд; перенос уже загруженных файлов — операторская операция
+    (`mc mirror` / `aws s3 sync`), а CDN и подписанные URL остаются отдельным срезом.
     Премодерация реализована в #89: новая фотография создаётся `Pending`, очередь
     `/admin/photos?tab=portfolio` и счётчик в `/admin/summary` появились, а блокировка
     (`isBlocked`) осталась маской для уже одобренных кадров (§17.14).
@@ -1686,14 +1723,17 @@ counters) plus a second `LoadAdminPhotosAsync` read of all photos ordered by
 `SortOrder, CreatedAt`. `readiness.photosCount` is a `COUNT` filtered by
 `IsPublished && !IsBlocked`: the checklist describes the public card, not the rows.
 
-**Photo and avatar files: local disk, not in the PostgreSQL backup (2026-11-11, issue-84/85).**
-Photographs are written to `{Storage:RootPath}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`,
-avatars to `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{jpg|png|webp}`;
-`RootPath` is relative to `ContentRootPath` or absolute, the directory is created and
-write-probed at startup, and `App_Data/` is gitignored. There is **one API instance and one
-disk**: the file store is not shared and not transactional with PostgreSQL. `pg_dump` and the
-PostgreSQL backup do **not** contain either directory, so both must be backed up
-separately; a shared volume or object storage for several instances is debt #31 (§12.12).
+**Photo and avatar files: local disk or S3, not in the PostgreSQL backup (2026-11-11,
+issue-84/85; S3 — issue-92).** With `Storage:Provider=Local` photographs are written to
+`{Storage:RootPath}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`, avatars to
+`{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{jpg|png|webp}`; `RootPath` is relative to
+`ContentRootPath` or absolute, the directory is created and write-probed at startup, and
+`App_Data/` is gitignored. With `Storage:Provider=S3` the same keys go to a private bucket, so one
+store serves several API instances and `pg_dump` still does not have to carry the files. Neither
+provider is transactional with PostgreSQL: the row is the source of truth, and a file can outlive a
+failed delete (best effort). `pg_dump` and the PostgreSQL backup do **not** contain the directory or
+the bucket, so Local backs up the directory separately and S3 backs up the bucket; moving existing
+files to a bucket is an operator step (`mc mirror` / `aws s3 sync`), not code.
 
 **Avatar read (2026-11-11, issue-85; flag since issue-87).** `IUserRepository.GetAvatarAccessAsync`
 is one `AsNoTracking` projection of `users.avatar_url` and `users.is_avatar_blocked` filtered by the
@@ -4285,8 +4325,9 @@ avatar_moderation_status <> 2 THEN NULL ELSE avatar_url END`), поэтому `P
 (§17.15).
 
 **Ограничения (осознанные).** 1) `srcset`/WebP-варианты и честный кэш закрыты в #90
-(§17.15); остаются серверный и CDN-кэш, политика `srcset` для CDN, AVIF, S3/MinIO и общий
-volume — долги #31/#32; кропа нет по-прежнему. 2) Нет фильтра `avatar=blocked` и
+(§17.15), второе хранилище (S3/MinIO) — в #92; остаются серверный и CDN-кэш, политика
+`srcset` для CDN, AVIF, ретенция файлов и перенос уже загруженных файлов — долги #31/#32;
+кропа нет по-прежнему. 2) Нет фильтра `avatar=blocked` и
 истории решений в очереди: только `Pending`; «скрытые» по-прежнему ищутся в общих списках.
 3) Аудит решений добавлен (#91): блокировка/одобрение/отклонение пишут
 `portfolio_photo.updated` (для аватара — `user.updated`), поэтому решение видно в журнале;
@@ -4358,11 +4399,32 @@ License) и Magick.NET (тяжёлый). `SkiaSharp` живёт только в 
 если оно есть, и `null` для внешних ссылок. **Миграции нет** — схема и колонка
 `portfolio_photos.thumbnail_url` не менялись; новых ключей конфигурации тоже нет.
 
-**Проверка.** `dotnet build` — 0 warnings / 0 errors; infrastructure **293** (новые
-`PhotoThumbnailerTests`, `MediaDeliveryTests`, расширенные `LocalPhotoStorageTests`),
-integration **279** (новые сценарии в `PortfolioPhotoUploadTests`, `UserAvatarTests`,
-`PhotoModerationTests`, helper `MediaTestImage.cs`); всего **2033** зелёных;
-`has-pending-model-changes` чисто. Frontend-тесты и бандл — frontend `AGENT.md` §15.
+**Провайдеры хранилища (issue-92).** `Storage:Provider` принимает `Local` (по умолчанию) или
+`S3`; значение читается строкой, а неизвестное (`minio`, `1`) роняет старт с перечнем
+допустимых. Для Local работает `Storage:RootPath` (каталог создаётся и проверяется write-probe
+на старте); для S3 обязательны `Storage:S3:Bucket`, `ServiceUrl`, `AccessKey`, `SecretKey`,
+`Region` по умолчанию `us-east-1`, `ForcePathStyle=true` (MinIO ждёт бакет в пути) и
+`EnsureBucket` (`false` в проде, `true` в dev/CI). Ключи объектов повторяют локальную раскладку:
+`portfolio/{profileId:N}/{mediaId:N}.{ext}`, `avatars/{userId:N}/{mediaId:N}.{ext}`, варианты
+`{mediaId:N}-{sm|md|lg}.webp` в том же «каталоге»; поэтому URL, `?size=`, ETag и коды ошибок от
+провайдера не зависят. `S3PhotoStorage` — зеркало `LocalPhotoStorage` поверх
+`IPhotoObjectStore`; `S3ObjectStore` прячет `AWSSDK.S3`, переводит любую ошибку транспорта/SDK в
+`IOException` без ключа, бакета, эндпоинта и секретов, а «не найдено» — в `null`. Проверка и
+создание бакета — `S3StorageInitializer` в `StartAsync`, то есть недоступное хранилище роняет
+старт, а не первую загрузку. Чтение буферизует объект в `MemoryStream` (≤ 5 МиБ), потому что
+`FileStreamResult` с `Range` требует известную длину и seek; `ETag` остаётся производным от
+`mediaId`, а не ETag объекта S3. Бакет приватный: публичных ACL, подписанных URL и прямой
+раздачи из S3 нет. В `docker-compose.yml` добавлен `minio` (9000/9001, том
+`barbersearch-minio-data`), `frontend-e2e` в CI прогоняет те же media-сценарии против MinIO.
+Официальный `minio/minio` удалён из Docker Hub, а `quay.io/minio/minio` с 2026-09-24 не отдаётся
+анонимно, поэтому пин-тег берётся из публичного зеркала
+`coollabsio/minio:RELEASE.2025-10-15T17-29-55Z` (тот же S3 API и консоль).
+
+**Проверка.** `dotnet build` — 0 warnings / 0 errors; infrastructure **344** (новые
+`S3PhotoStorageTests` и `PhotoStorageOptionsTests`), integration **292** (Local без правок
+сценариев); всего **2102** зелёных; `has-pending-model-changes` чисто (миграций нет).
+E2E в CI против MinIO — **309 passed / 6 skipped** (`frontend-e2e`); frontend-тесты и бандл —
+frontend `AGENT.md` §15.
 
 ---
 

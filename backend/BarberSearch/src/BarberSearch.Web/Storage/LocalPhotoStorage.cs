@@ -15,9 +15,11 @@ namespace BarberSearch.Web.Storage;
 /// <para>
 /// Реализация <see cref="IPhotoStorage"/> живёт в Web, потому что это host-адаптер: Application
 /// не знает ни про ASP.NET, ни про файловую систему, а отдельный проект решения под хранилище
-/// не заводится (см. backend/AGENT.md §4). Один адаптер, один корень и один диск обслуживают
-/// два вида файлов: различается только подкаталог, а запись, проверка «путь внутри корня» и
-/// MIME-тип общие.
+/// не заводится (см. backend/AGENT.md §4). Это провайдер по умолчанию
+/// (<c>Storage:Provider=Local</c>): dev, unit- и интеграционные тесты не требуют MinIO.
+/// Второй провайдер, <see cref="S3PhotoStorage"/>, пишет те же ключи в бакет. Одна раскладка
+/// (<see cref="PhotoMediaKeys"/>) обслуживает два вида файлов: различается только подкаталог,
+/// а запись, проверка «путь внутри корня» и MIME-тип общие.
 /// </para>
 /// <para>
 /// Рядом с исходником лежат производные варианты: <c>{mediaId:N}-{sm|md|lg}.webp</c> в том же
@@ -41,17 +43,6 @@ namespace BarberSearch.Web.Storage;
 /// </remarks>
 public sealed class LocalPhotoStorage : IPhotoStorage
 {
-    /// <summary>
-    /// Подкаталог корня, в котором лежат файлы портфолио.
-    /// </summary>
-    private const string PORTFOLIO_DIRECTORY = "portfolio";
-
-    /// <summary>
-    /// Подкаталог корня, в котором лежат файлы аватаров. Входит в тот же бэкап, что и
-    /// <c>portfolio/</c>: файлы не хранятся в PostgreSQL.
-    /// </summary>
-    private const string AVATAR_DIRECTORY = "avatars";
-
     /// <summary>
     /// Код ошибки хранилища фотографии: <c>500</c> без пути к диску в тексте.
     /// </summary>
@@ -83,11 +74,6 @@ public sealed class LocalPhotoStorage : IPhotoStorage
     /// Текст ошибки чтения аватара: тот же принцип — причина отказа не раскрывается.
     /// </summary>
     private const string AVATAR_NOT_FOUND_MESSAGE = "The avatar file was not found.";
-
-    private const string JPEG_CONTENT_TYPE = "image/jpeg";
-    private const string PNG_CONTENT_TYPE = "image/png";
-    private const string WEBP_CONTENT_TYPE = "image/webp";
-    private const string UNKNOWN_CONTENT_TYPE = "application/octet-stream";
 
     private readonly string _rootPath;
     private readonly IPhotoThumbnailer _thumbnailer;
@@ -287,7 +273,7 @@ public sealed class LocalPhotoStorage : IPhotoStorage
 
             return Result.Success<PhotoContent, Failure>(new PhotoContent(
                 stream,
-                ContentTypeFor(Path.GetExtension(fullPath)),
+                PhotoContentTypes.For(Path.GetExtension(fullPath)),
                 stream.Length,
                 PhotoVariantWidths.EntityTag(mediaId, variant)));
         }
@@ -479,7 +465,7 @@ public sealed class LocalPhotoStorage : IPhotoStorage
         PhotoVariant variant)
         => Path.Combine(
             _rootPath,
-            isAvatar ? AVATAR_DIRECTORY : PORTFOLIO_DIRECTORY,
+            PhotoMediaKeys.Directory(isAvatar),
             $"{ownerId:N}",
             PhotoVariantWidths.FileName(mediaId, variant));
 
@@ -701,7 +687,7 @@ public sealed class LocalPhotoStorage : IPhotoStorage
     private string ResolveFilePath(Guid ownerId, Guid mediaId, string extension, bool isAvatar)
         => Path.Combine(
             _rootPath,
-            isAvatar ? AVATAR_DIRECTORY : PORTFOLIO_DIRECTORY,
+            PhotoMediaKeys.Directory(isAvatar),
             $"{ownerId:N}",
             $"{mediaId:N}.{extension}");
 
@@ -760,17 +746,6 @@ public sealed class LocalPhotoStorage : IPhotoStorage
     /// </summary>
     private static bool IsAllowedExtension(string extension)
         => extension is "jpg" or "png" or "webp";
-
-    /// <summary>
-    /// MIME-тип для раздачи: строго по расширению из media-URL, а не по содержимому файла.
-    /// </summary>
-    private static string ContentTypeFor(string extensionWithDot) => extensionWithDot switch
-    {
-        ".jpg" => JPEG_CONTENT_TYPE,
-        ".png" => PNG_CONTENT_TYPE,
-        ".webp" => WEBP_CONTENT_TYPE,
-        _ => UNKNOWN_CONTENT_TYPE
-    };
 
     private static Failure StorageFailure(bool isAvatar)
         => isAvatar

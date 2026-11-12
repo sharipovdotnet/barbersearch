@@ -258,13 +258,18 @@ MiB), the sides (300..6000 px) and the area (at most 24 MP); the request itself 
 so Kestrel may answer `413` before the action. The result is `201 { id }`; the photo is created
 `Pending` and is not public until approved, and the 11th photo is `409 barberProfile.addPhoto.limit`.
 
-**Storage and URL.** Files live on the API disk behind `IPhotoStorage`, under `Storage:RootPath`
-(default `App_Data/photos`, relative to the API content root; an absolute path is used as is). The
-layout is `{root}/portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`; `mediaId` is a new
-UUIDv7 and the extension comes from the signature, not from the client file name. The API returns
-a **relative** URL `/api/media/portfolio/{barberProfileId:D}/{mediaId:N}.{ext}`, which works in
-`<img src>` because the SPA and `/api` share an origin. Old photos added through the JSON endpoint
-keep their absolute external URLs.
+**Storage and URL.** Files live behind `IPhotoStorage`; the provider is chosen by
+`Storage:Provider`. With the default `Local` they sit under `Storage:RootPath` (default
+`App_Data/photos`, relative to the API content root; an absolute path is used as is); with `S3`
+the same keys go to a private bucket. The layout is the same in both:
+`portfolio/{barberProfileId:N}/{mediaId:N}.{jpg|png|webp}`; `mediaId` is a new UUIDv7 and the
+extension comes from the signature, not from the client file name. The API returns a **relative**
+URL `/api/media/portfolio/{barberProfileId:D}/{mediaId:N}.{ext}`, which works in `<img src>`
+because the SPA and `/api` share an origin; `srcset`/`?size=` do not depend on the provider. Old
+photos added through the JSON endpoint keep their absolute external URLs.
+
+To run locally against MinIO: `docker compose up -d minio` in `backend/` and set the
+`Storage__Provider=S3` + `Storage__S3__*` variables from `backend/.env.example`.
 
 **Visibility and blocking.**
 
@@ -343,10 +348,11 @@ returns no photos, «Разблокировать» restores both, and the barbe
 portfolio specs and by both axe specs. `e2e/fixtures/seed.sql` deletes the `portfolio_photos` rows
 of `profileBarber` (`9e100000-0000-4000-8000-000000000015`) before its fixture upsert, so a rerun is
 idempotent; a failed scene is cleaned through the API in `afterEach`, with a best-effort `afterAll`
-as the last resort. File uploads are written to `Storage:RootPath`; CI passes
-`Storage__RootPath: ${{ runner.temp }}/photos` to the API step, and a local run may leave orphan
-files in `App_Data/photos` — they do not affect the database or the tests, but the directory
-should be emptied when it grows.
+as the last resort. With the default `Local` provider uploads are written to `Storage:RootPath`; CI
+starts MinIO and passes `Storage__Provider=S3` with the `Storage__S3__*` keys to the API step, so
+the media scenes exercise the S3 adapter too. A local run may leave orphan files in
+`App_Data/photos` — they do not affect the database or the tests, but the directory should be
+emptied when it grows.
 
 ## Avatar
 
@@ -465,8 +471,9 @@ user and barber cards render the raw `avatarUrl` (pending, hidden or not) with t
 and the `AvatarModeration` block owns approve/reject and hide/restore. A hidden or pending photo is
 masked on the public card and in search, but never in the admin card.
 
-**Storage and URL.** The file lives on the same disk and under the same `Storage:RootPath` as the
-portfolio, at `{root}/avatars/{userId:N}/{mediaId:N}.{ext}`. `GET /api/media/avatars/{userId}/{fileName}`
+**Storage and URL.** The file lives under the same provider and with the same layout as the
+portfolio: `{Storage:RootPath}/avatars/{userId:N}/{mediaId:N}.{ext}` for `Local`, or the key
+`avatars/{userId:N}/{mediaId:N}.{ext}` in the bucket for `S3`. `GET /api/media/avatars/{userId}/{fileName}`
 is anonymous: it serves the file only when the URL stored in the database equals the requested one.
 A public frame (`Approved`, not blocked) keeps `Cache-Control: public, max-age=0, must-revalidate`,
 a strong `ETag` and `X-Content-Type-Options: nosniff`; `?size=sm|md|lg` returns a WebP variant
@@ -1986,9 +1993,21 @@ ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=barbersearch_e2e;
   dotnet run --project BarberSearch/src/BarberSearch.Web --launch-profile http
 ```
 
-`Storage__RootPath` keeps uploaded files (portfolio photos and avatars) out of the checkout; CI
-passes `${{ runner.temp }}/photos` instead. Without it the API uses `App_Data/photos`, which still
-works but pollutes the working tree and survives between runs.
+`Storage__RootPath` keeps uploaded files (portfolio photos and avatars) out of the checkout. To
+exercise the S3 adapter instead, start `docker compose up -d minio` in `backend/` and replace the
+path with:
+
+```bash
+  Storage__Provider=S3 \
+  Storage__S3__ServiceUrl=http://localhost:9000 Storage__S3__Bucket=barbersearch \
+  Storage__S3__Region=us-east-1 Storage__S3__ForcePathStyle=true \
+  Storage__S3__EnsureBucket=true \
+  Storage__S3__AccessKey=barbersearch Storage__S3__SecretKey=barbersearch-e2e \
+```
+
+CI does the same: it starts MinIO and passes these variables, so the suite covers both providers.
+Without either setting the API uses `App_Data/photos`, which still works but pollutes the working
+tree and survives between runs.
 
 Without these variables registration still returns `201`, but no letter is sent: the resend button
 honestly answers `409 auth.emailVerification.unavailable`, `POST /api/auth/password-reset` answers
@@ -2111,9 +2130,9 @@ For portfolio photos the seed keeps the isolated `profileBarber`
 before its fixture upsert, so `barber-profile-photos-mutations.spec.ts` starts from «Фотографий
 нет.» and can upload the same `e2e/fixtures/portfolio-photo.png` (a real **800×600** PNG, about
 101 KB) on every run; a failed scene is cleaned through the API (`afterEach`, plus a best-effort
-`afterAll`). Uploaded files live outside PostgreSQL in `Storage:RootPath`; orphan files from a
-failed run do not affect the seed or the tests and are ignored by the media route once their
-database row is gone.
+`afterAll`). Uploaded files live outside PostgreSQL — in `Storage:RootPath` for `Local` or in the
+bucket for `S3`; orphan files from a failed run do not affect the seed or the tests and are ignored
+by the media route once their database row is gone.
 For avatars the seed resets `avatar_url`, `is_avatar_blocked`, `avatar_moderation_status`,
 `avatar_rejection_reason`, `avatar_submitted_at`, `avatar_reviewed_at` and
 `avatar_reviewed_by_user_id` on every fixture account, including the isolated `profileBarber`
