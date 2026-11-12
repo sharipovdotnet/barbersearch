@@ -56,12 +56,15 @@ export class AdminReviewsPage {
   /**
    * Бейдж очереди отзывов в рейле.
    *
-   * Цифра живёт внутри круга (`span[aria-hidden]`), а точное число — в имени
-   * ссылки: при `count = 0` бейджа нет, и локатор не найдёт ничего.
+   * Цифра живёт внутри круга (`span[aria-hidden]`), а сам круг — сосед ссылки
+   * внутри пункта `<li>`, а не её ребёнок: иначе видимый текст ссылки («Отзывы14»)
+   * не совпадал бы с её доступным именем и axe валил бы проверку. При `count = 0`
+   * бейджа нет, и локатор не найдёт ничего.
    */
   get reviewsBadge(): Locator {
     return this.rail
-      .getByRole('link', { name: /^Отзывы, на модерации: \d+$/ })
+      .locator('li')
+      .filter({ has: this.page.getByRole('link', { name: /^Отзывы/ }) })
       .locator('span[aria-hidden="true"]')
   }
 

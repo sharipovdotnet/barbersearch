@@ -55,9 +55,47 @@ function rail(): HTMLElement {
   return screen.getByRole('navigation', { name: 'Разделы администрирования' })
 }
 
-/** Сам круг с цифрой: единственный `aria-hidden` внутри ссылки. */
-function badgeOf(link: HTMLElement): HTMLElement | null {
-  return link.querySelector<HTMLElement>('span[aria-hidden="true"]')
+/**
+ * Сам круг с цифрой у пункта.
+ *
+ * Бейдж — сосед ссылки внутри `<li>` (иначе axe ругался на несовпадение видимого
+ * текста и доступного имени), поэтому ищем его у родителя пункта.
+ */
+function badgeIn(link: HTMLElement): HTMLElement | null {
+  return (
+    link.parentElement?.querySelector<HTMLElement>('span[aria-hidden="true"]') ??
+    null
+  )
+}
+
+/**
+ * Ждёт бейдж у пункта.
+ *
+ * Ссылка находится по префиксу имени и до прихода сводки, поэтому «найти ссылку»
+ * ещё не значит «данные уже нарисованы»: без ожидания тест ловил бы гонку и падал
+ * на медленном CI. Внутри — `waitFor`, он же проверяет, что цифра появилась.
+ */
+async function badge(item: HTMLElement): Promise<HTMLElement> {
+  return waitFor(() => {
+    const found = badgeIn(item)
+
+    if (found === null) {
+      throw new Error('бейдж ещё не отрисован')
+    }
+
+    return found
+  })
+}
+
+/**
+ * Ждёт, пока снимок сводки применится к рейлу.
+ *
+ * Признак — бейдж у заведомо ненулевого пункта: только после него отрицательные
+ * проверки («бейджа нет», «подсказки нет») что-то доказывают, а не проходят
+ * случайно на состоянии до загрузки.
+ */
+async function waitForSummary(label = 'Отзывы'): Promise<void> {
+  await badge(await link(label))
 }
 
 /**
@@ -103,12 +141,8 @@ describe('AdminRail: счётчики очередей', () => {
     ]
 
     for (const [name, value] of expected) {
-      const item = await link(name)
-      const badge = badgeOf(item)
-
-      expect(badge, name).not.toBeNull()
       // Цифра именно в самом бейдже, а не рядом с ним.
-      expect(badge?.textContent, name).toBe(value)
+      expect((await badge(await link(name))).textContent, name).toBe(value)
     }
   })
 
@@ -117,21 +151,26 @@ describe('AdminRail: счётчики очередей', () => {
 
     renderRail()
 
-    for (const name of ['Сводка', 'Статистика', 'Журнал']) {
-      const item = await link(name)
+    // Счётчики уже нарисованы — значит, отсутствие бейджа ниже не случайно.
+    await waitForSummary()
 
-      expect(badgeOf(item), name).toBeNull()
+    for (const name of ['Сводка', 'Статистика', 'Журнал']) {
+      expect(badgeIn(await link(name)), name).toBeNull()
     }
   })
 
   it('при нуле бейджа нет и имени с числом тоже', async () => {
-    serveSummary(EMPTY)
+    // Ненулевой остаётся только «Пользователи»: по его бейджу видно, что снимок
+    // применился, и проверка «у отзывов ничего нет» становится осмысленной.
+    serveSummary({ ...EMPTY, users: { unverifiedCount: 8 } })
 
     renderRail()
 
+    await waitForSummary('Пользователи')
+
     const reviews = await link('Отзывы')
 
-    expect(badgeOf(reviews)).toBeNull()
+    expect(badgeIn(reviews)).toBeNull()
     expect(reviews).not.toHaveAttribute('aria-label')
     expect(reviews.textContent).toBe('Отзывы')
   })
@@ -166,11 +205,26 @@ describe('AdminRail: счётчики очередей', () => {
     const photos = await link('Фото')
 
     expect(photos).toHaveAttribute('aria-current', 'page')
-    expect(badgeOf(photos)?.textContent).toBe('5')
+    expect((await badge(photos)).textContent).toBe('5')
   })
 
-  it('не меняет href пунктов', async () => {
+  it('держит бейдж вне ссылки, чтобы имя совпадало с видимым текстом', async () => {
     serveSummary(COUNTS)
+
+    renderRail()
+
+    const reviews = await link('Отзывы')
+
+    await badge(reviews)
+
+    // Цифра внутри `<a>` сделала бы видимый текст «Отзывы12» — axe-правило
+    // `label-content-name-mismatch` валит такую ссылку: имя «Отзывы, на
+    // модерации: 12» не содержит этой строки. Поэтому бейдж — сосед ссылки.
+    expect(reviews.querySelector('span[aria-hidden="true"]')).toBeNull()
+    expect(reviews.textContent).toBe('Отзывы')
+  })
+
+  it('не меняет href пунктов', async () => {    serveSummary(COUNTS)
 
     renderRail()
 
@@ -215,16 +269,12 @@ describe('AdminRail: счётчики очередей', () => {
       name: labelPattern('Отзывы'),
     })
 
-    expect(badgeOf(reviews)).toBeNull()
+    expect(badgeIn(reviews)).toBeNull()
     expect(reviews.textContent).toBe('Отзывы')
 
     release()
 
-    await waitFor(() => {
-      expect(
-        badgeOf(within(rail()).getByRole('link', { name: labelPattern('Отзывы') }))
-      ).not.toBeNull()
-    })
+    await badge(within(rail()).getByRole('link', { name: labelPattern('Отзывы') }))
   })
 })
 
@@ -234,6 +284,9 @@ describe('AdminRail: подсказка к бейджу', () => {
     serveSummary(COUNTS)
 
     renderRail()
+
+    // Снимок должен примениться до наведения: без числа подсказки не будет.
+    await waitForSummary()
 
     const reviews = await link('Отзывы')
 
@@ -253,6 +306,7 @@ describe('AdminRail: подсказка к бейджу', () => {
 
     renderRail()
 
+    await waitForSummary('Фото')
     await user.hover(await link('Фото'))
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
@@ -265,6 +319,8 @@ describe('AdminRail: подсказка к бейджу', () => {
     serveSummary(COUNTS)
 
     renderRail()
+
+    await waitForSummary()
 
     await user.tab()
     await user.tab()
@@ -280,9 +336,12 @@ describe('AdminRail: подсказка к бейджу', () => {
 
   it('не появляется у пункта без бейджа и у пустых очередей', async () => {
     const user = userEvent.setup()
-    serveSummary(EMPTY)
+    // Ненулевые только «Брони»: по их бейджу видно, что снимок применился.
+    serveSummary({ ...EMPTY, bookings: { confirmedCount: 1 } })
 
     renderRail()
+
+    await waitForSummary('Брони')
 
     await user.hover(await link('Отзывы'))
     await user.hover(await link('Журнал'))

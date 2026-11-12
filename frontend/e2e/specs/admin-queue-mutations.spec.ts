@@ -102,8 +102,10 @@ test.describe('очередь отзывов: фокус после действ
         await expect(badge).toHaveText(String(before - 1))
       }
 
-      // Перезагрузки не было: адрес и заголовок остались прежними.
-      expect(new URL(page.url()).pathname).toBe('/admin/reviews')
+      // Страница та же: на широком экране экран сам открывает следующую строку
+      // очереди, поэтому проверяем раздел, а не точный адрес без карточки.
+      await expect(adminReviews.heading).toBeVisible()
+      await expect(page).toHaveURL(/\/admin\/reviews(?:\/|$)/)
     } finally {
       await hidePublishedReview(request, reviewId)
     }

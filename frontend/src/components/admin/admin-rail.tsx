@@ -117,31 +117,11 @@ export function AdminRail() {
                 }}
               >
                 {t(section.label)}
-                {count > 0 && (
-                  // Круг — сам бейдж, цифра живёт внутри и центрируется `flex`.
-                  // Заливка сплошная и одинаковая в обеих темах: `--destructive`
-                  // в тёмной теме специально светлый (это цвет текста), поэтому
-                  // залитый кружок берёт `--destructive-solid`. Плашка 10 %-й
-                  // прозрачности давала 4.32:1 в тёмной теме и 3.67:1 на активном
-                  // пункте — ниже AA; белые цифры на сплошной заливке дают 5.79:1
-                  // и от подложки не зависят.
-                  // `aria-hidden`: точное число уже есть в `aria-label` ссылки.
-                  // Бейдж оставлен кликабельным для курсора (без `pointer-events-none`):
-                  // иначе верхние 4 px круга, выступающие над ссылкой, не считались бы
-                  // её наведением, и подсказка закрывалась бы, стоило навести на цифру.
-                  // Клик по бейджу всплывает к ссылке — переход работает как раньше.
-                  <span
-                    aria-hidden="true"
-                    className="absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive-solid bg-destructive-solid px-1 text-[11px] leading-none font-semibold text-white tabular-nums select-none"
-                  >
-                    {formatAdminBadgeCount(count)}
-                  </span>
-                )}
               </a>
             )
 
             return (
-              <li key={section.href}>
+              <li key={section.href} className="relative">
                 {/* Обёртка стоит всегда, даже без числа: иначе приход снимка сводки
                     пересоздавал бы `<a>` — терялись бы фокус и наведение у того, кто
                     уже навёл курсор на пункт. Без числа подсказка просто выключена. */}
@@ -155,6 +135,33 @@ export function AdminRail() {
                     </TooltipContent>
                   )}
                 </Tooltip>
+
+                {count > 0 && (
+                  // Круг — сам бейдж, цифра живёт внутри и центрируется `flex`.
+                  // Заливка сплошная и одинаковая в обеих темах: `--destructive`
+                  // в тёмной теме специально светлый (это цвет текста), поэтому
+                  // залитый кружок берёт `--destructive-solid`. Плашка 10 %-й
+                  // прозрачности давала 4.32:1 в тёмной теме и 3.67:1 на активном
+                  // пункте — ниже AA; белые цифры на сплошной заливке дают 5.79:1
+                  // и от подложки не зависят.
+                  //
+                  // Бейдж — сосед ссылки, а не её ребёнок: axe-правило
+                  // `label-content-name-mismatch` (serious) требует, чтобы видимый
+                  // текст входил в доступное имя, а цифра внутри `<a>` делает
+                  // видимый текст «Отзывы14» — это не подстрока aria-label
+                  // «Отзывы, на модерации: 14». Внутри ссылки бейдж к тому же
+                  // читался бы дважды.
+                  //
+                  // `pointer-events-none`: клик и наведение проходят сквозь кружок
+                  // на ссылку под ним, поэтому переход и подсказка работают как
+                  // раньше; `aria-hidden` — число уже есть в имени ссылки.
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -top-1 right-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-destructive-solid bg-destructive-solid px-1 text-[11px] leading-none font-semibold text-white tabular-nums select-none"
+                  >
+                    {formatAdminBadgeCount(count)}
+                  </span>
+                )}
               </li>
             )
           })}

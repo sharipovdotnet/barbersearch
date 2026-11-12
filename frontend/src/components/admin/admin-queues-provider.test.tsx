@@ -58,12 +58,16 @@ function rail(): HTMLElement {
   return document.querySelector('nav') as HTMLElement
 }
 
+/** Бейдж пункта: он сосед ссылки внутри `<li>`, а не её ребёнок. */
 function badgeOf(label: string): HTMLElement | null {
   const item = within(rail()).getByRole('link', {
     name: new RegExp(`^${label}`),
   })
 
-  return item.querySelector<HTMLElement>('span[aria-hidden="true"]')
+  return (
+    item.parentElement?.querySelector<HTMLElement>('span[aria-hidden="true"]') ??
+    null
+  )
 }
 
 function setVisibility(state: 'visible' | 'hidden'): void {
@@ -133,8 +137,8 @@ describe('AdminQueuesProvider', () => {
 
     await act(async () => {
       setVisibility('visible')
-      await vi.advanceTimersByTimeAsync(0)
     })
+    await tick(0)
     expect(requests).toHaveLength(2)
   })
 
@@ -146,17 +150,20 @@ describe('AdminQueuesProvider', () => {
     await tick(0)
     expect(requests).toHaveLength(1)
 
+    // Событие меняет состояние, а запрос уходит уже после коммита эффекта:
+    // поэтому сначала отдельный акт на событие, потом прокрутка микротасок.
+    // В одном акте запрос иногда не успевал начаться — тест падал на CI.
     await act(async () => {
       notifyAdminQueuesChanged()
-      await vi.advanceTimersByTimeAsync(0)
     })
+    await tick(0)
     expect(requests).toHaveLength(2)
 
     // Второе событие подряд — второй тихий refresh, а не ожидание тика.
     await act(async () => {
       notifyAdminQueuesChanged()
-      await vi.advanceTimersByTimeAsync(0)
     })
+    await tick(0)
     expect(requests).toHaveLength(3)
   })
 
