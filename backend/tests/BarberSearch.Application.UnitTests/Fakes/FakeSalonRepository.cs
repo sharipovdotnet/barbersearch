@@ -53,6 +53,15 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
     /// <summary>Подмена ошибки счётчика выключенных салонов.</summary>
     public Failure? CountInactiveFailure { get; set; }
 
+    /// <summary>Ответ <see cref="CountPendingModerationAsync"/>: салонов на проверке.</summary>
+    public int PendingModerationCount { get; set; }
+
+    /// <summary>Подмена ошибки счётчика салонов на проверке.</summary>
+    public Failure? CountPendingModerationFailure { get; set; }
+
+    /// <summary>Сколько раз сводка читала счётчик салонов на проверке.</summary>
+    public int CountPendingModerationCallCount { get; private set; }
+
     /// <summary>Сколько раз обработчик вызывал <see cref="AddAsync"/>.</summary>
     public int AddCalls { get; private set; }
 
@@ -121,6 +130,19 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
         => Task.FromResult(CountInactiveFailure is { } failure
             ? Result.Failure<int, Failure>(failure)
             : Result.Success<int, Failure>(InactiveCount));
+
+    /// <summary>
+    /// Счётчик салонов на проверке; тест задаёт значение и ошибку явно.
+    /// </summary>
+    public Task<Result<int, Failure>> CountPendingModerationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        CountPendingModerationCallCount++;
+
+        return Task.FromResult(CountPendingModerationFailure is { } failure
+            ? Result.Failure<int, Failure>(failure)
+            : Result.Success<int, Failure>(PendingModerationCount));
+    }
 
     public Task<Result<IReadOnlyList<AdminSalonResponse>, Failure>> GetAdminListAsync(
         AdminCatalogueStatus status,

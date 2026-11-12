@@ -425,6 +425,25 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
     }
 
     /// <summary>
+    /// Сколько пользователей не подтвердило email — ровно предикат фильтра
+    /// <c>AdminUserStatus.Unverified</c> при <c>role = all</c>.
+    /// </summary>
+    /// <remarks>
+    /// Это контракт, а не деталь реализации: <c>is_email_verified = false</c> у всех ролей,
+    /// включая заблокированных. Условие <c>is_active</c> или роль разошлись бы с размером
+    /// вкладки «Без подтверждения» и со списком пользователей с тем же фильтром.
+    /// </remarks>
+    public async Task<Result<int, Failure>> CountUnverifiedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var count = await Context.Users
+            .AsNoTracking()
+            .CountAsync(user => !user.IsEmailVerified, cancellationToken);
+
+        return Result.Success<int, Failure>(count);
+    }
+
+    /// <summary>
     /// Узкая проекция профиля кабинета: без избранного, пароля и служебных полей.
     /// </summary>
     /// <remarks>
