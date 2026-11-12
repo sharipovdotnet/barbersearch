@@ -8,15 +8,23 @@
 # Второй сервис — Mailpit: он нужен для писем (подтверждение email), а не для БД.
 # Письма не уходят наружу: SMTP слушает 1025, веб-интерфейс — 8025.
 #
+# Третий сервис — MinIO: S3-совместимое хранилище для второго провайдера фото
+# (Storage:Provider=S3). По умолчанию API пишет на локальный диск, поэтому MinIO
+# не обязателен для разработки и тестов; он нужен, чтобы проверить S3-ветку
+# вручную или прогнать E2E против object storage. Это не база: данные лежат в
+# отдельном томе и бэкапятся вместе с бакетом.
+#
 # Пароль обязателен и в файл не попадает: скопируйте .env.example в .env (он
-# в .gitignore) и задайте POSTGRES_PASSWORD, либо передайте переменную окружения:
+# в .gitignore) и задайте POSTGRES_PASSWORD и MINIO_ROOT_PASSWORD, либо передайте
+# переменные окружения:
 #   $env:POSTGRES_PASSWORD = '<локальный пароль>'
+#   $env:MINIO_ROOT_PASSWORD = '<локальный пароль MinIO>'
 #   docker compose up -d
 #
-#   docker compose up -d            # поднять базу и Mailpit
+#   docker compose up -d            # поднять базу, Mailpit и MinIO
 #   docker compose logs -f db       # смотреть лог
 #   docker compose ps               # статус и health
-#   docker compose down             # остановить (данные в томе остаются)
+#   docker compose down             # остановить (данные в томах остаются)
 #   docker compose down -v          # остановить и стереть данные
 #
 # Схему создаёт миграция, а не этот файл (AGENT.md §5):
@@ -96,8 +104,42 @@ services:
     # Том не нужен: письма — временные данные разработки, после перезапуска
     # контейнера инбокс пуст, и это ожидаемо.
 
+  minio:
+    # S3-совместимое хранилище для Storage:Provider=S3 (backend/AGENT.md §17.15).
+    # Тег закреплён по релизу, а не latest: обновление образа не должно менять
+    # формат данных тома и ломать E2E молча.
+    #
+    # Образ — публичное зеркало релиза MinIO: официальный minio/minio удалён из
+    # Docker Hub, а quay.io/minio/minio с 2026-09-24 не отдаётся анонимно.
+    # Консоль и S3 API те же; это инструмент dev/CI, а не доверенная граница.
+    image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
+    container_name: barbersearch-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-barbersearch}
+      # Секрет обязателен: без него compose падает с понятной ошибкой, а не
+      # поднимает хранилище с общеизвестным паролем.
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+
+    ports:
+      # 9000 — S3 API (его указывает Storage:S3:ServiceUrl), 9001 — веб-консоль.
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - minio_data:/data
+
+    # Healthcheck не задан намеренно: в micro-образе нет curl/wget, и проверка
+    # внутри контейнера врала бы. API и так падает на старте, если бакет
+    # недоступен; в CI живость проверяется снаружи через /minio/health/live.
+
 volumes:
   postgres_data:
     # Имя задано явно: по умолчанию compose взял бы имя каталога («backend») и
     # том мог бы столкнуться с другим проектом в папке с таким же именем.
     name: barbersearch-postgres-data
+  minio_data:
+    # Явное имя по той же причине: том бакета не должен слиться с чужим MinIO.
+    name: barbersearch-minio-data

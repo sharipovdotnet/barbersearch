@@ -50,6 +50,12 @@ COPY --from=build /app/publish .
 # контейнер, и при нескольких инстансах на одном томе включите Logging__File__Shared=true.
 RUN mkdir -p /app/logs && chown $APP_UID /app/logs
 
+# Каталог фото для локального провайдера (Storage:Provider=Local). Том монтируется сюда,
+# поэтому каталог создаётся в образе и принадлежит непривилегированному пользователю: иначе
+# write-probe на старте не прошёл бы, а точка монтирования осталась бы root-owned. При
+# Storage:Provider=S3 каталог не используется, но безвреден.
+RUN mkdir -p /app/App_Data/photos && chown -R $APP_UID /app/App_Data
+
 # Непривилегированный пользователь, предопределённый в официальном aspnet-образе.
 USER $APP_UID
 
