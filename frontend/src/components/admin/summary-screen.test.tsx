@@ -3,18 +3,22 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type JsonBodyType } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { AdminQueuesProvider } from '@/components/admin/admin-queues-provider'
 import { SummaryScreen } from '@/components/admin/summary-screen'
 import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
 /**
- * Экран сводки: три блока, честные нули, гейт входа и ошибки.
+ * Экран сводки: четыре блока, честные нули, гейт входа и ошибки.
  *
  * Сеть — только MSW на границе HTTP. Проверяем обещания экрана, которых не видит
  * unit-тест транспорта: числа и ссылки из контракта, тексты пустых очередей, `401`
  * без запроса блоков, первую ошибку с «Повторить» и ошибку обновления, которая
  * не стирает блоки. Русская копия сравнивается целиком.
+ *
+ * Опрос и данные живут в `AdminQueuesProvider`, поэтому экран рендерится в нём:
+ * так же, как на странице администрирования, где тот же снимок рисует рейл.
  */
 
 const URL = '/api/admin/summary'
@@ -30,15 +34,21 @@ const OLDEST = {
 const SUMMARY = {
   reviews: { pendingCount: 14, oldest: OLDEST },
   barbers: { unverifiedCount: 1 },
-  salons: { inactiveCount: 1 },
+  salons: { inactiveCount: 1, pendingModerationCount: 2 },
   photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 3 },
+  users: { unverifiedCount: 4 },
+  barberRequests: { pendingCount: 5 },
+  bookings: { confirmedCount: 6 },
 }
 
 const EMPTY = {
   reviews: { pendingCount: 0, oldest: null },
   barbers: { unverifiedCount: 0 },
-  salons: { inactiveCount: 0 },
+  salons: { inactiveCount: 0, pendingModerationCount: 0 },
   photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+  users: { unverifiedCount: 0 },
+  barberRequests: { pendingCount: 0 },
+  bookings: { confirmedCount: 0 },
 }
 
 /** Ответ сводки с запоминанием каждого запроса. */
@@ -56,6 +66,15 @@ function mockSummary(body: JsonBodyType): string[] {
   return requests
 }
 
+/** Экран всегда рендерится внутри провайдера: своего опроса у него больше нет. */
+function renderSummary() {
+  return render(
+    <AdminQueuesProvider>
+      <SummaryScreen />
+    </AdminQueuesProvider>
+  )
+}
+
 describe('SummaryScreen', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -64,7 +83,7 @@ describe('SummaryScreen', () => {
   it('показывает четыре блока с числами и ссылками из контракта', async () => {
     mockSummary(SUMMARY)
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     expect(
       screen.getByRole('heading', { name: 'Сводка', level: 1 })
@@ -131,7 +150,7 @@ describe('SummaryScreen', () => {
   it('нули называет честно и не показывает «самого старого»', async () => {
     mockSummary(EMPTY)
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     expect(
       await screen.findByText('Очередь пуста — все отзывы проверены.')
@@ -160,7 +179,7 @@ describe('SummaryScreen', () => {
       )
     )
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     expect(
       await screen.findByText('Вход для администраторов')
@@ -184,7 +203,7 @@ describe('SummaryScreen', () => {
       })
     )
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     expect(
       await screen.findByText('Раздел доступен только администратору.')
@@ -213,7 +232,7 @@ describe('SummaryScreen', () => {
       })
     )
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     const reviews = await screen.findByRole('region', {
       name: 'Отзывы на модерации',
@@ -235,7 +254,7 @@ describe('SummaryScreen', () => {
     const user = userEvent.setup()
     const requests = mockSummary(SUMMARY)
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     await screen.findByRole('region', { name: 'Отзывы на модерации' })
 
@@ -258,7 +277,7 @@ describe('SummaryScreen', () => {
     vi.useFakeTimers()
     const requests = mockSummary(SUMMARY)
 
-    render(<SummaryScreen />)
+    renderSummary()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)

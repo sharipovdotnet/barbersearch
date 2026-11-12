@@ -5,17 +5,19 @@ import { ApiError } from '@/lib/api'
 import {
   describeAdminSummaryError,
   fetchAdminSummary,
+  formatAdminBadgeCount,
+  selectSectionCounts,
 } from '@/lib/admin-summary'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
 /**
- * Транспорт и строгий guard админской сводки.
+ * Транспорт, строгий guard и селекторы админской сводки.
  *
  * Контракт `GET /api/admin/summary`: параметров нет вообще — ни `status`, ни
  * `pageSize`, ни `cursor`. Сводка — единственное агрегатное чтение админки, и её
- * тело проверяется строго: неотрицательные целые счётчики, три обязательных блока
- * и `oldest` либо `null`, либо компактная строка очереди.
+ * тело проверяется строго: неотрицательные целые счётчики, семь обязательных
+ * блоков и `oldest` либо `null`, либо компактная строка очереди.
  */
 
 const SUMMARY_URL = '/api/admin/summary'
@@ -31,54 +33,81 @@ const OLDEST = {
 const SUMMARY = {
   reviews: { pendingCount: 14, oldest: OLDEST },
   barbers: { unverifiedCount: 1 },
-  salons: { inactiveCount: 1 },
+  salons: { inactiveCount: 1, pendingModerationCount: 2 },
   photos: { pendingAvatarsCount: 2, pendingPortfolioCount: 3 },
+  users: { unverifiedCount: 4 },
+  barberRequests: { pendingCount: 5 },
+  bookings: { confirmedCount: 6 },
 }
 
 /** Тело ответа, которое должно собирать ошибку строгого guard'а. */
 const INVALID_SUMMARIES: readonly [string, JsonBodyType][] = [
   ['отрицательный счётчик', {
+    ...SUMMARY,
     reviews: { pendingCount: -1, oldest: null },
-    barbers: { unverifiedCount: 0 },
-    salons: { inactiveCount: 0 },
-    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['дробный счётчик', {
-    reviews: { pendingCount: 0, oldest: null },
+    ...SUMMARY,
     barbers: { unverifiedCount: 1.5 },
-    salons: { inactiveCount: 0 },
-    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['отсутствующий блок', {
     reviews: { pendingCount: 0, oldest: null },
     barbers: { unverifiedCount: 0 },
     photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+    users: { unverifiedCount: 0 },
+    barberRequests: { pendingCount: 0 },
+    bookings: { confirmedCount: 0 },
   }],
   ['отсутствующий блок photos', {
     reviews: { pendingCount: 0, oldest: null },
     barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0, pendingModerationCount: 0 },
+    users: { unverifiedCount: 0 },
+    barberRequests: { pendingCount: 0 },
+    bookings: { confirmedCount: 0 },
+  }],
+  ['отсутствующий блок users', {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0, pendingModerationCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+    barberRequests: { pendingCount: 0 },
+    bookings: { confirmedCount: 0 },
+  }],
+  ['отсутствующий блок barberRequests', {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0, pendingModerationCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+    users: { unverifiedCount: 0 },
+    bookings: { confirmedCount: 0 },
+  }],
+  ['отсутствующий блок bookings', {
+    reviews: { pendingCount: 0, oldest: null },
+    barbers: { unverifiedCount: 0 },
+    salons: { inactiveCount: 0, pendingModerationCount: 0 },
+    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
+    users: { unverifiedCount: 0 },
+    barberRequests: { pendingCount: 0 },
+  }],
+  ['салоны без pendingModerationCount', {
+    ...SUMMARY,
     salons: { inactiveCount: 0 },
   }],
   ['дробный счётчик фото', {
-    reviews: { pendingCount: 0, oldest: null },
-    barbers: { unverifiedCount: 0 },
-    salons: { inactiveCount: 0 },
+    ...SUMMARY,
     photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 2.5 },
   }],
   ['«самый старый» без поля', {
+    ...SUMMARY,
     reviews: {
       pendingCount: 1,
       oldest: { id: OLDEST.id, rating: 4, awaitingSince: OLDEST.awaitingSince },
     },
-    barbers: { unverifiedCount: 0 },
-    salons: { inactiveCount: 0 },
-    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
   ['оценка вне 1..5', {
+    ...SUMMARY,
     reviews: { pendingCount: 1, oldest: { ...OLDEST, rating: 6 } },
-    barbers: { unverifiedCount: 0 },
-    salons: { inactiveCount: 0 },
-    photos: { pendingAvatarsCount: 0, pendingPortfolioCount: 0 },
   }],
 ]
 
@@ -132,6 +161,52 @@ describe('строгий guard сводки', () => {
       )
     })
   }
+})
+
+describe('selectSectionCounts', () => {
+  it('раскладывает снимок по пунктам рейла и складывает очереди фото', () => {
+    expect(selectSectionCounts(SUMMARY)).toStrictEqual({
+      reviews: 14,
+      photos: 5,
+      photosAvatars: 2,
+      photosPortfolio: 3,
+      barbers: 1,
+      users: 4,
+      barberRequests: 5,
+      salons: 2,
+      bookings: 6,
+    })
+  })
+
+  it('ноль остаётся нулём: сумму не выдумывает', () => {
+    expect(
+      selectSectionCounts({
+        ...SUMMARY,
+        reviews: { pendingCount: 0, oldest: null },
+        salons: { inactiveCount: 3, pendingModerationCount: 0 },
+      })
+    ).toStrictEqual({
+      reviews: 0,
+      photos: 5,
+      photosAvatars: 2,
+      photosPortfolio: 3,
+      barbers: 1,
+      users: 4,
+      barberRequests: 5,
+      salons: 0,
+      bookings: 6,
+    })
+  })
+})
+
+describe('formatAdminBadgeCount', () => {
+  it('оставляет двузначные числа и капит сотню', () => {
+    expect(formatAdminBadgeCount(1)).toBe('1')
+    expect(formatAdminBadgeCount(12)).toBe('12')
+    expect(formatAdminBadgeCount(99)).toBe('99')
+    expect(formatAdminBadgeCount(100)).toBe('99+')
+    expect(formatAdminBadgeCount(4321)).toBe('99+')
+  })
 })
 
 describe('describeAdminSummaryError', () => {

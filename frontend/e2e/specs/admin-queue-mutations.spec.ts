@@ -56,4 +56,56 @@ test.describe('очередь отзывов: фокус после действ
       await hidePublishedReview(request, reviewId)
     }
   })
+
+  /**
+   * Счётчик рейла — без перезагрузки (#93).
+   *
+   * Публикация убирает отзыв из очереди, значит бейдж «Отзывы» в рейле обязан
+   * уменьшиться сам: раздел шлёт `admin:queues-changed`, провайдер делает тихий
+   * `refresh()` сводки. Тридцатисекундного тика тест не ждёт — иначе проверялся
+   * бы таймер, а не событие. В `finally` отзыв возвращается в очередь, чтобы
+   * счётчики следующего прогона остались исходными.
+   */
+  test('бейдж «Отзывы» уменьшается после публикации без перезагрузки', async ({
+    page,
+    request,
+  }) => {
+    const adminReviews = new AdminReviewsPage(page)
+
+    await adminReviews.goto()
+    await expect(adminReviews.heading).toBeVisible()
+    await expect(adminReviews.rows.first()).toBeVisible()
+
+    const badge = adminReviews.reviewsBadge
+
+    await expect(badge).toBeVisible()
+
+    const before = Number(await badge.textContent())
+
+    expect(before).toBeGreaterThan(0)
+
+    const row = adminReviews.rows.first()
+    const reviewId = await adminReviews.reviewId(row)
+
+    try {
+      await page
+        .locator('#review-detail')
+        .getByRole('button', { name: 'Опубликовать' })
+        .click()
+
+      await expect(page.getByText('Отзыв опубликован')).toBeVisible()
+
+      if (before === 1) {
+        // Очередь опустела: «0» не рисуется, бейдж исчезает совсем.
+        await expect(badge).toHaveCount(0)
+      } else {
+        await expect(badge).toHaveText(String(before - 1))
+      }
+
+      // Перезагрузки не было: адрес и заголовок остались прежними.
+      expect(new URL(page.url()).pathname).toBe('/admin/reviews')
+    } finally {
+      await hidePublishedReview(request, reviewId)
+    }
+  })
 })
