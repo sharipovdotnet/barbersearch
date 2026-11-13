@@ -1,0 +1,37 @@
+<Project>
+
+    <!--
+        Общие настройки сборки для всех проектов под mobile/. TargetFramework намеренно НЕ
+        задаётся: у MAUI-приложения он платформенный (net10.0-android / net10.0-ios),
+        у Core и тестов — net10.0.
+    -->
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>14.0</LangVersion>
+
+        <!-- Воспроизводимая сборка: одинаковый вход → одинаковый бинарник. -->
+        <Deterministic>true</Deterministic>
+
+        <!--
+            XML-документация не генерируется: иначе каждый публичный тип без <summary> даёт CS1591.
+            Доки в коде остаются, но проверяются отдельно (dotnet format), а не сборкой.
+        -->
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+        <!-- Анализаторы включены, шумные правила глушатся точечно в .editorconfig проекта. -->
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <AnalysisMode>Recommended</AnalysisMode>
+
+        <!-- Стилевые IDE-правила в сборке не проверяются: это отдельная команда dotnet format. -->
+        <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+        <!-- Любое предупреждение компилятора/анализатора — ошибка сборки. -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+        <!-- CI-сборка: детерминированные пути, включается только когда окружение само сообщает про CI. -->
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+</Project>

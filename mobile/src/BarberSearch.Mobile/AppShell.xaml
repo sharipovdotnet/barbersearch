@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="BarberSearch.Mobile.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="BarberSearch"
+    FlyoutBehavior="Disabled">
+
+    <!--
+        Четыре раздела клиентского приложения. Содержимое табам назначается в code-behind
+        из контейнера зависимостей: так страница получает ViewModel конструктором.
+    -->
+    <TabBar>
+        <ShellContent x:Name="SearchTab" Title="Поиск" Route="search" />
+        <ShellContent x:Name="MapTab" Title="Карта" Route="map" />
+        <ShellContent x:Name="BookingsTab" Title="Записи" Route="bookings" />
+        <ShellContent x:Name="ProfileTab" Title="Профиль" Route="profile" />
+    </TabBar>
+
+</Shell>

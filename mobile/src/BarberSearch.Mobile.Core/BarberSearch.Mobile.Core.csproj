@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>BarberSearch.Mobile.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Тесты собирают исключение API напрямую: фабрика из ответа требует настоящий HttpResponseMessage. -->
+    <InternalsVisibleTo Include="BarberSearch.Mobile.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      DTO берутся из бэкенда ссылкой на проект, а не копированием: контракт API меняется
+      в одном месте, и мобилка ломает сборку сразу, а не в проде. Contracts ссылается на
+      Domain ради перечислений (Grade, Language, PlaceKind), поэтому домен приедет
+      транзитивно — для клиента это только типы, EF и БД он не тянет.
+    -->
+    <ProjectReference Include="..\..\..\backend\BarberSearch\src\BarberSearch.Contracts\BarberSearch.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
