@@ -87,5 +87,16 @@
   "Завтра": "Tomorrow",
   "Язык": "Language",
   "дд.мм.гггг": "DD.MM.YYYY",
+  "Изменить цену визита": "Change the visit price",
+  "Сейчас: {price}.": "Now: {price}.",
+  "Клиент увидит новую цену в своих записях.": "The client will see the new price in their bookings.",
+  "Укажите цену.": "Enter a price.",
+  "Слишком большая цена — максимум 99 999 999,99 ₽.": "The price is too large — 99,999,999.99 RUB maximum.",
+  "Цена — не больше двух знаков после запятой.": "The price can have at most two decimal places.",
+  "Цену нельзя изменить у отменённой записи или у неявки.": "The price cannot be changed for a cancelled booking or a no-show.",
+  "Цена визита обновлена.": "The visit price has been updated.",
+  "Не удалось изменить цену визита.": "Could not change the visit price.",
+  "Не удалось изменить цену визита. Попробуйте ещё раз.": "Could not change the visit price. Try again.",
+  "Бронь уже изменилась — обновите карточку.": "The booking has already changed — refresh the card.",
   "BarberSearch — поиск барберов и онлайн-запись в салоны.": "BarberSearch — find barbers and book appointments online."
 }

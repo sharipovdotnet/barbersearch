@@ -110,6 +110,29 @@ export async function rescheduleBooking(
   )
 }
 
+/**
+ * Правка цены визита; сервер отвечает `204` без тела.
+ *
+ * Одна функция на оба кабинета: барбер и администратор идут в одну и ту же ручку
+ * `PUT /bookings/{id}/price` — права проверяет сервер (владелец профиля или админ).
+ * `price` — число, а не строка: контракт ждёт `decimal`, и строка «1500» прошла бы
+ * только через биндер. CSRF-повтор безопасен: фильтр отклоняет запрос до действия,
+ * а значение в теле не меняется. Тело ответа не читается — строку списка обновляет
+ * владелец экрана (локальная правка или повторное чтение).
+ */
+export async function updateBookingPrice(
+  bookingId: string,
+  price: number
+): Promise<void> {
+  await mutateWithCsrf<void>(
+    `/bookings/${encodeURIComponent(bookingId)}/price`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ price }),
+    }
+  )
+}
+
 export type CreateBookingInput = {
   barberProfileId: string
   barberServiceId: string

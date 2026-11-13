@@ -159,3 +159,65 @@ describe('useBarberBookings: тихое обновление', () => {
     expect(posts).toBe(1)
   })
 })
+
+describe('useBarberBookings: цена визита', () => {
+  it('правит строку локально после 204, без повторного GET', async () => {
+    const fetches = countRequests('/api/barber/bookings')
+    const puts: string[] = []
+
+    server.use(
+      http.get('/api/barber/bookings', () =>
+        HttpResponse.json({
+          items: [booking('a', 'Confirmed')],
+          nextCursor: null,
+        })
+      ),
+      http.put('/api/bookings/:id/price', async ({ request }) => {
+        puts.push(await request.text())
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    const { result } = renderHook(() => useBarberBookings('upcoming'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    const fetchesBefore = fetches()
+
+    await act(async () => {
+      await result.current.reprice('a', 2500)
+    })
+
+    expect(puts).toStrictEqual([JSON.stringify({ price: 2500 })])
+    expect(result.current.items[0]).toMatchObject({ id: 'a', price: 2500 })
+    expect(fetches()).toBe(fetchesBefore)
+    expect(result.current.isMutating).toBe(false)
+  })
+
+  it('опрос замечает чужую правку цены', async () => {
+    let items = [booking('a', 'Confirmed')]
+
+    server.use(
+      http.get('/api/barber/bookings', () =>
+        HttpResponse.json({ items, nextCursor: null })
+      )
+    )
+
+    const { result } = renderHook(() => useBarberBookings('upcoming'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    items = [{ ...booking('a', 'Confirmed'), price: 2500 }]
+
+    const change = await act(async () => result.current.refresh())
+
+    expect(change?.updated).toHaveLength(1)
+    expect(change?.updated[0]?.before.price).toBe(2000)
+    expect(change?.updated[0]?.after.price).toBe(2500)
+  })
+})

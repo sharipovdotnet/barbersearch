@@ -388,6 +388,12 @@ describe('подписи и константы контракта', () => {
     )
   })
 
+  it('цена визита тоже рендерится в рублях (#97)', () => {
+    expect(formatAuditValue('price', 2000, 'booking')).toBe(formatPrice(2000))
+    // Сервер иногда отдаёт число строкой — показываем ту же сумму.
+    expect(formatAuditValue('price', '2000', 'booking')).toBe(formatPrice(2000))
+  })
+
   it('цена другого типа и битая цена барбера — строка сервера', () => {
     expect(formatAuditValue('price', '5000', 'salon')).toBe('5000')
     expect(formatAuditValue('price', 'битая цена', 'barber_service')).toBe(

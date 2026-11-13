@@ -40,13 +40,17 @@ const PAGE_FALLBACK = 'Не удалось загрузить ещё запис�
 const getBookingId = (booking: Booking): string => booking.id
 
 /**
- * Что изменилось в строке: статус или время.
+ * Что изменилось в строке: статус, время или цена.
  *
  * Без сравнения `startAt` перенос барбером не попал бы в `updated`, и клиент не
- * увидел бы баннер «Барбер перенёс…».
+ * увидел бы баннер «Барбер перенёс…». Без `price` то же самое случилось бы с
+ * правкой суммы: строка осталась бы в списке, но баннер молчал бы, а `usePagedList`
+ * не заменил бы строку.
  */
 const bookingChanged = (before: Booking, after: Booking): boolean =>
-  before.status !== after.status || before.startAt !== after.startAt
+  before.status !== after.status ||
+  before.startAt !== after.startAt ||
+  before.price !== after.price
 
 /**
  * Два серверных списка броней клиента: «Предстоящие» и «История».

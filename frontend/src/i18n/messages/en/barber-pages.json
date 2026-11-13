@@ -112,5 +112,7 @@
   "Перенести запись {when}": "Reschedule the booking for {when}",
   "Клиент увидит новое время в кабинете. Письмо не отправляется.": "The client will see the new time in the cabinet. No email is sent.",
   "Визит перенесён на {when}.": "The visit has been moved to {when}.",
-  "Клиент перенёс запись на {when}.": "The client moved the booking to {when}."
+  "Клиент перенёс запись на {when}.": "The client moved the booking to {when}.",
+  "Изменить цену визита {when}": "Change the visit price for {when}",
+  "Администратор изменил цену визита ({name}, {when}): {from} → {to}.": "The administrator changed the visit price ({name}, {when}): {from} → {to}."
 }

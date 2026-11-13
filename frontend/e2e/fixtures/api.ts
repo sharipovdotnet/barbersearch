@@ -142,7 +142,7 @@ export function expectNoAuditField(
  */
 export async function fetchAdminAuditRows(
   request: APIRequestContext,
-  entityType: 'portfolio_photo' | 'user',
+  entityType: 'portfolio_photo' | 'user' | 'booking',
   entityId: string
 ): Promise<AdminAuditRow[]> {
   const query = new URLSearchParams({

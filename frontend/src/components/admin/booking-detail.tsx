@@ -2,6 +2,7 @@ import { useState, type ReactNode, type RefObject } from 'react'
 import { ArrowLeft, Circle, Loader2, TriangleAlert } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
+import { BookingPriceDialog } from '@/components/booking-price-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,7 +28,11 @@ import {
 } from '@/lib/admin-bookings'
 import { notifyAdminQueuesChanged } from '@/lib/admin-queues'
 import { ApiError } from '@/lib/api'
-import { canCancelBooking } from '@/lib/booking-status'
+import {
+  canCancelBooking,
+  canChangeBookingPrice,
+} from '@/lib/booking-status'
+import { updateBookingPrice } from '@/lib/bookings'
 import {
   formatDateTime,
   formatDuration,
@@ -41,14 +46,16 @@ export type BookingActionKind = 'cancel' | 'noShow'
 
 /**
  * Карточка брони: контекст клиента, барбера, услуги и салона плюс две
- * существующие операции поддержки.
+ * существующие операции поддержки и правка цены визита.
  *
  * Время показывается только в поясе салона: `startAt`/`endAt` приходят в UTC,
- * и подпись «Время в поясе салона» говорит об этом прямо. Новых операций нет:
- * «Отменить бронь» доступна `Pending`/`Confirmed`, «Отметить неявку» — только
- * `Confirmed` после начала визита (клиентская проверка для UX, сервер проверит
- * ещё раз). Обе необратимы и подтверждаются `alertdialog`'ом. Брони не
- * аудируются, поэтому экран не обещает запись в журнале.
+ * и подпись «Время в поясе салона» говорит об этом прямо. «Отменить бронь»
+ * доступна `Pending`/`Confirmed`, «Отметить неявку» — только `Confirmed` после
+ * начала визита (клиентская проверка для UX, сервер проверит ещё раз). Обе
+ * необратимы и подтверждаются `alertdialog`'ом. Цену визита меняет общая ручка
+ * `PUT api/bookings/{id}/price`: сумма доступна в любом статусе, кроме отмены и
+ * неявки, а каждая правка пишет `booking.updated` с `changes.price` — экран
+ * этого не обещает словами, но журнал её показывает.
  */
 export function BookingDetail({
   booking,
@@ -72,6 +79,11 @@ export function BookingDetail({
   const [pending, setPending] = useState<BookingActionKind | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState<string | null>(null)
+  // Правка цены: свой диалог, своё ожидание и своя ошибка — они не смешиваются
+  // с подтверждением отмены/неявки.
+  const [isPriceOpen, setIsPriceOpen] = useState(false)
+  const [isPricePending, setIsPricePending] = useState(false)
+  const [priceError, setPriceError] = useState<string | null>(null)
 
   const now = useNow()
   const durationMinutes = Math.round(
@@ -82,7 +94,9 @@ export function BookingDetail({
   const canMarkNoShow =
     booking.status === 'Confirmed' && Date.parse(booking.startAt) <= now
   const canCancel = canCancelBooking(booking.status)
-  const hasActions = canCancel || canMarkNoShow
+  // Сумма доступна у предстоящего и у завершённого визита — как в домене.
+  const canChangePrice = canChangeBookingPrice(booking.status)
+  const hasActions = canCancel || canMarkNoShow || canChangePrice
   const customerName = getAdminBookingCustomerName(booking.customer)
 
   function openAction(kind: BookingActionKind) {
@@ -142,6 +156,56 @@ export function BookingDetail({
       )
     } finally {
       setPending(null)
+      onActingChange?.(false)
+    }
+  }
+
+  function openPrice() {
+    setPriceError(null)
+    setIsPriceOpen(true)
+  }
+
+  function closePrice() {
+    if (isPricePending) {
+      return
+    }
+
+    setIsPriceOpen(false)
+    setPriceError(null)
+  }
+
+  /**
+   * Правка цены: общая ручка двух кабинетов, ответ `204`. Список перечитывается
+   * целиком (`onReload`), потому что строка в нём показывает ту же сумму.
+   */
+  async function submitPrice(price: number) {
+    if (isPricePending) {
+      return
+    }
+
+    setIsPricePending(true)
+    setPriceError(null)
+    onActingChange?.(true)
+
+    try {
+      await updateBookingPrice(booking.id, price)
+      setIsPriceOpen(false)
+      setAnnouncement(t('Цена визита обновлена.'))
+      onReload()
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        onRequiresSignIn()
+        return
+      }
+
+      setPriceError(
+        describeAdminBookingActionError(
+          cause,
+          t('Не удалось изменить цену визита. Попробуйте ещё раз.')
+        )
+      )
+    } finally {
+      setIsPricePending(false)
       onActingChange?.(false)
     }
   }
@@ -323,6 +387,15 @@ export function BookingDetail({
             </h3>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {canChangePrice && (
+                <Button
+                  variant="outline"
+                  className="h-11 sm:h-9"
+                  onClick={openPrice}
+                >
+                  {t('Изменить цену визита')}
+                </Button>
+              )}
               {canCancel && (
                 <Button
                   variant="outline"
@@ -345,12 +418,25 @@ export function BookingDetail({
 
             <p className="text-xs text-muted-foreground">
               {t(
-                'Доступны только отмена и отметка неявки. Заметку барбера администратор не меняет.'
+                'Цену визита можно изменить в любом статусе, кроме отмены и неявки. Отмена и отметка неявки необратимы; заметку барбера администратор не меняет.'
               )}
             </p>
           </section>
         )}
       </div>
+
+      {isPriceOpen && (
+        <BookingPriceDialog
+          description={`${formatAdminBookingTime(booking)} · ${customerName}`}
+          currentPrice={booking.price}
+          isPending={isPricePending}
+          error={priceError}
+          onSubmit={(price) => {
+            void submitPrice(price)
+          }}
+          onClose={closePrice}
+        />
+      )}
 
       {target !== null && (
         <BookingActionDialog

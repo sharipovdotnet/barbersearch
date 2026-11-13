@@ -222,6 +222,35 @@ test.describe('axe: 320 px, расписание барбера', () => {
     await expectNoBlockingViolations(page, '/barber @320', test.info())
   })
 
+  test('/barber: диалог цены визита на 320', async ({ page }) => {
+    const cabinet = new CabinetPage(page)
+
+    await cabinet.goto()
+    await cabinet.openTab('Ближайшие')
+
+    // «Ближайшие» отдают только активные записи, поэтому кнопка цены есть.
+    const row = cabinet.rows.first()
+
+    await expect(row).toBeVisible()
+    await cabinet.priceButtonOf(row).click()
+    await expect(cabinet.priceDialog).toBeVisible()
+
+    // Поле, подписи и кнопки диалога переносятся, а не расширяют страницу.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber (диалог цены визита) @320',
+      test.info()
+    )
+  })
+
   test('неделя, исключения и отпуска не расширяют страницу', async ({ page }) => {
     await page.goto('/barber/schedule')
     await expect(

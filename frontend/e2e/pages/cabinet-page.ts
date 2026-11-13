@@ -77,6 +77,27 @@ export class CabinetPage {
     return this.panel.locator('li')
   }
 
+  /**
+   * Кнопка правки цены в строке: ищется по доступному имени, а не по CSS-селектору.
+   * Имя уточняет время визита, поэтому `^` достаточно: у каждой строки своя кнопка.
+   */
+  priceButtonOf(row: Locator): Locator {
+    return row.getByRole('button', { name: /^Изменить цену визита/ })
+  }
+
+  /** Диалог правки цены: обычный `dialog`, а не подтверждение отмены. */
+  get priceDialog(): Locator {
+    return this.page.getByRole('dialog')
+  }
+
+  get priceInput(): Locator {
+    return this.priceDialog.getByLabel('Цена, ₽')
+  }
+
+  get savePriceButton(): Locator {
+    return this.priceDialog.getByRole('button', { name: 'Сохранить' })
+  }
+
   get actionDialog(): Locator {
     return this.page.getByRole('alertdialog')
   }

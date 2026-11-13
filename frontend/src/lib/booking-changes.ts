@@ -3,6 +3,7 @@ import { bookingStatusLabel } from '@/lib/booking-status'
 import type { BookingStatus } from '@/lib/bookings'
 import {
   formatBookingsCount,
+  formatPrice,
   formatShortDay,
   formatShortName,
   formatTime,
@@ -17,14 +18,16 @@ import type { PageChange } from '@/lib/page-changes'
  * завершена, и отменена, поэтому о ней молчим — её видно в истории.
  *
  * Строки-аргументы описаны минимумом полей: сообщению нужны только момент визита,
- * статус и (барберу) имя клиента. Полные DTO подходят структурно.
+ * статус, цена и (барберу) имя клиента. Полные DTO подходят структурно.
  */
 
-/** Строка клиента: время и статус. */
+/** Строка клиента: время, статус и сумма визита. */
 export type BookingChangeRow = {
   id: string
   status: BookingStatus
   startAt: string
+  /** Сумма визита: смена цены — отдельная новость, её видно баннером. */
+  price: number
 }
 
 /** Строка барбера: плюс имя клиента и пояс салона. */
@@ -99,6 +102,21 @@ export function describeBarberBookingsChange(
     })
   }
 
+  // Правку цены делает только администратор: собственного действия с суммой
+  // у барбера нет, поэтому изменение здесь всегда чужое.
+  const repriced = change.updated.find(
+    ({ before, after }) => before.price !== after.price
+  )
+
+  if (repriced !== undefined) {
+    return t('Администратор изменил цену визита ({name}, {when}): {from} → {to}.', {
+      name: formatShortName(repriced.after.customer.displayName),
+      when: moment(repriced.after.startAt, repriced.after.salon.timeZoneId),
+      from: formatPrice(repriced.before.price),
+      to: formatPrice(repriced.after.price),
+    })
+  }
+
   return null
 }
 
@@ -151,6 +169,20 @@ export function describeCustomerBookingsChange<T extends BookingChangeRow>(
   if (rescheduled !== undefined) {
     return t('Барбер перенёс запись на {when}.', {
       when: moment(rescheduled.after.startAt, timeZoneOf(rescheduled.after)),
+    })
+  }
+
+  // Смена суммы неожиданнее смены статуса (статус и так виден бейджем), поэтому
+  // о цене говорим раньше, чем о переводе в другой статус (D14).
+  const repriced = change.updated.find(
+    ({ before, after }) => before.price !== after.price
+  )
+
+  if (repriced !== undefined) {
+    return t('Барбер изменил цену визита {when}: {from} → {to}.', {
+      when: moment(repriced.after.startAt, timeZoneOf(repriced.after)),
+      from: formatPrice(repriced.before.price),
+      to: formatPrice(repriced.after.price),
     })
   }
 

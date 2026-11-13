@@ -735,9 +735,9 @@ An empty window is a clickable card («свободно 45 мин» + «Заня
 «Записать клиента» dialog with the day and the window's start, where the nearest slot is
 pre-selected once the barber picks a service and a salon. More than twenty rows in a day are
 truncated with «Показаны первые 20 записей дня.» — there is no per-day cursor. Actions are the
-same five, through the same `CabinetBookingRow`; a terminal action makes the other list reload, so
-the row moves from «Ближайшие» to «История» without a manual refresh. One failed list keeps the
-feed and adds «Не удалось обновить часть записей.» with «Повторить».
+same five plus the price edit, through the same `CabinetBookingRow`; a terminal action makes the
+other list reload, so the row moves from «Ближайшие» to «История» without a manual refresh. One
+failed list keeps the feed and adds «Не удалось обновить часть записей.» with «Повторить».
 
 The lists themselves page the server: `GET /api/barber/bookings?scope=upcoming&pageSize=20` (the
 profile comes from the `barber_profile_id` claim, there is no profile query parameter) and
@@ -766,6 +766,17 @@ changes the status to «Подтверждена»; complete, no-show and cancel
 «Ближайшие» and keep it in «История» with the new status and, for a barber cancellation, the
 reason; the note dialog (1000 characters, an empty field clears the note) updates `barberNote`. Every write sends `X-CSRF-TOKEN`; the list
 read does not. Double clicks are ignored while a request is in flight.
+
+Next to the sum a pencil icon button (44 px on mobile) opens the shared `BookingPriceDialog`
+(`src/components/booking-price-dialog.tsx`) for `Pending`, `Confirmed` and `Completed` rows: the
+field «Цена, ₽» accepts `0`–`99 999 999.99` with at most two decimals, «Сейчас: …» shows the
+current value, and the note «Клиент увидит новую цену в своих записях.» is literal — there are no
+booking notifications. Save is disabled while the value is unchanged or invalid; `Escape` closes
+the dialog and returns focus to the trigger; the server error sits in `role="alert"`.
+`PUT /api/bookings/{id}/price` answers `204`, `useBarberBookings.reprice` patches the row without a
+second `GET`, and the screen announces «Цена визита обновлена.». The 30-second poll is paused while
+the dialog is open, and a cancelled booking or a no-show shows no button
+(`canChangeBookingPrice`).
 
 «Записать клиента» opens a dialog on the same screen. The barber chooses who the visit is
 for. For a registered user he types at least three characters of the email or phone
@@ -808,7 +819,7 @@ keeps its own role gates and `/account` no longer turns a barber away.
   `barber-booking-action-dialog.tsx`, `barber-booking-dialog.tsx` (manual booking, with
   `initialDate`/`preferredStartAt` from a window) and `barber-slot-options.tsx` (shared slot
   chips/radios).
-- `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, five local mutations,
+- `src/hooks/use-barber-bookings.ts` — scope, the shared pager controller, the local mutations,
   `401`, click guard; `use-barber-day.ts` — the derived day controller over the two lists (merge,
   windows, next client, routed actions, partial failure); `use-barber-clients.ts` — debounced
   client search; and `use-barber-booking-options.ts` — own services and salons.
@@ -1153,7 +1164,15 @@ antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
   (`retry`/`refresh`/`signIn`/`fatal`/`unavailable`).
 - `src/lib/barber-path.ts`, `src/lib/catalog.ts` — route parsing and the shared profile cache.
 - `src/lib/barber-slots.ts` — slots DTO, `fetchBarberSlots`, salon-local date helpers.
-- `src/lib/bookings.ts` — `createBooking`, the booking list and cancellation.
+- `src/lib/bookings.ts` — `createBooking`, the booking list, cancellation and `updateBookingPrice`.
+
+**Цена визита.** The sum snapshot is not edited from the public card or `/account`: the customer
+cannot change it. The profile barber changes it from the `/barber` row and an administrator from
+`/admin/bookings/{id}` through the same «Изменить цену визита» dialog (`PUT
+/api/bookings/{id}/price` with `{ price }` → `204`; `Pending`/`Confirmed`/`Completed` only). Only
+the amount moves — service, salon, barber, time and status stay — and the customer sees the new sum
+in their own records on the next read. There are no booking notifications, discounts, promo codes
+or receipts, so the new sum is the whole effect.
 
 Moving an **existing** visit is not part of the public booking panel: the client and the barber
 reschedule from their cabinets (`/account` and `/barber`), and the admin has no reschedule action
@@ -1640,10 +1659,19 @@ What it can do:
   consequence, show a `role="status"` message after `204`, reload the card and the list, and map a
   refusal (`booking.cancel.invalidStatus`, `booking.markNoShow.tooEarly`,
   `booking.markNoShow.invalidStatus`) to Russian copy in `role="alert"`.
-- The two actions are the existing `POST` endpoints; the screen adds **no new mutation**. There is
-  no create for a customer, no reschedule, no edit of the price, service or barber note, no delete
-  and no refunds or payments — the domain has none of them, and the barber's note is read-only for
-  the admin. Terminal bookings show no actions, and rows have no action buttons at all. The
+- «Изменить цену визита» is the first button of the card's «Действия» section for `Pending`,
+  `Confirmed` and `Completed` bookings. It opens the shared `BookingPriceDialog`; after `204` the
+  card **and** the list are re-read (`handleActionReload` = `detail.reload()` + `list.refresh()`) and
+  the screen announces «Цена визита обновлена.». Polling is paused while the request is in flight,
+  and the section hint now reads «Цену визита можно изменить в любом статусе, кроме отмены и
+  неявки. Отмена и отметка неявки необратимы; заметку барбера администратор не меняет.».
+  `409 booking.price.status`, `400 booking.price.required|negative|tooLarge|precision` and a
+  network failure land in `role="alert"`.
+- The actions are the existing `POST` endpoints plus the one price `PUT`; the screen adds **no new
+  mutation** of its own. There is no create for a customer, no reschedule, no edit of the service or
+  the barber note (the price is the only editable value), no delete and no refunds or payments —
+  the domain has none of them, and the barber's note is read-only for the admin.
+  `Cancelled`/`NoShow` bookings show no actions, and rows have no action buttons at all. The
   booking-reschedule slice deliberately does **not** add a «Перенести» button here: support still
   cancels and marks no-shows, while moving a visit stays a client/barber action, even though the
   API allows an administrator to call it.
@@ -1656,15 +1684,15 @@ What it cannot do, on purpose:
   `?…`: the email is PII and does not belong in browser history or proxy logs. Only the booking id
   is in the address, because a direct link to a booking from a ticket is the point of the screen.
 - **Booking changes are audited, booking creation is not.** `AuditTrail` writes a `booking.updated`
-  row for every status or barber-note change — including the admin cancellation and no-show on this
-  screen — so they appear in `/admin/audit` under the «Бронь» filter. A reschedule is the same
-  `booking.updated` action with two changes, `startAt`/`endAt`; the journal renders them as
-  «Начало»/«Окончание» in **UTC with an explicit ` UTC` suffix**, because the payload has no salon
-  zone and the browser zone would mislead a remote administrator. Creating a booking writes
-  **no** row: `AuditsCreation: false`, because the booking already stores the customer, the time
-  and the price, and a line per booking would grow the journal without new information. Retention
-  and export remain separate slices. The price and the service/barber/salon links stay out of the
-  allowlist until the separate price-edit slice.
+  row for every status, barber-note or price change — including the admin cancellation, no-show and
+  price edit on this screen — so they appear in `/admin/audit` under the «Бронь» filter. A
+  reschedule is the same `booking.updated` action with two changes, `startAt`/`endAt`; the journal
+  renders them as «Начало»/«Окончание» in **UTC with an explicit ` UTC` suffix**, because the
+  payload has no salon zone and the browser zone would mislead a remote administrator. A price edit
+  carries `price` as JSON numbers, rendered in rubles. Creating a booking writes **no** row:
+  `AuditsCreation: false`, because the booking already stores the customer, the time and the price,
+  and a line per booking would grow the journal without new information. Retention and export remain
+  separate slices. The service/barber/salon links stay out of the allowlist.
 - Filters by date, barber and salon, bulk operations, a calendar/timeline and CSV export are not
   part of this screen.
 
@@ -1795,8 +1823,9 @@ is `noindex` like the rest of the admin.
   `_FIELD_LABELS`, `formatAuditAction` (the label comes from the tail after the last dot of
   `user.updated`), `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто»,
   Russian role, grade, booking-status and service-category labels with the raw string as a
-  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`; `price` is money only for
-  `barber_service` rows — `formatPrice`, and a non-numeric server value stays a string — while
+  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`; `price` is money for
+  `barber_service` **and `booking`** rows — `formatPrice`, and a non-numeric server value stays a
+  string — while
   `moderationStatus` is Russian by
   entity type — `SALON_MODERATION_LABELS` for `salon`, `PHOTO_MODERATION_LABELS` for
   `portfolio_photo` — and `avatarModerationStatus` always uses the photo labels),
@@ -1845,7 +1874,7 @@ What it does:
   `SaveChanges`; the screen only reads.
 - The journal covers **nine** entity types — `User`, `BarberProfile`, `PortfolioPhoto`,
   `BarberService`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking`. Booking rows
-  carry only `Status`, `BarberNote`, `CancellationReason` and (since #95) `StartAt`/`EndAt`
+  carry only `Status`, `BarberNote`, `CancellationReason`, `Price` and (since #95) `StartAt`/`EndAt`
   changes: creating a booking is deliberately not audited (`AuditsCreation: false`). The card of a
   barber is audited for `bio` and `latePolicy` (`barber_profile.updated`; a `bio` longer than 500
   characters is truncated with `...`, the full text stays in `barber_profiles`), and the price
@@ -1864,8 +1893,8 @@ What it does:
   frozen by a unit test). Avatar uploads, deletions and decisions appear
   under `User` as `user.updated`. The journal stays immutable and read-only; retention,
   partitioning and export are still separate slices, and catalogue deletes do not exist in the API.
-  The booking price, `salonId` and `barberServiceId` remain outside the journal until the
-  separate booking-price slice.
+  The booking price is in the journal since #97 (`booking.updated` with numeric `price`
+  `from`/`to`, rendered in rubles); `salonId` and `barberServiceId` remain outside.
 
 ## Testing
 
