@@ -69,6 +69,8 @@ public class AdminAuditReadHandlerTests
     [InlineData(" booking ", AdminAuditEntityType.Booking)]
     [InlineData("portfolio_photo", AdminAuditEntityType.PortfolioPhoto)]
     [InlineData(" PORTFOLIO_PHOTO ", AdminAuditEntityType.PortfolioPhoto)]
+    [InlineData("barber_service", AdminAuditEntityType.BarberService)]
+    [InlineData(" BARBER_SERVICE ", AdminAuditEntityType.BarberService)]
     public async Task Get_ParsesEntityTypeCaseInsensitively(
         string? value,
         AdminAuditEntityType expected)
@@ -89,6 +91,7 @@ public class AdminAuditReadHandlerTests
     [InlineData("up")]
     [InlineData("0")]
     [InlineData("8")]
+    [InlineData("9")]
     [InlineData("services")]
     [InlineData("bookings")]
     [InlineData("photo")]
@@ -269,7 +272,7 @@ public class AdminAuditReadHandlerTests
 
     /// <summary>
     /// Имена storage совпадают со строками, которые пишет <c>AuditTrail</c>: snake_case,
-    /// без CLR-имён и без чисел. Проверяются все восемь аудируемых типов.
+    /// без CLR-имён и без чисел. Проверяются все девять аудируемых типов.
     /// </summary>
     [Theory]
     [InlineData(AdminAuditEntityType.User, AdminAuditEntityTypes.USER)]

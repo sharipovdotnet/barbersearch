@@ -5,11 +5,12 @@ namespace BarberSearch.Application.Audit.Admin;
 /// </summary>
 /// <remarks>
 /// Значения повторяют allowlist <c>AuditTrail</c>: <c>User</c>, <c>BarberProfile</c>,
-/// <c>PortfolioPhoto</c>, <c>Review</c>, <c>Salon</c>, <c>HairService</c>,
-/// <c>Specialization</c> и <c>Booking</c>. У брони аудируются только изменения статуса и
-/// заметки барбера — создание брони строки не пишет. <see cref="PortfolioPhoto"/> — ребёнок
-/// профиля, но отдельный тип: загрузка и удаление кадра это жизненный цикл контента.
-/// <see cref="All"/> — отсутствие фильтра.
+/// <c>PortfolioPhoto</c>, <c>BarberService</c>, <c>Review</c>, <c>Salon</c>,
+/// <c>HairService</c>, <c>Specialization</c> и <c>Booking</c>. У брони аудируются только
+/// изменения статуса, заметки барбера и времени визита — создание брони строки не пишет.
+/// <see cref="PortfolioPhoto"/> и <see cref="BarberService"/> — дети профиля, но отдельные
+/// типы: у кадра это жизненный цикл контента, у услуги — прайс, который администратор
+/// различает с карточкой профиля. <see cref="All"/> — отсутствие фильтра.
 /// </remarks>
 public enum AdminAuditEntityType
 {
@@ -24,7 +25,7 @@ public enum AdminAuditEntityType
     User = 1,
 
     /// <summary>
-    /// Профиль барбера: грейд, активность, подтверждение, рейтинг.
+    /// Профиль барбера: грейд, активность, подтверждение, рейтинг, текст карточки.
     /// </summary>
     BarberProfile = 2,
 
@@ -59,5 +60,10 @@ public enum AdminAuditEntityType
     /// статус проверки. Ребёнок профиля, но отдельный тип: загрузка и удаление кадра —
     /// действие с контентом, а не техническая правка профиля.
     /// </summary>
-    PortfolioPhoto = 8
+    PortfolioPhoto = 8,
+
+    /// <summary>
+    /// Прайс барбера: профиль, услуга каталога, цена, длительность, активность.
+    /// </summary>
+    BarberService = 9
 }

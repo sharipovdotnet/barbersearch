@@ -1,0 +1,24 @@
+
+Running 11 tests using 1 worker
+
+node.exe : (node:35652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\Hrust\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:35652) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:25:3 › админка: журнал › рейл ведёт в журнал и отмечает пункт текущим (1.8s)
+  ok  2 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:44:3 › админка: журнал › фильтр по дате: «1–20», «Дальше» → «21–25», «Назад» без запроса (2.0s)
+  ok  3 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:78:3 › админка: журнал › первая строка — самая свежая и «Система», строка 20 раскрывает diff роли (1.9s)
+  ok  4 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:116:3 › админка: журнал › фильтр «Отзыв» оставляет только две записи этого типа (1.7s)
+  ok  5 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:132:3 › админка: журнал › фильтр «Салон»: одна запись и русский diff телефона (1.7s)
+  ok  6 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:154:3 › админка: журнал › фильтр «Бронь»: одна запись и русский статус в diff (1.8s)
+  ok  7 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:176:3 › админка: журнал › фильтр «Фото портфолио»: запрос entityType=portfolio_photo и «Ничего не найдено» (1.7s)
+  ok  8 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:207:3 › админка: журнал › фильтр автора: системная запись не находится, «%» — литерал (3.2s)
+  ok  9 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:247:3 › админка: журнал › «Сбросить фильтры» возвращает список к первой странице без даты (1.9s)
+  ok 10 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:269:3 › админка: журнал › журнал неизменяем: нет «Показать ещё» и действий над записями (1.7s)
+  ok 11 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:282:3 › админка: журнал › 401 на списке показывает гейт входа, а не текст ошибки (2.0s)
+
+  11 passed (23.4s)

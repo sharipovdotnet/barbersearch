@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.PortfolioPhotos;
@@ -32,19 +33,20 @@ namespace BarberSearch.Infrastructure.Postgresql.Audit;
 /// и не может получить scoped <see cref="ICurrentUser"/>.
 /// </para>
 /// <para>
-/// Аудируются восемь типов: <see cref="User"/>, <see cref="BarberProfile"/>,
-/// <see cref="PortfolioPhoto"/>, <see cref="Review"/>, <see cref="Salon"/>,
-/// <see cref="HairService"/>, <see cref="Specialization"/> и <see cref="Booking"/>, и только
-/// свойства из allowlist. У брони пишутся только изменения (<see cref="Booking.Status"/> и
-/// <see cref="Booking.BarberNote"/>): создание брони — действие клиента, а строка аудита на
-/// каждую бронь раздувала бы журнал без новой информации, которую бронь уже не хранит.
-/// Логины (<c>LastLoginAt</c>, <c>FailedLoginAttempts</c>) и правки профиля без
-/// административного смысла не пишутся: иначе таблица превращается в шум, в котором не видно
-/// смены роли и скрытия отзыва. Дети <see cref="BarberProfile"/> — услуги, салоны,
-/// расписание и отпуска — не отдельные агрегаты и в allowlist не входят: их правки строки
-/// не дают. Исключение одно — <see cref="PortfolioPhoto"/>: загрузка, скрытие и удаление
-/// кадра — это жизненный цикл контента, который администратор проверяет и блокирует, поэтому
-/// у фотографии собственный тип <c>portfolio_photo</c>, хотя она остаётся ребёнком профиля.
+/// Аудируются девять типов: <see cref="User"/>, <see cref="BarberProfile"/>,
+/// <see cref="PortfolioPhoto"/>, <see cref="BarberService"/>, <see cref="Review"/>,
+/// <see cref="Salon"/>, <see cref="HairService"/>, <see cref="Specialization"/> и
+/// <see cref="Booking"/>, и только свойства из allowlist. У брони пишутся только изменения
+/// (<see cref="Booking.Status"/> и <see cref="Booking.BarberNote"/>): создание брони —
+/// действие клиента, а строка аудита на каждую бронь раздувала бы журнал без новой
+/// информации, которую бронь уже не хранит. Логины (<c>LastLoginAt</c>,
+/// <c>FailedLoginAttempts</c>) и правки профиля без административного смысла не пишутся:
+/// иначе таблица превращается в шум, в котором не видно смены роли и скрытия отзыва.
+/// Дети <see cref="BarberProfile"/> — салоны, расписание и отпуска — не отдельные агрегаты
+/// и в allowlist не входят: их правки строки не дают. Исключений два: <see cref="PortfolioPhoto"/>
+/// (загрузка, скрытие и удаление кадра — жизненный цикл контента, который администратор
+/// проверяет и блокирует) и <see cref="BarberService"/> (прайс: кто и когда поставил цену) —
+/// у них собственные типы, хотя они остаются детьми профиля.
 /// </para>
 /// <para>
 /// Секреты не попадают в БД в открытом виде: значения свойств, имя которых содержит
@@ -120,11 +122,41 @@ public sealed class AuditTrail
                     nameof(BarberProfile.IsActive),
                     nameof(BarberProfile.IsVerified),
                     nameof(BarberProfile.Rating),
-                    nameof(BarberProfile.ReviewsCount)
+                    nameof(BarberProfile.ReviewsCount),
+
+                    // Карточка (#96): текст, который читает клиент. Списки (языки, достижения,
+                    // способы оплаты, формат общения, доп. услуги), специализации и стаж
+                    // сознательно не входят: diff массива нечитаем, а payload раздувается.
+                    // DisplayName не входит по другой причине (D4): это owned-тип, а не
+                    // свойство, и при замене инстанса (UpdateProfile) EF теряет снимок —
+                    // старая запись удаляется, новая приходит Added с OriginalValue ==
+                    // CurrentValue, поэтому diff from/to построить нечем. Тихая дыра
+                    // зафиксирована тестом Capture_WhenBarberProfileDisplayNameChanged_
+                    // WritesNoRowBecauseOwnedSnapshotIsLost и §14 #30, а не молчанием.
+                    nameof(BarberProfile.Bio),
+                    nameof(BarberProfile.LatePolicy)
                 ]),
 
-            // Портфолио — единственный ребёнок BarberProfile в allowlist: загрузка и удаление
-            // кадра — действие с контентом, а не техническая правка профиля. AuditsCreation
+            // Прайс барбера (#96): цена, длительность и видимость строки в карточке. Это
+            // ребёнок агрегата, но, как и PortfolioPhoto, получает собственный тип:
+            // администратор различает «профиль» и «прайс», и фильтр журнала должен тоже.
+            // AuditsCreation true: добавление услуги — редкое осмысленное событие (десятки
+            // строк на профиль), а без created нельзя ответить «когда услуга появилась».
+            // Deleted не бывает: DELETE в API деактивирует строку (isActive), потому что
+            // на неё ссылаются брони, — событие, которого в домене не было, не выдумываем.
+            [typeof(BarberService)] = new(
+                "barber_service",
+                [
+                    nameof(BarberService.BarberProfileId),
+                    nameof(BarberService.HairServiceId),
+                    nameof(BarberService.Price),
+                    nameof(BarberService.DurationMinutes),
+                    nameof(BarberService.IsActive)
+                ]),
+
+            // Портфолио — второй (после прайса) ребёнок BarberProfile в allowlist: загрузка
+            // и удаление кадра — действие с контентом, а не техническая правка профиля.
+            // AuditsCreation
             // остаётся true: кадров максимум десять на профиль, объём журнала это не взрывает.
             // Url обязателен: PortfolioPhoto.Id и mediaId в /api/media/portfolio/... — разные
             // GUID'ы, поэтому после удаления строку иначе не связать с файлом.

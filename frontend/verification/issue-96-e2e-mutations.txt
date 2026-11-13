@@ -1,0 +1,19 @@
+
+Running 6 tests using 1 worker
+
+node.exe : (node:12276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\Hrust\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:12276) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:45:3 › профиль барбера: мутации › правка «О себе» переживает перезагрузку (8.1s)
+  ok 2 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:63:3 › профиль барбера: мутации › услуга из «E2E Стрижка» появляется в прайсе и на публичной карточке (4.3s)
+  ok 3 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:104:3 › профиль барбера: мутации › новая цена видна и в прайсе, и публично (2.9s)
+  ok 4 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:136:3 › профиль барбера: мутации › новая цена видна в журнале «Услуга барбера» с diff в рублях и авторством барбера (11.5s)
+  ok 5 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:249:3 › профиль барбера: мутации › «Скрыть» оставляет строку со статусом «Скрыта» и убирает её из публичной карточки (2.8s)
+  ok 6 [mutations-chromium] › e2e\specs\barber-profile-mutations.spec.ts:292:3 › профиль барбера: мутации › «Вернуть» снова делает услугу активной (2.3s)
+
+  6 passed (42.1s)

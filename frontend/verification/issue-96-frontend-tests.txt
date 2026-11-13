@@ -1,0 +1,17 @@
+﻿issue-96 frontend verification — 2026-11-13T16:05:35.3717491+05:00
+
+=== npm run lint ===
+Found 0 warnings and 0 errors. (532 files)
+
+=== npm test ===
+Test Files  144 passed (144)
+Tests       1529 passed (1529)
+
+=== npm run build (tsc -b && vite build) ===
+✓ built in 5.35s
+
+=== npm run check:i18n -- --strict ===
+exit 0 (предупреждений о новых подписях нет)
+
+=== npx tsc -p tsconfig.e2e.json --noEmit ===
+exit 0

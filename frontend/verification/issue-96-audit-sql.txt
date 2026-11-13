@@ -1,0 +1,31 @@
+﻿issue-96 audit_log samples (barbersearch_e2e) — 2026-11-13T16:10:26.6454664+05:00
+
+psql> SELECT action, count(*) FROM audit_log WHERE entity_type = 'barber_service' GROUP BY 1;
+action         | count 
+------------------------+-------
+ barber_service.created |     1
+ barber_service.updated |     5
+(2 rows)
+
+psql> SELECT occurred_at, actor_user_id, payload FROM audit_log WHERE action = 'barber_service.created' ORDER BY occurred_at DESC LIMIT 1;
+occurred_at          |            actor_user_id             |                                                                                         payload                                                                                          
+-------------------------------+--------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 2026-11-13 15:54:32.957426+05 | 9e000000-0000-4000-8000-000000000115 | {"values": {"price": 1500, "isActive": true, "hairServiceId": "9e500000-0000-4000-8000-000000000001", "barberProfileId": "9e100000-0000-4000-8000-000000000015", "durationMinutes": 45}}
+(1 row)
+
+psql> SELECT occurred_at, payload FROM audit_log WHERE entity_type = 'barber_service' ORDER BY occurred_at DESC, id DESC LIMIT 5;
+occurred_at          |                        payload                         
+-------------------------------+--------------------------------------------------------
+ 2026-11-13 15:54:53.631371+05 | {"changes": {"isActive": {"to": true, "from": false}}}
+ 2026-11-13 15:54:51.230437+05 | {"changes": {"isActive": {"to": false, "from": true}}}
+ 2026-11-13 15:54:49.101061+05 | {"changes": {"price": {"to": 2000, "from": 2100.00}}}
+ 2026-11-13 15:54:40.288327+05 | {"changes": {"price": {"to": 2100, "from": 2000.00}}}
+ 2026-11-13 15:54:36.877848+05 | {"changes": {"price": {"to": 2000, "from": 1500.00}}}
+(5 rows)
+
+psql> SELECT occurred_at, payload FROM audit_log WHERE action = 'barber_profile.updated' AND payload ? 'changes' AND payload->'changes' ? 'bio' ORDER BY occurred_at DESC LIMIT 1;
+occurred_at          |                                                     payload                                                     
+-------------------------------+-----------------------------------------------------------------------------------------------------------------
+ 2026-11-13 15:54:28.995814+05 | {"changes": {"bio": {"to": "E2E-био 1794567264158", "from": "E2E-профиль: карточка, услуги и специализации."}}}
+(1 row)
+
