@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Loader2, TriangleAlert } from 'lucide-react'
 
+import { ScheduleConflictsDialog } from '@/components/barber/schedule-conflicts-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -12,10 +13,10 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useScheduleWrite } from '@/hooks/use-schedule-write'
 import { useI18n } from '@/i18n'
 import {
   DAY_LABELS,
-  describeScheduleError,
   fromTimeInputValue,
   isSameWeek,
   replaceWorkingSchedules,
@@ -47,8 +48,11 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
   const [days, setDays] = useState<WorkingDayInput[]>(() =>
     weeklyDaysToInput(salon.weekly)
   )
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const write = useScheduleWrite('hours', {
+    fallback: t('Не удалось сохранить расписание.'),
+    onSaved: () => onSaved(t('Расписание сохранено.')),
+  })
+  const saveRef = useRef<HTMLButtonElement>(null)
 
   const original = weeklyDaysToInput(salon.weekly)
   const isDirty = !isSameWeek(days, original)
@@ -58,7 +62,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
   const isAllDaysOff = days.every((day) => day.isDayOff)
 
   function updateDay(dayOfWeek: WorkingDayInput['dayOfWeek'], patch: Partial<WorkingDayInput>) {
-    setError(null)
+    write.clearError()
     setDays((current) =>
       current.map((day) =>
         day.dayOfWeek === dayOfWeek ? { ...day, ...patch } : day
@@ -66,24 +70,14 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
     )
   }
 
-  async function handleSave() {
-    if (isSaving || !isDirty || hasInvalidHours) {
+  function handleSave() {
+    if (write.isSaving || !isDirty || hasInvalidHours) {
       return
     }
 
-    setIsSaving(true)
-    setError(null)
-
-    try {
-      await replaceWorkingSchedules(barberProfileId, salon.salonId, days)
-      onSaved(t('Расписание сохранено.'))
-    } catch (cause) {
-      setError(
-        describeScheduleError(cause, t('Не удалось сохранить расписание.'))
-      )
-    } finally {
-      setIsSaving(false)
-    }
+    void write.save((force) =>
+      replaceWorkingSchedules(barberProfileId, salon.salonId, days, force)
+    )
   }
 
   return (
@@ -107,7 +101,7 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
             size="sm"
             className="h-11 sm:h-8"
             onClick={() => {
-              setError(null)
+              write.clearError()
               setDays(weekdayTemplate())
             }}
           >
@@ -201,27 +195,28 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
 
         <p className="text-xs text-muted-foreground">
           {t(
-            'Изменение графика не отменяет уже созданные записи. Если запись выйдет за новые часы, она останется в силе — проверьте её в разделе «Записи».'
+            'Изменение графика не отменяет записи: если визит выйдет за новые часы, сохранение попросит подтвердить.'
           )}
         </p>
 
-        {error && (
+        {write.error && (
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {write.error}
           </p>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
+            ref={saveRef}
             type="button"
             className="h-11 sm:h-8"
-            disabled={!isDirty || hasInvalidHours || isSaving}
-            aria-busy={isSaving}
-            onClick={() => {
-              void handleSave()
-            }}
+            disabled={!isDirty || hasInvalidHours || write.isSaving}
+            aria-busy={write.isSaving}
+            onClick={handleSave}
           >
-            {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden />}
+            {write.isSaving && (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            )}
             {t('Сохранить расписание')}
           </Button>
 
@@ -236,6 +231,19 @@ export function BarberWeekSchedule({ barberProfileId, salon, onSaved }: Props) {
           </span>
         </div>
       </CardContent>
+
+      <ScheduleConflictsDialog
+        open={write.conflicts !== null}
+        kind="hours"
+        conflicts={write.conflicts ?? []}
+        isSaving={write.isSaving}
+        error={write.error}
+        finalFocus={saveRef}
+        onCancel={write.cancel}
+        onConfirm={() => {
+          void write.confirm()
+        }}
+      />
     </Card>
   )
 }

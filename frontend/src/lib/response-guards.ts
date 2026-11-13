@@ -73,6 +73,7 @@ import type {
   BarberScheduleException,
   BarberScheduleSalon,
   BarberScheduleTimeOff,
+  ScheduleConflict,
 } from '@/lib/barber-schedule'
 import type { BarberSearchItem } from '@/lib/barber-search'
 import type { BarberSalonSummary } from '@/lib/barber-salons'
@@ -774,6 +775,33 @@ export function isBarberSchedule(value: unknown): value is BarberSchedule {
     isArrayOf(isScheduleSalon)(value.salons) &&
     isArrayOf(isScheduleTimeOff)(value.timeOffs)
   )
+}
+
+/**
+ * Запись списка `conflicts` ответа `409 barberSchedule.conflict`.
+ *
+ * Строгая: `id`, `timeZoneId` и обе границы — непустые строки, `status` — одно из
+ * пяти имён брони. Телефона, email и цены в контракте нет, поэтому лишние поля
+ * игнорируются, как и в остальных guard'ах.
+ */
+function isScheduleConflict(value: unknown): value is ScheduleConflict {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isString(value.startAt) &&
+    isString(value.endAt) &&
+    isNonEmptyString(value.timeZoneId) &&
+    isString(value.customerName) &&
+    isString(value.serviceName) &&
+    isBookingStatus(value.status)
+  )
+}
+
+/** Список визитов, из-за которых расписание не сохранено. */
+export function isScheduleConflicts(
+  value: unknown
+): value is ScheduleConflict[] {
+  return isArrayOf(isScheduleConflict)(value)
 }
 
 function isBarberSlot(value: unknown): value is BarberSlot {

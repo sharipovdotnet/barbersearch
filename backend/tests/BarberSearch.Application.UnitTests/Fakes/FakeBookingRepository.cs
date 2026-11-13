@@ -1,3 +1,4 @@
+using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
@@ -88,6 +89,18 @@ public sealed class FakeBookingRepository : IBookingRepository
     public Guid? LockedBarberProfileId { get; private set; }
 
     /// <summary>
+    /// Код ошибки таймаута, который обработчик передал в перегрузку блокировки:
+    /// расписание обязано просить <c>barberSchedule.lockTimeout</c>, а не код брони.
+    /// </summary>
+    public string? LastLockTimeoutCode { get; private set; }
+
+    /// <summary>
+    /// Сколько раз обработчик читал брони для проверки конфликтов расписания.
+    /// <c>force=true</c> и неизменённый день недели обязаны оставить это число нулевым.
+    /// </summary>
+    public int GetActiveForScheduleCalls { get; private set; }
+
+    /// <summary>
     /// Порядок вызовов репозитория: тест проверяет, что блокировка берётся до вставки (R-15).
     /// </summary>
     public List<string> Operations { get; } = [];
@@ -101,9 +114,19 @@ public sealed class FakeBookingRepository : IBookingRepository
     public Task<UnitResult<Failure>> AcquireBarberLockAsync(
         Guid barberProfileId,
         CancellationToken cancellationToken = default)
+        => AcquireBarberLockAsync(
+            barberProfileId,
+            ApiErrorCodes.Booking.AddLockTimeout,
+            cancellationToken);
+
+    public Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
+        string timeoutCode,
+        CancellationToken cancellationToken = default)
     {
         LockCalls++;
         LockedBarberProfileId = barberProfileId;
+        LastLockTimeoutCode = timeoutCode;
         Operations.Add("lock");
 
         return Task.FromResult(
@@ -411,6 +434,37 @@ public sealed class FakeBookingRepository : IBookingRepository
             .ToList();
 
         return Task.FromResult(Result.Success<IReadOnlyList<Booking>, Failure>(rows));
+    }
+
+    public Task<Result<IReadOnlyList<ScheduleConflictBooking>, Failure>> GetActiveForScheduleAsync(
+        Guid barberProfileId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        GetActiveForScheduleCalls++;
+
+        IReadOnlyList<ScheduleConflictBooking> rows = _bookings.Values
+            .Where(booking => booking.BarberProfileId == barberProfileId)
+            .Where(booking => booking.Status is BookingStatus.Pending or BookingStatus.Confirmed)
+            .Where(booking => booking.StartAt < to && from < booking.EndAt)
+            .OrderBy(booking => booking.StartAt)
+            .ThenBy(booking => booking.Id)
+            .Select(booking => new ScheduleConflictBooking(
+                booking.Id,
+                booking.SalonId,
+                booking.StartAt,
+                booking.EndAt,
+                booking.Status,
+                booking.UserId is { } userId
+                    ? $"Customer {userId:N}"
+                    : $"{booking.GuestFirstName} {booking.GuestLastName}".Trim(),
+                $"Service {booking.BarberServiceId:N}",
+                "Europe/Moscow"))
+            .ToList();
+
+        return Task.FromResult(
+            Result.Success<IReadOnlyList<ScheduleConflictBooking>, Failure>(rows));
     }
 
     public Task<Result<bool, Failure>> HasActiveOverlapAsync(

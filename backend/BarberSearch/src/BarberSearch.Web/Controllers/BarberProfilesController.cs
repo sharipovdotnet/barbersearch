@@ -18,6 +18,7 @@ using BarberSearch.Application.BarberProfiles.RemoveBarberProfileSpecialization;
 using BarberSearch.Application.BarberProfiles.RemoveBarberProfileTimeOff;
 using BarberSearch.Application.BarberProfiles.ReorderBarberProfilePhoto;
 using BarberSearch.Application.BarberProfiles.ReorderBarberProfilePhotos;
+using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.BarberProfiles.SetBarberProfilePrimarySalon;
 using BarberSearch.Application.BarberProfiles.UnverifyBarberProfile;
 using BarberSearch.Application.BarberProfiles.UpdateBarberProfile;
@@ -556,19 +557,38 @@ public class BarberProfilesController : ApiController
     /// <summary>
     /// Добавляет нерабочий период (отпуск) барбера.
     /// </summary>
+    /// <remarks>
+    /// Если в интервал попадают активные визиты, отвечает <c>409 barberSchedule.conflict</c>
+    /// со списком затронутых визитов; <c>force=true</c> сохраняет отпуск. Невалидное значение
+    /// <c>force</c> трактуется как <c>false</c>: отдельного <c>400</c> нет.
+    /// </remarks>
+    /// <param name="force">Сохранить, даже если в интервал попадают активные визиты.</param>
     [HttpPost("{barberProfileId:guid}/time-offs")]
     public async Task<ActionResult> AddTimeOff(
         Guid barberProfileId,
+        [FromQuery] string? force,
         [FromBody] AddBarberProfileTimeOffRequest request,
-        [FromServices] ICommandHandler<AddBarberProfileTimeOffCommand> handler,
+        [FromServices] ICommandHandler<ScheduleWriteOutcome, AddBarberProfileTimeOffCommand> handler,
         CancellationToken cancellationToken)
-        => ToActionResult(await handler.Handle(
+    {
+        var result = await handler.Handle(
             new AddBarberProfileTimeOffCommand(
                 barberProfileId,
                 request.StartAt,
                 request.EndAt,
-                request.Reason),
-            cancellationToken));
+                request.Reason,
+                ReadForce(force)),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return FailureProblemDetails.CreateResult(result.Error);
+        }
+
+        return result.Value.Conflicts.Count > 0
+            ? FailureProblemDetails.CreateConflictResult(result.Value.Conflicts, insideTimeOff: true)
+            : NoContent();
+    }
 
     /// <summary>
     /// Удаляет нерабочий период (отпуск) барбера.

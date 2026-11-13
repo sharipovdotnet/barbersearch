@@ -26,6 +26,7 @@ import {
   isNotificationSettings,
   isPortfolioPhoto,
   isSalonDirectoryItem,
+  isScheduleConflicts,
   isTelegramLink,
   isUnreadNotificationsPayload,
 } from '@/lib/response-guards'
@@ -1239,5 +1240,45 @@ describe('isAdminAuditPage, тип сущности portfolio_photo', () => {
         ],
       })
     ).toBe(false)
+  })
+})
+
+/**
+ * Список конфликтов расписания — часть тела `409`, поэтому guard обязан быть
+ * строгим: строка без пояса или неизвестный статус не должны попасть в диалог.
+ */
+describe('isScheduleConflicts', () => {
+  const CONFLICT = {
+    id: '9e100000-0000-4000-8000-000000000031',
+    startAt: '2026-11-20T09:00:00+00:00',
+    endAt: '2026-11-20T09:30:00+00:00',
+    timeZoneId: 'Asia/Yekaterinburg',
+    customerName: 'Иван Петров',
+    serviceName: 'Стрижка',
+    status: 'Confirmed',
+  }
+
+  it('принимает массив визитов и лишние поля', () => {
+    expect(isScheduleConflicts([{ ...CONFLICT, price: 1500 }])).toBe(true)
+  })
+
+  it('принимает пустой массив: список — не страница с курсором', () => {
+    expect(isScheduleConflicts([])).toBe(true)
+  })
+
+  it('отвергает запись без обязательного поля', () => {
+    const { timeZoneId, ...withoutZone } = CONFLICT
+
+    expect(timeZoneId).toBe('Asia/Yekaterinburg')
+    expect(isScheduleConflicts([withoutZone])).toBe(false)
+    expect(isScheduleConflicts([{ ...CONFLICT, id: '' }])).toBe(false)
+  })
+
+  it('отвергает неизвестный статус и не-массив', () => {
+    expect(isScheduleConflicts([{ ...CONFLICT, status: 'Archived' }])).toBe(
+      false
+    )
+    expect(isScheduleConflicts({ items: [CONFLICT] })).toBe(false)
+    expect(isScheduleConflicts(null)).toBe(false)
   })
 })

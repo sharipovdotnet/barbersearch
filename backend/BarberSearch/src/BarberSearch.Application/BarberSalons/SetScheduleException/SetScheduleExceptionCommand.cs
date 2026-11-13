@@ -12,6 +12,11 @@ namespace BarberSearch.Application.BarberSalons.SetScheduleException;
 /// <param name="StartTime">Начало своих часов; игнорируется для выходного.</param>
 /// <param name="EndTime">Окончание своих часов; игнорируется для выходного.</param>
 /// <param name="Reason">Пометка барбера или <c>null</c>.</param>
+/// <param name="Force">
+/// Сохранить правку, даже если на этой дате есть активные визиты. Осознанное подтверждение:
+/// проверка прав и существования при этом не отключается. Явная дата проверяется и за
+/// горизонтом повторяющихся дней.
+/// </param>
 public record SetScheduleExceptionCommand(
     Guid BarberProfileId,
     Guid SalonId,
@@ -19,4 +24,5 @@ public record SetScheduleExceptionCommand(
     bool IsDayOff,
     TimeOnly StartTime,
     TimeOnly EndTime,
-    string? Reason) : ICommand;
+    string? Reason,
+    bool Force = false) : ICommand;

@@ -12,6 +12,7 @@ export const roles = [
   'admin',
   'barber',
   'profileBarber',
+  'scheduleBarber',
   'newBarber',
   'customer',
   'mutations',
@@ -42,6 +43,17 @@ export const accounts: Record<Role, Account> = {
       process.env.E2E_PROFILE_BARBER_EMAIL ??
       'e2e-profile-barber@barbersearch.test',
     password: process.env.E2E_PROFILE_BARBER_PASSWORD ?? 'e2e-password',
+  },
+  // Барбер только для сцены конфликтов расписания (#94): отдельный профиль, салон
+  // и неделя 09:00–18:00. Профиль выключен (`is_active = false`), чтобы лишняя
+  // строка не попала ни в поиск, ни в `usageCount`, ни в сводку админки; кабинет
+  // и расписание от этого не зависят — их пускает claim `barber_profile_id`.
+  // Сид каждый раз сбрасывает неделю, исключения, отпуска и брони этого барбера.
+  scheduleBarber: {
+    email:
+      process.env.E2E_SCHEDULE_BARBER_EMAIL ??
+      'e2e-schedule-barber@barbersearch.test',
+    password: process.env.E2E_SCHEDULE_BARBER_PASSWORD ?? 'e2e-password',
   },
   // Барбер с ролью, но без профиля: онбординг `/barber/onboarding` создаёт его
   // впервые. Сид каждый раз удаляет профиль, созданный прошлым прогоном.
@@ -80,6 +92,21 @@ export const fixtures = {
   profileBarber: {
     profileId: '9e100000-0000-4000-8000-000000000015',
     userId: '9e000000-0000-4000-8000-000000000115',
+  },
+  /**
+   * Изолированный барбер сцены конфликтов расписания (#94): свой аккаунт, профиль,
+   * привязка к салону `E2E Studio` и неделя 09:00–18:00. Профиль выключен, чтобы
+   * не двигать поиск (14 карточек Москвы), `usageCount` (13) и сводку (1 профиль
+   * без подтверждения): сценарий пишет только расписание и брони этого барбера.
+   */
+  scheduleBarber: {
+    profileId: '9e100000-0000-4000-8000-000000000016',
+    userId: '9e000000-0000-4000-8000-000000000116',
+    barberSalonId: '9e200000-0000-4000-8000-000000000016',
+    barberServiceId: '9e300000-0000-4000-8000-000000000016',
+    salonId: '9e400000-0000-4000-8000-000000000001',
+    /** Пояс салона: в нём сценарий ставит визит на 10:00 и считает «завтра». */
+    timeZoneId: 'Europe/Moscow',
   },
   /** Барбер B2: ближайшая запись клиента и восстановление после её отмены. */
   customerBarberProfileId: '9e100000-0000-4000-8000-000000000002',

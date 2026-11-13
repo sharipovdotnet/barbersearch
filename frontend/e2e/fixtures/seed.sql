@@ -30,6 +30,10 @@
 --                               специализаций и броней; дополнительная услуга `E2E поиск` —
 --                               маркер изолированной карточки в поиске (#86); его услуги
 --                               мутирует только #83
+--   e2e-schedule-barber (…-0016) барбер сцены конфликтов расписания (#94): профиль
+--                               выключен, поэтому поиск, `usageCount` и сводка его не
+--                               видят; неделя 09:00–18:00, услуга и салон есть. Секция
+--                               1.2 сбрасывает его неделю, исключения, отпуска и брони
 --   2 отзыва на модерации       вкладка «На модерации» админки
 --   e2e-applicant               клиент без заявки «Стать барбером» (#46): спек подаёт
 --                               заявку с нуля, админ отклоняет её с причиной; секция 1
@@ -112,6 +116,25 @@ DELETE FROM salons
 WHERE owner_user_id IN (
   SELECT id FROM users WHERE email LIKE '%@barbersearch.test'
 );
+
+-- 1.2 Барбер сцены конфликтов расписания (#94).
+--
+-- Сцена меняет его неделю на 12:00–18:00 и создаёт гостевую бронь; если прогон
+-- упал до `finally`, следующий прогон должен начать с недели 09:00–18:00 и без
+-- активных визитов. Гостевые брони этого барбера уже удалены общим сбросом выше
+-- (у них нет `user_id`, но есть телефон), однако адресное удаление по профилю
+-- оставляет сброс понятным и не зависящим от формы гостевой строки.
+DELETE FROM bookings
+WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000016';
+
+DELETE FROM time_offs
+WHERE barber_profile_id = '9e100000-0000-4000-8000-000000000016';
+
+DELETE FROM schedule_overrides
+WHERE barber_salon_id = '9e200000-0000-4000-8000-000000000016';
+
+DELETE FROM working_schedules
+WHERE barber_salon_id = '9e200000-0000-4000-8000-000000000016';
 
 -- 2. Пользователи. Пароль `e2e-password` (IdentityV3).
 INSERT INTO users
@@ -739,6 +762,163 @@ ON CONFLICT (id) DO UPDATE SET
 UPDATE users
 SET barber_profile_id = '9e100000-0000-4000-8000-000000000015', updated_at = now()
 WHERE id = '9e000000-0000-4000-8000-000000000115';
+
+-- 4.3 Барбер сцены конфликтов расписания (#94).
+--
+-- Отдельный аккаунт и профиль для `barber-schedule-conflicts-mutations.spec.ts`:
+-- витринный барбер занят другими сценами, и его неделю менять нельзя.
+--
+-- Профиль **выключен** (`is_active = false`), но подтверждён. Это не оплошность:
+--   * поиск требует `IsActive && IsVerified`, поэтому лишней карточки в Москве нет
+--     (их по-прежнему 14, `search-login.spec.ts`);
+--   * `usageCount` услуги считает только активные подтверждённые профили — счётчик
+--     `E2E Стрижка` остаётся 13 (`admin-catalogue.spec.ts`);
+--   * сводка админки считает `!IsVerified` без учёта `is_active` — «1 профиль без
+--     подтверждения» не меняется (`admin-summary.spec.ts`).
+-- Кабинету и расписанию активность профиля не нужна: их пускает claim
+-- `barber_profile_id`, а пишущие обработчики проверяют только владение.
+--
+-- Неделя 09:00–18:00, как у витрины: визит в 10:00 попадает в старые часы и выходит
+-- за новые 12:00–18:00. Услуга использует тот же справочник `E2E Стрижка`, что и
+-- остальные, потому что `POST /api/barber/bookings` требует активную услугу профиля.
+--
+-- Идемпотентность: неделя, исключения, отпуска и брони удаляются в секции 1.2;
+-- профиль, связь и услуга — upsert по фиксированным id; аккаунт — upsert, ссылка
+-- на профиль выставляется после его вставки (FK `users → barber_profiles`).
+INSERT INTO users
+    (id, email, password_hash, first_name, last_name, phone_number, avatar_url,
+     is_email_verified, is_phone_verified, role, is_active, last_login_at,
+     barber_profile_id, created_at, updated_at, security_stamp, failed_login_attempts)
+VALUES
+    ('9e000000-0000-4000-8000-000000000116', 'e2e-schedule-barber@barbersearch.test',
+     'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
+     'Расписание', 'Барберов', '+70000000116', NULL,
+     true, false, 2, true, NULL,
+     NULL,
+     timestamptz '2026-09-01 10:08+00', timestamptz '2026-09-01 10:08+00',
+     'e2e-stamp-schedule-barber', 0)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    phone_number = EXCLUDED.phone_number,
+    avatar_url = EXCLUDED.avatar_url,
+    is_avatar_blocked = false,
+    avatar_moderation_status = 2,
+    avatar_rejection_reason = NULL,
+    avatar_submitted_at = NULL,
+    avatar_reviewed_at = NULL,
+    avatar_reviewed_by_user_id = NULL,
+    is_active = EXCLUDED.is_active,
+    is_email_verified = EXCLUDED.is_email_verified,
+    role = EXCLUDED.role,
+    barber_profile_id = NULL,
+    failed_login_attempts = 0,
+    lockout_end = NULL,
+    updated_at = now();
+
+INSERT INTO barber_profiles
+    (id, user_id, display_name, grade, bio, languages, years_of_experience,
+     certificates_and_training, rating, reviews_count, achievements,
+     payment_methods, communication_format, goodies, additional_services, late_policy,
+     is_active, is_verified, created_at, updated_at)
+VALUES
+    ('9e100000-0000-4000-8000-000000000016',
+     '9e000000-0000-4000-8000-000000000116',
+     'E2E Барбер Расписания',
+     5,
+     'E2E-профиль сцены конфликтов расписания.',
+     ARRAY[1, 2],
+     5,
+     ARRAY[]::text[],
+     NULL,
+     0,
+     ARRAY[]::text[],
+     ARRAY[1, 2],
+     ARRAY['Friendly'],
+     ARRAY[]::text[],
+     ARRAY['E2E расписание'],
+     '10 minutes',
+     false,
+     true,
+     '2026-09-01 10:08+00',
+     '2026-09-01 10:08+00')
+ON CONFLICT (id) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    display_name = EXCLUDED.display_name,
+    bio = EXCLUDED.bio,
+    years_of_experience = EXCLUDED.years_of_experience,
+    late_policy = EXCLUDED.late_policy,
+    languages = EXCLUDED.languages,
+    payment_methods = EXCLUDED.payment_methods,
+    certificates_and_training = EXCLUDED.certificates_and_training,
+    achievements = EXCLUDED.achievements,
+    communication_format = EXCLUDED.communication_format,
+    goodies = EXCLUDED.goodies,
+    additional_services = EXCLUDED.additional_services,
+    rating = EXCLUDED.rating,
+    reviews_count = EXCLUDED.reviews_count,
+    is_active = EXCLUDED.is_active,
+    is_verified = EXCLUDED.is_verified,
+    updated_at = now();
+
+INSERT INTO barber_salons
+    (id, barber_profile_id, salon_id, is_primary, created_at, updated_at)
+VALUES
+    ('9e200000-0000-4000-8000-000000000016',
+     '9e100000-0000-4000-8000-000000000016',
+     '9e400000-0000-4000-8000-000000000001',
+     true,
+     now(),
+     now())
+ON CONFLICT (id) DO UPDATE SET
+    barber_profile_id = EXCLUDED.barber_profile_id,
+    salon_id = EXCLUDED.salon_id,
+    is_primary = EXCLUDED.is_primary,
+    updated_at = now();
+
+INSERT INTO working_schedules
+    (id, barber_salon_id, day_of_week, start_time, end_time, is_day_off, created_at, updated_at)
+SELECT
+    md5('e2e-schedule-working-schedule:' || d)::uuid,
+    '9e200000-0000-4000-8000-000000000016'::uuid,
+    d,
+    '09:00'::time,
+    '18:00'::time,
+    false,
+    now(),
+    now()
+FROM generate_series(0, 6) AS d
+ON CONFLICT (id) DO UPDATE SET
+    start_time = EXCLUDED.start_time,
+    end_time = EXCLUDED.end_time,
+    is_day_off = EXCLUDED.is_day_off,
+    updated_at = now();
+
+INSERT INTO barber_services
+    (id, barber_profile_id, hair_service_id, price, duration_minutes,
+     is_active, created_at, updated_at)
+VALUES
+    ('9e300000-0000-4000-8000-000000000016',
+     '9e100000-0000-4000-8000-000000000016',
+     '9e500000-0000-4000-8000-000000000001',
+     30.00,
+     30,
+     true,
+     now(),
+     now())
+ON CONFLICT (id) DO UPDATE SET
+    barber_profile_id = EXCLUDED.barber_profile_id,
+    hair_service_id = EXCLUDED.hair_service_id,
+    price = EXCLUDED.price,
+    duration_minutes = EXCLUDED.duration_minutes,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
+UPDATE users
+SET barber_profile_id = '9e100000-0000-4000-8000-000000000016', updated_at = now()
+WHERE id = '9e000000-0000-4000-8000-000000000116';
 
 -- 5. Записи. Колонки одинаковые, меняются владелец, барбер и время.
 --    Статусы: 1 Pending, 2 Confirmed, 3 Cancelled, 4 Completed, 5 NoShow.

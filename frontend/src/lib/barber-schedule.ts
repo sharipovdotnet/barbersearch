@@ -2,9 +2,10 @@ import { getLocale, localeTag, t } from '@/i18n'
 import { ApiError, apiRequest } from '@/lib/api'
 import type { DayOfWeek } from '@/lib/barber-profile-labels'
 import { addDays } from '@/lib/barber-slots'
+import type { BookingStatus } from '@/lib/bookings'
 import { mutateWithCsrf } from '@/lib/csrf'
 import { describeApiFailure } from '@/lib/errors'
-import { isBarberSchedule } from '@/lib/response-guards'
+import { isBarberSchedule, isScheduleConflicts } from '@/lib/response-guards'
 
 /**
  * Расписание барбера: недельный шаблон, исключения на даты и отпуска.
@@ -75,6 +76,58 @@ export type TimeOffInput = {
   reason: string | null
 }
 
+/**
+ * Визит, который после правки расписания оказался вне рабочих часов.
+ *
+ * Приходит только в расширении `conflicts` ответа `409 barberSchedule.conflict`.
+ * Телефона, email и цены в контракте нет: диалогу хватает времени, имени и услуги.
+ */
+export type ScheduleConflict = {
+  id: string
+  startAt: string
+  endAt: string
+  /** Пояс салона записи: время в диалоге показывается именно в нём. */
+  timeZoneId: string
+  customerName: string
+  serviceName: string
+  status: BookingStatus
+}
+
+/** Что именно правит барбер: от этого зависит заголовок диалога конфликта. */
+export type ScheduleWriteKind = 'hours' | 'timeOff'
+
+/**
+ * Визиты, из-за которых сервер отказался сохранять расписание.
+ *
+ * `null` означает «тело не распознано», а не «конфликтов нет»: другой статус,
+ * другой код, гонка или старая версия сервера. Пустой список — тоже `null`:
+ * `409` без единого визита нечего объяснять в диалоге.
+ */
+export function readScheduleConflicts(
+  error: unknown
+): ScheduleConflict[] | null {
+  if (
+    !(error instanceof ApiError) ||
+    error.status !== 409 ||
+    !error.hasCode('barberSchedule.conflict')
+  ) {
+    return null
+  }
+
+  const conflicts = error.problem?.conflicts
+
+  if (!isScheduleConflicts(conflicts) || conflicts.length === 0) {
+    return null
+  }
+
+  return conflicts
+}
+
+/** `?force=true` только после подтверждения: обычный путь и его URL не меняются. */
+function forceQuery(force: boolean): string {
+  return force ? '?force=true' : ''
+}
+
 /** Порядок дней в редакторе: неделя начинается с понедельника. */
 export const WEEK_ORDER: readonly DayOfWeek[] = [
   'Monday',
@@ -120,14 +173,20 @@ export function fetchBarberSchedule(
   )
 }
 
-/** Полная замена недели: ровно семь дней, по одному на день недели. */
+/**
+ * Полная замена недели: ровно семь дней, по одному на день недели.
+ *
+ * `force` — осознанное подтверждение конфликта: сервер сохранит правку, даже если
+ * активные визиты выйдут за новые часы. Обычный путь отправляет запрос без параметра.
+ */
 export async function replaceWorkingSchedules(
   barberProfileId: string,
   salonId: string,
-  days: readonly WorkingDayInput[]
+  days: readonly WorkingDayInput[],
+  force = false
 ): Promise<void> {
   await mutateWithCsrf<void>(
-    `/barber-profiles/${barberProfileId}/salons/${salonId}/working-schedules`,
+    `/barber-profiles/${barberProfileId}/salons/${salonId}/working-schedules${forceQuery(force)}`,
     {
       method: 'PUT',
       body: JSON.stringify({ days }),
@@ -135,15 +194,20 @@ export async function replaceWorkingSchedules(
   )
 }
 
-/** Поставить или переписать исключение на дату. */
+/**
+ * Поставить или переписать исключение на дату.
+ *
+ * `force` — подтверждение конфликта: визиты этой даты остаются в силе.
+ */
 export async function setScheduleException(
   barberProfileId: string,
   salonId: string,
   date: string,
-  input: ScheduleExceptionInput
+  input: ScheduleExceptionInput,
+  force = false
 ): Promise<void> {
   await mutateWithCsrf<void>(
-    `/barber-profiles/${barberProfileId}/salons/${salonId}/schedule-exceptions/${date}`,
+    `/barber-profiles/${barberProfileId}/salons/${salonId}/schedule-exceptions/${date}${forceQuery(force)}`,
     {
       method: 'PUT',
       body: JSON.stringify(input),
@@ -162,15 +226,23 @@ export async function removeScheduleException(
   )
 }
 
-/** Отпуск общий для профиля; даты приходят уже UTC-инстантами. */
+/**
+ * Отпуск общий для профиля; даты приходят уже UTC-инстантами.
+ *
+ * `force` — подтверждение конфликта: визиты внутри периода остаются в силе.
+ */
 export async function addTimeOff(
   barberProfileId: string,
-  input: TimeOffInput
+  input: TimeOffInput,
+  force = false
 ): Promise<void> {
-  await mutateWithCsrf<void>(`/barber-profiles/${barberProfileId}/time-offs`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  await mutateWithCsrf<void>(
+    `/barber-profiles/${barberProfileId}/time-offs${forceQuery(force)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }
+  )
 }
 
 export async function removeTimeOff(
@@ -403,6 +475,12 @@ export function describeScheduleError(error: unknown, fallback: string): string 
 
   if (error.hasCode('barberProfile.addTimeOff.period')) {
     return t('Конец периода должен быть позже начала.')
+  }
+
+  // Код блокировки появляется, когда параллельная запись держит advisory-блокировку
+  // барбера дольше `lock_timeout`: это повторяемая ошибка, а не конфликт расписания.
+  if (error.hasCode('barberSchedule.lockTimeout')) {
+    return t('Расписание не сохранено: попробуйте ещё раз.')
   }
 
   if (error.status === 403 || error.hasCode('auth.forbidden')) {

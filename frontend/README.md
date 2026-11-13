@@ -963,14 +963,29 @@ future time offs.
   to the exclusive UTC range the API expects (`startAt` = local midnight, `endAt` = midnight after
   the last day) in the primary salon zone, then `POST`/`DELETE .../time-offs`. The UI says that
   the period applies to every salon.
+- **Conflicts.** A week, exception or time-off write that would leave an active visit outside the
+  new hours (or inside the new period) is refused with `409 barberSchedule.conflict` and the list
+  of affected visits. The card opens the `alertdialog` «Записи вне новых часов» / «Записи в
+  нерабочем периоде»: up to 20 visits with the time in the visit's salon zone, the customer, the
+  service and the status, then «и ещё N». «Всё равно сохранить» repeats the same request with
+  `?force=true` — the visit stays alive, because the dialog never cancels or moves it; «Отмена»
+  keeps the entered values and sends nothing. Recurring dates are checked over a 60-day horizon
+  from today in the salon zone, an explicit exception date is checked at any depth; `DELETE` is
+  never checked. A lock timeout maps to «Расписание не сохранено: попробуйте ещё раз.», and a
+  `409` whose body cannot be read to «…записи изменились, обновите страницу.». The date search
+  now honours exceptions and time offs too: a barber with a day-off exception, or with a time off
+  covering the whole local day of the primary salon, is not offered as working on that date.
 - **States.** Skeletons, a page-level first-read error with «Повторить», a refresh error that
   keeps the cards, `403`/`404` copy, `role="status"` announcements after each write and
-  `role="alert"` for validation/server errors. Existing bookings are **not** cancelled by a
-  schedule change; the week card says so explicitly.
+  `role="alert"` for validation/server errors. A write that would leave active visits outside the
+  new hours opens the `alertdialog` described above; it scrolls its own list, closes on Escape,
+  returns focus to the save button and is not `destructive`. Existing bookings are **not**
+  cancelled by a schedule change; the cards say so explicitly.
 
 Files: `src/pages/barber-schedule-page.tsx`, `src/components/barber/barber-cabinet-nav.tsx`,
 `barber-week-schedule.tsx`, `barber-schedule-exceptions.tsx`, `barber-time-offs.tsx`,
-`src/hooks/use-barber-schedule.ts`, `src/lib/barber-schedule.ts`.
+`schedule-conflicts-dialog.tsx`, `src/hooks/use-barber-schedule.ts`,
+`src/hooks/use-schedule-write.ts`, `src/lib/barber-schedule.ts`.
 
 ### Import from Google Docs and calendars
 
@@ -2081,8 +2096,8 @@ history bookings and 21 upcoming ones, two customers with 12 reviews each (the `
 gets 21 upcoming and 21 history bookings, so both `/account` tabs have two pages), an admin, twelve
 extra barbers in one city (so search has a second page), an applicant without a request for the
 `/become-a-barber` flow, a barber without a profile for onboarding, a support customer for the
-admin bookings and **28 users in total** (so `/admin/users` has two pages; the CI
-`minimal.sql` adds `ci-owner`, making 29). One of them is the profile **without confirmation**
+admin bookings and **29 users in total** (so `/admin/users` has two pages; the CI
+`minimal.sql` adds `ci-owner`, making 30). One of them is the profile **without confirmation**
 «E2E Барбер Без Подтверждения»
 (no services and no salon, id `9e100000-…-14`): it is the single positive row of the summary's
 «Барберы без подтверждения» block and of the «На проверке» queue, and because it is unverified it
@@ -2118,6 +2133,16 @@ barberProfile.create.alreadyExists` instead of the form. Because the barber has 
 changes none of the admin counters. The onboarding spec signs in through the dialog rather than
 reusing `storageState`: creating the profile rotates the refresh token, and a stored state would
 carry an already rotated one.
+For the schedule-conflict scene (#94) it adds `e2e-schedule-barber@barbersearch.test`
+(id `9e000000-…-16`, profile `9e100000-…-16`) with its own salon link, an active service and a
+**09:00–18:00** week. The profile is deliberately **disabled** (`is_active = false`, still
+verified): search needs `is_active && is_verified`, `usageCount` counts only active verified
+profiles and the summary counts only unverified ones, so the extra row keeps the 14 Moscow cards,
+the «13 барберов» of the service and the single unverified profile unchanged; the cabinet and
+`/barber/schedule` work from the `barber_profile_id` claim and do not check profile activity.
+Section 1.2 of the seed deletes this barber's bookings, time offs, date exceptions and week rows
+before re-inserting them, so a scene that failed before its `finally` still starts from
+09:00–18:00 and no active visits. The spec restores both in `finally` through the API.
 For the reminder inbox it adds exactly **two `barber_notifications` rows for `e2e-barber`** — an
 unread `Upcoming` (14:00 in `Europe/Moscow`, «стрижка», «Барбершоп на Ленина») and a read `Digest`
 (four bookings, first at 10:00) — plus `barber_notification_settings` at the server defaults
@@ -2147,8 +2172,8 @@ All accounts use the password `e2e-password` — a test constant, not a secret, 
 only one copied into the fixture. Emails end with `@barbersearch.test`; nothing real is used.
 
 Credentials and the API URL can be overridden with `E2E_CUSTOMER_EMAIL`, `E2E_CUSTOMER_PASSWORD`,
-`E2E_BARBER_*`, `E2E_NEW_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`, `E2E_APPLICANT_*`,
-`E2E_BASE_URL`, `E2E_API_URL`.
+`E2E_BARBER_*`, `E2E_NEW_BARBER_*`, `E2E_SCHEDULE_BARBER_*`, `E2E_ADMIN_*`, `E2E_MUTATIONS_*`,
+`E2E_APPLICANT_*`, `E2E_BASE_URL`, `E2E_API_URL`.
 
 ### Artifacts
 

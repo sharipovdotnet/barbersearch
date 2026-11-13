@@ -231,6 +231,22 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Профили, у которых отпуск накрывает весь календарный день в поясе основного салона.
+    /// </summary>
+    /// <remarks>
+    /// Поиск по дате исключает такие профили: отпуск на часть дня и свои часы барбера из выдачи
+    /// не убирают. Пояс разрешается в C#, поэтому в базе только окно чтения отпусков и join
+    /// к основному салону. Профиль без основного салона или с неразрешимым поясом не
+    /// исключается — прятать барбера из-за битой строки в данных нельзя. Пустой список —
+    /// нормальный ответ, а не ошибка.
+    /// </remarks>
+    /// <param name="date">Локальная дата, на которую ищется барбер.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<Guid>, Failure>> GetDayBlockedProfileIdsAsync(
+        DateOnly date,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Страница поиска активных и подтверждённых барберов.
     /// </summary>
     /// <remarks>

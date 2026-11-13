@@ -1,3 +1,4 @@
+using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.Bookings.Admin;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.Bookings.Admin;
@@ -170,6 +171,34 @@ public interface IBookingRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Активные брони барбера для проверки конфликтов расписания — плоская проекция с клиентом,
+    /// услугой и поясом салона. Читается без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Фильтр тот же, что у <see cref="GetActiveByBarberAsync"/>: <c>Pending</c>/<c>Confirmed</c>
+    /// и пересечение с <c>[from, to)</c>. <c>from</c> — текущий момент: прошедшие визиты не
+    /// проверяются, а уже начавшиеся отбрасывает вызывающий обработчик (D5).
+    /// </para>
+    /// <para>
+    /// Joins — как у списка записей барбера: <c>users</c> <b>LEFT</b> (гость остаётся строкой),
+    /// <c>barber_services → hair_services</c> и <c>salons</c> (нужен <c>time_zone_id</c>).
+    /// Имя собирается из <c>first_name</c>/<c>last_name</c> или гостевого снимка; пустое имя
+    /// заменяется на «Гость». Телефон, email и заметки в проекцию не входят. Порядок —
+    /// <c>StartAt</c>: ответ <c>409</c> детерминирован.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Профиль барбера.</param>
+    /// <param name="from">Нижняя граница интервала (обычно «сейчас»).</param>
+    /// <param name="to">Верхняя граница интервала — конец проверяемого окна.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<IReadOnlyList<ScheduleConflictBooking>, Failure>> GetActiveForScheduleAsync(
+        Guid barberProfileId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Занят ли интервал у барбера. Проверка перед вставкой; окончательная защита от
     /// двойной брони — exclusion-ограничение в БД.
     /// </summary>
@@ -200,6 +229,24 @@ public interface IBookingRepository
     /// <returns>Успех после взятия блокировки; <c>Failure</c> — истёк <c>lock_timeout</c>.</returns>
     Task<UnitResult<Failure>> AcquireBarberLockAsync(
         Guid barberProfileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Берёт advisory-блокировку барбера и возвращает заданный код ошибки при таймауте.
+    /// </summary>
+    /// <remarks>
+    /// Перегрузка нужна расписанию: механизм блокировки общий с созданием брони, но публичный
+    /// код ошибки — свой, <c>barberSchedule.lockTimeout</c>. Старая сигнатура остаётся рабочей
+    /// и отвечает <c>booking.add.lockTimeout</c>, поэтому создание брони не меняется.
+    /// </remarks>
+    /// <param name="barberProfileId">Барбер, чьи правки расписания сериализуются.</param>
+    /// <param name="timeoutCode">
+    /// Полный публичный код ошибки таймаута (например, <c>barberSchedule.lockTimeout</c>).
+    /// </param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<UnitResult<Failure>> AcquireBarberLockAsync(
+        Guid barberProfileId,
+        string timeoutCode,
         CancellationToken cancellationToken = default);
 
     /// <summary>

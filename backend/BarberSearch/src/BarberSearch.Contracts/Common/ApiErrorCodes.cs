@@ -324,6 +324,36 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Запись расписания барбера: конфликт с существующими визитами и таймаут блокировки.
+    /// </summary>
+    /// <remarks>
+    /// Класс назван <c>Schedule</c>, а не <c>BarberSchedule</c>: namespace
+    /// <c>BarberSearch.Contracts.BarberProfiles.BarberSchedule</c> уже существует, и одноимённый
+    /// вложенный тип сделал бы <c>using</c> неоднозначными. Сами коды при этом остаются
+    /// <c>barberSchedule.*</c>: префикс — часть публичного контракта.
+    /// </remarks>
+    public static class Schedule
+    {
+        /// <summary>
+        /// Правка расписания оставляет активную бронь вне рабочих часов / в отпуске; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Ответ несёт расширение <c>conflicts</c> со списком затронутых визитов. Без него
+        /// клиент не может показать, что именно сломается, поэтому код — часть контракта.
+        /// </remarks>
+        public const string Conflict = "barberSchedule.conflict";
+
+        /// <summary>
+        /// Истёк <c>lock_timeout</c> ожидания advisory-блокировки барбера; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код от <c>booking.add.lockTimeout</c>: у расписания своя операция и свой
+        /// клиентский текст, хотя механизм блокировки общий (тот же ключ, что у брони).
+        /// </remarks>
+        public const string LockTimeout = "barberSchedule.lockTimeout";
+    }
+
+    /// <summary>
     /// Профили барберов.
     /// </summary>
     public static class BarberProfile

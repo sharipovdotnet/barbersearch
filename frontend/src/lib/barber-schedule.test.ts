@@ -8,12 +8,14 @@ import {
   fetchBarberSchedule,
   formatScheduleDate,
   localDateToUtcIso,
+  readScheduleConflicts,
   removeScheduleException,
   removeTimeOff,
   replaceWorkingSchedules,
   setScheduleException,
   weeklyDaysToInput,
   type BarberSchedule,
+  type ScheduleConflict,
 } from '@/lib/barber-schedule'
 import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
@@ -313,7 +315,206 @@ describe('describeScheduleError', () => {
     )
   })
 
+  it('объясняет таймаут блокировки расписания', () => {
+    const error = new ApiError(
+      409,
+      problemDetails(409, {
+        errorCodes: ['barberSchedule.lockTimeout'],
+      }),
+      'Conflict.'
+    )
+
+    expect(describeScheduleError(error, fallback)).toBe(
+      'Расписание не сохранено: попробуйте ещё раз.'
+    )
+  })
+
+  it('не подменяет конфликт расписания общим текстом', () => {
+    // Код конфликта обрабатывает диалог, а не эта функция: здесь он обязан
+    // провалиться в общий fallback, а не получить собственную ветку.
+    const error = new ApiError(
+      409,
+      problemDetails(409, {
+        errorCodes: ['barberSchedule.conflict'],
+      }),
+      'Conflict.'
+    )
+
+    expect(describeScheduleError(error, fallback)).toBe(fallback)
+  })
+
   it('на неизвестной ошибке отдаёт запасной текст', () => {
     expect(describeScheduleError(new Error('сеть'), fallback)).toBe(fallback)
+  })
+})
+
+const CONFLICT: ScheduleConflict = {
+  id: '9e100000-0000-4000-8000-000000000031',
+  startAt: '2026-11-20T09:00:00+00:00',
+  endAt: '2026-11-20T09:30:00+00:00',
+  timeZoneId: 'Asia/Yekaterinburg',
+  customerName: 'Иван Петров',
+  serviceName: 'Стрижка',
+  status: 'Confirmed',
+}
+
+/** `409 barberSchedule.conflict`; `body` дописывается поверх корректного тела. */
+function conflictError(
+  conflicts: unknown,
+  options: { status?: number; codes?: string[] } = {}
+): ApiError {
+  return new ApiError(
+    options.status ?? 409,
+    {
+      ...problemDetails(options.status ?? 409, {
+        errorCodes: options.codes ?? ['barberSchedule.conflict'],
+      }),
+      conflicts,
+    },
+    'Conflict.'
+  )
+}
+
+describe('readScheduleConflicts', () => {
+  it('читает список из 409 barberSchedule.conflict', () => {
+    expect(readScheduleConflicts(conflictError([CONFLICT]))).toStrictEqual([
+      CONFLICT,
+    ])
+  })
+
+  it('на 409 без расширения conflicts отдаёт null', () => {
+    expect(readScheduleConflicts(conflictError(undefined))).toBeNull()
+  })
+
+  it('на conflicts не-массив отдаёт null', () => {
+    expect(readScheduleConflicts(conflictError({ items: [CONFLICT] }))).toBeNull()
+    expect(readScheduleConflicts(conflictError('conflicts'))).toBeNull()
+  })
+
+  it('на запись без timeZoneId отдаёт null: время негде показать', () => {
+    const { timeZoneId, ...withoutZone } = CONFLICT
+
+    expect(timeZoneId).toBe('Asia/Yekaterinburg')
+    expect(readScheduleConflicts(conflictError([withoutZone]))).toBeNull()
+  })
+
+  it('на неизвестный статус брони отдаёт null', () => {
+    expect(
+      readScheduleConflicts(conflictError([{ ...CONFLICT, status: 'Archived' }]))
+    ).toBeNull()
+  })
+
+  it('на пустой список отдаёт null: в диалоге нечего объяснять', () => {
+    expect(readScheduleConflicts(conflictError([]))).toBeNull()
+  })
+
+  it('не читает другие статусы и другие коды', () => {
+    expect(
+      readScheduleConflicts(conflictError([CONFLICT], { status: 400 }))
+    ).toBeNull()
+    expect(
+      readScheduleConflicts(conflictError([CONFLICT], { codes: ['other.code'] }))
+    ).toBeNull()
+  })
+
+  it('на сетевую ошибку и обычную ошибку отдаёт null', () => {
+    expect(readScheduleConflicts(new Error('сеть'))).toBeNull()
+    expect(readScheduleConflicts(null)).toBeNull()
+  })
+})
+
+describe('force в мутациях расписания', () => {
+  it('не добавляет параметр в обычную попытку', async () => {
+    let search: string | null = null
+
+    server.use(
+      http.put(
+        `/api/barber-profiles/${PROFILE_ID}/salons/${SALON_ID}/working-schedules`,
+        ({ request }) => {
+          search = new URL(request.url).search
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      )
+    )
+
+    await replaceWorkingSchedules(
+      PROFILE_ID,
+      SALON_ID,
+      WEEK.map(([dayOfWeek, isDayOff, startTime, endTime]) => ({
+        dayOfWeek,
+        isDayOff,
+        startTime,
+        endTime,
+      }))
+    )
+
+    expect(search).toBe('')
+  })
+
+  it('шлёт ?force=true для недели, исключения и отпуска', async () => {
+    const searches: string[] = []
+
+    server.use(
+      http.put(
+        `/api/barber-profiles/${PROFILE_ID}/salons/${SALON_ID}/working-schedules`,
+        ({ request }) => {
+          searches.push(new URL(request.url).search)
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      ),
+      http.put(
+        `/api/barber-profiles/${PROFILE_ID}/salons/${SALON_ID}/schedule-exceptions/2026-11-15`,
+        ({ request }) => {
+          searches.push(new URL(request.url).search)
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      ),
+      http.post(
+        `/api/barber-profiles/${PROFILE_ID}/time-offs`,
+        ({ request }) => {
+          searches.push(new URL(request.url).search)
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      )
+    )
+
+    await replaceWorkingSchedules(
+      PROFILE_ID,
+      SALON_ID,
+      WEEK.map(([dayOfWeek, isDayOff, startTime, endTime]) => ({
+        dayOfWeek,
+        isDayOff,
+        startTime,
+        endTime,
+      })),
+      true
+    )
+    await setScheduleException(
+      PROFILE_ID,
+      SALON_ID,
+      '2026-11-15',
+      {
+        isDayOff: true,
+        startTime: '00:00:00',
+        endTime: '00:00:00',
+        reason: null,
+      },
+      true
+    )
+    await addTimeOff(
+      PROFILE_ID,
+      {
+        startAt: '2026-11-30T19:00:00.000Z',
+        endAt: '2026-12-02T19:00:00.000Z',
+        reason: null,
+      },
+      true
+    )
+
+    expect(searches).toStrictEqual(['?force=true', '?force=true', '?force=true'])
   })
 })

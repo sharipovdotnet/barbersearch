@@ -16,7 +16,11 @@ import { AdminReviewsPage } from '../pages/admin-reviews-page'
  */
 test.use({ storageState: storageStatePath('admin') })
 
-test.describe('очередь отзывов: фокус после действия', () => {
+// Обе сцены читают и публикуют первую строку одной очереди и сверяют её счётчик в рейле:
+// параллельный запуск внутри файла (`fullyParallel: true`) делает их гонкой — одна сцена
+// публикует строку, которую вторая уже запомнила, и `finally` возвращает в очередь чужой id
+// (404). Файл обязан быть последовательным, как и остальные мутационные сцены.
+test.describe.serial('очередь отзывов: фокус после действия', () => {
   test('после публикации фокус остаётся в очереди', async ({ page, request }) => {
     const adminReviews = new AdminReviewsPage(page)
 
