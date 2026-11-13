@@ -41,3 +41,17 @@ export function canCancelBooking(status: BookingStatus): boolean {
 export function canReviewBooking(status: BookingStatus): boolean {
   return status === 'Completed'
 }
+
+/**
+ * Перенос — только у активной брони, которая ещё не началась.
+ *
+ * Терминальные статусы двигать поздно, а начавшийся визит закрывают завершением
+ * или неявкой. `now` передаётся снаружи, чтобы правило проверялось без часов.
+ */
+export function canRescheduleBooking(
+  status: BookingStatus,
+  startAt: string,
+  now: number
+): boolean {
+  return isActiveBooking(status) && Date.parse(startAt) > now
+}

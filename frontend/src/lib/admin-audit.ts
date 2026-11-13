@@ -10,6 +10,7 @@ import {
 import { bookingStatusLabel } from '@/lib/booking-status'
 import type { BookingStatus } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
+import { formatDateTime } from '@/lib/format'
 import {
   photoModerationLabel,
   type PhotoModerationStatus,
@@ -92,9 +93,9 @@ export const ADMIN_AUDIT_ACTION_LABELS: Record<string, string> = {
  * Русские подписи полей allowlist. Неизвестное поле показывается camelCase как есть:
  * выдуманное название скрыло бы, что сервер прислал новое поле.
  *
- * Здесь только поля, которые реально приходят с расширенным allowlist. Подписи
- * `startAt`/`endAt`/`price`/`salonId`/`barberServiceId` появятся вместе с переносом
- * и правкой цены, а не заранее.
+ * Перенос визита пишет `startAt`/`endAt`, поэтому у них есть подписи. `price`/
+ * `salonId`/`barberServiceId` по-прежнему остаются за рамками журнала — до правки
+ * цены, отдельного среза.
  */
 export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   email: 'Email',
@@ -138,6 +139,9 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   phoneNumber: 'Телефон',
   websiteUrl: 'Сайт',
   status: 'Статус',
+  // Перенос визита: в журнале видны старый и новый момент.
+  startAt: 'Начало',
+  endAt: 'Окончание',
   barberNote: 'Заметка барбера',
   cancellationReason: 'Причина отмены',
 }
@@ -235,6 +239,20 @@ export function formatAuditValue(
   // Статус проверки фото общий у портфолио и аватара: подпись не зависит от типа.
   if (field === 'avatarModerationStatus' && typeof value === 'string') {
     return photoModerationLabel(value as PhotoModerationStatus)
+  }
+
+  /*
+   * Время переноса показываем в UTC с явной подписью: в payload аудита нет пояса
+   * салона, а пояс браузера соврал бы удалённому администратору. Битую строку
+   * оставляем как есть — она честно говорит, что значение не разобрать.
+   */
+  if (
+    (field === 'startAt' || field === 'endAt') &&
+    typeof value === 'string'
+  ) {
+    return Number.isNaN(Date.parse(value))
+      ? value
+      : `${formatDateTime(value, 'UTC')} UTC`
   }
 
   if (field === 'moderationStatus' && typeof value === 'string') {

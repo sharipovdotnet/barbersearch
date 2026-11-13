@@ -86,6 +86,19 @@ export function describeBarberBookingsChange(
     })
   }
 
+  // Собственный перенос барбер применяет локально, поэтому сюда попадает только
+  // чужое действие — клиент. Статус при переносе не меняется (D14).
+  const rescheduled = change.updated.find(
+    ({ before, after }) =>
+      before.status === after.status && before.startAt !== after.startAt
+  )
+
+  if (rescheduled !== undefined) {
+    return t('Клиент перенёс запись на {when}.', {
+      when: moment(rescheduled.after.startAt, rescheduled.after.salon.timeZoneId),
+    })
+  }
+
   return null
 }
 
@@ -129,7 +142,21 @@ export function describeCustomerBookingsChange<T extends BookingChangeRow>(
     })
   }
 
-  const statusChange = change.updated[0]
+  // Перенос не меняет статус (D14), поэтому узнаётся по одному лишь времени.
+  const rescheduled = change.updated.find(
+    ({ before, after }) =>
+      before.status === after.status && before.startAt !== after.startAt
+  )
+
+  if (rescheduled !== undefined) {
+    return t('Барбер перенёс запись на {when}.', {
+      when: moment(rescheduled.after.startAt, timeZoneOf(rescheduled.after)),
+    })
+  }
+
+  const statusChange = change.updated.find(
+    ({ before, after }) => before.status !== after.status
+  )
 
   if (statusChange !== undefined) {
     return t('Запись на {when}: {status}.', {

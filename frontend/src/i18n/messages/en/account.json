@@ -231,5 +231,15 @@
   "Новый адрес подтверждён. Все сессии входа завершены — войдите с новым email и прежним паролем.": "The new address is confirmed. All sign-in sessions have ended — sign in with the new email and your current password.",
   "В ссылке нет токена для смены email. Откройте письмо и перейдите по ссылке целиком.": "The link has no email-change token. Open the email and follow the whole link.",
   "Ссылка для смены email устарела или уже использована. Запросите новую в профиле.": "The email-change link has expired or has already been used. Request a new one in your profile.",
-  "Не удалось подтвердить новый адрес. Попробуйте ещё раз.": "Could not confirm the new address. Try again."
+  "Не удалось подтвердить новый адрес. Попробуйте ещё раз.": "Could not confirm the new address. Try again.",
+  "Перенести запись": "Reschedule",
+  "Перенести запись {when}": "Reschedule the booking for {when}",
+  "Перенести запись?": "Reschedule the visit?",
+  "Новая дата": "New date",
+  "Новое время": "New time",
+  "Длительность и цена не изменятся.": "The duration and price stay the same.",
+  "Перенести визит": "Reschedule the visit",
+  "Переносим…": "Rescheduling…",
+  "Визит перенесён на {when}.": "The visit has been moved to {when}.",
+  "Барбер перенёс запись на {when}.": "The barber moved the booking to {when}."
 }

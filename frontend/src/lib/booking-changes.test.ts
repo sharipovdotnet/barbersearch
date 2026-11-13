@@ -78,6 +78,29 @@ describe('describeBarberBookingsChange', () => {
       )
     ).toBeNull()
   })
+
+  it('объявляет перенос клиентом: время изменилось, статус тот же', () => {
+    expect(
+      describeBarberBookingsChange(
+        {
+          ...emptyChange<BarberBookingChangeRow>(),
+          updated: [
+            {
+              before: barberRow('moved', FUTURE),
+              after: barberRow('moved', '2026-11-07T09:00:00Z'),
+            },
+          ],
+        },
+        NOW
+      )
+    ).toBe('Клиент перенёс запись на 7 нояб. в 12:00.')
+  })
+
+  it('не объявляет собственный перенос: локальная правка не создаёт diff', () => {
+    expect(
+      describeBarberBookingsChange(emptyChange<BarberBookingChangeRow>(), NOW)
+    ).toBeNull()
+  })
 })
 
 describe('describeCustomerBookingsChange', () => {
@@ -104,6 +127,56 @@ describe('describeCustomerBookingsChange', () => {
         moscow
       )
     ).toBe('Барбер подтвердил запись на 6 нояб. в 12:00.')
+  })
+
+  it('подтверждение приоритетнее переноса', () => {
+    expect(
+      describeCustomerBookingsChange(
+        {
+          ...emptyChange<BookingChangeRow>(),
+          updated: [
+            {
+              before: row('moved', FUTURE, 'Confirmed'),
+              after: row('moved', '2026-11-07T09:00:00Z', 'Confirmed'),
+            },
+            {
+              before: row('b', FUTURE, 'Pending'),
+              after: row('b', FUTURE, 'Confirmed'),
+            },
+          ],
+        },
+        NOW,
+        moscow
+      )
+    ).toBe('Барбер подтвердил запись на 6 нояб. в 12:00.')
+  })
+
+  it('объявляет перенос барбером: время изменилось, статус тот же', () => {
+    expect(
+      describeCustomerBookingsChange(
+        {
+          ...emptyChange<BookingChangeRow>(),
+          updated: [
+            {
+              before: row('moved', FUTURE, 'Confirmed'),
+              after: row('moved', '2026-11-07T09:00:00Z', 'Confirmed'),
+            },
+          ],
+        },
+        NOW,
+        moscow
+      )
+    ).toBe('Барбер перенёс запись на 7 нояб. в 12:00.')
+  })
+
+  it('о собственном переносе клиента молчит: локальная правка не создаёт diff', () => {
+    expect(
+      describeCustomerBookingsChange(
+        emptyChange<BookingChangeRow>(),
+        NOW,
+        moscow
+      )
+    ).toBeNull()
   })
 
   it('о прочих статусах говорит подписью статуса', () => {

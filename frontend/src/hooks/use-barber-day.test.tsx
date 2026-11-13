@@ -183,6 +183,46 @@ describe('useBarberDay: день из двух списков', () => {
     expect(calls.slice(before)).toStrictEqual(['past'])
   })
 
+  it('перенос уходит в контроллер-владелец, не перечитывая второй список', async () => {
+    const calls = serveLists({
+      upcoming: [booking('row', at(13, 0), at(13, 30))],
+      past: [],
+    })
+    let posts = 0
+
+    server.use(
+      http.post('/api/bookings/row/reschedule', () => {
+        posts += 1
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    const { result } = renderHook(() => useCabinet())
+
+    await waitFor(() => {
+      expect(result.current.day.items).toHaveLength(1)
+    })
+
+    const before = calls.length
+
+    await act(async () => {
+      await result.current.day.reschedule('row', {
+        startAt: at(15, 0),
+        endAt: at(15, 30),
+      })
+    })
+
+    expect(posts).toBe(1)
+    expect(result.current.day.items[0]).toMatchObject({
+      id: 'row',
+      startAt: at(15, 0),
+      endAt: at(15, 30),
+    })
+    // Визит остаётся активным: второй список не перечитывается.
+    expect(calls.slice(before)).toStrictEqual([])
+  })
+
   it('401 любого из двух списков — гейт входа', async () => {
     server.use(
       http.get('/api/barber/bookings', ({ request }) => {

@@ -19,15 +19,19 @@ export function BarberSlotOptions({
   selectedStartAt,
   onSelect,
   name = 'barber-slot',
+  legend,
 }: {
   slots: BarberSlots
   selectable: boolean
   selectedStartAt: string | null
   onSelect: (slot: BarberSlot) => void
   name?: string
+  /** Готовая подпись группы; диалог переноса передаёт «Новое время». */
+  legend?: string
 }) {
   const { t } = useI18n()
   const groupId = useId().replace(/:/g, '')
+  const legendText = legend ?? t('Время приёма')
 
   if (!slots.isWorkingDay) {
     return (
@@ -63,7 +67,7 @@ export function BarberSlotOptions({
 
   return (
     <fieldset>
-      <legend className="sr-only">{t('Время приёма')}</legend>
+      <legend className="sr-only">{legendText}</legend>
       <div className="flex flex-wrap gap-2">
         {slots.slots.map((slot, index) => {
           const inputId = `${groupId}-slot-${index}`

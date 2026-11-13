@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { CalendarClock, Loader2 } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -9,6 +9,7 @@ import type {
   BarberBooking,
   BarberBookingScope,
 } from '@/lib/barber-bookings'
+import { canRescheduleBooking } from '@/lib/booking-status'
 import {
   describeBarberBookingFailure,
   type BarberActionFailure,
@@ -39,6 +40,7 @@ export function CabinetBookingRow({
   onOpenCancel,
   onOpenNoShow,
   onOpenNote,
+  onOpenReschedule,
   onReload,
   registerRow,
 }: {
@@ -50,6 +52,7 @@ export function CabinetBookingRow({
   onOpenCancel: (booking: BarberBooking) => void
   onOpenNoShow: (booking: BarberBooking) => void
   onOpenNote: (booking: BarberBooking) => void
+  onOpenReschedule: (booking: BarberBooking) => void
   onReload: () => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
@@ -71,6 +74,12 @@ export function CabinetBookingRow({
   const canComplete = isConfirmed && hasStarted
   // Подтверждённую запись отменяют только в «Ближайших»: в истории визит уже прошёл.
   const canCancel = isPendingStatus || (isConfirmed && scope === 'upcoming')
+  // Перенос — как у клиента: активная и ещё не начавшаяся запись.
+  const canReschedule = canRescheduleBooking(
+    booking.status,
+    booking.startAt,
+    now
+  )
 
   const focusPrimary = useCallback(() => {
     ;(
@@ -281,6 +290,20 @@ export function CabinetBookingRow({
               onClick={() => onOpenNoShow(booking)}
             >
               {t('Неявка')}
+            </Button>
+          )}
+
+          {canReschedule && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-11 text-muted-foreground hover:text-foreground sm:size-8"
+              disabled={pendingAction !== null}
+              aria-label={t('Перенести запись {when}', { when })}
+              title={t('Перенести запись')}
+              onClick={() => onOpenReschedule(booking)}
+            >
+              <CalendarClock aria-hidden />
             </Button>
           )}
 

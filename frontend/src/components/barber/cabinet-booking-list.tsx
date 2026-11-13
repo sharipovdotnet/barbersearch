@@ -49,6 +49,7 @@ export function CabinetBookingList({
   onOpenCancel,
   onOpenNoShow,
   onOpenNote,
+  onOpenReschedule,
   registerRow,
 }: {
   view: BarberBookingScope
@@ -75,6 +76,7 @@ export function CabinetBookingList({
   onOpenCancel: (booking: BarberBooking) => void
   onOpenNoShow: (booking: BarberBooking) => void
   onOpenNote: (booking: BarberBooking) => void
+  onOpenReschedule: (booking: BarberBooking) => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
   const { t } = useI18n()
@@ -180,6 +182,7 @@ export function CabinetBookingList({
                 onOpenCancel={onOpenCancel}
                 onOpenNoShow={onOpenNoShow}
                 onOpenNote={onOpenNote}
+                onOpenReschedule={onOpenReschedule}
                 onReload={onReload}
                 registerRow={registerRow}
               />

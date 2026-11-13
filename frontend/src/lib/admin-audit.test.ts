@@ -14,6 +14,7 @@ import {
   formatAuditValue,
 } from '@/lib/admin-audit'
 import { problemDetails } from '@/test/msw/handlers'
+import { formatDateTime } from '@/lib/format'
 import { server } from '@/test/msw/server'
 
 /**
@@ -277,6 +278,21 @@ describe('formatAuditValue', () => {
     expect(formatAuditValue('rating', 5)).toBe('5')
     expect(formatAuditValue('favouriteColor', 'green')).toBe('green')
   })
+
+  it('время переноса показывается в UTC с явной подписью', () => {
+    const value = '2026-11-05T21:30:00Z'
+
+    expect(formatAuditValue('startAt', value)).toBe(
+      `${formatDateTime(value, 'UTC')} UTC`
+    )
+    expect(formatAuditValue('endAt', value)).toBe(
+      `${formatDateTime(value, 'UTC')} UTC`
+    )
+  })
+
+  it('битое время остаётся строкой сервера', () => {
+    expect(formatAuditValue('startAt', 'не дата')).toBe('не дата')
+  })
 })
 
 describe('formatAuditAction', () => {
@@ -336,6 +352,8 @@ describe('подписи и константы контракта', () => {
       phoneNumber: 'Телефон',
       websiteUrl: 'Сайт',
       status: 'Статус',
+      startAt: 'Начало',
+      endAt: 'Окончание',
       barberNote: 'Заметка барбера',
       cancellationReason: 'Причина отмены',
       isActive: 'Активность',

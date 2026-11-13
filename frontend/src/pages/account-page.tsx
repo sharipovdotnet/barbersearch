@@ -13,12 +13,14 @@ import { buildBookingView, type BookingView } from '@/components/account/booking
 import { CancelBookingDialog } from '@/components/account/cancel-booking-dialog'
 import { NextBookingCard } from '@/components/account/next-booking-card'
 import { ReviewDialog } from '@/components/account/review-dialog'
+import { RescheduleBookingDialog } from '@/components/reschedule-booking-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useBarberProfiles } from '@/hooks/use-barber-profiles'
 import { useCustomerBookings } from '@/hooks/use-bookings'
 import { useI18n } from '@/i18n'
 import { ACCOUNT_PATH } from '@/lib/account-path'
+import { type BarberSlot } from '@/lib/barber-slots'
 import { describeCustomerBookingsChange } from '@/lib/booking-changes'
 import type { Booking } from '@/lib/bookings'
 import { formatDateTime } from '@/lib/format'
@@ -72,7 +74,7 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
   const historyEnabled = tab === 'history'
   // id передаётся и в «Предстоящие», и в «Историю»: у администратора сервер без
   // этого фильтра возвращает все брони системы, а не только его собственные.
-  const { upcoming, history, cancelBooking, refreshUpcoming, isCancelling } =
+  const { upcoming, history, cancelBooking, refreshUpcoming, isCancelling, reschedule, isRescheduling } =
     useCustomerBookings({
       historyEnabled,
       userId,
@@ -91,6 +93,9 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
   const [now, setNow] = useState(() => Date.now())
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<BookingView | null>(
+    null
+  )
   const [reviewTarget, setReviewTarget] = useState<BookingView | null>(null)
   const [reviewedIds, setReviewedIds] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -158,14 +163,16 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
     refreshHistory()
   }, [tab, handleUpcomingRefresh, refreshHistory])
 
-  // Пока открыт диалог отмены или идёт мутация, список не трогаем: ответ,
-  // прочитанный до коммита отмены, вернул бы строку обратно.
+  // Пока открыт диалог отмены/переноса или идёт мутация, список не трогаем: ответ,
+  // прочитанный до коммита, вернул бы строку обратно.
   useAutoRefresh({
     enabled:
       upcoming.status === 'ready' &&
       !upcoming.requiresSignIn &&
       cancelTarget === null &&
-      !isCancelling,
+      rescheduleTarget === null &&
+      !isCancelling &&
+      !isRescheduling,
     onRefresh: handleUpcomingRefresh,
   })
 
@@ -183,6 +190,23 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
       t(
         'Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.'
       )
+    )
+  }
+
+  /**
+   * Перенос выполняет хук: запрос, затем правка строки без перезагрузки списка.
+   * Объявление строится по времени слота — сервер ответил `204` без тела.
+   */
+  async function handleRescheduled(slot: BarberSlot) {
+    if (rescheduleTarget === null) {
+      return
+    }
+
+    await reschedule(rescheduleTarget.booking.id, slot)
+    setAnnouncement(
+      t('Визит перенесён на {when}.', {
+        when: formatDateTime(slot.startAt, rescheduleTarget.timeZoneId),
+      })
     )
   }
 
@@ -276,6 +300,8 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
               isRefreshing={list.isRefreshing}
               refreshError={list.refreshError}
               onRefresh={handleManualRefresh}
+              now={now}
+              onRequestReschedule={setRescheduleTarget}
               onRequestCancel={setCancelTarget}
               onRequestReview={setReviewTarget}
             />
@@ -296,6 +322,23 @@ function BookingsCabinet({ role, userId }: { role: string; userId: string }) {
         onClose={() => setCancelTarget(null)}
         onConfirm={cancelBooking}
         onCancelled={handleCancelled}
+      />
+
+      <RescheduleBookingDialog
+        variant="customer"
+        target={
+          rescheduleTarget === null
+            ? null
+            : {
+                bookingId: rescheduleTarget.booking.id,
+                startAt: rescheduleTarget.booking.startAt,
+                endAt: rescheduleTarget.booking.endAt,
+                timeZoneId: rescheduleTarget.timeZoneId,
+                serviceName: rescheduleTarget.serviceName,
+              }
+        }
+        onClose={() => setRescheduleTarget(null)}
+        onRescheduled={handleRescheduled}
       />
 
       <ReviewDialog
