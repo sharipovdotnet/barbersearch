@@ -247,7 +247,8 @@ test.describe('axe: 320 px, расписание барбера', () => {
     await expectNoBlockingViolations(
       page,
       '/barber (диалог цены визита) @320',
-      test.info()
+      test.info(),
+      '[role="dialog"]'
     )
   })
 

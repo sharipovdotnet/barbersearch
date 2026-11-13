@@ -352,11 +352,13 @@ test.describe('кабинет барбера: цена визита', () => {
       await cabinet.priceButtonOf(row).click()
       await expect(cabinet.priceDialog).toBeVisible()
 
-      // axe — с открытым диалогом на 1280: он часть сцены, а не отдельная проверка.
+      // axe — с открытым диалогом на 1280: проверяется сам диалог, а не затемнённый
+      // под оверлеем фон (контраст под модальным затемнением — намеренное состояние).
       await expectNoBlockingViolations(
         page,
         '/barber (диалог цены визита)',
-        test.info()
+        test.info(),
+        '[role="dialog"]'
       )
 
       await cabinet.priceInput.fill('2000')

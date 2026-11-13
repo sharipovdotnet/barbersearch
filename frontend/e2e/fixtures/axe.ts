@@ -8,15 +8,27 @@ import { expect, type Page, type TestInfo } from '@playwright/test'
  * `moderate`/`minor` попадают в аннотации отчёта. Allow-list'а нет: любая
  * критичная находка — падающий тест, а не запись в списке исключений
  * (исключение допустимо только с номером долга в `AGENT.md` §14).
+ *
+ * `scope` сужает скан до одного узла. Это не allow-list: открытый модальный диалог
+ * затемняет фон под собой, и `color-contrast` честно считает контраст текста,
+ * оказавшегося под оверлеем. Такой фон — намеренное состояние диалога, а не текст,
+ * который читают, поэтому сцена с открытым диалогом проверяет сам диалог.
  */
 const BLOCKING_IMPACTS = new Set(['critical', 'serious'])
 
 export async function expectNoBlockingViolations(
   page: Page,
   screen: string,
-  testInfo: TestInfo
+  testInfo: TestInfo,
+  scope?: string
 ): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze()
+  const builder = new AxeBuilder({ page })
+
+  if (scope !== undefined) {
+    builder.include(scope)
+  }
+
+  const results = await builder.analyze()
 
   const blocking = results.violations.filter(
     (violation) =>
