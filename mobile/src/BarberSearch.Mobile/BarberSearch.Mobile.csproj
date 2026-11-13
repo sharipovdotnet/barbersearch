@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!--
+			Только iOS и Android: Windows и Mac Catalyst в продукт не входят. Остальные цели
+			пришлось бы поддерживать (сборка, манифесты, платформенные хаки) без пользователей.
+		-->
+		<TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>BarberSearch.Mobile</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!--
+			XAML компилируется генератором исходного кода (.NET 10): быстрее сборка и строгие
+			привязки с x:DataType. Отключать не нужно — это дефолт шаблона .NET 10.
+		-->
+		<MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+		<!-- Отображаемое имя и идентификатор приложения. -->
+		<ApplicationTitle>BarberSearch</ApplicationTitle>
+		<!--
+			Идентификатор нужен до публикации в сторах: сменить его после выпуска нельзя.
+			Выбран по будущему домену; поменять здесь, если домен будет другим.
+		-->
+		<ApplicationId>ru.barbersearch.mobile</ApplicationId>
+
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+		<!-- API 24+: на 21–23 десугаринг Java по умолчанию падает в рантайме (.NET 10, XA-рекомендация). -->
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#1F2937" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#1F2937" BaseSize="128,128" />
+		<MauiImage Include="Resources\Images\*" />
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\BarberSearch.Mobile.Core\BarberSearch.Mobile.Core.csproj" />
+	</ItemGroup>
+
+</Project>
