@@ -27,6 +27,21 @@ public interface IBookingRepository
     Task<Result<Booking, Failure>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Профиль барбера брони — узкая проекция без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Нужен переносу визита <b>до</b> advisory-блокировки: ключ блокировки — профиль барбера,
+    /// а <see cref="GetByIdAsync"/> вернул бы ту же отслеживаемую сущность и после блокировки,
+    /// то есть проверки увидели бы устаревшие данные. Читается один столбец
+    /// <c>barber_profile_id</c>. Отсутствующая бронь — <c>404 booking.notFound</c>.
+    /// </remarks>
+    /// <param name="id">Идентификатор брони.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<Guid, Failure>> GetBarberProfileIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Бронь по ключу идемпотентности в рамках пользователя.
     /// Повторный запрос создания с тем же ключом должен вернуть существующую бронь,
     /// а не создать вторую (см. AGENT.md §15.5).

@@ -297,6 +297,68 @@ public static class ApiErrorCodes
         /// превратило бы форму в проверку существования аккаунтов. Роль не проверяется.
         /// </remarks>
         public const string CreateCustomerNotFound = "booking.create.customerNotFound";
+
+        /// <summary>
+        /// Бронь уже нельзя перенести: статус не <c>Pending</c>/<c>Confirmed</c> либо визит
+        /// уже начался; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Начавшийся визит не «оживляют» переносом в будущее: для него есть завершение
+        /// и неявка. Тот же код у чтения слотов переноса — двигать такую запись поздно
+        /// и читать для неё сетку незачем.
+        /// </remarks>
+        public const string RescheduleStatus = "booking.reschedule.status";
+
+        /// <summary>
+        /// Новое начало визита не в будущем; <c>400</c>, <c>invalidField = "startAt"</c>.
+        /// </summary>
+        /// <remarks>
+        /// В отличие от создания брони допуска нет: «на четыре минуты назад» смысла
+        /// не имеет, а допуск по часам клиента здесь ничего не спасает.
+        /// </remarks>
+        public const string RescheduleStartAtInPast = "booking.reschedule.startAt.inPast";
+
+        /// <summary>
+        /// Новое начало визита дальше горизонта записи (<c>90</c> дней); <c>400</c>,
+        /// <c>invalidField = "startAt"</c>.
+        /// </summary>
+        public const string RescheduleStartAtTooFar = "booking.reschedule.startAt.tooFar";
+
+        /// <summary>
+        /// Дата чтения слотов переноса отсутствует или вне окна <c>[сегодня; +90 дней]</c>;
+        /// <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// «Сегодня» считается в поясе салона: у полуночи UTC-дата и дата салона различаются,
+        /// поэтому границы окна проверяются уже после чтения контекста дня.
+        /// </remarks>
+        public const string RescheduleDate = "booking.reschedule.date";
+
+        /// <summary>
+        /// Новое время не является легальным стартом слота: нерабочий день, часы, отпуск,
+        /// битые данные или неразрешимый пояс салона; <c>409</c>.
+        /// </summary>
+        public const string RescheduleSlot = "booking.reschedule.slot";
+
+        /// <summary>
+        /// Выбранное время занято другой активной бронью барбера; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Своя бронь слот не занимает: она исключается из проверки. Остаточная гонка
+        /// на exclusion-ограничении возвращает <c>booking.update.overlap</c> — клиент
+        /// показывает её тем же текстом «время занято».
+        /// </remarks>
+        public const string RescheduleOverlap = "booking.reschedule.overlap";
+
+        /// <summary>
+        /// Истёк <c>lock_timeout</c> ожидания advisory-блокировки барбера при переносе;
+        /// <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// Механизм блокировки общий с созданием брони, но код свой: клиент различает
+        /// операцию и показывает «попробуйте ещё раз».
+        /// </remarks>
+        public const string RescheduleLockTimeout = "booking.reschedule.lockTimeout";
     }
 
     /// <summary>

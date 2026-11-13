@@ -269,6 +269,46 @@ public class Booking : AggregateRoot
     }
 
     /// <summary>
+    /// Перенос визита: меняет только начало и окончание, ничего больше не трогая.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Статус, услуга, салон, барбер и цена остаются прежними: перенос — не новая запись,
+    /// а другое время той же. Длительность тоже не пересчитывается — она обещание клиенту,
+    /// даже если прайс с тех пор переписали.
+    /// </para>
+    /// <para>
+    /// Перенос доступен только <c>Pending</c> и <c>Confirmed</c>: завершённую, отменённую
+    /// и неявившуюся запись не «оживляют» — для них есть свои операции. Проверки «сейчас»,
+    /// горизонта и расписания живут в Application: домен не знает ни времени, ни репозиториев.
+    /// Повторный перенос на то же время — успех без изменений (D15).
+    /// </para>
+    /// </remarks>
+    /// <param name="startAt">Новое начало визита.</param>
+    /// <param name="endAt">Новое окончание визита; обязано быть позже начала.</param>
+    public UnitResult<Failure> Reschedule(DateTimeOffset startAt, DateTimeOffset endAt)
+    {
+        if (Status is not (BookingStatus.Pending or BookingStatus.Confirmed))
+        {
+            return InvalidStatus("booking.reschedule.status", BookingStatus.Confirmed);
+        }
+
+        if (endAt <= startAt)
+        {
+            return DomainErrors.Fail(Error.Validation(
+                "booking.overlap.period",
+                DomainMessages.END_TIME_NOT_AFTER_START,
+                nameof(endAt)));
+        }
+
+        StartAt = startAt;
+        EndAt = endAt;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
     /// Отмена. Недоступна для уже завершённой и уже отменённой брони.
     /// </summary>
     /// <param name="cancellationReason">

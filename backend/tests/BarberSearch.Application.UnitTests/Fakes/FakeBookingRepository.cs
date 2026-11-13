@@ -136,13 +136,39 @@ public sealed class FakeBookingRepository : IBookingRepository
     public Task<Result<Booking, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<Result<Booking, Failure>>(
+    {
+        Operations.Add("getById");
+
+        return Task.FromResult<Result<Booking, Failure>>(
             _bookings.TryGetValue(id, out var booking)
                 ? booking
                 : new Failure(Error.NotFound(
                     ApiErrorCodes.Booking.NotFound,
                     $"Booking '{id}' was not found.",
                     id)));
+    }
+
+    /// <summary>
+    /// Профиль барбера по брони: та же проверка существования, что у настоящего репозитория.
+    /// </summary>
+    /// <remarks>
+    /// Вызов записывается в <see cref="Operations"/>: перенос обязан прочитать профиль
+    /// до advisory-блокировки, а саму бронь — после неё.
+    /// </remarks>
+    public Task<Result<Guid, Failure>> GetBarberProfileIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("getBarberProfileId");
+
+        return Task.FromResult<Result<Guid, Failure>>(
+            _bookings.TryGetValue(id, out var booking)
+                ? booking.BarberProfileId
+                : new Failure(Error.NotFound(
+                    ApiErrorCodes.Booking.NotFound,
+                    $"Booking '{id}' was not found.",
+                    id)));
+    }
 
     public Task<Result<Booking, Failure>> GetByIdempotencyKeyAsync(
         Guid userId,

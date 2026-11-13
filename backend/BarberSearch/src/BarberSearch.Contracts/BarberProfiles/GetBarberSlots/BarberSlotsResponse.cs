@@ -29,6 +29,8 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 /// <c>Constants.DEFAULT_SLOT_DURATION_MINUTES</c> (30 минут) по умолчанию.
 /// Если задана услуга, она всегда читается из той же строки, чей
 /// <paramref name="BarberServiceId"/> возвращается, поэтому пару можно передать в бронь.
+/// Для переноса визита — длительность самой брони (<c>EndAt − StartAt</c>), потому что она
+/// могла разойтись с текущим прайсом: перенос обязан сохранить обещанное клиенту время.
 /// </param>
 /// <param name="IsWorkingDay">Есть ли у барбера рабочий день в этот день недели.</param>
 /// <param name="Slots">Свободные слоты в порядке возрастания времени.</param>
