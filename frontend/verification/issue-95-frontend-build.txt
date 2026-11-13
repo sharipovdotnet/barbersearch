@@ -1,0 +1,164 @@
+﻿issue-95 frontend build/i18n/tsc 2026-11-13T10:33:51.2131606+05:00
+
+
+===== npm run build =====
+
+> frontend@0.0.0 build
+> tsc -b && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2620 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                              0.90 kB │ gzip:   0.47 kB
+dist/assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2    7.42 kB
+dist/assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2      8.00 kB
+dist/assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2       15.08 kB
+dist/assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2      16.51 kB
+dist/assets/geist-latin-wght-normal-BgDaEnEv.woff2          29.40 kB
+dist/assets/index-Bspuf1qU.css                              90.54 kB │ gzip:  15.50 kB
+dist/assets/plus-CynmXK4c.js                                 0.18 kB │ gzip:   0.16 kB
+dist/assets/arrow-left-CV-tHgm6.js                           0.19 kB │ gzip:   0.17 kB
+dist/assets/clock-4HYX99_9.js                                0.19 kB │ gzip:   0.18 kB
+dist/assets/circle-check-D9rIzarQ.js                         0.23 kB │ gzip:   0.20 kB
+dist/assets/use-now-C5YYCLTL.js                              0.25 kB │ gzip:   0.20 kB
+dist/assets/mail-warning-CNuMr8Y0.js                         0.35 kB │ gzip:   0.25 kB
+dist/assets/trash-C7AjNHzY.js                                0.37 kB │ gzip:   0.24 kB
+dist/assets/shield-alert-eoAk2ZKH.js                         0.38 kB │ gzip:   0.27 kB
+dist/assets/calendar-clock-BQ-MZeqB.js                       0.41 kB │ gzip:   0.27 kB
+dist/assets/booking-status-badge-DrUEuUZJ.js                 0.41 kB │ gzip:   0.29 kB
+dist/assets/review-stars--Ryl1hLr.js                         0.48 kB │ gzip:   0.37 kB
+dist/assets/calendar-days-BUB_sypp.js                        0.52 kB │ gzip:   0.28 kB
+dist/assets/use-auto-refresh-DAO9IITs.js                     0.59 kB │ gzip:   0.37 kB
+dist/assets/catalog-Bct1VuxD.js                              0.67 kB │ gzip:   0.37 kB
+dist/assets/textarea-PMBBjxGJ.js                             0.70 kB │ gzip:   0.39 kB
+dist/assets/use-media-query-DQQTA65r.js                      0.71 kB │ gzip:   0.42 kB
+dist/assets/booking-status-BxrP2iln.js                       0.78 kB │ gzip:   0.42 kB
+dist/assets/barber-booking-create-CBBf7Fjh.js                1.07 kB │ gzip:   0.64 kB
+dist/assets/barber-slots-D9o5HvHv.js                         1.11 kB │ gzip:   0.58 kB
+dist/assets/password-reset-DCgsd0WW.js                       1.11 kB │ gzip:   0.60 kB
+dist/assets/barber-salons-dMmYGn1R.js                        1.17 kB │ gzip:   0.63 kB
+dist/assets/email-verification-23VlBCtl.js                   1.36 kB │ gzip:   0.70 kB
+dist/assets/barber-cabinet-nav-BbRoGx11.js                   1.52 kB │ gzip:   0.87 kB
+dist/assets/use-barber-profile-DpmSD-wd.js                   2.08 kB │ gzip:   0.86 kB
+dist/assets/email-change-Ch9kyzl-.js                         2.11 kB │ gzip:   0.89 kB
+dist/assets/use-my-barber-request-CS42LMdi.js                2.59 kB │ gzip:   1.21 kB
+dist/assets/barber-profile-DLwSyEi9.js                       3.23 kB │ gzip:   1.21 kB
+dist/assets/portfolio-photos-DMdHnAim.js                     3.32 kB │ gzip:   1.34 kB
+dist/assets/image-prep-Do798an2.js                           4.12 kB │ gzip:   1.73 kB
+dist/assets/account-gates-BjS0-gOP.js                        4.36 kB │ gzip:   1.52 kB
+dist/assets/account-shell-ByyYBrrO.js                        4.72 kB │ gzip:   1.96 kB
+dist/assets/use-barber-slots-C2vOdD7S.js                     4.99 kB │ gzip:   2.20 kB
+dist/assets/confirm-email-change-page-Cjx75eEG.js            5.07 kB │ gzip:   1.99 kB
+dist/assets/verify-email-page-E0YOECbS.js                    5.14 kB │ gzip:   1.94 kB
+dist/assets/forgot-password-page-C_Jz5c28.js                 5.14 kB │ gzip:   2.13 kB
+dist/assets/barber-salon-picker-dialog-rTRn-qhj.js           6.59 kB │ gzip:   2.68 kB
+dist/assets/booking-changes-CO5dv_k8.js                      7.16 kB │ gzip:   2.69 kB
+dist/assets/paging-OwJZ15oc.js                               7.37 kB │ gzip:   2.70 kB
+dist/assets/reset-password-page-DRI2rzNS.js                  8.11 kB │ gzip:   2.69 kB
+dist/assets/barber-onboarding-page-DVPUotDc.js               8.36 kB │ gzip:   2.83 kB
+dist/assets/barber-cabinet-gates-DjJ6pKcW.js                 8.97 kB │ gzip:   3.39 kB
+dist/assets/register-page-BMyoH2_V.js                       11.98 kB │ gzip:   4.10 kB
+dist/assets/account-security-page-DodvKrFO.js               12.00 kB │ gzip:   4.04 kB
+dist/assets/barber-profile-form-qkdRjthE.js                 12.40 kB │ gzip:   4.09 kB
+dist/assets/barber-notifications-page-DYZvyfLh.js           16.49 kB │ gzip:   5.03 kB
+dist/assets/account-reviews-page-Dknos1Dc.js                17.49 kB │ gzip:   5.63 kB
+dist/assets/become-a-barber-page-DksEKp4J.js                18.24 kB │ gzip:   5.46 kB
+dist/assets/account-profile-page-BHqNs3YR.js                18.64 kB │ gzip:   5.61 kB
+dist/assets/barber-salons-page-scRMlOEj.js                  20.75 kB │ gzip:   5.81 kB
+dist/assets/salon-form-BV4YjJXV.js                          20.88 kB │ gzip:   6.41 kB
+dist/assets/barber-schedule-page-DlgExxjL.js                26.98 kB │ gzip:   7.60 kB
+dist/assets/account-page-CHrUnzzP.js                        30.52 kB │ gzip:   9.49 kB
+dist/assets/privacy-page-DXBC2Mb4.js                        30.57 kB │ gzip:   7.77 kB
+dist/assets/barber-profile-page-BuX2eBug.js                 31.52 kB │ gzip:   7.34 kB
+dist/assets/barber-page-CbeHLz5T.js                         35.49 kB │ gzip:   9.38 kB
+dist/assets/barber-cabinet-page-DvPyDiaY.js                 54.52 kB │ gzip:  14.46 kB
+dist/assets/card-Ckr1l-dy.js                                57.57 kB │ gzip:  22.20 kB
+dist/assets/ical-Bwqcmdz_.js                                77.13 kB │ gzip:  23.11 kB
+dist/assets/barber-import-page-DBvah0WJ.js                  87.47 kB │ gzip:  26.43 kB
+dist/assets/csrf-83nNbpLA.js                                96.52 kB │ gzip:  31.89 kB
+dist/assets/router-AuPHyr1Z.js                             251.92 kB │ gzip:  66.60 kB
+dist/assets/admin-page-DGOJuJDU.js                         317.19 kB │ gzip:  67.64 kB
+dist/assets/index-Bob8UdJ2.js                              354.60 kB │ gzip: 114.72 kB
+
+✓ built in 5.21s
+EXIT=0
+
+===== npm run check:i18n -- --strict =====
+
+> frontend@0.0.0 check:i18n
+> node scripts/check-i18n.mjs --strict
+
+t() строк: 1762
+переводов: 2078
+нет перевода: 0
+не используется: 316
+конфликтов: 0
+русских строк вне t(): 413 (видимых в JSX: 0)
+
+ВНЕ t() (первые 60):
+  src/components/account/account-shell.tsx:62 [string] Записи
+  src/components/account/account-shell.tsx:68 [string] Отзывы
+  src/components/account/account-shell.tsx:74 [string] Профиль
+  src/components/account/account-shell.tsx:80 [string] Безопасность
+  src/components/account/booking-list.tsx:17 [string] Предстоящие
+  src/components/account/booking-list.tsx:18 [string] История
+  src/components/account/booking-list.tsx:23 [string] Страницы предстоящих записей
+  src/components/account/booking-list.tsx:24 [string] Страницы истории
+  src/components/account/cancel-booking-dialog.tsx:89 [string] Не удалось отменить запись.
+  src/components/account/change-password-dialog.tsx:108 [string] Не удалось сменить пароль.
+  src/components/account/delete-review-dialog.tsx:30 [string] Не удалось удалить отзыв.
+  src/components/account/edit-review-dialog.tsx:59 [string] Не удалось сохранить отзыв.
+  src/components/account/email-card.tsx:55 [string] Не удалось изменить email. Попробуйте позже.
+  src/components/account/profile-form.tsx:76 [string] Не удалось сохранить профиль.
+  src/components/account/review-dialog.tsx:52 [string] Не удалось отправить отзыв.
+  src/components/account/status-timeline.tsx:6 [string] Заявка
+  src/components/account/status-timeline.tsx:7 [string] Подтверждение
+  src/components/account/status-timeline.tsx:8 [string] Визит
+  src/components/admin/admin-rail.tsx:41 [string] Сводка
+  src/components/admin/admin-rail.tsx:42 [string] Статистика
+  src/components/admin/admin-rail.tsx:43 [string] Отзывы
+  src/components/admin/admin-rail.tsx:44 [string] Фото
+  src/components/admin/admin-rail.tsx:45 [string] Барберы
+  src/components/admin/admin-rail.tsx:46 [string] Пользователи
+  src/components/admin/admin-rail.tsx:47 [string] Заявки
+  src/components/admin/admin-rail.tsx:48 [string] Каталог
+  src/components/admin/admin-rail.tsx:49 [string] Брони
+  src/components/admin/admin-rail.tsx:50 [string] Журнал
+  src/components/admin/bookings-screen.tsx:690 [string] Время
+  src/components/admin/bookings-screen.tsx:691 [string] Клиент
+  src/components/admin/bookings-screen.tsx:692 [string] Барбер
+  src/components/admin/bookings-screen.tsx:693 [string] Услуга
+  src/components/admin/bookings-screen.tsx:694 [string] Статус
+  src/components/admin/bookings-screen.tsx:695 [string] Цена
+  src/components/admin/catalogue-screen.tsx:645 [string] Услуга включена
+  src/components/admin/catalogue-screen.tsx:645 [string] Услуга выключена
+  src/components/admin/catalogue-screen.tsx:647 [string] Специализация включена
+  src/components/admin/catalogue-screen.tsx:647 [string] Специализация выключена
+  src/components/admin/catalogue-screen.tsx:649 [string] Салон включён
+  src/components/admin/catalogue-screen.tsx:649 [string] Салон выключен
+  src/components/admin/moderation-rules-dialog.tsx:15 [string] Отзыв должен быть о состоявшемся визите, а не о сервисе в целом.
+  src/components/admin/moderation-rules-dialog.tsx:16 [string] Без оскорблений, угроз и перехода на личности.
+  src/components/admin/moderation-rules-dialog.tsx:17 [string] Без рекламы, ссылок и чужих персональных данных.
+  src/components/admin/moderation-rules-dialog.tsx:18 [string] Оценка без текста — нормальный отзыв, его не нужно скрывать.
+  src/components/admin/photos-screen.tsx:68 [string] Аватары
+  src/components/admin/photos-screen.tsx:69 [string] Портфолио
+  src/components/admin/review-tabs.tsx:8 [string] На модерации
+  src/components/admin/review-tabs.tsx:9 [string] Опубликованные
+  src/components/admin/statistics/top-table.tsx:16 [string] В топ попадают минимум 3 завершённых визита; «Остальные» дополняют итог периода.
+  src/components/admin/statistics/trend-chart.tsx:149 [string] запись
+  src/components/admin/statistics/trend-chart.tsx:149 [string] записи
+  src/components/admin/statistics/trend-chart.tsx:149 [string] записей
+  src/components/admin/statistics/trend-chart.tsx:150 [string] визит
+  src/components/admin/statistics/trend-chart.tsx:150 [string] визита
+  src/components/admin/statistics/trend-chart.tsx:150 [string] визитов
+  src/components/admin/statistics-screen.tsx:416 [string] визит
+  src/components/admin/statistics-screen.tsx:417 [string] визита
+  src/components/admin/statistics-screen.tsx:418 [string] визитов
+  src/components/admin/statistics-screen.tsx:448 [string] аккаунт
+  src/components/admin/statistics-screen.tsx:449 [string] аккаунта
+EXIT=0
+
+===== npx tsc -p tsconfig.e2e.json --noEmit =====
+EXIT=0

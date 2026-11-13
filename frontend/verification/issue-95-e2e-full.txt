@@ -1,0 +1,411 @@
+﻿
+Running 322 tests using 12 workers
+
+node.exe : (node:39276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\Hrust\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:39276) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5568) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15364) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35636) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:32776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok   1 [auth] › e2e\auth.setup.ts:18:3 › вход через API: admin (66ms)
+  ok   3 [auth] › e2e\auth.setup.ts:18:3 › вход через API: barber (81ms)
+  ok   4 [auth] › e2e\auth.setup.ts:18:3 › вход через API: scheduleBarber (75ms)
+  ok   2 [auth] › e2e\auth.setup.ts:18:3 › вход через API: newBarber (90ms)
+  ok   6 [auth] › e2e\auth.setup.ts:18:3 › вход через API: customer (77ms)
+  ok   7 [auth] › e2e\auth.setup.ts:18:3 › вход через API: profileBarber (66ms)
+  ok   8 [auth] › e2e\auth.setup.ts:18:3 › вход через API: mutations (65ms)
+  ok   5 [auth] › e2e\auth.setup.ts:18:3 › вход через API: applicant (89ms)
+(node:30964) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38124) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33252) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36540) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34408) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:10476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37684) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40724) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  15 [desktop-chromium] › e2e\specs\a11y.spec.ts:41:3 › axe: публичные экраны › витрина / (15.1s)
+  ok  14 [desktop-chromium] › e2e\specs\a11y.spec.ts:73:3 › axe: публичные экраны › подтверждение email /verify-email: недействительная ссылка (15.1s)
+  ok  11 [desktop-chromium] › e2e\specs\a11y.spec.ts:101:3 › axe: публичные экраны › восстановление пароля /forgot-password: форма (15.9s)
+  ok  10 [desktop-chromium] › e2e\specs\a11y.spec.ts:112:3 › axe: публичные экраны › новый пароль /reset-password: форма с фейковым токеном (15.9s)
+  ok  19 [desktop-chromium] › e2e\specs\a11y.spec.ts:125:3 › axe: публичные экраны › «Стать барбером» /become-a-barber: анонимный экран (15.6s)
+  ok  12 [desktop-chromium] › e2e\specs\a11y.spec.ts:64:3 › axe: публичные экраны › регистрация /register (15.9s)
+  x    9 [desktop-chromium] › e2e\specs\a11y.spec.ts:50:3 › axe: публичные экраны › профиль барбера с отзывами и пагинатором (15.3s)
+  ok  13 [desktop-chromium] › e2e\specs\a11y.spec.ts:87:3 › axe: публичные экраны › смена email /confirm-email-change: недействительная ссылка (16.1s)
+  ok  16 [desktop-chromium] › e2e\specs\a11y.spec.ts:137:3 › axe: публичные экраны › политика обработки данных /privacy и уведомление о cookie (16.3s)
+(node:38696) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  20 [desktop-chromium] › e2e\specs\a11y.spec.ts:189:3 › axe: кабинет клиента › /account/reviews: авторские отзывы и пагинатор (18.2s)
+  ok  18 [desktop-chromium] › e2e\specs\a11y.spec.ts:160:3 › axe: публичные экраны › открытый диалог входа (18.3s)
+  ok  17 [desktop-chromium] › e2e\specs\a11y.spec.ts:174:3 › axe: кабинет клиента › /account: записи и вкладки (22.2s)
+  ok  21 [desktop-chromium] › e2e\specs\a11y.spec.ts:208:3 › axe: кабинет клиента › /account/security: пароль, выход и email (7.4s)
+  ok  22 [desktop-chromium] › e2e\specs\a11y.spec.ts:199:3 › axe: кабинет клиента › /account/profile: форма и данные аккаунта (9.3s)
+  ok  25 [desktop-chromium] › e2e\specs\a11y.spec.ts:250:3 › axe: кабинет барбера › /barber/notifications: настройки и строки инбокса (10.7s)
+  ok  26 [desktop-chromium] › e2e\specs\a11y.spec.ts:264:3 › axe: кабинет барбера › /barber/salons: карточки и открытый диалог каталога (11.3s)
+  ok  24 [desktop-chromium] › e2e\specs\a11y.spec.ts:239:3 › axe: кабинет барбера › /barber: диалог записи клиента (12.7s)
+  ok  28 [desktop-chromium] › e2e\specs\a11y.spec.ts:321:3 › axe: админка › /admin/reviews?tab=published: опубликованные (13.2s)
+  ok  27 [desktop-chromium] › e2e\specs\a11y.spec.ts:309:3 › axe: админка › /admin/reviews: очередь и карточка отзыва (13.4s)
+  ok  30 [desktop-chromium] › e2e\specs\a11y.spec.ts:359:3 › axe: админка › /admin/users: список и карточка пользователя (14.7s)
+  ok  29 [desktop-chromium] › e2e\specs\a11y.spec.ts:339:3 › axe: админка › /admin/barbers: список и карточка барбера (15.1s)
+  ok  33 [desktop-chromium] › e2e\specs\a11y.spec.ts:390:3 › axe: админка › /admin/catalogue: вкладка «Услуги» (11.1s)
+  ok  23 [desktop-chromium] › e2e\specs\a11y.spec.ts:221:3 › axe: кабинет барбера › /barber: лента дня, вкладки и строки (18.7s)
+  ok  37 [desktop-chromium] › e2e\specs\a11y.spec.ts:456:3 › axe: админка › /admin/photos: вкладка «Аватары», пустая очередь (7.8s)
+  ok  34 [desktop-chromium] › e2e\specs\a11y.spec.ts:401:3 › axe: админка › /admin/catalogue?tab=salons: широкая таблица и форма правки (11.9s)
+  ok  31 [desktop-chromium] › e2e\specs\a11y.spec.ts:291:3 › axe: профиль барбера › /barber/profile: карточка, пустой прайс и специализации (13.4s)
+  ok  36 [desktop-chromium] › e2e\specs\a11y.spec.ts:440:3 › axe: админка › /admin/summary: три блока со счётчиками и ссылками (9.4s)
+  ok  32 [desktop-chromium] › e2e\specs\a11y.spec.ts:370:3 › axe: админка › /admin/users/{id}: карточка без фото, блок аватара (14.4s)
+  ok  38 [desktop-chromium] › e2e\specs\a11y.spec.ts:471:3 › axe: админка › /admin/photos?tab=portfolio: пустая очередь (7.6s)
+  ok  42 [desktop-chromium] › e2e\specs\a11y.spec.ts:543:3 › axe: заявка на роль барбера › форма клиента без заявки (7.4s)
+  ok  41 [desktop-chromium] › e2e\specs\a11y.spec.ts:524:3 › axe: админка › /admin/barber-requests: пустая очередь (7.8s)
+  ok  43 [desktop-chromium] › e2e\specs\a11y.spec.ts:561:3 › клавиатура › Tab до пагинатора, Enter и Пробел листают, фокус-кольцо видно (7.9s)
+  ok  44 [desktop-chromium] › e2e\specs\a11y.spec.ts:619:3 › клавиатура › диалог входа закрывается Escape и возвращает фокус на триггер (6.2s)
+  ok  49 [desktop-chromium] › e2e\specs\account-bookings.spec.ts:149:3 › мои записи: предстоящие и история › на странице нет «Показать ещё» и счётчиков вкладок (5.8s)
+  ok  48 [desktop-chromium] › e2e\specs\account-bookings.spec.ts:131:3 › мои записи: предстоящие и история › «Ближайшая запись» — первая строка предстоящих (6.4s)
+  ok  39 [desktop-chromium] › e2e\specs\a11y.spec.ts:488:3 › axe: админка › /admin/statistics: плитки, график и таблица (15.3s)
+  ok  46 [desktop-chromium] › e2e\specs\account-bookings.spec.ts:48:3 › мои записи: предстоящие и история › история: 20 строк, «Дальше» — одна, «Назад» из кэша (8.1s)
+  ok  35 [desktop-chromium] › e2e\specs\a11y.spec.ts:420:3 › axe: админка › /admin/bookings: поиск, список и карточка брони (18.2s)
+  ok  51 [desktop-chromium] › e2e\specs\account-cabinet-roles.spec.ts:14:3 › кабинет клиента › открывает профиль и не показывает рабочую зону (4.0s)
+  ok  45 [desktop-chromium] › e2e\specs\account-bookings.spec.ts:15:3 › мои записи: предстоящие и история › предстоящие: 20 строк, «Дальше» — одна, «Назад» без запросов (9.0s)
+  ok  50 [desktop-chromium] › e2e\specs\account-cabinet-roles.spec.ts:36:3 › кабинет барбера › видит свой профиль и ссылку на кабинет барбера (4.1s)
+  ok  40 [desktop-chromium] › e2e\specs\a11y.spec.ts:507:3 › axe: админка › /admin/audit: журнал с раскрытым diff (12.4s)
+  ok  47 [desktop-chromium] › e2e\specs\account-bookings.spec.ts:83:3 › мои записи: предстоящие и история › переключение вкладки грузит первую страницу своего скоупа и не смешивает строки (9.1s)
+  ok  52 [desktop-chromium] › e2e\specs\account-cabinet-roles.spec.ts:55:3 › кабинет администратора › видит свой профиль и ссылку на администрирование (4.3s)
+  ok  53 [desktop-chromium] › e2e\specs\account-reviews.spec.ts:15:3 › мои отзывы: список › 10 строк, «Дальше» → «11–12», «Назад» без запросов (7.0s)
+  ok  54 [desktop-chromium] › e2e\specs\account-reviews.spec.ts:43:3 › мои отзывы: список › ошибка следующей страницы: строки остаются, «Дальше» становится повтором (7.4s)
+  ok  57 [desktop-chromium] › e2e\specs\account-security.spec.ts:10:3 › кабинет: безопасность › показывает пароль, выход и подтверждение email (7.7s)
+  ok  55 [desktop-chromium] › e2e\specs\account-reviews.spec.ts:63:3 › мои отзывы: список › 401 на списке показывает гейт входа, а не общий текст ошибки (10.8s)
+  ok  56 [desktop-chromium] › e2e\specs\account-security.spec.ts:22:3 › кабинет: безопасность › пустая форма смены пароля показывает ошибки и закрывается по Escape (9.4s)
+  ok  58 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:25:3 › админка: журнал › рейл ведёт в журнал и отмечает пункт текущим (11.0s)
+  ok  63 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:132:3 › админка: журнал › фильтр «Салон»: одна запись и русский diff телефона (11.4s)
+  ok  62 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:154:3 › админка: журнал › фильтр «Бронь»: одна запись и русский статус в diff (11.6s)
+  ok  64 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:176:3 › админка: журнал › фильтр «Фото портфолио»: запрос entityType=portfolio_photo и «Ничего не найдено» (10.6s)
+  ok  60 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:78:3 › админка: журнал › первая строка — самая свежая и «Система», строка 20 раскрывает diff роли (12.1s)
+  ok  61 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:116:3 › админка: журнал › фильтр «Отзыв» оставляет только две записи этого типа (12.2s)
+  ok  59 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:44:3 › админка: журнал › фильтр по дате: «1–20», «Дальше» → «21–25», «Назад» без запроса (12.9s)
+  ok  66 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:247:3 › админка: журнал › «Сбросить фильтры» возвращает список к первой странице без даты (10.7s)
+  ok  65 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:207:3 › админка: журнал › фильтр автора: системная запись не находится, «%» — литерал (13.5s)
+  ok  67 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:269:3 › админка: журнал › журнал неизменяем: нет «Показать ещё» и действий над записями (11.2s)
+  ok  68 [desktop-chromium] › e2e\specs\admin-audit.spec.ts:282:3 › админка: журнал › 401 на списке показывает гейт входа, а не текст ошибки (9.7s)
+  ok  69 [desktop-chromium] › e2e\specs\admin-auto-refresh.spec.ts:17:3 › админская сводка: автообновление › через период опроса сама перечитывает сводку (11.4s)
+  ok  70 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:21:3 › админка: брони › рейл ведёт на брони и отмечает пункт текущим (11.0s)
+  ok  72 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:74:3 › админка: брони › первая строка — самая поздняя бронь: «Неявка» и время в поясе салона (10.1s)
+  ok  75 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:154:3 › админка: брони › точный id находит одну бронь, «%» — литерал, а не «найти всё» (10.4s)
+  ok  74 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:132:3 › админка: брони › фильтр статуса не сбрасывает поиск: Pending — 18 строк, NoShow — одна (10.7s)
+  ok  73 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:97:3 › админка: брони › карточка: клиент, барбер, услуга, салон и время; «Назад» возвращает список (11.2s)
+  ok  71 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:40:3 › админка: брони › поиск по email: «1–20», «Дальше» → «21–24», «Назад» без запроса (11.9s)
+  ok  77 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:195:3 › админка: брони › брони только читаются: нет лишних кнопок, счётчиков и действий в строках (8.3s)
+  ok  76 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:171:3 › админка: брони › «Сбросить фильтры» возвращает первую страницу, фильтров в URL нет (12.3s)
+  ok  80 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:32:3 › админка: каталог › по умолчанию открыты услуги: активная и выключенная строки, счётчик барберов (8.3s)
+  ok  78 [desktop-chromium] › e2e\specs\admin-bookings.spec.ts:208:3 › админка: брони › 401 на списке показывает гейт входа, а не текст ошибки (9.3s)
+  ok  79 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:17:3 › админка: каталог › рейл ведёт в каталог и отмечает пункт как текущий (8.7s)
+  ok  82 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:80:3 › админка: каталог › фильтр статуса оставляет только выключенные или только активные строки (12.6s)
+  ok  86 [desktop-chromium] › e2e\specs\admin-queue-keyboard.spec.ts:75:3 › очередь отзывов: клавиатура › Enter и Пробел открывают деталь выбранной строки (11.2s)
+  ok  85 [desktop-chromium] › e2e\specs\admin-queue-keyboard.spec.ts:16:3 › очередь отзывов: клавиатура › Tab доводит до строки, стрелки, Home и End двигают roving-фокус (12.2s)
+  ok  83 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:111:3 › админка: каталог › поиск сужает список по названию и по городу салона (12.9s)
+  ok  84 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:131:3 › админка: каталог › правка салона: название read-only, часовой пояс — select с текущим значением (12.4s)
+  ok  87 [desktop-chromium] › e2e\specs\admin-reviews.spec.ts:15:3 › админка: отзывы › вкладка «Опубликованные»: страницы «1–20» и «21–N», без «Показать ещё» (11.9s)
+  ok  88 [desktop-chromium] › e2e\specs\admin-reviews.spec.ts:54:3 › админка: отзывы › выбранный отзыв остаётся в URL при смене страницы (11.6s)
+  ok  92 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:28:3 › админка: сводка › «Сводка» — первый пункт рейла и ведёт на /admin/summary (8.6s)
+  ok  89 [desktop-chromium] › e2e\specs\admin-reviews.spec.ts:77:3 › админка: отзывы › «Обновить» не сбрасывает страницу и не показывает скелетон (10.7s)
+  ok  90 [desktop-chromium] › e2e\specs\admin-reviews.spec.ts:98:3 › админка: отзывы › смена вкладки не открывает отзыв из прошлой очереди (9.1s)
+  ok  81 [desktop-chromium] › e2e\specs\admin-catalogue.spec.ts:58:3 › админка: каталог › вкладка живёт в ?tab= и переживает перезагрузку (15.7s)
+  ok  91 [desktop-chromium] › e2e\specs\admin-reviews.spec.ts:129:3 › админка: отзывы › возврат из карточки оставляет ту же страницу (9.7s)
+  ok  93 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:53:3 › админка: сводка › /admin по-прежнему открывает очередь отзывов, а не сводку (8.7s)
+  ok  97 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:182:3 › админка: сводка › «Обновить» делает ровно один запрос, блоки не мигают скелетоном (10.0s)
+  ok  99 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:222:3 › админка: сводка › 401 на сводке показывает гейт входа, а не ошибку (9.9s)
+  ok  98 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:207:3 › админка: сводка › сводка только читает: нет графиков и лишних действий (10.3s)
+  ok 104 [desktop-chromium] › e2e\specs\auto-refresh.spec.ts:21:3 › кабинет барбера: автообновление › через период опроса сам перечитывает ленту дня (9.1s)
+  ok 100 [desktop-chromium] › e2e\specs\admin-users.spec.ts:10:3 › админка: пользователи › 20 строк, «Дальше» → «21–N», «Назад» без запросов (10.3s)
+  ok 101 [desktop-chromium] › e2e\specs\admin-users.spec.ts:39:3 › админка: пользователи › смена фильтра статуса сбрасывает на первую страницу (10.6s)
+  ok  96 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:152:3 › админка: сводка › «самый старый» — первая строка очереди и открывает её карточку (11.3s)
+  ok 102 [desktop-chromium] › e2e\specs\admin-users.spec.ts:54:3 › админка: пользователи › поиск сбрасывает на первую страницу (10.6s)
+  ok 103 [desktop-chromium] › e2e\specs\admin-users.spec.ts:69:3 › админка: пользователи › выбранный пользователь остаётся в URL при смене страницы (11.5s)
+  ok  95 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:111:3 › админка: сводка › блок «Фотографии на проверке»: честный ноль и пустые вкладки очереди (12.8s)
+  ok  94 [desktop-chromium] › e2e\specs\admin-summary.spec.ts:64:3 › админка: сводка › счётчики совпадают с разделами (14.9s)
+  ok 113 [desktop-chromium] › e2e\specs\barber-notifications.spec.ts:71:3 › уведомления барбера › настройки: дефолты 08:00/30 и выключенный Telegram (6.7s)
+  ok 112 [desktop-chromium] › e2e\specs\barber-notifications.spec.ts:40:3 › уведомления барбера › страница: заголовок, обе строки и «Открыть» (6.8s)
+  ok 107 [desktop-chromium] › e2e\specs\barber-cabinet.spec.ts:100:3 › кабинет барбера › ошибка следующей страницы: строки остаются, «Дальше» становится повтором (8.0s)
+  ok 105 [desktop-chromium] › e2e\specs\barber-cabinet.spec.ts:15:3 › кабинет барбера › вкладки: переключение не делает запросов, «Сегодня» возвращает списки к началу (10.5s)
+  ok 110 [desktop-chromium] › e2e\specs\barber-day.spec.ts:85:3 › кабинет барбера: лента дня › клавиатура: стрелки, Home и End ходят по вкладкам (7.8s)
+  ok 111 [desktop-chromium] › e2e\specs\barber-notifications.spec.ts:23:3 › уведомления барбера › колокольчик кабинета: бейдж «1» и имя со счётчиком (8.0s)
+  ok 115 [desktop-chromium] › e2e\specs\barber-profile.spec.ts:61:3 › профиль барбера › четвёртый пункт навигации ведёт на /barber/profile (6.8s)
+  ok 114 [desktop-chromium] › e2e\specs\barber-profile.spec.ts:16:3 › профиль барбера › форма заполнена из API, прайс и специализации пусты (7.5s)
+  ok 106 [desktop-chromium] › e2e\specs\barber-cabinet.spec.ts:67:3 › кабинет барбера › история: 20 строк, «Дальше» → «21–40», «Назад» без запросов (10.1s)
+  ok 108 [desktop-chromium] › e2e\specs\barber-cabinet.spec.ts:125:3 › кабинет барбера › диалог «Записать клиента»: находит клиента и показывает услуги (10.3s)
+  ok 116 [desktop-chromium] › e2e\specs\barber-salons.spec.ts:15:3 › мои салоны › салон, основной бейдж, третий пункт навигации и поиск каталога (8.0s)
+  ok 121 [desktop-chromium] › e2e\specs\email-verification.spec.ts:126:3 › подтверждение email › битый токен показывает понятную ошибку, а не белый экран (4.5s)
+  ok 109 [desktop-chromium] › e2e\specs\barber-day.spec.ts:19:3 › кабинет барбера: лента дня › открывается на «Сегодня», вкладки не перезапрашивают записи (12.9s)
+  ok 119 [desktop-chromium] › e2e\specs\email-change.spec.ts:202:3 › смена email › битый токен показывает понятную ошибку, а не белый экран (5.3s)
+  ok 123 [desktop-chromium] › e2e\specs\i18n.spec.ts:59:3 › переключатель на 320 px › не создаёт горизонтальную прокрутку и остаётся доступным (5.3s)
+  ok 125 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:31:3 › публичные отзывы: пагинация › первая страница: 10 карточек, диапазон и недоступное «Назад» (5.4s)
+  ok 122 [desktop-chromium] › e2e\specs\i18n.spec.ts:9:1 › переключает витрину на английский и запоминает выбор (6.5s)
+  ok 126 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:41:3 › публичные отзывы: пагинация › «Дальше»: один запрос с курсором, фокус на списке, «Назад» без запросов (5.5s)
+  ok 127 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:76:3 › публичные отзывы: пагинация › последняя страница неполная и «Дальше» недоступно (4.4s)
+  ok 117 [desktop-chromium] › e2e\specs\barber-schedule.spec.ts:16:3 › расписание барбера › неделя, исключения и отпуска, axe (9.2s)
+  ok 130 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:130:3 › публичные отзывы: пагинация › отзывы приходят только для витринного барбера (6.5s)
+  ok 128 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:88:3 › публичные отзывы: пагинация › ошибка следующей страницы: карточки остаются, повтор грузит страницу (6.9s)
+  ok 129 [desktop-chromium] › e2e\specs\public-reviews-pager.spec.ts:118:3 › публичные отзывы: пагинация › живой регион объявляет диапазон (6.9s)
+  ok 131 [desktop-chromium] › e2e\specs\registration-consent.spec.ts:32:3 › регистрация и согласие на обработку ПД › отправляет редакцию Политики и получает отказ по занятому email (5.7s)
+  ok 132 [desktop-chromium] › e2e\specs\registration-consent.spec.ts:67:3 › регистрация и согласие на обработку ПД › устаревшая редакция Политики показывает русскую ошибку и не пускает в аккаунт (5.2s)
+  ok 133 [desktop-chromium] › e2e\specs\search-login.spec.ts:16:3 › витрина и вход › поиск по городу: карточки, счётчик и «Показать ещё» добавляет страницу (5.6s)
+  ok 134 [desktop-chromium] › e2e\specs\search-login.spec.ts:48:3 › витрина и вход › поиск по несуществующему городу показывает пустое состояние (5.4s)
+  ok 135 [desktop-chromium] › e2e\specs\search-login.spec.ts:57:3 › витрина и вход › пустая отправка: клиентские ошибки, без запроса на сервер (6.0s)
+  ok 136 [desktop-chromium] › e2e\specs\search-login.spec.ts:69:3 › витрина и вход › неверные учётные данные: «Неверный email или пароль.» (10.0s)
+  ok 138 [desktop-chromium] › e2e\specs\statistics.spec.ts:17:3 › админка: статистика › второй пункт рейла ведёт на /admin/statistics (8.4s)
+  ok 140 [desktop-chromium] › e2e\specs\statistics.spec.ts:40:3 › админка: статистика › видит плитки, график, статусы и таблицу-дубль (8.4s)
+  ok 120 [desktop-chromium] › e2e\specs\email-verification.spec.ts:53:3 › подтверждение email › регистрация → письмо → ссылка → зелёный кабинет, повторный клик тоже успешен (20.6s)
+  ok 141 [desktop-chromium] › e2e\specs\statistics.spec.ts:99:3 › админка: статистика › свои даты дают запрос с выбранными границами (9.1s)
+  ok 144 [desktop-chromium] › e2e\specs\statistics.spec.ts:153:3 › админка: статистика › раздел только читает: нет действий записи (7.5s)
+  ok 142 [desktop-chromium] › e2e\specs\statistics.spec.ts:115:3 › админка: статистика › сравнение включает прошлый период в запросе (8.7s)
+  ok 139 [desktop-chromium] › e2e\specs\statistics.spec.ts:79:3 › админка: статистика › пресет меняет период и делает новый запрос (9.5s)
+  ok 137 [desktop-chromium] › e2e\specs\search-login.spec.ts:81:3 › витрина и вход › успешный вход: шапка показывает пользователя, reload сохраняет сессию (10.3s)
+  ok 143 [desktop-chromium] › e2e\specs\statistics.spec.ts:132:3 › админка: статистика › «Обновить» — ровно один запрос, секции не стираются (8.7s)
+(node:40016) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34868) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38356) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38524) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:25564) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35036) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 124 [desktop-chromium] › e2e\specs\password-reset.spec.ts:85:3 › сброс пароля › письмо со ссылкой → новый пароль → вход новым; вторая попытка недействительна (23.4s)
+(node:22984) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 118 [desktop-chromium] › e2e\specs\email-change.spec.ts:79:3 › смена email › заявка → два письма → ссылка → все сессии завершены, вход только новым адресом (31.6s)
+  ok 145 [mobile-chromium] › e2e\specs\account-cabinet-roles.spec.ts:14:3 › кабинет клиента › открывает профиль и не показывает рабочую зону (6.2s)
+  ok 153 [mobile-chromium] › e2e\specs\account-reviews.spec.ts:43:3 › мои отзывы: список › ошибка следующей страницы: строки остаются, «Дальше» становится повтором (6.6s)
+  ok 147 [mobile-chromium] › e2e\specs\account-cabinet-roles.spec.ts:36:3 › кабинет барбера › видит свой профиль и ссылку на кабинет барбера (6.8s)
+  ok 146 [mobile-chromium] › e2e\specs\account-cabinet-roles.spec.ts:55:3 › кабинет администратора › видит свой профиль и ссылку на администрирование (6.8s)
+  ok 152 [mobile-chromium] › e2e\specs\account-bookings.spec.ts:149:3 › мои записи: предстоящие и история › на странице нет «Показать ещё» и счётчиков вкладок (6.8s)
+  ok 150 [mobile-chromium] › e2e\specs\account-bookings.spec.ts:131:3 › мои записи: предстоящие и история › «Ближайшая запись» — первая строка предстоящих (6.8s)
+  ok 149 [mobile-chromium] › e2e\specs\account-bookings.spec.ts:83:3 › мои записи: предстоящие и история › переключение вкладки грузит первую страницу своего скоупа и не смешивает строки (7.4s)
+  ok 148 [mobile-chromium] › e2e\specs\account-reviews.spec.ts:15:3 › мои отзывы: список › 10 строк, «Дальше» → «11–12», «Назад» без запросов (7.5s)
+  ok 155 [mobile-chromium] › e2e\specs\account-reviews.spec.ts:63:3 › мои отзывы: список › 401 на списке показывает гейт входа, а не общий текст ошибки (5.5s)
+  ok 151 [mobile-chromium] › e2e\specs\account-bookings.spec.ts:15:3 › мои записи: предстоящие и история › предстоящие: 20 строк, «Дальше» — одна, «Назад» без запросов (7.6s)
+  ok 154 [mobile-chromium] › e2e\specs\account-bookings.spec.ts:48:3 › мои записи: предстоящие и история › история: 20 строк, «Дальше» — одна, «Назад» из кэша (8.1s)
+(node:22076) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 156 [mobile-chromium] › e2e\specs\account-security.spec.ts:22:3 › кабинет: безопасность › пустая форма смены пароля показывает ошибки и закрывается по Escape (3.9s)
+  ok 157 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:25:3 › админка: журнал › рейл ведёт в журнал и отмечает пункт текущим (7.6s)
+  ok 167 [mobile-chromium] › e2e\specs\account-security.spec.ts:10:3 › кабинет: безопасность › показывает пароль, выход и подтверждение email (6.9s)
+  ok 159 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:116:3 › админка: журнал › фильтр «Отзыв» оставляет только две записи этого типа (9.5s)
+  ok 163 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:176:3 › админка: журнал › фильтр «Фото портфолио»: запрос entityType=portfolio_photo и «Ничего не найдено» (8.9s)
+  ok 162 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:154:3 › админка: журнал › фильтр «Бронь»: одна запись и русский статус в diff (9.0s)
+  ok 165 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:247:3 › админка: журнал › «Сбросить фильтры» возвращает список к первой странице без даты (9.0s)
+  ok 161 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:132:3 › админка: журнал › фильтр «Салон»: одна запись и русский diff телефона (9.9s)
+  ok 160 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:44:3 › админка: журнал › фильтр по дате: «1–20», «Дальше» → «21–25», «Назад» без запроса (10.0s)
+  ok 166 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:269:3 › админка: журнал › журнал неизменяем: нет «Показать ещё» и действий над записями (8.7s)
+  ok 158 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:78:3 › админка: журнал › первая строка — самая свежая и «Система», строка 20 раскрывает diff роли (10.3s)
+  ok 168 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:282:3 › админка: журнал › 401 на списке показывает гейт входа, а не текст ошибки (6.9s)
+  ok 164 [mobile-chromium] › e2e\specs\admin-audit.spec.ts:207:3 › админка: журнал › фильтр автора: системная запись не находится, «%» — литерал (12.2s)
+  ok 170 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:21:3 › админка: брони › рейл ведёт на брони и отмечает пункт текущим (7.1s)
+  ok 169 [mobile-chromium] › e2e\specs\admin-auto-refresh.spec.ts:17:3 › админская сводка: автообновление › через период опроса сама перечитывает сводку (9.0s)
+  ok 179 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:17:3 › админка: каталог › рейл ведёт в каталог и отмечает пункт как текущий (7.1s)
+  ok 175 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:154:3 › админка: брони › точный id находит одну бронь, «%» — литерал, а не «найти всё» (9.1s)
+  ok 172 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:74:3 › админка: брони › первая строка — самая поздняя бронь: «Неявка» и время в поясе салона (9.7s)
+  ok 171 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:40:3 › админка: брони › поиск по email: «1–20», «Дальше» → «21–24», «Назад» без запроса (9.8s)
+  ok 178 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:208:3 › админка: брони › 401 на списке показывает гейт входа, а не текст ошибки (9.7s)
+  ok 177 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:195:3 › админка: брони › брони только читаются: нет лишних кнопок, счётчиков и действий в строках (9.8s)
+  -  186 [mobile-chromium] › e2e\specs\admin-reviews.spec.ts:54:3 › админка: отзывы › выбранный отзыв остаётся в URL при смене страницы
+  ok 174 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:132:3 › админка: брони › фильтр статуса не сбрасывает поиск: Pending — 18 строк, NoShow — одна (11.4s)
+  -  188 [mobile-chromium] › e2e\specs\admin-reviews.spec.ts:98:3 › админка: отзывы › смена вкладки не открывает отзыв из прошлой очереди
+  ok 173 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:97:3 › админка: брони › карточка: клиент, барбер, услуга, салон и время; «Назад» возвращает список (11.6s)
+  ok 180 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:32:3 › админка: каталог › по умолчанию открыты услуги: активная и выключенная строки, счётчик барберов (8.3s)
+  ok 176 [mobile-chromium] › e2e\specs\admin-bookings.spec.ts:171:3 › админка: брони › «Сбросить фильтры» возвращает первую страницу, фильтров в URL нет (11.6s)
+  ok 181 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:80:3 › админка: каталог › фильтр статуса оставляет только выключенные или только активные строки (8.1s)
+  ok 183 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:111:3 › админка: каталог › поиск сужает список по названию и по городу салона (9.7s)
+  ok 182 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:58:3 › админка: каталог › вкладка живёт в ?tab= и переживает перезагрузку (11.3s)
+  ok 185 [mobile-chromium] › e2e\specs\admin-reviews.spec.ts:15:3 › админка: отзывы › вкладка «Опубликованные»: страницы «1–20» и «21–N», без «Показать ещё» (8.6s)
+  ok 187 [mobile-chromium] › e2e\specs\admin-reviews.spec.ts:77:3 › админка: отзывы › «Обновить» не сбрасывает страницу и не показывает скелетон (8.3s)
+  ok 191 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:53:3 › админка: сводка › /admin по-прежнему открывает очередь отзывов, а не сводку (6.8s)
+  ok 189 [mobile-chromium] › e2e\specs\admin-reviews.spec.ts:129:3 › админка: отзывы › возврат из карточки оставляет ту же страницу (7.8s)
+  ok 190 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:28:3 › админка: сводка › «Сводка» — первый пункт рейла и ведёт на /admin/summary (7.4s)
+  ok 184 [mobile-chromium] › e2e\specs\admin-catalogue.spec.ts:131:3 › админка: каталог › правка салона: название read-only, часовой пояс — select с текущим значением (9.7s)
+  -  201 [mobile-chromium] › e2e\specs\admin-users.spec.ts:69:3 › админка: пользователи › выбранный пользователь остаётся в URL при смене страницы
+  ok 195 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:182:3 › админка: сводка › «Обновить» делает ровно один запрос, блоки не мигают скелетоном (9.4s)
+  ok 196 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:207:3 › админка: сводка › сводка только читает: нет графиков и лишних действий (7.1s)
+  ok 192 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:111:3 › админка: сводка › блок «Фотографии на проверке»: честный ноль и пустые вкладки очереди (13.2s)
+  ok 202 [mobile-chromium] › e2e\specs\auto-refresh.spec.ts:21:3 › кабинет барбера: автообновление › через период опроса сам перечитывает ленту дня (6.3s)
+  ok 194 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:152:3 › админка: сводка › «самый старый» — первая строка очереди и открывает её карточку (13.4s)
+  ok 197 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:222:3 › админка: сводка › 401 на сводке показывает гейт входа, а не ошибку (7.2s)
+  ok 193 [mobile-chromium] › e2e\specs\admin-summary.spec.ts:64:3 › админка: сводка › счётчики совпадают с разделами (14.9s)
+  ok 198 [mobile-chromium] › e2e\specs\admin-users.spec.ts:10:3 › админка: пользователи › 20 строк, «Дальше» → «21–N», «Назад» без запросов (8.2s)
+  ok 199 [mobile-chromium] › e2e\specs\admin-users.spec.ts:39:3 › админка: пользователи › смена фильтра статуса сбрасывает на первую страницу (8.3s)
+  ok 200 [mobile-chromium] › e2e\specs\admin-users.spec.ts:54:3 › админка: пользователи › поиск сбрасывает на первую страницу (8.4s)
+  ok 204 [mobile-chromium] › e2e\specs\barber-cabinet.spec.ts:15:3 › кабинет барбера › вкладки: переключение не делает запросов, «Сегодня» возвращает списки к началу (7.9s)
+  ok 203 [mobile-chromium] › e2e\specs\barber-cabinet.spec.ts:67:3 › кабинет барбера › история: 20 строк, «Дальше» → «21–40», «Назад» без запросов (8.2s)
+  -  216 [mobile-chromium] › e2e\specs\email-change.spec.ts:79:3 › смена email › заявка → два письма → ссылка → все сессии завершены, вход только новым адресом
+  -  217 [mobile-chromium] › e2e\specs\email-change.spec.ts:202:3 › смена email › битый токен показывает понятную ошибку, а не белый экран
+  ok 205 [mobile-chromium] › e2e\specs\barber-cabinet.spec.ts:100:3 › кабинет барбера › ошибка следующей страницы: строки остаются, «Дальше» становится повтором (5.7s)
+  ok 208 [mobile-chromium] › e2e\specs\barber-notifications.spec.ts:40:3 › уведомления барбера › страница: заголовок, обе строки и «Открыть» (5.9s)
+  ok 207 [mobile-chromium] › e2e\specs\barber-notifications.spec.ts:23:3 › уведомления барбера › колокольчик кабинета: бейдж «1» и имя со счётчиком (6.3s)
+  ok 210 [mobile-chromium] › e2e\specs\barber-day.spec.ts:85:3 › кабинет барбера: лента дня › клавиатура: стрелки, Home и End ходят по вкладкам (5.9s)
+  ok 211 [mobile-chromium] › e2e\specs\barber-notifications.spec.ts:71:3 › уведомления барбера › настройки: дефолты 08:00/30 и выключенный Telegram (5.4s)
+  -  222 [mobile-chromium] › e2e\specs\password-reset.spec.ts:85:3 › сброс пароля › письмо со ссылкой → новый пароль → вход новым; вторая попытка недействительна
+  ok 212 [mobile-chromium] › e2e\specs\barber-profile.spec.ts:16:3 › профиль барбера › форма заполнена из API, прайс и специализации пусты (5.7s)
+  ok 213 [mobile-chromium] › e2e\specs\barber-profile.spec.ts:61:3 › профиль барбера › четвёртый пункт навигации ведёт на /barber/profile (5.7s)
+  ok 206 [mobile-chromium] › e2e\specs\barber-cabinet.spec.ts:125:3 › кабинет барбера › диалог «Записать клиента»: находит клиента и показывает услуги (8.8s)
+  ok 214 [mobile-chromium] › e2e\specs\barber-salons.spec.ts:15:3 › мои салоны › салон, основной бейдж, третий пункт навигации и поиск каталога (6.8s)
+  ok 209 [mobile-chromium] › e2e\specs\barber-day.spec.ts:19:3 › кабинет барбера: лента дня › открывается на «Сегодня», вкладки не перезапрашивают записи (8.6s)
+  ok 220 [mobile-chromium] › e2e\specs\i18n.spec.ts:59:3 › переключатель на 320 px › не создаёт горизонтальную прокрутку и остаётся доступным (3.7s)
+  ok 221 [mobile-chromium] › e2e\specs\email-verification.spec.ts:126:3 › подтверждение email › битый токен показывает понятную ошибку, а не белый экран (3.7s)
+  ok 215 [mobile-chromium] › e2e\specs\barber-schedule.spec.ts:16:3 › расписание барбера › неделя, исключения и отпуска, axe (8.9s)
+  ok 223 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:31:3 › публичные отзывы: пагинация › первая страница: 10 карточек, диапазон и недоступное «Назад» (5.5s)
+  ok 225 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:76:3 › публичные отзывы: пагинация › последняя страница неполная и «Дальше» недоступно (5.6s)
+  ok 224 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:41:3 › публичные отзывы: пагинация › «Дальше»: один запрос с курсором, фокус на списке, «Назад» без запросов (6.1s)
+  ok 219 [mobile-chromium] › e2e\specs\i18n.spec.ts:9:1 › переключает витрину на английский и запоминает выбор (6.8s)
+  ok 228 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:130:3 › публичные отзывы: пагинация › отзывы приходят только для витринного барбера (5.0s)
+  ok 226 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:88:3 › публичные отзывы: пагинация › ошибка следующей страницы: карточки остаются, повтор грузит страницу (6.5s)
+  ok 227 [mobile-chromium] › e2e\specs\public-reviews-pager.spec.ts:118:3 › публичные отзывы: пагинация › живой регион объявляет диапазон (5.7s)
+  ok 229 [mobile-chromium] › e2e\specs\registration-consent.spec.ts:32:3 › регистрация и согласие на обработку ПД › отправляет редакцию Политики и получает отказ по занятому email (5.3s)
+  ok 230 [mobile-chromium] › e2e\specs\registration-consent.spec.ts:67:3 › регистрация и согласие на обработку ПД › устаревшая редакция Политики показывает русскую ошибку и не пускает в аккаунт (4.8s)
+  ok 232 [mobile-chromium] › e2e\specs\search-login.spec.ts:48:3 › витрина и вход › поиск по несуществующему городу показывает пустое состояние (4.4s)
+  ok 231 [mobile-chromium] › e2e\specs\search-login.spec.ts:16:3 › витрина и вход › поиск по городу: карточки, счётчик и «Показать ещё» добавляет страницу (5.1s)
+(node:37000) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 233 [mobile-chromium] › e2e\specs\search-login.spec.ts:57:3 › витрина и вход › пустая отправка: клиентские ошибки, без запроса на сервер (5.4s)
+  ok 234 [mobile-chromium] › e2e\specs\search-login.spec.ts:69:3 › витрина и вход › неверные учётные данные: «Неверный email или пароль.» (6.9s)
+  ok 218 [mobile-chromium] › e2e\specs\email-verification.spec.ts:53:3 › подтверждение email › регистрация → письмо → ссылка → зелёный кабинет, повторный клик тоже успешен (18.2s)
+  ok 236 [mobile-chromium] › e2e\specs\statistics.spec.ts:17:3 › админка: статистика › второй пункт рейла ведёт на /admin/statistics (7.6s)
+  ok 237 [mobile-chromium] › e2e\specs\statistics.spec.ts:40:3 › админка: статистика › видит плитки, график, статусы и таблицу-дубль (8.1s)
+  ok 238 [mobile-chromium] › e2e\specs\statistics.spec.ts:79:3 › админка: статистика › пресет меняет период и делает новый запрос (8.2s)
+  ok 239 [mobile-chromium] › e2e\specs\statistics.spec.ts:99:3 › админка: статистика › свои даты дают запрос с выбранными границами (8.0s)
+  ok 240 [mobile-chromium] › e2e\specs\statistics.spec.ts:115:3 › админка: статистика › сравнение включает прошлый период в запросе (7.7s)
+(node:10476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 242 [mobile-chromium] › e2e\specs\statistics.spec.ts:153:3 › админка: статистика › раздел только читает: нет действий записи (7.0s)
+  ok 241 [mobile-chromium] › e2e\specs\statistics.spec.ts:132:3 › админка: статистика › «Обновить» — ровно один запрос, секции не стираются (7.6s)
+  ok 235 [mobile-chromium] › e2e\specs\search-login.spec.ts:81:3 › витрина и вход › успешный вход: шапка показывает пользователя, reload сохраняет сессию (9.7s)
+(node:36856) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36696) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:30972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2408) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38724) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26992) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:25404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40384) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:30836) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 243 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:33:3 › axe: 320 px, публичный профиль › профиль барбера: пагинатор и иконочные кнопки (7.6s)
+  ok 245 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:68:3 › axe: 320 px, публичный профиль › «Стать барбером»: анонимный экран на 320 (4.4s)
+  ok 246 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:93:3 › axe: 320 px, публичный профиль › подтверждение email: карточка ошибки на 320 (4.8s)
+  ok 244 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:47:3 › axe: 320 px, публичный профиль › политика обработки данных: перечень cookie на 320 (6.4s)
+  ok 248 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:137:3 › axe: 320 px, публичный профиль › восстановление пароля: форма на 320 (5.6s)
+  ok 247 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:115:3 › axe: 320 px, публичный профиль › смена email: карточка ошибки на 320 (6.7s)
+  ok 249 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:156:3 › axe: 320 px, публичный профиль › новый пароль: форма на 320 (6.5s)
+  ok 250 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:206:3 › axe: 320 px, расписание барбера › /barber: лента дня не расширяет страницу (7.4s)
+  ok 251 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:180:3 › axe: 320 px, заявка на роль барбера › форма клиента без заявки на 320 (7.7s)
+  ok 253 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:250:3 › axe: 320 px, расписание барбера › «Мои салоны» и диалог каталога на 320 (8.7s)
+  ok 252 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:225:3 › axe: 320 px, расписание барбера › неделя, исключения и отпуска не расширяют страницу (9.1s)
+  ok 254 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:287:3 › axe: 320 px, профиль барбера › карточка и пустой прайс: без горизонтального скролла, действия 44 px (9.9s)
+  ok 255 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:335:3 › axe: 320 px, уведомления барбера › инбокс не расширяет страницу, колокольчик не сжимается (8.2s)
+  ok 256 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:390:3 › axe: 320 px, админка без выбранной строки › очередь отзывов: без панели детали (8.3s)
+  ok 257 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:405:3 › axe: 320 px, админка без выбранной строки › пользователи: без панели детали (9.1s)
+  ok 259 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:453:3 › axe: 320 px, админка без выбранной строки › каталог: салоны карточками, без горизонтального скролла (8.0s)
+  ok 258 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:425:3 › axe: 320 px, админка без выбранной строки › барберы: карточки, без горизонтального скролла (8.9s)
+  ok 261 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:501:3 › axe: 320 px, админка без выбранной строки › сводка: три блока одним столбцом, без горизонтального скролла (7.0s)
+  ok 267 [narrow-320] › e2e\specs\pager-320.spec.ts:12:3 › пагинатор на 320 px › одна строка, нет горизонтального скролла, кнопки не меньше 44×44 (2.9s)
+  ok 262 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:522:3 › axe: 320 px, админка без выбранной строки › статистика: плитки стопкой, без горизонтального скролла (7.3s)
+  ok 264 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:568:3 › axe: 320 px, админка без выбранной строки › заявки: пустая очередь на 320 (5.2s)
+  ok 260 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:476:3 › axe: 320 px, админка без выбранной строки › брони: поиск по клиенту, карточки без горизонтального скролла (9.2s)
+  ok 266 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:626:3 › axe: 320 px, кабинет › профиль: рейл, форма и email без горизонтального скролла (4.4s)
+  ok 265 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:593:3 › axe: 320 px, админка без выбранной строки › фотографии: пустая очередь на 320 (5.5s)
+  ok 263 [narrow-320] › e2e\specs\a11y-narrow.spec.ts:544:3 › axe: 320 px, админка без выбранной строки › журнал: строки с фильтром по дате, без горизонтального скролла (7.4s)
+
+
+  1) [desktop-chromium] › e2e\specs\a11y.spec.ts:50:3 › axe: публичные экраны › профиль барбера с отзывами и пагинатором 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('ul[aria-label="Отзывы барбера"]').locator('li')
+    Expected: 10
+    Received: 0
+    Timeout:  7000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('ul[aria-label="Отзывы барбера"]').locator('li') with timeout 7000ms
+      - waiting for locator('ul[aria-label="Отзывы барбера"]').locator('li')
+        13 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+       at pages\profile-page.ts:62
+
+      60 |   /** Ждём именно первую страницу, а не скелетон: 10 строк и пагинатор. */
+      61 |   async waitForFirstPage(): Promise<void> {
+    > 62 |     await expect(this.reviewCards).toHaveCount(pageSize.reviews)
+         |                                    ^
+      63 |   }
+      64 |
+      65 |   async cardTexts(): Promise<string[]> {
+        at ProfilePage.waitForFirstPage (D:\Projects\barbersearch\frontend\e2e\pages\profile-page.ts:62:36)
+        at D:\Projects\barbersearch\frontend\e2e\specs\a11y.spec.ts:54:19
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\specs-a11y-axe-публичные-э-947d5-ра-с-отзывами-и-пагинатором-desktop-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\specs-a11y-axe-публичные-э-947d5-ра-с-отзывами-и-пагинатором-desktop-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\specs-a11y-axe-публичные-э-947d5-ра-с-отзывами-и-пагинатором-desktop-chromium\error-context.md
+
+  1 failed
+    [desktop-chromium] › e2e\specs\a11y.spec.ts:50:3 › axe: публичные экраны › профиль барбера с отзывами и пагинатором 
+  6 skipped
+  55 did not run
+  260 passed (3.6m)
