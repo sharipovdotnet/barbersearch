@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '@/lib/api'
-import { describeRescheduleFailure } from '@/lib/errors'
+import {
+  describeBarberBookingFailure,
+  describeRescheduleFailure,
+} from '@/lib/errors'
 import { problemDetails } from '@/test/msw/handlers'
 
 /**
@@ -88,5 +91,43 @@ describe('describeRescheduleFailure', () => {
     expect(
       describeRescheduleFailure(new Error('сеть'), FALLBACK)
     ).toStrictEqual({ message: FALLBACK, reloadSlots: false })
+  })
+})
+
+/**
+ * Цена визита: коды домена переводятся в понятный текст, а не в английский `detail`.
+ *
+ * `booking.price.status` — `409` состояния, а не гонки: строка устарела настолько,
+ * что правка невозможна, и перезагрузка списка сама ничего не исправит.
+ */
+describe('describeBarberBookingFailure: цена визита', () => {
+  it.each([
+    ['booking.price.required', 'Укажите цену.'],
+    ['booking.price.negative', 'Цена не может быть отрицательной.'],
+    [
+      'booking.price.tooLarge',
+      'Слишком большая цена — максимум 99 999 999,99 ₽.',
+    ],
+    ['booking.price.precision', 'Цена — не больше двух знаков после запятой.'],
+    [
+      'booking.price.status',
+      'Цену нельзя изменить у отменённой записи или у неявки.',
+    ],
+  ])('код %s → «%s» без перезагрузки', (code, message) => {
+    expect(
+      describeBarberBookingFailure(apiError(400, [code]), 'Запасной текст.')
+    ).toStrictEqual({ message, canReload: false })
+  })
+
+  it('остаточный 409 гонки по-прежнему предлагает перезагрузить список', () => {
+    expect(
+      describeBarberBookingFailure(
+        apiError(409, ['booking.update.concurrencyConflict']),
+        'Запасной текст.'
+      )
+    ).toStrictEqual({
+      message: 'Запись уже изменилась — обновите список.',
+      canReload: true,
+    })
   })
 })

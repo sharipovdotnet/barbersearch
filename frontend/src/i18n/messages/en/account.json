@@ -241,5 +241,6 @@
   "Перенести визит": "Reschedule the visit",
   "Переносим…": "Rescheduling…",
   "Визит перенесён на {when}.": "The visit has been moved to {when}.",
-  "Барбер перенёс запись на {when}.": "The barber moved the booking to {when}."
+  "Барбер перенёс запись на {when}.": "The barber moved the booking to {when}.",
+  "Барбер изменил цену визита {when}: {from} → {to}.": "The barber changed the visit price for {when}: {from} → {to}."
 }

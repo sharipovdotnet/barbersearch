@@ -100,6 +100,15 @@ public static class Constants
     // пометка для клиента, а не описание: предел совпадает с причиной исключения расписания.
     public const int MAX_CANCELLATION_REASON_LENGTH = 500;
 
+    // Верхняя граница цены визита. Совпадает с numeric(10,2) колонки bookings.price
+    // (ColumnPrecision.MONEY_PRECISION/MONEY_SCALE): без неё опечатка в сумме даёт
+    // переполнение Postgres и 500 вместо 400.
+    public const decimal MAX_BOOKING_PRICE = 99_999_999.99m;
+
+    // Знаков после запятой у цены визита. Валюта — рубли с копейками; проверка нужна
+    // в домене, потому что база молча округлит 1500.999 до 1501.00, и журнал разойдётся с ней.
+    public const int BOOKING_PRICE_DECIMALS = 2;
+
     // Заявка на роль барбера. Город и причина отказа — короткие тексты; «о себе» использует
     // общий предел MAX_TEXT_LENGTH (2000), как описание фото и текст отзыва.
     public const int MAX_BARBER_REQUEST_CITY_LENGTH = 100;

@@ -6,11 +6,13 @@ import {
   type BarberBookingChangeRow,
   type BookingChangeRow,
 } from '@/lib/booking-changes'
+import { formatPrice } from '@/lib/format'
 
 /**
  * Тексты баннера — это копия: строки сравниваются целиком и могут меняться вместе
  * с продуктом. Даты проверяются в поясе Europe/Moscow, чтобы «12:00» не зависело
- * от часового пояса машины.
+ * от часового пояса машины; сумма собирается `formatPrice`, чтобы тест не зависел
+ * от вида пробела между разрядами.
  */
 
 const NOW = Date.parse('2026-11-05T10:00:00Z')
@@ -20,15 +22,17 @@ const PAST = '2026-11-05T06:00:00Z'
 const row = (
   id: string,
   startAt: string,
-  status: BookingChangeRow['status'] = 'Pending'
-): BookingChangeRow => ({ id, startAt, status })
+  status: BookingChangeRow['status'] = 'Pending',
+  price = 1500
+): BookingChangeRow => ({ id, startAt, status, price })
 
 const barberRow = (
   id: string,
   startAt: string,
-  displayName = 'Анна Петрова'
+  displayName = 'Анна Петрова',
+  price = 1500
 ): BarberBookingChangeRow => ({
-  ...row(id, startAt),
+  ...row(id, startAt, 'Pending', price),
   customer: { displayName },
   salon: { timeZoneId: 'Europe/Moscow' },
 })
@@ -100,6 +104,25 @@ describe('describeBarberBookingsChange', () => {
     expect(
       describeBarberBookingsChange(emptyChange<BarberBookingChangeRow>(), NOW)
     ).toBeNull()
+  })
+
+  it('объявляет правку цены администратором', () => {
+    expect(
+      describeBarberBookingsChange(
+        {
+          ...emptyChange<BarberBookingChangeRow>(),
+          updated: [
+            {
+              before: barberRow('priced', FUTURE, 'Анна Петрова', 1500),
+              after: barberRow('priced', FUTURE, 'Анна Петрова', 2000),
+            },
+          ],
+        },
+        NOW
+      )
+    ).toBe(
+      `Администратор изменил цену визита (Анна П., 6 нояб. в 12:00): ${formatPrice(1500)} → ${formatPrice(2000)}.`
+    )
   })
 })
 
@@ -210,5 +233,63 @@ describe('describeCustomerBookingsChange', () => {
         moscow
       )
     ).toBeNull()
+  })
+
+  it('объявляет правку цены барбером', () => {
+    expect(
+      describeCustomerBookingsChange(
+        {
+          ...emptyChange<BookingChangeRow>(),
+          updated: [
+            {
+              before: row('priced', FUTURE, 'Confirmed', 1500),
+              after: row('priced', FUTURE, 'Confirmed', 2000),
+            },
+          ],
+        },
+        NOW,
+        moscow
+      )
+    ).toBe(
+      `Барбер изменил цену визита 6 нояб. в 12:00: ${formatPrice(1500)} → ${formatPrice(2000)}.`
+    )
+  })
+
+  it('цена приоритетнее смены статуса, но ниже подтверждения и переноса', () => {
+    // Строка изменила и сумму, и статус: новость про деньги — первая (D14).
+    expect(
+      describeCustomerBookingsChange(
+        {
+          ...emptyChange<BookingChangeRow>(),
+          updated: [
+            {
+              before: row('both', FUTURE, 'Confirmed', 1500),
+              after: row('both', FUTURE, 'NoShow', 2000),
+            },
+          ],
+        },
+        NOW,
+        moscow
+      )
+    ).toBe(
+      `Барбер изменил цену визита 6 нояб. в 12:00: ${formatPrice(1500)} → ${formatPrice(2000)}.`
+    )
+
+    // Перенос важнее цены: он меняет само время визита.
+    expect(
+      describeCustomerBookingsChange(
+        {
+          ...emptyChange<BookingChangeRow>(),
+          updated: [
+            {
+              before: row('moved', FUTURE, 'Confirmed', 1500),
+              after: row('moved', '2026-11-07T09:00:00Z', 'Confirmed', 2000),
+            },
+          ],
+        },
+        NOW,
+        moscow
+      )
+    ).toBe('Барбер перенёс запись на 7 нояб. в 12:00.')
   })
 })

@@ -6,6 +6,7 @@ import {
   createBooking,
   fetchBookings,
   rescheduleBooking,
+  updateBookingPrice,
   type CreateBookingInput,
 } from '@/lib/bookings'
 import { problemDetails } from '@/test/msw/handlers'
@@ -277,5 +278,63 @@ describe('rescheduleBooking', () => {
     expect(error.status).toBe(409)
     expect(error.hasCode('booking.reschedule.overlap')).toBe(true)
     expect(posts).toBe(1)
+  })
+})
+
+/**
+ * Цена визита — `PUT` одного поля: тело `{price}` числом, ответ `204`.
+ *
+ * Функция общая для двух кабинетов, поэтому проверяется и путь, и CSRF-заголовок:
+ * прямой `apiRequest` без токена получил бы `400 auth.csrf.invalid`.
+ */
+describe('updateBookingPrice', () => {
+  it('шлёт PUT с CSRF-заголовком и телом {price}', async () => {
+    const csrfCalls = countRequests('/api/auth/csrf')
+    const puts: {
+      bookingId: string
+      method: string
+      csrfToken: string | null
+      body: string
+    }[] = []
+
+    server.use(
+      http.get('/api/auth/csrf', () => HttpResponse.json({ token: 'csrf-token' })),
+      http.put('/api/bookings/:bookingId/price', async ({ params, request }) => {
+        puts.push({
+          bookingId: String(params.bookingId),
+          method: request.method,
+          csrfToken: request.headers.get('X-CSRF-TOKEN'),
+          body: await request.text(),
+        })
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    await expect(updateBookingPrice('booking-1', 2000)).resolves.toBeUndefined()
+
+    expect(csrfCalls()).toBe(1)
+    expect(puts).toHaveLength(1)
+    expect(puts[0].bookingId).toBe('booking-1')
+    expect(puts[0].method).toBe('PUT')
+    expect(puts[0].csrfToken).toBe('csrf-token')
+    // Цена — число, а не строка: контракт ждёт decimal.
+    expect(JSON.parse(puts[0].body)).toStrictEqual({ price: 2000 })
+  })
+
+  it('отдаёт ApiError с кодом статуса при 409', async () => {
+    server.use(
+      http.put('/api/bookings/:bookingId/price', () => {
+        return HttpResponse.json(
+          problemDetails(409, { errorCodes: ['booking.price.status'] }),
+          { status: 409 }
+        )
+      })
+    )
+
+    const error = await apiErrorOf(updateBookingPrice('booking-1', 2000))
+
+    expect(error.status).toBe(409)
+    expect(error.hasCode('booking.price.status')).toBe(true)
   })
 })

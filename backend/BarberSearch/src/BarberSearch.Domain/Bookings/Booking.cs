@@ -45,6 +45,26 @@ public class Booking : AggregateRoot
     private const string GUEST_PHONE_CODE = "booking.create.guestPhone";
 
     /// <summary>
+    /// Публичный код ошибки «цена визита отрицательная»; <c>400</c>.
+    /// </summary>
+    private const string PRICE_NEGATIVE_CODE = "booking.price.negative";
+
+    /// <summary>
+    /// Публичный код ошибки «цена визита выше предела <c>numeric(10,2)</c>»; <c>400</c>.
+    /// </summary>
+    private const string PRICE_TOO_LARGE_CODE = "booking.price.tooLarge";
+
+    /// <summary>
+    /// Публичный код ошибки «у цены больше двух знаков после запятой»; <c>400</c>.
+    /// </summary>
+    private const string PRICE_PRECISION_CODE = "booking.price.precision";
+
+    /// <summary>
+    /// Публичный код ошибки «у отменённой записи или у неявки цену менять нельзя»; <c>409</c>.
+    /// </summary>
+    private const string PRICE_STATUS_CODE = "booking.price.status";
+
+    /// <summary>
     /// Клиент брони; <c>null</c> у записи гостя (walk-in), для которого аккаунт не создаётся.
     /// </summary>
     /// <remarks>
@@ -303,6 +323,71 @@ public class Booking : AggregateRoot
 
         StartAt = startAt;
         EndAt = endAt;
+        MarkUpdated();
+
+        return DomainErrors.Ok();
+    }
+
+    /// <summary>
+    /// Меняет цену визита: сумму, которую заплатит клиент.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Меняется только сумма. Услуга, салон, барбер, время и статус остаются прежними:
+    /// смена услуги или салона визита, а также скидки, промокоды и «итоговая сумма» —
+    /// отдельные срезы, а не свойство этой операции.
+    /// </para>
+    /// <para>
+    /// Цену правят у предстоящего и у состоявшегося визита (<c>Pending</c>, <c>Confirmed</c>,
+    /// <c>Completed</c>): отменённая запись и неявка не оплачиваются, поэтому там цена
+    /// заморожена (<c>booking.price.status</c>). Границы взяты из <c>numeric(10,2)</c>:
+    /// неотрицательная сумма не длиннее предела и не больше двух знаков после запятой.
+    /// </para>
+    /// <para>
+    /// Повтор с той же суммой — успех без изменений: <c>MarkUpdated</c> не вызывается,
+    /// поэтому <c>updated_at</c> не сдвигается и строка журнала не появляется (D6).
+    /// </para>
+    /// </remarks>
+    /// <param name="price">Новая цена визита.</param>
+    public UnitResult<Failure> ChangePrice(decimal price)
+    {
+        if (Status is BookingStatus.Cancelled or BookingStatus.NoShow)
+        {
+            return DomainErrors.Fail(Error.Conflict(
+                PRICE_STATUS_CODE,
+                $"The price of a booking in status {Status} cannot be changed."));
+        }
+
+        if (DomainErrors.NegativePrice(price, PRICE_NEGATIVE_CODE) is { } negative)
+        {
+            return DomainErrors.Fail(negative);
+        }
+
+        if (price > Constants.MAX_BOOKING_PRICE)
+        {
+            return DomainErrors.Fail(Error.Validation(
+                PRICE_TOO_LARGE_CODE,
+                $"Booking price cannot be greater than {Constants.MAX_BOOKING_PRICE}.",
+                nameof(price)));
+        }
+
+        if (decimal.Round(price, Constants.BOOKING_PRICE_DECIMALS) != price)
+        {
+            return DomainErrors.Fail(Error.Validation(
+                PRICE_PRECISION_CODE,
+                $"""
+                 Booking price cannot have more than
+                 {Constants.BOOKING_PRICE_DECIMALS} decimal places.
+                 """,
+                nameof(price)));
+        }
+
+        if (price == Price)
+        {
+            return DomainErrors.Ok();
+        }
+
+        Price = price;
         MarkUpdated();
 
         return DomainErrors.Ok();

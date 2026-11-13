@@ -12,7 +12,10 @@ import {
   type BarberBookingScope,
 } from '@/lib/barber-bookings'
 import type { BarberSlot } from '@/lib/barber-slots'
-import { rescheduleBooking as rescheduleBookingRequest } from '@/lib/bookings'
+import {
+  rescheduleBooking as rescheduleBookingRequest,
+  updateBookingPrice,
+} from '@/lib/bookings'
 import { diffPageItems, type PageChange } from '@/lib/page-changes'
 
 export type BarberBookingsController = {
@@ -59,6 +62,11 @@ export type BarberBookingsController = {
    * Собственный перенос барбера локально уже применён, поэтому опрос его не объявит.
    */
   reschedule: (id: string, slot: BarberSlot) => Promise<void>
+  /**
+   * Правка цены визита: общая ручка двух кабинетов, строка правится локально.
+   * Собственное действие опрос также не объявит — баннер остаётся за чужой правкой.
+   */
+  reprice: (id: string, price: number) => Promise<void>
 }
 
 const LIST_FALLBACK = 'Не удалось загрузить записи.'
@@ -67,11 +75,14 @@ const PAGE_FALLBACK = 'Не удалось загрузить ещё запис�
 const getBookingId = (booking: BarberBooking): string => booking.id
 
 /**
- * Для баннера важно изменение статуса или времени: клиент может перенести визит,
- * не меняя статус, и барбер должен это увидеть.
+ * Для баннера важно изменение статуса, времени или цены: клиент может перенести
+ * визит, не меняя статус, а администратор — изменить сумму визита. Обе правки
+ * барбер должен увидеть в «Ближайших».
  */
 const statusChanged = (before: BarberBooking, after: BarberBooking): boolean =>
-  before.status !== after.status || before.startAt !== after.startAt
+  before.status !== after.status ||
+  before.startAt !== after.startAt ||
+  before.price !== after.price
 
 /** Терминальный статус уводит строку из «Ближайших»: история живёт в другом скоупе. */
 function isTerminal(status: BarberBooking['status']): boolean {
@@ -307,6 +318,16 @@ export function useBarberBookings(
     [mutate]
   )
 
+  const reprice = useCallback(
+    (id: string, price: number) =>
+      mutate(
+        id,
+        (bookingId) => updateBookingPrice(bookingId, price),
+        (booking) => ({ ...booking, price })
+      ),
+    [mutate]
+  )
+
   return {
     items,
     status,
@@ -333,5 +354,6 @@ export function useBarberBookings(
     cancel,
     saveNote,
     reschedule,
+    reprice,
   }
 }

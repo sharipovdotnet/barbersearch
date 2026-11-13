@@ -279,6 +279,43 @@ public static class ApiErrorCodes
         public const string BarberNoteTooLong = "booking.barberNote.tooLong";
 
         /// <summary>
+        /// В запросе на изменение цены нет поля <c>price</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Тело принимает <c>decimal?</c>: ноль — валидная цена, поэтому пропущенное поле
+        /// нельзя толковать как <c>0</c>, иначе визит молча подешевел бы до нуля.
+        /// </remarks>
+        public const string PriceRequired = "booking.price.required";
+
+        /// <summary>
+        /// Цена визита отрицательная; <c>400</c>.
+        /// </summary>
+        public const string PriceNegative = "booking.price.negative";
+
+        /// <summary>
+        /// Цена визита больше предела <c>numeric(10,2)</c> — <c>99 999 999.99</c>; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Без собственной границы опечатка в сумме давала бы переполнение Postgres
+        /// и <c>500</c> вместо понятного <c>400</c>.
+        /// </remarks>
+        public const string PriceTooLarge = "booking.price.tooLarge";
+
+        /// <summary>
+        /// У цены визита больше двух знаков после запятой; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// <c>numeric(10,2)</c> округлил бы <c>1500.999</c> до <c>1501.00</c> молча,
+        /// а payload журнала сохранил бы введённое значение — база и журнал разошлись бы.
+        /// </remarks>
+        public const string PricePrecision = "booking.price.precision";
+
+        /// <summary>
+        /// Цену нельзя изменить у отменённой записи или у неявки; <c>409</c>.
+        /// </summary>
+        public const string PriceStatus = "booking.price.status";
+
+        /// <summary>
         /// Барбер отменяет запись без причины; <c>400</c>.
         /// </summary>
         public const string CancelReasonRequired = "booking.cancel.reasonRequired";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarClock, Loader2 } from 'lucide-react'
+import { CalendarClock, Loader2, Pencil } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -9,7 +9,10 @@ import type {
   BarberBooking,
   BarberBookingScope,
 } from '@/lib/barber-bookings'
-import { canRescheduleBooking } from '@/lib/booking-status'
+import {
+  canChangeBookingPrice,
+  canRescheduleBooking,
+} from '@/lib/booking-status'
 import {
   describeBarberBookingFailure,
   type BarberActionFailure,
@@ -41,6 +44,7 @@ export function CabinetBookingRow({
   onOpenNoShow,
   onOpenNote,
   onOpenReschedule,
+  onOpenPrice,
   onReload,
   registerRow,
 }: {
@@ -53,6 +57,7 @@ export function CabinetBookingRow({
   onOpenNoShow: (booking: BarberBooking) => void
   onOpenNote: (booking: BarberBooking) => void
   onOpenReschedule: (booking: BarberBooking) => void
+  onOpenPrice: (booking: BarberBooking) => void
   onReload: () => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
@@ -80,6 +85,9 @@ export function CabinetBookingRow({
     booking.startAt,
     now
   )
+  // Цену правят у предстоящего и у завершённого визита; кнопка живёт рядом с суммой,
+  // а не в блоке действий: тот отрисован только для активных статусов (D11).
+  const canChangePrice = canChangeBookingPrice(booking.status)
 
   const focusPrimary = useCallback(() => {
     ;(
@@ -184,9 +192,24 @@ export function CabinetBookingRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
-          <span className="text-sm tabular-nums">
-            {formatPrice(booking.price)}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-sm tabular-nums">
+              {formatPrice(booking.price)}
+            </span>
+            {canChangePrice && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-11 text-muted-foreground hover:text-foreground sm:size-8"
+                disabled={pendingAction !== null}
+                aria-label={t('Изменить цену визита {when}', { when })}
+                title={t('Изменить цену визита')}
+                onClick={() => onOpenPrice(booking)}
+              >
+                <Pencil aria-hidden />
+              </Button>
+            )}
+          </div>
           <BookingStatusBadge status={booking.status} />
         </div>
       </div>

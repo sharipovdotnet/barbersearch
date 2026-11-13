@@ -1,6 +1,12 @@
 import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
+import {
+  auditChange,
+  cancelGuestBookings,
+  createGuestBookings,
+  fetchAdminAuditRows,
+} from '../fixtures/api'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 
 /**
@@ -134,5 +140,72 @@ test.describe('админка: брони, действия', () => {
     await expect(adminBookings.actionButton('Отменить бронь')).toBeVisible()
 
     expect(mutations, 'закрытие диалога не отправляет мутацию').toStrictEqual([])
+  })
+
+  /**
+   * Правка цены визита (#97): своя гостевая запись, потому что `cancelId`/`noShowId`
+   * терминальны и цену уже не примут, а `untouchedId` утверждает «ничего не изменилось».
+   * Уборка — отмена в `finally`: база остаётся пригодной для повторного прогона.
+   */
+  test('правка цены: карточка и строка списка показывают новую сумму, журнал пишет booking.updated', async ({
+    page,
+    playwright,
+    request,
+  }) => {
+    test.slow()
+
+    const adminBookings = new AdminBookingsPage(page)
+    const lastRunToken = String(Date.now() % 100_000)
+    const startAt = new Date(Date.now() + 26 * 60 * 60_000)
+    let createdId: string | null = null
+
+    try {
+      const created = await createGuestBookings(
+        playwright,
+        [{ startAt, lastName: `Цена админ ${lastRunToken}` }],
+        { role: 'barber' }
+      )
+
+      createdId = created[0].id
+
+      await adminBookings.goto()
+      await adminBookings.searchFor(createdId)
+      await adminBookings.waitForRows(1)
+      await adminBookings.openBooking(createdId)
+
+      await expect(adminBookings.detailStatus('Подтверждена')).toBeVisible()
+
+      await adminBookings.actionButton('Изменить цену визита').click()
+
+      const dialog = adminBookings.priceDialog
+      await expect(dialog).toBeVisible()
+
+      // Сумма не изменилась — сохранение недоступно.
+      await expect(adminBookings.savePriceButton).toBeDisabled()
+
+      await adminBookings.priceInput.fill('2000')
+      await adminBookings.savePriceButton.click()
+
+      await expect(dialog).toBeHidden()
+      await expect(adminBookings.detail.getByRole('status')).toContainText(
+        'Цена визита обновлена.'
+      )
+      // Карточка перечитана, строка списка — тоже.
+      await expect(adminBookings.detail).toContainText(/2\s*000/)
+      await expect(adminBookings.rowOf(createdId)).toContainText(/2\s*000/)
+
+      // Журнал: одна строка booking.updated с changes.price числами.
+      const rows = await fetchAdminAuditRows(request, 'booking', createdId)
+      const price = auditChange(rows[0], 'price')
+
+      expect(rows).toHaveLength(1)
+      expect(rows[0].action).toBe('booking.updated')
+      expect(price?.from).toBe(30)
+      expect(price?.to).toBe(2000)
+    } finally {
+      if (createdId !== null) {
+        await cancelGuestBookings(playwright, [createdId])
+      }
+    }
   })
 })

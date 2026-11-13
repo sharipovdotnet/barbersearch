@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { canRescheduleBooking } from '@/lib/booking-status'
+import {
+  canChangeBookingPrice,
+  canRescheduleBooking,
+} from '@/lib/booking-status'
 
 /**
  * Перенос — только активная бронь в будущем: терминальные статусы и начавшийся
@@ -31,5 +34,21 @@ describe('canRescheduleBooking', () => {
 
   it('битую дату считает непереносимой', () => {
     expect(canRescheduleBooking('Confirmed', 'не дата', NOW)).toBe(false)
+  })
+})
+
+/**
+ * Цена визита: сумма есть у предстоящего и у состоявшегося визита, а отменённая
+ * запись и неявка не оплачиваются — ровно как в домене (`booking.price.status`).
+ */
+describe('canChangeBookingPrice', () => {
+  it.each([
+    ['Pending', true],
+    ['Confirmed', true],
+    ['Completed', true],
+    ['Cancelled', false],
+    ['NoShow', false],
+  ] as const)('%s → %s', (status, expected) => {
+    expect(canChangeBookingPrice(status)).toBe(expected)
   })
 })

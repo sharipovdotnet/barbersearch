@@ -1,10 +1,13 @@
 import { expect, test } from '../fixtures/test'
+import type { Browser, BrowserContext } from '@playwright/test'
 
-import { fixtures, storageStatePath } from '../fixtures/accounts'
+import { baseURL, fixtures, storageStatePath } from '../fixtures/accounts'
 import {
+  auditChange,
   cancelGuestBookings,
   createGuestBookings,
   createUpcomingBooking,
+  fetchAdminAuditRows,
   type GuestBooking,
 } from '../fixtures/api'
 import { expectNoBlockingViolations } from '../fixtures/axe'
@@ -280,6 +283,127 @@ test.describe('кабинет барбера: лента дня', () => {
         test.info()
       )
     } finally {
+      await cancelGuestBookings(
+        playwright,
+        created.map((booking) => booking.id)
+      )
+    }
+  })
+})
+
+/** Гость, чью цену правит барбер: имя уникально для прогона. */
+const PRICE_LAST_NAME = `Цена ${RUN_TOKEN}`
+
+/** Через два часа после прогона: чужие сцены этот интервал не занимают. */
+const pricedAt = new Date(now.getTime() + 2 * 60 * 60_000)
+
+/**
+ * Отдельный админский контекст.
+ *
+ * Журнал закрыт `AdminOnly`, а барбер не должен делить cookie с администратором:
+ * иначе сцена проверяла бы чтение журнала от лица владельца профиля. Хелпер
+ * дублируется по спекам намеренно — в общие фикстуры его не выносят.
+ */
+function openAdminContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext({
+    baseURL,
+    storageState: storageStatePath('admin'),
+    viewport: { width: 1280, height: 900 },
+    reducedMotion: 'reduce',
+  })
+}
+
+/**
+ * Правка цены визита из кабинета барбера (#97).
+ *
+ * Своя гостевая запись вместо общей фикстуры: `untouchedId` в админских сценах
+ * утверждает «ничего не изменилось», а отменённые строки цену уже не примут.
+ * Уборка — отмена в `finally`, чтобы повторный прогон стартовал с той же базы.
+ */
+test.describe('кабинет барбера: цена визита', () => {
+  test('меняет цену визита, показывает сумму в строке и пишет журнал', async ({
+    page,
+    playwright,
+    browser,
+  }) => {
+    test.slow()
+
+    const cabinet = new CabinetPage(page)
+    let created: GuestBooking[] = []
+    let adminContext: BrowserContext | null = null
+
+    try {
+      created = await createGuestBookings(playwright, [
+        { startAt: pricedAt, lastName: PRICE_LAST_NAME },
+      ])
+
+      const booking = created[0]
+
+      await cabinet.goto()
+      await cabinet.openTab('Ближайшие')
+
+      const row = cabinet.rows.filter({
+        hasText: `E2E ${PRICE_LAST_NAME}`,
+      })
+
+      await expect(row).toBeVisible()
+
+      // Кнопка живёт рядом с суммой: доступное имя уточняет время визита.
+      await cabinet.priceButtonOf(row).click()
+      await expect(cabinet.priceDialog).toBeVisible()
+
+      // axe — с открытым диалогом на 1280: проверяется сам диалог, а не затемнённый
+      // под оверлеем фон (контраст под модальным затемнением — намеренное состояние).
+      await expectNoBlockingViolations(
+        page,
+        '/barber (диалог цены визита)',
+        test.info(),
+        '[role="dialog"]'
+      )
+
+      await cabinet.priceInput.fill('2000')
+      await cabinet.savePriceButton.click()
+
+      await expect(cabinet.priceDialog).toBeHidden()
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Цена визита обновлена.' })
+      ).toBeVisible()
+      await expect(row).toContainText(/2\s*000/)
+
+      // Сервер отдаёт ту же сумму: строка не «покрасивела» локально.
+      const list = await page.request.get(
+        '/api/barber/bookings?scope=upcoming&pageSize=100'
+      )
+
+      expect(list.status(), 'GET /api/barber/bookings').toBe(200)
+
+      const body = (await list.json()) as {
+        items: { id: string; price: number }[]
+      }
+
+      expect(
+        body.items.find((item) => item.id === booking.id)?.price,
+        'цена визита в кабинете барбера'
+      ).toBe(2000)
+
+      // Журнал: ровно одна строка booking.updated с changes.price числами.
+      adminContext = await openAdminContext(browser)
+
+      const rows = await fetchAdminAuditRows(
+        adminContext.request,
+        'booking',
+        booking.id
+      )
+
+      expect(rows).toHaveLength(1)
+      expect(rows[0].action).toBe('booking.updated')
+
+      const price = auditChange(rows[0], 'price')
+
+      expect(price?.from).toBe(30)
+      expect(price?.to).toBe(2000)
+    } finally {
+      await adminContext?.close()
       await cancelGuestBookings(
         playwright,
         created.map((booking) => booking.id)

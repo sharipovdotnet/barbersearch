@@ -109,12 +109,29 @@ export class AdminBookingsPage {
   }
 
   /** Кнопки действий карточки. Диалог подтверждения порталится, поэтому не мешает. */
-  actionButton(name: 'Отменить бронь' | 'Отметить неявку'): Locator {
+  actionButton(
+    name: 'Отменить бронь' | 'Отметить неявку' | 'Изменить цену визита'
+  ): Locator {
     return this.detail.getByRole('button', { name })
   }
 
   get confirmDialog(): Locator {
     return this.page.getByRole('alertdialog')
+  }
+
+  /** Диалог правки цены визита: обычный `dialog`, а не подтверждение. */
+  get priceDialog(): Locator {
+    return this.page.getByRole('dialog')
+  }
+
+  /** Поле «Цена, ₽» внутри диалога цены. */
+  get priceInput(): Locator {
+    return this.priceDialog.getByLabel('Цена, ₽')
+  }
+
+  /** Кнопка сохранения в диалоге цены; недоступна при неизменной сумме. */
+  get savePriceButton(): Locator {
+    return this.priceDialog.getByRole('button', { name: 'Сохранить' })
   }
 
   async searchFor(
@@ -180,7 +197,7 @@ export class AdminBookingsPage {
   }
 
   /**
-   * Брони — только чтение плюс две операции в карточке.
+   * Брони — только чтение плюс три операции в карточке.
    *
    * У строк нет кнопок действий, на экране нет создания, переноса, правки и
    * удаления, а общего числа записей сервер не отдаёт — счётчика «всего» нет.

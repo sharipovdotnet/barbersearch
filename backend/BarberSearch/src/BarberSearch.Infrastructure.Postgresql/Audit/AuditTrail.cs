@@ -236,17 +236,19 @@ public sealed class AuditTrail
                     nameof(Specialization.IsActive)
                 ]),
 
-            // Бронь: Status, BarberNote, CancellationReason и время визита. Перенос меняет
-            // только StartAt/EndAt, поэтому строка booking.updated несёт старый и новый момент
-            // (from/to в ISO), а подписи к ним есть в админском журнале. Price/SalonId/
-            // BarberServiceId/UserId/BarberProfileId по-прежнему не меняются ни одной
-            // операцией — правка цены остаётся отдельным срезом и расширит allowlist вместе
-            // с ней. IdempotencyKey не аудируется никогда: это технический ключ клиента,
-            // а не история изменения.
+            // Бронь: Status, BarberNote, CancellationReason, время визита и цена.
+            // Перенос меняет только StartAt/EndAt, поэтому строка booking.updated несёт старый
+            // и новый момент (from/to в ISO), а подписи к ним есть в админском журнале.
+            // Price добавлен в #97: цену визита меняет одна операция (PUT api/bookings/{id}/price),
+            // и именно этот вопрос задают в поддержке — поэтому правка пишет
+            // changes.price.from/to числами. SalonId/BarberServiceId/UserId/BarberProfileId
+            // по-прежнему не меняются ни одной операцией и остаются вне allowlist; смена
+            // услуги или салона визита — отдельные срезы. IdempotencyKey не аудируется никогда:
+            // это технический ключ клиента, а не история изменения.
             // AuditsCreation: false — создание брони не пишется сознательно: бронь уже хранит
             // владельца, время и цену, а строка на каждую бронь (1,2 млн в load-базе) раздувает
             // audit_log без новой информации. Журнал отвечает на «кто отменил/подтвердил/
-            // отметил неявку/перенёс и когда», а не на «кто забронировал».
+            // отметил неявку/перенёс/изменил цену и когда», а не на «кто забронировал».
             [typeof(Booking)] = new(
                 "booking",
                 [
@@ -254,7 +256,8 @@ public sealed class AuditTrail
                     nameof(Booking.BarberNote),
                     nameof(Booking.CancellationReason),
                     nameof(Booking.StartAt),
-                    nameof(Booking.EndAt)
+                    nameof(Booking.EndAt),
+                    nameof(Booking.Price)
                 ],
                 AuditsCreation: false)
         };

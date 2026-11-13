@@ -45,6 +45,11 @@ export type BarberDayController = {
   markNoShow: (id: string) => Promise<void>
   cancel: (id: string, reason: string) => Promise<void>
   saveNote: (id: string, note: string) => Promise<void>
+  /**
+   * Правка цены визита: строка остаётся в том же дне и скоупе, обновляется только
+   * сумма — второй список не перечитывается.
+   */
+  reprice: (id: string, price: number) => Promise<void>
   /** Перенос уходит в контроллер-владелец строки; второй список не перечитывается. */
   reschedule: (id: string, slot: BarberSlot) => Promise<void>
 }
@@ -263,6 +268,15 @@ export function useBarberDay(
     [ownerOf]
   )
 
+  /** Правка цены не меняет ни день, ни статус: строка остаётся на месте. */
+  const reprice = useCallback(
+    async (id: string, price: number): Promise<void> => {
+      const owner = ownerOf(id)
+      await owner?.reprice(id, price)
+    },
+    [ownerOf]
+  )
+
   const isTruncated =
     (upcoming.items.length === BARBER_BOOKINGS_PAGE_SIZE ||
       past.items.length === BARBER_BOOKINGS_PAGE_SIZE) &&
@@ -289,5 +303,6 @@ export function useBarberDay(
     cancel,
     saveNote,
     reschedule,
+    reprice,
   }
 }

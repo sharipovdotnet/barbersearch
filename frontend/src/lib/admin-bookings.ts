@@ -15,9 +15,12 @@ import { isAdminBooking, isAdminBookingPage } from '@/lib/response-guards'
  * Поиск — email клиента или точный id брони, фильтр — статус; и то и другое
  * живёт в состоянии React и в URL не пишется.
  *
- * Новых мутаций здесь нет: отмена и неявка — существующие эндпоинты
- * `POST api/bookings/{id}/cancellation` и `.../no-show`. Брони не аудируются,
- * и экран этого не обещает.
+ * Мутаций здесь только две исторические — отмена и неявка: это существующие
+ * эндпоинты `POST api/bookings/{id}/cancellation` и `.../no-show`. Правка цены
+ * визита идёт общей функцией `updateBookingPrice` из `lib/bookings.ts`: отдельного
+ * админского эндпоинта нет, и дублировать путь во втором `lib` незачем. Бронь
+ * аудируется (создание — нет), поэтому её правка цены пишет `booking.updated`,
+ * а «кто и когда» администратор видит в журнале.
  */
 
 /** Статус брони: имена `BookingStatus` приходят строками, как везде в JSON. */
@@ -89,7 +92,11 @@ export type AdminBooking = {
   status: AdminBookingStatus
   startAt: string
   endAt: string
-  /** Снимок цены из брони, а не текущая цена услуги. */
+  /**
+   * Снимок цены из брони, а не текущая цена услуги. Меняется ручкой
+   * `PUT api/bookings/{id}/price`; каждая реальная правка даёт строку
+   * `booking.updated` с `changes.price`.
+   */
   price: number
   customerNote: string | null
   /** Заметка барбера: админ её только читает. */
@@ -248,8 +255,9 @@ export function describeAdminBookingsError(
  * Текст ошибки действия с бронью.
  *
  * Домен отвечает кодами: отмена уже завершённой брони, слишком ранняя неявка,
- * неявка для неподтверждённой брони. Показываем причину по-русски, а не
- * английский `detail`; на неизвестной ошибке — запасной текст экрана.
+ * неявка для неподтверждённой брони, границы и статус правки цены. Показываем
+ * причину по-русски, а не английский `detail`; на неизвестной ошибке — запасной
+ * текст экрана.
  */
 export function describeAdminBookingActionError(
   cause: unknown,
@@ -269,6 +277,30 @@ export function describeAdminBookingActionError(
 
   if (cause.hasCode('booking.markNoShow.invalidStatus')) {
     return t('Неявку отмечают только для подтверждённой брони.')
+  }
+
+  if (cause.hasCode('booking.price.status')) {
+    return t('Цену нельзя изменить у отменённой записи или у неявки.')
+  }
+
+  if (cause.hasCode('booking.price.required')) {
+    return t('Укажите цену.')
+  }
+
+  if (cause.hasCode('booking.price.negative')) {
+    return t('Цена не может быть отрицательной.')
+  }
+
+  if (cause.hasCode('booking.price.tooLarge')) {
+    return t('Слишком большая цена — максимум 99 999 999,99 ₽.')
+  }
+
+  if (cause.hasCode('booking.price.precision')) {
+    return t('Цена — не больше двух знаков после запятой.')
+  }
+
+  if (cause.hasCode('booking.update.concurrencyConflict')) {
+    return t('Бронь уже изменилась — обновите карточку.')
   }
 
   if (cause.status === 404 || cause.hasCode('admin.bookings.notFound')) {

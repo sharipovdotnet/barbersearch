@@ -27,7 +27,7 @@
   "Длительность": "Duration",
   "Длительность по умолчанию, минуты": "Default duration, minutes",
   "До {max} символов. Причина не редактируется после отказа.": "Up to {max} characters. The reason can't be edited after rejection.",
-  "Доступны только отмена и отметка неявки. Заметку барбера администратор не меняет.": "Only cancellation and no-show are available. The administrator doesn't change the barber's note.",
+  "Цену визита можно изменить в любом статусе, кроме отмены и неявки. Отмена и отметка неявки необратимы; заметку барбера администратор не меняет.": "The visit price can be changed in any status except cancelled and no-show. Cancellation and no-show are irreversible; the administrator doesn't change the barber's note.",
   "Загружаем брони…": "Loading bookings…",
   "Загружаем бронь…": "Loading the booking…",
   "Загружаем заявки…": "Loading requests…",

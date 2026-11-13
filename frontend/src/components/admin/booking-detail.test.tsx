@@ -95,6 +95,24 @@ function mockAction(path: 'cancellation' | 'no-show') {
   return calls
 }
 
+/** `204` для правки цены: тело запроса собирается, чтобы проверить сумму. */
+function mockPrice() {
+  const calls: { path: string; body: string }[] = []
+
+  server.use(
+    http.put('/api/bookings/:bookingId/price', async ({ request }) => {
+      calls.push({
+        path: new URL(request.url).pathname,
+        body: await request.text(),
+      })
+
+      return new HttpResponse(null, { status: 204 })
+    })
+  )
+
+  return calls
+}
+
 describe('BookingDetail', () => {
   it('показывает время в поясе салона, клиента, барбера, услугу и салон', () => {
     renderDetail(makeBooking())
@@ -229,14 +247,43 @@ describe('BookingDetail', () => {
     ).toBeInTheDocument()
   })
 
-  it('для терминального статуса операций нет', () => {
-    renderDetail(makeBooking({ status: 'Completed' }))
+  it('у отменённой записи действий нет: цену тоже не меняют', () => {
+    renderDetail(makeBooking({ status: 'Cancelled' }))
 
     expect(
       screen.queryByRole('button', { name: 'Отменить бронь' })
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Отметить неявку' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Изменить цену визита' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('у завершённой записи остаётся правка цены', () => {
+    renderDetail(makeBooking({ status: 'Completed' }))
+
+    expect(
+      screen.getByRole('button', { name: 'Изменить цену визита' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Отменить бронь' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('подсказка секции «Действия» не обещает только отмену и неявку', () => {
+    renderDetail(makeBooking({ status: 'Completed' }))
+
+    expect(
+      screen.getByText(
+        'Цену визита можно изменить в любом статусе, кроме отмены и неявки. Отмена и отметка неявки необратимы; заметку барбера администратор не меняет.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Доступны только отмена и отметка неявки. Заметку барбера администратор не меняет.'
+      )
     ).not.toBeInTheDocument()
   })
 
@@ -362,5 +409,68 @@ describe('BookingDetail', () => {
     expect(screen.queryByText('Invalid status.')).not.toBeInTheDocument()
     expect(onReload).not.toHaveBeenCalled()
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+
+  it('правка цены отправляет PUT, объявляет результат и перечитывает карточку', async () => {
+    const user = userEvent.setup()
+    const calls = mockPrice()
+    const { onReload } = renderDetail(makeBooking({ status: 'Completed' }))
+
+    await user.click(
+      screen.getByRole('button', { name: 'Изменить цену визита' })
+    )
+
+    const dialog = screen.getByRole('dialog')
+    const input = within(dialog).getByLabelText('Цена, ₽')
+
+    await user.clear(input)
+    await user.type(input, '2500')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Цена визита обновлена.'
+    )
+    expect(calls).toStrictEqual([
+      {
+        path: `/api/bookings/${BASE_BOOKING.id}/price`,
+        body: JSON.stringify({ price: 2500 }),
+      },
+    ])
+    expect(onReload).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('отказ по статусу показывается в диалоге по-русски и не перечитывает карточку', async () => {
+    const user = userEvent.setup()
+
+    server.use(
+      http.put('/api/bookings/:bookingId/price', () =>
+        HttpResponse.json(
+          problemDetails(409, {
+            detail: 'The price of a booking in status Cancelled cannot be changed.',
+            errorCodes: ['booking.price.status'],
+          }),
+          { status: 409 }
+        )
+      )
+    )
+
+    const { onReload } = renderDetail(makeBooking({ status: 'Confirmed' }))
+
+    await user.click(
+      screen.getByRole('button', { name: 'Изменить цену визита' })
+    )
+
+    const dialog = screen.getByRole('dialog')
+    const input = within(dialog).getByLabelText('Цена, ₽')
+
+    await user.clear(input)
+    await user.type(input, '2500')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(
+      await within(screen.getByRole('dialog')).findByRole('alert')
+    ).toHaveTextContent('Цену нельзя изменить у отменённой записи или у неявки.')
+    expect(onReload).not.toHaveBeenCalled()
   })
 })

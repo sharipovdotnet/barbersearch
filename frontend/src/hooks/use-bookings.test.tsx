@@ -88,6 +88,29 @@ describe('useCustomerBookings: тихое обновление', () => {
     expect(change?.removed.map((item) => item.id)).toStrictEqual(['a'])
   })
 
+  it('замечает изменение только цены визита', async () => {
+    let items = [booking('a', 'Confirmed')]
+    serveUpcoming(() => items)
+
+    const { result } = renderHook(() =>
+      useCustomerBookings({ historyEnabled: false, userId: USER_ID })
+    )
+
+    await waitFor(() => {
+      expect(result.current.upcoming.items).toHaveLength(1)
+    })
+
+    // Статус и время те же: изменилась только сумма — её и должен увидеть баннер.
+    items = [{ ...booking('a', 'Confirmed'), price: 2500 }]
+
+    const change = await act(async () => result.current.refreshUpcoming())
+
+    expect(change?.updated).toHaveLength(1)
+    expect(change?.updated[0]?.before.price).toBe(2000)
+    expect(change?.updated[0]?.after.price).toBe(2500)
+    expect(result.current.upcoming.items[0]?.price).toBe(2500)
+  })
+
   it('сужает оба списка до вошедшего пользователя', async () => {
     const requests: URL[] = []
 

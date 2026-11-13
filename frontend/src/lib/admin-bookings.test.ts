@@ -459,4 +459,38 @@ describe('describeAdminBookingActionError', () => {
       fallback
     )
   })
+
+  it.each([
+    ['booking.price.status', 409, 'Цену нельзя изменить у отменённой записи или у неявки.'],
+    ['booking.price.required', 400, 'Укажите цену.'],
+    ['booking.price.negative', 400, 'Цена не может быть отрицательной.'],
+    [
+      'booking.price.tooLarge',
+      400,
+      'Слишком большая цена — максимум 99 999 999,99 ₽.',
+    ],
+    ['booking.price.precision', 400, 'Цена — не больше двух знаков после запятой.'],
+  ] as const)('код %s переводится в свой текст', (code, status, message) => {
+    const error = new ApiError(
+      status,
+      problemDetails(status, { errorCodes: [code] }),
+      'English detail.'
+    )
+
+    expect(describeAdminBookingActionError(error, fallback)).toBe(message)
+  })
+
+  it('гонка правки цены просит обновить карточку', () => {
+    const error = new ApiError(
+      409,
+      problemDetails(409, {
+        errorCodes: ['booking.update.concurrencyConflict'],
+      }),
+      'Conflict.'
+    )
+
+    expect(describeAdminBookingActionError(error, fallback)).toBe(
+      'Бронь уже изменилась — обновите карточку.'
+    )
+  })
 })

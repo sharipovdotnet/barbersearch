@@ -20,6 +20,7 @@ import {
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberNoteDialog } from '@/components/barber/barber-note-dialog'
+import { BookingPriceDialog } from '@/components/booking-price-dialog'
 import { RescheduleBookingDialog } from '@/components/reschedule-booking-dialog'
 import { RefreshStatus } from '@/components/refresh-status'
 import { SessionUnavailable } from '@/components/session-unavailable'
@@ -43,6 +44,7 @@ import type {
   BarberBookingScope,
 } from '@/lib/barber-bookings'
 import { describeBarberBookingsChange } from '@/lib/booking-changes'
+import { describeBarberBookingFailure } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
 
 /**
@@ -140,6 +142,11 @@ function BarberBookingsScreen({
   const [noteTarget, setNoteTarget] = useState<BarberBooking | null>(null)
   const [rescheduleTarget, setRescheduleTarget] =
     useState<BarberBooking | null>(null)
+  // Правка цены: цель, ожидание ответа и его ошибка живут на экране, потому что
+  // диалог общий с карточкой администратора и маппер ошибок у кабинетов свой.
+  const [priceTarget, setPriceTarget] = useState<BarberBooking | null>(null)
+  const [isPricePending, setIsPricePending] = useState(false)
+  const [priceError, setPriceError] = useState<string | null>(null)
   const [actionTarget, setActionTarget] = useState<BarberActionTarget | null>(
     null
   )
@@ -199,6 +206,7 @@ function BarberBookingsScreen({
       noteTarget === null &&
       actionTarget === null &&
       rescheduleTarget === null &&
+      priceTarget === null &&
       !isMutating,
     onRefresh: handleRefresh,
   })
@@ -316,6 +324,48 @@ function BarberBookingsScreen({
         when: formatDateTime(slot.startAt, rescheduleTarget.salon.timeZoneId),
       })
     )
+  }
+
+  /**
+   * Правка цены визита: общая ручка двух кабинетов, строка правится контроллером
+   * локально. Собственное действие баннера не даёт — баннер остаётся чужой правке.
+   */
+  function openPrice(booking: BarberBooking) {
+    setPriceError(null)
+    setPriceTarget(booking)
+  }
+
+  function closePrice() {
+    if (isPricePending) {
+      return
+    }
+
+    setPriceTarget(null)
+    setPriceError(null)
+  }
+
+  async function handlePriceSubmit(price: number) {
+    if (priceTarget === null || isPricePending) {
+      return
+    }
+
+    setIsPricePending(true)
+    setPriceError(null)
+
+    try {
+      await actions.reprice(priceTarget.id, price)
+      setPriceTarget(null)
+      setAnnouncement(t('Цена визита обновлена.'))
+    } catch (cause) {
+      setPriceError(
+        describeBarberBookingFailure(
+          cause,
+          t('Не удалось изменить цену визита.')
+        ).message
+      )
+    } finally {
+      setIsPricePending(false)
+    }
   }
 
   /**
@@ -487,6 +537,7 @@ function BarberBookingsScreen({
                 }
                 onOpenNote={setNoteTarget}
                 onOpenReschedule={setRescheduleTarget}
+                onOpenPrice={openPrice}
                 onReload={day.reload}
                 registerRow={registerRow}
               />
@@ -520,6 +571,7 @@ function BarberBookingsScreen({
                 }
                 onOpenNote={setNoteTarget}
                 onOpenReschedule={setRescheduleTarget}
+                onOpenPrice={openPrice}
                 registerRow={registerRow}
               />
             )}
@@ -557,6 +609,19 @@ function BarberBookingsScreen({
         onClose={() => setRescheduleTarget(null)}
         onRescheduled={handleRescheduled}
       />
+
+      {priceTarget !== null && (
+        <BookingPriceDialog
+          description={`${formatDateTime(priceTarget.startAt, priceTarget.salon.timeZoneId)} · ${priceTarget.customer.displayName}`}
+          currentPrice={priceTarget.price}
+          isPending={isPricePending}
+          error={priceError}
+          onSubmit={(price) => {
+            void handlePriceSubmit(price)
+          }}
+          onClose={closePrice}
+        />
+      )}
     </div>
   )
 }

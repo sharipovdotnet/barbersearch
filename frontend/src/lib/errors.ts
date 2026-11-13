@@ -72,6 +72,37 @@ export function describeBarberBookingFailure(
     }
   }
 
+  // Цена визита: те же правила, что у домена. Сумма — деньги, поэтому текст
+  // говорит, что именно не так, а не «неверный запрос».
+  if (error.hasCode('booking.price.required')) {
+    return { message: t('Укажите цену.'), canReload: false }
+  }
+
+  if (error.hasCode('booking.price.negative')) {
+    return { message: t('Цена не может быть отрицательной.'), canReload: false }
+  }
+
+  if (error.hasCode('booking.price.tooLarge')) {
+    return {
+      message: t('Слишком большая цена — максимум 99 999 999,99 ₽.'),
+      canReload: false,
+    }
+  }
+
+  if (error.hasCode('booking.price.precision')) {
+    return {
+      message: t('Цена — не больше двух знаков после запятой.'),
+      canReload: false,
+    }
+  }
+
+  if (error.hasCode('booking.price.status')) {
+    return {
+      message: t('Цену нельзя изменить у отменённой записи или у неявки.'),
+      canReload: false,
+    }
+  }
+
   if (error.status === 404 || error.hasCode('booking.notFound')) {
     return { message: t('Запись не найдена.'), canReload: false }
   }

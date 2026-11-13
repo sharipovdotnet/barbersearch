@@ -53,6 +53,7 @@ function renderRow(value: BarberBooking, now = Date.UTC(2026, 10, 8, 12, 0, 0)) 
         onOpenNoShow={vi.fn()}
         onOpenNote={vi.fn()}
         onOpenReschedule={vi.fn()}
+        onOpenPrice={vi.fn()}
         onReload={vi.fn()}
         registerRow={vi.fn()}
       />
@@ -110,6 +111,44 @@ describe('CabinetBookingRow: перенос', () => {
 
     expect(
       screen.queryByRole('button', { name: /^Перенести запись/ })
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('CabinetBookingRow: цена визита', () => {
+  it('предлагает правку цены у подтверждённой записи', () => {
+    renderRow(booking(null))
+
+    const button = screen.getByRole('button', {
+      name: /^Изменить цену визита/,
+    })
+
+    expect(button).toHaveAttribute('title', 'Изменить цену визита')
+  })
+
+  it('предлагает правку цены у завершённой записи: блок действий там не рисуется', () => {
+    renderRow({ ...booking(null), status: 'Completed' })
+
+    // Блока подтверждения/завершения/отмены у завершённой строки нет,
+    // но кнопка цены живёт рядом с суммой и остаётся.
+    expect(screen.queryByRole('button', { name: 'Отменить' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^Изменить цену визита/ })
+    ).toBeInTheDocument()
+  })
+
+  it('не предлагает правку цены у отменённой записи и у неявки', () => {
+    const { unmount } = renderRow({ ...booking(null), status: 'Cancelled' })
+
+    expect(
+      screen.queryByRole('button', { name: /^Изменить цену визита/ })
+    ).not.toBeInTheDocument()
+
+    unmount()
+    renderRow({ ...booking(null), status: 'NoShow' })
+
+    expect(
+      screen.queryByRole('button', { name: /^Изменить цену визита/ })
     ).not.toBeInTheDocument()
   })
 })
