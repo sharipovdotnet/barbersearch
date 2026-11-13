@@ -71,6 +71,13 @@ describe('useBarberSlots: режим брони', () => {
 
   it('поздний ответ старой даты не перезаписывает новую', async () => {
     const dates: string[] = []
+    // Ворота вместо таймера: первый ответ ждёт, пока тест сам его не отпустит.
+    // Так сценарий не зависит от скорости машины — на медленном CI `rerender`
+    // успевал отменить запрос раньше, чем он доходил до MSW.
+    let releaseOld = () => {}
+    const oldGate = new Promise<void>((resolve) => {
+      releaseOld = resolve
+    })
 
     server.use(
       http.get(PATH, async ({ request }) => {
@@ -78,8 +85,10 @@ describe('useBarberSlots: режим брони', () => {
 
         dates.push(date)
 
-        // Первый ответ намеренно медленный: он не должен перезаписать второй.
-        await sleep(date === '2026-11-06' ? 80 : 0)
+        // Первый ответ намеренно висит: он не должен перезаписать второй.
+        if (date === '2026-11-06') {
+          await oldGate
+        }
 
         return HttpResponse.json(slots(date))
       })
@@ -91,14 +100,22 @@ describe('useBarberSlots: режим брони', () => {
       { initialProps: { date: '2026-11-06' } }
     )
 
+    // Ждём, пока запрос первой даты действительно уйдёт в сеть: без этого
+    // `rerender` на быстрой машине отменяет его до MSW, и сценарий перестаёт
+    // проверять «поздний ответ».
+    await waitFor(() => {
+      expect(dates).toContain('2026-11-06')
+    })
+
     rerender({ date: '2026-11-07' })
 
     await waitFor(() => {
       expect(result.current.slots?.date).toBe('2026-11-07')
     })
 
-    // Ждём, пока придёт медленный ответ старой даты: состояние не должно откатиться.
-    await sleep(120)
+    // Отпускаем старый ответ и даём ему прийти: состояние не должно откатиться.
+    releaseOld()
+    await sleep(50)
 
     expect(result.current.slots?.date).toBe('2026-11-07')
     expect(dates).toStrictEqual(['2026-11-06', '2026-11-07'])
