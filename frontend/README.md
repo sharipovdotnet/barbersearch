@@ -1795,7 +1795,9 @@ is `noindex` like the rest of the admin.
   `_FIELD_LABELS`, `formatAuditAction` (the label comes from the tail after the last dot of
   `user.updated`), `formatAuditValue` (`null` → «—», booleans → «Да»/«Нет», `[redacted]` → «скрыто»,
   Russian role, grade, booking-status and service-category labels with the raw string as a
-  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`; `moderationStatus` is Russian by
+  fallback, via `bookingStatusLabel` and `SERVICE_CATEGORY_LABELS`; `price` is money only for
+  `barber_service` rows — `formatPrice`, and a non-numeric server value stays a string — while
+  `moderationStatus` is Russian by
   entity type — `SALON_MODERATION_LABELS` for `salon`, `PHOTO_MODERATION_LABELS` for
   `portfolio_photo` — and `avatarModerationStatus` always uses the photo labels),
   `fetchAdminAuditEntries` and `describeAdminAuditError`.
@@ -1811,7 +1813,8 @@ is `noindex` like the rest of the admin.
 What it does:
 
 - Filters: a native `<select>` for the entity type («Все сущности», «Пользователь», «Барбер»,
-  «Отзыв», «Салон», «Услуга», «Специализация», «Бронь», «Фото портфолио» — the last option),
+  «Отзыв», «Салон», «Услуга», «Специализация», «Бронь», «Фото портфолио», «Услуга барбера» — the
+  last option, appended after #96; the order of the previous options never moves),
   a debounced (300 ms) author email search capped at 100 characters, and «С даты» / «По дату».
   The two dates are **inclusive UTC days** —
   the visible hint says so — while a row's time is shown in the browser's local time zone.
@@ -1840,17 +1843,29 @@ What it does:
 - The journal is **immutable**: there is no write endpoint, no «Изменить», «Выключить», «Удалить»
   or «Очистить журнал», and no «Показать ещё». `AuditTrail` writes the table on every
   `SaveChanges`; the screen only reads.
-- The journal covers **eight** entity types — `User`, `BarberProfile`, `PortfolioPhoto`, `Review`,
-  `Salon`, `HairService`, `Specialization` and `Booking`. Booking rows carry only `Status`,
-  `BarberNote` and `CancellationReason` changes: creating a booking is deliberately not audited
-  (`AuditsCreation: false`). `PortfolioPhoto` is the only audited `BarberProfile` child: upload,
-  caption, order, publication, block/unblock and approve/reject write
-  `portfolio_photo.created|updated|deleted` (the field diff carries `url`, `description`,
+- The journal covers **nine** entity types — `User`, `BarberProfile`, `PortfolioPhoto`,
+  `BarberService`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking`. Booking rows
+  carry only `Status`, `BarberNote`, `CancellationReason` and (since #95) `StartAt`/`EndAt`
+  changes: creating a booking is deliberately not audited (`AuditsCreation: false`). The card of a
+  barber is audited for `bio` and `latePolicy` (`barber_profile.updated`; a `bio` longer than 500
+  characters is truncated with `...`, the full text stays in `barber_profiles`), and the price
+  list is its own type: adding a service writes `barber_service.created`, changing price and/or
+  duration one `barber_service.updated` with `from`/`to` per changed field, hiding and restoring
+  the row an `updated` with `isActive` — `deleted` never happens, because `DELETE` deactivates the
+  row (bookings reference it). `PortfolioPhoto` and `BarberService` are the only audited
+  `BarberProfile` children: upload, caption, order, publication, block/unblock and approve/reject
+  write `portfolio_photo.created|updated|deleted` (the field diff carries `url`, `description`,
   `sortOrder`, `isPublished`, `isBlocked`, `moderationStatus`; the rejection reason,
-  `reviewedAt`/`reviewedByUserId` and `thumbnailUrl` are not in the payload). Services, salons,
-  schedules and time offs are still not covered. Avatar uploads, deletions and decisions appear
+  `reviewedAt`/`reviewedByUserId` and `thumbnailUrl` are not in the payload). Salons, schedules,
+  time offs, the card lists (languages, achievements, payment methods, communication format,
+  additional services), specializations and the years of experience are still not covered, and
+  `displayName` is not either: it is an EF owned type, so replacing the instance loses the old
+  value snapshot and no `from`/`to` can be built (#96 D4, recorded in §14 #30 of `AGENT.md` and
+  frozen by a unit test). Avatar uploads, deletions and decisions appear
   under `User` as `user.updated`. The journal stays immutable and read-only; retention,
   partitioning and export are still separate slices, and catalogue deletes do not exist in the API.
+  The booking price, `salonId` and `barberServiceId` remain outside the journal until the
+  separate booking-price slice.
 
 ## Testing
 
@@ -1878,9 +1893,11 @@ needs no API and no database, and covers:
   broken body and a non-scalar `from`, `formatAuditValue` (`null`, booleans, `[redacted]`, role and
   grade labels, the five Russian booking statuses, the service categories, `moderationStatus` in
   Russian for `salon` («Одобрен») and `portfolio_photo` («Одобрено»), `avatarModerationStatus`,
-  `url` as a string, unknown values and an unknown entity type), `formatAuditAction` by the action
-  tail, the exact order of the nine entity values (`all` plus the eight types) and their labels
-  (the new values are appended; «Фото портфолио» is last), and the error mapping for `403`, `429` and
+  `url` as a string, unknown values and an unknown entity type, and `price` in rubles only for
+  `barber_service` rows), `formatAuditAction` by the action
+  tail, the exact order of the ten entity values (`all` plus the nine types) and their labels
+  (the new values are appended; «Услуга барбера» is last), the card/price field labels, the
+  absence of a `displayName` label (the server never sends it), and the error mapping for `403`, `429` and
   `admin.audit.cursor.invalid`. `AuditEntry` (colocated with the component) covers `<time>`, the
   short id with the full id in `title`, «Система» and «Удалённый пользователь», the expandable
   `<dl>` diff «Роль: Клиент → Администратор», «Активность» for `isActive`, the booking diff
@@ -1968,15 +1985,22 @@ an admin sees the same image, deletion restores the initials), email
 verification (registration → letter in Mailpit → link → confirmed cabinet), password reset
 (registration → `/forgot-password` → letter in Mailpit → new password → sign-in), the keyboard
 paths and an axe scan of every screen and role in two widths (1280 and 320). `npm test` (Vitest)
-stays separate and fast; E2E never runs inside it. The last full local run (2026-11-12, after the
-photo-audit slice) is **309 passed, 6 skipped, 0 failed** — 315 tests in 6.3 min with
-`--workers=2`; the queue page object is `e2e/pages/admin-photos-page.ts`. The #90 media scenes
+stays separate and fast; E2E never runs inside it. The last full local run (2026-11-13, after the
+card/price audit slice) is **317 passed, 6 skipped, 0 failed** — 323 tests in 6.8 min with
+`--workers=2` (run it with that setting: with the machine's 12 default workers the read-only a11y
+and pagination specs time out under CPU load); the queue page object is
+`e2e/pages/admin-photos-page.ts`. The #90 media scenes
 extend the two existing mutation specs (gallery/cabinet `srcset`, the `?size=` WebP response,
 `ETag`/`304`, the hidden-frame `404` and the new cache header). The #91 scenes add the
 «Фото портфолио» filter to `admin-audit.spec.ts`
 (it sends `entityType=portfolio_photo` and finds nothing under the fixture date) and one
 audit-API assert, made from the admin context, to each of the two media mutation specs (exact
-`entityId`, `action` and `changes`, no rejection reason). The previously documented
+`entityId`, `action` and `changes`, no rejection reason). The #96 scene adds one serial test to
+`barber-profile-mutations.spec.ts`: the barber sets «E2E Стрижка» to 2 100 ₽, an admin in a
+separate context opens `/admin/audit`, filters «Услуга барбера» and reads «Цена: 2 000 ₽ →
+2 100 ₽», axe is clean at 1280, `GET /api/admin/audit?entityType=barber_service` confirms the same
+row with `changes.price.to = 2100` and the fixture barber as the actor, and `finally` restores
+2 000 ₽ for the following hide/restore scenes. The already documented
 cache flake is fixed: a guest `playwright.request.newContext` inherited the owner's `storageState`,
 so "anonymous" requests carried the cookie and ASP.NET added `no-store`; every guest context now
 passes an explicit empty `storageState`, and a real guest asserts

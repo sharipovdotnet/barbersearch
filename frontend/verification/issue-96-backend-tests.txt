@@ -1,0 +1,26 @@
+﻿issue-96 backend verification — 2026-11-13T16:05:31.5590275+05:00
+
+=== dotnet build BarberSearch/BarberSearch.sln --nologo ===
+Сборка успешно завершена.
+    Предупреждений: 0
+    Ошибок: 0
+
+=== dotnet test tests/BarberSearch.Domain.UnitTests ===
+Пройден!   : не пройдено 0, пройдено 595, пропущено 0, всего 595
+
+=== dotnet test tests/BarberSearch.Application.UnitTests ===
+Пройден!   : не пройдено 0, пройдено 958, пропущено 0, всего 958
+
+=== dotnet test tests/BarberSearch.Infrastructure.UnitTests ===
+Пройден!   : не пройдено 0, пройдено 363, пропущено 0, всего 363
+
+=== dotnet test tests/BarberSearch.IntegrationTests (full) ===
+Пройден!   : не пройдено 0, пройдено 320, пропущено 0, всего 320, длительность 4 m 33 s
+
+(новый класс BarberProfileAuditCoverageTests — 7 [Fact], все зелёные;
+ смежные AdminAuditCoverageTests + PhotoAuditCoverageTests — 26 зелёных)
+
+=== dotnet ef migrations has-pending-model-changes ===
+No changes have been made to the model since the last migration.
+
+Команды запускались с -p:BaseOutputPath=%TEMP%\bs-tests\<Project>\ — см. backend/AGENT.md §5.2.

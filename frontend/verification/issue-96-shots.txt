@@ -1,0 +1,7 @@
+admin: e2e-admin@barbersearch.test
+1280: scrollWidth=1280 clientWidth=1280 horizontalScroll=false
+1280: row = 13 нояб. 15:54 · e2e-profile-barber@barbersearch.test | Услуга барбера 01a1d48b · Изменено | Скрыть изменения | Цена | 2 100 ₽ → 2 000 ₽
+1280: diff = Цена | 2 100 ₽ → 2 000 ₽
+320: scrollWidth=320 clientWidth=320 horizontalScroll=false
+320: row = 13 нояб. 15:54 · e2e-profile-barber@barbersearch.test | Услуга барбера 01a1d48b · Изменено | Скрыть изменения | Цена | 2 100 ₽ → 2 000 ₽
+320: diff = Цена | 2 100 ₽ → 2 000 ₽

@@ -506,8 +506,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-12 (срез аудита фото): domain **588**, application
-**878**, infrastructure **317**, integration **292** — всего **2075**, все зелёные на
+Актуальный baseline на 2026-11-13 (срез аудита карточки и прайса): domain **595**, application
+**958**, infrastructure **363**, integration **320** — всего **2236**, все зелёные на
 локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
@@ -933,7 +933,7 @@ The rules below were pushed to the application layer because the aggregate canno
 | Tests | ✅ 588 domain + 878 application + 317 infrastructure + 292 integration (2075 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из восьми типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
+| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
 | Web | ✅ 32 контроллера / 158 endpoints (146 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
@@ -2237,10 +2237,19 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
 - **Аудит изменений (R-34).** Таблица `audit_log`: `occurred_at`, `actor_user_id` (nullable),
   `action`, `entity_type`, `entity_id`, `payload jsonb`. Строка аудита добавляется в тот же
   `SaveChanges`, что и изменение (`AuditTrail.Capture` в `RepositoryBase.SaveChangesAsync`),
-  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Allowlist — восемь типов: `user`,
-  `barber_profile`, `portfolio_photo`, `review`, `salon`, `hair_service`, `specialization` и
-  `booking`, у каждого свой список свойств. `user`/`barber_profile` — роль, активность,
-  подтверждения email/телефона, привязка профиля, грейд/верификация/рейтинг; `user`
+  поэтому откатывается вместе с транзакцией `IUnitOfWork`. Allowlist — девять типов: `user`,
+  `barber_profile`, `portfolio_photo`, `barber_service`, `review`, `salon`, `hair_service`,
+  `specialization` и `booking`, у каждого свой список свойств. `user`/`barber_profile` — роль,
+  активность, подтверждения email/телефона, привязка профиля, грейд/верификация/рейтинг; с #96
+  `barber_profile` пишет ещё `bio` и `latePolicy` (текст карточки). `displayName` **не** пишется,
+  и это осознанное решение по факту кода (D4): `DisplayName` — EF owned-тип, а `UpdateProfile`
+  заменяет инстанс, поэтому EF удаляет старую owned-запись и создаёт новую в состоянии `Added`
+  с `OriginalValue == CurrentValue` — снимок старого имени теряется, и diff `from/to` построить
+  нечем. Тест `Capture_WhenBarberProfileDisplayNameChanged_WritesNoRowBecauseOwnedSnapshotIsLost`
+  фиксирует это как известное ограничение, а не как тихий пропуск; списки карточки (языки,
+  достижения, способы оплаты, формат общения, доп. услуги), специализации и стаж тоже не входят —
+  diff массива нечитаем, а payload раздувается.
+  `user`
   дополнительно аудирует `avatarUrl` и `avatarModerationStatus` (загрузка/замена/удаление
   аватара и решения администратора) вместе с прежним `isAvatarBlocked`. `portfolio_photo` —
   создание, подпись, порядок, публикация, блокировка и решения администратора:
@@ -2259,10 +2268,17 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   полей у брони сегодня нет. **Создание брони не аудируется сознательно**
   (`AuditsCreation: false`): бронь уже хранит клиента, время и цену, а строка на каждую бронь
   (1,2 млн в нагрузочной базе) раздувала бы журнал без новой информации; журнал отвечает на
-  «кто отменил/подтвердил/отметил неявку», а не на «кто забронировал». Дети `BarberProfile`
-  (`BarberService`, `BarberSalon`, `WorkingSchedule`, `TimeOff`) в allowlist не входят;
-  `PortfolioPhoto` — единственное исключение: загрузка и удаление кадра это жизненный цикл
-  контента, который администратор проверяет и блокирует. Логины (`last_login_at`,
+  «кто отменил/подтвердил/отметил неявку», а не на «кто забронировал». `barber_service`
+  (#96) — прайс: `barberProfileId`, `hairServiceId`, `price`, `durationMinutes`, `isActive`.
+  Добавление услуги пишется (`created`, `AuditsCreation` true: событие редкое, десятки строк
+  на профиль), смена цены/длительности — одна `updated` с `from/to` по изменённым полям,
+  скрытие и возврат — `updated` с `isActive`; `deleted` у типа не бывает, потому что `DELETE`
+  в API деактивирует строку (на неё ссылаются брони). `hairServiceId` остаётся GUID: журнал
+  принципиально не резолвит имена — сущность могли переименовать или удалить.
+  Остальные дети `BarberProfile` (`BarberSalon`, `WorkingSchedule`, `TimeOff`) в allowlist
+  не входят; исключений два — `PortfolioPhoto` (загрузка и удаление кадра это жизненный цикл
+  контента, который администратор проверяет и блокирует) и `BarberService` (прайс, который
+  администратор различает с карточкой профиля). Логины (`last_login_at`,
   `failed_login_attempts`, `lockout_end`), `updated_at` и
   `xmin` не пишутся — это шум. В `payload` (camelCase, enum'ы строками) значения свойств, имя
   которых содержит `password`, `hash`, `stamp`, `token` или `secret`, заменяются на
@@ -2272,7 +2288,8 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   (индекс `ix_audit_log_entity_type_entity_id`), лента одного типа —
   `SELECT * FROM audit_log WHERE entity_type = 'salon' ORDER BY occurred_at DESC, id LIMIT 20`
   (`ix_audit_log_occurred_at_id`; с issue-41 так же фильтруются `booking`, `hair_service` и
-  `specialization`, а с issue-91 — `portfolio_photo`), действия пользователя — по
+  `specialization`, с issue-91 — `portfolio_photo`, с issue-96 — `barber_service`), действия
+  пользователя — по
   `actor_user_id`, последние события — по `occurred_at DESC, id`. Ретенции, партиционирования и
   экспорта нет — это отдельные срезы. Миграция не нужна: `audit_log.action`/`entity_type` —
   `varchar(64)`, `payload` — `jsonb`, новые строки помещаются без изменения схемы.
@@ -2409,6 +2426,17 @@ Conventions:
   when no row exists), and `POST .../services` with the same `hairServiceId` reactivates a hidden
   row and overwrites price and duration (`409 barberProfile.addService.duplicate` only for an
   active row). No migration: `barber_services.is_active` already existed.
+- **Карточка и прайс в журнале (2026-11-13, issue-96).** Журнал получил девятый тип
+  `barber_service` и десятый фильтр `entityType=barber_service` в `AdminAuditController`;
+  строки пишет `AuditTrail` в том же `SaveChanges`, новых ручек нет. По карточке пишутся
+  `bio` и `latePolicy` (`barber_profile.updated`), по прайсу — `created` при добавлении
+  услуги и `updated` при смене цены/длительности и при скрытии/возврате (`isActive`).
+  `displayName` не пишется: `DisplayName` — owned-тип, и при замене инстанса EF теряет
+  снимок старого значения (§15, D4; тест
+  `Capture_WhenBarberProfileDisplayNameChanged_WritesNoRowBecauseOwnedSnapshotIsLost`).
+  Списки карточки, специализации, расписание и отпуска по-прежнему вне журнала; цена визита
+  (`Booking.Price`/`SalonId`/`BarberServiceId`) — отдельный срез. Миграции нет: `entity_type` —
+  `varchar(64)`, `payload` — `jsonb`; `has-pending-model-changes` пуст.
 - **Портфолио: загрузка, порядок, блокировка и раздача (2026-11-11, issue-84).**
   `POST api/barber-profiles/{id}/photos/upload` — `multipart/form-data` с полями `file` и
   `description`; запрос ограничен 6 МиБ (`RequestSizeLimit` + `MultipartBodyLengthLimit`),
@@ -2742,14 +2770,17 @@ Read endpoints (added 2026-10-19):
   `admin.audit` scope tag (a cursor from another list is rejected instead of paginating a foreign
   order), and `pageSize` defaults to 20 and is capped at 100. The entity **name is deliberately
   not resolved**: the record may be renamed or deleted, so the row carries `entity_id` only.
-  The journal covers **eight entity types** — `User`, `BarberProfile`, `PortfolioPhoto`,
-  `Review`, `Salon`, `HairService`, `Specialization` and `Booking`. The last four were added by
-  issue-41; since issue-91 `PortfolioPhoto` is the eighth and the only audited `BarberProfile`
-  child — creating, captioning, reordering, publishing, blocking and deciding a frame write
-  `portfolio_photo.created|updated|deleted`, while `BarberService`, `BarberSalon`,
-  `WorkingSchedule` and `TimeOff` stay out. Booking rows record `Status`, `BarberNote` and time
-  (`StartAt`/`EndAt` since issue-95) changes, and booking creation is deliberately not audited. `entityType` therefore accepts
-  `all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo`,
+  The journal covers **nine entity types** — `User`, `BarberProfile`, `PortfolioPhoto`,
+  `BarberService`, `Review`, `Salon`, `HairService`, `Specialization` and `Booking`. The last four
+  were added by issue-41; since issue-91 `PortfolioPhoto` is an audited `BarberProfile` child —
+  creating, captioning, reordering, publishing, blocking and deciding a frame write
+  `portfolio_photo.created|updated|deleted`; since issue-96 `BarberService` is the second one —
+  adding a service writes `barber_service.created`, price/duration changes and hiding/restoring
+  write `barber_service.updated` (`isActive`, and `deleted` never happens because `DELETE`
+  deactivates the row), while `BarberSalon`, `WorkingSchedule` and `TimeOff` stay out. Booking rows
+  record `Status`, `BarberNote` and time (`StartAt`/`EndAt` since issue-95) changes, and booking
+  creation is deliberately not audited. `entityType` therefore accepts
+  `all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo|barber_service`,
   trimmed and case-insensitive; numbers and unknown strings are still
   `400 admin.audit.entityType`. Nothing else about the read-only contract changed: there is no
   new endpoint and no mutation, `total`,
