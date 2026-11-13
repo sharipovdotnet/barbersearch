@@ -36,13 +36,16 @@ const VIEW: BookingView = {
 
 function renderRow(
   overrides: Partial<BookingView['booking']> = {},
-  isReviewed = false
+  isReviewed = false,
+  now = Date.parse('2026-11-01T10:00:00Z')
 ) {
   return render(
     <ul>
       <BookingRow
         view={{ ...VIEW, booking: { ...VIEW.booking, ...overrides } }}
         isReviewed={isReviewed}
+        now={now}
+        onRequestReschedule={vi.fn()}
         onRequestCancel={vi.fn()}
         onRequestReview={vi.fn()}
       />
@@ -56,6 +59,8 @@ function renderView(overrides: Partial<BookingView> = {}) {
       <BookingRow
         view={{ ...VIEW, ...overrides }}
         isReviewed={false}
+        now={Date.parse('2026-11-01T10:00:00Z')}
+        onRequestReschedule={vi.fn()}
         onRequestCancel={vi.fn()}
         onRequestReview={vi.fn()}
       />
@@ -138,5 +143,37 @@ describe('BookingRow, причина отмены', () => {
     renderRow({ status: 'Confirmed', cancellationReason: null })
 
     expect(screen.queryByText(/Причина отмены/)).not.toBeInTheDocument()
+  })
+})
+
+describe('BookingRow, перенос', () => {
+  it('предлагает перенос активной будущей записи с временем в имени', () => {
+    const now = Date.parse('2026-11-01T10:00:00Z')
+
+    renderRow({ status: 'Confirmed' }, false, now)
+
+    expect(
+      screen.getByRole('button', { name: /^Перенести запись/ })
+    ).toBeInTheDocument()
+  })
+
+  it('не предлагает перенос прошедшей записи', () => {
+    renderRow(
+      { status: 'Confirmed' },
+      false,
+      Date.parse('2026-12-02T10:00:00Z')
+    )
+
+    expect(
+      screen.queryByRole('button', { name: /^Перенести запись/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('не предлагает перенос терминальной записи', () => {
+    renderRow({ status: 'Cancelled' })
+
+    expect(
+      screen.queryByRole('button', { name: /^Перенести запись/ })
+    ).not.toBeInTheDocument()
   })
 })

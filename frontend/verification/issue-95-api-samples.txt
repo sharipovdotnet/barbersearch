@@ -1,0 +1,144 @@
+﻿POST /api/auth/login/cookie -> 204
+
+Р‘СЂРѕРЅСЊ-С†РµР»СЊ: 2515b7d5-85e9-f4f3-924a-50a089f3d793, РёСЃС‚РѕС‡РЅРёРє: 2508cd2c-5916-1852-977e-e17c44cc5d5e, РґР°С‚Р° СЃР»РѕС‚РѕРІ: 2026-11-18
+
+GET /api/bookings/2515b7d5-85e9-f4f3-924a-50a089f3d793/reschedule-slots?date=2026-11-18 -> 200
+{
+    "barberProfileId":  "9e100000-0000-4000-8000-000000000001",
+    "salonId":  "9e400000-0000-4000-8000-000000000001",
+    "barberServiceId":  "9e300000-0000-4000-8000-000000000001",
+    "hairServiceId":  null,
+    "date":  "2026-11-18",
+    "timeZoneId":  "Europe/Moscow",
+    "dayStart":  "2026-11-17T21:00:00+00:00",
+    "dayEnd":  "2026-11-18T21:00:00+00:00",
+    "durationMinutes":  30,
+    "isWorkingDay":  true,
+    "slots":  [
+                  {
+                      "startAt":  "2026-11-18T06:00:00+00:00",
+                      "endAt":  "2026-11-18T06:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T06:30:00+00:00",
+                      "endAt":  "2026-11-18T07:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T07:00:00+00:00",
+                      "endAt":  "2026-11-18T07:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T07:30:00+00:00",
+                      "endAt":  "2026-11-18T08:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T08:00:00+00:00",
+                      "endAt":  "2026-11-18T08:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T08:30:00+00:00",
+                      "endAt":  "2026-11-18T09:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T09:30:00+00:00",
+                      "endAt":  "2026-11-18T10:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T10:00:00+00:00",
+                      "endAt":  "2026-11-18T10:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T10:30:00+00:00",
+                      "endAt":  "2026-11-18T11:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T11:00:00+00:00",
+                      "endAt":  "2026-11-18T11:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T11:30:00+00:00",
+                      "endAt":  "2026-11-18T12:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T12:00:00+00:00",
+                      "endAt":  "2026-11-18T12:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T12:30:00+00:00",
+                      "endAt":  "2026-11-18T13:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T13:00:00+00:00",
+                      "endAt":  "2026-11-18T13:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T13:30:00+00:00",
+                      "endAt":  "2026-11-18T14:00:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T14:00:00+00:00",
+                      "endAt":  "2026-11-18T14:30:00+00:00"
+                  },
+                  {
+                      "startAt":  "2026-11-18T14:30:00+00:00",
+                      "endAt":  "2026-11-18T15:00:00+00:00"
+                  }
+              ]
+}
+
+POST /api/bookings/2515b7d5-85e9-f4f3-924a-50a089f3d793/reschedule { startAt: 2026-11-18T06:00:00+00:00 } -> 204
+<no body>
+
+GET /api/bookings РїРѕСЃР»Рµ РїРµСЂРµРЅРѕСЃР°: startAt=2026-11-18T06:00:00+00:00 endAt=2026-11-18T06:30:00+00:00 price=30.00 status=Confirmed
+
+POST /api/bookings/2508cd2c-5916-1852-977e-e17c44cc5d5e/reschedule РЅР° Р·Р°РЅСЏС‚РѕРµ РІСЂРµРјСЏ -> 409
+{
+    "title":  "The request conflicts with the current state of the resource.",
+    "status":  409,
+    "detail":  "The requested time is already taken.",
+    "errorCodes":  [
+                       "booking.reschedule.overlap"
+                   ]
+}
+
+POST /api/bookings/2508cd2c-5916-1852-977e-e17c44cc5d5e/reschedule РІРЅРµ СЃРµС‚РєРё СЃР»РѕС‚РѕРІ -> 409
+{
+    "title":  "The request conflicts with the current state of the resource.",
+    "status":  409,
+    "detail":  "The requested time is not a legal slot start.",
+    "errorCodes":  [
+                       "booking.reschedule.slot"
+                   ]
+}
+
+POST /api/bookings/2508cd2c-5916-1852-977e-e17c44cc5d5e/reschedule РІ РїСЂРѕС€Р»РѕРµ (2026-11-13T05:49:07+05:00) -> 400
+{
+    "title":  "One or more validation errors occurred.",
+    "status":  400,
+    "detail":  "A booking cannot be rescheduled to a time in the past.",
+    "errors":  {
+                   "StartAt":  [
+                                   "A booking cannot be rescheduled to a time in the past."
+                               ]
+               },
+    "errorCodes":  [
+                       "booking.reschedule.startAt.inPast"
+                   ]
+}
+
+POST /api/bookings/2508cd2c-5916-1852-977e-e17c44cc5d5e/reschedule Р·Р° РіРѕСЂРёР·РѕРЅС‚ (2027-02-12T05:53:07+05:00) -> 400
+{
+    "title":  "One or more validation errors occurred.",
+    "status":  400,
+    "detail":  "A booking cannot be rescheduled more than 90 days ahead.",
+    "errors":  {
+                   "StartAt":  [
+                                   "A booking cannot be rescheduled more than 90 days ahead."
+                               ]
+               },
+    "errorCodes":  [
+                       "booking.reschedule.startAt.tooFar"
+                   ]
+}
+
+РЈР±РѕСЂРєР°: POST /api/bookings/2515b7d5-85e9-f4f3-924a-50a089f3d793/reschedule РѕР±СЂР°С‚РЅРѕ РЅР° 2026-11-16T09:00:00+00:00 -> 204

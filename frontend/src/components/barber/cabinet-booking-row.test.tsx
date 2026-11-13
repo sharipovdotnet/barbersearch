@@ -40,18 +40,19 @@ function booking(avatarUrl: string | null): BarberBooking {
   }
 }
 
-function renderRow(value: BarberBooking) {
+function renderRow(value: BarberBooking, now = Date.UTC(2026, 10, 8, 12, 0, 0)) {
   return render(
     <ul>
       <CabinetBookingRow
         booking={value}
         scope="upcoming"
-        now={Date.UTC(2026, 10, 8, 12, 0, 0)}
+        now={now}
         onConfirm={vi.fn(async () => undefined)}
         onComplete={vi.fn(async () => undefined)}
         onOpenCancel={vi.fn()}
         onOpenNoShow={vi.fn()}
         onOpenNote={vi.fn()}
+        onOpenReschedule={vi.fn()}
         onReload={vi.fn()}
         registerRow={vi.fn()}
       />
@@ -92,5 +93,23 @@ describe('CabinetBookingRow: аватар клиента', () => {
       'href',
       'tel:+79990000000'
     )
+  })
+})
+
+describe('CabinetBookingRow: перенос', () => {
+  it('предлагает перенос будущей записи с временем в имени', () => {
+    renderRow(booking(null), Date.UTC(2026, 10, 8, 8, 0, 0))
+
+    expect(
+      screen.getByRole('button', { name: /^Перенести запись/ })
+    ).toBeInTheDocument()
+  })
+
+  it('не предлагает перенос начавшейся записи', () => {
+    renderRow(booking(null), Date.UTC(2026, 10, 8, 12, 0, 0))
+
+    expect(
+      screen.queryByRole('button', { name: /^Перенести запись/ })
+    ).not.toBeInTheDocument()
   })
 })

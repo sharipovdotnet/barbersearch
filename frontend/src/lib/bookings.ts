@@ -90,6 +90,26 @@ export async function cancelBooking(bookingId: string): Promise<void> {
   })
 }
 
+/**
+ * Перенос визита: меняются только начало и конец, сервер отвечает `204`.
+ *
+ * `startAt` отправляется ровно таким, каким пришёл из `reschedule-slots`: сервер
+ * сравнивает абсолютные моменты и сам берёт `endAt` у слота. Новое время клиент уже
+ * знает из ответа слотов, поэтому тело ответа не читается — список обновится опросом.
+ */
+export async function rescheduleBooking(
+  bookingId: string,
+  startAt: string
+): Promise<void> {
+  await mutateWithCsrf<void>(
+    `/bookings/${encodeURIComponent(bookingId)}/reschedule`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ startAt }),
+    }
+  )
+}
+
 export type CreateBookingInput = {
   barberProfileId: string
   barberServiceId: string

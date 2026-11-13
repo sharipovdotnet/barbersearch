@@ -1,11 +1,15 @@
-import { Check, Star, X } from 'lucide-react'
+import { CalendarClock, Check, Star, X } from 'lucide-react'
 
 import { BookingStatusBadge } from '@/components/booking-status-badge'
 import type { BookingView } from '@/components/account/booking-view'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
-import { canCancelBooking, canReviewBooking } from '@/lib/booking-status'
+import {
+  canCancelBooking,
+  canRescheduleBooking,
+  canReviewBooking,
+} from '@/lib/booking-status'
 import {
   formatDateTime,
   formatPrice,
@@ -26,11 +30,16 @@ import { avatarImageSource } from '@/lib/media'
 export function BookingRow({
   view,
   isReviewed,
+  now,
+  onRequestReschedule,
   onRequestCancel,
   onRequestReview,
 }: {
   view: BookingView
   isReviewed: boolean
+  /** Текущий момент страницы: перенос доступен только до начала визита. */
+  now: number
+  onRequestReschedule: () => void
   onRequestCancel: () => void
   onRequestReview: () => void
 }) {
@@ -39,6 +48,11 @@ export function BookingRow({
   const timeZone = view.timeZoneId
   const when = formatDateTime(booking.startAt, timeZone)
   const canCancel = canCancelBooking(booking.status)
+  const canReschedule = canRescheduleBooking(
+    booking.status,
+    booking.startAt,
+    now
+  )
   // Отзыв мог уйти в этой сессии (`isReviewed`) или прийти с сервера (`hasReview`):
   // без второго флага звезда возвращалась после перезагрузки истории.
   const isAlreadyReviewed = isReviewed || booking.hasReview
@@ -87,6 +101,19 @@ export function BookingRow({
         <BookingStatusBadge status={booking.status} />
 
         <div className="flex items-center gap-0.5">
+          {canReschedule && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('Перенести запись {when}', { when })}
+              title={t('Перенести запись')}
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onRequestReschedule}
+            >
+              <CalendarClock aria-hidden />
+            </Button>
+          )}
+
           {canCancel && (
             <Button
               variant="ghost"

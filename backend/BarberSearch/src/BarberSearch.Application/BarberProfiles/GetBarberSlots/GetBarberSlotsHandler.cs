@@ -15,9 +15,10 @@ namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
 /// <remarks>
 /// Границы дня и рабочего интервала считаются в часовом поясе салона
 /// (<c>Salon.TimeZoneId</c>) и только затем переводятся в UTC — неявного UTC-сдвига нет.
-/// Сетка строится по локальному времени салона, поэтому переход на летнее время
-/// не сдвигает начало рабочего дня. Слот исключается, если пересекается с отпуском
-/// или активной бронью; отменённые и завершённые брони слот не занимают.
+/// Сама сетка строится <see cref="SlotGrid"/>: переход на летнее время, дедупликация
+/// повторного часа и отпуска живут там, чтобы перенос визита считал слоты тем же кодом.
+/// Здесь остаются только фильтры, зависящие от сценария: прошедшие слоты и занятость
+/// активными бронями (отменённые и завершённые слот не занимают).
 /// Если услуга задана, в ответ попадают <c>barberServiceId</c> и <c>hairServiceId</c>
 /// той пары, по которой посчитана длительность: именно <c>barberServiceId</c> нужен
 /// для создания брони (R-20).
@@ -169,51 +170,22 @@ public sealed class GetBarberSlotsHandler
             return bookingsResult.Error;
         }
 
-        var workStartLocal = date.ToDateTime(context.StartTime);
-        var workEndLocal = date.ToDateTime(context.EndTime);
         var now = _timeProvider.GetUtcNow();
-        var slots = new List<BarberSlotResponse>();
-        var seen = new HashSet<DateTimeOffset>();
 
-        for (var localStart = workStartLocal;
-             localStart.AddMinutes(context.DurationMinutes) <= workEndLocal;
-             localStart = localStart.AddMinutes(context.DurationMinutes))
-        {
-            var localEnd = localStart.AddMinutes(context.DurationMinutes);
-            var slotStart = ToUtc(localStart, timeZone);
-            var slotEnd = ToUtc(localEnd, timeZone);
-
-            if (slotStart is null || slotEnd is null)
-            {
-                // Несуществующее локальное время (переход на летнее время) пропускается.
-                continue;
-            }
-
-            // При переходе на зимнее время два локальных времени могут дать один UTC-инстант.
-            if (!seen.Add(slotStart.Value))
-            {
-                continue;
-            }
-
-            if (slotStart.Value <= now)
-            {
-                continue;
-            }
-
-            if (context.TimeOffs.Any(timeOff =>
-                    timeOff.StartAt < slotEnd.Value && slotStart.Value < timeOff.EndAt))
-            {
-                continue;
-            }
-
-            if (bookingsResult.Value.Any(booking =>
-                    booking.StartAt < slotEnd.Value && slotStart.Value < booking.EndAt))
-            {
-                continue;
-            }
-
-            slots.Add(new BarberSlotResponse(slotStart.Value, slotEnd.Value));
-        }
+        // Сама сетка — чистая функция SlotGrid: тот же расчёт нужен переносу визита,
+        // у которого длительность берётся из брони, а не из текущего прайса.
+        var slots = SlotGrid
+            .Legal(
+                date,
+                context.TimeZoneId,
+                context.StartTime,
+                context.EndTime,
+                context.DurationMinutes,
+                context.TimeOffs)
+            .Where(slot => slot.StartAt > now)
+            .Where(slot => !bookingsResult.Value.Any(booking =>
+                booking.StartAt < slot.EndAt && slot.StartAt < booking.EndAt))
+            .ToList();
 
         return response with { Slots = slots };
     }

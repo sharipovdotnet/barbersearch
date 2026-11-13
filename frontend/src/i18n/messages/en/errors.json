@@ -36,5 +36,15 @@
   "Нет доступа к портфолио этого барбера.": "You don't have access to this barber's portfolio.",
   "Не удалось сохранить файл. Попробуйте ещё раз.": "Could not save the file. Try again.",
   "Не удалось выполнить действие с фото. Попробуйте ещё раз.": "Could not complete the photo action. Try again.",
-  "Не удалось изменить аватар. Попробуйте ещё раз.": "Could not change the avatar. Try again."
+  "Не удалось изменить аватар. Попробуйте ещё раз.": "Could not change the avatar. Try again.",
+  "Это время уже занято. Выберите другое.": "This slot is already taken. Choose another one.",
+  "Это время больше не доступно. Выберите другое.": "This time is no longer available. Choose another one.",
+  "Это время уже прошло. Выберите другое.": "This time has already passed. Choose another one.",
+  "Слишком далеко в будущем.": "That date is too far in the future.",
+  "Запись уже нельзя перенести — обновите страницу.": "The booking can no longer be rescheduled — refresh the page.",
+  "Запись изменилась — обновите страницу.": "The booking has changed — refresh the page.",
+  "Запись больше нельзя перенести: время или место недоступны.": "The booking can no longer be rescheduled: the time or place is unavailable.",
+  "Это запись другого клиента.": "This booking belongs to another client.",
+  "Не удалось перенести запись.": "Could not reschedule the booking.",
+  "Не удалось перенести: попробуйте ещё раз.": "Could not reschedule: try again."
 }

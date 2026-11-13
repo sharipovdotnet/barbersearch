@@ -70,6 +70,7 @@ function controller(
     markNoShow: vi.fn(async () => undefined),
     cancel: vi.fn(async () => undefined),
     saveNote: vi.fn(async () => undefined),
+    reschedule: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -83,6 +84,7 @@ function draw(day: BarberDayController) {
     onOpenCancel: vi.fn(),
     onOpenNoShow: vi.fn(),
     onOpenNote: vi.fn(),
+    onOpenReschedule: vi.fn(),
     onReload: vi.fn(),
     registerRow: vi.fn(),
   }

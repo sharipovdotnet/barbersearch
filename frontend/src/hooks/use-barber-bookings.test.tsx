@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { useBarberBookings } from '@/hooks/use-barber-bookings'
 import type { BarberBooking } from '@/lib/barber-bookings'
+import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 /**
@@ -85,5 +86,76 @@ describe('useBarberBookings: тихое обновление', () => {
     const change = await act(async () => result.current.refresh())
 
     expect(change).toStrictEqual({ added: [], removed: [], updated: [] })
+  })
+
+  it('перенос обновляет строку на месте, без повторного GET', async () => {
+    const startAt = '2026-11-12T14:00:00Z'
+    const endAt = '2026-11-12T14:30:00Z'
+    const fetches = countRequests('/api/barber/bookings')
+    const posts: string[] = []
+
+    server.use(
+      http.get('/api/barber/bookings', () =>
+        HttpResponse.json({ items: [booking('a')], nextCursor: null })
+      ),
+      http.post('/api/bookings/:id/reschedule', async ({ request }) => {
+        posts.push(await request.text())
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    const { result } = renderHook(() => useBarberBookings('upcoming'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    const fetchesBefore = fetches()
+
+    await act(async () => {
+      await result.current.reschedule('a', { startAt, endAt })
+    })
+
+    expect(posts).toStrictEqual([JSON.stringify({ startAt })])
+    expect(result.current.items[0]).toMatchObject({ id: 'a', startAt, endAt })
+    expect(fetches()).toBe(fetchesBefore)
+    expect(result.current.isMutating).toBe(false)
+  })
+
+  it('второй клик по той же строке не шлёт второй POST (single-flight)', async () => {
+    let posts = 0
+
+    server.use(
+      http.get('/api/barber/bookings', () =>
+        HttpResponse.json({ items: [booking('a')], nextCursor: null })
+      ),
+      http.post('/api/bookings/:id/reschedule', () => {
+        posts += 1
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    const { result } = renderHook(() => useBarberBookings('upcoming'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    await act(async () => {
+      await Promise.all([
+        result.current.reschedule('a', {
+          startAt: '2026-11-12T14:00:00Z',
+          endAt: '2026-11-12T14:30:00Z',
+        }),
+        result.current.reschedule('a', {
+          startAt: '2026-11-12T15:00:00Z',
+          endAt: '2026-11-12T15:30:00Z',
+        }),
+      ])
+    })
+
+    expect(posts).toBe(1)
   })
 })

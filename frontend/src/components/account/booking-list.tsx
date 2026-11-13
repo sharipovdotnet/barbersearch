@@ -76,6 +76,8 @@ export function BookingList({
   isRefreshing,
   refreshError,
   onRefresh,
+  now,
+  onRequestReschedule,
   onRequestCancel,
   onRequestReview,
 }: {
@@ -99,6 +101,9 @@ export function BookingList({
   /** Ошибка тихого обновления: строки остаются на экране. */
   refreshError: string | null
   onRefresh: () => void
+  /** Текущий момент страницы: перенос доступен только до начала визита. */
+  now: number
+  onRequestReschedule: (view: BookingView) => void
   onRequestCancel: (view: BookingView) => void
   onRequestReview: (view: BookingView) => void
 }) {
@@ -196,6 +201,8 @@ export function BookingList({
                       key={view.booking.id}
                       view={view}
                       isReviewed={reviewedIds.has(view.booking.id)}
+                      now={now}
+                      onRequestReschedule={() => onRequestReschedule(view)}
                       onRequestCancel={() => onRequestCancel(view)}
                       onRequestReview={() => onRequestReview(view)}
                     />

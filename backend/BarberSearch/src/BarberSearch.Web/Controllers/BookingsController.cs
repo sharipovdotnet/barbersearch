@@ -4,12 +4,16 @@ using BarberSearch.Application.Bookings.CancelBooking;
 using BarberSearch.Application.Bookings.CompleteBooking;
 using BarberSearch.Application.Bookings.ConfirmBooking;
 using BarberSearch.Application.Bookings.CreateBooking;
+using BarberSearch.Application.Bookings.GetBookingRescheduleSlots;
 using BarberSearch.Application.Bookings.GetBookings;
 using BarberSearch.Application.Bookings.MarkBookingNoShow;
+using BarberSearch.Application.Bookings.RescheduleBooking;
+using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
 using BarberSearch.Contracts.Bookings.CancelBooking;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
+using BarberSearch.Contracts.Bookings.RescheduleBooking;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Web.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -114,6 +118,51 @@ public class BookingsController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new MarkBookingNoShowCommand(bookingId),
+            cancellationToken));
+
+    /// <summary>
+    /// Переносит визит на другое время: меняются только начало и окончание.
+    /// </summary>
+    /// <remarks>
+    /// Ответ — <c>204</c> без тела, как у остальных переходов брони: новое время клиент уже
+    /// знает из слота, а список перечитывается опросом. Услуга, салон, барбер, цена и статус
+    /// не меняются, длительность сохраняется по самой брони. Новое время обязано быть стартом
+    /// слота из <see cref="GetRescheduleSlots"/>; повтор с тем же временем — безвредный no-op.
+    /// </remarks>
+    /// <param name="bookingId">Идентификатор переносимой брони.</param>
+    /// <param name="request">Новое начало визита.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPost("{bookingId:guid}/reschedule")]
+    public async Task<ActionResult> Reschedule(
+        Guid bookingId,
+        [FromBody] RescheduleBookingRequest request,
+        [FromServices] ICommandHandler<RescheduleBookingCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new RescheduleBookingCommand(bookingId, request.StartAt),
+            cancellationToken));
+
+    /// <summary>
+    /// Возвращает слоты для переноса визита на дату.
+    /// </summary>
+    /// <remarks>
+    /// Отдельное чтение, а не параметр публичных слотов: длительность и салон берутся из самой
+    /// брони, поэтому она могла разойтись с текущим прайсом. Контракт — обычный
+    /// <c>BarberSlotsResponse</c>; своя бронь слот не занимает, чужие — занимают.
+    /// </remarks>
+    /// <param name="bookingId">Идентификатор переносимой брони.</param>
+    /// <param name="date">Локальная дата салона.</param>
+    /// <param name="handler">Обработчик запроса.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpGet("{bookingId:guid}/reschedule-slots")]
+    public async Task<ActionResult<BarberSlotsResponse>> GetRescheduleSlots(
+        Guid bookingId,
+        [FromQuery] DateOnly? date,
+        [FromServices] IQueryHandler<BarberSlotsResponse, GetBookingRescheduleSlotsQuery> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new GetBookingRescheduleSlotsQuery(bookingId, date),
             cancellationToken));
 
     /// <summary>

@@ -662,7 +662,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
 | `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
 | `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
-| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions; **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
+| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions (`Reschedule` меняет только время и только из `Pending`/`Confirmed`; повтор на то же время — no-op); **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 | `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
 
@@ -758,6 +758,16 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 показывается. `IsAvatarBlocked` и `Rejected` — разные вещи: блокировка скрывает уже
 опубликованный кадр, отказ — решение о новом. Миграция `AddPhotoModeration` не перепроверяет
 историю: существующие строки получают `Approved`. Очереди, маршруты и видимость — §17.14.
+
+**Перенос визита (2026-11-13, issue-95).** `Booking.Reschedule(startAt, endAt)` меняет
+**только время** визита: услуга, салон, барбер, цена и статус остаются прежними, длительность
+тоже (`EndAt − StartAt` брони, а не текущий прайс). Переход возможен только из `Pending` и
+`Confirmed` (`409 booking.reschedule.status`), `endAt > startAt` (`400 booking.overlap.period`,
+как у `HasActiveOverlapAsync`), иначе поля не меняются. Повторный перенос на то же время —
+успех без записи (D15), поэтому строки аудита не появляется. «Сейчас», горизонт `90` дней,
+сетка слотов, отпуска, занятость и advisory-блокировка барбера — забота Application (§16);
+домен по-прежнему не знает ни времени, ни репозиториев (§7.6). Статус переносом не меняется:
+подтверждение остаётся отдельным решением барбера.
 
 ### 7.4 Statuses and enums
 
@@ -923,8 +933,8 @@ The rules below were pushed to the application layer because the aggregate canno
 | Tests | ✅ 588 domain + 878 application + 317 infrastructure + 292 integration (2075 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из восьми типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони только `Status`/`BarberNote`/`CancellationReason`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 32 контроллера / 156 endpoints (144 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из восьми типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
+| Web | ✅ 32 контроллера / 158 endpoints (146 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -1719,6 +1729,13 @@ unique indexes already serve every new `EXISTS`/`NOT EXISTS`. The new conflict r
 time-off read is a 4.9 ms hash join over 600 `time_offs` and 12 000 primary links — both below
 the point where an index would pay for itself.
 
+**Reschedule reads (2026-11-13, issue-95).** The slice adds no query shape: `GetBarberProfileIdAsync`
+is a primary-key projection of one column (`SELECT barber_profile_id FROM bookings WHERE id = @id`,
+`AsNoTracking`), occupancy is the same `GetActiveByBarberAsync` range scan already used by the public
+slots (`(barber_profile_id, start_at)` partial index), and the new slot read reuses
+`GetSlotContextAsync`/`GetOwnSlotContextAsync`. **Plan unchanged**, no new index and no migration —
+`dotnet ef migrations has-pending-model-changes` is empty.
+
 **Own card read (2026-11-10, issue-83).** `BarberProfileRepository.GetOwnCardByIdAsync` is a
 primary-key lookup (`WHERE id = @id`, **no** visibility predicate) with three `Include`s under
 `AsSplitQuery`, so it runs on `barber_profiles_pkey` and the collections are fetched by their
@@ -2302,7 +2319,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**31 domain controllers (+ `AuthController`), 156 endpoints: 144 domain + 12 auth** — one endpoint
+**31 domain controllers (+ `AuthController`), 158 endpoints: 146 domain + 12 auth** — one endpoint
 per Application operation, plus the twelve `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2321,7 +2338,7 @@ the aggregate that owns the child entity:
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 4 (search, card, slots, additional-service suggestions) |
-| `BookingsController` | `api/bookings` | 7 (6 write + list) |
+| `BookingsController` | `api/bookings` | 9 (8 write + list) |
 | `BarberBookingsController` | `api/barber/bookings` | 2 (list + manual client booking) |
 | `BarberBookingSetupController` | `api/barber` | 3 (client search, booking options, own slots) |
 | `BarberNotificationsController` | `api/barber/notifications` | 6 (inbox page, mark read, read-all, unread count, Telegram link, Telegram unlink) |
@@ -2730,8 +2747,8 @@ Read endpoints (added 2026-10-19):
   issue-41; since issue-91 `PortfolioPhoto` is the eighth and the only audited `BarberProfile`
   child — creating, captioning, reordering, publishing, blocking and deciding a frame write
   `portfolio_photo.created|updated|deleted`, while `BarberService`, `BarberSalon`,
-  `WorkingSchedule` and `TimeOff` stay out. Booking rows record only `Status` and `BarberNote`
-  changes, and booking creation is deliberately not audited. `entityType` therefore accepts
+  `WorkingSchedule` and `TimeOff` stay out. Booking rows record `Status`, `BarberNote` and time
+  (`StartAt`/`EndAt` since issue-95) changes, and booking creation is deliberately not audited. `entityType` therefore accepts
   `all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo`,
   trimmed and case-insensitive; numbers and unknown strings are still
   `400 admin.audit.entityType`. Nothing else about the read-only contract changed: there is no
@@ -2774,10 +2791,14 @@ Read endpoints (added 2026-10-19):
   `GetBarberPageAsync` keep their contracts and `scope` behaviour. `GET api/admin/bookings/{id}`
   uses the same projection and answers `404 admin.bookings.notFound`. Mutations stay on
   `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
-  and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation,
-  reschedule, price/note edit, delete or refund anywhere in the API. **Admin cancellation and
+  and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation, price/note
+  edit, delete or refund anywhere in the API, and the admin screen has **no** reschedule action
+  (D13). The reschedule endpoint itself lives on `BookingsController` and accepts an administrator
+  (D3), which is covered by an integration test; API and UI may disagree there on purpose.
+  **Admin cancellation and
   no-show are written to `audit_log`** since issue-41: the `Booking` allowlist records `Status`,
-  `BarberNote` and `CancellationReason` changes as `booking.updated`, with the acting administrator as the actor, so
+  `BarberNote`, `CancellationReason` and (since issue-95) `StartAt`/`EndAt` changes as
+  `booking.updated`, with the acting administrator as the actor, so
   the journal shows them under `entityType=booking`. Creating a booking is deliberately **not**
   audited (`AuditsCreation: false`) — the row already holds the customer, the time and the price,
   and a line per booking would grow the journal without new information. Retention and export
@@ -3055,6 +3076,38 @@ Read endpoints (added 2026-10-19):
   field is returned as `cancellationReason` by `GET api/bookings`, `GET api/barber/bookings` and the
   admin booking contracts; it is in the `Booking` audit allowlist, so a barber cancellation writes
   `booking.updated` with both `status` and `cancellationReason`.
+- **Reschedule (2026-11-13, issue-95).** `POST api/bookings/{id}/reschedule` takes
+  `{ startAt }` and answers **`204`** (like the other status transitions; no `BookingResponse`
+  body, because the customer and barber lists use different DTOs). Only `startAt`/`endAt` change:
+  service, salon, barber, price, status and duration stay as they were. Who may move it follows
+  the cancellation rule (D3): customer owner, profile barber or administrator; a guest booking can
+  be moved only by the barber or an administrator (`403 auth.forbidden` otherwise). The window has
+  no tolerance: `startAt` must be strictly in the future (`400 booking.reschedule.startAt.inPast`)
+  and at most `Constants.BOOKING_HORIZON_DAYS` (90) ahead (`400 booking.reschedule.startAt.tooFar`);
+  an already started visit is `409 booking.reschedule.status` (terminal status — the same code), so
+  a past visit is never "revived". The new time must be a **slot start** computed from the booking's
+  own duration (`endAt − startAt`), not from the current price list (D5/D6): working hours, a
+  schedule exception (a day off beats the weekly template), a time off and the DST gap all give
+  `409 booking.reschedule.slot`. Occupancy is checked in C# over the active bookings of that local
+  day, excluding the booking itself — its own slot does not block it (D9/D15); a foreign booking
+  gives `409 booking.reschedule.overlap`, and the residual GiST race still maps to
+  `booking.update.overlap`. Atomicity (D8): `IUnitOfWork` → advisory lock on the barber with
+  `booking.reschedule.lockTimeout` (`409`, never a `500`) → `GetByIdAsync` **after** the lock →
+  authorization → checks → `Booking.Reschedule` → `UpdateAsync`; the lock key comes from the narrow
+  projection `IBookingRepository.GetBarberProfileIdAsync`, read before the transaction. A repeat on
+  the very same `startAt` is a successful no-op without a write or an audit row (D15). Audit (D10):
+  `booking.updated` with `startAt`/`endAt` `from`/`to` in ISO (the payload has no salon zone, so the
+  journal shows UTC), exactly one row, and creation is still not audited (`AuditsCreation: false`).
+  `GET api/bookings/{id}/reschedule-slots?date=` returns the existing `BarberSlotsResponse` with
+  `barberProfileId`/`salonId`/`barberServiceId` from the booking, `hairServiceId: null` and
+  `durationMinutes` = the booking duration; a customer owner reads it with public visibility, a
+  barber/administrator with the own context (`404` if the barber is hidden). `date` is required and
+  limited to `[today in the salon zone; +90 days]` (`400 booking.reschedule.date`); a terminal or
+  already started booking gives `409 booking.reschedule.status`, a foreign booking `403`, an unknown
+  one `404 booking.notFound`. Public `/slots` and `/barber/slots` gained **no** parameter (D7), and
+  both endpoints share the pure `SlotGrid.Legal` with the public slots (same DST/time-off rules).
+  No migration and no new index: the SQL shape is unchanged (same `GetActiveByBarberAsync` range
+  scan and the partial `(barber_profile_id, start_at)` index), so the plan is unchanged.
 - **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`
   (issue-36 added the scopes). `scope=all|upcoming|past`: `all` is the default and keeps the old
   behaviour exactly (`start_at DESC, id ASC`, every status, `all` without the parameter) so the

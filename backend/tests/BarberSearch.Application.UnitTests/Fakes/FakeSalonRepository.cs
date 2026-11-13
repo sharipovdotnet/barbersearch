@@ -68,6 +68,12 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
     /// <summary>Сколько раз обработчик вызывал <see cref="UpdateAsync"/>.</summary>
     public int UpdateCalls { get; private set; }
 
+    /// <summary>
+    /// Сколько раз обработчик читал салон по идентификатору. Переносу визита важно, что
+    /// перенос «на то же время» не читает даже пояс салона — это успех без записи (D15).
+    /// </summary>
+    public int GetByIdCalls { get; private set; }
+
     /// <summary>Салоны, сохранённые через <see cref="AddAsync"/> или <see cref="UpdateAsync"/>.</summary>
     public IReadOnlyCollection<Salon> Salons => _salons.Values;
 
@@ -233,13 +239,17 @@ public sealed class FakeSalonRepository : ISalonRepository, IFakeTransactionPart
     public Task<Result<Salon, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<Result<Salon, Failure>>(
+    {
+        GetByIdCalls++;
+
+        return Task.FromResult<Result<Salon, Failure>>(
             _salons.TryGetValue(id, out var salon)
                 ? salon
                 : new Failure(Error.NotFound(
                     ApiErrorCodes.Salon.NotFound,
                     $"Salon '{id}' was not found.",
                     id)));
+    }
 
     public Task<Result<IReadOnlyList<Salon>, Failure>> GetByIdsAsync(
         IEnumerable<Guid> ids,

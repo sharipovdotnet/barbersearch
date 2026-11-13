@@ -90,6 +90,91 @@ export function describeBarberBookingFailure(
   return { message: describeApiFailure(error, fallback), canReload: false }
 }
 
+export type RescheduleFailure = {
+  message: string
+  /** Перезапросить сетку: время заняли, слот исчез или запись устарела. */
+  reloadSlots: boolean
+}
+
+/**
+ * Ошибки переноса визита — общий маппер двух кабинетов.
+ *
+ * Коды важнее статуса: `booking.reschedule.overlap` и остаточная гонка
+ * `booking.update.overlap` значат одно — время занято; `booking.reschedule.slot`
+ * — сетка устарела; `booking.update.concurrencyConflict` — строку изменили
+ * параллельно. `detail` не показываем: он английский.
+ */
+export function describeRescheduleFailure(
+  error: unknown,
+  fallback: string
+): RescheduleFailure {
+  if (!(error instanceof ApiError)) {
+    return { message: t(fallback), reloadSlots: false }
+  }
+
+  if (
+    error.hasCode('booking.reschedule.overlap') ||
+    error.hasCode('booking.update.overlap')
+  ) {
+    return {
+      message: t('Это время уже занято. Выберите другое.'),
+      reloadSlots: true,
+    }
+  }
+
+  if (error.hasCode('booking.reschedule.slot')) {
+    return {
+      message: t('Это время больше не доступно. Выберите другое.'),
+      reloadSlots: true,
+    }
+  }
+
+  if (error.hasCode('booking.reschedule.startAt.inPast')) {
+    return {
+      message: t('Это время уже прошло. Выберите другое.'),
+      reloadSlots: true,
+    }
+  }
+
+  if (error.hasCode('booking.reschedule.startAt.tooFar')) {
+    return {
+      message: t('Слишком далеко в будущем.'),
+      reloadSlots: false,
+    }
+  }
+
+  if (error.hasCode('booking.reschedule.status')) {
+    return {
+      message: t('Запись уже нельзя перенести — обновите страницу.'),
+      reloadSlots: false,
+    }
+  }
+
+  if (error.hasCode('booking.reschedule.lockTimeout')) {
+    return {
+      message: t('Не удалось перенести: попробуйте ещё раз.'),
+      reloadSlots: true,
+    }
+  }
+
+  if (error.hasCode('booking.update.concurrencyConflict')) {
+    return {
+      message: t('Запись изменилась — обновите страницу.'),
+      reloadSlots: true,
+    }
+  }
+
+  if (error.status === 404 || error.hasCode('booking.notFound')) {
+    return { message: t('Запись не найдена.'), reloadSlots: false }
+  }
+
+  if (error.status === 403) {
+    return { message: t('Это запись другого клиента.'), reloadSlots: false }
+  }
+
+  return { message: describeApiFailure(error, fallback), reloadSlots: false }
+}
+
 export type BarberBookingCreateFailure = {
   message: string
   /** Перезапросить слоты: время заняли, услуга/салон исчезли или старт вне окна. */

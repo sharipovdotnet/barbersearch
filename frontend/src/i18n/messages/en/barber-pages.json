@@ -107,5 +107,10 @@
   "Не удалось загрузить ещё уведомления.": "Could not load more notifications.",
   "Не удалось прочитать уведомления.": "Could not mark notifications as read.",
   "Не удалось подключить Telegram.": "Could not connect Telegram.",
-  "Не удалось отключить Telegram.": "Could not disconnect Telegram."
+  "Не удалось отключить Telegram.": "Could not disconnect Telegram.",
+  "Перенести запись": "Reschedule",
+  "Перенести запись {when}": "Reschedule the booking for {when}",
+  "Клиент увидит новое время в кабинете. Письмо не отправляется.": "The client will see the new time in the cabinet. No email is sent.",
+  "Визит перенесён на {when}.": "The visit has been moved to {when}.",
+  "Клиент перенёс запись на {when}.": "The client moved the booking to {when}."
 }

@@ -47,6 +47,7 @@ export function BarberDay({
   onOpenCancel,
   onOpenNoShow,
   onOpenNote,
+  onOpenReschedule,
   onReload,
   registerRow,
 }: {
@@ -62,6 +63,7 @@ export function BarberDay({
   onOpenCancel: (booking: BarberBooking) => void
   onOpenNoShow: (booking: BarberBooking) => void
   onOpenNote: (booking: BarberBooking) => void
+  onOpenReschedule: (booking: BarberBooking) => void
   onReload: () => void
   registerRow: (id: string, handle: RowHandle | null) => void
 }) {
@@ -194,6 +196,7 @@ export function BarberDay({
                     onOpenCancel={onOpenCancel}
                     onOpenNoShow={onOpenNoShow}
                     onOpenNote={onOpenNote}
+                    onOpenReschedule={onOpenReschedule}
                     onReload={onReload}
                     registerRow={registerRow}
                   />

@@ -1,0 +1,23 @@
+﻿issue-95 unit tests via temp BaseOutputPath (sandbox workaround) 2026-11-13T10:33:47.5770457+05:00
+
+
+===== Domain.UnitTests =====
+Тестовый запуск для C:\Users\Hrust\AppData\Local\Temp\bs-tests\DomainUnitTests\Debug\net10.0\BarberSearch.Domain.UnitTests.dll (.NETCoreApp,Version=v10.0)
+Общее количество тестовых файлов (1), соответствующих указанному шаблону.
+
+Пройден!   : не пройдено     0, пройдено   595, пропущено     0, всего   595, длительность 576 ms. - BarberSearch.Domain.UnitTests.dll (net10.0)
+EXIT=0
+
+===== Application.UnitTests =====
+Тестовый запуск для C:\Users\Hrust\AppData\Local\Temp\bs-tests\ApplicationUnitTests\Debug\net10.0\BarberSearch.Application.UnitTests.dll (.NETCoreApp,Version=v10.0)
+Общее количество тестовых файлов (1), соответствующих указанному шаблону.
+
+Пройден!   : не пройдено     0, пройдено   955, пропущено     0, всего   955, длительность 569 ms. - BarberSearch.Application.UnitTests.dll (net10.0)
+EXIT=0
+
+===== Infrastructure.UnitTests =====
+Тестовый запуск для C:\Users\Hrust\AppData\Local\Temp\bs-tests\InfrastructureUnitTests\Debug\net10.0\BarberSearch.Infrastructure.UnitTests.dll (.NETCoreApp,Version=v10.0)
+Общее количество тестовых файлов (1), соответствующих указанному шаблону.
+
+Пройден!   : не пройдено     0, пройдено   351, пропущено     0, всего   351, длительность 7 s. - BarberSearch.Infrastructure.UnitTests.dll (net10.0)
+EXIT=0

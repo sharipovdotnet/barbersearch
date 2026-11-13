@@ -13,6 +13,7 @@ import {
   BARBER_BOOKINGS_PAGE_SIZE,
   type BarberBooking,
 } from '@/lib/barber-bookings'
+import type { BarberSlot } from '@/lib/barber-slots'
 import { diffPageItems, type PageChange } from '@/lib/page-changes'
 
 /** Одна из двух выборок упала, вторая отдала строки: день остаётся на экране. */
@@ -44,6 +45,8 @@ export type BarberDayController = {
   markNoShow: (id: string) => Promise<void>
   cancel: (id: string, reason: string) => Promise<void>
   saveNote: (id: string, note: string) => Promise<void>
+  /** Перенос уходит в контроллер-владелец строки; второй список не перечитывается. */
+  reschedule: (id: string, slot: BarberSlot) => Promise<void>
 }
 
 function isListLoading(controller: BarberBookingsController): boolean {
@@ -87,7 +90,7 @@ function applyChange(
 
 const getId = (booking: BarberBooking): string => booking.id
 const statusChanged = (left: BarberBooking, right: BarberBooking): boolean =>
-  left.status !== right.status
+  left.status !== right.status || left.startAt !== right.startAt
 
 /**
  * Производный контроллер ленты дня.
@@ -247,6 +250,19 @@ export function useBarberDay(
     [ownerOf]
   )
 
+  /**
+   * Перенос не уводит строку в другой скоуп — визит остаётся активным, поэтому
+   * второй список не перечитывается. День пересобирается из изменившейся строки и
+   * сам уберёт её из «сегодня», если время уехало на другой день.
+   */
+  const reschedule = useCallback(
+    async (id: string, slot: BarberSlot): Promise<void> => {
+      const owner = ownerOf(id)
+      await owner?.reschedule(id, slot)
+    },
+    [ownerOf]
+  )
+
   const isTruncated =
     (upcoming.items.length === BARBER_BOOKINGS_PAGE_SIZE ||
       past.items.length === BARBER_BOOKINGS_PAGE_SIZE) &&
@@ -272,5 +288,6 @@ export function useBarberDay(
     markNoShow,
     cancel,
     saveNote,
+    reschedule,
   }
 }

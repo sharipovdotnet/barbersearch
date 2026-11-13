@@ -544,6 +544,99 @@ public class BookingTests
     }
 
     [Fact]
+    public void Reschedule_FromPending_MovesBothTimesAndKeepsEverythingElse()
+    {
+        var booking = CreateValidBooking();
+        var before = booking.UpdatedAt;
+        var newStart = Start.AddDays(2);
+
+        var result = booking.Reschedule(newStart, newStart.AddMinutes(45));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(newStart, booking.StartAt);
+        Assert.Equal(newStart.AddMinutes(45), booking.EndAt);
+        Assert.True(booking.UpdatedAt >= before);
+
+        // Перенос меняет только время: услуга, барбер, салон, цена и статус — прежние.
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+        Assert.Equal(1500m, booking.Price);
+        Assert.Equal("key-1", booking.IdempotencyKey);
+    }
+
+    [Fact]
+    public void Reschedule_FromConfirmed_MovesBothTimesAndKeepsConfirmed()
+    {
+        var booking = CreateValidBooking();
+        booking.Confirm();
+        var barberProfileId = booking.BarberProfileId;
+        var salonId = booking.SalonId;
+        var barberServiceId = booking.BarberServiceId;
+        var newStart = Start.AddDays(3);
+
+        var result = booking.Reschedule(newStart, newStart.AddMinutes(30));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+        Assert.Equal(newStart, booking.StartAt);
+        Assert.Equal(newStart.AddMinutes(30), booking.EndAt);
+        Assert.Equal(barberProfileId, booking.BarberProfileId);
+        Assert.Equal(salonId, booking.SalonId);
+        Assert.Equal(barberServiceId, booking.BarberServiceId);
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Cancelled)]
+    [InlineData(BookingStatus.Completed)]
+    [InlineData(BookingStatus.NoShow)]
+    public void Reschedule_FromTerminalStatus_ReturnsRescheduleStatusAndKeepsTimes(
+        BookingStatus terminalStatus)
+    {
+        var booking = CreateValidBooking();
+        MoveToStatus(booking, terminalStatus);
+        var originalStart = booking.StartAt;
+        var originalEnd = booking.EndAt;
+        var newStart = Start.AddDays(5);
+
+        var result = booking.Reschedule(newStart, newStart.AddMinutes(30));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.reschedule.status", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal(terminalStatus, booking.Status);
+        Assert.Equal(originalStart, booking.StartAt);
+        Assert.Equal(originalEnd, booking.EndAt);
+    }
+
+    [Fact]
+    public void Reschedule_WithEndNotAfterStart_ReturnsOverlapPeriodAndKeepsTimes()
+    {
+        var booking = CreateValidBooking();
+        var originalStart = booking.StartAt;
+        var originalEnd = booking.EndAt;
+        var newStart = Start.AddDays(1);
+
+        var result = booking.Reschedule(newStart, newStart);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.overlap.period", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(originalStart, booking.StartAt);
+        Assert.Equal(originalEnd, booking.EndAt);
+    }
+
+    [Fact]
+    public void Reschedule_ToTheSameTime_SucceedsAndKeepsTimes()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.Reschedule(booking.StartAt, booking.EndAt);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(Start, booking.StartAt);
+        Assert.Equal(Start.AddMinutes(45), booking.EndAt);
+    }
+
+    [Fact]
     public void EveryBookingStatus_IsReachable()
     {
         var confirmed = CreateValidBooking();
@@ -577,5 +670,28 @@ public class BookingTests
                 cancelled.Status,
                 noShow.Status
             });
+    }
+
+    /// <summary>
+    /// Доменные переходы в терминальный статус — так же, как их проходят в рабочем сценарии.
+    /// </summary>
+    private static void MoveToStatus(Booking booking, BookingStatus status)
+    {
+        switch (status)
+        {
+            case BookingStatus.Cancelled:
+                Assert.True(booking.Cancel().IsSuccess);
+                break;
+            case BookingStatus.Completed:
+                Assert.True(booking.Confirm().IsSuccess);
+                Assert.True(booking.Complete().IsSuccess);
+                break;
+            case BookingStatus.NoShow:
+                Assert.True(booking.Confirm().IsSuccess);
+                Assert.True(booking.MarkNoShow().IsSuccess);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(status), status, "Not a terminal status.");
+        }
     }
 }

@@ -611,6 +611,15 @@ when the tab is opened for the first time. Cancelling waits for `204` and then r
 barber who cancelled (a customer cancellation or an older row says «Причина отмены не указана»). Barber names and salon addresses still come from
 `GET /api/barbers/{id}` for the visible rows and the hero only, not for the hidden list.
 
+A future `Pending`/`Confirmed` row also has a «Перенести запись» icon button (a calendar-clock
+next to cancel): it opens the shared reschedule dialog, the person picks a salon-local date and a
+slot from `GET /api/bookings/{id}/reschedule-slots`, and the visit keeps its service, barber,
+salon, price, status and duration. The request is `POST /api/bookings/{id}/reschedule` with
+`{ startAt }` and `204`; the row is updated locally without a reload, so the client does not see a
+false «Барбер перенёс…» banner about their own action. A barber moving a visit shows up through the
+30-second poll as «Барбер перенёс запись на …». There is no email or push: the cabinet is the
+source of truth.
+
 States: hero/list skeletons, a first-page error with «Повторить», a next-page error inside the
 pager (the rows stay), the sign-in gate on `401`, and per-tab empty states. An empty «Предстоящие»
 shows one invitation card with «Найти барбера» instead of the duplicated hero/empty-list pair. A
@@ -618,9 +627,11 @@ next-page error in one tab does not clear the other.
 
 - `src/pages/account-page.tsx` — session gate, shell, hero, tabs and the dialogs.
 - `src/hooks/use-bookings.ts` — `useCustomerBookings`: two `usePagedList` controllers
-  (`upcoming`/`past`), the lazy history switch and cancellation.
+  (`upcoming`/`past`), the lazy history switch, cancellation and reschedule.
 - `src/components/account/booking-list.tsx` — tabs, month groups per page, rows and the shared pager.
-- `src/lib/bookings.ts` — `Booking`, `BookingScope`, `fetchBookings(scope, cursor, signal)`.
+- `src/components/reschedule-booking-dialog.tsx` — the shared reschedule dialog of both cabinets.
+- `src/lib/bookings.ts` — `Booking`, `BookingScope`, `fetchBookings(scope, cursor, signal)`,
+  `cancelBooking`, `rescheduleBooking`.
 
 ### Profile
 
@@ -1088,6 +1099,11 @@ Telegram is an **optional delivery channel** on top of the same rows, off withou
 external service or consent to work. With a configured bot, «Подключить» issues a one-time code
 and a `t.me` deep link; the client never receives `chatId`.
 
+Rescheduling a visit sends **no** notification of any kind: the client sees the new time in the
+cabinet (or the «Барбер перенёс запись на …» banner from the 30-second poll), the barber sees the
+row change, and the dialog says honestly that no email is sent. Reminders and the digest are a
+separate slice and do not subscribe to `booking.updated`.
+
 Files: `src/pages/barber-notifications-page.tsx`, `src/hooks/use-barber-notifications.ts`,
 `use-unread-notifications.ts`, `use-notification-settings.ts`, `src/lib/barber-notifications.ts`,
 `src/components/barber/barber-cabinet-gates.tsx` (`BarberUnreadBell`). E2E:
@@ -1138,6 +1154,11 @@ antiforgery on this endpoint, so the booking path has no `GET /api/auth/csrf`.
 - `src/lib/barber-path.ts`, `src/lib/catalog.ts` — route parsing and the shared profile cache.
 - `src/lib/barber-slots.ts` — slots DTO, `fetchBarberSlots`, salon-local date helpers.
 - `src/lib/bookings.ts` — `createBooking`, the booking list and cancellation.
+
+Moving an **existing** visit is not part of the public booking panel: the client and the barber
+reschedule from their cabinets (`/account` and `/barber`), and the admin has no reschedule action
+in the UI. `POST /api/bookings/{id}/reschedule` exists for the API, but the public card still only
+creates bookings; the slot grid there is unchanged.
 - `src/lib/barber-profile-labels.ts` — Russian labels for categories, languages, payment and days.
 
 Search cards on the landing are real links, so middle click and «открыть в новой вкладке» work.
@@ -1622,7 +1643,12 @@ What it can do:
 - The two actions are the existing `POST` endpoints; the screen adds **no new mutation**. There is
   no create for a customer, no reschedule, no edit of the price, service or barber note, no delete
   and no refunds or payments — the domain has none of them, and the barber's note is read-only for
-  the admin. Terminal bookings show no actions, and rows have no action buttons at all.
+  the admin. Terminal bookings show no actions, and rows have no action buttons at all. The
+  booking-reschedule slice deliberately does **not** add a «Перенести» button here: support still
+  cancels and marks no-shows, while moving a visit stays a client/barber action, even though the
+  API allows an administrator to call it.
+- Bookings moved by a client or a barber show the same `startAt`/`endAt` in this list and card,
+  because both read the booking row; the admin journal now also records that move (see below).
 
 What it cannot do, on purpose:
 
@@ -1631,10 +1657,14 @@ What it cannot do, on purpose:
   is in the address, because a direct link to a booking from a ticket is the point of the screen.
 - **Booking changes are audited, booking creation is not.** `AuditTrail` writes a `booking.updated`
   row for every status or barber-note change — including the admin cancellation and no-show on this
-  screen — so they appear in `/admin/audit` under the «Бронь» filter. Creating a booking writes
+  screen — so they appear in `/admin/audit` under the «Бронь» filter. A reschedule is the same
+  `booking.updated` action with two changes, `startAt`/`endAt`; the journal renders them as
+  «Начало»/«Окончание» in **UTC with an explicit ` UTC` suffix**, because the payload has no salon
+  zone and the browser zone would mislead a remote administrator. Creating a booking writes
   **no** row: `AuditsCreation: false`, because the booking already stores the customer, the time
   and the price, and a line per booking would grow the journal without new information. Retention
-  and export remain separate slices.
+  and export remain separate slices. The price and the service/barber/salon links stay out of the
+  allowlist until the separate price-edit slice.
 - Filters by date, barber and salon, bulk operations, a calendar/timeline and CSV export are not
   part of this screen.
 

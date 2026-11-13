@@ -36,28 +36,56 @@ export type BarberSlots = {
   slots: BarberSlot[]
 }
 
-export type BarberSlotsParams = {
-  barberProfileId: string
-  /** Локальная дата салона; битую строку сервер вернёт framework-`400`. */
-  date: string
-  hairServiceId: string | null
-  salonId: string
-  /**
-   * `true` — слоты собственного профиля (`GET api/barber/slots`): кабинет работает
-   * и до публикации, поэтому сервер не требует активного и подтверждённого профиля.
-   */
-  own?: boolean
-}
+/**
+ * Параметры чтения слотов: публичная сетка, собственная сетка кабинета или сетка
+ * переноса конкретной брони.
+ *
+ * Режим брони не принимает `barberProfileId`/`salonId`/`hairServiceId`: сервер берёт
+ * их из самой брони, а длительность — из её `EndAt − StartAt`. Так `BarberBooking`
+ * без `salonId`/`barberServiceId` не нужно достраивать до публичного запроса.
+ */
+export type BarberSlotsParams =
+  | {
+      barberProfileId: string
+      /** Локальная дата салона; битую строку сервер вернёт framework-`400`. */
+      date: string
+      hairServiceId: string | null
+      salonId: string
+      /**
+       * `true` — слоты собственного профиля (`GET api/barber/slots`): кабинет работает
+       * и до публикации, поэтому сервер не требует активного и подтверждённого профиля.
+       */
+      own?: boolean
+      bookingId?: never
+    }
+  | {
+      date: string
+      /** `GET api/bookings/{id}/reschedule-slots?date=…`. */
+      bookingId: string
+      barberProfileId?: never
+      hairServiceId?: never
+      salonId?: never
+      own?: never
+    }
 
 const SALON_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Горизонт переноса в днях.
+ *
+ * Зеркало серверной `Constants.BOOKING_HORIZON_DAYS`: клиент не читает серверные
+ * константы, поэтому число повторено здесь и подписано. Только для `max` нативного
+ * поля даты; окончательно границу проверяет сервер (`booking.reschedule.startAt.tooFar`).
+ */
+export const RESCHEDULE_HORIZON_DAYS = 90
 
 /** `YYYY-MM-DD` — единственный формат, который понимает `DateOnly` на сервере. */
 export function isSalonDate(value: string): boolean {
   return SALON_DATE_PATTERN.test(value)
 }
 
-function dayKey(date: Date, timeZoneId: string): string {
+function dayKey(date: Date, timeZoneId: string | undefined): string {
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: '2-digit',
@@ -67,7 +95,7 @@ function dayKey(date: Date, timeZoneId: string): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {
       ...options,
-      timeZone: timeZoneId,
+      ...(timeZoneId === undefined ? {} : { timeZone: timeZoneId }),
     }).format(date)
   } catch {
     // Битый исторический пояс не должен ронять страницу: считаем в поясе браузера.
@@ -79,10 +107,28 @@ function dayKey(date: Date, timeZoneId: string): string {
  * Сегодняшняя дата в поясе салона.
  *
  * Именно в поясе салона, а не браузера: `en-CA` отдаёт `YYYY-MM-DD`, а `Date`
- * в разных поясах уже относится к разным календарным дням.
+ * в разных поясах уже относится к разным календарным дням. Без пояса (карточка
+ * барбера ещё не загрузилась) считаем в поясе браузера, как `formatTime`.
  */
-export function todayInTimeZone(timeZoneId: string): string {
+export function todayInTimeZone(timeZoneId?: string): string {
   return dayKey(new Date(), timeZoneId)
+}
+
+/**
+ * Календарная дата инстанта в поясе салона (`YYYY-MM-DD`).
+ *
+ * Нужна диалогу переноса для начального значения поля даты: `startAt` приходит
+ * UTC-инстантом, а поле понимает только локальную дату салона. Битый пояс — фолбэк
+ * на пояс браузера, битый инстант — пустая строка (запрос слотов не отправится).
+ */
+export function salonDateOf(iso: string, timeZoneId?: string): string {
+  const date = new Date(iso)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return dayKey(date, timeZoneId)
 }
 
 /** Календарная арифметика без часовых поясов: `2026-11-30` + 1 → `2026-12-01`. */
@@ -96,12 +142,24 @@ export function addDays(date: string, days: number): string {
   return new Date(start + days * DAY_MS).toISOString().slice(0, 10)
 }
 
-/** Один запрос слотов; параметры собираются `URLSearchParams`, чтобы не кодировать вручную. */
+/**
+ * Один запрос слотов; параметры собираются `URLSearchParams`, чтобы не кодировать
+ * вручную. У режима брони в запросе только дата: профиль, салон и длительность
+ * сервер знает из самой брони.
+ */
 export async function fetchBarberSlots(
   params: BarberSlotsParams,
   signal?: AbortSignal
 ): Promise<BarberSlots> {
   const query = new URLSearchParams({ date: params.date })
+
+  if (params.bookingId !== undefined) {
+    return apiRequest<BarberSlots>(
+      `/bookings/${encodeURIComponent(params.bookingId)}/reschedule-slots?${query.toString()}`,
+      signal ? { signal } : {},
+      { validate: isBarberSlots }
+    )
+  }
 
   if (params.hairServiceId !== null && params.hairServiceId !== '') {
     query.set('hairServiceId', params.hairServiceId)

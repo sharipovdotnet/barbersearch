@@ -2,7 +2,12 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '@/lib/api'
-import { createBooking, fetchBookings, type CreateBookingInput } from '@/lib/bookings'
+import {
+  createBooking,
+  fetchBookings,
+  rescheduleBooking,
+  type CreateBookingInput,
+} from '@/lib/bookings'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
@@ -206,5 +211,71 @@ describe('createBooking', () => {
     expect(error.hasCode('booking.add.overlap')).toBe(true)
     expect(posts).toBe(1)
     expect(csrfCalls()).toBe(1)
+  })
+})
+
+/**
+ * Перенос — cookie-мутация с `204`: тело ответа не читается, а `startAt`
+ * отправляется ровно таким, каким пришёл из слотов.
+ */
+describe('rescheduleBooking', () => {
+  it('шлёт POST с CSRF-заголовком и телом {startAt}', async () => {
+    const csrfCalls = countRequests('/api/auth/csrf')
+    const posts: {
+      bookingId: string
+      csrfToken: string | null
+      body: string
+    }[] = []
+
+    server.use(
+      http.get('/api/auth/csrf', () => HttpResponse.json({ token: 'csrf-token' })),
+      http.post(
+        '/api/bookings/:bookingId/reschedule',
+        async ({ params, request }) => {
+          posts.push({
+            bookingId: String(params.bookingId),
+            csrfToken: request.headers.get('X-CSRF-TOKEN'),
+            body: await request.text(),
+          })
+
+          return new HttpResponse(null, { status: 204 })
+        }
+      )
+    )
+
+    await expect(
+      rescheduleBooking('booking-1', '2026-12-02T10:00:00+00:00')
+    ).resolves.toBeUndefined()
+
+    expect(csrfCalls()).toBe(1)
+    expect(posts).toHaveLength(1)
+    expect(posts[0].bookingId).toBe('booking-1')
+    expect(posts[0].csrfToken).toBe('csrf-token')
+    expect(JSON.parse(posts[0].body)).toStrictEqual({
+      startAt: '2026-12-02T10:00:00+00:00',
+    })
+  })
+
+  it('не повторяет конфликт и отдаёт ApiError с кодом переноса', async () => {
+    let posts = 0
+
+    server.use(
+      http.post('/api/bookings/:bookingId/reschedule', () => {
+        posts += 1
+
+        return HttpResponse.json(
+          problemDetails(409, { errorCodes: ['booking.reschedule.overlap'] }),
+          { status: 409 }
+        )
+      })
+    )
+
+    const error = await apiErrorOf(
+      rescheduleBooking('booking-1', '2026-12-02T10:00:00+00:00')
+    )
+
+    expect(error.status).toBe(409)
+    expect(error.hasCode('booking.reschedule.overlap')).toBe(true)
+    expect(posts).toBe(1)
   })
 })

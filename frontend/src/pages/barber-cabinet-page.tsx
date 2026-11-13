@@ -20,6 +20,7 @@ import {
   BarberRoleGate,
 } from '@/components/barber/barber-cabinet-gates'
 import { BarberNoteDialog } from '@/components/barber/barber-note-dialog'
+import { RescheduleBookingDialog } from '@/components/reschedule-booking-dialog'
 import { RefreshStatus } from '@/components/refresh-status'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
@@ -28,6 +29,7 @@ import { useBarberDay } from '@/hooks/use-barber-day'
 import { useNow } from '@/hooks/use-now'
 import { useSession } from '@/hooks/use-session'
 import { useI18n } from '@/i18n'
+import type { BarberSlot } from '@/lib/barber-slots'
 import { localDateKey, type DayGap } from '@/lib/barber-day'
 import {
   BARBER_CABINET_PANEL_ID,
@@ -41,6 +43,7 @@ import type {
   BarberBookingScope,
 } from '@/lib/barber-bookings'
 import { describeBarberBookingsChange } from '@/lib/booking-changes'
+import { formatDateTime } from '@/lib/format'
 
 /**
  * Кабинет барбера.
@@ -135,6 +138,8 @@ function BarberBookingsScreen({
   const now = useNow()
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<BarberBooking | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] =
+    useState<BarberBooking | null>(null)
   const [actionTarget, setActionTarget] = useState<BarberActionTarget | null>(
     null
   )
@@ -184,7 +189,7 @@ function BarberBookingsScreen({
     }
   }, [refreshActive, view])
 
-  // Пока открыт диалог действия или идёт мутация, список не трогаем: строка
+  // Пока открыт диалог действия/переноса или идёт мутация, список не трогаем: строка
   // под руками не должна менять статус из-за ответа, прочитанного до коммита.
   useAutoRefresh({
     enabled:
@@ -193,6 +198,7 @@ function BarberBookingsScreen({
       !requiresSignIn &&
       noteTarget === null &&
       actionTarget === null &&
+      rescheduleTarget === null &&
       !isMutating,
     onRefresh: handleRefresh,
   })
@@ -293,6 +299,23 @@ function BarberBookingsScreen({
     await actions.saveNote(id, note)
     pendingFocus.current = { id, target: 'note' }
     setAnnouncement(t('Заметка сохранена.'))
+  }
+
+  /**
+   * Перенос выполняет контроллер-владелец строки; второй список не перечитывается.
+   * Объявление строится по времени слота — сервер ответил `204` без тела.
+   */
+  async function handleRescheduled(slot: BarberSlot) {
+    if (rescheduleTarget === null) {
+      return
+    }
+
+    await actions.reschedule(rescheduleTarget.id, slot)
+    setAnnouncement(
+      t('Визит перенесён на {when}.', {
+        when: formatDateTime(slot.startAt, rescheduleTarget.salon.timeZoneId),
+      })
+    )
   }
 
   /**
@@ -463,6 +486,7 @@ function BarberBookingsScreen({
                   setActionTarget({ booking, kind: 'noShow' })
                 }
                 onOpenNote={setNoteTarget}
+                onOpenReschedule={setRescheduleTarget}
                 onReload={day.reload}
                 registerRow={registerRow}
               />
@@ -495,6 +519,7 @@ function BarberBookingsScreen({
                   setActionTarget({ booking, kind: 'noShow' })
                 }
                 onOpenNote={setNoteTarget}
+                onOpenReschedule={setRescheduleTarget}
                 registerRow={registerRow}
               />
             )}
@@ -514,6 +539,23 @@ function BarberBookingsScreen({
         onConfirm={handleActionConfirm}
         onDone={handleActionDone}
         onReload={actions.reload}
+      />
+
+      <RescheduleBookingDialog
+        variant="barber"
+        target={
+          rescheduleTarget === null
+            ? null
+            : {
+                bookingId: rescheduleTarget.id,
+                startAt: rescheduleTarget.startAt,
+                endAt: rescheduleTarget.endAt,
+                timeZoneId: rescheduleTarget.salon.timeZoneId,
+                serviceName: rescheduleTarget.service.name,
+              }
+        }
+        onClose={() => setRescheduleTarget(null)}
+        onRescheduled={handleRescheduled}
       />
     </div>
   )

@@ -51,6 +51,44 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
         return booking;
     }
 
+    public async Task<Result<Guid, Failure>> GetBarberProfileIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var barberProfileId = await BuildBarberProfileIdQuery(Context, id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return MapBarberProfileId(id, barberProfileId);
+    }
+
+    /// <summary>
+    /// Проекция профиля барбера по брони: один столбец, без отслеживания.
+    /// </summary>
+    /// <remarks>
+    /// Вынесено из <see cref="GetBarberProfileIdAsync"/>, чтобы unit-тест проверил трансляцию
+    /// без базы (backend/AGENT.md §5.4). Отслеживание здесь не нужно: вызывающий берёт
+    /// блокировку по этому идентификатору и читает бронь заново.
+    /// </remarks>
+    internal static IQueryable<Guid?> BuildBarberProfileIdQuery(
+        ApplicationDbContext context,
+        Guid bookingId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Bookings
+            .AsNoTracking()
+            .Where(booking => booking.Id == bookingId)
+            .Select(booking => (Guid?)booking.BarberProfileId);
+    }
+
+    /// <summary>
+    /// Маппит проекцию профиля барбера: отсутствие брони — <c>404 booking.notFound</c>.
+    /// </summary>
+    internal static Result<Guid, Failure> MapBarberProfileId(Guid bookingId, Guid? barberProfileId)
+        => barberProfileId is { } value
+            ? value
+            : NotFound(ApiErrorCodes.Booking.NotFound, nameof(Booking), bookingId);
+
     public async Task<Result<Booking, Failure>> GetByIdempotencyKeyAsync(
         Guid userId,
         string idempotencyKey,

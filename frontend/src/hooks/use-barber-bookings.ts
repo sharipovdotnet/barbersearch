@@ -11,6 +11,8 @@ import {
   type BarberBooking,
   type BarberBookingScope,
 } from '@/lib/barber-bookings'
+import type { BarberSlot } from '@/lib/barber-slots'
+import { rescheduleBooking as rescheduleBookingRequest } from '@/lib/bookings'
 import { diffPageItems, type PageChange } from '@/lib/page-changes'
 
 export type BarberBookingsController = {
@@ -52,6 +54,11 @@ export type BarberBookingsController = {
   markNoShow: (id: string) => Promise<void>
   cancel: (id: string, reason: string) => Promise<void>
   saveNote: (id: string, note: string) => Promise<void>
+  /**
+   * Перенос визита: `mutate` обновляет только свою строку, без повторного `GET`.
+   * Собственный перенос барбера локально уже применён, поэтому опрос его не объявит.
+   */
+  reschedule: (id: string, slot: BarberSlot) => Promise<void>
 }
 
 const LIST_FALLBACK = 'Не удалось загрузить записи.'
@@ -59,9 +66,12 @@ const PAGE_FALLBACK = 'Не удалось загрузить ещё запис�
 
 const getBookingId = (booking: BarberBooking): string => booking.id
 
-/** Для баннера важно только изменение статуса: остальные поля сервер не меняет. */
+/**
+ * Для баннера важно изменение статуса или времени: клиент может перенести визит,
+ * не меняя статус, и барбер должен это увидеть.
+ */
 const statusChanged = (before: BarberBooking, after: BarberBooking): boolean =>
-  before.status !== after.status
+  before.status !== after.status || before.startAt !== after.startAt
 
 /** Терминальный статус уводит строку из «Ближайших»: история живёт в другом скоупе. */
 function isTerminal(status: BarberBooking['status']): boolean {
@@ -283,6 +293,20 @@ export function useBarberBookings(
     [mutate]
   )
 
+  const reschedule = useCallback(
+    (id: string, slot: BarberSlot) =>
+      mutate(
+        id,
+        (bookingId) => rescheduleBookingRequest(bookingId, slot.startAt),
+        (booking) => ({
+          ...booking,
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+        })
+      ),
+    [mutate]
+  )
+
   return {
     items,
     status,
@@ -308,5 +332,6 @@ export function useBarberBookings(
     markNoShow,
     cancel,
     saveNote,
+    reschedule,
   }
 }

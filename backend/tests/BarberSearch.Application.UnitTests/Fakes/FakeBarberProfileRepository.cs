@@ -101,6 +101,25 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public BarberSlotContext? SlotContext { get; set; }
 
     /// <summary>
+    /// Какое чтение контекста дня вызвал обработчик: <c>visible</c> — публичная видимость
+    /// (клиент-владелец), <c>own</c> — кабинет барбера/администратора. Переносу визита важно
+    /// не путать эти ветки: у барбера профиль может быть ещё не опубликован.
+    /// </summary>
+    public List<string> SlotContextLoads { get; } = [];
+
+    /// <summary>Дата, на которую обработчик читал контекст дня.</summary>
+    public DateOnly? LastSlotContextDate { get; private set; }
+
+    /// <summary>Салон, который обработчик передал в чтение контекста дня.</summary>
+    public Guid? LastSlotContextSalonId { get; private set; }
+
+    /// <summary>
+    /// Услуга справочника, которую обработчик передал в чтение контекста дня. Перенос обязан
+    /// передавать <c>null</c>: длительность берётся из брони, а не из прайса.
+    /// </summary>
+    public Guid? LastSlotContextHairServiceId { get; private set; }
+
+    /// <summary>
     /// Подмена сохранения профиля: тест проверяет откат транзакции при ошибке записи.
     /// </summary>
     public Func<BarberProfile, UnitResult<Failure>>? UpdateBehavior { get; set; }
@@ -335,8 +354,23 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         Guid barberProfileId,
         Guid userId,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<Result<bool, Failure>>(
+    {
+        // Явное владение: у профиля в памяти идентификатор генерирует домен, поэтому тест,
+        // который проверяет права по профилю из брони, задаёт владельца напрямую.
+        if (OwnershipOverrides.TryGetValue(barberProfileId, out var ownerId))
+        {
+            return Task.FromResult<Result<bool, Failure>>(ownerId == userId);
+        }
+
+        return Task.FromResult<Result<bool, Failure>>(
             _profiles.TryGetValue(barberProfileId, out var profile) && profile.UserId == userId);
+    }
+
+    /// <summary>
+    /// Владельцы профилей для проверки прав, когда идентификатор профиля задан тестом,
+    /// а не создан доменом.
+    /// </summary>
+    public Dictionary<Guid, Guid> OwnershipOverrides { get; } = [];
 
     public Task<Result<bool, Failure>> ExistsAsync(
         Guid id,
@@ -485,17 +519,7 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default)
-    {
-        if (SlotContext is not null && SlotContext.BarberProfileId == barberProfileId)
-        {
-            return Task.FromResult<Result<BarberSlotContext, Failure>>(SlotContext);
-        }
-
-        return Task.FromResult<Result<BarberSlotContext, Failure>>(new Failure(Error.NotFound(
-            ApiErrorCodes.Common.BarberSlotsSalonNotFound,
-            $"Slot context for barber profile '{barberProfileId}' was not found.",
-            barberProfileId)));
-    }
+        => LoadSlotContext("visible", barberProfileId, salonId, hairServiceId, date);
 
     /// <summary>
     /// Собственные слоты в фейке совпадают с публичными: тесты обработчика проверяют
@@ -507,12 +531,30 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         Guid? hairServiceId,
         DateOnly date,
         CancellationToken cancellationToken = default)
-        => GetSlotContextAsync(
-            barberProfileId,
-            salonId,
-            hairServiceId,
-            date,
-            cancellationToken);
+        => LoadSlotContext("own", barberProfileId, salonId, hairServiceId, date);
+
+    private Task<Result<BarberSlotContext, Failure>> LoadSlotContext(
+        string kind,
+        Guid barberProfileId,
+        Guid? salonId,
+        Guid? hairServiceId,
+        DateOnly date)
+    {
+        SlotContextLoads.Add(kind);
+        LastSlotContextDate = date;
+        LastSlotContextSalonId = salonId;
+        LastSlotContextHairServiceId = hairServiceId;
+
+        if (SlotContext is not null && SlotContext.BarberProfileId == barberProfileId)
+        {
+            return Task.FromResult<Result<BarberSlotContext, Failure>>(SlotContext);
+        }
+
+        return Task.FromResult<Result<BarberSlotContext, Failure>>(new Failure(Error.NotFound(
+            ApiErrorCodes.Common.BarberSlotsSalonNotFound,
+            $"Slot context for barber profile '{barberProfileId}' was not found.",
+            barberProfileId)));
+    }
 
     /// <summary>
     /// Данные формы ручной записи; тест задаёт их явно, чтобы не собирать карточку.
