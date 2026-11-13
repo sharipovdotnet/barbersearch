@@ -77,8 +77,10 @@ schedule, slots and online booking work exactly as in a barbershop. The barber c
   `backend/**` changes.
 - `.github/workflows/frontend-ci.yml` — `npm ci`, lint and production build; runs on
   `frontend/**` changes.
+- `.github/workflows/mobile-ci.yml` — the mobile tests plus an Android build on `mobile/**`
+  changes; the iOS build (compile only, simulator) runs on `macos-26` weekly and on demand.
 
-Both workflows also support manual runs via `workflow_dispatch`.
+All three workflows also support manual runs via `workflow_dispatch`.
 
 ## Conventions
 
