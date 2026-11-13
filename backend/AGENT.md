@@ -506,8 +506,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-13 (срез аудита карточки и прайса): domain **595**, application
-**958**, infrastructure **363**, integration **320** — всего **2236**, все зелёные на
+Актуальный baseline на 2026-11-13 (срез цены визита): domain **606**, application
+**965**, infrastructure **365**, integration **325** — всего **2261**, все зелёные на
 локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
@@ -662,7 +662,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
 | `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
 | `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
-| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions (`Reschedule` меняет только время и только из `Pending`/`Confirmed`; повтор на то же время — no-op); **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
+| `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `ChangePrice` — only from `Pending`/`Confirmed`/`Completed`, `0..Constants.MAX_BOOKING_PRICE` with at most `Constants.BOOKING_PRICE_DECIMALS` decimal places and a no-op on the same value, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions (`Reschedule` меняет только время и только из `Pending`/`Confirmed`; повтор на то же время — no-op); **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 | `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
 
@@ -769,6 +769,17 @@ user.uploadAvatar.fileRequired` / `.tooLarge` (плюс существующие
 домен по-прежнему не знает ни времени, ни репозиториев (§7.6). Статус переносом не меняется:
 подтверждение остаётся отдельным решением барбера.
 
+**Цена визита (2026-11-13, issue-97).** `Booking.ChangePrice(decimal price)` меняет **только сумму**
+визита: услуга, салон, барбер, время и статус остаются прежними. Правка возможна у `Pending`,
+`Confirmed` и `Completed`; у отменённой записи и неявки — `409 booking.price.status`, поля не
+меняются. Отрицательная сумма — `booking.price.negative`, больше
+`Constants.MAX_BOOKING_PRICE` (`99 999 999.99`) — `booking.price.tooLarge`, больше
+`Constants.BOOKING_PRICE_DECIMALS` (2) знаков после запятой — `booking.price.precision`; `0` и
+верхняя граница допустимы. Повтор с той же суммой — успех без записи и без сдвига `UpdatedAt`
+(D6), поэтому строки аудита не появляется. Права, «кто именно» и запись в журнал
+(`booking.updated` с числовыми `changes.price.from/to`) — забота Application/Infrastructure
+(§16); домен по-прежнему не знает ни ролей, ни журнала (§7.6).
+
 ### 7.4 Statuses and enums
 
 All persisted enums have **explicit numeric values** (§10.10).
@@ -856,7 +867,7 @@ created through the factories above, but any consumer can copy it with `error wi
   `User.Create`, `Salon.Create`, `HairService.Create`, `Specialization.Create`,
   `Booking.Create`, `Review.Create`) and `BarberProfile.FindSalon`.
 - `UnitResult<Failure>` — every mutating method on an aggregate or child
-  (`Confirm`, `Cancel`, `Complete`, `MarkNoShow`, `Verify`, `Activate`, `Deactivate`,
+  (`Confirm`, `Cancel`, `Complete`, `MarkNoShow`, `ChangePrice`, `Verify`, `Activate`, `Deactivate`,
   `UpdateProfile`, `UpdateRating`, `AddX`, `RemoveX`, `Rename`, `Reorder`, …).
 - `Result<T, Error>` — internal value objects (`DisplayName.Create`,
   `YearsOfExperience.Create`); the aggregate collects their `Error`s into a `Failure`.
@@ -930,11 +941,11 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 26 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 588 domain + 878 application + 317 infrastructure + 292 integration (2075 total); unit-проекты зелёные локально (2026-11-12), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 145 обработчиков (107 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
-| Contracts | ✅ 41 request-запись; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 32 контроллера / 158 endpoints (146 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Tests | ✅ 606 domain + 965 application + 365 infrastructure + 325 integration (2261 total); unit-проекты зелёные локально (2026-11-13), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 146 обработчиков (108 command + 38 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Contracts | ✅ 42 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
+| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
+| Web | ✅ 32 контроллера / 159 endpoints (147 доменных + 12 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -2263,9 +2274,10 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   `salon` — имя (только в `values` создания: переименования салона в API нет), адрес, город,
   пояс, координаты, контакты и `isActive`; `hair_service` — имя, описание, категория,
   длительность и `isActive`; `specialization` — имя, описание и `isActive`; `booking` —
-  **только** `Status`, `BarberNote` и `CancellationReason`
-  (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`), потому что других изменяемых
-  полей у брони сегодня нет. **Создание брони не аудируется сознательно**
+  `Status`, `BarberNote`, `CancellationReason`, `StartAt`/`EndAt` (перенос, #95) и `Price` (правка
+  суммы, #97)
+  (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`/`Reschedule`/`ChangePrice`).
+  **Создание брони не аудируется сознательно**
   (`AuditsCreation: false`): бронь уже хранит клиента, время и цену, а строка на каждую бронь
   (1,2 млн в нагрузочной базе) раздувала бы журнал без новой информации; журнал отвечает на
   «кто отменил/подтвердил/отметил неявку», а не на «кто забронировал». `barber_service`
@@ -2336,7 +2348,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**31 domain controllers (+ `AuthController`), 158 endpoints: 146 domain + 12 auth** — one endpoint
+**31 domain controllers (+ `AuthController`), 159 endpoints: 147 domain + 12 auth** — one endpoint
 per Application operation, plus the twelve `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2355,7 +2367,7 @@ the aggregate that owns the child entity:
 | `HairServicesController` | `api/hair-services` | 5 (4 admin writes + public list) |
 | `SpecializationsController` | `api/specializations` | 5 (4 admin writes + public list) |
 | `BarbersController` | `api/barbers` | 4 (search, card, slots, additional-service suggestions) |
-| `BookingsController` | `api/bookings` | 9 (8 write + list) |
+| `BookingsController` | `api/bookings` | 10 (9 write + list) |
 | `BarberBookingsController` | `api/barber/bookings` | 2 (list + manual client booking) |
 | `BarberBookingSetupController` | `api/barber` | 3 (client search, booking options, own slots) |
 | `BarberNotificationsController` | `api/barber/notifications` | 6 (inbox page, mark read, read-all, unread count, Telegram link, Telegram unlink) |
@@ -2434,8 +2446,9 @@ Conventions:
   `displayName` не пишется: `DisplayName` — owned-тип, и при замене инстанса EF теряет
   снимок старого значения (§15, D4; тест
   `Capture_WhenBarberProfileDisplayNameChanged_WritesNoRowBecauseOwnedSnapshotIsLost`).
-  Списки карточки, специализации, расписание и отпуска по-прежнему вне журнала; цена визита
-  (`Booking.Price`/`SalonId`/`BarberServiceId`) — отдельный срез. Миграции нет: `entity_type` —
+  Списки карточки, специализации, расписание и отпуска по-прежнему вне журнала; связки
+  `SalonId`/`BarberServiceId` брони остаются вне, а цена визита (`Booking.Price`) вошла в
+  allowlist `Booking` в #97 (§16). Миграции нет: `entity_type` —
   `varchar(64)`, `payload` — `jsonb`; `has-pending-model-changes` пуст.
 - **Портфолио: загрузка, порядок, блокировка и раздача (2026-11-11, issue-84).**
   `POST api/barber-profiles/{id}/photos/upload` — `multipart/form-data` с полями `file` и
@@ -2778,8 +2791,8 @@ Read endpoints (added 2026-10-19):
   adding a service writes `barber_service.created`, price/duration changes and hiding/restoring
   write `barber_service.updated` (`isActive`, and `deleted` never happens because `DELETE`
   deactivates the row), while `BarberSalon`, `WorkingSchedule` and `TimeOff` stay out. Booking rows
-  record `Status`, `BarberNote` and time (`StartAt`/`EndAt` since issue-95) changes, and booking
-  creation is deliberately not audited. `entityType` therefore accepts
+  record `Status`, `BarberNote`, `CancellationReason`, `Price` and time (`StartAt`/`EndAt` since
+  issue-95) changes, and booking creation is deliberately not audited. `entityType` therefore accepts
   `all|user|barber_profile|review|salon|hair_service|specialization|booking|portfolio_photo|barber_service`,
   trimmed and case-insensitive; numbers and unknown strings are still
   `400 admin.audit.entityType`. Nothing else about the read-only contract changed: there is no
@@ -2822,13 +2835,15 @@ Read endpoints (added 2026-10-19):
   `GetBarberPageAsync` keep their contracts and `scope` behaviour. `GET api/admin/bookings/{id}`
   uses the same projection and answers `404 admin.bookings.notFound`. Mutations stay on
   `BookingsController`: cancellation and no-show are the existing actions the admin screen calls,
-  and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation, price/note
-  edit, delete or refund anywhere in the API, and the admin screen has **no** reschedule action
+  and this controller adds no `POST`/`PUT`/`DELETE` — there is no admin booking creation, no edit
+  of the service or the barber note, no delete or refund anywhere in the API (the booking price is
+  the one editable value, through `PUT api/bookings/{id}/price` on `BookingsController`), and the
+  admin screen has **no** reschedule action
   (D13). The reschedule endpoint itself lives on `BookingsController` and accepts an administrator
   (D3), which is covered by an integration test; API and UI may disagree there on purpose.
   **Admin cancellation and
   no-show are written to `audit_log`** since issue-41: the `Booking` allowlist records `Status`,
-  `BarberNote`, `CancellationReason` and (since issue-95) `StartAt`/`EndAt` changes as
+  `BarberNote`, `CancellationReason`, `Price` and (since issue-95) `StartAt`/`EndAt` changes as
   `booking.updated`, with the acting administrator as the actor, so
   the journal shows them under `entityType=booking`. Creating a booking is deliberately **not**
   audited (`AuditsCreation: false`) — the row already holds the customer, the time and the price,
@@ -3139,6 +3154,24 @@ Read endpoints (added 2026-10-19):
   both endpoints share the pure `SlotGrid.Legal` with the public slots (same DST/time-off rules).
   No migration and no new index: the SQL shape is unchanged (same `GetActiveByBarberAsync` range
   scan and the partial `(barber_profile_id, start_at)` index), so the plan is unchanged.
+- **Booking price (2026-11-13, issue-97).** `PUT api/bookings/{id}/price` takes `{ price }`
+  (`ChangeBookingPriceRequest(decimal? Price)`, so a missing field is distinguishable from the valid
+  `0`) and answers **`204`** without a body; `BookingsController.ChangePrice` is the only new
+  endpoint. Authorization is the owner-barber-or-admin path of cancel/no-show: the profile owner
+  barber or an administrator, anonymous `401`, another user `403 auth.forbidden`, an unknown id
+  `404 booking.notFound`. `ChangeBookingPriceHandler` rejects a missing field before the read
+  (`400 booking.price.required`), loads the aggregate, checks the caller, then calls
+  `Booking.ChangePrice`: the status must be `Pending`, `Confirmed` or `Completed`, otherwise
+  `409 booking.price.status`; the sum must be non-negative (`booking.price.negative`), at most
+  `Constants.MAX_BOOKING_PRICE` = `99 999 999.99` (`booking.price.tooLarge`) and have at most
+  `Constants.BOOKING_PRICE_DECIMALS` = 2 decimal places (`booking.price.precision`); a repeated value
+  is a successful no-op without `MarkUpdated` (D6), so `updated_at` does not move and no audit row
+  is written. Only `Price` changes: service, salon, barber, `StartAt`/`EndAt` and status stay.
+  Audit: exactly one `booking.updated` row per real change with numeric
+  `changes.price.from/to`; the `Booking` allowlist gained `Price`, while
+  `SalonId`/`BarberServiceId`/`UserId`/`IdempotencyKey` stay outside and creation is still not
+  audited (`AuditsCreation: false`). No migration — `bookings.price` was already `numeric(10,2)` —
+  and no new entity type: the journal still covers nine types.
 - **`GET api/bookings`** — own bookings for a non-admin; admin sees all and may filter by `userId`
   (issue-36 added the scopes). `scope=all|upcoming|past`: `all` is the default and keeps the old
   behaviour exactly (`start_at DESC, id ASC`, every status, `all` without the parameter) so the

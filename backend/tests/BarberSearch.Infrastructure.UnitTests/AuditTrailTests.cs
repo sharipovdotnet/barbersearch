@@ -633,6 +633,53 @@ public class AuditTrailTests
     }
 
     [Fact]
+    public void Capture_WhenBookingPriceChanged_WritesPriceChange()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var booking = TrackUnchanged(context, CreateBooking(), context.Bookings);
+
+        Assert.True(booking.ChangePrice(2000m).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+
+        Assert.Equal("booking.updated", row.Action);
+        Assert.Equal("booking", row.EntityType);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var changes = payload.RootElement.GetProperty("changes");
+        var price = changes.GetProperty("price");
+
+        // Цена — число, не строка: payload журнала обязан совпадать с типом колонки,
+        // иначе админский журнал не отформатирует её в рублях.
+        Assert.Equal(1500m, price.GetProperty("from").GetDecimal());
+        Assert.Equal(2000m, price.GetProperty("to").GetDecimal());
+        Assert.Equal(JsonValueKind.Number, price.GetProperty("from").ValueKind);
+        Assert.Equal(JsonValueKind.Number, price.GetProperty("to").ValueKind);
+
+        // Меняется только сумма: остальные allowlist-поля брони не попадают в diff.
+        Assert.Single(changes.EnumerateObject());
+    }
+
+    [Fact]
+    public void Capture_WhenBookingPriceSetToSameValue_WritesNoRow()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var booking = TrackUnchanged(context, CreateBooking(), context.Bookings);
+
+        // Повтор с той же суммой — no-op: MarkUpdated не вызывается, и строка журнала
+        // не должна появляться (D6). EF тоже не пометил бы Price изменённым.
+        Assert.True(booking.ChangePrice(1500m).IsSuccess);
+
+        audit.Capture(context);
+
+        Assert.Empty(context.AuditLogs.Local);
+    }
+
+    [Fact]
     public void Capture_WhenBookingCancelled_WritesStatusChange()
     {
         using var context = CreateContext();

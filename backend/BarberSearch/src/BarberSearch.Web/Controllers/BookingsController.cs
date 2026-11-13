@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Bookings.AddBookingBarberNote;
 using BarberSearch.Application.Bookings.CancelBooking;
+using BarberSearch.Application.Bookings.ChangeBookingPrice;
 using BarberSearch.Application.Bookings.CompleteBooking;
 using BarberSearch.Application.Bookings.ConfirmBooking;
 using BarberSearch.Application.Bookings.CreateBooking;
@@ -11,6 +12,7 @@ using BarberSearch.Application.Bookings.RescheduleBooking;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
 using BarberSearch.Contracts.Bookings.CancelBooking;
+using BarberSearch.Contracts.Bookings.ChangeBookingPrice;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Bookings.RescheduleBooking;
@@ -176,5 +178,41 @@ public class BookingsController : ApiController
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
             new AddBookingBarberNoteCommand(bookingId, request.Note),
+            cancellationToken));
+
+    /// <summary>
+    /// Меняет цену визита.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Менять сумму может владелец профиля барбера и администратор — одна политика на оба
+    /// кабинета, как у отмены и неявки; клиент получает <c>403</c>, аноним — <c>401</c>.
+    /// Меняется только сумма: услуга, салон, барбер, время и статус остаются прежними.
+    /// </para>
+    /// <para>
+    /// Цену правят у <c>Pending</c>, <c>Confirmed</c> и <c>Completed</c>; у отменённой записи
+    /// и у неявки — <c>409 booking.price.status</c>. Отсутствующее поле в теле даёт
+    /// <c>400 booking.price.required</c> (тело принимает <c>decimal?</c>: <c>0</c> — валидная
+    /// цена и не может быть значением по умолчанию), отрицательная сумма, больше
+    /// <c>99 999 999.99</c> или с копейками дробнее двух знаков — <c>400</c>.
+    /// </para>
+    /// <para>
+    /// Успех — <c>204</c> без тела. Каждая реальная правка пишет строку <c>booking.updated</c>
+    /// с <c>changes.price.from/to</c>; повтор с той же суммой — успех без строки журнала
+    /// и без сдвига <c>updated_at</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="bookingId">Идентификатор брони.</param>
+    /// <param name="request">Новая цена визита.</param>
+    /// <param name="handler">Обработчик команды.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [HttpPut("{bookingId:guid}/price")]
+    public async Task<ActionResult> ChangePrice(
+        Guid bookingId,
+        [FromBody] ChangeBookingPriceRequest request,
+        [FromServices] ICommandHandler<ChangeBookingPriceCommand> handler,
+        CancellationToken cancellationToken)
+        => ToActionResult(await handler.Handle(
+            new ChangeBookingPriceCommand(bookingId, request.Price),
             cancellationToken));
 }

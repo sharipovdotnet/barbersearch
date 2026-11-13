@@ -636,6 +636,135 @@ public class BookingTests
         Assert.Equal(Start.AddMinutes(45), booking.EndAt);
     }
 
+    [Theory]
+    [InlineData(BookingStatus.Pending)]
+    [InlineData(BookingStatus.Confirmed)]
+    [InlineData(BookingStatus.Completed)]
+    public void ChangePrice_FromEditableStatus_ReplacesPriceAndKeepsEverythingElse(
+        BookingStatus editableStatus)
+    {
+        var booking = CreateValidBooking();
+
+        if (editableStatus is BookingStatus.Confirmed or BookingStatus.Completed)
+        {
+            Assert.True(booking.Confirm().IsSuccess);
+        }
+
+        if (editableStatus == BookingStatus.Completed)
+        {
+            Assert.True(booking.Complete().IsSuccess);
+        }
+
+        var startAt = booking.StartAt;
+        var endAt = booking.EndAt;
+        var salonId = booking.SalonId;
+        var serviceId = booking.BarberServiceId;
+        var barberProfileId = booking.BarberProfileId;
+
+        var result = booking.ChangePrice(2000m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2000m, booking.Price);
+
+        // Меняется только сумма: услуга, салон, барбер, время и статус остаются прежними.
+        Assert.Equal(editableStatus, booking.Status);
+        Assert.Equal(startAt, booking.StartAt);
+        Assert.Equal(endAt, booking.EndAt);
+        Assert.Equal(salonId, booking.SalonId);
+        Assert.Equal(serviceId, booking.BarberServiceId);
+        Assert.Equal(barberProfileId, booking.BarberProfileId);
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Cancelled)]
+    [InlineData(BookingStatus.NoShow)]
+    public void ChangePrice_FromUnpaidTerminalStatus_ReturnsPriceStatusAndKeepsPrice(
+        BookingStatus terminalStatus)
+    {
+        var booking = CreateValidBooking();
+        MoveToStatus(booking, terminalStatus);
+
+        var result = booking.ChangePrice(2000m);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.price.status", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal(1500m, booking.Price);
+        Assert.Equal(terminalStatus, booking.Status);
+    }
+
+    [Fact]
+    public void ChangePrice_WithNegativePrice_ReturnsPriceNegativeAndKeepsPrice()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(-1m);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.price.negative", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(1500m, booking.Price);
+    }
+
+    [Fact]
+    public void ChangePrice_AboveMaximum_ReturnsPriceTooLargeAndKeepsPrice()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(100_000_000m);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.price.tooLarge", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(1500m, booking.Price);
+    }
+
+    [Fact]
+    public void ChangePrice_WithMoreThanTwoDecimals_ReturnsPricePrecisionAndKeepsPrice()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(1500.999m);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("booking.price.precision", result.Error.Errors[0].Code);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal(1500m, booking.Price);
+    }
+
+    [Fact]
+    public void ChangePrice_WithZero_Succeeds()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(0m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0m, booking.Price);
+    }
+
+    [Fact]
+    public void ChangePrice_WithMaximum_Succeeds()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(Constants.MAX_BOOKING_PRICE);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(Constants.MAX_BOOKING_PRICE, booking.Price);
+    }
+
+    [Fact]
+    public void ChangePrice_ToTheSameValue_SucceedsAndKeepsPrice()
+    {
+        var booking = CreateValidBooking();
+
+        var result = booking.ChangePrice(1500m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1500m, booking.Price);
+    }
+
     [Fact]
     public void EveryBookingStatus_IsReachable()
     {
