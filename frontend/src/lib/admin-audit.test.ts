@@ -14,7 +14,7 @@ import {
   formatAuditValue,
 } from '@/lib/admin-audit'
 import { problemDetails } from '@/test/msw/handlers'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatPrice } from '@/lib/format'
 import { server } from '@/test/msw/server'
 
 /**
@@ -308,7 +308,7 @@ describe('formatAuditAction', () => {
 })
 
 describe('подписи и константы контракта', () => {
-  it('типы сущностей — девять значений (all + восемь), новые дописаны после прежних', () => {
+  it('типы сущностей — десять значений (all + девять), новые дописаны после прежних', () => {
     expect(ADMIN_AUDIT_ENTITY_TYPES).toStrictEqual([
       'all',
       'user',
@@ -319,6 +319,7 @@ describe('подписи и константы контракта', () => {
       'specialization',
       'booking',
       'portfolio_photo',
+      'barber_service',
     ])
   })
 
@@ -333,6 +334,7 @@ describe('подписи и константы контракта', () => {
       specialization: 'Специализация',
       booking: 'Бронь',
       portfolio_photo: 'Фото портфолио',
+      barber_service: 'Услуга барбера',
     })
   })
 
@@ -359,6 +361,38 @@ describe('подписи и константы контракта', () => {
       isActive: 'Активность',
       isAvatarBlocked: 'Фото скрыто администратором',
     })
+  })
+
+  it('подписи полей карточки и прайса барбера — русские', () => {
+    expect(ADMIN_AUDIT_FIELD_LABELS).toMatchObject({
+      bio: 'О себе',
+      latePolicy: 'Правила опоздания',
+      price: 'Цена',
+      durationMinutes: 'Длительность, мин',
+      hairServiceId: 'Услуга каталога',
+    })
+  })
+
+  it('displayName не подписан: сервер его не присылает (#96 D4)', () => {
+    // Owned-тип теряет снимок старого значения, поэтому имени в журнале нет.
+    // Подпись поля, которого в журнале не бывает, обещала бы данные, которых нет.
+    expect(ADMIN_AUDIT_FIELD_LABELS.displayName).toBeUndefined()
+  })
+
+  it('цена услуги барбера рендерится в рублях', () => {
+    expect(formatAuditValue('price', 5000, 'barber_service')).toBe(
+      formatPrice(5000)
+    )
+    expect(formatAuditValue('price', '5000', 'barber_service')).toBe(
+      formatPrice(5000)
+    )
+  })
+
+  it('цена другого типа и битая цена барбера — строка сервера', () => {
+    expect(formatAuditValue('price', '5000', 'salon')).toBe('5000')
+    expect(formatAuditValue('price', 'битая цена', 'barber_service')).toBe(
+      'битая цена'
+    )
   })
 
   it('подписи полей фото портфолио и аватара — русские', () => {

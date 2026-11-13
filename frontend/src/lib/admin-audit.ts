@@ -10,7 +10,7 @@ import {
 import { bookingStatusLabel } from '@/lib/booking-status'
 import type { BookingStatus } from '@/lib/bookings'
 import { describeApiFailure } from '@/lib/errors'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatPrice } from '@/lib/format'
 import {
   photoModerationLabel,
   type PhotoModerationStatus,
@@ -29,20 +29,31 @@ import {
  * имя могло быть переименовано или удалено, и «актуальное» имя рядом с историческим
  * diff'ом только вводило бы в заблуждение.
  *
- * Аудит покрывает восемь типов (`allowlist` `AuditTrail`): `User`, `BarberProfile`,
- * `Review`, `Salon`, `HairService`, `Specialization`, `Booking` и `PortfolioPhoto`;
- * у брони пишутся только смена статуса и заметка барбера. Создание брони сознательно
- * не аудируется — бронь уже хранит владельца, время и цену, а строка на каждую
- * бронь раздувала бы журнал без новой информации. `PortfolioPhoto` — исключение
- * среди детей `BarberProfile`: у кадра отдельный тип, потому что загрузка и
- * удаление — это жизненный цикл контента, а `BarberService`, `BarberSalon`,
- * `WorkingSchedule` и `TimeOff` в allowlist не входят. Ретенции,
- * партиционирования и экспорта нет, поэтому журнал растёт монотонно и читается
- * страницами. Удалений каталога в API нет, и экран не обещает «настоящую»
- * историю удалений.
+ * Аудит покрывает девять типов (`allowlist` `AuditTrail`): `User`, `BarberProfile`,
+ * `Review`, `Salon`, `HairService`, `Specialization`, `Booking`, `PortfolioPhoto`
+ * и `BarberService`; у брони пишутся только смена статуса, заметка барбера и время
+ * визита. Создание брони сознательно не аудируется — бронь уже хранит владельца,
+ * время и цену, а строка на каждую бронь раздувала бы журнал без новой информации.
+ * `PortfolioPhoto` и `BarberService` — исключения среди детей `BarberProfile`:
+ * у кадра отдельный тип, потому что загрузка и удаление — это жизненный цикл
+ * контента, у услуги — потому что прайс («кто поставил цену и когда») администратор
+ * различает с карточкой профиля. `BarberSalon`, `WorkingSchedule` и `TimeOff`
+ * в allowlist не входят.
+ *
+ * По карточке профиля пишется текст, который читает клиент: `bio` и `latePolicy`.
+ * Списки (языки, достижения, способы оплаты, формат общения, доп. услуги),
+ * специализации и стаж не пишутся — diff массива нечитаем. `displayName` тоже
+ * не пишется: это EF owned-тип, и при замене инстанса теряется снимок старого
+ * значения, поэтому diff `from/to` построить нечем (#96, AGENT §14 #30).
+ * У брони цена визита (`price`), `salonId` и `barberServiceId` по-прежнему вне
+ * журнала — до отдельного среза правки цены.
+ *
+ * Ретенции, партиционирования и экспорта нет, поэтому журнал растёт монотонно
+ * и читается страницами. Удалений каталога в API нет, и экран не обещает
+ * «настоящую» историю удалений.
  */
 
-/** Тип сущности фильтра: `all` — без фильтра, остальные восемь — allowlist аудита. */
+/** Тип сущности фильтра: `all` — без фильтра, остальные девять — allowlist аудита. */
 export type AdminAuditEntityType =
   | 'all'
   | 'user'
@@ -53,6 +64,7 @@ export type AdminAuditEntityType =
   | 'specialization'
   | 'booking'
   | 'portfolio_photo'
+  | 'barber_service'
 
 /** Порядок опций фильтра: прежние значения не сдвигаются, новые дописаны. */
 export const ADMIN_AUDIT_ENTITY_TYPES: readonly AdminAuditEntityType[] = [
@@ -65,6 +77,7 @@ export const ADMIN_AUDIT_ENTITY_TYPES: readonly AdminAuditEntityType[] = [
   'specialization',
   'booking',
   'portfolio_photo',
+  'barber_service',
 ]
 
 export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
@@ -77,6 +90,7 @@ export const ADMIN_AUDIT_ENTITY_LABELS: Record<AdminAuditEntityType, string> = {
   specialization: 'Специализация',
   booking: 'Бронь',
   portfolio_photo: 'Фото портфолио',
+  barber_service: 'Услуга барбера',
 }
 
 /**
@@ -93,9 +107,12 @@ export const ADMIN_AUDIT_ACTION_LABELS: Record<string, string> = {
  * Русские подписи полей allowlist. Неизвестное поле показывается camelCase как есть:
  * выдуманное название скрыло бы, что сервер прислал новое поле.
  *
- * Перенос визита пишет `startAt`/`endAt`, поэтому у них есть подписи. `price`/
- * `salonId`/`barberServiceId` по-прежнему остаются за рамками журнала — до правки
- * цены, отдельного среза.
+ * Прайс барбера (#96) пишет `price`/`durationMinutes`/`hairServiceId`, карточка —
+ * `bio`/`latePolicy`; у них есть подписи. `displayName` подписи не получает: сервер
+ * его не присылает (owned-тип, снимок теряется — #96 D4), а подпись поля, которого
+ * в журнале нет, обещала бы данные, которых там не будет. Цена визита (`booking.price`),
+ * `salonId` и `barberServiceId` брони по-прежнему остаются за рамками журнала — до
+ * правки цены, отдельного среза.
  */
 export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   email: 'Email',
@@ -144,6 +161,13 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   endAt: 'Окончание',
   barberNote: 'Заметка барбера',
   cancellationReason: 'Причина отмены',
+  // Карточка и прайс барбера (#96). «О себе» и «Длительность, мин» уже переведены
+  // каталогом и справочником — ключ один, дублей нет.
+  bio: 'О себе',
+  latePolicy: 'Правила опоздания',
+  price: 'Цена',
+  durationMinutes: 'Длительность, мин',
+  hairServiceId: 'Услуга каталога',
 }
 
 /**
@@ -276,6 +300,15 @@ export function formatAuditValue(
 
   if (field === 'category' && typeof value === 'string') {
     return t(SERVICE_CATEGORY_LABELS[value as ServiceCategory] ?? value)
+  }
+
+  // Цена услуги барбера — деньги, а не строка «5000». Только для своего типа:
+  // price брони (когда появится) в рублях показывать нельзя без своего решения.
+  // Битая строка сервера остаётся как есть — она честно говорит, что не разобрать.
+  if (field === 'price' && entityType === 'barber_service') {
+    const price = typeof value === 'number' ? value : Number(value)
+
+    return Number.isFinite(price) ? formatPrice(price) : String(value)
   }
 
   return String(value)
