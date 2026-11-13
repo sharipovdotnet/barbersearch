@@ -8,15 +8,18 @@ repository.
 ```
 backend/    .NET 10 solution — DDD domain, EF Core + PostgreSQL, cookie + JWT auth
 frontend/   React 19 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui
+mobile/     .NET MAUI client for iOS and Android
 .agents/    agent skills shared by both projects
 .github/    CI workflows
 ```
 
 ## Prerequisites
 
-- .NET SDK 10.0.303 (pinned by `backend/global.json`)
+- .NET SDK 10.0.303 (pinned by `backend/global.json` and `mobile/global.json`)
 - Node.js 24 and npm
 - Docker Desktop — PostgreSQL for local runs, Testcontainers for integration tests
+- .NET MAUI workloads (`android`, `ios`) for the mobile app — installed with Visual Studio 18.8
+  or by `dotnet workload install maui`
 
 ## Backend
 
@@ -41,6 +44,22 @@ npm run lint     # oxlint
 
 In development Vite proxies `/api` to `http://localhost:5243`. Point it elsewhere with
 `VITE_API_PROXY_TARGET`. Details: `frontend/README.md`.
+
+## Mobile
+
+.NET MAUI client for iOS and Android — the customer side: search, the barber card, slots,
+booking, favourites. The barber cabinet and the admin section stay on the web.
+
+```powershell
+cd mobile
+dotnet test tests/BarberSearch.Mobile.Core.Tests
+dotnet build src/BarberSearch.Mobile/BarberSearch.Mobile.csproj -f net10.0-android
+```
+
+API DTOs are shared with the backend by project reference (`BarberSearch.Contracts`), so a broken
+contract fails the mobile build instead of the app at runtime. The Android emulator reaches the
+local API at `10.0.2.2:5243`, the iOS simulator at `localhost:5243`. iOS builds need macOS with
+Xcode 26. Details: `mobile/README.md` and `mobile/AGENT.md`.
 
 ## Places
 
