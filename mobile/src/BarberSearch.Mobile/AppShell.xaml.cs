@@ -20,6 +20,12 @@ public partial class AppShell : Shell
 		// к списку сохраняет и город, и найденных барберов.
 		Routing.RegisterRoute(BarberPage.Route, new PageRouteFactory<BarberPage>(services));
 
+		// Просмотр работ открывается поверх карточки: возврат оставляет её на прежнем месте,
+		// а системная кнопка «назад» закрывает просмотр без своего кода.
+		Routing.RegisterRoute(
+			PortfolioPhotoPage.Route,
+			new PageRouteFactory<PortfolioPhotoPage>(services));
+
 		// Перенос и отзыв открываются поверх стека «Записей» и закрываются возвратом:
 		// список под ними сохраняет вкладку, прокрутку и уже загруженные строки.
 		Routing.RegisterRoute(

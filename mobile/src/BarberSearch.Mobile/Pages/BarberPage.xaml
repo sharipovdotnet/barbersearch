@@ -9,29 +9,109 @@
 
     <Grid>
 
-        <ScrollView IsVisible="{Binding IsContentVisible}">
+        <ScrollView x:Name="PageScroll" IsVisible="{Binding IsContentVisible}">
             <VerticalStackLayout Padding="16">
 
-                <!-- Шапка: имя, грейд, рейтинг и место приёма. Аватара в срезе нет. -->
+                <!-- Шапка: аватар, имя, грейд, «Проверен», рейтинг, стаж и место приёма. -->
                 <Border
                     Margin="0,0,0,12"
                     Padding="16"
                     Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                     StrokeShape="RoundRectangle 10">
-                    <VerticalStackLayout Spacing="4">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border
+                            WidthRequest="64"
+                            HeightRequest="64"
+                            Padding="0"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            StrokeShape="RoundRectangle 32"
+                            StrokeThickness="0"
+                            VerticalOptions="Start">
+                            <Grid>
+                                <Image
+                                    Aspect="AspectFill"
+                                    IsVisible="{Binding HasAvatar}"
+                                    Source="{Binding AvatarImageUrl}" />
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="22"
+                                    HorizontalOptions="Center"
+                                    IsVisible="{Binding ShowInitials}"
+                                    Text="{Binding Initials}"
+                                    VerticalOptions="Center" />
+                            </Grid>
+                        </Border>
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="22"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding DisplayName}" />
+                            <HorizontalStackLayout Spacing="8">
+                                <Label
+                                    Text="{Binding GradeText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Border
+                                    Padding="8,2"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                    IsVisible="{Binding IsVerified}"
+                                    StrokeShape="RoundRectangle 6"
+                                    StrokeThickness="0">
+                                    <Label FontSize="12" Text="Проверен" />
+                                </Border>
+                            </HorizontalStackLayout>
+                            <Label Text="{Binding RatingText}" />
+                            <Label
+                                FontSize="12"
+                                Text="{Binding ExperienceText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding PlaceText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+
+                <!-- Работы: две плитки в ряд; пустое портфолио секции не создаёт. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasPhotos}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
                         <Label
+                            Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
-                            FontSize="22"
-                            LineBreakMode="WordWrap"
-                            Text="{Binding DisplayName}" />
-                        <Label
-                            Text="{Binding GradeText}"
-                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Label Text="{Binding RatingText}" />
-                        <Label
-                            LineBreakMode="WordWrap"
-                            Text="{Binding PlaceText}"
-                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            FontSize="16"
+                            Text="Работы" />
+                        <FlexLayout
+                            AlignContent="Start"
+                            BindableLayout.ItemsSource="{Binding Photos}"
+                            Direction="Row"
+                            Wrap="Wrap">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberPhotoOption">
+                                    <Border
+                                        Margin="0,0,8,8"
+                                        Padding="0"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                        FlexLayout.Basis="48%"
+                                        HeightRequest="160"
+                                        SemanticProperties.Description="{Binding AltText}"
+                                        SemanticProperties.Hint="{Binding OpenHint}"
+                                        StrokeShape="RoundRectangle 8"
+                                        StrokeThickness="0">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnPhotoTapped" />
+                                        </Border.GestureRecognizers>
+                                        <Image Aspect="AspectFill" Source="{Binding TileImageUrl}" />
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </FlexLayout>
                     </VerticalStackLayout>
                 </Border>
 
@@ -293,6 +373,265 @@
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- О мастере: описание, языки и пять списков в веб-порядке. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasAbout}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="12">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="О мастере" />
+
+                        <Label
+                            IsVisible="{Binding HasBio}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding Bio}" />
+
+                        <VerticalStackLayout IsVisible="{Binding HasLanguages}" Spacing="6">
+                            <Label
+                                FontSize="12"
+                                Text="Языки"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <FlexLayout BindableLayout.ItemsSource="{Binding LanguageChips}" Wrap="Wrap">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border
+                                            Margin="0,0,8,8"
+                                            Padding="8,4"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                            FlexLayout.Shrink="0"
+                                            StrokeShape="RoundRectangle 6"
+                                            StrokeThickness="0">
+                                            <Label FontSize="12" Text="{Binding .}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </FlexLayout>
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding AboutLists}" Spacing="12">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberInfoList">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Label
+                                            FontSize="12"
+                                            Text="{Binding Title}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Items}" Spacing="4">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:BarberInfoItem">
+                                                    <Label
+                                                        FontSize="14"
+                                                        LineBreakMode="WordWrap"
+                                                        Text="{Binding Text}" />
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Отзывы: сводка из профиля, страница строк, ошибки и пагинатор. -->
+                <Border
+                    x:Name="ReviewsSection"
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Отзывы" />
+
+                        <Label
+                            FontFamily="GeistMedium"
+                            IsVisible="{Binding Reviews.HasSummary}"
+                            Text="{Binding Reviews.SummaryText}" />
+
+                        <ActivityIndicator
+                            HorizontalOptions="Start"
+                            IsRunning="{Binding Reviews.IsFirstLoading}"
+                            IsVisible="{Binding Reviews.IsFirstLoading}" />
+
+                        <VerticalStackLayout IsVisible="{Binding Reviews.HasFirstError}" Spacing="8">
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Reviews.FirstErrorText}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <Button
+                                Command="{Binding Reviews.RetryFirstPageCommand}"
+                                HorizontalOptions="Start"
+                                Text="Повторить" />
+                        </VerticalStackLayout>
+
+                        <Label
+                            IsVisible="{Binding Reviews.IsEmpty}"
+                            Text="Пока нет отзывов."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            IsVisible="{Binding Reviews.IsPageEmpty}"
+                            Text="На этой странице отзывов нет."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews.Items}" Spacing="12">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberReviewItem">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                            <Label
+                                                Text="{Binding Stars}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                            <Label
+                                                Grid.Column="1"
+                                                FontFamily="GeistMedium"
+                                                Text="{Binding RatingText}" />
+                                            <Label
+                                                Grid.Column="2"
+                                                FontSize="12"
+                                                HorizontalTextAlignment="End"
+                                                Text="{Binding DateText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </Grid>
+                                        <Label LineBreakMode="WordWrap" Text="{Binding BodyText}">
+                                            <Label.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding HasText}"
+                                                    TargetType="Label"
+                                                    Value="False">
+                                                    <Setter
+                                                        Property="TextColor"
+                                                        Value="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                </DataTrigger>
+                                            </Label.Triggers>
+                                        </Label>
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout IsVisible="{Binding Reviews.IsPagerVisible}" Spacing="8">
+                            <Label
+                                IsVisible="{Binding Reviews.HasPageError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Reviews.PageErrorText}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Button
+                                    Command="{Binding Reviews.PreviousPageCommand}"
+                                    IsEnabled="{Binding Reviews.CanGoPrevious}"
+                                    MinimumHeightRequest="44"
+                                    Text="Назад" />
+                                <Label
+                                    Grid.Column="1"
+                                    FontSize="12"
+                                    HorizontalTextAlignment="Center"
+                                    Text="{Binding Reviews.PageRangeText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center" />
+                                <Button
+                                    Grid.Column="2"
+                                    Command="{Binding Reviews.NextPageCommand}"
+                                    IsEnabled="{Binding Reviews.CanGoNext}"
+                                    MinimumHeightRequest="44"
+                                    Text="{Binding Reviews.NextPageButtonText}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Специализации: название и описание из справочника. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasSpecializations}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Специализации" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Specializations}" Spacing="12">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberSpecializationOption">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Name}" />
+                                        <Label
+                                            FontSize="12"
+                                            IsVisible="{Binding HasDescription}"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Description}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Оплата: способы оплаты чипами в порядке сервера. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasPayments}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Оплата" />
+                        <FlexLayout BindableLayout.ItemsSource="{Binding PaymentChips}" Wrap="Wrap">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <Border
+                                        Margin="0,0,8,8"
+                                        Padding="8,4"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                        FlexLayout.Shrink="0"
+                                        StrokeShape="RoundRectangle 6"
+                                        StrokeThickness="0">
+                                        <Label FontSize="12" Text="{Binding .}" />
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </FlexLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Правила визита: правило опозданий. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasLatePolicy}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Правила визита" />
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding LatePolicyText}" />
                     </VerticalStackLayout>
                 </Border>
 

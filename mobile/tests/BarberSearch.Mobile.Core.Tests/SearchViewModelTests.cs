@@ -132,5 +132,12 @@ public sealed class SearchViewModelTests
             Guid? salonId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Поиск не читает свободное время.");
+
+        public Task<PagedResponse<BarberSearch.Contracts.Reviews.GetReviews.ReviewResponse>> GetReviewsAsync(
+            Guid barberProfileId,
+            string? cursor = null,
+            int? pageSize = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Поиск не читает отзывы.");
     }
 }

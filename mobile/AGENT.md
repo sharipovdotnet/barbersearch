@@ -107,6 +107,22 @@ A local backend is required before running (`backend/docker compose up -d` +
   does need an immediate second sign-in in the app, unlike the web: the server revokes every refresh
   token and rotates `SecurityStamp`, so the mobile pair is dead the moment `204` arrives, and the
   app re-authenticates with the new password instead of keeping a dead session.
+- **The portfolio viewer is a page with a swipe, not a dialog with arrows.** The web opens a modal
+  lightbox with «Назад»/«Дальше» buttons next to the photo; MAUI has no modal lightbox, and on a
+  phone the thumb is on the picture, so the frames are paged by swiping a `CarouselView` and the
+  system back button closes the page. The caption and the «N из M» counter stay; the arrow buttons
+  and the keyboard shortcuts of the web are deliberately dropped.
+- **Reviews live in a nested section, not in the card ViewModel.** Pagination, a per-page cache, an
+  error on the *next* page that must keep the rows already shown and a retry with the same cursor is
+  a life cycle of its own, and the card file was already over a thousand lines.
+  `BarberReviewsSection` is still one ViewModel per screen: the page binds to
+  `BarberCardViewModel.Reviews`, and the section owns only the review list and its pager — it is not
+  a second `BindingContext`.
+- **The card shows the avatar, the account hub still does not.** The public card reads the already
+  public `avatarUrl` from `GET api/barbers/{id}` and only renders it — nothing is uploaded, removed
+  or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub
+  keeps initials because the account slice allows no avatar management at all; a read-only avatar
+  there would promise an editing flow that does not exist.
 
 ## 6. What the backend still lacks
 

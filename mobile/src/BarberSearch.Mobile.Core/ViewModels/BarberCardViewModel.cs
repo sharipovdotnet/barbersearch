@@ -8,6 +8,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -79,6 +80,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private const string StartAtTooFarCode = "booking.create.startAt.tooFar";
 
     private readonly IBarberSearchApi _api;
+    private readonly BarberSearchApiOptions _apiOptions;
     private readonly IBookingsApi _bookingsApi;
     private readonly TokenSession _session;
     private readonly TimeProvider _timeProvider;
@@ -86,6 +88,8 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private Guid _barberProfileId;
     private Guid? _loadedProfileId;
     private BarberProfileResponse? _profile;
+    private string _primaryTimeZoneId = string.Empty;
+    private string _latePolicy = string.Empty;
 
     private CancellationTokenSource? _slotsCts;
     private int _slotsGeneration;
@@ -108,25 +112,31 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <summary>
     /// Создаёт карточку барбера.
     /// </summary>
-    /// <param name="api">Публичные чтения: карточка и слоты.</param>
+    /// <param name="api">Публичные чтения: карточка, слоты и отзывы.</param>
+    /// <param name="apiOptions">Адрес API: от него зависят абсолютные адреса медиа.</param>
     /// <param name="bookingsApi">Создание брони через клиент с Bearer.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
     /// <param name="timeProvider">Текущий момент: «сегодня» в поясе салона проверяется тестом.</param>
     public BarberCardViewModel(
         IBarberSearchApi api,
+        BarberSearchApiOptions apiOptions,
         IBookingsApi bookingsApi,
         TokenSession session,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(api);
+        ArgumentNullException.ThrowIfNull(apiOptions);
         ArgumentNullException.ThrowIfNull(bookingsApi);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _api = api;
+        _apiOptions = apiOptions;
         _bookingsApi = bookingsApi;
         _session = session;
         _timeProvider = timeProvider;
+
+        Reviews = new BarberReviewsSection(api);
     }
 
     /// <summary>
@@ -253,6 +263,36 @@ public sealed partial class BarberCardViewModel : ObservableObject
     public ObservableCollection<BarberSlotOption> Slots { get; } = [];
 
     /// <summary>
+    /// Фотографии портфолио в порядке сервера: он уже отсортировал их по <c>sortOrder</c>.
+    /// </summary>
+    public ObservableCollection<BarberPhotoOption> Photos { get; } = [];
+
+    /// <summary>
+    /// Чипы языков общения в порядке сервера.
+    /// </summary>
+    public ObservableCollection<string> LanguageChips { get; } = [];
+
+    /// <summary>
+    /// Списки раздела «О мастере» в веб-порядке; пустые списки сюда не попадают.
+    /// </summary>
+    public ObservableCollection<BarberInfoList> AboutLists { get; } = [];
+
+    /// <summary>
+    /// Специализации из справочника в порядке сервера.
+    /// </summary>
+    public ObservableCollection<BarberSpecializationOption> Specializations { get; } = [];
+
+    /// <summary>
+    /// Чипы способов оплаты в порядке сервера.
+    /// </summary>
+    public ObservableCollection<string> PaymentChips { get; } = [];
+
+    /// <summary>
+    /// Секция отзывов: своя пагинация, свои ошибки и «Повторить».
+    /// </summary>
+    public BarberReviewsSection Reviews { get; }
+
+    /// <summary>
     /// Есть ли загруженная карточка.
     /// </summary>
     public bool HasProfile => _profile is not null;
@@ -333,6 +373,93 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Больше одного салона: только тогда показывается выбор места.
     /// </summary>
     public bool HasMultipleSalons => Salons.Count > 1;
+
+    /// <summary>
+    /// Абсолютный адрес аватара: вариант <c>md</c> (192 px) на 64 pt при тройной плотности.
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> — аватара нет или он скрыт администратором. Управления аватаром на
+    /// карточке нет: она только читает публичное поле.
+    /// </remarks>
+    public string? AvatarImageUrl => string.IsNullOrWhiteSpace(_profile?.AvatarUrl)
+        ? null
+        : MediaUrl.Resolve(_apiOptions.BaseAddress, MediaUrl.Resize(_profile!.AvatarUrl!, "md"));
+
+    /// <summary>
+    /// Есть ли аватар для показа картинкой.
+    /// </summary>
+    public bool HasAvatar => AvatarImageUrl is not null;
+
+    /// <summary>
+    /// Показывать ли инициалы: заглушка вместо картинки.
+    /// </summary>
+    public bool ShowInitials => !HasAvatar;
+
+    /// <summary>
+    /// Инициалы мастера для заглушки аватара.
+    /// </summary>
+    public string Initials => BarberText.Initials(DisplayName);
+
+    /// <summary>
+    /// Подтверждён ли профиль администратором.
+    /// </summary>
+    public bool IsVerified => _profile?.IsVerified ?? false;
+
+    /// <summary>
+    /// Стаж в шапке: «Стаж: 8 лет».
+    /// </summary>
+    public string ExperienceText => _profile is null
+        ? string.Empty
+        : string.Concat("Стаж: ", BarberText.Experience(_profile.YearsOfExperience));
+
+    /// <summary>
+    /// Есть ли языки общения.
+    /// </summary>
+    public bool HasLanguages => LanguageChips.Count > 0;
+
+    /// <summary>
+    /// Показывать ли раздел «О мастере»: нужен хотя бы один из его блоков.
+    /// </summary>
+    public bool HasAbout => !string.IsNullOrWhiteSpace(_profile?.Bio)
+        || HasLanguages
+        || AboutLists.Count > 0;
+
+    /// <summary>
+    /// Описание мастера как есть, с переносами строк; пусто, если его нет.
+    /// </summary>
+    public string Bio => _profile?.Bio?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// Есть ли описание «о себе».
+    /// </summary>
+    public bool HasBio => Bio.Length > 0;
+
+    /// <summary>
+    /// Есть ли чем заполнить «Специализации».
+    /// </summary>
+    public bool HasSpecializations => Specializations.Count > 0;
+
+    /// <summary>
+    /// Есть ли способы оплаты.
+    /// </summary>
+    public bool HasPayments => PaymentChips.Count > 0;
+
+    /// <summary>
+    /// Правило опозданий: «Опоздания: 10 minutes»; пусто, если правила нет.
+    /// </summary>
+    public string LatePolicyText => _latePolicy.Length == 0
+        ? string.Empty
+        : string.Concat("Опоздания: ", _latePolicy);
+
+    /// <summary>
+    /// Есть ли правило опозданий: пустая строка и пробелы секции не создают.
+    /// </summary>
+    public bool HasLatePolicy => _latePolicy.Length > 0;
+
+    /// <summary>
+    /// Есть ли фотографии портфолио: без них секции «Работы» нет.
+    /// </summary>
+    public bool HasPhotos => Photos.Count > 0;
 
     /// <summary>
     /// Есть ли ошибка загрузки слотов.
@@ -818,7 +945,17 @@ public sealed partial class BarberCardViewModel : ObservableObject
             // Карточка уже видна: индикатор относится к профилю, а не к сетке слотов.
             IsLoading = false;
 
+            // Отзывы идут параллельно слотам и не задерживают показ карточки: ошибка секции
+            // не должна ломать ни профиль, ни запись.
+            var reviewsTask = Reviews.InitializeAsync(
+                profile.Id,
+                _primaryTimeZoneId,
+                profile.ReviewsCount,
+                RatingText,
+                cancellationToken);
+
             await LoadSlotsAsync(cancellationToken);
+            await reviewsTask;
         }
         catch (OperationCanceledException)
         {
@@ -860,6 +997,20 @@ public sealed partial class BarberCardViewModel : ObservableObject
         Services.Clear();
         ServiceOptions.Clear();
         Salons.Clear();
+        Photos.Clear();
+        LanguageChips.Clear();
+        AboutLists.Clear();
+        Specializations.Clear();
+        PaymentChips.Clear();
+
+        _latePolicy = profile.LatePolicy?.Trim() ?? string.Empty;
+
+        // Пояс отзывов — пояс основного салона: отзыв относится к барберу, а не к текущему
+        // выбору в «Свободном времени».
+        var primarySalon = profile.Salons.FirstOrDefault(salon => salon.IsPrimary)
+            ?? (profile.Salons.Count > 0 ? profile.Salons[0] : null);
+
+        _primaryTimeZoneId = primarySalon?.TimeZoneId ?? string.Empty;
 
         foreach (var service in profile.Services.Where(service => service.IsActive))
         {
@@ -876,12 +1027,56 @@ public sealed partial class BarberCardViewModel : ObservableObject
             Salons.Add(BarberSalonOption.From(salon));
         }
 
+        // Номер кадра — порядок сервера: карточка не пересортировывает портфолио.
+        for (var index = 0; index < profile.Photos.Count; index++)
+        {
+            Photos.Add(BarberPhotoOption.From(
+                profile.Photos[index],
+                _apiOptions.BaseAddress,
+                profile.DisplayName,
+                index + 1));
+        }
+
+        foreach (var language in profile.Languages)
+        {
+            LanguageChips.Add(BarberText.LanguageText(language));
+        }
+
+        AddInfoList("Дополнительные услуги", profile.AdditionalServices);
+        AddInfoList("Сертификаты и обучение", profile.CertificatesAndTraining);
+        AddInfoList("Достижения", profile.Achievements);
+        AddInfoList("Особенности", profile.Goodies);
+        AddInfoList("Формат общения", profile.CommunicationFormat);
+
+        foreach (var specialization in profile.Specializations)
+        {
+            Specializations.Add(BarberSpecializationOption.From(specialization));
+        }
+
+        foreach (var paymentMethod in profile.PaymentMethods)
+        {
+            PaymentChips.Add(BarberText.PaymentText(paymentMethod));
+        }
+
         SelectedSalon = Salons.FirstOrDefault(salon => salon.IsPrimary) ?? Salons.FirstOrDefault();
         SelectedService = ServiceOptions[0];
         UpdateDateBounds();
         SelectedDate = MinimumDate;
 
         RaiseProfileChanged();
+    }
+
+    /// <summary>
+    /// Добавляет список «О мастере», если в нём есть хоть одна непустая строка.
+    /// </summary>
+    private void AddInfoList(string title, IReadOnlyList<string> items)
+    {
+        var list = BarberInfoList.Create(title, items);
+
+        if (list is not null)
+        {
+            AboutLists.Add(list);
+        }
     }
 
     /// <summary>
@@ -1232,6 +1427,21 @@ public sealed partial class BarberCardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasNoSalons));
         OnPropertyChanged(nameof(HasSingleSalon));
         OnPropertyChanged(nameof(HasMultipleSalons));
+        OnPropertyChanged(nameof(AvatarImageUrl));
+        OnPropertyChanged(nameof(HasAvatar));
+        OnPropertyChanged(nameof(ShowInitials));
+        OnPropertyChanged(nameof(Initials));
+        OnPropertyChanged(nameof(IsVerified));
+        OnPropertyChanged(nameof(ExperienceText));
+        OnPropertyChanged(nameof(HasPhotos));
+        OnPropertyChanged(nameof(HasLanguages));
+        OnPropertyChanged(nameof(HasAbout));
+        OnPropertyChanged(nameof(Bio));
+        OnPropertyChanged(nameof(HasBio));
+        OnPropertyChanged(nameof(HasSpecializations));
+        OnPropertyChanged(nameof(HasPayments));
+        OnPropertyChanged(nameof(LatePolicyText));
+        OnPropertyChanged(nameof(HasLatePolicy));
     }
 
     /// <summary>

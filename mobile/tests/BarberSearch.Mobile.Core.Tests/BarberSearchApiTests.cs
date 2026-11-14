@@ -125,6 +125,25 @@ public sealed class BarberSearchApiTests
         }
         """;
 
+    private const string ReviewsPageJson = """
+        {
+          "items": [
+            {
+              "id": "9e100000-0000-4000-8000-0000000000a1",
+              "barberProfileId": "9e100000-0000-4000-8000-000000000001",
+              "userId": "9e100000-0000-4000-8000-0000000000a2",
+              "bookingId": "9e100000-0000-4000-8000-0000000000a3",
+              "rating": 5,
+              "text": null,
+              "isPublished": true,
+              "createdAt": "2026-11-14T22:30:00+00:00",
+              "updatedAt": "2026-11-14T22:30:00+00:00"
+            }
+          ],
+          "nextCursor": null
+        }
+        """;
+
     [Fact]
     public async Task SearchBarbersAsync_SendsFiltersAndParsesPage()
     {
@@ -305,6 +324,120 @@ public sealed class BarberSearchApiTests
 
         Assert.Empty(slots.Slots);
         Assert.Null(slots.BarberServiceId);
+    }
+
+    [Fact]
+    public async Task GetReviewsAsync_SendsProfilePageSizeAndEscapedCursor()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, ReviewsPageJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        const string cursor = "next&page=2";
+
+        await api.GetReviewsAsync(BarberProfileId, cursor, pageSize: 10);
+
+        Assert.Equal("/api/reviews", handler.LastRequestUri!.AbsolutePath);
+
+        var query = Uri.UnescapeDataString(handler.LastRequestUri.Query);
+
+        Assert.Contains(
+            string.Concat("barberProfileId=", BarberProfileId.ToString("D")),
+            query,
+            StringComparison.Ordinal);
+        Assert.Contains("pageSize=10", query, StringComparison.Ordinal);
+        Assert.Contains(string.Concat("cursor=", cursor), query, StringComparison.Ordinal);
+
+        // Курсор непрозрачен и уходит как есть, но query-разделители в нём экранируются:
+        // без EscapeDataString «next&page=2» распалось бы на два параметра.
+        Assert.Contains("cursor=next%26page%3D2", handler.LastRequestUri.Query, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetReviewsAsync_EmptyCursor_OmitsCursorParameter(string? cursor)
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, ReviewsPageJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        await api.GetReviewsAsync(BarberProfileId, cursor);
+
+        // Пустой курсор — это первая страница: параметр не передаётся вовсе, иначе сервер
+        // ответил бы кодом review.cursor.invalid.
+        Assert.DoesNotContain("cursor=", handler.LastRequestUri!.Query, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("/api/reviews", handler.LastRequestUri.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task GetReviewsAsync_NullTextAndNoNextCursor_ParsesPage()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, ReviewsPageJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var page = await api.GetReviewsAsync(BarberProfileId);
+
+        var review = Assert.Single(page.Items);
+
+        Assert.Equal(5, review.Rating);
+        Assert.Null(review.Text);
+        Assert.Equal(
+            new DateTimeOffset(2026, 11, 14, 22, 30, 0, TimeSpan.Zero),
+            review.CreatedAt);
+
+        // nextCursor = null — последняя страница; клиент не придумывает ему замену.
+        Assert.Null(page.NextCursor);
+    }
+
+    [Fact]
+    public async Task GetReviewsAsync_ProblemDetails_MapsStatusAndErrorCodes()
+    {
+        const string problemJson = """
+            {
+              "title": "Bad Request",
+              "status": 400,
+              "detail": "Курсор не разобран.",
+              "errorCodes": ["review.cursor.invalid"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.BadRequest, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetReviewsAsync(BarberProfileId, "broken"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Equal("Курсор не разобран.", exception.Message);
+        Assert.Contains("review.cursor.invalid", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetReviewsAsync_TooManyRequests_ThrowsRateLimitStatus()
+    {
+        const string problemJson = """
+            {
+              "title": "Too Many Requests",
+              "status": 429,
+              "detail": "Слишком много запросов.",
+              "errorCodes": ["rateLimit.exceeded"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.TooManyRequests, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetReviewsAsync(BarberProfileId));
+
+        // Секция отзывов ветвится по коду состояния: 429 — «подождите минуту», а не общая ошибка.
+        Assert.Equal(HttpStatusCode.TooManyRequests, exception.StatusCode);
+        Assert.Contains("rateLimit.exceeded", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
     /// <summary>

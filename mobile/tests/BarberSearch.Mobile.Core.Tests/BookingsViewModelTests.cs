@@ -866,6 +866,13 @@ public sealed class BookingsViewModelTests
             Guid? salonId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Экран записей не читает слоты барбера.");
+
+        public Task<PagedResponse<BarberSearch.Contracts.Reviews.GetReviews.ReviewResponse>> GetReviewsAsync(
+            Guid barberProfileId,
+            string? cursor = null,
+            int? pageSize = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает отзывы барбера.");
     }
 
     /// <summary>

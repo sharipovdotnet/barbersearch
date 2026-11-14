@@ -5,7 +5,9 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Api;
@@ -35,6 +37,12 @@ public sealed class BarberCardViewModelTests
     private static readonly Guid CreatedId = Guid.Parse("9e100000-0000-4000-8000-00000000000a");
 
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 22, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// 14 ноября 2026, 22:30 UTC — это уже 15-е в Москве и ещё 14-е в Лос-Анджелесе:
+    /// по этой строке видно, чей пояс взяли для даты отзыва.
+    /// </summary>
+    private static readonly DateTimeOffset ReviewInstant = new(2026, 11, 14, 22, 30, 0, TimeSpan.Zero);
 
     private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
     private const string SlotsHintText = "Выберите услугу, чтобы записаться.";
@@ -507,6 +515,302 @@ public sealed class BarberCardViewModelTests
         Assert.Equal(slotsBefore + 1, harness.Api.SlotsCalls.Count);
     }
 
+    [Fact]
+    public async Task InitializeAsync_PhotosWithoutThumbnail_UseMdVariantAndAbsoluteUrls()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(photos:
+        [
+            Photo("/api/media/portfolio/photo-1.webp"),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var photo = Assert.Single(harness.ViewModel.Photos);
+
+        Assert.True(harness.ViewModel.HasPhotos);
+        // Своя раздача без готовой миниатюры просит у сервера вариант md, а не исходник:
+        // плитка сетки маленькая, и качать полноразмерный кадр ради неё незачем.
+        Assert.Equal("http://localhost:5243/api/media/portfolio/photo-1.webp?size=md", photo.TileImageUrl);
+        Assert.Equal("http://localhost:5243/api/media/portfolio/photo-1.webp", photo.ImageUrl);
+        Assert.Equal("Работа барбера Тимур Барберов, фото 1", photo.AltText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PhotoWithThumbnail_PrefersThumbnailAndTrimsDescription()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(photos:
+        [
+            Photo(
+                "/api/media/portfolio/photo-2.webp",
+                thumbnailUrl: "/api/media/portfolio/photo-2-thumb.webp",
+                description: "  Текстурный затылок  "),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var photo = Assert.Single(harness.ViewModel.Photos);
+
+        // Миниатюра уже нарезана сервером: повторно просить size=md нельзя, иначе
+        // получился бы чужой query поверх готового адреса.
+        Assert.Equal("http://localhost:5243/api/media/portfolio/photo-2-thumb.webp", photo.TileImageUrl);
+        Assert.Equal("http://localhost:5243/api/media/portfolio/photo-2.webp", photo.ImageUrl);
+        Assert.Equal("Текстурный затылок", photo.AltText);
+        Assert.True(photo.HasDescription);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AvatarUrl_ResolvesMdVariantAndHidesInitials()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(avatarUrl: "/api/media/avatars/avatar.webp"));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.HasAvatar);
+        Assert.False(harness.ViewModel.ShowInitials);
+        // 192 px на 64 pt при тройной плотности: тот же вариант, что в вебе.
+        Assert.Equal("http://localhost:5243/api/media/avatars/avatar.webp?size=md", harness.ViewModel.AvatarImageUrl);
+        Assert.Equal("ТБ", harness.ViewModel.Initials);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_NullAvatar_ShowsInitialsFallback()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(avatarUrl: null));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.False(harness.ViewModel.HasAvatar);
+        Assert.True(harness.ViewModel.ShowInitials);
+        Assert.Null(harness.ViewModel.AvatarImageUrl);
+        Assert.Equal("ТБ", harness.ViewModel.Initials);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VerifiedProfile_ShowsVerificationAndExperience()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            yearsOfExperience: 8,
+            isVerified: true));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.IsVerified);
+        // Форма слова зависит от числа: «8 лет», а не «8 года».
+        Assert.Equal("Стаж: 8 лет", harness.ViewModel.ExperienceText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Languages_FillChipsInServerOrder()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            languages: [Language.Ru, Language.En, Language.Kg]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.HasLanguages);
+        Assert.Equal(3, harness.ViewModel.LanguageChips.Count);
+        // Самоназвания, как в вебе: English, а не «Английский».
+        Assert.Equal("Русский", harness.ViewModel.LanguageChips[0]);
+        Assert.Equal("English", harness.ViewModel.LanguageChips[1]);
+        Assert.Equal("Кыргызча", harness.ViewModel.LanguageChips[2]);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AboutLists_KeepWebOrderAndSkipEmptyLists()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            bio: "  Стригу с 2015 года.  ",
+            additionalServices: ["  Борода  ", "   "],
+            certificatesAndTraining: [],
+            achievements: ["Победа на чемпионате"],
+            goodies: [],
+            communicationFormat: ["Дружелюбно"]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        Assert.True(viewModel.HasAbout);
+        Assert.True(viewModel.HasBio);
+        Assert.Equal("Стригу с 2015 года.", viewModel.Bio);
+
+        // Заголовки идут веб-порядком, а списки без непустых строк не создаются вовсе:
+        // иначе на экране появился бы заголовок без содержимого.
+        Assert.Equal(3, viewModel.AboutLists.Count);
+        Assert.Equal("Дополнительные услуги", viewModel.AboutLists[0].Title);
+        Assert.Equal("Достижения", viewModel.AboutLists[1].Title);
+        Assert.Equal("Формат общения", viewModel.AboutLists[2].Title);
+
+        Assert.Equal("• Борода", viewModel.AboutLists[0].Items[0].Text);
+        Assert.Equal("• Победа на чемпионате", viewModel.AboutLists[1].Items[0].Text);
+        Assert.Equal("• Дружелюбно", viewModel.AboutLists[2].Items[0].Text);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_EmptyAboutData_HidesAboutSection()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            bio: "   ",
+            languages: [],
+            additionalServices: [],
+            certificatesAndTraining: [],
+            achievements: [],
+            goodies: [],
+            communicationFormat: [],
+            paymentMethods: []));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.False(harness.ViewModel.HasAbout);
+        Assert.False(harness.ViewModel.HasBio);
+        Assert.False(harness.ViewModel.HasLanguages);
+        Assert.False(harness.ViewModel.HasPayments);
+        Assert.Empty(harness.ViewModel.AboutLists);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Specializations_FillNameAndDescription()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Фейд", "Короткая стрижка"),
+            Specialization("Борода", null),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        Assert.True(viewModel.HasSpecializations);
+        Assert.Equal(2, viewModel.Specializations.Count);
+        Assert.Equal("Фейд", viewModel.Specializations[0].Name);
+        Assert.True(viewModel.Specializations[0].HasDescription);
+        Assert.False(viewModel.Specializations[1].HasDescription);
+        Assert.Null(viewModel.Specializations[1].Description);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PaymentMethods_FillChipsInServerOrder()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            paymentMethods: [PaymentMethod.Cash, PaymentMethod.Card, PaymentMethod.Sbp]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.HasPayments);
+        Assert.Equal(3, harness.ViewModel.PaymentChips.Count);
+        Assert.Equal("Наличные", harness.ViewModel.PaymentChips[0]);
+        Assert.Equal("Карта", harness.ViewModel.PaymentChips[1]);
+        Assert.Equal("СБП", harness.ViewModel.PaymentChips[2]);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_LatePolicy_TrimsTextAndShowsSection()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(latePolicy: "  До 10 минут.  "));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.HasLatePolicy);
+        Assert.Equal("Опоздания: До 10 минут.", harness.ViewModel.LatePolicyText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_BlankLatePolicy_HidesSection()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(latePolicy: "   "));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.False(harness.ViewModel.HasLatePolicy);
+        Assert.Equal(string.Empty, harness.ViewModel.LatePolicyText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithReviews_LoadsFirstPageInPrimarySalonTimeZone()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            salons:
+            [
+                // Неосновной салон стоит первым: пояс отзывов обязан браться у основного,
+                // и разница поясов делает подмену заметной.
+                Salon(LosAngelesSalonId, "LA Studio", "America/Los_Angeles", isPrimary: false),
+                Salon(MoscowSalonId, "E2E Studio", "Europe/Moscow", isPrimary: true),
+            ],
+            rating: 4.8m,
+            reviewsCount: 12));
+        harness.Api.Reviews = (_, _, _) => Task.FromResult(new PagedResponse<ReviewResponse>(
+            [Review(text: "Отлично", createdAt: ReviewInstant)],
+            NextCursor: null));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var request = Assert.Single(harness.Api.ReviewCalls);
+
+        Assert.Equal(ProfileId, request.BarberProfileId);
+        Assert.Null(request.Cursor);
+        Assert.Equal(10, request.PageSize);
+        Assert.Equal("4,8 · 12 отзывов", harness.ViewModel.Reviews.SummaryText);
+
+        var item = Assert.Single(harness.ViewModel.Reviews.Items);
+
+        // 22:30 UTC — это 01:30 15 ноября в Москве; в Лос-Анджелесе было бы ещё 14-е.
+        Assert.Equal("15 ноября 2026", item.DateText);
+        Assert.Equal("Отлично", item.BodyText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ZeroReviews_DoesNotRequestReviews()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(
+            rating: null,
+            reviewsCount: 0));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Empty(harness.Api.ReviewCalls);
+        Assert.True(harness.ViewModel.Reviews.IsEmpty);
+        Assert.False(harness.ViewModel.Reviews.HasSummary);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RepeatedAppearing_DoesNotRequestReviewsAgain()
+    {
+        using var harness = new Harness();
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Профиль уже загружен, поэтому секция отзывов не перезагружается: иначе каждый
+        // возврат на экран стоил бы лишнего запроса и сбрасывал страницу.
+        Assert.Single(harness.Api.ReviewCalls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ProfileWithoutPhotos_HidesWorksSection()
+    {
+        using var harness = new Harness();
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.False(harness.ViewModel.HasPhotos);
+        Assert.Empty(harness.ViewModel.Photos);
+    }
+
     /// <summary>
     /// Выбирает услугу и первый слот: так выглядит экран перед записью.
     /// </summary>
@@ -521,31 +825,82 @@ public sealed class BarberCardViewModelTests
 
     private static BarberProfileResponse ProfileResponse(
         IReadOnlyList<BarberProfileServiceResponse>? services = null,
-        IReadOnlyList<BarberProfileSalonResponse>? salons = null) =>
+        IReadOnlyList<BarberProfileSalonResponse>? salons = null,
+        string? avatarUrl = null,
+        string displayName = "Тимур Барберов",
+        string? bio = null,
+        int yearsOfExperience = 11,
+        IReadOnlyList<Language>? languages = null,
+        IReadOnlyList<string>? certificatesAndTraining = null,
+        decimal? rating = 4.8m,
+        int reviewsCount = 12,
+        IReadOnlyList<string>? achievements = null,
+        IReadOnlyList<PaymentMethod>? paymentMethods = null,
+        IReadOnlyList<string>? communicationFormat = null,
+        IReadOnlyList<string>? goodies = null,
+        string latePolicy = "",
+        bool isVerified = true,
+        IReadOnlyList<BarberProfileSpecializationResponse>? specializations = null,
+        IReadOnlyList<string>? additionalServices = null,
+        IReadOnlyList<BarberProfilePhotoResponse>? photos = null) =>
         new(
             ProfileId,
             Guid.CreateVersion7(),
-            null,
-            "Тимур Барберов",
+            avatarUrl,
+            displayName,
             Grade.SeniorBarber,
-            null,
-            11,
-            [Language.Ru],
-            [],
-            4.8m,
-            12,
-            [],
-            [PaymentMethod.Cash],
-            [],
-            [],
-            string.Empty,
+            bio,
+            yearsOfExperience,
+            languages ?? [Language.Ru],
+            certificatesAndTraining ?? [],
+            rating,
+            reviewsCount,
+            achievements ?? [],
+            paymentMethods ?? [PaymentMethod.Cash],
+            communicationFormat ?? [],
+            goodies ?? [],
+            latePolicy,
             true,
-            true,
+            isVerified,
             services ?? [Service(BarberServiceId, HairServiceId, "E2E Стрижка", 2400m, 45, isActive: true)],
             salons ?? [Salon(MoscowSalonId, "E2E Studio", "Europe/Moscow", isPrimary: true)],
-            [],
-            [],
-            []);
+            specializations ?? [],
+            additionalServices ?? [],
+            photos ?? []);
+
+    private static BarberProfilePhotoResponse Photo(
+        string url,
+        string? thumbnailUrl = null,
+        string? description = null) =>
+        new(
+            Guid.CreateVersion7(),
+            url,
+            thumbnailUrl,
+            description,
+            SortOrder: 0,
+            IsPublished: true,
+            IsBlocked: false,
+            PhotoModerationStatus.Approved,
+            RejectionReason: null);
+
+    private static BarberProfileSpecializationResponse Specialization(string name, string? description) =>
+        new(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            name,
+            description);
+
+    private static ReviewResponse Review(string? text, DateTimeOffset createdAt) =>
+        new(
+            Guid.CreateVersion7(),
+            ProfileId,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Rating: 5,
+            text,
+            IsPublished: true,
+            createdAt,
+            createdAt);
 
     private static BarberProfileServiceResponse Service(
         Guid barberServiceId,
@@ -655,9 +1010,14 @@ public sealed class BarberCardViewModelTests
                 salonId ?? MoscowSalonId,
                 SlotAt(date)));
 
+        public Func<Guid, string?, int?, Task<PagedResponse<ReviewResponse>>> Reviews { get; set; } =
+            (_, _, _) => Task.FromResult(new PagedResponse<ReviewResponse>([], NextCursor: null));
+
         public int ProfileCalls { get; private set; }
 
         public List<SlotsRequest> SlotsCalls { get; } = [];
+
+        public List<ReviewsRequest> ReviewCalls { get; } = [];
 
         public Task<BarberProfileResponse> GetBarberProfileAsync(
             Guid id,
@@ -678,6 +1038,17 @@ public sealed class BarberCardViewModelTests
             SlotsCalls.Add(new SlotsRequest(slotDate, hairServiceId, salonId));
 
             return Slots(slotDate, hairServiceId, salonId);
+        }
+
+        public Task<PagedResponse<ReviewResponse>> GetReviewsAsync(
+            Guid barberProfileId,
+            string? cursor = null,
+            int? pageSize = null,
+            CancellationToken cancellationToken = default)
+        {
+            ReviewCalls.Add(new ReviewsRequest(barberProfileId, cursor, pageSize));
+
+            return Reviews(barberProfileId, cursor, pageSize);
         }
 
         public Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
@@ -737,6 +1108,11 @@ public sealed class BarberCardViewModelTests
     private sealed record SlotsRequest(DateOnly Date, Guid? HairServiceId, Guid? SalonId);
 
     /// <summary>
+    /// Параметры запроса отзывов: профиль, курсор и размер страницы.
+    /// </summary>
+    private sealed record ReviewsRequest(Guid BarberProfileId, string? Cursor, int? PageSize);
+
+    /// <summary>
     /// Подменённое хранилище пары.
     /// </summary>
     private sealed class FakeTokenStore : ITokenStore
@@ -774,7 +1150,12 @@ public sealed class BarberCardViewModelTests
             }
 
             Session = new TokenSession(Store);
-            ViewModel = new BarberCardViewModel(Api, Bookings, Session, new FixedTimeProvider(Now));
+            ViewModel = new BarberCardViewModel(
+                Api,
+                BarberSearchApiOptions.FromBaseAddress("http://localhost:5243"),
+                Bookings,
+                Session,
+                new FixedTimeProvider(Now));
         }
 
         public FakeBarberApi Api { get; } = new();

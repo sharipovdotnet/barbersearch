@@ -2,6 +2,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.GetReviews;
 
 namespace BarberSearch.Mobile.Core.Api;
 
@@ -66,5 +67,25 @@ public interface IBarberSearchApi
         DateOnly slotDate,
         Guid? hairServiceId,
         Guid? salonId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Опубликованные отзывы барбера: страница с непрозрачным курсором.
+    /// </summary>
+    /// <remarks>
+    /// Это анонимное чтение: сервер не требует токен и не отдаёт автора, услугу и салон
+    /// в <see cref="ReviewResponse"/>. Порядок — свежие сверху; <paramref name="cursor"/>
+    /// возвращается из ответа как есть и не разбирается.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля барбера; обязателен.</param>
+    /// <param name="cursor">Курсор следующей страницы; <c>null</c> — первая.</param>
+    /// <param name="pageSize">Размер страницы; <c>null</c> — серверный по умолчанию (20).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Страница отзывов; <c>NextCursor = null</c> означает последнюю.</returns>
+    /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
+    Task<PagedResponse<ReviewResponse>> GetReviewsAsync(
+        Guid barberProfileId,
+        string? cursor = null,
+        int? pageSize = null,
         CancellationToken cancellationToken = default);
 }

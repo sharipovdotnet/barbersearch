@@ -83,6 +83,7 @@ public static class MauiProgram
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
         builder.Services.AddTransient<BarberCardViewModel>();
+        builder.Services.AddTransient<PortfolioViewerViewModel>();
 
         // Экран «Записи» — singleton, поэтому его ViewModel создаётся ровно один раз и живёт
         // столько же: состояние вкладки переживает переключения между разделами.
@@ -101,6 +102,7 @@ public static class MauiProgram
 
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
+        builder.Services.AddTransient<PortfolioPhotoPage>();
         builder.Services.AddTransient<RescheduleBookingPage>();
         builder.Services.AddTransient<ReviewBookingPage>();
         builder.Services.AddTransient<AccountProfilePage>();
