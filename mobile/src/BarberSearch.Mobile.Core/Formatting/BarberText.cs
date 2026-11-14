@@ -178,4 +178,172 @@ public static class BarberText
     /// <returns>«4,8» или «—».</returns>
     public static string Rating(decimal? value) =>
         value is null ? "—" : value.Value.ToString("0.0", RuCulture);
+
+    /// <summary>
+    /// Подпись подтверждённого профиля.
+    /// </summary>
+    public const string Verified = "Проверен";
+
+    /// <summary>
+    /// Русские подписи языков общения: самоназвания, как в вебе, а не перевод.
+    /// </summary>
+    private static readonly Dictionary<Language, string> Languages = new()
+    {
+        [Language.Ru] = "Русский",
+        [Language.En] = "English",
+        [Language.De] = "Deutsch",
+        [Language.Kg] = "Кыргызча",
+        [Language.Tj] = "Тоҷикӣ",
+        [Language.Uz] = "Oʻzbekcha",
+    };
+
+    /// <summary>
+    /// Русские подписи способов оплаты.
+    /// </summary>
+    private static readonly Dictionary<PaymentMethod, string> PaymentMethods = new()
+    {
+        [PaymentMethod.Cash] = "Наличные",
+        [PaymentMethod.Card] = "Карта",
+        [PaymentMethod.DigitalWallet] = "Цифровой кошелёк",
+        [PaymentMethod.Sbp] = "СБП",
+        [PaymentMethod.BankTransfer] = "Перевод",
+    };
+
+    /// <summary>
+    /// Стаж в правильной форме: «1 год», «2 года», «8 лет».
+    /// </summary>
+    /// <remarks>
+    /// Формы повторяют плюрал <c>experience</c> веба: 11–14 всегда «лет», дальше — по
+    /// последней цифре. Отрицательный стаж не бывает, но берётся модуль, чтобы строка
+    /// не сломалась на мусорных данных.
+    /// </remarks>
+    /// <param name="years">Стаж в годах.</param>
+    /// <returns>Число и форма слова.</returns>
+    public static string Experience(int years)
+    {
+        var rest = Math.Abs(years) % 100;
+        var last = rest % 10;
+
+        var form = rest is >= 11 and <= 14
+            ? "лет"
+            : last switch
+            {
+                1 => "год",
+                2 or 3 or 4 => "года",
+                _ => "лет",
+            };
+
+        return string.Concat(years.ToString(CultureInfo.InvariantCulture), " ", form);
+    }
+
+    /// <summary>
+    /// Подпись языка: «Русский», «English», «Кыргызча».
+    /// </summary>
+    /// <param name="language">Язык из карточки.</param>
+    /// <returns>Самоназвание языка.</returns>
+    public static string LanguageText(Language language) =>
+        Languages.TryGetValue(language, out var text) ? text : language.ToString();
+
+    /// <summary>
+    /// Подпись способа оплаты: «Наличные», «Карта», «СБП».
+    /// </summary>
+    /// <param name="method">Способ оплаты из карточки.</param>
+    /// <returns>Русская подпись.</returns>
+    public static string PaymentText(PaymentMethod method) =>
+        PaymentMethods.TryGetValue(method, out var text) ? text : method.ToString();
+
+    /// <summary>
+    /// Инициалы для заглушки аватара: первые буквы первых двух слов.
+    /// </summary>
+    /// <remarks>
+    /// Имя приходит от пользователя и может быть пустым или однословным; пустое имя даёт
+    /// «?», как <c>getInitials</c> веба, — заглушка без буквы выглядела бы поломкой.
+    /// <see cref="AccountText.Initials"/> здесь не подходит: он завязан на профиль кабинета.
+    /// </remarks>
+    /// <param name="displayName">Имя мастера из карточки.</param>
+    /// <returns>Одна или две буквы в верхнем регистре.</returns>
+    public static string Initials(string displayName)
+    {
+        var words = (displayName ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (words.Length == 0)
+        {
+            return "?";
+        }
+
+        var initials = words
+            .Take(2)
+            .Select(word => char.ToUpperInvariant(word[0]));
+
+        return new string([.. initials]);
+    }
+
+    /// <summary>
+    /// Описание фотографии для экранного диктора.
+    /// </summary>
+    /// <remarks>
+    /// Подпись владельца важнее шаблона: она описывает кадр, а шаблон — только его место
+    /// в портфолио. Номер — с единицы, как в вебе.
+    /// </remarks>
+    /// <param name="barberName">Имя мастера.</param>
+    /// <param name="number">Номер фотографии с единицы.</param>
+    /// <param name="description">Подпись фотографии; может быть пустой.</param>
+    /// <returns>Подпись либо шаблон «Работа барбера N, фото M».</returns>
+    public static string PhotoAlt(string barberName, int number, string? description) =>
+        string.IsNullOrWhiteSpace(description)
+            ? string.Concat(
+                "Работа барбера ",
+                barberName ?? string.Empty,
+                ", фото ",
+                number.ToString(CultureInfo.InvariantCulture))
+            : description.Trim();
+
+    /// <summary>
+    /// Подсказка нажатия на плитку портфолио: «Открыть фото: {подпись}».
+    /// </summary>
+    /// <param name="caption">Подпись фотографии.</param>
+    /// <returns>Текст для <c>SemanticProperties.Hint</c>.</returns>
+    public static string PhotoOpenHint(string caption) =>
+        string.Concat("Открыть фото: ", caption ?? string.Empty);
+
+    /// <summary>
+    /// Счётчик кадров: «3 из 12».
+    /// </summary>
+    /// <param name="current">Номер текущего кадра с единицы.</param>
+    /// <param name="total">Всего кадров.</param>
+    /// <returns>Номер и общее число.</returns>
+    public static string PhotoCounter(int current, int total) => string.Concat(
+        current.ToString(CultureInfo.InvariantCulture),
+        " из ",
+        total.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// Диапазон видимых строк страницы: «1–10 из 12».
+    /// </summary>
+    /// <remarks>
+    /// Тире — среднее, как в макете. Смещение отсчитывается от нуля, а показывает диапазон
+    /// с единицы; пустая страница даёт «0 из {total}», как <c>formatPageRange</c> веба.
+    /// Общее число берётся из профиля, а не из длины страницы: последняя страница неполная.
+    /// </remarks>
+    /// <param name="offset">Сколько строк было на предыдущих страницах.</param>
+    /// <param name="count">Сколько строк на текущей странице.</param>
+    /// <param name="total">Всего строк по данным профиля.</param>
+    /// <returns>Диапазон и общее число.</returns>
+    public static string PageRange(int offset, int count, int total)
+    {
+        var totalText = total.ToString(CultureInfo.InvariantCulture);
+
+        if (count <= 0)
+        {
+            return string.Concat("0 из ", totalText);
+        }
+
+        return string.Concat(
+            (offset + 1).ToString(CultureInfo.InvariantCulture),
+            "–",
+            (offset + count).ToString(CultureInfo.InvariantCulture),
+            " из ",
+            totalText);
+    }
 }

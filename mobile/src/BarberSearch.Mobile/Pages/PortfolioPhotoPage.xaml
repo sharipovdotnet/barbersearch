@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.PortfolioPhotoPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:PortfolioViewerViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Работы">
+
+    <Grid Padding="16" RowDefinitions="*,Auto" RowSpacing="12">
+
+        <!-- Кадры листаются свайпом: стрелок на телефоне нет, это осознанная адаптация. -->
+        <CarouselView
+            IsBounceEnabled="False"
+            ItemsSource="{Binding Photos}"
+            Loop="False"
+            Position="{Binding Position, Mode=TwoWay}">
+            <CarouselView.ItemTemplate>
+                <DataTemplate x:DataType="vm:BarberPhotoOption">
+                    <Image
+                        Aspect="AspectFit"
+                        Source="{Binding ImageUrl}" />
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+        </CarouselView>
+
+        <Grid
+            Grid.Row="1"
+            ColumnDefinitions="*,Auto"
+            ColumnSpacing="12">
+            <Label
+                FontSize="12"
+                IsVisible="{Binding HasCaption}"
+                LineBreakMode="WordWrap"
+                Text="{Binding CaptionText}" />
+            <Label
+                Grid.Column="1"
+                FontSize="12"
+                HorizontalTextAlignment="End"
+                Text="{Binding CounterText}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                VerticalOptions="Start" />
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

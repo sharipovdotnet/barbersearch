@@ -6,10 +6,17 @@ namespace BarberSearch.Mobile.Pages;
 /// Карточка барбера и запись: услуга, салон, дата, слот и подтверждение.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Страница резолвится из DI фабрикой маршрута (<c>PageRouteFactory</c>), поэтому ViewModel
 /// приходит конструктором. Код-behind держит только то, что Core знать не может: разбор
-/// параметра маршрута, события выбора и переход на вкладку «Профиль» — навигация живёт
-/// в приложении.
+/// параметра маршрута, события выбора, переход на вкладку «Профиль» и прокрутку к секции —
+/// навигация и вёрстка живут в приложении.
+/// </para>
+/// <para>
+/// Подписка на смену страницы отзывов живёт между <c>OnAppearing</c> и <c>OnDisappearing</c>:
+/// карточка остаётся в стеке и возвращается, поэтому подписка в конструкторе пережила бы
+/// первый уход, а снятие при уходе без повторной подписки сломало бы прокрутку после возврата.
+/// </para>
 /// </remarks>
 public partial class BarberPage : ContentPage, IQueryAttributable
 {
@@ -75,8 +82,9 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     /// Открывает карточку при каждом появлении экрана.
     /// </summary>
     /// <remarks>
-    /// Возврат с вкладки «Профиль» не перезагружает карточку: ViewModel сам решает, что
-    /// уже загружено, и только перечитывает признак входа.
+    /// Возврат с вкладки «Профиль» или из просмотра фото не перезагружает карточку: ViewModel
+    /// сам решает, что уже загружено, и только перечитывает признак входа. Подписка на смену
+    /// страницы отзывов восстанавливается здесь же — страница живёт в стеке и возвращается.
     /// </remarks>
     protected override async void OnAppearing()
     {
@@ -84,10 +92,23 @@ public partial class BarberPage : ContentPage, IQueryAttributable
 
         _isAppeared = true;
 
+        _viewModel.Reviews.PageChanged -= OnReviewsPageChanged;
+        _viewModel.Reviews.PageChanged += OnReviewsPageChanged;
+
         if (_queryApplied)
         {
             await _viewModel.InitializeAsync(_barberId);
         }
+    }
+
+    /// <summary>
+    /// Снимает подписку на смену страницы отзывов, пока страница не на экране.
+    /// </summary>
+    protected override void OnDisappearing()
+    {
+        _viewModel.Reviews.PageChanged -= OnReviewsPageChanged;
+
+        base.OnDisappearing();
     }
 
     /// <summary>
@@ -122,6 +143,43 @@ public partial class BarberPage : ContentPage, IQueryAttributable
             await _viewModel.SelectDateAsync(date);
         }
     }
+
+    /// <summary>
+    /// Открывает полноэкранный просмотр с выбранного кадра.
+    /// </summary>
+    /// <remarks>
+    /// Индекс считается здесь, потому что навигация — дело приложения, а не Core. Просмотр
+    /// получает кадры и номер объектами маршрута: отдельного эндпоинта «фото по id» нет.
+    /// </remarks>
+    private async void OnPhotoTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is not BarberPhotoOption photo)
+        {
+            return;
+        }
+
+        var index = _viewModel.Photos.IndexOf(photo);
+
+        if (index < 0)
+        {
+            return;
+        }
+
+        await Shell.Current.GoToAsync(
+            PortfolioPhotoPage.Route,
+            new Dictionary<string, object>
+            {
+                ["photos"] = _viewModel.Photos,
+                ["index"] = index,
+            });
+    }
+
+    /// <summary>
+    /// Возвращает карточку к заголовку «Отзывы» после смены страницы.
+    /// </summary>
+    private void OnReviewsPageChanged(object? sender, EventArgs e) =>
+        Dispatcher.Dispatch(async () =>
+            await PageScroll.ScrollToAsync(ReviewsSection, ScrollToPosition.Start, true));
 
     /// <summary>
     /// Уводит на вкладку «Профиль» вместо отдельной формы входа.

@@ -159,6 +159,50 @@ applies `rating`, `text`, `isPublished` and `updatedAt` from the `PUT` response 
 the new status locally: a rating-only change keeps a published review published, a text change
 returns it to moderation, and only the server decides.
 
+## Barber card (the public profile)
+
+The card is one scroll: hero → «Работы» → «Услуги» → «Свободное время» → «О мастере» → «Отзывы» →
+«Специализации» → «Оплата» → «Правила визита». Services stay above the slot grid, where the mobile
+card already had them; every other section follows the web order, and an empty section is not drawn
+at all — the web's rule that a heading without data is noise. «Отзывы» is the only section with an
+empty state.
+
+All of it comes from the same public `GET api/barbers/{id}` the card already reads: `avatarUrl`,
+`isVerified`, `yearsOfExperience`, `bio`, `languages`, `certificatesAndTraining`, `achievements`,
+`goodies`, `communicationFormat`, `additionalServices`, `paymentMethods`, `latePolicy`, `photos`
+and `specializations`. The public response contains only approved, published and unblocked photos,
+already ordered by `sortOrder` then `createdAt`, so the client never sorts or filters them.
+
+Media URLs are relative (`/api/media/portfolio/...`, `/api/media/avatars/...`) or absolute legacy
+links, and `Image.Source` needs an absolute URI: `MediaUrl.Resolve` joins the relative form with the
+API base address from `BarberSearchApiOptions` (the port survives because the base ends with a
+slash), and returns absolute links untouched — a legacy photo stays on its own host. `MediaUrl.Resize`
+adds `?size=sm|md|lg` **only** to those two own prefixes and only when the URL has no query or
+fragment yet: it mirrors `frontend/src/lib/media.ts`, because the server serves variants for its own
+files and nothing else. Tiles use `thumbnailUrl` when the server sent one and `?size=md` otherwise;
+the viewer uses the raw source. Caching is whatever `UriImageSource` does by default — no second
+image cache, no extra package.
+
+Reviews are paged from `GET api/reviews?barberProfileId=&pageSize=10&cursor=`. The size is 10, as on
+the web; the cursor is opaque, sent back exactly as received, and `nextCursor = null` means the last
+page. Pages are cached in memory by number, so «Назад» never touches the network, and «Дальше» only
+follows the cursor from the response — the client invents no offsets. The summary (`4,5 · 12
+отзывов`) and the page range (`1–10 из 12`) take the total from the profile, not from the loaded
+page: the last page is shorter, and a mean over one page would be wrong. With `reviewsCount = 0` no
+request is made at all. A failure on the first page replaces the list with an error and «Повторить»;
+a failure on a later page keeps the rows already shown and turns «Дальше» into «Повторить» with the
+same cursor, so a flaky connection cannot lose the reader's place.
+
+Review dates are shown in the **primary salon's** zone, not in the zone of the salon selected in
+«Свободное время»: a review belongs to the barber, and the current slot choice has nothing to do
+with when the visit happened. An unknown zone falls back to UTC, as everywhere else.
+
+The photo viewer is a separate route (`portfolio-photo`) over the search stack with the tab bar
+hidden, not a dialog: frames are passed as route objects (there is no "photo by id" endpoint, and
+the card already loaded the gallery), swiping pages them, the caption and the «N из M» counter
+follow the current frame, and the system back button returns to the card. The web's arrow buttons
+and keyboard shortcuts are deliberately dropped — on a phone the gesture is the control.
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):
@@ -193,7 +237,10 @@ and the salon clock/text helpers. The bookings slice adds the list, cancellation
 review clients (query string, opaque cursor, `204` without a body, error codes), `BookingText`, and
 the three ViewModels: two independent lists with cursor loading and month groups, profile
 resolution with a per-profile cache, cancel/reschedule/review state machines and their error texts,
-all with fixed time and fake APIs — no emulator.
+all with fixed time and fake APIs — no emulator. The barber-card slice adds `MediaUrl` (join with
+the API base, variants only for own media), the new `BarberText` formatting, the review page cache,
+cursor handling, both kinds of review errors and the «Дальше» → «Повторить» retry, the portfolio
+viewer's counter and caption, and the card's new sections with their hide rules.
 
 ## iOS
 

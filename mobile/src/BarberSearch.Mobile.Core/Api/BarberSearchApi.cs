@@ -4,6 +4,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.GetReviews;
 
 namespace BarberSearch.Mobile.Core.Api;
 
@@ -103,6 +104,31 @@ public sealed class BarberSearchApi : IBarberSearchApi
         return slots ?? throw new InvalidOperationException("The API returned an empty slots response.");
     }
 
+    /// <inheritdoc />
+    public async Task<PagedResponse<ReviewResponse>> GetReviewsAsync(
+        Guid barberProfileId,
+        string? cursor = null,
+        int? pageSize = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient
+            .GetAsync(BuildReviewsPath(barberProfileId, cursor, pageSize), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BarberSearchApiException
+                .FromResponseAsync(response, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var page = await response.Content
+            .ReadFromJsonAsync<PagedResponse<ReviewResponse>>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        return page ?? throw new InvalidOperationException("The API returned an empty reviews response.");
+    }
+
     /// <summary>
     /// Собирает относительный адрес поиска из заданных фильтров.
     /// </summary>
@@ -170,5 +196,36 @@ public sealed class BarberSearchApi : IBarberSearchApi
             barberProfileId.ToString("D"),
             "/slots?",
             string.Join('&', parameters));
+    }
+
+    /// <summary>
+    /// Собирает адрес страницы отзывов.
+    /// </summary>
+    /// <remarks>
+    /// <c>barberProfileId</c> обязателен. Пустой курсор в адрес не попадает: сервер трактует
+    /// отсутствие параметра как первую страницу, а строка <c>cursor=</c> вызвала бы
+    /// <c>review.cursor.invalid</c>. Курсор непрозрачен и уходит как есть — только
+    /// экранируется, потому что это часть query.
+    /// </remarks>
+    private static string BuildReviewsPath(Guid barberProfileId, string? cursor, int? pageSize)
+    {
+        var parameters = new List<string>(3)
+        {
+            string.Concat("barberProfileId=", barberProfileId.ToString("D")),
+        };
+
+        if (pageSize is not null)
+        {
+            parameters.Add(string.Concat(
+                "pageSize=",
+                pageSize.Value.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            parameters.Add(string.Concat("cursor=", Uri.EscapeDataString(cursor)));
+        }
+
+        return string.Concat("api/reviews?", string.Join('&', parameters));
     }
 }
