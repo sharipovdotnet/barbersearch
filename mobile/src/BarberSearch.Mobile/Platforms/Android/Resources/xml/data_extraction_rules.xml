@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Правила резервного копирования и переноса на другое устройство для Android 12+
+	(android:dataExtractionRules).
+
+	Смысл тот же, что в backup_rules.xml: зашифрованные shared preferences .NET MAUI SecureStorage
+	нельзя переносить без ключа из Android KeyStore — на новом устройстве значение не расшифровать.
+	Исключение действует и для облачной копии, и для прямого переноса между устройствами.
+-->
+<data-extraction-rules>
+	<cloud-backup>
+		<include domain="sharedpref" path="." />
+		<exclude domain="sharedpref" path="ru.barbersearch.mobile.microsoft.maui.essentials.preferences.xml" />
+	</cloud-backup>
+	<device-transfer>
+		<include domain="sharedpref" path="." />
+		<exclude domain="sharedpref" path="ru.barbersearch.mobile.microsoft.maui.essentials.preferences.xml" />
+	</device-transfer>
+</data-extraction-rules>

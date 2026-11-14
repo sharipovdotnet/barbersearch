@@ -4,7 +4,12 @@
 		usesCleartextTraffic открыт ради локального бэкенда по http://10.0.2.2:5243.
 		Убрать, когда появится стенд по HTTPS: Play помечает приложение с открытым трафиком.
 	-->
-	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
+	<!--
+		allowBackup остаётся true, но зашифрованные shared preferences SecureStorage из копии
+		исключены: см. Resources/xml/backup_rules.xml и data_extraction_rules.xml. Без правил
+		восстановление на новом устройстве принесло бы пару токенов без ключа шифрования.
+	-->
+	<application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 </manifest>
