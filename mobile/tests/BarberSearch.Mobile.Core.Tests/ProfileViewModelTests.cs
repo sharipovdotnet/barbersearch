@@ -468,6 +468,20 @@ public sealed class ProfileViewModelTests
         Assert.Equal(1, raised);
     }
 
+    [Fact]
+    public void ForgotPasswordCommand_RaisesNavigationEvent()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var viewModel = CreateViewModel(session);
+        var raised = 0;
+        viewModel.ForgotPasswordRequested += (_, _) => raised++;
+
+        viewModel.ForgotPasswordCommand.Execute(null);
+
+        Assert.Equal(1, raised);
+    }
+
     /// <summary>
     /// Создаёт уже открытый экран без сессии — то, что видит пользователь перед вводом пароля.
     /// </summary>
@@ -543,6 +557,11 @@ public sealed class ProfileViewModelTests
             RegisterRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Вкладка «Профиль» не регистрирует.");
+
+        public Task RequestPasswordResetAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Вкладка «Профиль» не просит ссылку сброса.");
 
         public Task<TokenResponse> LoginAsync(
             string email,

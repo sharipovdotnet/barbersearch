@@ -45,6 +45,7 @@ public partial class ProfilePage : ContentPage
         _viewModel.ReviewsRequested += OnReviewsRequested;
         _viewModel.SecurityRequested += OnSecurityRequested;
         _viewModel.RegisterRequested += OnRegisterRequested;
+        _viewModel.ForgotPasswordRequested += OnForgotPasswordRequested;
     }
 
     /// <summary>
@@ -108,5 +109,17 @@ public partial class ProfilePage : ContentPage
     private async void OnRegisterRequested(object? sender, EventArgs e)
     {
         await Shell.Current.GoToAsync(RegisterPage.Route);
+    }
+
+    /// <summary>
+    /// Открывает запрос ссылки для сброса забытого пароля.
+    /// </summary>
+    /// <remarks>
+    /// Экран живёт поверх стека «Профиля»: возврат с него оставляет форму входа вместе с
+    /// введённым адресом, а ссылка из письма открывается уже в браузере.
+    /// </remarks>
+    private async void OnForgotPasswordRequested(object? sender, EventArgs e)
+    {
+        await Shell.Current.GoToAsync(ForgotPasswordPage.Route);
     }
 }

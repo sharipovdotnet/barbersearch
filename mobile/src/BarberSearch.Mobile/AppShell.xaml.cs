@@ -46,6 +46,12 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			RegisterPage.Route,
 			new PageRouteFactory<RegisterPage>(services));
+
+		// Запрос ссылки сброса пароля стоит рядом с формой входа: возврат оставляет вкладку
+		// «Профиль» на месте, а сама ссылка из письма открывается уже в браузере.
+		Routing.RegisterRoute(
+			ForgotPasswordPage.Route,
+			new PageRouteFactory<ForgotPasswordPage>(services));
 		Routing.RegisterRoute(
 			SecurityPage.Route,
 			new PageRouteFactory<SecurityPage>(services));
