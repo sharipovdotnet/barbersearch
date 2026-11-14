@@ -124,6 +124,12 @@ Until then the "Map", "Favourites" and push screens have nothing to build on.
   English about what this session changed — not a file list and not a retelling of the diff. Stage
   only the work of the session: files that were already modified before it started are not part of
   the commit.
+- **PR conflicts are resolved by the agent, automatically.** A pull request that GitHub reports as
+  conflicting with `main` is not handed back to anyone: fetch the current `main`, merge it into the
+  branch, resolve every conflict by hand — keeping the intent of both sides instead of dropping one
+  — re-run the checks in §4, push the resolution and confirm the PR is mergeable again before
+  reporting it done. `git push --force` over someone else's commits and "please resolve the
+  conflicts" both stay out of the workflow.
 
 ## 8. Design source: the web frontend
 
