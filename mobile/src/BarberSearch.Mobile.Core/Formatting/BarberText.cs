@@ -180,6 +180,34 @@ public static class BarberText
         value is null ? "—" : value.Value.ToString("0.0", RuCulture);
 
     /// <summary>
+    /// Счётчик найденных барберов: «Показан 1 барбер», «Показаны 2 барбера»,
+    /// «Показаны 5 барберов».
+    /// </summary>
+    /// <remarks>
+    /// Формы повторяют плюрал <c>shownBarbers</c> веба: 11–14 всегда «барберов», дальше —
+    /// по последней цифре. Отрицательных значений не бывает, но берётся модуль, чтобы строка
+    /// не сломалась на мусорных данных.
+    /// </remarks>
+    /// <param name="count">Сколько барберов показано.</param>
+    /// <returns>Строка счётчика.</returns>
+    public static string ShownBarbers(int count)
+    {
+        var rest = Math.Abs(count) % 100;
+        var last = rest % 10;
+
+        var form = rest is >= 11 and <= 14
+            ? "Показаны {0} барберов"
+            : last switch
+            {
+                1 => "Показан {0} барбер",
+                2 or 3 or 4 => "Показаны {0} барбера",
+                _ => "Показаны {0} барберов",
+            };
+
+        return string.Format(CultureInfo.InvariantCulture, form, count);
+    }
+
+    /// <summary>
     /// Подпись подтверждённого профиля.
     /// </summary>
     public const string Verified = "Проверен";

@@ -57,6 +57,33 @@ a single `401` (single-flight, so two requests never rotate the same refresh tok
 request once. A refused refresh ends the session. The Profile tab holds the sign-in form while
 there is no session, and email with “Выйти” after it.
 
+## Search
+
+The «Поиск» tab carries the web's six filters: city, date, language, specialization, hair service
+and an additional-service substring (`GET api/barbers?city=&date=&language=&specializationId=&
+hairServiceId=&additionalService=&pageSize=`). Nothing is requested while a field is edited: the
+form submits only on «Найти», and empty values are omitted from the query, exactly as in
+`frontend/src/lib/barber-search.ts`. The server compares the city exactly, the language is one
+enum name (`Ru`, `En`, …), and the additional service is a case-insensitive substring of the
+barber's own list.
+
+The two catalog selects are filled from the public reads `GET api/specializations` and
+`GET api/hair-services` (bare arrays, no paging), requested in parallel once per screen. Their
+failure does not block city, date or language: the form shows «Не удалось загрузить фильтры.» with
+«Повторить», the selects stay disabled, and the search button keeps working. A catalog that loaded
+empty hides its own select, as on the web.
+
+The empty state keeps the web's wording and priority: a city is more specific than a date, a date
+more specific than the other filters, and without filters «Барберов пока нет». The counter above
+the results repeats the web's plural (`Показан 1 барбер`, `Показаны 2 барбера`,
+`Показаны 5 барберов`). A finished search scrolls the page to the results, the way the web scrolls
+to `#barbers` after submit.
+
+The date filter is a picker, not a calendar: MAUI's `DatePicker` cannot be empty, and the filter is
+optional. Its first item is «Любая дата», then today and the next 30 days in the device's calendar
+(the web uses the browser date). The bounded list and the dropped `<datalist>` hints of the
+additional-service field are recorded in `AGENT.md` §5.
+
 ## Booking
 
 The barber card (`GET api/barbers/{id}`) and the slot grid
@@ -230,10 +257,12 @@ dotnet test tests/BarberSearch.Mobile.Core.Tests
 ```
 
 Covers the HTTP clients (real `HttpClient` with a stub handler: JSON parsing of search, card and
-slots, booking body and `201 { id }`, `ProblemDetails` → `BarberSearchApiException`, empty filters
-omitted), the search and profile ViewModels, the barber card ViewModel (slot defaults in the salon's
-zone, service/salon/date changes, stale slot responses, the booking state machine and its retries)
-and the salon clock/text helpers. The bookings slice adds the list, cancellation, reschedule and
+slots, catalog arrays, booking body and `201 { id }`, `ProblemDetails` →
+`BarberSearchApiException`, empty filters omitted), the search and profile ViewModels, the barber
+card ViewModel (slot defaults in the salon's zone, service/salon/date changes, stale slot
+responses, the booking state machine and its retries), the search ViewModel (every filter in one
+request, the catalogs' loading/error/retry states and the empty-state wording) and the salon
+clock/text helpers. The bookings slice adds the list, cancellation, reschedule and
 review clients (query string, opaque cursor, `204` without a body, error codes), `BookingText`, and
 the three ViewModels: two independent lists with cursor loading and month groups, profile
 resolution with a per-profile cache, cancel/reschedule/review state machines and their error texts,

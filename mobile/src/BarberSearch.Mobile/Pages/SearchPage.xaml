@@ -8,65 +8,188 @@
     x:DataType="vm:SearchViewModel"
     Title="Поиск">
 
-    <Grid Padding="16" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+    <ScrollView x:Name="PageScroll">
+        <VerticalStackLayout Padding="16" Spacing="16">
 
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <Entry
-                Placeholder="Город"
-                ReturnCommand="{Binding SearchCommand}"
-                Text="{Binding City}" />
-            <Button
-                Grid.Column="1"
-                Command="{Binding SearchCommand}"
-                Text="Найти" />
-        </Grid>
+            <!--
+                Форма поиска: те же шесть фильтров, что на витрине веба, разложенные под палец.
+                Справочники приходят из API, поэтому их селекты ждут загрузки и умеют «Повторить».
+            -->
+            <Border Padding="16" StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="12">
 
-        <VerticalStackLayout Grid.Row="1" Spacing="8">
-            <ActivityIndicator IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" />
-            <Label
-                IsVisible="{Binding HasError}"
-                LineBreakMode="WordWrap"
-                Text="{Binding ErrorMessage}"
-                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-        </VerticalStackLayout>
+                    <VerticalStackLayout Spacing="2">
+                        <Label
+                            FontSize="12"
+                            Text="Город салона"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Entry
+                            Placeholder="Москва"
+                            ReturnCommand="{Binding SearchCommand}"
+                            Text="{Binding City}" />
+                    </VerticalStackLayout>
 
-        <CollectionView
-            x:Name="BarbersList"
-            Grid.Row="2"
-            ItemsSource="{Binding Barbers}"
-            SelectionChanged="OnBarberSelected"
-            SelectionMode="Single">
-            <CollectionView.EmptyView>
-                <Label
-                    Margin="0,24,0,0"
-                    HorizontalTextAlignment="Center"
-                    Text="Введите город и нажмите «Найти»"
-                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-            </CollectionView.EmptyView>
-
-            <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="search:BarberSearchItemResponse">
-                    <Border
-                        Margin="0,0,0,8"
-                        Padding="12"
-                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                        StrokeShape="RoundRectangle 10">
-                        <VerticalStackLayout Spacing="4">
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <VerticalStackLayout Spacing="2">
                             <Label
-                                FontFamily="GeistSemiBold"
-                                FontSize="16"
-                                Text="{Binding DisplayName}" />
-                            <Label Text="{Binding PrimarySalonName}" />
-                            <Label
-                                Text="{Binding City}"
+                                FontSize="12"
+                                Text="Дата"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Label Text="{Binding Rating, StringFormat='Рейтинг: {0}'}" />
+                            <Picker
+                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchDateOption}"
+                                ItemsSource="{Binding Dates}"
+                                SelectedItem="{Binding SelectedDate}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="Язык"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Picker
+                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchLanguageOption}"
+                                ItemsSource="{Binding Languages}"
+                                SelectedItem="{Binding SelectedLanguage}" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <VerticalStackLayout IsVisible="{Binding ShowSpecializationPicker}" Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="Специализация"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Picker
+                                IsEnabled="{Binding IsCatalogsEnabled}"
+                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchCatalogOption}"
+                                ItemsSource="{Binding Specializations}"
+                                SelectedItem="{Binding SelectedSpecialization}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            Grid.Column="1"
+                            IsVisible="{Binding ShowHairServicePicker}"
+                            Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="Услуга"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Picker
+                                IsEnabled="{Binding IsCatalogsEnabled}"
+                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchCatalogOption}"
+                                ItemsSource="{Binding HairServices}"
+                                SelectedItem="{Binding SelectedHairService}" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <VerticalStackLayout Spacing="2">
+                        <Label
+                            FontSize="12"
+                            Text="Дополнительная услуга"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Entry
+                            Placeholder="Например, борода"
+                            ReturnCommand="{Binding SearchCommand}"
+                            Text="{Binding AdditionalService}" />
+                    </VerticalStackLayout>
+
+                    <!-- Ошибка справочников не блокирует город, дату и язык: эти поля работают и так. -->
+                    <Border
+                        IsVisible="{Binding HasCatalogsError}"
+                        Padding="12"
+                        Stroke="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="8">
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding CatalogsErrorText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Button
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding RetryCatalogsCommand}"
+                                Text="Повторить"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                         </VerticalStackLayout>
                     </Border>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
 
-    </Grid>
+                    <Button Command="{Binding SearchCommand}" Text="Найти" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Выдача: заголовок, счётчик, индикатор, ошибка и карточки. -->
+            <VerticalStackLayout x:Name="ResultsSection" Spacing="8">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    Text="Барберы рядом" />
+
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding ShowResultsCount}"
+                    Text="{Binding ResultsCountText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <ActivityIndicator
+                    HorizontalOptions="Start"
+                    IsRunning="{Binding IsLoading}"
+                    IsVisible="{Binding IsLoading}" />
+
+                <VerticalStackLayout IsVisible="{Binding HasError}" Spacing="8">
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ErrorMessage}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Button
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding SearchCommand}"
+                        Text="Повторить"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Barbers}" Spacing="8">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="search:BarberSearchItemResponse">
+                            <Border Padding="12" StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnBarberTapped" />
+                                </Border.GestureRecognizers>
+                                <VerticalStackLayout Spacing="4">
+                                    <Label
+                                        FontFamily="GeistSemiBold"
+                                        FontSize="16"
+                                        Text="{Binding DisplayName}" />
+                                    <Label Text="{Binding PrimarySalonName}" />
+                                    <Label
+                                        Text="{Binding City}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label Text="{Binding Rating, StringFormat='Рейтинг: {0}'}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Пустое состояние: подсказка зависит от последних отправленных фильтров. -->
+                <VerticalStackLayout
+                    Margin="0,24,0,0"
+                    IsVisible="{Binding ShowEmptyState}"
+                    Spacing="8">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        HorizontalTextAlignment="Center"
+                        IsVisible="{Binding HasEmptyTitle}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding EmptyTitle}" />
+                    <Label
+                        HorizontalTextAlignment="Center"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding EmptyDescription}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
 
 </ContentPage>

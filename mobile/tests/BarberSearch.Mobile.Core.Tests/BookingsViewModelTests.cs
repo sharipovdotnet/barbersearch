@@ -6,6 +6,8 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.GetHairServices;
+using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.Bookings;
@@ -853,11 +855,19 @@ public sealed class BookingsViewModelTests
         }
 
         public Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
-            string? city,
+            BarberSearchFilters filters,
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Экран записей не ищет барберов.");
+
+        public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает справочник специализаций.");
+
+        public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает справочник услуг.");
 
         public Task<BarberSlotsResponse> GetSlotsAsync(
             Guid barberProfileId,

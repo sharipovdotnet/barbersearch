@@ -2,7 +2,9 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Specializations.GetSpecializations;
 
 namespace BarberSearch.Mobile.Core.Api;
 
@@ -12,24 +14,53 @@ namespace BarberSearch.Mobile.Core.Api;
 /// <remarks>
 /// Интерфейс существует ради тестов ViewModel: экраны зависят от него, а не от
 /// <see cref="HttpClient"/>, поэтому проверяются без сети и без эмулятора. Набор методов растёт
-/// вместе с экранами — «на всякий случай» сюда ничего не добавляется. Карточка и слоты —
-/// публичные чтения, поэтому живут здесь и ходят на клиент без авторизационного обработчика.
+/// вместе с экранами — «на всякий случай» сюда ничего не добавляется. Поиск, справочники для его
+/// фильтров, карточка и слоты — публичные чтения, поэтому живут здесь и ходят на клиент без
+/// авторизационного обработчика.
 /// </remarks>
 public interface IBarberSearchApi
 {
     /// <summary>
-    /// Ищет барберов с фильтром по городу и keyset-пагинацией.
+    /// Ищет барберов с фильтрами витрины и keyset-пагинацией.
     /// </summary>
-    /// <param name="city">Город салона; пусто — без фильтра.</param>
+    /// <param name="filters">
+    /// Фильтры: город, дата, язык, специализация, услуга справочника и дополнительная услуга.
+    /// </param>
     /// <param name="cursor">Непрозрачный курсор следующей страницы из предыдущего ответа.</param>
     /// <param name="pageSize">Размер страницы; сервер по умолчанию отдаёт 20.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Страница выдачи; <c>NextCursor = null</c> означает последнюю.</returns>
     /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
     Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
-        string? city,
+        BarberSearchFilters filters,
         string? cursor = null,
         int? pageSize = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Публичный справочник активных специализаций для фильтра витрины.
+    /// </summary>
+    /// <remarks>
+    /// Ответ — голый массив без пагинации, порядок серверный (по имени). Пустой справочник —
+    /// пустой список, а не ошибка: экран просто скрывает свой селект.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Активные специализации в порядке сервера.</returns>
+    /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
+    Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Публичный справочник активных услуг для фильтра витрины.
+    /// </summary>
+    /// <remarks>
+    /// Ответ — голый массив без пагинации; порядок — категория, затем имя.
+    /// <c>DefaultDurationMinutes</c> фильтру не нужен, но приходит в том же контракте.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Активные услуги в порядке сервера.</returns>
+    /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
+    Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>

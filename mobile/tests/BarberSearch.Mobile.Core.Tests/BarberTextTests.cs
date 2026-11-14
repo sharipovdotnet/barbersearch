@@ -123,6 +123,21 @@ public sealed class BarberTextTests
         Assert.Equal("0 из 12", BarberText.PageRange(offset: 0, count: 0, total: 12));
     }
 
+    [Theory]
+    [InlineData(1, "Показан 1 барбер")]
+    [InlineData(2, "Показаны 2 барбера")]
+    [InlineData(4, "Показаны 4 барбера")]
+    [InlineData(5, "Показаны 5 барберов")]
+    [InlineData(11, "Показаны 11 барберов")]
+    [InlineData(21, "Показан 21 барбер")]
+    [InlineData(22, "Показаны 22 барбера")]
+    public void ShownBarbers_VariousCounts_ReturnsWebPluralForm(int count, string expected)
+    {
+        // Формы повторяют плюрал shownBarbers веба: 11–14 всегда «барберов», дальше —
+        // по последней цифре. Счётчик стоит над выдачей, поэтому ошибка видна сразу.
+        Assert.Equal(expected, BarberText.ShownBarbers(count));
+    }
+
     [Fact]
     public void Verified_Constant_ReturnsRussianCaption() =>
         Assert.Equal("Проверен", BarberText.Verified);

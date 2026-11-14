@@ -1,8 +1,7 @@
 using System.Net;
 using System.Text;
-using System.Text.Json;
-using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
-using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.BarberProfiles.Enums;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Mobile.Core.Api;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -20,6 +19,7 @@ public sealed class BarberSearchApiTests
     private static readonly Guid SalonId = Guid.Parse("9e100000-0000-4000-8000-000000000002");
     private static readonly Guid HairServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000003");
     private static readonly Guid BarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000004");
+    private static readonly Guid SpecializationId = Guid.Parse("9e100000-0000-4000-8000-000000000009");
 
     private const string BarberProfileJson = """
         {
@@ -151,7 +151,17 @@ public sealed class BarberSearchApiTests
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
         var api = new BarberSearchApi(httpClient);
 
-        var page = await api.SearchBarbersAsync("Тюмень", pageSize: 10);
+        var page = await api.SearchBarbersAsync(
+            new BarberSearchFilters
+            {
+                City = "Тюмень",
+                Date = new DateOnly(2026, 11, 20),
+                SpecializationId = SpecializationId,
+                HairServiceId = HairServiceId,
+                Language = Language.En,
+                AdditionalService = "борода",
+            },
+            pageSize: 10);
 
         var barber = Assert.Single(page.Items);
         Assert.Equal("Алиса", barber.DisplayName);
@@ -160,6 +170,11 @@ public sealed class BarberSearchApiTests
 
         var query = Uri.UnescapeDataString(handler.LastRequestUri!.Query);
         Assert.Contains("city=Тюмень", query, StringComparison.Ordinal);
+        Assert.Contains("date=2026-11-20", query, StringComparison.Ordinal);
+        Assert.Contains(string.Concat("specializationId=", SpecializationId.ToString("D")), query, StringComparison.Ordinal);
+        Assert.Contains(string.Concat("hairServiceId=", HairServiceId.ToString("D")), query, StringComparison.Ordinal);
+        Assert.Contains("language=En", query, StringComparison.Ordinal);
+        Assert.Contains("additionalService=борода", query, StringComparison.Ordinal);
         Assert.Contains("pageSize=10", query, StringComparison.Ordinal);
     }
 
@@ -180,7 +195,7 @@ public sealed class BarberSearchApiTests
         var api = new BarberSearchApi(httpClient);
 
         var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
-            () => api.SearchBarbersAsync("Тюмень"));
+            () => api.SearchBarbersAsync(new BarberSearchFilters { City = "Тюмень" }));
 
         Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
         Assert.Equal("Город слишком длинный.", exception.Message);
@@ -195,7 +210,7 @@ public sealed class BarberSearchApiTests
         var api = new BarberSearchApi(httpClient);
 
         var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
-            () => api.SearchBarbersAsync(null));
+            () => api.SearchBarbersAsync(BarberSearchFilters.Empty));
 
         Assert.Equal(HttpStatusCode.BadGateway, exception.StatusCode);
         Assert.Empty(exception.ErrorCodes);
@@ -208,7 +223,7 @@ public sealed class BarberSearchApiTests
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
         var api = new BarberSearchApi(httpClient);
 
-        var page = await api.SearchBarbersAsync("   ");
+        var page = await api.SearchBarbersAsync(new BarberSearchFilters { City = "   " });
 
         Assert.Empty(page.Items);
         Assert.Equal("/api/barbers", handler.LastRequestUri!.AbsolutePath);
@@ -438,6 +453,97 @@ public sealed class BarberSearchApiTests
         // Секция отзывов ветвится по коду состояния: 429 — «подождите минуту», а не общая ошибка.
         Assert.Equal(HttpStatusCode.TooManyRequests, exception.StatusCode);
         Assert.Contains("rateLimit.exceeded", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetSpecializationsAsync_ParsesBareArray()
+    {
+        const string json = """
+            [
+              {
+                "id": "9e100000-0000-4000-8000-000000000009",
+                "name": "Классика",
+                "description": null
+              }
+            ]
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.OK, json, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var items = await api.GetSpecializationsAsync();
+
+        var specialization = Assert.Single(items);
+        Assert.Equal(SpecializationId, specialization.Id);
+        Assert.Equal("Классика", specialization.Name);
+        Assert.Null(specialization.Description);
+        Assert.Equal("/api/specializations", handler.LastRequestUri!.AbsolutePath);
+        Assert.Equal(string.Empty, handler.LastRequestUri.Query);
+    }
+
+    [Fact]
+    public async Task GetHairServicesAsync_ParsesBareArray()
+    {
+        const string json = """
+            [
+              {
+                "id": "9e100000-0000-4000-8000-000000000003",
+                "name": "Стрижка",
+                "category": "Haircut",
+                "defaultDurationMinutes": 40,
+                "description": "Машинкой и ножницами."
+              }
+            ]
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.OK, json, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var items = await api.GetHairServicesAsync();
+
+        var service = Assert.Single(items);
+        Assert.Equal(HairServiceId, service.Id);
+        Assert.Equal(ServiceCategory.Haircut, service.Category);
+        Assert.Equal(40, service.DefaultDurationMinutes);
+        Assert.Equal("/api/hair-services", handler.LastRequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task GetSpecializationsAsync_EmptyArray_ReturnsEmptyList()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "[]", "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var items = await api.GetSpecializationsAsync();
+
+        // Пустой справочник — не ошибка: экран просто скрывает свой селект.
+        Assert.Empty(items);
+    }
+
+    [Fact]
+    public async Task GetHairServicesAsync_ProblemDetails_TurnsIntoException()
+    {
+        const string problemJson = """
+            {
+              "title": "Internal Server Error",
+              "status": 500,
+              "detail": "Каталог недоступен.",
+              "errorCodes": ["hairServices.get.failed"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.InternalServerError, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetHairServicesAsync());
+
+        Assert.Equal(HttpStatusCode.InternalServerError, exception.StatusCode);
+        Assert.Contains("hairServices.get.failed", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
     /// <summary>

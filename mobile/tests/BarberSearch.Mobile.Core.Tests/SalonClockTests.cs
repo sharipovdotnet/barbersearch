@@ -83,4 +83,17 @@ public sealed class SalonClockTests
     {
         Assert.Equal("воскресенье, 15 ноября", SalonClock.FormatDate(new DateOnly(2026, 11, 15)));
     }
+
+    [Fact]
+    public void FormatDayMonth_DateOnly_ReturnsDayAndGenitiveMonth()
+    {
+        // День недели уже назван словом («Сегодня, …»), поэтому здесь его нет.
+        Assert.Equal("15 ноября", SalonClock.FormatDayMonth(new DateOnly(2026, 11, 15)));
+    }
+
+    [Fact]
+    public void FormatWeekdayDate_DateOnly_ReturnsShortWeekdayAndDate()
+    {
+        Assert.Equal("вт, 17 ноября", SalonClock.FormatWeekdayDate(new DateOnly(2026, 11, 17)));
+    }
 }
