@@ -7,14 +7,14 @@
 
     <VerticalStackLayout Padding="24" Spacing="8" VerticalOptions="Center">
         <Label
-            FontAttributes="Bold"
-            FontSize="18"
+            FontFamily="GeistSemiBold"
+            FontSize="20"
             HorizontalTextAlignment="Center"
             Text="Карта" />
         <Label
             HorizontalTextAlignment="Center"
             Text="Экран появится после того, как в API будет поиск по координатам."
-            TextColor="{StaticResource Gray500}" />
+            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
     </VerticalStackLayout>
 
 </ContentPage>

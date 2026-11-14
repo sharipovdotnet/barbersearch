@@ -27,7 +27,7 @@
                 IsVisible="{Binding HasError}"
                 LineBreakMode="WordWrap"
                 Text="{Binding ErrorMessage}"
-                TextColor="{StaticResource Danger}" />
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
         </VerticalStackLayout>
 
         <CollectionView Grid.Row="2" ItemsSource="{Binding Barbers}">
@@ -36,7 +36,7 @@
                     Margin="0,24,0,0"
                     HorizontalTextAlignment="Center"
                     Text="Введите город и нажмите «Найти»"
-                    TextColor="{StaticResource Gray500}" />
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </CollectionView.EmptyView>
 
             <CollectionView.ItemTemplate>
@@ -44,17 +44,17 @@
                     <Border
                         Margin="0,0,0,8"
                         Padding="12"
-                        Stroke="{StaticResource Gray200}"
-                        StrokeShape="RoundRectangle 12">
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
                         <VerticalStackLayout Spacing="4">
                             <Label
-                                FontAttributes="Bold"
+                                FontFamily="GeistSemiBold"
                                 FontSize="16"
                                 Text="{Binding DisplayName}" />
                             <Label Text="{Binding PrimarySalonName}" />
                             <Label
                                 Text="{Binding City}"
-                                TextColor="{StaticResource Gray500}" />
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Label Text="{Binding Rating, StringFormat='Рейтинг: {0}'}" />
                         </VerticalStackLayout>
                     </Border>

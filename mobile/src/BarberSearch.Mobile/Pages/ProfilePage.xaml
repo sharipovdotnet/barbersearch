@@ -19,8 +19,8 @@
             <VerticalStackLayout Padding="0,24,0,0" Spacing="12">
 
                 <Label
-                    FontAttributes="Bold"
-                    FontSize="18"
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
                     Text="Вход в BarberSearch" />
 
                 <VerticalStackLayout Spacing="4">
@@ -46,7 +46,7 @@
                     IsVisible="{Binding HasError}"
                     LineBreakMode="WordWrap"
                     Text="{Binding ErrorMessage}"
-                    TextColor="{StaticResource Danger}" />
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
                 <Button
                     Command="{Binding LoginCommand}"
