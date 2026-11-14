@@ -42,3 +42,12 @@ dotnet_diagnostic.CA1707.severity = none
 # MAUI-шаблон и платформенные файлы — сгенерированный код, правила к нему не применяем.
 [src/BarberSearch.Mobile/Platforms/**/*.cs]
 dotnet_analyzer_diagnostic.severity = none
+
+# SecureStorage бросает разные типы в зависимости от платформы и версии Android
+# (Java.Security.SecurityException, Android.Security.KeyStoreException, исключения
+# AndroidX Security вплоть до InvalidProtocolBufferException). Перечень типов был бы
+# неполным, а последствие пропущенного исключения — падение на старте после восстановления
+# из бэкапа. Поэтому здесь ловится Exception с обязательным объяснением в каждом catch:
+# значение повреждено → «сессии нет» и RemoveAll, а не отказ приложения.
+[src/BarberSearch.Mobile/Auth/SecureStorageTokenStore.cs]
+dotnet_diagnostic.CA1031.severity = none

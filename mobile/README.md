@@ -44,11 +44,18 @@ emulator reaches the host as `10.0.2.2:5243`, the iOS simulator as `localhost:52
 manifest allows cleartext HTTP for that local client only — remove it when a stand with HTTPS
 appears.
 
-Authentication is already designed for mobile on the server side: `POST /api/auth/login` returns
-the access token and the refresh token **in the body** (`TokenResponse`), `POST /api/auth/refresh`
-rotates the pair, `POST /api/auth/logout` accepts `Authorization: Bearer`. The cookie branch of the
-same controller serves the browser web app. Wiring the token flow into the app is the next step,
-not part of the current skeleton.
+Authentication runs on the token branch of the auth controller: `POST /api/auth/login` returns the
+access token and the refresh token **in the body** (`TokenResponse`), `POST /api/auth/refresh`
+rotates the pair, `POST /api/auth/logout` revokes the refresh token. The cookie branch of the same
+controller serves the browser web app.
+
+The pair is stored by `ITokenStore` (Core) as one JSON value; the app implements it with
+`SecureStorage` (`SecureStorageTokenStore`), and the Android backup rules exclude the encrypted
+preferences file so a restored install cannot resurrect an undecryptable pair. `TokenSession` keeps
+the pair in memory, and `AuthenticatedHttpHandler` adds `Authorization: Bearer`, refreshes once on
+a single `401` (single-flight, so two requests never rotate the same refresh token) and repeats the
+request once. A refused refresh ends the session. The Profile tab is the only screen: a sign-in
+form while there is no session, email and “Выйти” after it.
 
 ## Build and run
 

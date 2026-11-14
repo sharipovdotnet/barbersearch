@@ -3,18 +3,74 @@
     x:Class="BarberSearch.Mobile.Pages.ProfilePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:ProfileViewModel"
     Title="Профиль">
 
-    <VerticalStackLayout Padding="24" Spacing="8" VerticalOptions="Center">
-        <Label
-            FontAttributes="Bold"
-            FontSize="18"
-            HorizontalTextAlignment="Center"
-            Text="Профиль" />
-        <Label
-            HorizontalTextAlignment="Center"
-            Text="Вход, данные и настройки уведомлений появятся на следующем шаге."
-            TextColor="{StaticResource Gray500}" />
-    </VerticalStackLayout>
+    <Grid Padding="16">
+
+        <ActivityIndicator
+            HorizontalOptions="Center"
+            IsRunning="{Binding IsLoading}"
+            IsVisible="{Binding IsLoading}"
+            VerticalOptions="Center" />
+
+        <ScrollView IsVisible="{Binding IsFormVisible}">
+            <VerticalStackLayout Padding="0,24,0,0" Spacing="12">
+
+                <Label
+                    FontAttributes="Bold"
+                    FontSize="18"
+                    Text="Вход в BarberSearch" />
+
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Email" />
+                    <Entry
+                        IsEnabled="{Binding IsFormEnabled}"
+                        Keyboard="Email"
+                        MinimumHeightRequest="44"
+                        Text="{Binding Email}" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Пароль" />
+                    <Entry
+                        IsEnabled="{Binding IsFormEnabled}"
+                        IsPassword="True"
+                        MinimumHeightRequest="44"
+                        ReturnCommand="{Binding LoginCommand}"
+                        Text="{Binding Password}" />
+                </VerticalStackLayout>
+
+                <Label
+                    IsVisible="{Binding HasError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ErrorMessage}"
+                    TextColor="{StaticResource Danger}" />
+
+                <Button
+                    Command="{Binding LoginCommand}"
+                    IsEnabled="{Binding IsFormEnabled}"
+                    MinimumHeightRequest="44"
+                    Text="{Binding LoginButtonText}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <VerticalStackLayout
+            IsVisible="{Binding IsProfileVisible}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                Text="{Binding ProfileEmail}" />
+            <Button
+                Command="{Binding LogoutCommand}"
+                MinimumHeightRequest="44"
+                Text="{Binding LogoutButtonText}" />
+        </VerticalStackLayout>
+
+    </Grid>
 
 </ContentPage>

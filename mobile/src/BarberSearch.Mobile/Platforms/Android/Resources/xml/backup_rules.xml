@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Правила Auto Backup для Android 11 и ниже (android:fullBackupContent).
+
+	Файл зашифрованных shared preferences (.NET MAUI SecureStorage) исключён из резервной копии:
+	ключ шифрования лежит в Android KeyStore и в бэкап не попадает, поэтому на новом устройстве
+	восстановленное значение не расшифровать. Без исключения приложение после восстановления
+	получает нечитаемую сессию и обязано её выбросить.
+
+	Имя файла — {ApplicationId}.microsoft.maui.essentials.preferences.xml: его задаёт
+	Preferences.GetPrivatePreferencesSharedName в .NET MAUI. При смене ApplicationId
+	в BarberSearch.Mobile.csproj это имя нужно поменять и здесь, и в data_extraction_rules.xml.
+-->
+<full-backup-content>
+	<include domain="sharedpref" path="." />
+	<exclude domain="sharedpref" path="ru.barbersearch.mobile.microsoft.maui.essentials.preferences.xml" />
+</full-backup-content>
