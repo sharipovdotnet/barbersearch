@@ -5,6 +5,7 @@ using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Pages;
 using Microsoft.Extensions.Logging;
@@ -31,6 +32,21 @@ public static class MauiProgram
 #endif
 
     /// <summary>
+    /// Адрес публичного сайта: правовые документы открываются в браузере, а не в приложении.
+    /// </summary>
+    /// <remarks>
+    /// Совпадает с <c>App:PublicUrl</c> бэкенда в разработке — сайт запускается на 5173.
+    /// Эмулятор Android видит хост как <c>10.0.2.2</c>, симулятор iOS — как <c>localhost</c>.
+    /// Адрес стенда появится здесь же, когда он будет.
+    /// </remarks>
+    private const string DevelopmentSiteBaseAddress =
+#if ANDROID
+        "http://10.0.2.2:5173";
+#else
+        "http://localhost:5173";
+#endif
+
+    /// <summary>
     /// Создаёт и настраивает MAUI-приложение.
     /// </summary>
     /// <returns>Готовое приложение.</returns>
@@ -52,6 +68,7 @@ public static class MauiProgram
             });
 
         builder.Services.AddSingleton(BarberSearchApiOptions.FromBaseAddress(DevelopmentApiBaseAddress));
+        builder.Services.AddSingleton(LegalOptions.FromBaseAddress(DevelopmentSiteBaseAddress));
 
         // Пара токенов живёт в защищённом хранилище платформы; Core про него не знает.
         builder.Services.AddSingleton<ITokenStore, SecureStorageTokenStore>();
@@ -82,6 +99,7 @@ public static class MauiProgram
 
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
+        builder.Services.AddTransient<RegisterViewModel>();
         builder.Services.AddTransient<BarberCardViewModel>();
         builder.Services.AddTransient<PortfolioViewerViewModel>();
 
@@ -109,6 +127,7 @@ public static class MauiProgram
         builder.Services.AddTransient<SecurityPage>();
         builder.Services.AddTransient<MyReviewsPage>();
         builder.Services.AddTransient<EditReviewPage>();
+        builder.Services.AddTransient<RegisterPage>();
         builder.Services.AddSingleton<MapPage>();
         builder.Services.AddSingleton<BookingsPage>();
         builder.Services.AddSingleton<ProfilePage>();

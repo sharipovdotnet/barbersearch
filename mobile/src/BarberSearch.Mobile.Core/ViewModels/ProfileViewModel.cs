@@ -19,7 +19,8 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// Отдельной страницы входа нет: пока сессии нет, на экране форма, после входа — карточка
 /// личности и переходы в разделы («Личные данные», «Мои отзывы», «Безопасность»). Экраны
 /// разделов открываются обычными страницами Shell поверх стека «Профиля», поэтому вкладка
-/// остаётся единственным экраном входа.
+/// остаётся единственным экраном входа. Регистрация — исключение: это отдельная страница
+/// поверх того же стека, и ссылка на неё стоит под формой входа.
 /// </para>
 /// <para>
 /// Состояний больше, чем у других вкладок, и они не пересекаются: проверяем сессию, форма
@@ -101,6 +102,11 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// Нажата «Безопасность» (в том числе предупреждение о неподтверждённом email).
     /// </summary>
     public event EventHandler? SecurityRequested;
+
+    /// <summary>
+    /// Нажата «Зарегистрироваться» под формой входа: страница открывает экран регистрации.
+    /// </summary>
+    public event EventHandler? RegisterRequested;
 
     /// <summary>
     /// Идёт проверка сессии при открытии экрана.
@@ -514,6 +520,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     private void Security() => SecurityRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Просит страницу открыть регистрацию.
+    /// </summary>
+    /// <remarks>
+    /// Регистрация — отдельный экран, а не состояние формы входа: полей у неё вдвое больше,
+    /// и возврат с неё должен оставлять вкладку «Профиль» на месте.
+    /// </remarks>
+    [RelayCommand]
+    private void Register() => RegisterRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// Читает профиль и раскладывает его по свойствам экрана.

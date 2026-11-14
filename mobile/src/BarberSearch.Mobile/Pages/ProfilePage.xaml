@@ -59,6 +59,24 @@
                     MinimumHeightRequest="44"
                     Text="{Binding LoginButtonText}" />
 
+                <!-- Регистрация — отдельная страница поверх стека: ссылка стоит под входом,
+                     как в диалоге входа веба («Нет аккаунта? Зарегистрироваться»). -->
+                <HorizontalStackLayout
+                    HorizontalOptions="Center"
+                    Spacing="4">
+                    <Label
+                        Text="Нет аккаунта?"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center" />
+                    <Button
+                        Padding="0"
+                        BackgroundColor="Transparent"
+                        Command="{Binding RegisterCommand}"
+                        HorizontalOptions="Start"
+                        Text="Зарегистрироваться"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                </HorizontalStackLayout>
+
             </VerticalStackLayout>
         </ScrollView>
 

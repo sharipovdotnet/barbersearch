@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.RegisterPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:RegisterViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Регистрация">
+
+    <!--
+        Форма повторяет веб (frontend/src/components/register-form.tsx): имя и фамилия,
+        email, пароль и его повтор, отметка согласия с подписью редакции Политики.
+        Карточка «Аккаунт создан» заменяет форму, когда аккаунт уже есть, а автовход не удался:
+        повторная регистрация получила бы 409.
+    -->
+    <Grid Padding="16">
+
+        <ScrollView IsVisible="{Binding ShowForm}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="8">
+
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="Создайте аккаунт, чтобы записываться к барберам."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <Label Text="Имя" />
+                <Entry IsEnabled="{Binding IsFormEnabled}" Text="{Binding FirstName}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasFirstNameError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding FirstNameError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="Фамилия" />
+                <Entry IsEnabled="{Binding IsFormEnabled}" Text="{Binding LastName}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasLastNameError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LastNameError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="Email" />
+                <Entry
+                    IsEnabled="{Binding IsFormEnabled}"
+                    Keyboard="Email"
+                    Placeholder="you@example.com"
+                    Text="{Binding Email}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasEmailError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding EmailError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="Пароль" />
+                <Entry
+                    IsEnabled="{Binding IsFormEnabled}"
+                    IsPassword="True"
+                    Text="{Binding Password}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="Минимум 12 символов. Не должен совпадать с email, именем или фамилией."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasPasswordError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding PasswordError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="Повтор пароля" />
+                <Entry
+                    IsEnabled="{Binding IsFormEnabled}"
+                    IsPassword="True"
+                    Text="{Binding PasswordRepeat}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasPasswordRepeatError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding PasswordRepeatError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <!-- Согласие — отдельное основание обработки (ч. 1 ст. 9 152-ФЗ). -->
+                <Grid
+                    Margin="0,8,0,0"
+                    ColumnDefinitions="Auto,*"
+                    ColumnSpacing="8">
+                    <CheckBox
+                        IsChecked="{Binding IsConsentGiven, Mode=TwoWay}"
+                        IsEnabled="{Binding IsFormEnabled}"
+                        VerticalOptions="Start" />
+                    <Label
+                        Grid.Column="1"
+                        LineBreakMode="WordWrap"
+                        Text="Я согласен на обработку персональных данных"
+                        VerticalTextAlignment="Center" />
+                </Grid>
+
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="Для регистрации и использования аккаунта, оформления и сопровождения записей."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <Button
+                    Padding="0"
+                    BackgroundColor="Transparent"
+                    Clicked="OnPrivacyPolicyClicked"
+                    FontSize="12"
+                    HorizontalOptions="Start"
+                    Text="{Binding PrivacyPolicyLinkText}"
+                    TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasConsentError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ConsentError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label
+                    IsVisible="{Binding HasFormError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding FormError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Button
+                    Margin="0,8,0,0"
+                    Command="{Binding RegisterCommand}"
+                    IsEnabled="{Binding IsFormEnabled}"
+                    Text="{Binding RegisterButtonText}" />
+
+                <HorizontalStackLayout
+                    HorizontalOptions="Center"
+                    Spacing="4">
+                    <Label
+                        Text="Уже есть аккаунт?"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center" />
+                    <Button
+                        Padding="0"
+                        BackgroundColor="Transparent"
+                        Clicked="OnSignInClicked"
+                        HorizontalOptions="Start"
+                        Text="Войти"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                </HorizontalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Аккаунт создан, автовход не удался: повторная регистрация получила бы 409. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowCreatedCard}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="20"
+                HorizontalTextAlignment="Center"
+                Text="Аккаунт создан" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="Автоматический вход не удался, но аккаунт уже существует — повторно регистрироваться не нужно. Войдите с тем же email и паролем."
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding SignInCommand}"
+                HorizontalOptions="Center"
+                Text="Войти" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

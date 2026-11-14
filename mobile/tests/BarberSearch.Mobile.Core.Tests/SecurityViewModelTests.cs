@@ -1,6 +1,7 @@
 using System.Net;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Me;
+using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
@@ -531,6 +532,11 @@ public sealed class SecurityViewModelTests
         public string? LastEmail { get; private set; }
 
         public string? LastPassword { get; private set; }
+
+        public Task<Guid> RegisterAsync(
+            RegisterRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран безопасности не регистрирует.");
 
         public Task<TokenResponse> LoginAsync(
             string email,

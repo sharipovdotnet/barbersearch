@@ -40,6 +40,12 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			AccountProfilePage.Route,
 			new PageRouteFactory<AccountProfilePage>(services));
+
+		// Регистрация живёт там же, рядом с формой входа: возврат с неё оставляет вкладку
+		// «Профиль» на месте, а после успеха страница закрывается сама.
+		Routing.RegisterRoute(
+			RegisterPage.Route,
+			new PageRouteFactory<RegisterPage>(services));
 		Routing.RegisterRoute(
 			SecurityPage.Route,
 			new PageRouteFactory<SecurityPage>(services));

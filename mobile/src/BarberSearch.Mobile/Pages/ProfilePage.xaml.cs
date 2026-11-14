@@ -44,6 +44,7 @@ public partial class ProfilePage : ContentPage
         _viewModel.EditProfileRequested += OnEditProfileRequested;
         _viewModel.ReviewsRequested += OnReviewsRequested;
         _viewModel.SecurityRequested += OnSecurityRequested;
+        _viewModel.RegisterRequested += OnRegisterRequested;
     }
 
     /// <summary>
@@ -99,5 +100,13 @@ public partial class ProfilePage : ContentPage
     private async void OnSecurityRequested(object? sender, EventArgs e)
     {
         await Shell.Current.GoToAsync(SecurityPage.Route);
+    }
+
+    /// <summary>
+    /// Открывает экран регистрации: он живёт поверх стека «Профиля».
+    /// </summary>
+    private async void OnRegisterRequested(object? sender, EventArgs e)
+    {
+        await Shell.Current.GoToAsync(RegisterPage.Route);
     }
 }

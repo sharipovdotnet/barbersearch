@@ -1,5 +1,6 @@
 using System.Net;
 using BarberSearch.Contracts.Auth.Login;
+using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
@@ -285,6 +286,11 @@ public sealed class AuthenticatedHttpHandlerTests
         public int RefreshCalls { get; private set; }
 
         public string? LastRefreshToken { get; private set; }
+
+        public Task<Guid> RegisterAsync(
+            RegisterRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("The handler must not register.");
 
         public Task<TokenResponse> LoginAsync(
             string email,
