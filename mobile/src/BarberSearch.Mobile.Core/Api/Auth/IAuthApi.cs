@@ -1,9 +1,10 @@
 using BarberSearch.Contracts.Auth.Login;
+using BarberSearch.Contracts.Auth.Register;
 
 namespace BarberSearch.Mobile.Core.Api.Auth;
 
 /// <summary>
-/// Вход, продление и выход по паре токенов.
+/// Регистрация, вход, продление и выход по паре токенов.
 /// </summary>
 /// <remarks>
 /// Отдельно от <see cref="IAccountApi"/>: эти запросы идут на «чистом» <see cref="HttpClient"/>
@@ -12,6 +13,24 @@ namespace BarberSearch.Mobile.Core.Api.Auth;
 /// </remarks>
 public interface IAuthApi
 {
+    /// <summary>
+    /// Создаёт аккаунт клиента и возвращает его идентификатор.
+    /// </summary>
+    /// <remarks>
+    /// Регистрация не входит: <c>201</c> несёт только <c>id</c>, а пара выдаётся отдельным
+    /// <see cref="LoginAsync"/> тем же паролем — так же поступает веб. Роль в теле не
+    /// передаётся: публичная регистрация всегда создаёт <c>Customer</c>.
+    /// <c>ConsentVersion</c> по смыслу обязателен — без него сервер отвечает
+    /// <c>400 auth.register.consentRequired</c>, а со старой редакцией —
+    /// <c>400 auth.register.consentVersion</c>.
+    /// </remarks>
+    /// <param name="request">Имя, фамилия, email, пароль и редакция Политики.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Идентификатор созданного пользователя.</returns>
+    Task<Guid> RegisterAsync(
+        RegisterRequest request,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Меняет email и пароль на пару токенов.
     /// </summary>

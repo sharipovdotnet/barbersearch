@@ -96,7 +96,8 @@ A local backend is required before running (`backend/docker compose up -d` +
   omission.
 - **The «Профиль» tab is a hub, not a copy of the web cabinet.** The web wraps every account route
   in its own access gate and renders the avatar card, the email card, the profile form and the
-  account details on one page. Mobile keeps one tab: the sign-in form without a session, then a
+  account details on one page. Mobile keeps one tab: the sign-in form without a session (with a
+  «Нет аккаунта? Зарегистрироваться» link under it), then a
   person card (initials, name, email, role, «Email не подтверждён») with «Личные данные», «Мои
   отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over the profile stack.
   Avatars are out of this slice — nothing is uploaded, deleted or shown — but `avatarUrl` is still
@@ -107,6 +108,20 @@ A local backend is required before running (`backend/docker compose up -d` +
   does need an immediate second sign-in in the app, unlike the web: the server revokes every refresh
   token and rotates `SecurityStamp`, so the mobile pair is dead the moment `204` arrives, and the
   app re-authenticates with the new password instead of keeping a dead session.
+- **Registration is a page over the profile stack, and it signs in by itself.** Until this slice a
+  customer could only be created on the web, which made a phone-only sign-up a dead end. The screen
+  repeats `frontend/src/components/register-form.tsx` — the same fields in the same order, the same
+  client checks, the same `POST api/auth/register` followed by a `login` with the same password —
+  and opens from the «Нет аккаунта? Зарегистрироваться» link under the sign-in form, so the
+  «Профиль» tab stays the single entry screen and the return keeps it in place. Three details are
+  mobile decisions. The Policy link opens the public site in the system browser
+  (`Core/Legal/PrivacyPolicy.cs` mirrors `frontend/src/lib/legal.ts`; the dev base address is the
+  web dev server, the counterpart of the backend's `App:PublicUrl`), because the Policy is the
+  Operator's document and a copy inside the app would go stale between releases. An outdated
+  consent version (`400 auth.register.consentVersion`) asks to update the app instead of reloading
+  the page: the revision is a build-time constant and there is nothing to re-read. And when the
+  account is created but the automatic sign-in fails, the form is replaced by a «Аккаунт создан»
+  card with a plain sign-in, because a second `POST` would answer `409`.
 - **The portfolio viewer is a page with a swipe, not a dialog with arrows.** The web opens a modal
   lightbox with «Назад»/«Дальше» buttons next to the photo; MAUI has no modal lightbox, and on a
   phone the thumb is on the picture, so the frames are paged by swiping a `CarouselView` and the

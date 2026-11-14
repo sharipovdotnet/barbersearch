@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Auth;
 
@@ -137,6 +138,61 @@ public sealed class AuthApiTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
         Assert.Contains("auth.refresh.reused", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_NewAccount_PostsRequestAndParsesId()
+    {
+        const string createdJson = """{ "id": "0192f5a4-0000-7000-8000-000000000001" }""";
+
+        var handler = new RecordingHandler(HttpStatusCode.Created, createdJson);
+        using var httpClient = CreateClient(handler);
+        var api = new AuthApi(httpClient);
+
+        var id = await api.RegisterAsync(new RegisterRequest(
+            "mobile-test@barbersearch.test",
+            "Mobile-test-1!",
+            "Ева",
+            "Клиентова",
+            "2026-11-11"));
+
+        Assert.Equal(Guid.Parse("0192f5a4-0000-7000-8000-000000000001"), id);
+        Assert.Equal(HttpMethod.Post, handler.LastMethod);
+        Assert.Equal("/api/auth/register", handler.LastUri!.AbsolutePath);
+
+        using var body = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal("mobile-test@barbersearch.test", body.RootElement.GetProperty("email").GetString());
+        Assert.Equal("Mobile-test-1!", body.RootElement.GetProperty("password").GetString());
+        Assert.Equal("Ева", body.RootElement.GetProperty("firstName").GetString());
+        Assert.Equal("Клиентова", body.RootElement.GetProperty("lastName").GetString());
+        Assert.Equal("2026-11-11", body.RootElement.GetProperty("consentVersion").GetString());
+    }
+
+    [Fact]
+    public async Task RegisterAsync_EmailTaken_TurnsIntoErrorCode()
+    {
+        const string problemJson = """
+            {
+              "status": 409,
+              "detail": "A user with this email already exists.",
+              "errorCodes": ["user.create.emailTaken"]
+            }
+            """;
+
+        var handler = new RecordingHandler(HttpStatusCode.Conflict, problemJson, "application/problem+json");
+        using var httpClient = CreateClient(handler);
+        var api = new AuthApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.RegisterAsync(new RegisterRequest(
+                "mobile-test@barbersearch.test",
+                "Mobile-test-1!",
+                "Ева",
+                "Клиентова",
+                "2026-11-11")));
+
+        Assert.Equal(HttpStatusCode.Conflict, exception.StatusCode);
+        Assert.Contains("user.create.emailTaken", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
     private static HttpClient CreateClient(HttpMessageHandler handler) =>

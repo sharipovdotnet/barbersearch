@@ -2,11 +2,13 @@ using System.Net.Http.Json;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Logout;
 using BarberSearch.Contracts.Auth.Refresh;
+using BarberSearch.Contracts.Auth.Register;
+using BarberSearch.Contracts.Common;
 
 namespace BarberSearch.Mobile.Core.Api.Auth;
 
 /// <summary>
-/// HTTP-клиент авторизации: вход, refresh и выход.
+/// HTTP-клиент авторизации: регистрация, вход, refresh и выход.
 /// </summary>
 /// <remarks>
 /// Клиент тонкий, как <see cref="BarberSearchApi"/>: адрес, сериализация и разбор ошибок.
@@ -26,6 +28,32 @@ public sealed class AuthApi : IAuthApi
         ArgumentNullException.ThrowIfNull(httpClient);
 
         _httpClient = httpClient;
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid> RegisterAsync(
+        RegisterRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        using var response = await _httpClient
+            .PostAsJsonAsync("api/auth/register", request, ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BarberSearchApiException
+                .FromResponseAsync(response, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var created = await response.Content
+            .ReadFromJsonAsync<CreatedResourceResponse>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        return created?.Id
+            ?? throw new InvalidOperationException("The API returned an empty registration response.");
     }
 
     /// <inheritdoc />
