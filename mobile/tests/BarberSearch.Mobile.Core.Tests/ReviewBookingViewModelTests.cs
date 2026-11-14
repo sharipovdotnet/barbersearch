@@ -1,5 +1,8 @@
 using System.Net;
 using BarberSearch.Contracts.Bookings.GetBookings;
+using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Reviews.GetMyReviews;
+using BarberSearch.Contracts.Reviews.UpdateReview;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Reviews;
@@ -252,6 +255,22 @@ public sealed class ReviewBookingViewModelTests
 
             return Create(bookingId, rating, text);
         }
+
+        public Task<PagedResponse<MyReviewResponse>> GetMyReviewsAsync(
+            string? cursor,
+            int pageSize,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран отзыва не читает список отзывов.");
+
+        public Task<UpdateReviewResponse> UpdateReviewAsync(
+            Guid reviewId,
+            int rating,
+            string? text,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран отзыва не правит отзывы.");
+
+        public Task DeleteReviewAsync(Guid reviewId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран отзыва не удаляет отзывы.");
     }
 
     /// <summary>

@@ -92,10 +92,21 @@ public static class MauiProgram
         builder.Services.AddTransient<RescheduleBookingViewModel>();
         builder.Services.AddTransient<ReviewBookingViewModel>();
 
+        // Разделы кабинета тоже живут один визит: каждый читает профиль при появлении
+        // и не должен хранить данные прошлого пользователя между открытиями.
+        builder.Services.AddTransient<AccountProfileViewModel>();
+        builder.Services.AddTransient<SecurityViewModel>();
+        builder.Services.AddTransient<MyReviewsViewModel>();
+        builder.Services.AddTransient<EditReviewViewModel>();
+
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
         builder.Services.AddTransient<RescheduleBookingPage>();
         builder.Services.AddTransient<ReviewBookingPage>();
+        builder.Services.AddTransient<AccountProfilePage>();
+        builder.Services.AddTransient<SecurityPage>();
+        builder.Services.AddTransient<MyReviewsPage>();
+        builder.Services.AddTransient<EditReviewPage>();
         builder.Services.AddSingleton<MapPage>();
         builder.Services.AddSingleton<BookingsPage>();
         builder.Services.AddSingleton<ProfilePage>();

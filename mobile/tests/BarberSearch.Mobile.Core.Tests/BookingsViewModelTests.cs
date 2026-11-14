@@ -6,6 +6,7 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.HairServices;
@@ -883,6 +884,33 @@ public sealed class BookingsViewModelTests
 
             return Me();
         }
+
+        public Task<MyProfileResponse> GetMyProfileAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает профиль кабинета.");
+
+        public Task UpdateProfileAsync(
+            Guid userId,
+            string firstName,
+            string lastName,
+            string? phoneNumber,
+            string? avatarUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не сохраняет профиль.");
+
+        public Task ChangePasswordAsync(
+            string currentPassword,
+            string newPassword,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не меняет пароль.");
+
+        public Task RequestEmailChangeAsync(
+            string newEmail,
+            string currentPassword,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не меняет email.");
+
+        public Task RequestEmailVerificationAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не отправляет письмо подтверждения.");
     }
 
     /// <summary>

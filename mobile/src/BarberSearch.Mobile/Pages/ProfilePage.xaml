@@ -7,6 +7,11 @@
     x:DataType="vm:ProfileViewModel"
     Title="Профиль">
 
+    <!--
+        Вкладка «Профиль» — хаб: без сессии форма входа, с сессией карточка личности и
+        переходы в разделы. Состояния лежат в одной ячейке сетки и показываются
+        взаимоисключающе: так ни одно из них не толкает остальные.
+    -->
     <Grid Padding="16">
 
         <ActivityIndicator
@@ -57,19 +62,151 @@
             </VerticalStackLayout>
         </ScrollView>
 
+        <!-- Первая загрузка профиля: индикатор вместо пустой карточки. -->
         <VerticalStackLayout
-            IsVisible="{Binding IsProfileVisible}"
+            IsVisible="{Binding ShowProfileLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding ShowProfileLoading}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="Загружаем профиль…"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Профиль не загрузился, показать нечего: ошибка и повтор. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowProfileError}"
             Spacing="12"
             VerticalOptions="Center">
             <Label
+                FontFamily="GeistSemiBold"
                 FontSize="16"
                 HorizontalTextAlignment="Center"
-                Text="{Binding ProfileEmail}" />
+                LineBreakMode="WordWrap"
+                Text="Не удалось загрузить профиль" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ProfileError}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             <Button
-                Command="{Binding LogoutCommand}"
-                MinimumHeightRequest="44"
-                Text="{Binding LogoutButtonText}" />
+                Command="{Binding RetryProfileCommand}"
+                HorizontalOptions="Center"
+                Text="Повторить" />
         </VerticalStackLayout>
+
+        <ScrollView IsVisible="{Binding IsProfileVisible}">
+            <VerticalStackLayout Spacing="12">
+
+                <!-- Карточка личности: инициалы вместо аватара, имя, email, роль, статус. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="56"
+                            Stroke="Transparent"
+                            StrokeShape="RoundRectangle 10"
+                            VerticalOptions="Start"
+                            WidthRequest="56">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="20"
+                                HorizontalTextAlignment="Center"
+                                Text="{Binding Initials}"
+                                TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}"
+                                VerticalTextAlignment="Center" />
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="2">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                LineBreakMode="TailTruncation"
+                                Text="{Binding DisplayName}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="TailTruncation"
+                                Text="{Binding ProfileEmail}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                Text="{Binding RoleText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label FontSize="12" Text="{Binding EmailStatusText}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding IsEmailVerified}"
+                                        TargetType="Label"
+                                        Value="True">
+                                        <Setter
+                                            Property="TextColor"
+                                            Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                    </DataTrigger>
+                                    <DataTrigger
+                                        Binding="{Binding IsEmailVerified}"
+                                        TargetType="Label"
+                                        Value="False">
+                                        <Setter
+                                            Property="TextColor"
+                                            Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+
+                <!-- Предупреждение о неподтверждённом адресе: нажатие ведёт в «Безопасность». -->
+                <Button
+                    BackgroundColor="Transparent"
+                    Command="{Binding SecurityCommand}"
+                    FontSize="14"
+                    HorizontalOptions="Start"
+                    IsVisible="{Binding ShowEmailWarning}"
+                    Padding="0"
+                    Text="Email не подтверждён"
+                    TextColor="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+
+                <!-- Ошибка тихого обновления: данные на экране остаются, есть чем повторить. -->
+                <VerticalStackLayout IsVisible="{Binding HasProfileError}" Spacing="8">
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ProfileError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Button
+                        Command="{Binding RetryProfileCommand}"
+                        HorizontalOptions="Start"
+                        Text="Повторить" />
+                </VerticalStackLayout>
+
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding EditProfileCommand}"
+                    Text="Личные данные"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding ReviewsCommand}"
+                    Text="Мои отзывы"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding SecurityCommand}"
+                    Text="Безопасность"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding LogoutCommand}"
+                    Text="{Binding LogoutButtonText}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
 
     </Grid>
 

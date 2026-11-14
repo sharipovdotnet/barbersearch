@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AccountProfilePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AccountProfileViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Профиль">
+
+    <Grid Padding="16">
+
+        <VerticalStackLayout
+            IsVisible="{Binding ShowLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding ShowLoading}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="Загружаем профиль…"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <VerticalStackLayout
+            IsVisible="{Binding ShowError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="Не удалось загрузить профиль" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryCommand}"
+                HorizontalOptions="Center"
+                Text="Повторить" />
+        </VerticalStackLayout>
+
+        <ScrollView IsVisible="{Binding ShowContent}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="16">
+
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="Имя, телефон и данные аккаунта. Email меняется в карточке выше, пароль — в разделе «Безопасность»."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Карточка «Email»: заявка на новый адрес, а не мгновенная смена. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Email" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="Email используется для входа. Новый адрес подтверждается ссылкой из письма."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontFamily="GeistMedium"
+                            FontSize="14"
+                            LineBreakMode="CharacterWrap"
+                            Text="{Binding Email}" />
+                        <Label FontSize="12" Text="{Binding EmailStatusText}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding IsEmailVerified}"
+                                    TargetType="Label"
+                                    Value="True">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    Binding="{Binding IsEmailVerified}"
+                                    TargetType="Label"
+                                    Value="False">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                        <Button
+                            Command="{Binding StartEmailChangeCommand}"
+                            HorizontalOptions="Start"
+                            IsEnabled="{Binding CanStartEmailChange}"
+                            Text="{Binding EmailButtonText}" />
+
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasEmailAnnouncement}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding EmailAnnouncement}"
+                            TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasEmailAnnouncement}"
+                            LineBreakMode="WordWrap"
+                            Text="На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!-- Форма заявки вместо модального диалога: в MAUI его нет. -->
+                        <VerticalStackLayout IsVisible="{Binding IsEmailFormOpen}" Spacing="8">
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке."
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <Label Text="Новый email" />
+                            <Entry
+                                Keyboard="Email"
+                                MaxLength="{Binding MaxEmailLength}"
+                                Text="{Binding NewEmail}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasNewEmailError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding NewEmailError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <Label Text="Текущий пароль" />
+                            <Entry IsPassword="True" Text="{Binding EmailCurrentPassword}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasEmailPasswordError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding EmailPasswordError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasEmailFormError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding EmailFormError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <FlexLayout
+                                AlignItems="Center"
+                                Direction="Row"
+                                Wrap="Wrap">
+                                <Button
+                                    Margin="0,0,8,8"
+                                    Command="{Binding SendEmailChangeCommand}"
+                                    IsEnabled="{Binding CanSendEmail}"
+                                    Text="{Binding SendEmailButtonText}" />
+                                <Button
+                                    Margin="0,0,8,8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                    Command="{Binding CancelEmailChangeCommand}"
+                                    Text="Отмена"
+                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                            </FlexLayout>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Карточка «Личные данные»: имя, фамилия, телефон. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Личные данные" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="Имя и телефон видны вам и администратору. Барбер увидит имя в записи."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label Text="Имя" />
+                        <Entry MaxLength="{Binding MaxNameLength}" Text="{Binding FirstName}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasFirstNameError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding FirstNameError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                        <Label Text="Фамилия" />
+                        <Entry MaxLength="{Binding MaxNameLength}" Text="{Binding LastName}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasLastNameError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding LastNameError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                        <Label Text="Телефон" />
+                        <Entry
+                            Keyboard="Telephone"
+                            MaxLength="{Binding MaxPhoneLength}"
+                            Placeholder="+7 900 000-00-00"
+                            Text="{Binding PhoneNumber}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="Необязательно. По этому номеру с вами может связаться салон."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasFormError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding FormError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                        <FlexLayout
+                            AlignItems="Center"
+                            Direction="Row"
+                            Wrap="Wrap">
+                            <Button
+                                Margin="0,0,8,8"
+                                Command="{Binding SaveCommand}"
+                                IsEnabled="{Binding CanSave}"
+                                Text="{Binding SaveButtonText}" />
+                            <Button
+                                Margin="0,0,8,8"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding CancelCommand}"
+                                IsEnabled="{Binding CanCancel}"
+                                Text="Отменить"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        </FlexLayout>
+
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasAnnouncement}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding Announcement}"
+                            TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Карточка «Аккаунт»: служебные данные. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Аккаунт" />
+                        <Label
+                            FontSize="12"
+                            Text="Служебные данные аккаунта."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="12"
+                            Text="Роль"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label FontSize="14" Text="{Binding RoleText}" />
+
+                        <Label
+                            FontSize="12"
+                            Text="Аккаунт создан"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label FontSize="14" Text="{Binding CreatedAtText}" />
+
+                        <Label
+                            FontSize="12"
+                            Text="Последний вход"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label FontSize="14" Text="{Binding LastLoginText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</ContentPage>

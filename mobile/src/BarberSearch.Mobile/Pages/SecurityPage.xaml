@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.SecurityPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:SecurityViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Безопасность">
+
+    <Grid Padding="16">
+
+        <VerticalStackLayout
+            IsVisible="{Binding ShowLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding ShowLoading}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="Загружаем профиль…"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <VerticalStackLayout
+            IsVisible="{Binding ShowError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="Не удалось загрузить профиль" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryCommand}"
+                HorizontalOptions="Center"
+                Text="Повторить" />
+        </VerticalStackLayout>
+
+        <ScrollView IsVisible="{Binding ShowContent}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="16">
+
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="Пароль, вход и подтверждение адреса. Остальные настройки аккаунта — в профиле."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Карточка «Пароль»: раскрывающаяся форма вместо модального диалога. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Пароль" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="Пароль от 12 символов. После смены остальные сессии входа завершатся — здесь вы останетесь."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Button
+                            Command="{Binding OpenPasswordFormCommand}"
+                            HorizontalOptions="Start"
+                            IsVisible="{Binding ShowOpenPasswordButton}"
+                            Text="Сменить пароль" />
+
+                        <VerticalStackLayout IsVisible="{Binding IsPasswordFormOpen}" Spacing="8">
+                            <Label Text="Текущий пароль" />
+                            <Entry IsPassword="True" Text="{Binding CurrentPassword}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasCurrentPasswordError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding CurrentPasswordError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <Label Text="Новый пароль" />
+                            <Entry IsPassword="True" Text="{Binding NewPassword}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasNewPasswordError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding NewPasswordError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <Label Text="Повторите пароль" />
+                            <Entry IsPassword="True" Text="{Binding ConfirmPassword}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasConfirmPasswordError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding ConfirmPasswordError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasPasswordFormError}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding PasswordFormError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                            <FlexLayout
+                                AlignItems="Center"
+                                Direction="Row"
+                                Wrap="Wrap">
+                                <Button
+                                    Margin="0,0,8,8"
+                                    Clicked="OnChangePasswordClicked"
+                                    IsEnabled="{Binding CanChangePassword}"
+                                    Text="{Binding ChangePasswordButtonText}" />
+                                <Button
+                                    Margin="0,0,8,8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                    Command="{Binding CancelPasswordChangeCommand}"
+                                    Text="Отмена"
+                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                            </FlexLayout>
+                        </VerticalStackLayout>
+
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasPasswordAnnouncement}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PasswordAnnouncement}"
+                            TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Карточка «Подтверждение email»: письмо со ссылкой, открывается в браузере. -->
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Подтверждение email" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding VerificationDescription}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <HorizontalStackLayout Spacing="4">
+                            <Label
+                                FontSize="14"
+                                Text="Адрес:"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="CharacterWrap"
+                                Text="{Binding Email}" />
+                        </HorizontalStackLayout>
+
+                        <Label FontSize="12" Text="{Binding IsEmailVerifiedText}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding IsEmailVerified}"
+                                    TargetType="Label"
+                                    Value="True">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                </DataTrigger>
+                                <DataTrigger
+                                    Binding="{Binding IsEmailVerified}"
+                                    TargetType="Label"
+                                    Value="False">
+                                    <Setter
+                                        Property="TextColor"
+                                        Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                        <Button
+                            Command="{Binding ResendVerificationCommand}"
+                            HorizontalOptions="Start"
+                            IsEnabled="{Binding CanResend}"
+                            IsVisible="{Binding ShowResendButton}"
+                            Text="{Binding ResendButtonText}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding ShowResendButton}"
+                            Text="Письмо действует 24 часа."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasVerificationNotice}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding VerificationNotice}"
+                            TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasVerificationError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding VerificationError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</ContentPage>
