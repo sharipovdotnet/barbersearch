@@ -4,12 +4,14 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Specializations.GetSpecializations;
 
 namespace BarberSearch.Mobile.Core.Api;
 
 /// <summary>
-/// HTTP-клиент публичных чтений: поиск, карточка барбера и свободные слоты.
+/// HTTP-клиент публичных чтений: поиск, справочники фильтров, карточка барбера и слоты.
 /// </summary>
 /// <remarks>
 /// Клиент тонкий: адрес, сериализация и разбор ошибок. Никакой бизнес-логики здесь нет —
@@ -32,13 +34,15 @@ public sealed class BarberSearchApi : IBarberSearchApi
 
     /// <inheritdoc />
     public async Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
-        string? city,
+        BarberSearchFilters filters,
         string? cursor = null,
         int? pageSize = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(filters);
+
         using var response = await _httpClient
-            .GetAsync(BuildSearchPath(city, cursor, pageSize), cancellationToken)
+            .GetAsync(BuildSearchPath(filters, cursor, pageSize), cancellationToken)
             .ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
@@ -54,6 +58,18 @@ public sealed class BarberSearchApi : IBarberSearchApi
 
         return page ?? throw new InvalidOperationException("The API returned an empty search response.");
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
+        CancellationToken cancellationToken = default) =>
+        await GetCatalogAsync<SpecializationResponse>("api/specializations", cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
+        CancellationToken cancellationToken = default) =>
+        await GetCatalogAsync<HairServiceResponse>("api/hair-services", cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<BarberProfileResponse> GetBarberProfileAsync(
@@ -134,15 +150,49 @@ public sealed class BarberSearchApi : IBarberSearchApi
     /// </summary>
     /// <remarks>
     /// Пустые фильтры не передаются вовсе: сервер трактует отсутствие параметра и пустую строку
-    /// одинаково, но короткий адрес читаемее в логах и кэше.
+    /// одинаково, но короткий адрес читаемее в логах и кэше. Дата уходит календарной строкой
+    /// в инвариантной культуре, язык — именем enum (<c>Ru</c>): числовую форму сервер отвергает.
     /// </remarks>
-    private static string BuildSearchPath(string? city, string? cursor, int? pageSize)
+    private static string BuildSearchPath(BarberSearchFilters filters, string? cursor, int? pageSize)
     {
-        var parameters = new List<string>(3);
+        var parameters = new List<string>(8);
 
-        if (!string.IsNullOrWhiteSpace(city))
+        if (!string.IsNullOrWhiteSpace(filters.City))
         {
-            parameters.Add(string.Concat("city=", Uri.EscapeDataString(city)));
+            parameters.Add(string.Concat("city=", Uri.EscapeDataString(filters.City)));
+        }
+
+        if (filters.Date is { } date)
+        {
+            parameters.Add(string.Concat(
+                "date=",
+                date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        }
+
+        if (filters.SpecializationId is { } specializationId)
+        {
+            parameters.Add(string.Concat(
+                "specializationId=",
+                specializationId.ToString("D", CultureInfo.InvariantCulture)));
+        }
+
+        if (filters.HairServiceId is { } hairServiceId)
+        {
+            parameters.Add(string.Concat(
+                "hairServiceId=",
+                hairServiceId.ToString("D", CultureInfo.InvariantCulture)));
+        }
+
+        if (filters.Language is { } language)
+        {
+            parameters.Add(string.Concat("language=", language.ToString()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.AdditionalService))
+        {
+            parameters.Add(string.Concat(
+                "additionalService=",
+                Uri.EscapeDataString(filters.AdditionalService)));
         }
 
         if (!string.IsNullOrWhiteSpace(cursor))
@@ -160,6 +210,38 @@ public sealed class BarberSearchApi : IBarberSearchApi
         return parameters.Count == 0
             ? "api/barbers"
             : string.Concat("api/barbers?", string.Join('&', parameters));
+    }
+
+    /// <summary>
+    /// Читает публичный справочник: сервер отдаёт голый JSON-массив без пагинации.
+    /// </summary>
+    /// <remarks>
+    /// Пустой массив — не ошибка: справочник может быть пуст, и экран просто скроет селект.
+    /// Нулевое тело — нарушение контракта, поэтому превращается в исключение, а не в пустой
+    /// список: «фильтров нет» и «ответ потерян» — разные состояния.
+    /// </remarks>
+    /// <typeparam name="T">Строка справочника из Contracts.</typeparam>
+    /// <param name="path">Относительный адрес справочника.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Строки справочника в порядке сервера.</returns>
+    private async Task<IReadOnlyList<T>> GetCatalogAsync<T>(string path, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient
+            .GetAsync(path, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BarberSearchApiException
+                .FromResponseAsync(response, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var items = await response.Content
+            .ReadFromJsonAsync<List<T>>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        return items ?? throw new InvalidOperationException("The API returned an empty catalog response.");
     }
 
     /// <summary>

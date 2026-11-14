@@ -147,6 +147,14 @@ A local backend is required before running (`backend/docker compose up -d` +
   or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub
   keeps initials because the account slice allows no avatar management at all; a read-only avatar
   there would promise an editing flow that does not exist.
+- **Search filters are the web's six, with two touch adaptations.** City, date, language,
+  specialization, hair service and the additional-service substring travel in one request, only on
+  «Найти», and the catalogs for the two selects come from `GET api/specializations` and
+  `GET api/hair-services`. Two things are not the web's: the date is a `Picker` of «Любая дата» plus
+  the booking horizon (today + 30 days, device calendar), because MAUI's `DatePicker` cannot hold an
+  empty value and the filter is optional; and the additional-service field has no `<datalist>`
+  suggestions, because there is no native equivalent and the filter itself is free text. Both are
+  recorded here instead of being left as silent omissions.
 
 ## 6. What the backend still lacks
 

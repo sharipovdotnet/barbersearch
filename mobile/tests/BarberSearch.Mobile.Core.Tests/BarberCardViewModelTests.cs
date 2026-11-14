@@ -5,7 +5,9 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
@@ -1052,11 +1054,19 @@ public sealed class BarberCardViewModelTests
         }
 
         public Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
-            string? city,
+            BarberSearchFilters filters,
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Карточка не ищет барберов.");
+
+        public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не читает справочник специализаций.");
+
+        public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не читает справочник услуг.");
     }
 
     /// <summary>

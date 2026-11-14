@@ -3,7 +3,9 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.ViewModels;
 
@@ -459,11 +461,19 @@ public sealed class BarberReviewsSectionTests
         }
 
         public Task<PagedResponse<BarberSearchItemResponse>> SearchBarbersAsync(
-            string? city,
+            BarberSearchFilters filters,
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Секция отзывов не ищет барберов.");
+
+        public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Секция отзывов не читает справочник специализаций.");
+
+        public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Секция отзывов не читает справочник услуг.");
 
         public Task<BarberProfileResponse> GetBarberProfileAsync(
             Guid id,

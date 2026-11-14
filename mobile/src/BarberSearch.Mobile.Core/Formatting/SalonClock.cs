@@ -114,6 +114,25 @@ public static class SalonClock
         date.ToDateTime(TimeOnly.MinValue).ToString("dddd, d MMMM", RuCulture);
 
     /// <summary>
+    /// Дата без дня недели: «15 ноября».
+    /// </summary>
+    /// <remarks>
+    /// Нужна там, где день недели уже назван словом: «Сегодня, 15 ноября».
+    /// </remarks>
+    /// <param name="date">Календарная дата.</param>
+    /// <returns>Число и месяц в родительном падеже.</returns>
+    public static string FormatDayMonth(DateOnly date) =>
+        date.ToDateTime(TimeOnly.MinValue).ToString("d MMMM", RuCulture);
+
+    /// <summary>
+    /// Дата с коротким днём недели: «пн, 17 ноября».
+    /// </summary>
+    /// <param name="date">Календарная дата.</param>
+    /// <returns>Сокращённый день недели, число и месяц.</returns>
+    public static string FormatWeekdayDate(DateOnly date) =>
+        date.ToDateTime(TimeOnly.MinValue).ToString("ddd, d MMMM", RuCulture);
+
+    /// <summary>
     /// Сегодняшняя календарная дата в поясе салона.
     /// </summary>
     /// <remarks>
