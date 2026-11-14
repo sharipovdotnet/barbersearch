@@ -4,7 +4,7 @@ using BarberSearch.Contracts.Auth.Register;
 namespace BarberSearch.Mobile.Core.Api.Auth;
 
 /// <summary>
-/// Регистрация, вход, продление и выход по паре токенов.
+/// Регистрация, вход, запрос ссылки сброса пароля и работа с парой токенов.
 /// </summary>
 /// <remarks>
 /// Отдельно от <see cref="IAccountApi"/>: эти запросы идут на «чистом» <see cref="HttpClient"/>
@@ -29,6 +29,22 @@ public interface IAuthApi
     /// <returns>Идентификатор созданного пользователя.</returns>
     Task<Guid> RegisterAsync(
         RegisterRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Просит сервер отправить на адрес ссылку для сброса пароля.
+    /// </summary>
+    /// <remarks>
+    /// Ответ <c>204</c> одинаков для существующего, несуществующего и неактивного адреса:
+    /// по нему нельзя выяснить, есть ли аккаунт, и экран обязан повторять это. Письмо со
+    /// ссылкой открывается в браузере — приложение её не разбирает и новый пароль не
+    /// принимает. <c>409 auth.passwordReset.unavailable</c> значит, что почта на сервере
+    /// не настроена; <c>429</c> — лимитер авторизации.
+    /// </remarks>
+    /// <param name="email">Адрес аккаунта; его существование не проверяется.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task RequestPasswordResetAsync(
+        string email,
         CancellationToken cancellationToken = default);
 
     /// <summary>

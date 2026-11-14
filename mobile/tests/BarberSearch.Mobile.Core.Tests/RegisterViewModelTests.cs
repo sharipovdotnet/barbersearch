@@ -436,6 +436,11 @@ public sealed class RegisterViewModelTests
             return Register(request);
         }
 
+        public Task RequestPasswordResetAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран регистрации не просит ссылку сброса.");
+
         public Task<TokenResponse> LoginAsync(
             string email,
             string password,

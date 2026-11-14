@@ -292,6 +292,11 @@ public sealed class AuthenticatedHttpHandlerTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("The handler must not register.");
 
+        public Task RequestPasswordResetAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("The handler must not request a password reset.");
+
         public Task<TokenResponse> LoginAsync(
             string email,
             string password,
