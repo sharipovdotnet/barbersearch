@@ -57,6 +57,26 @@ a single `401` (single-flight, so two requests never rotate the same refresh tok
 request once. A refused refresh ends the session. The Profile tab is the only screen: a sign-in
 form while there is no session, email and “Выйти” after it.
 
+## Booking
+
+The barber card (`GET api/barbers/{id}`) and the slot grid
+(`GET api/barbers/{id}/slots?date=&hairServiceId=&salonId=`) are public reads and go through
+`IBarberSearchApi` on a client without the auth handler. `POST api/bookings` goes through
+`IBookingsApi` on a client with `AuthenticatedHttpHandler`, so the customer comes from the token.
+
+A tap on a search row opens the `barber?id={id}` route; `PageRouteFactory` resolves the page from
+DI. The card starts with the primary salon, “Любая услуга” and today in the salon's zone. Slot
+times are UTC and are shown in the salon's IANA `timeZoneId` from the slot response — the device
+zone takes no part. An unknown zone falls back to UTC instead of the device zone: the web uses the
+browser zone, and a phone has no salon zone of its own.
+
+The booking panel keeps an immutable snapshot of the chosen slot (date, salon, barber service,
+UTC start/end, price) and an idempotency key created once per attempt. Every retry (network, `429`,
+`5xx`, `lockTimeout`, expired session) reuses the key, so a broken connection cannot create a
+second booking; a new key is generated only for `booking.create.idempotencyKeyConflict`. The
+comment is trimmed, sent as `null` when empty and limited to 500 characters.
+
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):

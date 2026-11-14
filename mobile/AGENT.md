@@ -77,6 +77,10 @@ A local backend is required before running (`backend/docker compose up -d` +
   subdirectory.
 - **`ApplicationId` `ru.barbersearch.mobile`** — change it before the first release; after shipping
   to the stores it cannot be changed.
+- **Salon time, not device time.** Slot times are UTC and are shown in the salon's IANA zone from the
+  slot response; an unknown zone falls back to UTC (the web uses the browser zone, a phone has no
+  equivalent). The card's "today" is the salon's calendar date, and booking times go back as the
+  same instants the API returned, together with an idempotency key per attempt.
 
 ## 6. What the backend still lacks
 

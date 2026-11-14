@@ -2,6 +2,7 @@ using BarberSearch.Mobile.Auth;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Pages;
@@ -61,12 +62,20 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IAccountApi, AccountApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Бронь — второе чтение/запись с Bearer; публичные карточка и слоты остаются анонимными.
+        builder.Services.AddHttpClient<IBookingsApi, BookingsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
+
+        builder.Services.AddSingleton(TimeProvider.System);
 
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
+        builder.Services.AddTransient<BarberCardViewModel>();
 
         builder.Services.AddTransient<SearchPage>();
+        builder.Services.AddTransient<BarberPage>();
         builder.Services.AddSingleton<MapPage>();
         builder.Services.AddSingleton<BookingsPage>();
         builder.Services.AddSingleton<ProfilePage>();
