@@ -1,4 +1,6 @@
 using System.Net;
+using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles.Enums;
@@ -117,5 +119,18 @@ public sealed class SearchViewModelTests
 
             return _response();
         }
+
+        public Task<BarberProfileResponse> GetBarberProfileAsync(
+            Guid id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Поиск не читает карточку барбера.");
+
+        public Task<BarberSlotsResponse> GetSlotsAsync(
+            Guid barberProfileId,
+            DateOnly slotDate,
+            Guid? hairServiceId,
+            Guid? salonId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Поиск не читает свободное время.");
     }
 }

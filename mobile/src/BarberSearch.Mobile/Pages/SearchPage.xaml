@@ -30,7 +30,12 @@
                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
         </VerticalStackLayout>
 
-        <CollectionView Grid.Row="2" ItemsSource="{Binding Barbers}">
+        <CollectionView
+            x:Name="BarbersList"
+            Grid.Row="2"
+            ItemsSource="{Binding Barbers}"
+            SelectionChanged="OnBarberSelected"
+            SelectionMode="Single">
             <CollectionView.EmptyView>
                 <Label
                     Margin="0,24,0,0"

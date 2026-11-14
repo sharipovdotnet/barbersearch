@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberCardViewModel"
+    Title="Барбер">
+
+    <Grid>
+
+        <ScrollView IsVisible="{Binding IsContentVisible}">
+            <VerticalStackLayout Padding="16">
+
+                <!-- Шапка: имя, грейд, рейтинг и место приёма. Аватара в срезе нет. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="4">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="22"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding DisplayName}" />
+                        <Label
+                            Text="{Binding GradeText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label Text="{Binding RatingText}" />
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PlaceText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Услуги: цена и длительность, без кнопок записи. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Услуги" />
+                        <Label
+                            IsVisible="{Binding HasNoServices}"
+                            LineBreakMode="WordWrap"
+                            Text="Услуги пока не добавлены."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberServiceOption">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                        <VerticalStackLayout Spacing="2">
+                                            <Label LineBreakMode="WordWrap" Text="{Binding Name}" />
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding DurationText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </VerticalStackLayout>
+                                        <Label
+                                            Grid.Column="1"
+                                            Text="{Binding PriceText}"
+                                            VerticalOptions="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Свободное время: салон, услуга, дата, чипы слотов и панель записи. -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="Свободное время" />
+
+                        <Label
+                            IsVisible="{Binding HasNoSalons}"
+                            LineBreakMode="WordWrap"
+                            Text="Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено."
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <VerticalStackLayout IsVisible="{Binding HasSalons}" Spacing="8">
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="Услуга"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Picker
+                                        ItemsSource="{Binding ServiceOptions}"
+                                        SelectedIndexChanged="OnServiceChanged"
+                                        SelectedItem="{Binding SelectedService, Mode=OneWay}"
+                                        ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:BarberServiceOption}" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="Салон"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Picker
+                                        IsVisible="{Binding HasMultipleSalons}"
+                                        ItemsSource="{Binding Salons}"
+                                        SelectedIndexChanged="OnSalonChanged"
+                                        SelectedItem="{Binding SelectedSalon, Mode=OneWay}"
+                                        ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:BarberSalonOption}" />
+                                    <Label
+                                        IsVisible="{Binding HasSingleSalon}"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding SelectedSalon.Name}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <VerticalStackLayout Spacing="2">
+                                <Label
+                                    FontSize="12"
+                                    Text="Дата"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <DatePicker
+                                    Date="{Binding SelectedDate, Mode=OneWay}"
+                                    DateSelected="OnDateSelected"
+                                    Format="dd.MM.yyyy"
+                                    MaximumDate="{Binding MaximumDate}"
+                                    MinimumDate="{Binding MinimumDate}" />
+                            </VerticalStackLayout>
+
+                            <Label FontFamily="GeistMedium" Text="{Binding SelectedDateText}" />
+
+                            <ActivityIndicator
+                                HorizontalOptions="Start"
+                                IsRunning="{Binding IsSlotsLoading}"
+                                IsVisible="{Binding IsSlotsLoading}" />
+
+                            <VerticalStackLayout IsVisible="{Binding HasSlotsError}" Spacing="8">
+                                <Label
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding SlotsErrorText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Button
+                                    Command="{Binding RetrySlotsCommand}"
+                                    HorizontalOptions="Start"
+                                    Text="Повторить" />
+                            </VerticalStackLayout>
+
+                            <Label
+                                IsVisible="{Binding HasEmptySlots}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding EmptySlotsText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <FlexLayout BindableLayout.ItemsSource="{Binding Slots}" Wrap="Wrap">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BarberSlotOption">
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            Padding="12,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                            Command="{Binding SelectCommand}"
+                                            CommandParameter="{Binding .}"
+                                            CornerRadius="8"
+                                            FontSize="14"
+                                            Text="{Binding TimeText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}">
+                                            <Button.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding IsSelected}"
+                                                    TargetType="Button"
+                                                    Value="True">
+                                                    <Setter
+                                                        Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                                    <Setter
+                                                        Property="TextColor"
+                                                        Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                                </DataTrigger>
+                                            </Button.Triggers>
+                                        </Button>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </FlexLayout>
+
+                            <Label
+                                IsVisible="{Binding ShowSlotsHint}"
+                                LineBreakMode="WordWrap"
+                                Text="Выберите услугу, чтобы записаться."
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <!-- Панель записи: сводка, комментарий, отправка и подтверждение. -->
+                            <Border
+                                IsVisible="{Binding IsBookingPanelVisible}"
+                                Padding="12"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="8">
+                                    <Label
+                                        FontFamily="GeistMedium"
+                                        IsVisible="{Binding IsSummaryVisible}"
+                                        Text="Запись на приём" />
+
+                                    <VerticalStackLayout IsVisible="{Binding IsSummaryVisible}" Spacing="2">
+                                        <Label FontFamily="GeistMedium" Text="{Binding SummaryDateText}" />
+                                        <Label
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding SummaryServiceText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label Text="{Binding SummaryPriceText}" />
+                                    </VerticalStackLayout>
+
+                                    <Label
+                                        IsVisible="{Binding IsBookingErrorVisible}"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding BookingErrorText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                                    <VerticalStackLayout IsVisible="{Binding IsSignInVisible}" Spacing="8">
+                                        <Label
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding SignInText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Button
+                                            Clicked="OnSignInClicked"
+                                            MinimumHeightRequest="44"
+                                            Text="Войти" />
+                                    </VerticalStackLayout>
+
+                                    <VerticalStackLayout IsVisible="{Binding IsBookFormVisible}" Spacing="8">
+                                        <VerticalStackLayout Spacing="2">
+                                            <Label
+                                                FontSize="12"
+                                                Text="Комментарий (необязательно)"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Editor
+                                                AutoSize="TextChanges"
+                                                MaxLength="500"
+                                                MinimumHeightRequest="80"
+                                                Text="{Binding CustomerNote}" />
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding NoteHintText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </VerticalStackLayout>
+                                        <Button
+                                            Command="{Binding BookCommand}"
+                                            IsEnabled="{Binding IsSubmitEnabled}"
+                                            IsVisible="{Binding IsSubmitVisible}"
+                                            Text="{Binding SubmitButtonText}" />
+                                    </VerticalStackLayout>
+
+                                    <VerticalStackLayout IsVisible="{Binding IsSuccessVisible}" Spacing="8">
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label FontFamily="GeistMedium" Text="Заявка отправлена" />
+                                            <Label
+                                                Text="Ждёт подтверждения"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </HorizontalStackLayout>
+                                        <Label
+                                            LineBreakMode="WordWrap"
+                                            Text="Барбер подтвердит запись."
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Button
+                                            Command="{Binding BookAgainCommand}"
+                                            IsVisible="{Binding IsBookAgainVisible}"
+                                            Text="Записаться ещё раз" />
+                                    </VerticalStackLayout>
+
+                                    <Button
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                        Command="{Binding ChangeTimeCommand}"
+                                        IsVisible="{Binding IsBookingActionsVisible}"
+                                        Text="{Binding SecondaryButtonText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Label
+                                FontSize="12"
+                                Text="Время — местное для салона."
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <ActivityIndicator
+            HorizontalOptions="Center"
+            IsRunning="{Binding IsLoading}"
+            IsVisible="{Binding IsLoading}"
+            VerticalOptions="Center" />
+
+        <VerticalStackLayout
+            IsVisible="{Binding IsNotFound}"
+            Padding="24"
+            Spacing="8"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="18"
+                HorizontalTextAlignment="Center"
+                Text="Барбер не найден" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="Возможно, профиль скрыт или ссылка устарела."
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <VerticalStackLayout
+            IsVisible="{Binding HasLoadError}"
+            Padding="24"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding LoadErrorText}" />
+            <Button Command="{Binding RetryLoadCommand}" HorizontalOptions="Center" Text="Повторить" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

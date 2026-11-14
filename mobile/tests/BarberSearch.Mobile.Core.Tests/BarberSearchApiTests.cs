@@ -16,6 +16,91 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// </remarks>
 public sealed class BarberSearchApiTests
 {
+    private static readonly Guid BarberProfileId = Guid.Parse("9e100000-0000-4000-8000-000000000001");
+    private static readonly Guid SalonId = Guid.Parse("9e100000-0000-4000-8000-000000000002");
+    private static readonly Guid HairServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000003");
+    private static readonly Guid BarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000004");
+
+    private const string BarberProfileJson = """
+        {
+          "id": "9e100000-0000-4000-8000-000000000001",
+          "userId": "9e100000-0000-4000-8000-000000000005",
+          "avatarUrl": null,
+          "displayName": "Тимур Барберов",
+          "grade": "SeniorBarber",
+          "bio": "Стригу с 2015 года.",
+          "yearsOfExperience": 11,
+          "languages": ["Ru"],
+          "certificatesAndTraining": [],
+          "rating": 4.8,
+          "reviewsCount": 12,
+          "achievements": [],
+          "paymentMethods": ["Cash"],
+          "communicationFormat": [],
+          "goodies": [],
+          "latePolicy": "До 10 минут.",
+          "isActive": true,
+          "isVerified": true,
+          "services": [
+            {
+              "barberServiceId": "9e100000-0000-4000-8000-000000000004",
+              "hairServiceId": "9e100000-0000-4000-8000-000000000003",
+              "name": "E2E Стрижка",
+              "category": "Haircut",
+              "defaultDurationMinutes": 40,
+              "price": 2400,
+              "durationMinutes": 45,
+              "isActive": true
+            },
+            {
+              "barberServiceId": "9e100000-0000-4000-8000-000000000006",
+              "hairServiceId": "9e100000-0000-4000-8000-000000000007",
+              "name": "Скрытая услуга",
+              "category": "Beard",
+              "defaultDurationMinutes": 30,
+              "price": 1000,
+              "durationMinutes": 30,
+              "isActive": false
+            }
+          ],
+          "salons": [
+            {
+              "id": "9e100000-0000-4000-8000-000000000008",
+              "salonId": "9e100000-0000-4000-8000-000000000002",
+              "name": "E2E Studio",
+              "address": "Ленина, 1",
+              "city": "Москва",
+              "country": "Россия",
+              "timeZoneId": "Europe/Moscow",
+              "kind": "Salon",
+              "isPrimary": true,
+              "workingSchedules": []
+            }
+          ],
+          "specializations": [],
+          "additionalServices": [],
+          "photos": []
+        }
+        """;
+
+    private const string SlotsJson = """
+        {
+          "barberProfileId": "9e100000-0000-4000-8000-000000000001",
+          "salonId": "9e100000-0000-4000-8000-000000000002",
+          "barberServiceId": "9e100000-0000-4000-8000-000000000004",
+          "hairServiceId": "9e100000-0000-4000-8000-000000000003",
+          "date": "2026-11-15",
+          "timeZoneId": "Europe/Moscow",
+          "dayStart": "2026-11-14T21:00:00+00:00",
+          "dayEnd": "2026-11-15T21:00:00+00:00",
+          "durationMinutes": 45,
+          "isWorkingDay": true,
+          "slots": [
+            { "startAt": "2026-11-15T15:30:00+00:00", "endAt": "2026-11-15T16:15:00+00:00" }
+          ]
+        }
+        """;
+
     private const string SearchPageJson = """
         {
           "items": [
@@ -109,6 +194,117 @@ public sealed class BarberSearchApiTests
         Assert.Empty(page.Items);
         Assert.Equal("/api/barbers", handler.LastRequestUri!.AbsolutePath);
         Assert.Equal(string.Empty, handler.LastRequestUri.Query);
+    }
+
+    [Fact]
+    public async Task GetBarberProfileAsync_ParsesNestedServicesAndSalons()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, BarberProfileJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var profile = await api.GetBarberProfileAsync(BarberProfileId);
+
+        Assert.Equal("Тимур Барберов", profile.DisplayName);
+        Assert.Equal(2, profile.Services.Count);
+
+        var active = profile.Services[0];
+        Assert.Equal(BarberServiceId, active.BarberServiceId);
+        Assert.Equal(HairServiceId, active.HairServiceId);
+        Assert.Equal(2400m, active.Price);
+        Assert.Equal(45, active.DurationMinutes);
+        Assert.True(active.IsActive);
+
+        // Выключенная услуга приходит в карточке вместе с активными: фильтрует экран.
+        Assert.False(profile.Services[1].IsActive);
+
+        var salon = Assert.Single(profile.Salons);
+        Assert.Equal(SalonId, salon.SalonId);
+        Assert.Equal("Europe/Moscow", salon.TimeZoneId);
+        Assert.True(salon.IsPrimary);
+
+        Assert.Equal(string.Concat("/api/barbers/", BarberProfileId.ToString("D")), handler.LastRequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task GetBarberProfileAsync_NotFound_TurnsProblemDetailsIntoException()
+    {
+        const string problemJson = """
+            {
+              "title": "Not Found",
+              "status": 404,
+              "detail": "Barber profile was not found.",
+              "errorCodes": ["barberProfile.notFound"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.NotFound, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetBarberProfileAsync(BarberProfileId));
+
+        Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
+        Assert.Contains("barberProfile.notFound", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetSlotsAsync_SendsSalonDateAndFilters()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, SlotsJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var slots = await api.GetSlotsAsync(
+            BarberProfileId,
+            new DateOnly(2026, 11, 15),
+            HairServiceId,
+            SalonId);
+
+        var query = Uri.UnescapeDataString(handler.LastRequestUri!.Query);
+
+        Assert.Equal(
+            string.Concat("/api/barbers/", BarberProfileId.ToString("D"), "/slots"),
+            handler.LastRequestUri.AbsolutePath);
+        Assert.Contains("date=2026-11-15", query, StringComparison.Ordinal);
+        Assert.Contains(string.Concat("hairServiceId=", HairServiceId.ToString("D")), query, StringComparison.Ordinal);
+        Assert.Contains(string.Concat("salonId=", SalonId.ToString("D")), query, StringComparison.Ordinal);
+
+        Assert.Equal(45, slots.DurationMinutes);
+        Assert.Equal("Europe/Moscow", slots.TimeZoneId);
+        Assert.Equal(BarberServiceId, slots.BarberServiceId);
+        Assert.Equal(new DateOnly(2026, 11, 15), slots.Date);
+        Assert.Single(slots.Slots);
+    }
+
+    [Fact]
+    public async Task GetSlotsAsync_EmptySlots_ParsesAsEmptyList()
+    {
+        const string emptyJson = """
+            {
+              "barberProfileId": "9e100000-0000-4000-8000-000000000001",
+              "salonId": "9e100000-0000-4000-8000-000000000002",
+              "barberServiceId": null,
+              "hairServiceId": null,
+              "date": "2026-11-16",
+              "timeZoneId": "Europe/Moscow",
+              "dayStart": "2026-11-15T21:00:00+00:00",
+              "dayEnd": "2026-11-16T21:00:00+00:00",
+              "durationMinutes": 30,
+              "isWorkingDay": true,
+              "slots": []
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.OK, emptyJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var slots = await api.GetSlotsAsync(BarberProfileId, new DateOnly(2026, 11, 16), null, null);
+
+        Assert.Empty(slots.Slots);
+        Assert.Null(slots.BarberServiceId);
     }
 
     /// <summary>
