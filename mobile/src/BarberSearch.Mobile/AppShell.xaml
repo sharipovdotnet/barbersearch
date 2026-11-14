@@ -9,12 +9,18 @@
     <!--
         Четыре раздела клиентского приложения. Содержимое табам назначается в code-behind
         из контейнера зависимостей: так страница получает ViewModel конструктором.
+
+        Иконки — те же lucide, что в вебе (search, map-pin, calendar-check, user-round):
+        контур 24×24, штрих 2, без заливки, поэтому цвет задают Shell.TabBarForegroundColor
+        и TabBarUnselectedColor из Styles.xaml, а не сам файл. Своей иконки «Карты»
+        в вебе нет — он карту не рисует; взят его же знак места (map-pin), как у раздела
+        «Салоны».
     -->
     <TabBar>
-        <ShellContent x:Name="SearchTab" Title="Поиск" Route="search" />
-        <ShellContent x:Name="MapTab" Title="Карта" Route="map" />
-        <ShellContent x:Name="BookingsTab" Title="Записи" Route="bookings" />
-        <ShellContent x:Name="ProfileTab" Title="Профиль" Route="profile" />
+        <ShellContent x:Name="SearchTab" Title="Поиск" Icon="tab_search.png" Route="search" />
+        <ShellContent x:Name="MapTab" Title="Карта" Icon="tab_map.png" Route="map" />
+        <ShellContent x:Name="BookingsTab" Title="Записи" Icon="tab_bookings.png" Route="bookings" />
+        <ShellContent x:Name="ProfileTab" Title="Профиль" Icon="tab_profile.png" Route="profile" />
     </TabBar>
 
 </Shell>

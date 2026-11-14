@@ -118,6 +118,15 @@ A local backend is required before running (`backend/docker compose up -d` +
   `BarberReviewsSection` is still one ViewModel per screen: the page binds to
   `BarberCardViewModel.Reviews`, and the section owns only the review list and its pager — it is not
   a second `BindingContext`.
+- **The tab bar carries the web's own lucide icons.** Four tabs need four marks, and the web has
+  no tab bar to copy; so each tab takes the icon of the section it stands for — `search` for
+  «Поиск», `map-pin` for «Карта» (the web's own mark for a place; the map screen itself has no
+  counterpart), `calendar-check` for «Записи» and `user-round` for «Профиль» (the last two are the
+  barber cabinet nav's own icons). The files are stroke-only SVGs at 24 in `Resources/Images`:
+  the colour is written as `#171717` but nothing depends on it, because Shell tints the icons
+  through `TabBarForegroundColor` and `TabBarUnselectedColor` — selected and unselected states
+  follow `Primary` / `MutedForeground` in both themes, and no new colour, font or package enters
+  the app.
 - **The card shows the avatar, the account hub still does not.** The public card reads the already
   public `avatarUrl` from `GET api/barbers/{id}` and only renders it — nothing is uploaded, removed
   or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub
