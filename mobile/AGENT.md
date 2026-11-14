@@ -105,12 +105,16 @@ Until then the "Map", "Favourites" and push screens have nothing to build on.
   the constructor, registration in `MauiProgram`.
 - `dotnet sln add` in `backend/` is forbidden (backend/AGENT.md §5.1); in `mobile/` the solution is
   maintained with a plain `dotnet sln`.
-- **Session end: branch, commit, push, pull request.** Finished work is never left in the working
-  tree. Work on a branch of your own (`features/…`, `fix/…`, `docs/…`), never on `main`; when the
-  slice is done, commit it, push the branch to `origin` and open a pull request against `main`
-  without waiting to be asked. The PR description is one or two sentences in English about what
-  this session changed — not a file list and not a retelling of the diff. Stage only the work of
-  the session: files that were already modified before it started are not part of the commit.
+- **Branch first, then the first edit.** Before a single file in the working tree changes, the work
+  must have a branch of its own; if there is none, create one from an up-to-date `main` —
+  `git switch -c docs/… main`, with `docs/…`, `features/…` or `fix/…` named after the change. A
+  session never edits on `main` and never picks up a branch left over from another task.
+- **Session end: commit, push, pull request.** Finished work is never left in the working tree.
+  When the slice is done, commit it on that branch, push the branch to `origin` and open a pull
+  request against `main` without waiting to be asked. The PR description is one or two sentences in
+  English about what this session changed — not a file list and not a retelling of the diff. Stage
+  only the work of the session: files that were already modified before it started are not part of
+  the commit.
 
 ## 8. Design source: the web frontend
 
