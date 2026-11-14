@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.RescheduleBookingPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:RescheduleBookingViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Перенести запись">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <!-- Текущий визит: перенос меняет только время. -->
+            <Border
+                Padding="12"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="4">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        LineBreakMode="TailTruncation"
+                        Text="{Binding BarberName}" />
+                    <Label LineBreakMode="WordWrap" Text="{Binding MomentText}" />
+                    <Label LineBreakMode="WordWrap" Text="{Binding ServiceName}" />
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding SalonName}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    <Label Text="{Binding PriceText}" />
+                    <Label
+                        FontSize="12"
+                        Text="{Binding DurationText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="Длительность и цена не изменятся"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Дата: границы уже посчитаны в поясе салона. -->
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    FontSize="12"
+                    Text="Дата"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <DatePicker
+                    Date="{Binding SelectedDate, Mode=TwoWay}"
+                    Format="D"
+                    MaximumDate="{Binding MaximumDate}"
+                    MinimumDate="{Binding MinimumDate}" />
+            </VerticalStackLayout>
+
+            <!-- Свободное время выбранной даты. -->
+            <VerticalStackLayout Spacing="8">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    Text="Свободное время" />
+
+                <ActivityIndicator
+                    HorizontalOptions="Start"
+                    IsRunning="{Binding IsLoadingSlots}"
+                    IsVisible="{Binding IsLoadingSlots}" />
+
+                <!--
+                    Ошибка сетки: показывается, пока SlotsError не null. Отдельного
+                    признака в ViewModel нет, поэтому видимость снимается триггером.
+                -->
+                <VerticalStackLayout Spacing="8">
+                    <VerticalStackLayout.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SlotsError}"
+                            TargetType="VerticalStackLayout"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </VerticalStackLayout.Triggers>
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding SlotsError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Button
+                        Command="{Binding RetrySlotsCommand}"
+                        HorizontalOptions="Start"
+                        Text="Повторить" />
+                </VerticalStackLayout>
+
+                <Label
+                    IsVisible="{Binding ShowEmptyDay}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding EmptyDayText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <FlexLayout BindableLayout.ItemsSource="{Binding Slots}" Wrap="Wrap">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberSlotOption">
+                            <Button
+                                Margin="0,0,8,8"
+                                Padding="12,8"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding SelectCommand}"
+                                CommandParameter="{Binding .}"
+                                CornerRadius="8"
+                                FontSize="14"
+                                Text="{Binding TimeText}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}">
+                                <Button.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding IsSelected}"
+                                        TargetType="Button"
+                                        Value="True">
+                                        <Setter
+                                            Property="BackgroundColor"
+                                            Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                        <Setter
+                                            Property="TextColor"
+                                            Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </FlexLayout>
+            </VerticalStackLayout>
+
+            <Label
+                IsVisible="{Binding HasError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+            <Button
+                Command="{Binding SubmitCommand}"
+                IsEnabled="{Binding CanSubmit}"
+                Text="{Binding SubmitText}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

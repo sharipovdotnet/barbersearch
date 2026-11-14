@@ -19,5 +19,14 @@ public partial class AppShell : Shell
 		// Карточка барбера — не вкладка, а маршрут поверх стека «Поиска»: так возврат
 		// к списку сохраняет и город, и найденных барберов.
 		Routing.RegisterRoute(BarberPage.Route, new PageRouteFactory<BarberPage>(services));
+
+		// Перенос и отзыв открываются поверх стека «Записей» и закрываются возвратом:
+		// список под ними сохраняет вкладку, прокрутку и уже загруженные строки.
+		Routing.RegisterRoute(
+			RescheduleBookingPage.Route,
+			new PageRouteFactory<RescheduleBookingPage>(services));
+		Routing.RegisterRoute(
+			ReviewBookingPage.Route,
+			new PageRouteFactory<ReviewBookingPage>(services));
 	}
 }

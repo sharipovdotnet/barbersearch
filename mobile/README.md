@@ -76,6 +76,33 @@ UTC start/end, price) and an idempotency key created once per attempt. Every ret
 second booking; a new key is generated only for `booking.create.idempotencyKeyConflict`. The
 comment is trimmed, sent as `null` when empty and limited to 500 characters.
 
+## Bookings (the «Записи» tab)
+
+The tab reads two independent lists from `GET api/bookings?scope=upcoming|past&pageSize=20&userId=`,
+where `userId` is always the signed-in customer: without it an administrator would receive every
+booking in the system. The cursor is opaque — it is sent back exactly as the server returned it, and
+`nextCursor = null` means the last page. The history list is fetched on its first open and re-read
+only after a cancel, a reschedule or a review; switching tabs inside the screen requests nothing.
+
+`BookingResponse` carries only the booking and the ids of the related aggregates — no barber,
+service, salon or time zone names — so each row is completed from the public barber card
+(`GET api/barbers/{id}`): the barber and salon names, the service by `barberServiceId`, the address,
+and the IANA zone used to show the time. Cards are cached per profile for the lifetime of the screen,
+at most four are requested at once, and a failed profile leaves the neutral labels («Барбер»,
+«Услуга», «Салон») with the time in UTC plus a footnote under the list.
+
+`POST api/bookings/{id}/cancellation` (no body — the customer never writes a reason),
+`GET api/bookings/{id}/reschedule-slots?date=` (a salon calendar date; the grid uses the booking's
+own duration) and `POST api/bookings/{id}/reschedule` (only `startAt`, exactly the instant the slot
+response returned) go through `IBookingsApi`; `POST api/reviews` goes through `IReviewsApi`. A review
+is created hidden and waits for moderation, so a booking with `hasReview` shows «Отзыв отправлен»
+instead of the button.
+
+There is no background polling: the lists refresh when the tab appears (silently — the rows stay
+until the answer), on pull-to-refresh and after an action. The «через 2 часа» countdown is
+recomputed by a one-minute timer in the page and touches no network. That deviation from the web,
+which polls «Предстоящие» once a minute, is recorded in `AGENT.md` §5.
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):
@@ -106,7 +133,11 @@ Covers the HTTP clients (real `HttpClient` with a stub handler: JSON parsing of 
 slots, booking body and `201 { id }`, `ProblemDetails` → `BarberSearchApiException`, empty filters
 omitted), the search and profile ViewModels, the barber card ViewModel (slot defaults in the salon's
 zone, service/salon/date changes, stale slot responses, the booking state machine and its retries)
-and the salon clock/text helpers.
+and the salon clock/text helpers. The bookings slice adds the list, cancellation, reschedule and
+review clients (query string, opaque cursor, `204` without a body, error codes), `BookingText`, and
+the three ViewModels: two independent lists with cursor loading and month groups, profile
+resolution with a per-profile cache, cancel/reschedule/review state machines and their error texts,
+all with fixed time and fake APIs — no emulator.
 
 ## iOS
 

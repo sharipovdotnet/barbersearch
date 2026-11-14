@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.ReviewBookingPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:pages="clr-namespace:BarberSearch.Mobile.Pages"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:ReviewBookingViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="Отзыв о визите">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    LineBreakMode="WordWrap"
+                    Text="Отзыв о визите" />
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    LineBreakMode="TailTruncation"
+                    Text="{Binding BarberName}" />
+                <Label
+                    LineBreakMode="WordWrap"
+                    Text="{Binding MomentText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Оценка: пять звёзд, у каждой своя цель нажатия и семантическая подпись. -->
+            <VerticalStackLayout Spacing="8">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    Text="Оценка" />
+                <FlexLayout
+                    AlignItems="Center"
+                    Direction="Row"
+                    Wrap="Wrap">
+                    <Label
+                        HeightRequest="44"
+                        SemanticProperties.Description="1 из 5"
+                        Text="★"
+                        FontSize="24"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center"
+                        WidthRequest="44">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectRatingCommand}"
+                                CommandParameter="{x:Static pages:ReviewRating.One}" />
+                        </Label.GestureRecognizers>
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding Star1Selected}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        HeightRequest="44"
+                        SemanticProperties.Description="2 из 5"
+                        Text="★"
+                        FontSize="24"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center"
+                        WidthRequest="44">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectRatingCommand}"
+                                CommandParameter="{x:Static pages:ReviewRating.Two}" />
+                        </Label.GestureRecognizers>
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding Star2Selected}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        HeightRequest="44"
+                        SemanticProperties.Description="3 из 5"
+                        Text="★"
+                        FontSize="24"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center"
+                        WidthRequest="44">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectRatingCommand}"
+                                CommandParameter="{x:Static pages:ReviewRating.Three}" />
+                        </Label.GestureRecognizers>
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding Star3Selected}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        HeightRequest="44"
+                        SemanticProperties.Description="4 из 5"
+                        Text="★"
+                        FontSize="24"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center"
+                        WidthRequest="44">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectRatingCommand}"
+                                CommandParameter="{x:Static pages:ReviewRating.Four}" />
+                        </Label.GestureRecognizers>
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding Star4Selected}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        HeightRequest="44"
+                        SemanticProperties.Description="5 из 5"
+                        Text="★"
+                        FontSize="24"
+                        HorizontalTextAlignment="Center"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalTextAlignment="Center"
+                        WidthRequest="44">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding SelectRatingCommand}"
+                                CommandParameter="{x:Static pages:ReviewRating.Five}" />
+                        </Label.GestureRecognizers>
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding Star5Selected}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        Margin="8,0,0,0"
+                        Text="{Binding RatingText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalOptions="Center" />
+                </FlexLayout>
+            </VerticalStackLayout>
+
+            <!-- Комментарий: необязателен, длина ограничена теми же 2000, что и на сервере. -->
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    FontSize="12"
+                    Text="Комментарий — необязательно"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MaxLength="{Binding MaxTextLength}"
+                        MinimumHeightRequest="88"
+                        Placeholder="Что понравилось, что можно улучшить"
+                        Text="{Binding Text}" />
+                </Border>
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="End"
+                    Text="{Binding TextCounterText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="Отзыв появится на карточке барбера после проверки модератором."
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <Label
+                IsVisible="{Binding HasError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+            <Button
+                Command="{Binding SubmitCommand}"
+                IsEnabled="{Binding CanSubmit}"
+                Text="{Binding SubmitText}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
