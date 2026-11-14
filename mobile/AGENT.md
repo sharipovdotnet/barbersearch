@@ -42,6 +42,7 @@ mobile app: a schedule and working hours are not filled in from a phone.
 | TFM | `net10.0-android`, `net10.0-ios` (core and tests — `net10.0`) |
 | SDK | `10.0.303` (`global.json`) |
 | MAUI | workload from Visual Studio 18.8 (`Microsoft.Maui.Controls` 10.0.20) |
+| Typeface | Geist 1.9.2 — static TTF `Regular`/`Medium`/`SemiBold`, same as the web |
 | MVVM | CommunityToolkit.Mvvm 8.4.0, `[ObservableProperty]` on fields |
 | Android | `SupportedOSPlatformVersion` 24, `ApplicationId` `ru.barbersearch.mobile` |
 | iOS | `SupportedOSPlatformVersion` 15.0 |
@@ -77,6 +78,10 @@ A local backend is required before running (`backend/docker compose up -d` +
   subdirectory.
 - **`ApplicationId` `ru.barbersearch.mobile`** — change it before the first release; after shipping
   to the stores it cannot be changed.
+- **Tokens are copied from the web by hand, not generated.** `Colors.xaml` is a transcription of
+  `frontend/src/index.css` (oklch → sRGB hex, alpha kept), and Geist is the official release font.
+  A design generator would introduce a third palette to reconcile; the rule in §8.3 is what keeps
+  two clients one product.
 - **Salon time, not device time.** Slot times are UTC and are shown in the salon's IANA zone from the
   slot response; an unknown zone falls back to UTC (the web uses the browser zone, a phone has no
   equivalent). The card's "today" is the salon's calendar date, and booking times go back as the
@@ -139,21 +144,34 @@ model to touch.
 
 ### 8.2 What porting means in MAUI
 
-- **Tokens become resources, not literals.** `Resources/Styles/Colors.xaml` keeps the web names as
-  semantic keys (`Background`, `Foreground`, `Card`, `Muted`, `MutedForeground`, `Primary`,
-  `Border`, `Destructive`, `Success`, `Warning`) with both light and dark values through
-  `AppThemeBinding`; `Styles.xaml` styles controls only through those keys.
-- **Replace the template palette, do not extend it.** `Primary #512BD4`, `Secondary #DFD8F7`,
-  `Tertiary` and `Gray*` are MAUI template leftovers; the web palette is neutral. `Danger #DC2626`
-  is a placeholder for the token too.
-- **Typeface is Geist Variable** with Cyrillic. MAUI cannot load WOFF2, so register a TTF/OTF
-  (`ConfigureFonts`) — do not copy the font files out of `frontend/node_modules` as they are.
+The port is done: this is the state to keep, not a plan.
+
+- **Tokens are resources, not literals.** `Resources/Styles/Colors.xaml` holds the web names as
+  semantic keys — `Background`, `Foreground`, `Card`, `Muted`, `MutedForeground`, `Primary`,
+  `PrimaryForeground`, `Secondary`, `Accent`, `Border`, `Input`, `Ring`, `Destructive`,
+  `DestructiveSolid`, `Success`, `Warning` — each with a light value and a `…Dark` twin, and every
+  use site chooses the theme through `AppThemeBinding`. `Styles.xaml` styles controls only through
+  those keys.
+- **The template palette is gone, not extended.** `Primary #512BD4`, `Secondary #DFD8F7`,
+  `Tertiary`, `Gray*`, `Magenta`, `MidnightBlue`, `OffBlack`, `Danger #DC2626` and the `*Brush`
+  duplicates were deleted. `Platforms/Android/Resources/values/colors.xml` carries the same
+  `--primary` / `--background` values for the platform chrome, and the icon and splash colours in
+  the `.csproj` use `#171717` for the same reason.
+- **Values are the web's `oklch`, converted to sRGB hex.** MAUI does not parse `oklch()`, so the
+  hex is a lossless transcription, checked by contrast rather than by eye: `--destructive` `#CE0000`
+  still gives 5.79:1 on white, as `index.css` records for issue #34. Translucent tokens keep their
+  alpha as 8-digit ARGB (`--border` 10% → `#1AFFFFFF`). When a token changes in `index.css`, the
+  same value changes here — nothing else.
+- **Typeface is Geist**, registered in `MauiProgram` as three static faces: `Geist` (body),
+  `GeistMedium`, `GeistSemiBold` (headings). The WOFF2 in `frontend/node_modules` is unusable in
+  MAUI, so the TTFs come from the official release 1.9.2; Cyrillic and `№` were verified in the
+  `cmap` of all three. Bold text uses `FontFamily="GeistSemiBold"`, not `FontAttributes="Bold"`.
   Sizes follow the web scale: screen title 20–24, card title 16, body 14–16, meta 12.
-- **Radius from the scale.** Base `--radius: 0.625rem` → 10: sm 6, md 8, lg 10, xl 14. No
-  hand-picked `12` (`SearchPage` has one today).
+- **Radius from the scale.** Base `--radius: 0.625rem` → 10: sm 6, md 8, lg 10, xl 14. The
+  hand-picked `12` in `SearchPage` is now 10.
 - **Accessibility carries over.** AA contrast in both themes; the `muted-foreground` on `muted`
   case is a known threshold in the web (frontend §7.2, issues #33/#34) and the same values are
-  reused here.
+  reused here. The old placeholder colour — `Gray200 #C8C8C8` on white, 1.7:1 — is gone with it.
 
 ### 8.3 Rules
 

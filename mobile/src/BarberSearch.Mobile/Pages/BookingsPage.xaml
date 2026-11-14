@@ -7,14 +7,14 @@
 
     <VerticalStackLayout Padding="24" Spacing="8" VerticalOptions="Center">
         <Label
-            FontAttributes="Bold"
-            FontSize="18"
+            FontFamily="GeistSemiBold"
+            FontSize="20"
             HorizontalTextAlignment="Center"
             Text="Мои записи" />
         <Label
             HorizontalTextAlignment="Center"
             Text="Список записей появится после подключения авторизации."
-            TextColor="{StaticResource Gray500}" />
+            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
     </VerticalStackLayout>
 
 </ContentPage>
