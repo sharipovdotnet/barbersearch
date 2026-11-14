@@ -28,5 +28,20 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			ReviewBookingPage.Route,
 			new PageRouteFactory<ReviewBookingPage>(services));
+
+		// Разделы кабинета открываются поверх стека «Профиля»: вкладка остаётся хабом,
+		// а возврат не теряет ни вход, ни загруженный профиль.
+		Routing.RegisterRoute(
+			AccountProfilePage.Route,
+			new PageRouteFactory<AccountProfilePage>(services));
+		Routing.RegisterRoute(
+			SecurityPage.Route,
+			new PageRouteFactory<SecurityPage>(services));
+		Routing.RegisterRoute(
+			MyReviewsPage.Route,
+			new PageRouteFactory<MyReviewsPage>(services));
+		Routing.RegisterRoute(
+			EditReviewPage.Route,
+			new PageRouteFactory<EditReviewPage>(services));
 	}
 }

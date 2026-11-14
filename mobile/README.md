@@ -103,6 +103,62 @@ until the answer), on pull-to-refresh and after an action. The «через 2 ч
 recomputed by a one-minute timer in the page and touches no network. That deviation from the web,
 which polls «Предстоящие» once a minute, is recorded in `AGENT.md` §5.
 
+## Account (the «Профиль» tab)
+
+The tab is the hub and the only sign-in screen: without a session it shows the sign-in form, with
+a session it shows initials instead of an avatar, the name, the email, its verification state, the
+role and the entry points to «Личные данные», «Мои отзывы», «Безопасность» and «Выйти». Those
+sections are ordinary Shell pages pushed over the profile stack (`account-profile`, `security`,
+`my-reviews`, `review-edit`), so the tab bar stays hidden there and the back gesture returns to the
+hub. The web has no hub — every account route is wrapped in its own access gate — and that
+adaptation is recorded in `AGENT.md` §5.
+
+The hub and the account pages read `GET api/users/me`, not `GET api/auth/me`: the latter returns a
+projection of the token claims and stays the session check and the `userId` source for «Записи»,
+while the former comes from the database and shows the current name, phone and verifications. The
+profile is read on every appearance: the first time with a spinner, afterwards silently, without
+erasing what is already on screen. Without a session no request is made at all. A `401` clears the
+session and returns to the sign-in form; a network failure, `429` or `5xx` shows the error with
+«Повторить» and keeps the session — a connection problem does not sign anyone out.
+
+Avatars are out of this slice: nothing is uploaded, deleted or rendered, and the header uses
+initials. `avatarUrl` is still sent back unchanged on every profile save, `null` included: `PUT
+api/users/{id}/profile` replaces the whole field set, so dropping the field would erase a photo
+uploaded on the web. An empty phone is sent as `null`, and the form's save button stays disabled
+until the fields differ from the last saved values.
+
+Changing the email is a request, not a rename. `POST api/auth/email-change` with the new address
+and the current password only puts two messages in the outbox — a confirmation link to the new
+address and a notice to the old one — and `204` therefore means «letters queued», not «address
+changed». The address changes when the link is opened in a browser
+(`{App:PublicUrl}/confirm-email-change?token=…`); the app neither opens nor parses it, and the
+displayed email stays the old one until the next profile read. A local 60-second cooldown follows
+success and `409 auth.emailChange.cooldown`, and the button counts down.
+
+Changing the password is the one action that needs an immediate second sign-in. `POST
+api/auth/change-password` revokes every refresh token and rotates `SecurityStamp`, so the old access
+token stops passing validation right away and the old pair is dead. After `204` the app signs in
+again with the profile email and the new password and replaces the pair through
+`TokenSession.ApplyAsync`; if that second sign-in fails, it says «Пароль изменён» / «Войдите снова
+с новым паролем.» and ends the session, because half a pair is worse than a clean sign-out. The web
+does not need this: its cookie session is not the revoked refresh token.
+
+Email verification is the same browser story: `POST api/auth/email-verification` asks for a letter
+to the current address and the button exists only while the address is unconfirmed (for a verified
+address the server answers `204` and sends nothing). Its cooldown also covers `429` and `409
+auth.emailVerification.cooldown`.
+
+«Мои отзывы» reads `GET api/reviews/mine?pageSize=10` with the opaque cursor sent back verbatim;
+`nextCursor = null` is the last page. There is no polling: the page loads once per visit,
+`RefreshView` re-reads the first page and replaces the list, and scrolling appends the next page.
+Edits and deletions change only their own row — a full `GET` would shift the pages — and a stale
+answer, arriving after a refresh or a sign-out, is dropped by a generation counter. Deleting the
+last row while a cursor exists loads the next page instead of showing the empty state; `404` on
+delete means the review is already gone and removes the row with «Этот отзыв уже удалён.». Editing
+applies `rating`, `text`, `isPublished` and `updatedAt` from the `PUT` response and never derives
+the new status locally: a rating-only change keeps a published review published, a text change
+returns it to moderation, and only the server decides.
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):

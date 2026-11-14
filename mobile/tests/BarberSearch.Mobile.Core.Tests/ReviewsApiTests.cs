@@ -2,23 +2,37 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using BarberSearch.Contracts.Reviews.CreateReview;
+using BarberSearch.Contracts.Reviews.UpdateReview;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Reviews;
 
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки клиента отзывов: тело запроса, разбор <c>201</c> и коды ошибок.
+/// Проверки клиента отзывов: создание, «мои отзывы», правка, удаление и коды ошибок.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Отзыв создаётся скрытым и уходит на модерацию, поэтому клиенту нужен только идентификатор
 /// из ответа. Сеть подменяется <see cref="HttpMessageHandler"/>: тест не поднимает бэкенд,
 /// но проходит через настоящий <see cref="HttpClient"/> и настоящие настройки JSON.
+/// </para>
+/// <para>
+/// Курсор пагинации непрозрачен: клиент не разбирает его, но обязан передать обратно
+/// без потерь, поэтому адрес проверяется и как экранированная строка, и после декодирования.
+/// Ответ <c>204</c> собирается без содержимого: клиент не должен читать у него JSON.
+/// </para>
 /// </remarks>
 public sealed class ReviewsApiTests
 {
     private static readonly Guid BookingId = Guid.Parse("9e100000-0000-4000-8000-0000000000c1");
     private static readonly Guid ReviewId = Guid.Parse("9e100000-0000-4000-8000-0000000000c2");
+    private static readonly Guid BarberId = Guid.Parse("9e100000-0000-4000-8000-0000000000c3");
+
+    /// <summary>
+    /// Начало визита из ответа: 15 ноября 2026, 01:30 по поясу салона.
+    /// </summary>
+    private static readonly DateTimeOffset VisitStart = new(2026, 11, 14, 22, 30, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task CreateReviewAsync_WithText_SendsBookingIdRatingAndText()
@@ -146,12 +160,211 @@ public sealed class ReviewsApiTests
             () => api.CreateReviewAsync(BookingId, 5, "Отличная стрижка"));
     }
 
+    [Fact]
+    public async Task GetMyReviewsAsync_FirstPage_SendsPageSizeWithoutCursor()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, MyReviewsJson("null"));
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        await api.GetMyReviewsAsync(null, 10);
+
+        var uri = handler.LastRequestUri!;
+
+        Assert.Equal(HttpMethod.Get, handler.LastMethod);
+        Assert.Equal("/api/reviews/mine", uri.AbsolutePath);
+
+        // Отсутствие курсора — это первая страница; пустая строка была бы невалидным курсором.
+        Assert.Equal("?pageSize=10", uri.Query);
+        Assert.DoesNotContain("cursor=", uri.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetMyReviewsAsync_CursorWithReservedCharacters_IsUrlEscaped()
+    {
+        const string cursor = "abc+/=def";
+
+        var handler = new StubHandler(HttpStatusCode.OK, MyReviewsJson("null"));
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        await api.GetMyReviewsAsync(cursor, 10);
+
+        var query = handler.LastRequestUri!.Query;
+
+        Assert.Contains("pageSize=10", query, StringComparison.Ordinal);
+
+        var cursorParameter = query
+            .Split('&')
+            .Single(part => part.StartsWith("cursor=", StringComparison.Ordinal));
+        var escaped = cursorParameter["cursor=".Length..];
+
+        // Курсор непрозрачен и может содержать символы, недопустимые в адресе: «+», «/» и «=»
+        // обязаны уехать экранированными, иначе сервер получит другой курсор.
+        Assert.Equal("abc%2B%2F%3Ddef", escaped);
+        Assert.Equal(cursor, WebUtility.UrlDecode(escaped));
+    }
+
+    [Fact]
+    public async Task GetMyReviewsAsync_SingleReview_ParsesVisitAndStatus()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, MyReviewsJson("null"));
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        var page = await api.GetMyReviewsAsync(null, 10);
+
+        var item = Assert.Single(page.Items);
+
+        // Скрытый отзыв обязан приехать со своим контекстом визита: именно из него строится
+        // строка «когда, услуга, салон, цена», а без неё список не подписать.
+        Assert.Equal(ReviewId, item.Id);
+        Assert.Equal(4, item.Rating);
+        Assert.Null(item.Text);
+        Assert.False(item.IsPublished);
+        Assert.Equal(BarberId, item.Barber.Id);
+        Assert.Equal("Иван Барбер", item.Barber.DisplayName);
+        Assert.Equal(BookingId, item.Visit.BookingId);
+        Assert.Equal(VisitStart, item.Visit.StartAt);
+        Assert.Equal("Europe/Moscow", item.Visit.TimeZoneId);
+        Assert.Equal(2400m, item.Visit.Price);
+        Assert.Equal("Стрижка", item.Visit.ServiceName);
+        Assert.Equal("Салон «Тест»", item.Visit.SalonName);
+
+        // null — последняя страница: клиент не должен просить следующую по пустому курсору.
+        Assert.Null(page.NextCursor);
+    }
+
+    [Fact]
+    public async Task GetMyReviewsAsync_MorePages_ParsesNextCursor()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, MyReviewsJson("\"next-page\""));
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        var page = await api.GetMyReviewsAsync(null, 10);
+
+        // Ненулевой курсор — единственный признак, что список можно догрузить.
+        Assert.Equal("next-page", page.NextCursor);
+    }
+
+    [Fact]
+    public async Task UpdateReviewAsync_ChangedReview_SendsPutAndParsesStatus()
+    {
+        const string updatedJson = """
+            {
+              "isPublished": false,
+              "updatedAt": "2026-11-15T10:15:00+00:00"
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.OK, updatedJson);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        var updated = await api.UpdateReviewAsync(ReviewId, 4, null);
+
+        Assert.Equal(HttpMethod.Put, handler.LastMethod);
+        Assert.Equal($"/api/reviews/{ReviewId:D}", handler.LastRequestUri!.AbsolutePath);
+
+        using var document = JsonDocument.Parse(handler.LastBody!);
+        var root = document.RootElement;
+
+        Assert.Equal(4, root.GetProperty("rating").GetInt32());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("text").ValueKind);
+
+        var parsed = JsonSerializer.Deserialize<UpdateReviewRequest>(handler.LastBody!, ApiJson.Options);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(4, parsed.Rating);
+        Assert.Null(parsed.Text);
+
+        // Сервер сам решает, вернулся ли отзыв на модерацию: клиент показывает его ответ,
+        // иначе строка «Опубликован» врала бы до перезагрузки кабинета.
+        Assert.False(updated.IsPublished);
+        Assert.Equal(new DateTimeOffset(2026, 11, 15, 10, 15, 0, TimeSpan.Zero), updated.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task DeleteReviewAsync_ExistingReview_SendsDelete()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        // 204 без тела — успех: читать нечего, отзыв уже удалён.
+        await api.DeleteReviewAsync(ReviewId);
+
+        Assert.Equal(HttpMethod.Delete, handler.LastMethod);
+        Assert.Equal($"/api/reviews/{ReviewId:D}", handler.LastRequestUri!.AbsolutePath);
+        Assert.True(string.IsNullOrEmpty(handler.LastBody));
+    }
+
+    [Fact]
+    public async Task DeleteReviewAsync_NotFound_ThrowsWithStatusAndCode()
+    {
+        const string problemJson = """
+            {
+              "title": "Not Found",
+              "status": 404,
+              "errorCodes": ["review.notFound"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.NotFound, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new ReviewsApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.DeleteReviewAsync(ReviewId));
+
+        // Чужой или уже удалённый отзыв: экран должен убрать строку, а не показать «удалено».
+        Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
+        Assert.Contains("review.notFound", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
     private static string CreatedJson() => $$"""{"id":"{{ReviewId:D}}"}""";
+
+    /// <summary>
+    /// Ответ «мои отзывы»: один скрытый отзыв с контекстом визита.
+    /// </summary>
+    /// <param name="nextCursor">JSON-значение курсора следующей страницы: строка либо <c>null</c>.</param>
+    private static string MyReviewsJson(string nextCursor) => $$"""
+        {
+          "items": [
+            {
+              "id": "{{ReviewId:D}}",
+              "rating": 4,
+              "text": null,
+              "isPublished": false,
+              "createdAt": "2026-11-15T10:00:00+00:00",
+              "updatedAt": "2026-11-15T10:00:00+00:00",
+              "barber": {
+                "id": "{{BarberId:D}}",
+                "displayName": "Иван Барбер"
+              },
+              "visit": {
+                "bookingId": "{{BookingId:D}}",
+                "startAt": "2026-11-14T22:30:00+00:00",
+                "timeZoneId": "Europe/Moscow",
+                "price": 2400,
+                "serviceName": "Стрижка",
+                "salonName": "Салон «Тест»"
+              }
+            }
+          ],
+          "nextCursor": {{nextCursor}}
+        }
+        """;
 
     /// <summary>
     /// Подменённый обработчик: отдаёт заданный ответ и запоминает метод, адрес и тело.
     /// </summary>
-    private sealed class StubHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
+    /// <remarks>
+    /// Тело ответа необязательно: у <c>204</c> содержимого нет, и клиент не должен его читать.
+    /// </remarks>
+    private sealed class StubHandler(HttpStatusCode statusCode, string? body = null, string contentType = "application/json")
+        : HttpMessageHandler
     {
         public HttpMethod? LastMethod { get; private set; }
 
@@ -171,7 +384,7 @@ public sealed class ReviewsApiTests
 
             return new HttpResponseMessage(statusCode)
             {
-                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                Content = body is null ? null : new StringContent(body, Encoding.UTF8, contentType),
             };
         }
     }

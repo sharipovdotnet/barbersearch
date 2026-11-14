@@ -94,6 +94,19 @@ A local backend is required before running (`backend/docker compose up -d` +
   answer), on pull-to-refresh and after an action, and only the countdown ticks once a minute. This
   is a deliberate deviation from §8 "the web is the reference", recorded here rather than left as an
   omission.
+- **The «Профиль» tab is a hub, not a copy of the web cabinet.** The web wraps every account route
+  in its own access gate and renders the avatar card, the email card, the profile form and the
+  account details on one page. Mobile keeps one tab: the sign-in form without a session, then a
+  person card (initials, name, email, role, «Email не подтверждён») with «Личные данные», «Мои
+  отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over the profile stack.
+  Avatars are out of this slice — nothing is uploaded, deleted or shown — but `avatarUrl` is still
+  round-tripped on every profile save, because `PUT api/users/{id}/profile` replaces the whole file
+  and `null` would erase a photo uploaded on the web. Email verification and the address change
+  finish in the browser: the letter's link opens the web page, the app neither opens nor parses it,
+  and the session simply ends after the confirmation rotates `SecurityStamp`. Changing the password
+  does need an immediate second sign-in in the app, unlike the web: the server revokes every refresh
+  token and rotates `SecurityStamp`, so the mobile pair is dead the moment `204` arrives, and the
+  app re-authenticates with the new password instead of keeping a dead session.
 
 ## 6. What the backend still lacks
 

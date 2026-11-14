@@ -1,6 +1,9 @@
 using System.Net;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Me;
+using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.Common;
+using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
@@ -10,19 +13,27 @@ using BarberSearch.Mobile.Core.ViewModels;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки экрана «Профиль»: вход, тексты отказов, выход и состояние сессии на старте.
+/// Проверки вкладки «Профиль»: вход, хаб аккаунта, тихое обновление и выход.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Тексты сверяются дословно с вебом (<c>frontend/src/lib/sign-in-errors.ts</c>): расхождение
 /// здесь — не опечатка, а разная копия одного продукта в двух клиентах.
+/// </para>
+/// <para>
+/// Хаб читает <c>GET api/users/me</c>, а не <c>/auth/me</c>: второй остаётся проверкой сессии
+/// и источником <c>userId</c> для «Записей». Поэтому фальшивый клиент считает оба чтения
+/// раздельно, а тесты «без сессии» доказывают отсутствие сети обоими счётчиками.
+/// </para>
 /// </remarks>
 public sealed class ProfileViewModelTests
 {
     private const string UserEmail = "mobile-test@barbersearch.test";
     private const string UserPassword = "Mobile-test-1!";
+    private const string SessionExpiredText = "Сессия истекла — войдите снова.";
 
     [Fact]
-    public async Task LoginAsync_ValidCredentials_SavesTokensAndShowsProfile()
+    public async Task LoginAsync_ValidCredentials_SavesTokensAndShowsAccount()
     {
         var store = new FakeTokenStore();
         using var session = new TokenSession(store);
@@ -43,6 +54,50 @@ public sealed class ProfileViewModelTests
         Assert.True(session.IsAuthenticated);
         Assert.Equal("access-1", session.AccessToken);
         Assert.Equal("refresh-1", store.Tokens!.RefreshToken);
+    }
+
+    [Fact]
+    public async Task LoginAsync_ValidCredentials_ShowsNameRoleAndInitials()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var viewModel = await CreateSignedOutViewModelAsync(session);
+        viewModel.Email = UserEmail;
+        viewModel.Password = UserPassword;
+
+        await viewModel.LoginCommand.ExecuteAsync(null);
+
+        Assert.Equal("Ева Клиентова", viewModel.DisplayName);
+        Assert.Equal("ЕК", viewModel.Initials);
+        Assert.Equal("Клиент", viewModel.RoleText);
+        Assert.Equal("Адрес подтверждён.", viewModel.EmailStatusText);
+        Assert.False(viewModel.ShowEmailWarning);
+    }
+
+    [Fact]
+    public async Task LoginAsync_JustLoggedInWithoutProfile_KeepsEmailAndSections()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromException<MyProfileResponse>(
+                ApiError(HttpStatusCode.InternalServerError, "internal.database")),
+        };
+        var viewModel = await CreateSignedOutViewModelAsync(session, accountApi: accountApi);
+        viewModel.Email = UserEmail;
+        viewModel.Password = UserPassword;
+
+        await viewModel.LoginCommand.ExecuteAsync(null);
+
+        // Вход состоялся, и терять его из-за показа имени нельзя: email из формы виден,
+        // разделы доступны, а причина ошибки осталась в памяти.
+        Assert.True(viewModel.IsAuthenticated);
+        Assert.True(viewModel.IsProfileVisible);
+        Assert.False(viewModel.ShowProfileError);
+        Assert.Equal(UserEmail, viewModel.ProfileEmail);
+        Assert.NotNull(viewModel.ProfileError);
+        Assert.Empty(viewModel.DisplayName);
     }
 
     [Fact]
@@ -174,6 +229,26 @@ public sealed class ProfileViewModelTests
     }
 
     [Fact]
+    public async Task LogoutAsync_LoadedProfile_ClearsPreviousUserData()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var viewModel = await CreateSignedOutViewModelAsync(session);
+
+        await viewModel.InitializeAsync();
+        await viewModel.LogoutCommand.ExecuteAsync(null);
+
+        // Данные прошлого пользователя не остаются ни в одном привязанном свойстве.
+        Assert.Empty(viewModel.DisplayName);
+        Assert.Empty(viewModel.Initials);
+        Assert.Empty(viewModel.RoleText);
+        Assert.Empty(viewModel.EmailStatusText);
+        Assert.Null(viewModel.ProfileEmail);
+        Assert.False(viewModel.IsEmailVerified);
+        Assert.False(viewModel.IsProfileVisible);
+    }
+
+    [Fact]
     public async Task InitializeAsync_WithoutTokens_MakesNoRequests()
     {
         var store = new FakeTokenStore();
@@ -183,7 +258,8 @@ public sealed class ProfileViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal(0, accountApi.Calls);
+        Assert.Equal(0, accountApi.MeCalls);
+        Assert.Equal(0, accountApi.ProfileCalls);
         Assert.False(viewModel.IsAuthenticated);
         Assert.False(viewModel.IsLoading);
         Assert.True(viewModel.IsFormVisible);
@@ -191,7 +267,7 @@ public sealed class ProfileViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_StoredTokens_ShowsProfileWithoutPassword()
+    public async Task InitializeAsync_StoredTokens_ShowsAccountWithoutPassword()
     {
         var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
         using var session = new TokenSession(store);
@@ -200,12 +276,195 @@ public sealed class ProfileViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal(1, accountApi.Calls);
+        Assert.Equal(1, accountApi.ProfileCalls);
         Assert.True(viewModel.IsAuthenticated);
         Assert.True(viewModel.IsProfileVisible);
         Assert.False(viewModel.IsLoading);
         Assert.Equal(UserEmail, viewModel.ProfileEmail);
+        Assert.Equal("Ева Клиентова", viewModel.DisplayName);
         Assert.Empty(viewModel.Password);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ProfileUnauthorized_ClearsSessionAndShowsForm()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromException<MyProfileResponse>(
+                ApiError(HttpStatusCode.Unauthorized, "auth.unauthorized")),
+        };
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(session.IsAuthenticated);
+        Assert.Null(store.Tokens);
+        Assert.False(viewModel.IsAuthenticated);
+        Assert.True(viewModel.IsFormVisible);
+        Assert.Equal(SessionExpiredText, viewModel.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_NetworkFailure_KeepsSessionAndShowsRetry()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromException<MyProfileResponse>(new HttpRequestException("refused")),
+        };
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+
+        // Ошибка сети из аккаунта не выкидывает: сессия жива, показать нужно «Повторить».
+        Assert.True(session.IsAuthenticated);
+        Assert.True(viewModel.IsAuthenticated);
+        Assert.True(viewModel.ShowProfileError);
+        Assert.False(viewModel.IsFormVisible);
+        Assert.Equal(
+            "Нет связи с сервером. Проверьте подключение и повторите попытку.",
+            viewModel.ProfileError);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RateLimited_ShowsRateLimitText()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromException<MyProfileResponse>(
+                ApiError(HttpStatusCode.TooManyRequests, "auth.rateLimit")),
+        };
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            "Слишком много запросов. Подождите минуту и повторите.",
+            viewModel.ProfileError);
+        Assert.True(viewModel.IsAuthenticated);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_SecondAppearance_RefreshesProfileSilently()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi();
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+        accountApi.Profile = () => Task.FromResult(ProfileOf(firstName: "Анна"));
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(2, accountApi.ProfileCalls);
+        Assert.Equal("Анна Клиентова", viewModel.DisplayName);
+        Assert.False(viewModel.IsLoading);
+        Assert.False(viewModel.IsProfileLoading);
+        Assert.False(viewModel.ShowProfileLoading);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_SilentRefreshFailure_KeepsShownData()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi();
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+        accountApi.Profile = () => Task.FromException<MyProfileResponse>(new HttpRequestException("refused"));
+        await viewModel.InitializeAsync();
+
+        // Тихое обновление не стирает карточку: человек видит прежние данные и причину.
+        Assert.Equal("Ева Клиентова", viewModel.DisplayName);
+        Assert.True(viewModel.IsProfileVisible);
+        Assert.NotNull(viewModel.ProfileError);
+        Assert.True(viewModel.HasProfileError);
+    }
+
+    [Fact]
+    public async Task RetryProfileAsync_AfterFailure_LoadsProfile()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromException<MyProfileResponse>(new HttpRequestException("refused")),
+        };
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+        accountApi.Profile = () => Task.FromResult(ProfileOf());
+        await viewModel.RetryProfileCommand.ExecuteAsync(null);
+
+        Assert.Null(viewModel.ProfileError);
+        Assert.False(viewModel.ShowProfileError);
+        Assert.Equal("Ева Клиентова", viewModel.DisplayName);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_UnverifiedEmail_ShowsWarning()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromResult(ProfileOf(isEmailVerified: false)),
+        };
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.ShowEmailWarning);
+        Assert.False(viewModel.IsEmailVerified);
+        Assert.Equal("Адрес не подтверждён.", viewModel.EmailStatusText);
+    }
+
+    [Fact]
+    public void EditProfileCommand_RaisesNavigationEvent()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var viewModel = CreateViewModel(session);
+        var raised = 0;
+        viewModel.EditProfileRequested += (_, _) => raised++;
+
+        viewModel.EditProfileCommand.Execute(null);
+
+        Assert.Equal(1, raised);
+    }
+
+    [Fact]
+    public void ReviewsCommand_RaisesNavigationEvent()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var viewModel = CreateViewModel(session);
+        var raised = 0;
+        viewModel.ReviewsRequested += (_, _) => raised++;
+
+        viewModel.ReviewsCommand.Execute(null);
+
+        Assert.Equal(1, raised);
+    }
+
+    [Fact]
+    public void SecurityCommand_RaisesNavigationEvent()
+    {
+        var store = new FakeTokenStore();
+        using var session = new TokenSession(store);
+        var viewModel = CreateViewModel(session);
+        var raised = 0;
+        viewModel.SecurityRequested += (_, _) => raised++;
+
+        viewModel.SecurityCommand.Execute(null);
+
+        Assert.Equal(1, raised);
     }
 
     /// <summary>
@@ -235,6 +494,29 @@ public sealed class ProfileViewModelTests
 
     private static TokenResponse Tokens(string accessToken, string refreshToken) =>
         new(accessToken, "Bearer", 900, refreshToken, 1209600);
+
+    private static MyProfileResponse ProfileOf(
+        Guid? id = null,
+        string firstName = "Ева",
+        string lastName = "Клиентова",
+        string? phoneNumber = "+70000000003",
+        bool isEmailVerified = true) =>
+        new(
+            id ?? Guid.CreateVersion7(),
+            UserEmail,
+            firstName,
+            lastName,
+            phoneNumber,
+            "https://cdn.example.test/avatar.jpg",
+            UserRole.Customer,
+            null,
+            isEmailVerified,
+            false,
+            new DateTimeOffset(2026, 1, 10, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 11, 1, 12, 30, 0, TimeSpan.Zero),
+            false,
+            PhotoModerationStatus.Approved,
+            null);
 
     private static BarberSearchApiException ApiError(HttpStatusCode statusCode, string errorCode) =>
         new(
@@ -280,16 +562,20 @@ public sealed class ProfileViewModelTests
     }
 
     /// <summary>
-    /// Подменённый клиент текущего пользователя: считает вызовы, чтобы «старт без токенов»
+    /// Подменённый клиент аккаунта: считает оба чтения раздельно, чтобы «старт без токенов»
     /// доказывался отсутствием сети, а не состоянием экрана.
     /// </summary>
     private sealed class FakeAccountApi : IAccountApi
     {
-        public int Calls { get; private set; }
+        public int MeCalls { get; private set; }
+
+        public int ProfileCalls { get; private set; }
+
+        public Func<Task<MyProfileResponse>> Profile { get; set; } = () => Task.FromResult(ProfileOf());
 
         public Task<MeResponse> GetMeAsync(CancellationToken cancellationToken = default)
         {
-            Calls++;
+            MeCalls++;
 
             return Task.FromResult(new MeResponse(
                 Guid.CreateVersion7(),
@@ -298,6 +584,37 @@ public sealed class ProfileViewModelTests
                 null,
                 IsEmailVerified: true));
         }
+
+        public Task<MyProfileResponse> GetMyProfileAsync(CancellationToken cancellationToken = default)
+        {
+            ProfileCalls++;
+
+            return Profile();
+        }
+
+        public Task UpdateProfileAsync(
+            Guid userId,
+            string firstName,
+            string lastName,
+            string? phoneNumber,
+            string? avatarUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Хаб профиля не сохраняет личные данные.");
+
+        public Task ChangePasswordAsync(
+            string currentPassword,
+            string newPassword,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Хаб профиля не меняет пароль.");
+
+        public Task RequestEmailChangeAsync(
+            string newEmail,
+            string currentPassword,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Хаб профиля не меняет email.");
+
+        public Task RequestEmailVerificationAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Хаб профиля не отправляет письмо подтверждения.");
     }
 
     /// <summary>
