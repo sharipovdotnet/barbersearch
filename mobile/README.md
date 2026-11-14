@@ -54,8 +54,8 @@ The pair is stored by `ITokenStore` (Core) as one JSON value; the app implements
 preferences file so a restored install cannot resurrect an undecryptable pair. `TokenSession` keeps
 the pair in memory, and `AuthenticatedHttpHandler` adds `Authorization: Bearer`, refreshes once on
 a single `401` (single-flight, so two requests never rotate the same refresh token) and repeats the
-request once. A refused refresh ends the session. The Profile tab is the only screen: a sign-in
-form while there is no session, email and “Выйти” after it.
+request once. A refused refresh ends the session. The Profile tab holds the sign-in form while
+there is no session, and email with “Выйти” after it.
 
 ## Booking
 
@@ -75,7 +75,6 @@ UTC start/end, price) and an idempotency key created once per attempt. Every ret
 `5xx`, `lockTimeout`, expired session) reuses the key, so a broken connection cannot create a
 second booking; a new key is generated only for `booking.create.idempotencyKeyConflict`. The
 comment is trimmed, sent as `null` when empty and limited to 500 characters.
-
 
 ## Build and run
 
@@ -103,9 +102,11 @@ The APK lands in `src/BarberSearch.Mobile/bin/Debug/net10.0-android/` (`ru.barbe
 dotnet test tests/BarberSearch.Mobile.Core.Tests
 ```
 
-Covers the HTTP client (real `HttpClient` with a stub handler: JSON parsing, `ProblemDetails` →
-`BarberSearchApiException`, empty filters omitted) and the search ViewModel (results, replacement,
-API error, network error).
+Covers the HTTP clients (real `HttpClient` with a stub handler: JSON parsing of search, card and
+slots, booking body and `201 { id }`, `ProblemDetails` → `BarberSearchApiException`, empty filters
+omitted), the search and profile ViewModels, the barber card ViewModel (slot defaults in the salon's
+zone, service/salon/date changes, stale slot responses, the booking state machine and its retries)
+and the salon clock/text helpers.
 
 ## iOS
 
