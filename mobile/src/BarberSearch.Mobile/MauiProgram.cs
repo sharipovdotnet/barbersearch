@@ -38,10 +38,15 @@ public static class MauiProgram
 
         builder
             .UseMauiApp<App>()
+            // Geist — тот же шрифт, что в вебе (frontend/src/index.css: --font-sans). MAUI не грузит
+            // WOFF2, поэтому здесь TTF из релиза 1.9.2, а не файлы из frontend/node_modules.
+            // Веса — отдельными файлами: ось wght вариативного шрифта на Android ведёт себя
+            // по-разному в зависимости от версии системы, а GeistSemiBold нужен заголовкам.
             .ConfigureFonts(fonts =>
             {
-                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+                fonts.AddFont("Geist-Regular.ttf", "Geist");
+                fonts.AddFont("Geist-Medium.ttf", "GeistMedium");
+                fonts.AddFont("Geist-SemiBold.ttf", "GeistSemiBold");
             });
 
         builder.Services.AddSingleton(BarberSearchApiOptions.FromBaseAddress(DevelopmentApiBaseAddress));
