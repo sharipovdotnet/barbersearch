@@ -53,7 +53,11 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <!--
+                        Справочники стоят в столбик: пустой справочник скрывает свой селект
+                        (как в вебе), и в двухколоночной сетке на его месте осталась бы дыра.
+                    -->
+                    <VerticalStackLayout Spacing="12">
                         <VerticalStackLayout IsVisible="{Binding ShowSpecializationPicker}" Spacing="2">
                             <Label
                                 FontSize="12"
@@ -66,10 +70,7 @@
                                 SelectedItem="{Binding SelectedSpecialization}" />
                         </VerticalStackLayout>
 
-                        <VerticalStackLayout
-                            Grid.Column="1"
-                            IsVisible="{Binding ShowHairServicePicker}"
-                            Spacing="2">
+                        <VerticalStackLayout IsVisible="{Binding ShowHairServicePicker}" Spacing="2">
                             <Label
                                 FontSize="12"
                                 Text="Услуга"
@@ -80,7 +81,7 @@
                                 ItemsSource="{Binding HairServices}"
                                 SelectedItem="{Binding SelectedHairService}" />
                         </VerticalStackLayout>
-                    </Grid>
+                    </VerticalStackLayout>
 
                     <VerticalStackLayout Spacing="2">
                         <Label
