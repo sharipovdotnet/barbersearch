@@ -3,6 +3,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Bookings.CreateBooking;
+using BarberSearch.Contracts.Bookings.GetBookings;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.HairServices;
@@ -705,6 +706,29 @@ public sealed class BarberCardViewModelTests
 
             return Create(request);
         }
+
+        public Task<PagedResponse<BookingResponse>> GetBookingsAsync(
+            BookingScope scope,
+            Guid userId,
+            string? cursor = null,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не читает список записей.");
+
+        public Task CancelBookingAsync(Guid bookingId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не отменяет записи.");
+
+        public Task<BarberSlotsResponse> GetRescheduleSlotsAsync(
+            Guid bookingId,
+            DateOnly slotDate,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не переносит записи.");
+
+        public Task RescheduleBookingAsync(
+            Guid bookingId,
+            DateTimeOffset startAt,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не переносит записи.");
     }
 
     /// <summary>

@@ -86,6 +86,14 @@ A local backend is required before running (`backend/docker compose up -d` +
   slot response; an unknown zone falls back to UTC (the web uses the browser zone, a phone has no
   equivalent). The card's "today" is the salon's calendar date, and booking times go back as the
   same instants the API returned, together with an idempotency key per attempt.
+- **Bookings are a list, not a hero and a timeline.** The «Записи» tab keeps the web's data and
+  wording but drops the web's "next booking" hero and the request → confirmation → visit timeline:
+  on a phone the first card of «Предстоящие» carries the «Ближайшая запись» badge and the countdown,
+  and the status badge carries the state. The lists are not polled either, although the web polls
+  «Предстоящие» once a minute: the tab refreshes on appearance (silently — the rows stay until the
+  answer), on pull-to-refresh and after an action, and only the countdown ticks once a minute. This
+  is a deliberate deviation from §8 "the web is the reference", recorded here rather than left as an
+  omission.
 
 ## 6. What the backend still lacks
 

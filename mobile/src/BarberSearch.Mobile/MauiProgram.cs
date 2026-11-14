@@ -3,6 +3,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Bookings;
+using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Pages;
@@ -71,6 +72,10 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IBookingsApi, BookingsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Отзыв — третья запись с Bearer: автора сервер берёт из токена, барбера — из брони.
+        builder.Services.AddHttpClient<IReviewsApi, ReviewsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
@@ -79,8 +84,18 @@ public static class MauiProgram
         builder.Services.AddTransient<ProfileViewModel>();
         builder.Services.AddTransient<BarberCardViewModel>();
 
+        // Экран «Записи» — singleton, поэтому его ViewModel создаётся ровно один раз и живёт
+        // столько же: состояние вкладки переживает переключения между разделами.
+        builder.Services.AddTransient<BookingsViewModel>();
+
+        // Вспомогательные экраны открываются поверх стека и живут один визит.
+        builder.Services.AddTransient<RescheduleBookingViewModel>();
+        builder.Services.AddTransient<ReviewBookingViewModel>();
+
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
+        builder.Services.AddTransient<RescheduleBookingPage>();
+        builder.Services.AddTransient<ReviewBookingPage>();
         builder.Services.AddSingleton<MapPage>();
         builder.Services.AddSingleton<BookingsPage>();
         builder.Services.AddSingleton<ProfilePage>();
