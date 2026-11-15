@@ -4,17 +4,20 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Bookings;
+using BarberSearch.Mobile.Core.Api.Push;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Configuration;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.Location;
+using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Devices;
 using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Pages;
+using BarberSearch.Mobile.Push;
 using BarberSearch.Mobile.Theming;
 using Microsoft.Extensions.Logging;
 
@@ -100,6 +103,39 @@ public static class MauiProgram
         builder.Services.AddSingleton<ITokenStore, SecureStorageTokenStore>();
         builder.Services.AddSingleton<TokenSession>();
 
+        // Push настраивается один раз на старте: Android читает push.json и, если он есть,
+        // инициализирует Firebase до первого обращения к токену. Без ресурса — Disabled:
+        // ни разрешений, ни переключателя в «Профиле», приложение работает как раньше.
+#if ANDROID
+        var pushOptions = PushBootstrap.Initialize();
+#else
+        var pushOptions = PushOptions.Disabled;
+#endif
+        builder.Services.AddSingleton(pushOptions);
+        builder.Services.AddSingleton<IPushStateStore, PreferencesPushStateStore>();
+        builder.Services.AddSingleton<IPushRegistrar, PushRegistrar>();
+
+        // Единственный переход по нажатию на напоминание: и холодный старт, и тёплый
+        // складывают цель сюда, а Shell забирает её, когда уже существует.
+        builder.Services.AddSingleton<NotificationTapRouter>();
+
+#if ANDROID
+        // Провайдер и разрешение — устройство, а не аккаунт: один экземпляр на приложение.
+        // Конкретные типы зарегистрированы отдельно, чтобы служба FCM могла сообщить
+        // обновлённый токен тому же экземпляру, который отдаёт его регистратору.
+        builder.Services.AddSingleton<AndroidPushPermission>();
+        builder.Services.AddSingleton<IPushPermission>(
+            services => services.GetRequiredService<AndroidPushPermission>());
+        builder.Services.AddSingleton<FcmPushTokenProvider>();
+        builder.Services.AddSingleton<IPushTokenProvider>(
+            services => services.GetRequiredService<FcmPushTokenProvider>());
+#else
+        // iOS: push появится отдельным срезом на APNs. Заглушки отвечают «выключено»,
+        // поэтому ни Firebase, ни разрешений в iOS-сборке нет.
+        builder.Services.AddSingleton<IPushPermission, IosPushPermission>();
+        builder.Services.AddSingleton<IPushTokenProvider, IosPushTokenProvider>();
+#endif
+
         // Вход, refresh и выход идут на клиент без обработчика: иначе refresh, получивший 401,
         // вызывал бы сам себя, а выход отправлял бы уже отозванный access-токен.
         builder.Services.AddHttpClient<IAuthApi, AuthApi>(ConfigureHttpClient);
@@ -117,6 +153,10 @@ public static class MauiProgram
 
         // Отзыв — третья запись с Bearer: автора сервер берёт из токена, барбера — из брони.
         builder.Services.AddHttpClient<IReviewsApi, ReviewsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
+        // Регистрация push-устройства — тоже с Bearer: пользователя сервер берёт из токена.
+        builder.Services.AddHttpClient<IPushApi, PushApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);

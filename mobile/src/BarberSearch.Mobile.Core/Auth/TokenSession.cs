@@ -52,6 +52,24 @@ public sealed class TokenSession : IDisposable
     public event EventHandler? SessionEnded;
 
     /// <summary>
+    /// Сессия началась: пара появилась там, где её не было.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Поднимается только на переходе «не вошли» → «вошли», то есть при входе и регистрации,
+    /// но не при продлении пары: <c>AuthenticatedHttpHandler</c> применяет новую пару на
+    /// каждом refresh, и событие на каждый refresh заставляло бы клиентов заново
+    /// регистрировать устройство по несколько раз за сессию.
+    /// </para>
+    /// <para>
+    /// Как и <see cref="SessionEnded"/>, событие синхронное и приходит на сетевом потоке:
+    /// push-регистратору UI не нужен, а разрешение на уведомления запрашивает платформенный
+    /// сервис, который сам переходит на главный поток.
+    /// </para>
+    /// </remarks>
+    public event EventHandler? SessionStarted;
+
+    /// <summary>
     /// Есть ли действующая пара.
     /// </summary>
     /// <remarks>
@@ -59,6 +77,23 @@ public sealed class TokenSession : IDisposable
     /// сначала ждёт загрузку, иначе на старте он на мгновение показал бы форму входа.
     /// </remarks>
     public bool IsAuthenticated => _tokens is not null;
+
+    /// <summary>
+    /// Проверяет сессию, при необходимости прочитав её из хранилища.
+    /// </summary>
+    /// <remarks>
+    /// Единственный корректный способ спросить «есть ли вход» у фонового клиента (push-регистратор,
+    /// старт приложения): <see cref="IsAuthenticated"/> до <see cref="EnsureLoadedAsync"/> видит
+    /// только память и на первом запуске ответил бы «нет» при живой сохранённой паре.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns><c>true</c>, если пара есть.</returns>
+    public async Task<bool> IsAuthenticatedAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
+        return IsAuthenticated;
+    }
 
     /// <summary>
     /// Текущий access-токен или <c>null</c>, если сессии нет.
@@ -127,10 +162,13 @@ public sealed class TokenSession : IDisposable
 
         var stored = new StoredTokens(tokens.AccessToken, tokens.RefreshToken);
 
+        bool wasAuthenticated;
+
         await _stateLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
+            wasAuthenticated = _tokens is not null;
             _tokens = stored;
             _isLoaded = true;
         }
@@ -140,6 +178,11 @@ public sealed class TokenSession : IDisposable
         }
 
         await _tokenStore.SaveAsync(stored, cancellationToken).ConfigureAwait(false);
+
+        if (!wasAuthenticated)
+        {
+            SessionStarted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>

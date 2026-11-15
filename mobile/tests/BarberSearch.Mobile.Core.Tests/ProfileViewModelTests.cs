@@ -9,6 +9,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -482,6 +483,181 @@ public sealed class ProfileViewModelTests
         Assert.Equal(1, raised);
     }
 
+    [Fact]
+    public async Task InitializeAsync_PushTransientFailure_ShowsNoDeviceHint()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar
+        {
+            IsConfigured = true,
+            EnsureResult = PushTokenResult.TransientFailure,
+        };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+
+        // Обрыв связи или 5xx — не свойство устройства: подсказка про настройки телефона
+        // была бы неправдой, а следующая попытка может успеть.
+        Assert.True(viewModel.NotificationsEnabled);
+        Assert.Empty(viewModel.NotificationsStatusText);
+        Assert.False(viewModel.HasNotificationsStatus);
+        Assert.False(viewModel.ShowNotificationSettings);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_UnregistersBeforeLogoutRequest()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var order = new List<string>(2);
+        var authApi = new FakeAuthApi
+        {
+            Logout = _ =>
+            {
+                order.Add("logout");
+
+                return Task.CompletedTask;
+            },
+        };
+        var push = new FakePushRegistrar
+        {
+            UnregisterCallback = () =>
+            {
+                order.Add("unregister");
+
+                // Снятие идёт с Bearer: к этому моменту пара ещё должна быть жива.
+                Assert.True(session.IsAuthenticated);
+            },
+        };
+        var viewModel = CreateViewModel(session, authApi: authApi, push: push);
+
+        await viewModel.InitializeAsync();
+        await viewModel.LogoutCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, order.Count);
+        Assert.Equal("unregister", order[0]);
+        Assert.Equal("logout", order[1]);
+        Assert.Equal(1, push.UnregisterCalls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PushNotConfigured_HidesNotificationsRow()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar();
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+
+        // Без push.json строка настроек не показывается и разрешение не запрашивается.
+        Assert.False(viewModel.IsPushConfigured);
+        Assert.Equal(0, push.EnsureCalls);
+        Assert.Empty(viewModel.NotificationsStatusText);
+        Assert.False(viewModel.HasNotificationsStatus);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PushConfigured_ShowsToggleOnAndRegisters()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar { IsConfigured = true };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.IsPushConfigured);
+        Assert.True(viewModel.NotificationsEnabled);
+        Assert.Equal(1, push.EnsureCalls);
+        Assert.Empty(viewModel.NotificationsStatusText);
+        Assert.False(viewModel.ShowNotificationSettings);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PushPermissionDenied_ShowsSettingsHint()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar
+        {
+            IsConfigured = true,
+            EnsureResult = PushTokenResult.Denied,
+        };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            "Уведомления выключены в настройках телефона. Разрешите их, чтобы получать напоминания.",
+            viewModel.NotificationsStatusText);
+        Assert.True(viewModel.HasNotificationsStatus);
+
+        // Отказ лечится только в настройках телефона, поэтому ссылка показана.
+        Assert.True(viewModel.ShowNotificationSettings);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PushUnavailable_ShowsDeviceHint()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar
+        {
+            IsConfigured = true,
+            EnsureResult = PushTokenResult.Unavailable,
+        };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Уведомления недоступны на этом устройстве", viewModel.NotificationsStatusText);
+        Assert.False(viewModel.ShowNotificationSettings);
+    }
+
+    [Fact]
+    public async Task ToggleNotificationsCommand_Off_UnregistersAndStoresChoice()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar { IsConfigured = true };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ToggleNotificationsCommand.ExecuteAsync(false);
+
+        Assert.False(push.IsUserEnabled);
+        Assert.False(viewModel.NotificationsEnabled);
+        Assert.Equal(false, push.LastSetEnabled);
+        Assert.Empty(viewModel.NotificationsStatusText);
+    }
+
+    [Fact]
+    public async Task ToggleNotificationsCommand_OnDenied_KeepsChoiceAndShowsHint()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var push = new FakePushRegistrar
+        {
+            IsConfigured = true,
+            SetEnabledResult = PushTokenResult.Denied,
+        };
+        var viewModel = CreateViewModel(session, push: push);
+
+        await viewModel.InitializeAsync();
+        await viewModel.ToggleNotificationsCommand.ExecuteAsync(true);
+
+        // Выбор человека остаётся включённым, а подсказка объясняет, что разрешить —
+        // в настройках телефона, а не в приложении.
+        Assert.True(viewModel.NotificationsEnabled);
+        Assert.Equal(true, push.LastSetEnabled);
+        Assert.Equal(
+            "Уведомления выключены в настройках телефона. Разрешите их, чтобы получать напоминания.",
+            viewModel.NotificationsStatusText);
+        Assert.True(viewModel.ShowNotificationSettings);
+    }
+
     /// <summary>
     /// Создаёт уже открытый экран без сессии — то, что видит пользователь перед вводом пароля.
     /// </summary>
@@ -504,8 +680,13 @@ public sealed class ProfileViewModelTests
     private static ProfileViewModel CreateViewModel(
         TokenSession session,
         FakeAuthApi? authApi = null,
-        FakeAccountApi? accountApi = null) =>
-        new(authApi ?? new FakeAuthApi(), accountApi ?? new FakeAccountApi(), session);
+        FakeAccountApi? accountApi = null,
+        IPushRegistrar? push = null) =>
+        new(
+            authApi ?? new FakeAuthApi(),
+            accountApi ?? new FakeAccountApi(),
+            session,
+            push ?? new FakePushRegistrar());
 
     private static TokenResponse Tokens(string accessToken, string refreshToken) =>
         new(accessToken, "Bearer", 900, refreshToken, 1209600);
@@ -640,6 +821,66 @@ public sealed class ProfileViewModelTests
 
         public Task RequestEmailVerificationAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Хаб профиля не отправляет письмо подтверждения.");
+    }
+
+    /// <summary>
+    /// Подменённый регистратор push: считает вызовы и отдаёт заданное состояние.
+    /// </summary>
+    private sealed class FakePushRegistrar : IPushRegistrar
+    {
+        public bool IsConfigured { get; init; }
+
+        public bool IsUserEnabled { get; private set; } = true;
+
+        public PushTokenResult EnsureResult { get; init; } = PushTokenResult.Available("fcm-token");
+
+        public PushTokenResult SetEnabledResult { get; init; } = PushTokenResult.Available("fcm-token");
+
+        public int EnsureCalls { get; private set; }
+
+        public int UnregisterCalls { get; private set; }
+
+        public bool? LastSetEnabled { get; private set; }
+
+        /// <summary>
+        /// Действие в момент снятия: тесту нужен порядок относительно запроса выхода.
+        /// </summary>
+        public Action? UnregisterCallback { get; init; }
+
+        public Task<PushTokenResult> EnsureRegisteredAsync(
+            CancellationToken cancellationToken = default)
+        {
+            EnsureCalls++;
+
+            return Task.FromResult(EnsureResult);
+        }
+
+        public Task UnregisterAsync(CancellationToken cancellationToken = default)
+        {
+            UnregisterCalls++;
+            UnregisterCallback?.Invoke();
+
+            return Task.CompletedTask;
+        }
+
+        public Task HandleTokenChangedAsync(
+            string token,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<PushTokenResult> SetEnabledAsync(
+            bool enabled,
+            CancellationToken cancellationToken = default)
+        {
+            LastSetEnabled = enabled;
+            IsUserEnabled = enabled;
+
+            return Task.FromResult(enabled ? SetEnabledResult : PushTokenResult.Disabled);
+        }
+
+        public void OpenSettings()
+        {
+        }
     }
 
     /// <summary>

@@ -10,7 +10,17 @@
 		исключены: см. Resources/xml/backup_rules.xml и data_extraction_rules.xml. Без правил
 		восстановление на новом устройстве принесло бы пару токенов без ключа шифрования.
 	-->
-	<application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
+	<application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true">
+		<!--
+			Уведомление, показанное системой в фоне, берёт иконку и канал из этих метаданных.
+			Без иконки Android подставил бы адаптивную иконку приложения и нарисовал бы белое
+			пятно; без канала сообщение с channel_id=reminders упало бы в канал по умолчанию.
+			Идентификатор канала совпадает с AndroidNotifications.ChannelId и с тем, что
+			присылает сервер.
+		-->
+		<meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/notification_bell" />
+		<meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="reminders" />
+	</application>
 	<!--
 		Геопозиция нужна только для порядка «сначала ближайшие» в выдаче поиска. Обе строки
 		обязательны: с Android 12 человек выбирает точность сам, и без COARSE система не
@@ -20,4 +30,11 @@
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
+	<!--
+		Напоминания о записях. С Android 13 уведомления требуют явного согласия: без этой
+		строки система молча не показывает ни FCM, ни локальные уведомления, а запросить
+		разрешение через Essentials нельзя. Согласие спрашивается только когда канал настроен
+		(push.json), — без конфигурации приложение о разрешении не упоминает.
+	-->
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

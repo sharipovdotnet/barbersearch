@@ -140,4 +140,23 @@ public partial class ProfilePage : ContentPage
     {
         await Shell.Current.GoToAsync(ForgotPasswordPage.Route);
     }
+
+    /// <summary>
+    /// Передаёт переключатель «Присылать напоминания» команде ViewModel.
+    /// </summary>
+    /// <remarks>
+    /// Привязка <c>IsToggled</c> односторонняя: значение приходит от ViewModel, а команда
+    /// вызывается только тогда, когда положение изменил человек. Событие, поднятое самой
+    /// привязкой, отличается тем, что новое положение уже совпадает с состоянием ViewModel, —
+    /// его и пропускаем, иначе первое появление вкладки регистрировало бы устройство дважды.
+    /// </remarks>
+    private async void OnNotificationsToggled(object? sender, ToggledEventArgs e)
+    {
+        if (_viewModel.NotificationsEnabled == e.Value)
+        {
+            return;
+        }
+
+        await _viewModel.ToggleNotificationsCommand.ExecuteAsync(e.Value);
+    }
 }
