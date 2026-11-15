@@ -195,6 +195,19 @@ public sealed class BarberSearchApi : IBarberSearchApi
                 Uri.EscapeDataString(filters.AdditionalService)));
         }
 
+        // Геопозиция уходит только полной парой: сервер отвергает половину, а «широта без
+        // долготы» ничего не сортирует. Формат — round-trip в инвариантной культуре, иначе
+        // телефон с запятой в качестве разделителя отправил бы «56,8389» и получил 400.
+        if (filters is { Latitude: { } latitude, Longitude: { } longitude })
+        {
+            parameters.Add(string.Concat(
+                "latitude=",
+                latitude.ToString("R", CultureInfo.InvariantCulture)));
+            parameters.Add(string.Concat(
+                "longitude=",
+                longitude.ToString("R", CultureInfo.InvariantCulture)));
+        }
+
         if (!string.IsNullOrWhiteSpace(cursor))
         {
             parameters.Add(string.Concat("cursor=", Uri.EscapeDataString(cursor)));

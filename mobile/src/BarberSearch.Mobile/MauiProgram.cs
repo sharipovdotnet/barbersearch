@@ -7,8 +7,10 @@ using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Core.Location;
 using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
+using BarberSearch.Mobile.Devices;
 using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Pages;
 using BarberSearch.Mobile.Theming;
@@ -113,6 +115,11 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
+
+        // Геопозиция — устройство, а не аккаунт: сервис живёт один на приложение и не хранит
+        // состояние между экранами. Поиск зависит от интерфейса Core, поэтому проверяется
+        // без эмулятора и без разрешений ОС.
+        builder.Services.AddSingleton<ILocationService, MauiLocationService>();
 
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();

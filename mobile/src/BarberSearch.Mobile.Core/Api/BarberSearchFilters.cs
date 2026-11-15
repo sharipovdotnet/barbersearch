@@ -56,4 +56,19 @@ public sealed record BarberSearchFilters
     /// без учёта регистра с любым элементом списка дополнительных услуг барбера.
     /// </summary>
     public string AdditionalService { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Широта устройства; <c>null</c> — без сортировки по расстоянию.
+    /// </summary>
+    /// <remarks>
+    /// Пара с <see cref="Longitude"/> необязательна: без геопозиции поиск работает как раньше,
+    /// по рейтингу. Сервер принимает только обе координаты сразу, поэтому клиент не отправляет
+    /// половину пары.
+    /// </remarks>
+    public double? Latitude { get; init; }
+
+    /// <summary>
+    /// Долгота устройства; <c>null</c> — без сортировки по расстоянию.
+    /// </summary>
+    public double? Longitude { get; init; }
 }

@@ -26,7 +26,8 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// </summary>
 /// <remarks>
 /// Поиск в фейке повторяет keyset-порядок настоящего репозитория
-/// (<c>rating DESC NULLS LAST, id</c>), поэтому на нём можно проверять стык страниц.
+/// (<c>rating DESC NULLS LAST, id</c>, а с координатами — <c>distance IS NULL, distance, id</c>),
+/// поэтому на нём можно проверять стык страниц.
 /// Фильтры по городу, специализации, услуге и дате фейк не применяет: тесты проверяют,
 /// что обработчик передал их в репозиторий без искажений.
 /// </remarks>
@@ -452,6 +453,33 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         CancellationToken cancellationToken = default)
     {
         LastSearchFilter = filter;
+
+        if (filter.Location is not null)
+        {
+            IEnumerable<BarberSearchItemResponse> geoOrdered = _searchItems
+                .OrderBy(item => item.DistanceKm == null)
+                .ThenBy(item => item.DistanceKm)
+                .ThenBy(item => item.Id);
+
+            if (filter.Cursor is { } geoCursor)
+            {
+                geoOrdered = geoCursor.DistanceKm is { } cursorDistance
+                    ? geoOrdered.Where(item =>
+                        item.DistanceKm == null
+                        || item.DistanceKm > cursorDistance
+                        || (item.DistanceKm == cursorDistance
+                            && item.Id.CompareTo(geoCursor.Id) > 0))
+                    : geoOrdered.Where(item =>
+                        item.DistanceKm == null && item.Id.CompareTo(geoCursor.Id) > 0);
+            }
+
+            IReadOnlyList<BarberSearchItemResponse> geoPage = geoOrdered
+                .Take(filter.Limit)
+                .ToList();
+
+            return Task.FromResult(
+                Result.Success<IReadOnlyList<BarberSearchItemResponse>, Failure>(geoPage));
+        }
 
         var ordered = _searchItems
             .OrderBy(item => item.Rating == null)

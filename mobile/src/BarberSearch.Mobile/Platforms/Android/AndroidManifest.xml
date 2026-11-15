@@ -10,6 +10,13 @@
 		восстановление на новом устройстве принесло бы пару токенов без ключа шифрования.
 	-->
 	<application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
+	<!--
+		Геопозиция нужна только для порядка «сначала ближайшие» в выдаче поиска. Обе строки
+		обязательны: с Android 12 человек выбирает точность сам, и без COARSE система не
+		показывает переключатель «Примерно», а FINE без COARSE не запрашивается.
+	-->
+	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 </manifest>

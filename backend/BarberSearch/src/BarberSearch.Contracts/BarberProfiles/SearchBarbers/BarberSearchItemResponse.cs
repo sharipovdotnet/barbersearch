@@ -34,6 +34,10 @@ namespace BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 /// Аватар владельца профиля; <c>null</c>, если не загружен <b>или скрыт администратором</b>.
 /// Заблокированный барбер остаётся в выдаче — маскируется только фото.
 /// </param>
+/// <param name="DistanceKm">
+/// Расстояние в километрах от геопозиции клиента до ближайшего активного салона барбера;
+/// <c>null</c>, если координаты не переданы или у барбера нет активного салона.
+/// </param>
 public record BarberSearchItemResponse(
     Guid Id,
     string DisplayName,
@@ -48,4 +52,5 @@ public record BarberSearchItemResponse(
     string? City,
     PlaceKind? PrimaryPlaceKind,
     IReadOnlyList<string> AdditionalServices,
-    string? AvatarUrl);
+    string? AvatarUrl,
+    double? DistanceKm);

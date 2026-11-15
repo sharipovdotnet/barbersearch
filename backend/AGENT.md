@@ -2958,6 +2958,36 @@ Read endpoints (added 2026-10-19):
   primary-key lookup on the page's owner ids, **not** by a join in the keyset query, so the
   index plan, the filters, the order and the row count are unchanged.
   A broken cursor or an out-of-range page size is `400`, not `500`.
+- **Geolocation in search (2026-11-15, `features/geo-search`).** `GET api/barbers` also accepts the
+  optional client position pair `latitude` (`−90..90`) and `longitude` (`−180..180`). Both or
+  neither: a half pair, a non-finite value (`NaN`, `±Infinity`) or an out-of-range value is
+  `400 barberSearch.location.invalid` with `invalidField` naming the offending parameter
+  (`SearchLocation.TryCreate` in Application; `SearchBarbersHandler` checks it **before** the
+  repository, so a bad pair never reaches SQL). With coordinates each item also carries
+  `distanceKm` (**last** in `BarberSearchItemResponse`, nullable) — the distance from the client
+  to the barber's **nearest active salon** (`IsActive && ModerationStatus == Active`, the same
+  visibility predicate as the `city` filter; a salon without an active row is not counted, so a
+  barber with no active salon gets `null`). The formula is the local equirectangular
+  approximation: `dLat = (salon.Latitude − lat) · 111.32`,
+  `dLon = (salon.Longitude − lon) · 111.32 · cos(latRad)`, `distanceKm = √(dLat² + dLon²)`.
+  `cos(latRad)` is computed **once in C#** and passed as a query constant; everything else is
+  inlined into the SQL (`sqrt(...)` over a correlated `MIN` subquery), which is why the tests
+  assert it with `ToQueryString()`. This is deliberately **not** haversine: on city distances
+  (units to tens of km) the «nearest first» order is unaffected and the error is a fraction of a
+  percent, while the SQL avoids per-row trigonometry; on intercontinental distances the numbers
+  drift, so `distanceKm` is a display hint and an order key, not a geodesic measurement. The geo
+  order is `distanceKm IS NULL, distanceKm ASC, id ASC` — the rating does **not** participate,
+  so the cursor stays a two-key `(distance, id)` in geo mode and is stable across pages. The
+  cursor is written in version 2 (`version|rating|id|distance`, base64url, empty distance =
+  `null`); version 1 cursors (`version|rating|id`) still decode in the rating search, but in geo
+  mode they are `400 barberSearch.cursor.invalid` (they describe a foreign, rating order), and a
+  v2 cursor carrying a distance is `400` in the rating search for the mirror reason. A geo page
+  that ends in the «no active salon» group emits a v2 cursor with an empty distance, and the
+  repository continues that group by `id`. The rating-order index plan and the second
+  salon/avatar query are unchanged; the geo projection is a separate query
+  (`BuildDistanceSearchRowsQuery`) with no supporting index — the distance is computed for the
+  already narrowed visible set (`is_active`/`is_verified`), and per §15.2 no index is added
+  without `EXPLAIN` evidence.
 - **Additional-service suggestions (2026-11-06, issue-53).** `GET api/barbers/additional-services`
   is an anonymous `reads`-limited `IReadOnlyList<string>`: `SelectMany(p => p.AdditionalServices)`
   becomes `JOIN LATERAL unnest(additional_services)`, `DISTINCT` collapses equal values of

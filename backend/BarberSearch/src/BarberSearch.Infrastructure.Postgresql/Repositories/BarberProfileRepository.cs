@@ -477,37 +477,13 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             blockedProfileIds = blockedResult.Value;
         }
 
-        // Только публичная выдача, фильтры и курсор — в ApplySearchFilters: тест проверяет
-        // их трансляцию через ToQueryString без базы (см. AdditionalServiceSearchQueryTests).
-        var query = ApplySearchFilters(Context.BarberProfiles.AsNoTracking(), filter, blockedProfileIds);
-
-        var rows = await query
-            // PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок
-            // задан тремя ключами: сначала «есть ли рейтинг», затем рейтинг, затем id.
-            // Этот порядок терм в терм совпадает с выражением индекса
-            // ix_barber_profiles_search_keyset (((rating IS NULL)), rating DESC, id)
-            // WHERE is_active AND is_verified, поэтому планировщик идёт по индексу и
-            // останавливается после Limit, не сортируя все видимые профили.
-            .OrderBy(profile => profile.Rating == null)
-            .ThenByDescending(profile => profile.Rating)
-            .ThenBy(profile => profile.Id)
-            .Take(filter.Limit)
-            .Select(profile => new BarberSearchRow(
-                profile.Id,
-                profile.UserId,
-                profile.DisplayName.Value,
-                profile.Grade,
-                profile.YearsOfExperience.Value,
-                profile.Languages.ToList(),
-                profile.Rating,
-                profile.ReviewsCount,
-                profile.IsVerified,
-                null,
-                null,
-                null,
-                null,
-                profile.AdditionalServices.ToList(),
-                null))
+        // Только публичная выдача, фильтры, курсор, проекция и порядок — в
+        // BuildSearchRowsQuery: unit-тест проверяет их трансляцию через ToQueryString без базы
+        // (см. AdditionalServiceSearchQueryTests и GeoSearchQueryTests).
+        var rows = await BuildSearchRowsQuery(
+                Context.BarberProfiles.AsNoTracking(),
+                filter,
+                blockedProfileIds)
             .ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
@@ -580,9 +556,200 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     enriched.City,
                     enriched.PrimaryPlaceKind,
                     enriched.AdditionalServices,
-                    enriched.AvatarUrl);
+                    enriched.AvatarUrl,
+                    enriched.DistanceKm);
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Строки keyset-выдачи поиска: фильтры, проекция, порядок и курсор в одном запросе.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Вынесено из <see cref="SearchAsync"/>, чтобы unit-тест проверил трансляцию обоих
+    /// порядков через <c>ToQueryString()</c> без базы: гео-режим обязан дать <c>ORDER BY</c>
+    /// по расстоянию, обычный — прежний <c>rating DESC NULLS LAST, id</c>.
+    /// </para>
+    /// <para>
+    /// Проекция в <see cref="BarberSearchRow"/> идёт <b>до</b> сортировки: в гео-режиме
+    /// фильтр курсора и порядок считаются по уже спроецированному <c>DistanceKm</c>, а не
+    /// по повторённой в трёх местах подзапросе-расстоянии.
+    /// </para>
+    /// </remarks>
+    /// <param name="query">Исходный запрос профилей.</param>
+    /// <param name="filter">Разобранные фильтры.</param>
+    /// <param name="blockedProfileIds">
+    /// Профили, накрытые отпуском на весь локальный день основного салона (D10).
+    /// </param>
+    internal IQueryable<BarberSearchRow> BuildSearchRowsQuery(
+        IQueryable<BarberProfile> query,
+        BarberSearchFilter filter,
+        IReadOnlyCollection<Guid>? blockedProfileIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(filter);
+
+        query = ApplySearchFilters(query, filter, blockedProfileIds);
+
+        return filter.Location is { } location
+            ? BuildDistanceSearchRowsQuery(query, filter, location)
+            : BuildRatingSearchRowsQuery(query, filter);
+    }
+
+    /// <summary>
+    /// Прежний порядок выдачи: <c>rating DESC NULLS LAST, id</c>.
+    /// </summary>
+    /// <remarks>
+    /// PostgreSQL по умолчанию ставит NULL первыми при DESC, поэтому порядок задан тремя
+    /// ключами: сначала «есть ли рейтинг», затем рейтинг, затем id. Этот порядок терм в терм
+    /// совпадает с выражением индекса
+    /// <c>ix_barber_profiles_search_keyset (((rating IS NULL)), rating DESC, id)</c>
+    /// WHERE is_active AND is_verified, поэтому планировщик идёт по индексу и останавливается
+    /// после Limit, не сортируя все видимые профили. Курсор этого режима применён выше,
+    /// в <see cref="ApplySearchFilters"/>.
+    /// </remarks>
+    private static IQueryable<BarberSearchRow> BuildRatingSearchRowsQuery(
+        IQueryable<BarberProfile> query,
+        BarberSearchFilter filter)
+        => query
+            .OrderBy(profile => profile.Rating == null)
+            .ThenByDescending(profile => profile.Rating)
+            .ThenBy(profile => profile.Id)
+            .Take(filter.Limit)
+            .Select(profile => new BarberSearchRow(
+                profile.Id,
+                profile.UserId,
+                profile.DisplayName.Value,
+                profile.Grade,
+                profile.YearsOfExperience.Value,
+                profile.Languages.ToList(),
+                profile.Rating,
+                profile.ReviewsCount,
+                profile.IsVerified,
+                null,
+                null,
+                null,
+                null,
+                profile.AdditionalServices.ToList(),
+                null,
+                null));
+
+    /// <summary>
+    /// Гео-порядок выдачи: <c>distance IS NULL, distance ASC, id ASC</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ближайший салон — минимум расстояния по <b>активным</b> салонам барбера
+    /// (<c>IsActive && ModerationStatus == Active</c>): те же условия видимости, что у фильтра
+    /// города. Салон без активной записи не учитывается, поэтому у барбера только с закрытыми
+    /// салонами <c>DistanceKm</c> = <c>null</c>, и он уходит в последнюю группу.
+    /// </para>
+    /// <para>
+    /// Формула — локальная равнопромежуточная аппроксимация:
+    /// <c>dLat = (Latitude − lat) · 111.32</c>,
+    /// <c>dLon = (Longitude − lon) · 111.32 · cos(latRad)</c>,
+    /// <c>distanceKm = √(dLat² + dLon²)</c>. Это не haversine: на городских расстояниях
+    /// (единицы-десятки километров) кривизна Земли меняет результат на доли процента, а порядок
+    /// «сначала ближайшие» от неё не зависит. Зато формула состоит из сложения, умножения и
+    /// <c>sqrt</c>, которые PostgreSQL считает напрямую, — haversine потребовал бы
+    /// тригонометрии в SQL на каждую строку. <c>cos(latRad)</c> считается в C# <b>один раз</b>:
+    /// это константа запроса, а не выражение на строку.
+    /// </para>
+    /// <para>
+    /// Рейтинг в гео-порядке не участвует: курсор остаётся двухключевым
+    /// <c>(distance, id)</c> и стабильным, а «сначала ближайшие» не разбавляется рейтингом.
+    /// Курсор этого режима применён здесь, а не в <see cref="ApplySearchFilters"/>, потому что
+    /// фильтровать нужно по спроецированному расстоянию; null-группа продолжается по id.
+    /// </para>
+    /// </remarks>
+    /// <param name="query">Запрос профилей с уже применёнными фильтрами и видимостью.</param>
+    /// <param name="filter">Разобранные фильтры; <see cref="BarberSearchFilter.Location"/> задан.</param>
+    /// <param name="location">Геопозиция клиента.</param>
+    private IQueryable<BarberSearchRow> BuildDistanceSearchRowsQuery(
+        IQueryable<BarberProfile> query,
+        BarberSearchFilter filter,
+        SearchLocation location)
+    {
+        var latitude = location.Latitude;
+        var longitude = location.Longitude;
+
+        // cos(latRad) — константа запроса: один Math.Cos в C#, а не тригонометрия в SQL
+        // на каждую строку.
+        var kilometresPerDegreeLongitude = SearchLocation.KILOMETRES_PER_DEGREE
+            * Math.Cos(latitude * Math.PI / 180.0);
+
+        // Промежуточная проекция с расстоянием: фильтр курсора и порядок ссылаются на её
+        // член DistanceKm, и EF подставляет выражение расстояния в SQL сам. Проекция сразу
+        // в BarberSearchRow здесь не годится — запись с коллекциями не транслируется
+        // в предикат, и EF попытался бы собрать её на клиенте уже в WHERE.
+        var rows = query.Select(profile => new
+        {
+            Profile = profile,
+            // Минимум по активным салонам профиля: пустой набор (нет активного салона)
+            // даёт NULL, а не ноль, поэтому барбер попадает в последнюю группу.
+            DistanceKm = Context.BarberSalons
+                .Where(link => link.BarberProfileId == profile.Id
+                    && Context.Salons.Any(salon => salon.Id == link.SalonId
+                        && salon.IsActive
+                        && salon.ModerationStatus == SalonModerationStatus.Active))
+                .Select(link => Context.Salons
+                    .Where(salon => salon.Id == link.SalonId)
+                    .Select(salon => new
+                    {
+                        DLat = (salon.Latitude - latitude)
+                            * SearchLocation.KILOMETRES_PER_DEGREE,
+                        DLon = (salon.Longitude - longitude) * kilometresPerDegreeLongitude
+                    })
+                    .Select(pair => (double?)Math.Sqrt(
+                        (pair.DLat * pair.DLat) + (pair.DLon * pair.DLon)))
+                    .First())
+                .Min()
+        });
+
+        if (filter.Cursor is { } cursor)
+        {
+            if (cursor.DistanceKm is { } distance)
+            {
+                // Строки дальше курсора: сначала группа без расстояния (она всегда следующая
+                // за любой строкой с расстоянием), затем строго большее расстояние, затем
+                // тот же километраж и больший id.
+                rows = rows.Where(row =>
+                    row.DistanceKm == null
+                    || row.DistanceKm > distance
+                    || (row.DistanceKm == distance && row.Profile.Id.CompareTo(cursor.Id) > 0));
+            }
+            else
+            {
+                // Курсор внутри null-группы: она идёт последней и упорядочена по id.
+                rows = rows.Where(row =>
+                    row.DistanceKm == null && row.Profile.Id.CompareTo(cursor.Id) > 0);
+            }
+        }
+
+        return rows
+            // false (есть расстояние) — первым, null — последними.
+            .OrderBy(row => row.DistanceKm == null)
+            .ThenBy(row => row.DistanceKm)
+            .ThenBy(row => row.Profile.Id)
+            .Take(filter.Limit)
+            .Select(row => new BarberSearchRow(
+                row.Profile.Id,
+                row.Profile.UserId,
+                row.Profile.DisplayName.Value,
+                row.Profile.Grade,
+                row.Profile.YearsOfExperience.Value,
+                row.Profile.Languages.ToList(),
+                row.Profile.Rating,
+                row.Profile.ReviewsCount,
+                row.Profile.IsVerified,
+                null,
+                null,
+                null,
+                null,
+                row.Profile.AdditionalServices.ToList(),
+                null,
+                row.DistanceKm));
     }
 
     /// <summary>
@@ -701,8 +868,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     /// <remarks>
     /// <see cref="UserId"/> нужен только для второго запроса за аватаром и в контракт не попадает:
     /// иначе идентификатор владельца утёк бы в JSON, где его нет ни у одной строки выдачи.
+    /// <see cref="DistanceKm"/> заполнен только в гео-режиме: расстояние до ближайшего активного
+    /// салона либо <c>null</c>, если координаты не переданы или активного салона нет.
     /// </remarks>
-    private sealed record BarberSearchRow(
+    internal sealed record BarberSearchRow(
         Guid Id,
         Guid UserId,
         string DisplayName,
@@ -717,7 +886,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         string? City,
         PlaceKind? PrimaryPlaceKind,
         IReadOnlyList<string> AdditionalServices,
-        string? AvatarUrl);
+        string? AvatarUrl,
+        double? DistanceKm);
 
     /// <summary>
     /// Строит второй запрос поиска: аватары владельцев страницы по уже урезанному набору id.
@@ -864,8 +1034,10 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             }
         }
 
-        if (filter.Cursor is { } cursor)
+        if (filter.Cursor is { } cursor && filter.Location is null)
         {
+            // Курсор гео-режима фильтрует по расстоянию и применяется после проекции,
+            // в BuildDistanceSearchRowsQuery: здесь порядок рейтинговый, и смысл ключей другой.
             if (cursor.Rating is null)
             {
                 // null-рейтинг — последняя группа: продолжаем внутри неё по возрастанию id.

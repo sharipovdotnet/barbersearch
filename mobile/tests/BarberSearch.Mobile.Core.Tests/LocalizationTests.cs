@@ -164,6 +164,17 @@ public sealed class LocalizationTests
         Assert.Equal("15 November", SalonClock.FormatDayMonth(new DateOnly(2026, 11, 15)));
     }
 
+    [Fact]
+    public void Distance_English_UsesEnglishUnitsAndDot()
+    {
+        using var _ = UseLocale(Locale.En);
+
+        // en-GB: точка в числе и английские единицы, а не «850 м».
+        Assert.Equal("850 m", BarberText.Distance(0.854));
+        Assert.Equal("1.2 km", BarberText.Distance(1.24));
+        Assert.Equal("12 km", BarberText.Distance(12.4));
+    }
+
     private static RestoreLocale UseLocale(Locale locale)
     {
         var previous = Loc.Current;

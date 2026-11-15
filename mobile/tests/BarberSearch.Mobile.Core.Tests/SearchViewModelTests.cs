@@ -10,6 +10,7 @@ using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Location;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -348,15 +349,127 @@ public sealed class SearchViewModelTests
         Assert.Equal(1, completed);
     }
 
+    [Fact]
+    public async Task SearchAsync_LocationAvailable_SendsCoordinatesAndShowsNearbySort()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса", 1.2)));
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(56.8389, 60.6057)));
+        var viewModel = Create(api, location);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var filters = Assert.Single(api.SearchCalls);
+
+        Assert.Equal(56.8389, filters.Latitude);
+        Assert.Equal(60.6057, filters.Longitude);
+        Assert.True(viewModel.ShowNearbySort);
+        Assert.False(viewModel.HasLocationHint);
+        Assert.Equal(1, location.Calls);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LocationDenied_SearchesWithoutCoordinatesAndShowsHint()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, new FakeLocationService(LocationResult.Denied()));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var filters = Assert.Single(api.SearchCalls);
+
+        Assert.Null(filters.Latitude);
+        Assert.Null(filters.Longitude);
+        Assert.True(viewModel.HasLocationHint);
+        Assert.Equal(
+            "Геопозиция недоступна — показываем всех мастеров. Разрешите доступ в настройках телефона.",
+            viewModel.LocationHint);
+        Assert.False(viewModel.ShowNearbySort);
+        // Отказ в геопозиции не блокирует поиск: выдача та же, просто без расстояний.
+        Assert.Single(viewModel.Barbers);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LocationUnavailable_SearchesWithoutCoordinatesAndShowsHint()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, new FakeLocationService(LocationResult.Unavailable()));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Null(Assert.Single(api.SearchCalls).Latitude);
+        Assert.True(viewModel.HasLocationHint);
+        Assert.Equal(
+            "Не удалось определить геопозицию — показываем всех мастеров.",
+            viewModel.LocationHint);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LocationPresentButServerWithoutDistances_DoesNotClaimNearbySort()
+    {
+        // Старый сервер проигнорирует координаты и вернёт рейтинговый порядок без distanceKm:
+        // подпись «сначала ближайшие» тогда была бы ложью.
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, new FakeLocationService(LocationResult.Ok(new GeoPosition(56.84, 60.61))));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.ShowNearbySort);
+        Assert.False(viewModel.HasLocationHint);
+    }
+
+    [Fact]
+    public async Task SearchAsync_SecondSearch_DoesNotReadLocationAgain()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var location = new FakeLocationService(LocationResult.Denied());
+        var viewModel = Create(api, location);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, location.Calls);
+        Assert.Equal(2, api.SearchCalls.Count);
+    }
+
+    [Fact]
+    public async Task RetryLocationCommand_AfterDenial_ReadsLocationAgainAndSendsCoordinates()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса", 0.4)));
+        var location = new FakeLocationService(LocationResult.Denied());
+        var viewModel = Create(api, location);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasLocationHint);
+
+        location.Result = LocationResult.Ok(new GeoPosition(55.75, 37.62));
+
+        await viewModel.RetryLocationCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, location.Calls);
+        Assert.Equal(55.75, api.SearchCalls[^1].Latitude);
+        Assert.Equal(37.62, api.SearchCalls[^1].Longitude);
+        Assert.False(viewModel.HasLocationHint);
+        Assert.True(viewModel.ShowNearbySort);
+    }
+
     /// <summary>
     /// Создаёт ViewModel с фиксированным «сегодня»: список дат не зависит от машины теста.
     /// </summary>
-    private static SearchViewModel Create(FakeApi api) => new(api, new FixedTimeProvider(Today));
+    /// <remarks>
+    /// Без явной геопозиции подменённый сервис отвечает «недоступна»: старые проверки поиска
+    /// не должны незаметно зависеть от координат.
+    /// </remarks>
+    private static SearchViewModel Create(FakeApi api, ILocationService? locationService = null) =>
+        new(
+            api,
+            locationService ?? new FakeLocationService(LocationResult.Unavailable()),
+            new FixedTimeProvider(Today));
 
     private static PagedResponse<BarberSearchItemResponse> Page(params BarberSearchItemResponse[] items) =>
         new(items, NextCursor: null);
 
-    private static BarberSearchItemResponse Barber(string displayName) => new(
+    private static BarberSearchItemResponse Barber(string displayName, double? distanceKm = null) => new(
         Guid.CreateVersion7(),
         displayName,
         Grade.SeniorBarber,
@@ -370,7 +483,25 @@ public sealed class SearchViewModelTests
         "Тюмень",
         PlaceKind.Salon,
         ["борода"],
-        null);
+        null,
+        distanceKm);
+
+    /// <summary>
+    /// Подменённая геопозиция: запоминает число чтений и отдаёт заданный результат.
+    /// </summary>
+    private sealed class FakeLocationService(LocationResult result) : ILocationService
+    {
+        public LocationResult Result { get; set; } = result;
+
+        public int Calls { get; private set; }
+
+        public Task<LocationResult> GetPositionAsync(CancellationToken cancellationToken = default)
+        {
+            Calls++;
+
+            return Task.FromResult(Result);
+        }
+    }
 
     /// <summary>
     /// «Сегодня» для расчёта списка дат: полдень 15 ноября 2026 года.

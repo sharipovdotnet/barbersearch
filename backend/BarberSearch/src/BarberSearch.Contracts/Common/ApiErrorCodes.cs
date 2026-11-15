@@ -1384,6 +1384,17 @@ public static class ApiErrorCodes
         public const string BarberSearchLanguageInvalid = "barberSearch.language.invalid";
 
         /// <summary>
+        /// Геопозиция клиента в поиске барберов некорректна: передана половина пары,
+        /// значение вне диапазона или не конечно; <c>400</c>.
+        /// </summary>
+        /// <remarks>
+        /// Пара обязательна целиком: <c>latitude</c> без <c>longitude</c> (и наоборот) — ошибка,
+        /// а не «сортировка не запрошена», иначе клиент молча получил бы не тот порядок.
+        /// Поле в ответе — тот параметр, который нарушил правило.
+        /// </remarks>
+        public const string BarberSearchLocationInvalid = "barberSearch.location.invalid";
+
+        /// <summary>
         /// У профиля барбера нет активного салона или указанный салон не активен; <c>404</c>.
         /// </summary>
         public const string BarberSlotsSalonNotFound = "barberSlots.salon.notFound";

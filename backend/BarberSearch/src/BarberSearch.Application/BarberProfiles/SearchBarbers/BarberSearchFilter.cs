@@ -23,6 +23,11 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// </param>
 /// <param name="Cursor">Позиция продолжения выдачи; <c>null</c> — первая страница.</param>
 /// <param name="Limit">Сколько строк прочитать из базы (pageSize + 1).</param>
+/// <param name="Location">
+/// Геопозиция клиента; <c>null</c> — прежний порядок <c>rating DESC NULLS LAST, id</c>.
+/// При заданной позиции репозиторий сортирует по расстоянию до ближайшего активного салона,
+/// а рейтинг в порядке не участвует (см. <c>SearchAsync</c>).
+/// </param>
 public sealed record BarberSearchFilter(
     string? City,
     Guid? SpecializationId,
@@ -31,4 +36,5 @@ public sealed record BarberSearchFilter(
     Language? Language,
     string? AdditionalService,
     BarberSearchCursor? Cursor,
-    int Limit);
+    int Limit,
+    SearchLocation? Location = null);

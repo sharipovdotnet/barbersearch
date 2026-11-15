@@ -141,4 +141,31 @@ public sealed class BarberTextTests
     [Fact]
     public void Verified_Constant_ReturnsRussianCaption() =>
         Assert.Equal("Проверен", BarberText.Verified);
+
+    [Theory]
+    [InlineData(0.0, "10 м")]
+    [InlineData(0.05, "50 м")]
+    [InlineData(0.854, "850 м")]
+    [InlineData(0.995, "1,0 км")]
+    [InlineData(1.0, "1,0 км")]
+    [InlineData(1.24, "1,2 км")]
+    [InlineData(9.96, "10,0 км")]
+    [InlineData(12.4, "12 км")]
+    public void Distance_Kilometers_ShowsMetersOrRoundedKilometers(double distanceKm, string expected)
+    {
+        // До километра — метры с округлением до 10 м (точность серверной формулы не выше),
+        // до 10 км — один знак, дальше — целые километры, чтобы подпись не скакала.
+        Assert.Equal(expected, BarberText.Distance(distanceKm));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Distance_UnknownOrInvalid_ReturnsEmpty(double? distanceKm)
+    {
+        // Нет координат — нет подписи: карточка не показывает «NaN км» и не занимает строку.
+        Assert.Equal(string.Empty, BarberText.Distance(distanceKm));
+    }
 }

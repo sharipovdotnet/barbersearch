@@ -56,6 +56,15 @@ public class BarbersController : ApiController
     /// </param>
     /// <param name="cursor">Непрозрачный курсор следующей страницы из предыдущего ответа.</param>
     /// <param name="pageSize">Размер страницы; по умолчанию 20, максимум 100.</param>
+    /// <param name="latitude">
+    /// Широта клиента в градусах (<c>−90..90</c>) для сортировки «сначала ближайшие».
+    /// Передаётся только вместе с <paramref name="longitude"/>: половина пары — <c>400</c>
+    /// с кодом <c>barberSearch.location.invalid</c>.
+    /// </param>
+    /// <param name="longitude">
+    /// Долгота клиента в градусах (<c>−180..180</c>); только вместе с
+    /// <paramref name="latitude"/>.
+    /// </param>
     /// <param name="handler">Обработчик запроса.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     [AllowAnonymous]
@@ -70,6 +79,8 @@ public class BarbersController : ApiController
         [FromQuery] string? additionalService,
         [FromQuery] string? cursor,
         [FromQuery] int? pageSize,
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
         [FromServices] IQueryHandler<PagedResponse<BarberSearchItemResponse>, SearchBarbersQuery> handler,
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
@@ -81,7 +92,9 @@ public class BarbersController : ApiController
                 language,
                 cursor,
                 pageSize,
-                additionalService),
+                additionalService,
+                latitude,
+                longitude),
             cancellationToken));
 
     /// <summary>
