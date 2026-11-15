@@ -8,7 +8,9 @@
         AppThemeBinding — тех же, что в вебе (frontend/src/index.css); литералов здесь нет.
         Шрифт — Geist, зарегистрированный в MauiProgram: Geist для тела, GeistSemiBold для
         заголовков. Размеры по шкале веба (AGENT.md §8.2): заголовок экрана 20–24, заголовок
-        карточки 16, тело 14–16, подпись 12.
+        карточки 16, тело 14–16, подпись 12. Поле ввода — 16, на ступень выше тела:
+        это текст, который человек набирает сам, и на телефоне он должен читаться без
+        напряжения.
     -->
 
     <Style TargetType="ActivityIndicator">
@@ -123,7 +125,7 @@
         <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="FontFamily" Value="Geist"/>
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="PlaceholderColor" Value="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         <Setter Property="MinimumHeightRequest" Value="44"/>
         <Setter Property="MinimumWidthRequest" Value="44"/>
@@ -145,7 +147,7 @@
         <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="FontFamily" Value="Geist"/>
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="PlaceholderColor" Value="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         <Setter Property="MinimumHeightRequest" Value="44"/>
         <Setter Property="MinimumWidthRequest" Value="44"/>
