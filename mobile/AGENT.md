@@ -122,6 +122,17 @@ A local backend is required before running (`backend/docker compose up -d` +
   the page: the revision is a build-time constant and there is nothing to re-read. And when the
   account is created but the automatic sign-in fails, the form is replaced by a «Аккаунт создан»
   card with a plain sign-in, because a second `POST` would answer `409`.
+- **A forgotten password is requested from the app and reset in the browser.** The sign-in form
+  carries the web `LoginDialog`'s «Забыли пароль?» link, which opens `forgot-password` over the
+  profile stack: one email field, `POST api/auth/password-reset`, the generic «Проверьте почту»
+  card for every address — the server answers `204` for an unknown, inactive or malformed one, and
+  the screen must not hint otherwise — and a local 60-second resend cooldown, because the server's
+  own cooldown is silent too. The letter's `/reset-password?token=…` link opens the web page: the
+  app neither opens nor parses it and has no new-password form, the same browser story as email
+  verification and the address change. Two deviations from the web: the card has no «На главную»,
+  because on a phone the back gesture is the return to the sign-in form, and «Безопасность» has no
+  second link, because a signed-in person does not need the reset and the sign-in form is the app's
+  only «forgot» entry.
 - **The portfolio viewer is a page with a swipe, not a dialog with arrows.** The web opens a modal
   lightbox with «Назад»/«Дальше» buttons next to the photo; MAUI has no modal lightbox, and on a
   phone the thumb is on the picture, so the frames are paged by swiping a `CarouselView` and the

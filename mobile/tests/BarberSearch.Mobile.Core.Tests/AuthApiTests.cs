@@ -195,6 +195,46 @@ public sealed class AuthApiTests
         Assert.Contains("user.create.emailTaken", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public async Task RequestPasswordResetAsync_Email_SendsPostWithEmail()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = CreateClient(handler);
+        var api = new AuthApi(httpClient);
+
+        await api.RequestPasswordResetAsync("mobile-test@barbersearch.test");
+
+        Assert.Equal(HttpMethod.Post, handler.LastMethod);
+        Assert.Equal("/api/auth/password-reset", handler.LastUri!.AbsolutePath);
+
+        using var body = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal(
+            "mobile-test@barbersearch.test",
+            body.RootElement.GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task RequestPasswordResetAsync_Unavailable_TurnsIntoErrorCode()
+    {
+        const string problemJson = """
+            {
+              "status": 409,
+              "detail": "Password reset by email is not configured.",
+              "errorCodes": ["auth.passwordReset.unavailable"]
+            }
+            """;
+
+        var handler = new RecordingHandler(HttpStatusCode.Conflict, problemJson, "application/problem+json");
+        using var httpClient = CreateClient(handler);
+        var api = new AuthApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.RequestPasswordResetAsync("mobile-test@barbersearch.test"));
+
+        Assert.Equal(HttpStatusCode.Conflict, exception.StatusCode);
+        Assert.Contains("auth.passwordReset.unavailable", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
     private static HttpClient CreateClient(HttpMessageHandler handler) =>
         new(handler) { BaseAddress = new Uri("http://localhost:5243/") };
 

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Logout;
+using BarberSearch.Contracts.Auth.PasswordReset;
 using BarberSearch.Contracts.Auth.Refresh;
 using BarberSearch.Contracts.Auth.Register;
 using BarberSearch.Contracts.Common;
@@ -8,7 +9,7 @@ using BarberSearch.Contracts.Common;
 namespace BarberSearch.Mobile.Core.Api.Auth;
 
 /// <summary>
-/// HTTP-клиент авторизации: регистрация, вход, refresh и выход.
+/// HTTP-клиент авторизации: регистрация, вход, запрос ссылки сброса, refresh и выход.
 /// </summary>
 /// <remarks>
 /// Клиент тонкий, как <see cref="BarberSearchApi"/>: адрес, сериализация и разбор ошибок.
@@ -54,6 +55,27 @@ public sealed class AuthApi : IAuthApi
 
         return created?.Id
             ?? throw new InvalidOperationException("The API returned an empty registration response.");
+    }
+
+    /// <inheritdoc />
+    public async Task RequestPasswordResetAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient
+            .PostAsJsonAsync(
+                "api/auth/password-reset",
+                new RequestPasswordResetRequest(email),
+                ApiJson.Options,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BarberSearchApiException
+                .FromResponseAsync(response, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />

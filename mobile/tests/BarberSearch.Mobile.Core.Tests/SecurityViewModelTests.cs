@@ -538,6 +538,11 @@ public sealed class SecurityViewModelTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Экран безопасности не регистрирует.");
 
+        public Task RequestPasswordResetAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран безопасности не просит ссылку сброса.");
+
         public Task<TokenResponse> LoginAsync(
             string email,
             string password,

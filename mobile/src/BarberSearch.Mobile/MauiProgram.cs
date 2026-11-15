@@ -100,6 +100,7 @@ public static class MauiProgram
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
         builder.Services.AddTransient<RegisterViewModel>();
+        builder.Services.AddTransient<ForgotPasswordViewModel>();
         builder.Services.AddTransient<BarberCardViewModel>();
         builder.Services.AddTransient<PortfolioViewerViewModel>();
 
@@ -128,6 +129,7 @@ public static class MauiProgram
         builder.Services.AddTransient<MyReviewsPage>();
         builder.Services.AddTransient<EditReviewPage>();
         builder.Services.AddTransient<RegisterPage>();
+        builder.Services.AddTransient<ForgotPasswordPage>();
         builder.Services.AddSingleton<MapPage>();
         builder.Services.AddSingleton<BookingsPage>();
         builder.Services.AddSingleton<ProfilePage>();

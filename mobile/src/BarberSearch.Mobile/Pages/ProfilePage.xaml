@@ -53,6 +53,17 @@
                     Text="{Binding ErrorMessage}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
+                <!-- Ссылка стоит между ошибкой входа и кнопкой, как в диалоге входа веба. -->
+                <Button
+                    Padding="0"
+                    BackgroundColor="Transparent"
+                    Command="{Binding ForgotPasswordCommand}"
+                    FontSize="14"
+                    HorizontalOptions="End"
+                    MinimumHeightRequest="44"
+                    Text="Забыли пароль?"
+                    TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+
                 <Button
                     Command="{Binding LoginCommand}"
                     IsEnabled="{Binding IsFormEnabled}"

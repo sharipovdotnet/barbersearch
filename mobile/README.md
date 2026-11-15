@@ -170,6 +170,16 @@ again with the profile email and the new password and replaces the pair through
 с новым паролем.» and ends the session, because half a pair is worse than a clean sign-out. The web
 does not need this: its cookie session is not the revoked refresh token.
 
+«Забыли пароль?» under the sign-in form opens `forgot-password` over the profile stack. It sends
+one anonymous `POST api/auth/password-reset` with the address and shows the generic «Проверьте
+почту» card for every address — the server answers `204` even for an unknown, inactive or malformed
+one, so the screen never distinguishes them — with a local 60-second resend cooldown, because the
+server's own cooldown is silent as well. The letter's `/reset-password?token=…` link opens the web
+page: the app neither opens nor parses it and has no new-password form, exactly like email
+verification and the address change. The card drops the web's «На главную» (the back gesture returns
+to the sign-in form), and «Безопасность» has no second entry point; both deviations are recorded in
+`AGENT.md` §5.
+
 Email verification is the same browser story: `POST api/auth/email-verification` asks for a letter
 to the current address and the button exists only while the address is unconfirmed (for a verified
 address the server answers `204` and sends nothing). Its cooldown also covers `429` and `409
@@ -269,7 +279,10 @@ resolution with a per-profile cache, cancel/reschedule/review state machines and
 all with fixed time and fake APIs — no emulator. The barber-card slice adds `MediaUrl` (join with
 the API base, variants only for own media), the new `BarberText` formatting, the review page cache,
 cursor handling, both kinds of review errors and the «Дальше» → «Повторить» retry, the portfolio
-viewer's counter and caption, and the card's new sections with their hide rules.
+viewer's counter and caption, and the card's new sections with their hide rules. The password-reset
+slice adds the anonymous request client (body, `204`, `ProblemDetails`) and its screen ViewModel:
+the client-side email checks, the exact «Проверьте почту» wording, the server's failures, the local
+cooldown and its 60-second tick.
 
 ## iOS
 
