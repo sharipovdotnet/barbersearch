@@ -108,8 +108,9 @@ comment is trimmed, sent as `null` when empty and limited to 500 characters.
 The tab reads two independent lists from `GET api/bookings?scope=upcoming|past&pageSize=20&userId=`,
 where `userId` is always the signed-in customer: without it an administrator would receive every
 booking in the system. The cursor is opaque — it is sent back exactly as the server returned it, and
-`nextCursor = null` means the last page. The history list is fetched on its first open and re-read
-only after a cancel, a reschedule or a review; switching tabs inside the screen requests nothing.
+`nextCursor = null` means the last page. The history list is fetched on its first open, re-read
+after a cancel, a reschedule or a review, and refreshed by the auto-refresh while it is the visible
+tab; switching tabs inside the screen otherwise requests nothing.
 
 `BookingResponse` carries only the booking and the ids of the related aggregates — no barber,
 service, salon or time zone names — so each row is completed from the public barber card
@@ -125,10 +126,15 @@ response returned) go through `IBookingsApi`; `POST api/reviews` goes through `I
 is created hidden and waits for moderation, so a booking with `hasReview` shows «Отзыв отправлен»
 instead of the button.
 
-There is no background polling: the lists refresh when the tab appears (silently — the rows stay
-until the answer), on pull-to-refresh and after an action. The «через 2 часа» countdown is
-recomputed by a one-minute timer in the page and touches no network. That deviation from the web,
-which polls «Предстоящие» once a minute, is recorded in `AGENT.md` §5.
+There is a 30-second auto-refresh, not a button: while the tab is on screen and the app is in the
+foreground, a page timer calls `BookingsViewModel.AutoRefreshAsync`, which re-reads the first page
+of the active list silently — the rows stay until the answer and a failed refresh keeps them. The
+timer pauses with `OnDisappearing`, on `Window.Stopped` and resumes on `Window.Resumed`, and it
+yields while a cancel, a pull-to-refresh, the first load or a page append is running; a list where
+a second page was loaded is left alone, because the replace would drop those rows. On top of it the
+lists refresh when the tab appears, on pull-to-refresh and after an action. The «через 2 часа»
+countdown is recomputed by a separate one-minute timer in the page and touches no network. That
+deviation from the web, which polls «Предстоящие» once a minute, is recorded in `AGENT.md` §5.
 
 ## Account (the «Профиль» tab)
 

@@ -14,19 +14,26 @@ namespace BarberSearch.Mobile.Pages;
 /// столько же, сколько сама страница, — их источник ей и принадлежит.
 /// </para>
 /// <para>
-/// Минутный таймер считает обратный отсчёт и доступность переноса без сети: ViewModel этого
-/// делать не может, потому что таймер — платформенная сущность MAUI. Навигация к экранам
-/// переноса и отзыва тоже здесь: Core не знает ни про Shell, ни про маршруты.
+/// Два таймера страницы: раз в минуту пересчитывается обратный отсчёт и доступность переноса
+/// без сети, раз в 30 секунд первая страница активного списка перечитывается молча. ViewModel
+/// этого делать не может, потому что таймер — платформенная сущность MAUI. Отдельной кнопки
+/// «Обновить» нет: список обновляют таймер, свайп, появление вкладки и действия. Таймеры
+/// останавливаются, когда вкладка уходит с экрана и когда приложение уходит в фон: сеть
+/// в невидимом окне не опрашивается. Навигация к экранам переноса и отзыва тоже здесь: Core
+/// не знает ни про Shell, ни про маршруты.
 /// </para>
 /// </remarks>
 public partial class BookingsPage : ContentPage
 {
     private const int RecomputeIntervalSeconds = 60;
+    private const int AutoRefreshIntervalSeconds = 30;
 
     private readonly BookingsViewModel _viewModel;
     private readonly TokenSession _session;
 
     private IDispatcherTimer? _timeTimer;
+    private IDispatcherTimer? _refreshTimer;
+    private bool _isVisible;
 
     /// <summary>
     /// Создаёт вкладку и подписывается на сессию и события ViewModel.
@@ -52,7 +59,7 @@ public partial class BookingsPage : ContentPage
     }
 
     /// <summary>
-    /// Запускает минутный таймер и тихо обновляет активную вкладку.
+    /// Запускает таймеры отсчёта и тихого обновления и тихо обновляет активную вкладку.
     /// </summary>
     /// <remarks>
     /// Обновление при каждом появлении — это и есть «попробовать ещё раз» после возврата с
@@ -63,21 +70,26 @@ public partial class BookingsPage : ContentPage
     {
         base.OnAppearing();
 
+        _isVisible = true;
+
         _session.SessionEnded -= OnSessionEnded;
         _session.SessionEnded += OnSessionEnded;
 
-        _timeTimer ??= CreateTimeTimer();
-        _timeTimer.Start();
+        SubscribeWindowLifecycle();
+        StartTimers();
 
         await _viewModel.InitializeAsync();
     }
 
     /// <summary>
-    /// Останавливает таймер, пока вкладка не видна.
+    /// Останавливает таймеры, пока вкладка не видна.
     /// </summary>
     protected override void OnDisappearing()
     {
-        _timeTimer?.Stop();
+        _isVisible = false;
+
+        StopTimers();
+        UnsubscribeWindowLifecycle();
 
         _session.SessionEnded -= OnSessionEnded;
 
@@ -148,6 +160,16 @@ public partial class BookingsPage : ContentPage
     private void OnTimeTimerTick(object? sender, EventArgs e) => _viewModel.RecomputeTimes();
 
     /// <summary>
+    /// Тихо перечитывает активный список раз в 30 секунд.
+    /// </summary>
+    /// <remarks>
+    /// ViewModel сам пропускает тик, когда список занят: идёт действие, свайп или загрузка.
+    /// Ошибку обновления он тоже показывает сам, поэтому обработчику остаётся только вызов.
+    /// </remarks>
+    private async void OnRefreshTimerTick(object? sender, EventArgs e) =>
+        await _viewModel.AutoRefreshAsync();
+
+    /// <summary>
     /// Отменяет запись после нативного подтверждения.
     /// </summary>
     /// <remarks>
@@ -205,6 +227,86 @@ public partial class BookingsPage : ContentPage
     }
 
     /// <summary>
+    /// Запускает таймеры отсчёта и тихого обновления.
+    /// </summary>
+    private void StartTimers()
+    {
+        _timeTimer ??= CreateTimeTimer();
+        _timeTimer.Start();
+
+        _refreshTimer ??= CreateRefreshTimer();
+        _refreshTimer.Start();
+    }
+
+    /// <summary>
+    /// Останавливает оба таймера, не выбрасывая их.
+    /// </summary>
+    private void StopTimers()
+    {
+        _timeTimer?.Stop();
+        _refreshTimer?.Stop();
+    }
+
+    /// <summary>
+    /// Подписывается на переход приложения в фон и обратно.
+    /// </summary>
+    /// <remarks>
+    /// Уход приложения в фон не вызывает <see cref="OnDisappearing"/>: вкладка остаётся
+    /// «появившейся», и без этой подписки таймер продолжал бы ходить в сеть из невидимого окна.
+    /// </remarks>
+    private void SubscribeWindowLifecycle()
+    {
+        if (Window is null)
+        {
+            return;
+        }
+
+        Window.Stopped -= OnWindowStopped;
+        Window.Stopped += OnWindowStopped;
+        Window.Resumed -= OnWindowResumed;
+        Window.Resumed += OnWindowResumed;
+    }
+
+    /// <summary>
+    /// Снимает подписку на жизненный цикл окна при уходе со вкладки.
+    /// </summary>
+    private void UnsubscribeWindowLifecycle()
+    {
+        if (Window is null)
+        {
+            return;
+        }
+
+        Window.Stopped -= OnWindowStopped;
+        Window.Resumed -= OnWindowResumed;
+    }
+
+    /// <summary>
+    /// Останавливает таймеры, когда приложение ушло в фон.
+    /// </summary>
+    private void OnWindowStopped(object? sender, EventArgs e) => StopTimers();
+
+    /// <summary>
+    /// Возвращает таймеры, когда приложение снова на экране, и пересчитывает время.
+    /// </summary>
+    /// <remarks>
+    /// Проверка <see cref="_isVisible"/> закрывает случай, когда окно ожило уже после ухода
+    /// с вкладки: подписка снимается в <see cref="OnDisappearing"/>, но событие могло быть
+    /// поставлено в очередь раньше. Время пересчитывается сразу: пока приложение было в фоне,
+    /// минутный таймер молчал, и отсчёт в строках иначе остался бы старым до следующего тика.
+    /// </remarks>
+    private void OnWindowResumed(object? sender, EventArgs e)
+    {
+        if (!_isVisible)
+        {
+            return;
+        }
+
+        StartTimers();
+        _viewModel.RecomputeTimes();
+    }
+
+    /// <summary>
     /// Создаёт таймер пересчёта времени.
     /// </summary>
     private IDispatcherTimer CreateTimeTimer()
@@ -213,6 +315,19 @@ public partial class BookingsPage : ContentPage
 
         timer.Interval = TimeSpan.FromSeconds(RecomputeIntervalSeconds);
         timer.Tick += OnTimeTimerTick;
+
+        return timer;
+    }
+
+    /// <summary>
+    /// Создаёт таймер тихого обновления списка.
+    /// </summary>
+    private IDispatcherTimer CreateRefreshTimer()
+    {
+        var timer = Dispatcher.CreateTimer();
+
+        timer.Interval = TimeSpan.FromSeconds(AutoRefreshIntervalSeconds);
+        timer.Tick += OnRefreshTimerTick;
 
         return timer;
     }

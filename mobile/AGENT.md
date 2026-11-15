@@ -91,11 +91,17 @@ A local backend is required before running (`backend/docker compose up -d` +
 - **Bookings are a list, not a hero and a timeline.** The «Записи» tab keeps the web's data and
   wording but drops the web's "next booking" hero and the request → confirmation → visit timeline:
   on a phone the first card of «Предстоящие» carries the «Ближайшая запись» badge and the countdown,
-  and the status badge carries the state. The lists are not polled either, although the web polls
-  «Предстоящие» once a minute: the tab refreshes on appearance (silently — the rows stay until the
-  answer), on pull-to-refresh and after an action, and only the countdown ticks once a minute. This
-  is a deliberate deviation from §8 "the web is the reference", recorded here rather than left as an
-  omission.
+  and the status badge carries the state. The lists also refresh themselves every 30 seconds while
+  the tab is on screen and the app is in the foreground (the page stops both timers on disappearing
+  and on `Window.Stopped`, and restarts them on `Window.Resumed`), and there is no «Обновить»
+  button: a second page timer calls `BookingsViewModel.AutoRefreshAsync`, which re-reads the first
+  page of the active list silently — the rows stay until the answer, and a failed refresh keeps
+  them — on top of the refresh on appearance, on pull-to-refresh and after an action, while the
+  countdown still ticks once a minute. The auto-refresh yields to whatever else is running on the
+  screen (a cancel, a pull, the first load, a page append) and leaves alone a list where the user
+  loaded a second page: a silent replace would throw those rows away. This is a deliberate deviation
+  from §8 "the web is the reference" — the web polls «Предстоящие» once a minute — recorded here
+  rather than left as an omission.
 - **The «Профиль» tab is a hub, not a copy of the web cabinet.** The web wraps every account route
   in its own access gate and renders the avatar card, the email card, the profile form and the
   account details on one page. Mobile keeps one tab: the sign-in form without a session (with a
