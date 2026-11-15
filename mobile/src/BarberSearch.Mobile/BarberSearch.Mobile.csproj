@@ -54,4 +54,13 @@
 		<ProjectReference Include="..\BarberSearch.Mobile.Core\BarberSearch.Mobile.Core.csproj" />
 	</ItemGroup>
 
+	<!--
+		Хост локального бэкенда для отладочной сборки на реальном телефоне по локальной сети.
+		Пустое значение — правило по устройству: эмулятор видит машину как 10.0.2.2, телефон —
+		как localhost через `adb reverse`. Пример: -p:DevApiHost=192.168.1.10 (см. README).
+	-->
+	<ItemGroup Condition="'$(DevApiHost)' != ''">
+		<AssemblyMetadata Include="BarberSearch.DevApiHost" Value="$(DevApiHost)" />
+	</ItemGroup>
+
 </Project>

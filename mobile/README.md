@@ -39,10 +39,19 @@ assembly comes along transitively — it is types only, no EF Core and no databa
 
 ## API
 
-Base address is chosen per platform in `MauiProgram.DevelopmentApiBaseAddress`: the Android
-emulator reaches the host as `10.0.2.2:5243`, the iOS simulator as `localhost:5243`. The Android
-manifest allows cleartext HTTP for that local client only — remove it when a stand with HTTPS
-appears.
+The base address is resolved at startup by `DevelopmentEndpoints` (Core) from a single host: the
+Android emulator reaches the host as `10.0.2.2:5243`, the iOS simulator and a physical phone as
+`localhost:5243`. A phone has no way to see the developer machine's own address, so the port travels
+over the cable (or Wi-Fi debugging) through `adb reverse` — the app itself stays on `localhost`:
+
+```powershell
+adb reverse tcp:5243 tcp:5243    # API
+adb reverse tcp:5173 tcp:5173    # the site behind the Policy link
+```
+
+The forward lives as long as the connection: run it again after the cable, the phone or the adb
+server restarts. The Android manifest allows cleartext HTTP for that local client only — remove it
+when a stand with HTTPS appears.
 
 Authentication runs on the token branch of the auth controller: `POST /api/auth/login` returns the
 access token and the refresh token **in the body** (`TokenResponse`), `POST /api/auth/refresh`
@@ -303,6 +312,22 @@ dotnet build src/BarberSearch.Mobile/BarberSearch.Mobile.csproj -f net10.0-andro
 ```
 
 The APK lands in `src/BarberSearch.Mobile/bin/Debug/net10.0-android/` (`ru.barbersearch.mobile-Signed.apk`).
+
+On a physical phone, forward the two dev ports once per connection before `-t:Run` (the app is built
+against `localhost`, see API):
+
+```powershell
+adb reverse tcp:5243 tcp:5243
+adb reverse tcp:5173 tcp:5173
+```
+
+A phone on the same Wi-Fi can skip the forward and be built against the machine's own address
+instead — the backend then has to listen on the LAN interface, and the firewall has to allow both
+ports:
+
+```powershell
+dotnet build src/BarberSearch.Mobile/BarberSearch.Mobile.csproj -f net10.0-android -p:DevApiHost=192.168.1.10
+```
 
 ## Tests
 

@@ -64,7 +64,11 @@ project with `-f net10.0-android`.
 
 A local backend is required before running (`backend/docker compose up -d` +
 `dotnet run --project BarberSearch/src/BarberSearch.Web`). The Android emulator reaches the host as
-`10.0.2.2:5243`, the iOS simulator as `localhost:5243`.
+`10.0.2.2:5243`, the iOS simulator as `localhost:5243`. A physical phone cannot see the machine's own
+address, so it reaches the host as `localhost:5243` too, and the port is forwarded by
+`adb reverse tcp:5243 tcp:5243` (`tcp:5173` for the site) once per connection; a phone on the same
+network may use the machine's address instead via `-p:DevApiHost=192.168.1.10`. `DevelopmentEndpoints`
+in Core owns both base addresses.
 
 ## 5. Decisions made and why
 
@@ -210,6 +214,16 @@ A local backend is required before running (`backend/docker compose up -d` +
   `SetStatusBarColor`, so `PlatformTheme` leaves the whole call out on 35+ — toggling only the icons
   there would put dark icons on the platform's dark bar. iOS takes the window's user-interface style
   from the same theme and needs no platform code.
+- **A physical phone reaches the dev backend through `adb reverse`, not through the machine's LAN
+  address.** The app has to name one address, and the machine's address is the one thing a phone does
+  not know: `10.0.2.2` is the emulator's alias for the host and on a device it means the device
+  itself. So the device build uses `localhost` and the port is forwarded over the cable
+  (`adb reverse tcp:5243 tcp:5243`, `tcp:5173` for the site): it works on any network, needs no
+  firewall rule and survives the machine changing its address. The LAN story is not dropped but moved
+  behind a build parameter — `-p:DevApiHost=192.168.1.10`, written into the assembly as metadata and
+  read in debug only — because a phone on the same Wi-Fi is a different topology, not a different
+  default. `DevelopmentEndpoints` in Core owns the rule and both base addresses, so the choice is one
+  tested function rather than two `#if` constants.
 
 ## 6. What the backend still lacks
 

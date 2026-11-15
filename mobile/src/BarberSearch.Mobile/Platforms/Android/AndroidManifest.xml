@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 	<!--
-		usesCleartextTraffic открыт ради локального бэкенда по http://10.0.2.2:5243.
+		usesCleartextTraffic открыт ради локального бэкенда: эмулятор ходит на http://10.0.2.2:5243,
+		телефон — на http://localhost:5243 через `adb reverse`.
 		Убрать, когда появится стенд по HTTPS: Play помечает приложение с открытым трафиком.
 	-->
 	<!--
