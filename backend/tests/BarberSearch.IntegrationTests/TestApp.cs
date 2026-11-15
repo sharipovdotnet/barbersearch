@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Privacy;
+using BarberSearch.Application.Push;
 using BarberSearch.Contracts.Auth.Csrf;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Register;
@@ -14,6 +15,7 @@ using BarberSearch.Infrastructure.Postgresql;
 using BarberSearch.Web.Auth;
 using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
+using BarberSearch.Web.Push;
 using BarberSearch.Web.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -168,7 +170,8 @@ public sealed class TestApp : IAsyncDisposable
         IReadOnlyDictionary<string, string?>? configuration = null,
         TimeProvider? timeProvider = null,
         ITelegramSender? telegramSender = null,
-        IEmailSender? emailSender = null)
+        IEmailSender? emailSender = null,
+        IPushSender? pushSender = null)
     {
         ArgumentNullException.ThrowIfNull(database);
 
@@ -208,7 +211,8 @@ public sealed class TestApp : IAsyncDisposable
             var factory = new IntegrationWebApplicationFactory(
                 timeProvider,
                 telegramSender,
-                emailSender);
+                emailSender,
+                pushSender);
 
             var client = factory.CreateClient(new WebApplicationFactoryClientOptions
             {
@@ -231,6 +235,11 @@ public sealed class TestApp : IAsyncDisposable
             // Тот же порядок для воркера outbox: стартовый тик идёт параллельно запуску хоста.
             var emails = factory.Services.GetRequiredService<EmailDispatchService>();
             await emails.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+
+            // И для push-воркера: стартовый тик не должен гоняться с токенами,
+            // которые тест сидирует сразу после старта.
+            var push = factory.Services.GetRequiredService<PushDispatchService>();
+            await push.InitialTickCompleted.WaitAsync(TimeSpan.FromSeconds(30));
 
             // Уборка токенов подтверждения email тоже идёт сразу на старте: DELETE не должен
             // гоняться со строками, которые тест сидирует после старта хоста.
@@ -271,15 +280,18 @@ public sealed class TestApp : IAsyncDisposable
         private readonly TimeProvider? _timeProvider;
         private readonly ITelegramSender? _telegramSender;
         private readonly IEmailSender? _emailSender;
+        private readonly IPushSender? _pushSender;
 
         public IntegrationWebApplicationFactory(
             TimeProvider? timeProvider,
             ITelegramSender? telegramSender,
-            IEmailSender? emailSender)
+            IEmailSender? emailSender,
+            IPushSender? pushSender)
         {
             _timeProvider = timeProvider;
             _telegramSender = telegramSender;
             _emailSender = emailSender;
+            _pushSender = pushSender;
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -320,6 +332,12 @@ public sealed class TestApp : IAsyncDisposable
                         services.RemoveAll<IEmailSenderAvailability>();
                         services.AddSingleton(availability);
                     }
+                }
+
+                if (_pushSender is not null)
+                {
+                    services.RemoveAll<IPushSender>();
+                    services.AddSingleton(_pushSender);
                 }
             });
         }
@@ -527,6 +545,21 @@ public sealed class TestApp : IAsyncDisposable
     public async Task<EmailTickResult> RunEmailDispatchAsync()
     {
         var service = Services.GetRequiredService<EmailDispatchService>();
+
+        return await service.RunTickAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Прогоняет один тик push-воркера: тест получает push без ожидания таймера.
+    /// </summary>
+    /// <remarks>
+    /// В тестовом хосте интервал — час (<c>Push__IntervalSeconds=3600</c>), поэтому строка
+    /// появляется у <see cref="CapturingPushSender"/> только после явного тика. При
+    /// <c>Push:Enabled=false</c> тик ничего не делает.
+    /// </remarks>
+    public async Task<PushTickResult> RunPushTickAsync()
+    {
+        var service = Services.GetRequiredService<PushDispatchService>();
 
         return await service.RunTickAsync(CancellationToken.None);
     }

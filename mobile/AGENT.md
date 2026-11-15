@@ -1,8 +1,9 @@
 # AGENT.md — BarberSearch (mobile)
 
 > Context for agents and developers. Read together with the `README.md` next to it and with
-> `backend/AGENT.md` (§7 — domain, §16 — API, §17 — authorization) and `frontend/AGENT.md`
-> (§7 — design system, §8 — UI kit): the mobile UI is designed after the web app, see §8 below.
+> `backend/AGENT.md` (§7 — domain, §16 — API, §17 — authorization, §20 — push) and
+> `frontend/AGENT.md` (§7 — design system, §8 — UI kit): the mobile UI is designed after the web
+> app, see §8 below.
 
 ---
 
@@ -18,8 +19,8 @@
 ## 1. What this is
 
 The BarberSearch client mobile app for iOS and Android on .NET MAUI (.NET 10).
-The user searches for a barber, opens the card and the free slots, books an appointment, and sees
-their bookings.
+The user searches for a barber, opens the card and the free slots, books an appointment, sees
+their bookings, and — on Android — receives a push reminder an hour before a confirmed visit.
 
 The barber cabinet and the admin section live on the web (`frontend/`). They will not exist in the
 mobile app: a schedule and working hours are not filled in from a phone.
@@ -33,6 +34,9 @@ mobile app: a schedule and working hours are not filled in from a phone.
 | Core without MAUI (HTTP client, ViewModels) | `mobile/src/BarberSearch.Mobile.Core` |
 | Interface language, English catalog | `mobile/src/BarberSearch.Mobile.Core/Localization` |
 | App language switch and XAML `Translate` markup | `mobile/src/BarberSearch.Mobile/Localization` |
+| Push contracts, registrar, options, payload (no MAUI) | `mobile/src/BarberSearch.Mobile.Core/Push` |
+| Push platform code (Android FCM, notifications, tap router) | `mobile/src/BarberSearch.Mobile/Platforms/Android/Push`, `mobile/src/BarberSearch.Mobile/Push` |
+| Firebase config (ignored by `mobile/.gitignore`) | `mobile/src/BarberSearch.Mobile/Resources/Raw/push.json`; template — `push.example.json` beside it |
 | Core tests | `mobile/tests/BarberSearch.Mobile.Core.Tests` |
 | API contracts (project reference) | `backend/BarberSearch/src/BarberSearch.Contracts` |
 | Git root | `D:\Projects\barbersearch` — the mobile app sits inside the repository, not next to it |
@@ -48,6 +52,8 @@ mobile app: a schedule and working hours are not filled in from a phone.
 | MVVM | CommunityToolkit.Mvvm 8.4.0, `[ObservableProperty]` on fields |
 | Android | `SupportedOSPlatformVersion` 24, `ApplicationId` `ru.barbersearch.mobile` |
 | iOS | `SupportedOSPlatformVersion` 15.0 |
+| Android push | `Xamarin.Firebase.Messaging` **125.0.0.1**, pinned exactly in an Android-only `ItemGroup`; no `google-services.json` |
+| Firebase config | `Resources/Raw/push.json` (ignored by `mobile/.gitignore`), initialized programmatically; `push.example.json` is a template and is excluded from the APK |
 
 ## 4. Build and verify
 
@@ -61,6 +67,11 @@ dotnet build src/BarberSearch.Mobile/BarberSearch.Mobile.csproj -f net10.0-ios  
 On Windows only Android builds: the iOS target needs macOS with Xcode 26. The whole solution
 (`dotnet build BarberSearch.Mobile.sln`) fails on iOS on Windows — that is expected, build the app
 project with `-f net10.0-android`.
+
+Push needs no Firebase project at build time. Without `Resources/Raw/push.json` the Android app
+compiles and behaves exactly as before: no notification permission, no «Присылать напоминания» row,
+no Firebase initialization. A project is needed only to exercise real delivery; see §5 and the
+README.
 
 A local backend is required before running (`backend/docker compose up -d` +
 `dotnet run --project BarberSearch/src/BarberSearch.Web`). The Android emulator reaches the host as
@@ -245,10 +256,88 @@ in Core owns both base addresses.
   read in debug only — because a phone on the same Wi-Fi is a different topology, not a different
   default. `DevelopmentEndpoints` in Core owns the rule and both base addresses, so the choice is one
   tested function rather than two `#if` constants.
+- **The reminder text is composed by the server, in Russian, and the channel is Android/FCM-first.**
+  The app never formats reminder text. FCM delivers a `notification` payload that Android shows even
+  when the process is dead, so the title and body must exist before any app code runs; a data-only
+  message with a background handler would be unreliable on modern Android and would add a second
+  localization path. The server also owns the salon's IANA zone and the «сегодня»/«завтра» word, and
+  `PushMessages` is covered byte-for-byte by backend tests. Russian is deliberate: the server stores
+  no device locale, and customer-facing booking notifications follow the product's Russian wording
+  (the app's RU/EN switch does not translate push). Android is the only implemented platform;
+  `IosPushPermission`/`IosPushTokenProvider` are stubs that answer «disabled», so an iOS build pulls
+  no Firebase, asks for no permission and shows no reminder row. APNs is a later slice — the shared
+  token table already reserves `PushPlatform.Ios`.
+- **Firebase is a local file, not a build input: no `google-services.json`, and the app builds
+  without a Firebase project.** `Resources/Raw/push.json` is camelCase
+  `{ enabled, projectId, applicationId, apiKey, senderId }`, where `applicationId` is the Firebase
+  Android app id (`mobilesdk_app_id`, not the package name), `apiKey` is the Firebase web API key and
+  `senderId` is the GCM/FCM sender id. `PushBootstrap.Initialize` reads the asset synchronously at
+  startup and builds `FirebaseOptions` programmatically; the `reminders` channel is created later by
+  `App`, after localization (see the next bullet). Absent, invalid, `enabled: false` or a blank field
+  all become `PushOptions.Disabled`: no Firebase init, no permission prompt, no channel and no row
+  in «Профиль». The file is ignored by `mobile/.gitignore` because the key and ids are per stand;
+  the checked-in `push.example.json` documents the shape and is excluded from `MauiAsset`, so it
+  never enters the APK. No `GoogleServicesJson` item exists, by design: the configuration must stay
+  optional for the repository and CI.
+- **`Xamarin.Firebase.Messaging` is pinned to 125.0.0.1 and referenced only by the Android target.**
+  Newer 125.0.1+/125.1.x lift AndroidX, and restore fails with NU1608 — an error under
+  `TreatWarningsAsErrors`; 125.1+ also marks the token APIs (`GetToken`, `OnNewToken`) obsolete,
+  while `FcmPushTokenProvider` is built on them. 125.0.0.1 restores and builds clean, so the exact
+  version is intentional, not a leftover. The `ItemGroup` is conditioned on the Android platform, so
+  the iOS build references no Firebase package at all.
+- **The device token is a lifecycle, not one registration call.** Registration runs on
+  `TokenSession.SessionStarted` (only the signed-out → signed-in transition, not on every refresh),
+  on `Window.Resumed` (covers a session restored from storage and every return to the foreground) and
+  on FCM `OnNewToken` (reinstall, cleared data, token rotation). An explicit sign-out unregisters
+  **before** the logout request (with a 5-second cap), not merely before `TokenSession.ClearAsync`:
+  `POST unregister` needs the Bearer pair, and logout revokes it. A failed unregister keeps the
+  persisted marker and is retried by the next ensure while the toggle is off; a later sign-in always
+  re-POSTs the token, so it moves to the new user instead of staying with the old one. An expired
+  session cannot send unregister at all, so its marker simply stays. Every call is swallowed and
+  never blocks a screen: after login or profile load the registration is fire-and-forget, with
+  `IsLoading`/`IsSigningIn` reset first, so the permission dialog and the FCM round-trip cannot hold
+  the spinner or the «Входим…» button. A failed registration clears the marker; a transient failure
+  (HTTP, timeout, cancellation) is `PushTokenStatus.TransientFailure`, while only the device-level
+  `Unavailable` means «this phone cannot receive push». A session generation counter stops a
+  late registration from writing the marker after sign-out. `IPushStateStore` keeps the choice and
+  the last token under `barbersearch.push.enabled` / `barbersearch.push.token`, and an in-session
+  token field prevents a second `POST` for the same token.
+- **«Присылать напоминания» exists only when push is configured.** The row sits between the email
+  card and «Личные данные» in «Профиль», is a global `Switch` with a 44 pt target, and is hidden
+  entirely when `IsPushConfigured` is false. It is on by default (`IPushStateStore.IsEnabled` defaults
+  to `true`). A denied permission shows «Уведомления выключены в настройках телефона. Разрешите их,
+  чтобы получать напоминания.» with «Открыть настройки» and keeps the person's switch on; no Play
+  services / no FCM token shows «Уведомления недоступны на этом устройстве». A transient network
+  failure shows no hint at all — the next ensure retries. Switching off calls `SetEnabledAsync(false)`,
+  which attempts to unregister the device and keeps the marker if the request fails, so the next
+  ensure retries while the toggle is off. The channel is `reminders`, importance `Default`; its
+  visible name and description are localized keys «Напоминания» / «Напоминания о записях» and are
+  created/updated by `App` **after** localization is initialized (not in `MauiProgram`), only when
+  push is configured. Notifications use the monochrome lucide bell vector
+  `Platforms/Android/Resources/drawable/notification_bell.xml` as the small icon, and the manifest
+  sets `com.google.firebase.messaging.default_notification_icon` /
+  `...default_notification_channel_id=reminders`, so a background notification shown by the system
+  gets the same icon and channel. `POST_NOTIFICATIONS` is declared in the manifest and requested
+  only after push is configured. A foreground message is posted locally (`AndroidNotifications`), a
+  background one is shown by the system. A tap opens the «Записи» tab via `//bookings`: cold start
+  reads the extras in `MainActivity.OnCreate` **only when `savedInstanceState is null`** (a restored
+  process must not jump tabs), warm start in `OnNewIntent` (`LaunchMode.SingleTop`), and the router
+  waits for `Shell.Current`. There is no per-booking deep link because `GET api/bookings/{id}` does
+  not exist and the list already shows the visit. Tests add 47 cases (624 total): options parsing and
+  the `Disabled` fallback, the registrar lifecycle (session events and generations, token refresh,
+  sign-out-before-logout ordering, failed-unregister retry, transient status, one `POST` per token),
+  the API client (`204`, no body), payload parsing/routing and the «Профиль» toggle/status texts
+  (including the rule that a transient failure shows no device hint). iOS compiles after an iOS
+  `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
+  `[src/BarberSearch.Mobile/Platforms/**/*.cs]` section (the MAUI-mandated `AppDelegate` and
+  `AndroidPushPermission` names) plus the pointwise `IPushPermission.cs` entry. No real FCM delivery
+  was exercised because there is no Firebase project. The production backend stays `Push:Enabled=false`
+  until `/privacy` is amended and `PrivacyPolicy.Version` is bumped (`backend/AGENT.md` §20.9); a
+  build without `push.json` sends nothing anywhere.
 
 ## 6. What the backend still lacks
 
-The mobile MVP is blocked by three backend changes (`backend/`) that do not exist yet:
+The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:
 
 1. **Geo points for the map.** `Salon` has coordinates and the public search now ranks by the
    distance to the nearest one, but there is still no public endpoint of points within a radius or
@@ -257,10 +346,12 @@ The mobile MVP is blocked by three backend changes (`backend/`) that do not exis
    «Карта» tab can draw anything.
 2. **Reading favourites.** `POST`/`DELETE /api/users/{id}/favorites/{barberProfileId}` exist, but
    there is no `GET` for the list.
-3. **Push.** There is no infrastructure at all: no device/token table, no FCM/APNs, no client
-   notifications. Reminders today are a Telegram bot for barbers and an email outbox.
 
-Until then the "Map", "Favourites" and push screens have nothing to build on.
+Push reminders are **no longer** in this list: the backend has device/token tables, the FCM
+transport and the worker (`backend/AGENT.md` §20), and the app registers the device, shows the
+reminder and routes a tap to «Записи». A per-booking deep link is still impossible — there is no
+`GET api/bookings/{id}` — but the list already contains the visit, so the slice does not need it.
+Until the two items above land, the "Map" and "Favourites" screens have nothing to build on.
 
 ## 7. Working rules
 

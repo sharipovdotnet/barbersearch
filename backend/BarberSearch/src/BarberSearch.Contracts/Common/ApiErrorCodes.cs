@@ -1518,6 +1518,71 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Push-уведомления клиенту: доставка через FCM и регистрация устройств.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Коды ошибок валидации токена и платформы живут в домене
+    /// (<c>pushDeviceToken.token.invalid</c>, <c>pushDeviceToken.token.tooLong</c>,
+    /// <c>pushDeviceToken.platform.unknown</c>, <c>pushNotification.create.*</c>) и здесь
+    /// не дублируются (AGENT.md §10.7).
+    /// </para>
+    /// <para>
+    /// Три кода доставки — служебные: клиентских ответов у push-очереди нет, они попадают
+    /// в <c>PushNotification.LastError</c> и в журнал. Регистрация устройства отвечает
+    /// <c>204</c> и этих кодов не возвращает.
+    /// </para>
+    /// </remarks>
+    public static class Push
+    {
+        /// <summary>
+        /// Временная ошибка отправки (сеть, таймаут, <c>429</c>, <c>5xx</c>); попытка
+        /// повторяется.
+        /// </summary>
+        public const string Send = "push.send";
+
+        /// <summary>
+        /// Проблема с credentials (<c>401/403</c>) или транспорт не настроен; попытка
+        /// повторяется.
+        /// </summary>
+        /// <remarks>
+        /// Отдельный код от <see cref="Send"/>: по нему видно, что дело не в устройстве
+        /// и не в сети, а в сервисном аккаунте, — это подсказка эксплуатации.
+        /// </remarks>
+        public const string Unavailable = "push.unavailable";
+
+        /// <summary>
+        /// FCM отверг токен как мёртвый (<c>UNREGISTERED</c> либо документированное сообщение
+        /// о недействительном registration token); строка токена удаляется, повторять нечего.
+        /// </summary>
+        /// <remarks>
+        /// Не любой <c>404</c> и не любой <c>400 INVALID_ARGUMENT</c>: те же коды FCM отдаёт
+        /// на неверный проект и кривое тело запроса, и удалять устройства по ошибке
+        /// конфигурации нельзя.
+        /// </remarks>
+        public const string TokenUnregistered = "push.tokenUnregistered";
+
+        /// <summary>
+        /// Префикс кодов сохранения напоминания; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        /// <remarks>
+        /// Вставка идёт <c>ON CONFLICT DO NOTHING</c> по <c>booking_id</c>, поэтому
+        /// уникальность здесь не ошибка, а штатный ответ «строка уже есть».
+        /// </remarks>
+        public const string NotificationAddPrefix = "pushNotification.add";
+
+        /// <summary>
+        /// Префикс кодов обновления напоминания; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        public const string NotificationUpdatePrefix = "pushNotification.update";
+
+        /// <summary>
+        /// Префикс кодов upsert устройства; к нему добавляется суффикс из фабрик.
+        /// </summary>
+        public const string DeviceTokenUpdatePrefix = "pushDeviceToken.update";
+    }
+
+    /// <summary>
     /// Суффикс нарушения уникальности; <c>409</c>.
     /// </summary>
     /// <param name="codePrefix">Префикс операции, например <c>booking.add</c>.</param>

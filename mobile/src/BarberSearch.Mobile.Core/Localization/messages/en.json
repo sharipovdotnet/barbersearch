@@ -399,5 +399,12 @@
   "Сначала ближайшие мастера": "Nearest first",
   "Определяем геопозицию…": "Detecting your location…",
   "Геопозиция недоступна — показываем всех мастеров. Разрешите доступ в настройках телефона.": "Location is unavailable — showing all barbers. Allow access in your phone settings.",
-  "Не удалось определить геопозицию — показываем всех мастеров.": "Could not determine your location — showing all barbers."
+  "Не удалось определить геопозицию — показываем всех мастеров.": "Could not determine your location — showing all barbers.",
+
+  "Присылать напоминания": "Send reminders",
+  "Уведомления выключены в настройках телефона. Разрешите их, чтобы получать напоминания.": "Notifications are off in your phone settings. Allow them to receive reminders.",
+  "Уведомления недоступны на этом устройстве": "Notifications aren't available on this device",
+  "Открыть настройки": "Open settings",
+  "Напоминания": "Reminders",
+  "Напоминания о записях": "Booking reminders"
 }

@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "projectId": "barbersearch-example",
+  "applicationId": "1:000000000000:android:0000000000000000000000",
+  "apiKey": "REPLACE_WITH_FIREBASE_WEB_API_KEY",
+  "senderId": "000000000000"
+}

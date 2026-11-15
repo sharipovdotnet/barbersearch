@@ -5,11 +5,12 @@ using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.BarberRequests;
 using BarberSearch.Application.Bookings;
 using BarberSearch.Application.EmailChanges;
-using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.Emails;
+using BarberSearch.Application.EmailVerifications;
 using BarberSearch.Application.HairServices;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.PasswordResets;
+using BarberSearch.Application.Push;
 using BarberSearch.Application.RefreshTokens;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Application.Salons;
@@ -96,6 +97,9 @@ public static class DependencyInjection
         services.AddScoped<IBarberNotificationRepository, BarberNotificationsRepository>();
         services.AddScoped<IBarberNotificationSettingsRepository, BarberNotificationSettingsRepository>();
         services.AddScoped<IReminderSourceRepository, ReminderSourceRepository>();
+        services.AddScoped<IPushNotificationRepository, PushNotificationRepository>();
+        services.AddScoped<IPushDeviceTokenRepository, PushDeviceTokenRepository>();
+        services.AddScoped<IPushSourceRepository, PushSourceRepository>();
         services.AddScoped<ITelegramUpdateRepository, TelegramUpdateRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

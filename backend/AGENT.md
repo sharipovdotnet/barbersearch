@@ -1,11 +1,11 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: **12 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> Code state: **13 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **588 domain + 878 application + 317 infrastructure + 292 integration (2075 total)**;
-> the three unit projects are green locally (2026-11-12), integration runs on PostgreSQL
+> Tests: **625 domain + 1044 application + 414 infrastructure + 337 integration (2420 total)**;
+> the three unit projects are green locally (2026-11-15), integration runs on PostgreSQL
 > (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
@@ -22,7 +22,8 @@
 [§16. Web / API layer](#16-web--api-layer-added-2026-10-16) ·
 [§17. Auth: cookie + JWT](#17-auth-cookie--jwt-added-2026-10-19) ·
 [§18. Logging: Serilog](#18-logging-serilog-file-sink-added-2026-11-05) ·
-[§19. Email outbox](#19-email-outbox-added-2026-11-09)
+[§19. Email outbox](#19-email-outbox-added-2026-11-09) ·
+[§20. Push notifications: customer reminders](#20-push-notifications-customer-reminders-added-2026-11-15)
 
 ---
 
@@ -46,10 +47,10 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
 | Working branch | `features/issue-6` (default: `main`) |
-| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 588 xunit tests) |
-| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 873 xunit tests, fakes instead of a database) |
-| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 293 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 279 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 625 xunit tests) |
+| Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 1044 xunit tests, fakes instead of a database) |
+| Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 414 xunit tests, no database) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 337 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -62,7 +63,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (six src projects + four test projects) |
+| Target framework | `net10.0` (nine src projects + four test projects) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
@@ -85,8 +86,7 @@ Package versions are inline in `.csproj`. `global.json`, `Directory.Build.props`
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 10 projects (Web, Domain, Application, Contracts,
-    │                                        Infrastructure.Postgresql, Shared, four test projects)
+    ├── BarberSearch.sln                  ← 13 projects (nine src + four test)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -136,10 +136,10 @@ backend/                                  ← workspace root
         │       └── {Operation}/          ← XxxCommand/XxxQuery + XxxHandler per operation (145)
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
-        │   ├── Configurations/           ← 24 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 36 migrations + ApplicationDbContextModelSnapshot
-        │   ├── Repositories/             ← RepositoryBase<T> + 17 repository implementations
-        │   ├── ApplicationDbContext.cs   ← 24 DbSet + ApplyConfigurationsFromAssembly + extensions
+        │   ├── Configurations/           ← 27 × IEntityTypeConfiguration<T>
+        │   ├── Migrations/               ← 37 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Repositories/             ← RepositoryBase<T> + 22 repository implementations
+        │   ├── ApplicationDbContext.cs   ← 27 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
         │   └── BarberSearch.Infrastructure.Postgresql.csproj → Application, Domain
         │
@@ -156,16 +156,23 @@ backend/                                  ← workspace root
         │   ├── TelegramSenderExtensions.cs ← AddTelegramSender: настройки, ITelegramBot, HttpClient, отправитель
         │   └── BarberSearch.Infrastructure.Telegram.csproj → Application
         │
+        ├── BarberSearch.Infrastructure.Push/           ← FCM HTTP v1: push клиенту (§20)
+        │   ├── FcmPushSender.cs          ← IPushSender: POST messages:send, разбор ответа и коды ошибок
+        │   ├── FcmAccessTokenProvider.cs ← RS256 JWT сервисного аккаунта + кэш access-токена
+        │   ├── PushSenderExtensions.cs   ← AddPushSender: PushOptions, именованный HttpClient, синглтоны
+        │   └── BarberSearch.Infrastructure.Push.csproj → Application, Contracts, Shared
+        │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
             ├── Emails/                   ← EmailDispatchService (воркер outbox) + EmailTickResult (§19)
-            ├── Notifications/            ← ReminderDispatchService (воркер напоминаний)
+            ├── Notifications/            ← ReminderDispatchService (воркер напоминаний барберу)
+            ├── Push/                     ← PushDispatchService (воркер push) + PushTickResult (§20)
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             │                               + MediaDelivery (разбор ?size, ETag/304, политика кэша)
-            ├── Controllers/              ← 32 контроллера: 31 доменный (144 endpoints) + AuthController (12 actions)
+            ├── Controllers/              ← 33 контроллера: 32 доменных (149 endpoints) + AuthController (14 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -178,7 +185,7 @@ backend/                                  ← workspace root
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
             │                               Storage:Provider/RootPath (issue-84; avatars — issue-85; S3 — issue-92) +
             │                               Logging:LogLevel / Logging:File (§18) +
-            │                               EmailOutbox (§19) + AllowedHosts
+            │                               EmailOutbox (§19) + Push (§20; Enabled=false) + AllowedHosts
             ├── appsettings.Development.json
             ├── Properties/launchSettings.json   ← http:5243, https:7175
             └── BarberSearch.Web.http     ← requests for the main flows
@@ -233,7 +240,9 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 `PaymentMethod` в контрактах) · `BarberSearch.Infrastructure.Email` → `Application` только
 (почтовый транспорт не знает домена и EF) · `BarberSearch.Infrastructure.Telegram` →
 `Application` только (транспорт Bot API не знает домена и EF; Web видит и его настройки —
-контроллеру вебхука нужен `WebhookSecret`) · `Shared` → CSharpFunctionalExtensions.
+контроллеру вебхука нужен `WebhookSecret`) · `BarberSearch.Infrastructure.Push` → `Application`,
+`Contracts`, `Shared` (FCM-транспорт не знает домена и EF; коды ошибок берёт из `Contracts`) ·
+`Shared` → CSharpFunctionalExtensions.
 
 > Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
 > (`Users/IUserRepository.cs`, `Reviews/IReviewRepository.cs` + `Reviews/ReviewRatingSummary.cs`),
@@ -243,12 +252,15 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 > The **composition root** is `BarberSearch.Web/DependencyInjection.cs`: `AddPostgresInfrastructure`
 > reads `ConnectionStrings:Postgres` from configuration (user secrets in Development →
 > `ConnectionStrings__Postgres`; the `appsettings.json` value is intentionally empty, R-46) and
-> hands it to the infrastructure layer; `AddRepositories` registers the seven repositories and
+> hands it to the infrastructure layer; `AddRepositories` registers the repository implementations and
 > `AddApplication` the command/query handlers. `Program.cs` calls the chain, so Web itself never
 > touches `ApplicationDbContext` or any EF type. `Program.cs` starts with
 > `StartupSettings.Load(builder.Configuration, builder.Environment)`: configuration is validated
 > before services are registered, and in `Production` the start fails when `AllowedHosts` is empty
-> or contains `*` (R-47).
+> or contains `*` (R-47). The push chain is registered next to the email one: `AddPushSender(startup.Push)`
+> binds the `Push` section (already range-checked), registers the named `fcm` `HttpClient`, the OAuth
+> token provider and `IPushSender`; `PushDispatchService` is a singleton hosted service so tests can
+> call the same instance's `RunTickAsync` (§20).
 
 ---
 
@@ -354,7 +366,7 @@ its environment variables.
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all twelve projects. Verify with:
+`BarberSearch.sln` lists all thirteen projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
@@ -362,7 +374,8 @@ dotnet sln BarberSearch/BarberSearch.sln list
 
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
 `BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`,
-`BarberSearch.Infrastructure.Email`, `BarberSearch.Infrastructure.Telegram`, `Shared`,
+`BarberSearch.Infrastructure.Email`, `BarberSearch.Infrastructure.Telegram`,
+`BarberSearch.Infrastructure.Push`, `Shared`,
 `..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
 `..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`,
 `..\tests\BarberSearch.Infrastructure.UnitTests\BarberSearch.Infrastructure.UnitTests.csproj`,
@@ -393,11 +406,16 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 `ProjectConfigurationPlatforms`, GUID проекта — `{7C4E1A2B-9D3F-4E58-B6A1-2F8C5D7E9B03}`;
 проект не вложен ни в одну папку решения.
 
-Since 2026-10-25 (R-54) all twelve `Project(…)` entries use the SDK-style project type GUID
+**`BarberSearch.Infrastructure.Push` добавлен 2026-11-15 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Infrastructure.Telegram`, четыре строки
+`ProjectConfigurationPlatforms`, GUID проекта — `{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}`;
+проект не вложен ни в одну папку решения, путь — `src\BarberSearch.Infrastructure.Push\…csproj`.
+
+Since 2026-10-25 (R-54) all thirteen `Project(…)` entries use the SDK-style project type GUID
 `{9A19103F-16F7-4668-BE54-9A1E7A4F7556}`; the legacy C# project-type GUID is gone. The solution
 folder `tests` keeps `{2150E333-…}`. Nothing else in the file was touched: project GUIDs, paths,
 configurations and the order of the lines are unchanged. `dotnet sln list` still prints the same
-twelve projects, and Debug and Release build with 0 errors / 0 warnings.
+thirteen projects, and Debug and Release build with 0 errors / 0 warnings.
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
 > adds `x64`/`x86` solution configurations for every project and nests the new project into the
@@ -417,7 +435,7 @@ tree without trouble. Retry that one command with the `danger-full-access` sandb
 run it from a normal developer shell — then both commands succeed:
 
 ```powershell
-dotnet build BarberSearch/BarberSearch.sln     # 10 projects, 0 errors, 0 warnings
+dotnet build BarberSearch/BarberSearch.sln     # 13 projects, 0 errors, 0 warnings
 ```
 
 If the session is ever confined again, the symptom is
@@ -546,6 +564,7 @@ Target layering (bold = already exists):
 ```
 BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE]
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
+BarberSearch.Infrastructure.Push → FCM HTTP v1 transport, OAuth token, no FCM SDK   [DONE]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
@@ -596,6 +615,10 @@ EmailVerificationToken (AR)  — standalone one-time email confirmation token
 PasswordResetToken (AR)      — standalone one-time password-reset token (§17.12)
 EmailOutboxMessage (Entity)  — строка transactional outbox писем (§19); не агрегат:
                                инфраструктурная запись, бизнес-инвариантов у неё нет
+PushDeviceToken (Entity)     — токен устройства клиента (§20); не агрегат: адрес доставки,
+                               уникален, внешний ключ на users с ON DELETE CASCADE
+PushNotification (Entity)    — строка очереди push-напоминаний (§20); не агрегат:
+                               снимок визита + состояние доставки, уникальна по booking_id
 ```
 
 AR = `AggregateRoot`, which derives from `Entity`.
@@ -665,6 +688,8 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `Booking` | `EndAt > StartAt`, duration `<= Constants.MAX_BOOKING_DURATION_MINUTES` (1440), `Price >= 0`, `ChangePrice` — only from `Pending`/`Confirmed`/`Completed`, `0..Constants.MAX_BOOKING_PRICE` with at most `Constants.BOOKING_PRICE_DECIMALS` decimal places and a no-op on the same value, `IdempotencyKey` is trimmed and non-empty (≤128), status transitions (`Reschedule` меняет только время и только из `Pending`/`Confirmed`; повтор на то же время — no-op); **either** `UserId` **or** a guest contact: a set `UserId` forbids guest fields (`booking.create.customerAmbiguous`), a `null` `UserId` requires a trimmed guest first name and phone (`booking.create.guestFirstName` / `.guestPhone`, max 100/32) while a guest last name is optional (≤100, blank → `null`); names are trimmed with repeated spaces collapsed |
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 | `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
+| `PushDeviceToken` | `Register`: непустой `UserId`, токен после `Trim()` 1..512 (`pushDeviceToken.token.invalid` / `.token.tooLong`), `Platform` — определённое значение `PushPlatform` (`pushDeviceToken.platform.unknown`), `now` не `default`; `Touch` не откатывает `LastSeenAt` назад и идемпотентен; `TransferTo` требует непустые user/now. Уникальность токена и предел пяти устройств на пользователя держат БД/репозиторий, не агрегат (§20.3) |
+| `PushNotification` | `Create`: непустые `UserId`/`BookingId`, не `default` `StartAt`; снимки после `Trim()` — салон/услуга ≤200, мастер ≤120, IANA-пояс ≤100 (`pushNotification.create.*`); новое напоминание всегда `Pending`; `MarkSent`/`MarkSkipped`/`MarkFailed` — только из `Pending`, иначе `409`; `MarkFailed` увеличивает `DeliveryAttempts`, на пределе (по умолчанию 5, жёсткий максимум `Constants.MAX_NOTIFICATION_DELIVERY_ATTEMPTS`) ставит `Failed`, иначе — `NextAttemptAt` аргументом; `LastError` — код первой ошибки (≤500), не текст сервиса и не ПДн (§20) |
 
 **Портфолио: внешняя ссылка и загруженный файл (2026-11-11, issue-84).** У фотографии два
 доменных пути создания, и они не взаимозаменяемы. `AddPhoto` по-прежнему принимает только
@@ -807,6 +832,15 @@ All persisted enums have **explicit numeric values** (§10.10).
   имена (`allowIntegerValues: false`, R-23); значение вне enum, дошедшее до домена, —
   `400 salon.kind.unknown`. `Salon`/`RentalStudio` обязаны быть в каталоге, `Home`/`Mobile` —
   не могут (`400 salon.isListed.kind`).
+- `PushDelivery`: `Pending=0, Sent=1, Skipped=2, Failed=3` — состояние push-напоминания
+  (§20); `Pending` — единственное состояние, из которого возможны переходы, повторная
+  попытка не создаёт нового состояния (строка остаётся `Pending` с новым `NextAttemptAt`).
+  Числовые значения закреплены check-ограничением `ck_push_notifications_delivery`.
+- `PushPlatform`: `Android=1, Ios=2` — платформа устройства; в этом срезе обслуживается
+  только `Android` (FCM HTTP v1), `Ios` зарезервирован под APNs и не требует миграции
+  схемы. JSON принимает только имена (`"Android"`), целые значения запрещены
+  (`allowIntegerValues: false`, R-23); неизвестное значение, дошедшее до домена, —
+  `400 pushDeviceToken.platform.unknown`.
 - `PhotoModerationStatus`: `Pending=1, Approved=2, Rejected=3` — допуск кадра к публикации,
   общий для `PortfolioPhoto.ModerationStatus` и `User.AvatarModerationStatus`; numeric values
   закреплены check-ограничениями `ck_portfolio_photos_moderation_status` и
@@ -935,21 +969,21 @@ The rules below were pushed to the application layer because the aggregate canno
 
 ## 8. Current state
 
-Сводка на 2026-11-12; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
+Сводка на 2026-11-15; нагрузка — `LOADTEST.md`, эксплуатация — `DEPLOY.md`.
 
 | Слой | Статус |
 |---|---|
-| Solution | ✅ 12 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
-| Domain | ✅ 26 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 606 domain + 965 application + 365 infrastructure + 325 integration (2261 total); unit-проекты зелёные локально (2026-11-13), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
-| Application | ✅ 163 обработчика (118 command + 45 query), 17 абстракций репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
+| Solution | ✅ 13 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
+| Domain | ✅ 30 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
+| Tests | ✅ 625 domain + 1044 application + 414 infrastructure + 337 integration (2420 total); unit-проекты зелёные локально (2026-11-15), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Application | ✅ 170 обработчиков (124 command + 46 query), 22 абстракции репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 53 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 24 конфигурации, 17 репозиториев, `IUnitOfWork`, 24 таблицы; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита |
-| Web | ✅ 32 контроллера / 161 endpoint (147 доменных + 14 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний) и `EmailDispatchService` (воркер outbox, §19); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Infrastructure | ✅ 27 конфигураций, 22 репозитория, `IUnitOfWork`, 27 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита; `push_device_tokens` и `push_notifications` — обе с FK на `users` `ON DELETE CASCADE`, без аудита (§20) |
+| Web | ✅ 33 контроллера / 163 endpoint (149 доменных + 14 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний барберу), `EmailDispatchService` (воркер outbox, §19) и `PushDispatchService` (воркер push, §20); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
-**Миграции (36):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
+**Миграции (37):** `InitialCreate`, `AddRefreshTokens`, `AddSecurityStamp`,
 `AddReadIndexes`, `AddSearchKeysetIndex`, `AddCrossAggregateForeignKeys`, `NormalizeUserEmail`,
 `AddOptimisticConcurrency`, `DeferrablePrimarySalonConstraint`, `AddUrlLengthLimits`,
 `AddUserLockout`, `AddAuditLog`, `AddReviewModerationIndex`,
@@ -960,7 +994,7 @@ The rules below were pushed to the application layer because the aggregate canno
 `AddBarberAdditionalServices`, `AddSalonPlaceKind`, `AddBarberNotifications`,
 `AddEmailVerificationTokens`, `AddPasswordResetTokens`, `AddEmailOutbox`,
 `AddReviewModerationUpdatedAtIndex`, `AddPortfolioPhotoBlocked`, `AddUserAvatarBlocked`,
-`AddEmailChangeTokens`, `AddPhotoModeration`.
+`AddEmailChangeTokens`, `AddPhotoModeration`, `AddPushNotifications`.
 
 **`AddGuestBookings` (2026-11-06, issue #50).** Makes `bookings.user_id` nullable and adds the
 guest contact snapshot `guest_first_name` / `guest_last_name` (`varchar(100)`) and
@@ -1089,7 +1123,8 @@ scope через `IServiceScopeFactory`, ошибка шага логирует�
 `telegram_updates.update_id`. Текст собирается в `NotificationMessages` и содержит только
 время, услугу, салон и ссылку `App:PublicUrl` + `/barber/notifications`: имени, телефона и
 заметок клиента в нём нет (152-ФЗ, D3), поэтому Политика конфиденциальности не менялась и
-Telegram в `/privacy` не значится (`PrivacyPolicy.Version` не поднималась).
+Telegram в `/privacy` не значится (`PrivacyPolicy.Version` не поднималась). Это относится
+только к напоминаниям барберу: push клиенту — другой канал и другая запись в Политике (§20.9).
 
 **Ретенция — 180 дней** (`Reminders:RetentionDays`): раз в сутки воркер удаляет строки старше
 порога, инбокс не растёт вечно; выключение напоминаний историю не удаляет.
@@ -2348,7 +2383,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**31 domain controllers (+ `AuthController`), 161 endpoint: 147 domain + 14 auth** — one endpoint
+**32 domain controllers (+ `AuthController`), 163 endpoints: 149 domain + 14 auth** — one endpoint
 per Application operation, plus the fourteen `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2385,6 +2420,15 @@ the aggregate that owns the child entity:
 | `AdminStatisticsController` | `api/admin/statistics` | 1 (aggregate read, admin only, required period) |
 | `BarberRequestsController` | `api/barber-requests` | 2 (create + mine) |
 | `AdminBarberRequestsController` | `api/admin/barber-requests` | 4 (list + by id + approve + reject, admin only) |
+| `PushDevicesController` | `api/push/devices` | 2 (register + unregister an FCM device; any authenticated role, `204`, §20.4) |
+
+The push device routes are the customer half of §20; both answer `204` and take the owner from the
+session, never from the body:
+
+| Метод | Маршрут | Доступ | Что делает |
+|---|---|---|---|
+| POST | `api/push/devices` | fallback auth (Bearer или cookie), rate limit записи | `{ token, platform: "Android" }` → `204`; upsert по токену: повтор обновляет `last_seen_at`, токен из другого аккаунта переходит к текущему; ошибки полей — `400 pushDeviceToken.token.invalid` / `.token.tooLong` / `.platform.unknown`, аноним — `401` |
+| POST | `api/push/devices/unregister` | fallback auth, rate limit записи | `{ token }` → `204`; удаляет только собственный токен, неизвестный/чужой/пустой — успех без эффекта (ответ не работает oracle'ом) |
 
 Conventions:
 
@@ -4516,7 +4560,7 @@ avatar_moderation_status <> 2 THEN NULL ELSE avatar_url END`), поэтому `P
 сущности и в payload не входят, как и `thumbnailUrl`: это свободный текст администратора,
 дубли `occurred_at`/`actor_user_id` и производная файла. Объём журнала (до десяти кадров на
 профиль) признан приемлемым; ретенция — отдельное решение. 4) Писем и push об
-одобрении/отказе нет:
+одобрении/отказе нет (push-канал этого среза — только напоминания о визите, §20):
 владелец узнаёт статус при следующем чтении кабинета. 5) Массовых действий и автоодобрения
 для админов нет. 6) Премодерация не меняет `POST/DELETE .../avatar/block` и
 `.../photos/{id}/block`, не превращает `Rejected` в `Blocked` и не трогает
@@ -4836,4 +4880,282 @@ docker compose start mailpit  # следующий тик досылает пи�
 Проверка выключенного воркера: `EmailOutbox__Enabled=false` — запрос пишет строку, писем нет;
 после перезапуска с `true` строка уходит. Строки и `last_error` видны в `email_outbox`
 (`SELECT id, attempts, sent_at, failed_at, last_error FROM email_outbox ORDER BY created_at DESC`).
+
+---
+
+## 20. Push notifications: customer reminders (added 2026-11-15)
+
+> Клиент получает Android/FCM-push за час до **подтверждённого** визита. Текст собирает сервер
+> по-русски; в сообщении только салон, мастер, услуга и время — персональных данных клиента нет
+> (152-ФЗ). Воркер, две таблицы и транспорт FCM HTTP v1 — новый проект
+> `BarberSearch.Infrastructure.Push` (13-й в решении). В бою канал **выключен** до поправки
+> Политики конфиденциальности (§20.9); в Development включён без ключей и работает как режим
+> разработки — текст пишется в журнал, строка становится `Skipped`.
+
+### 20.1 Зачем
+
+Список «Записи» показывает визит, но телефон сам о нём не напоминает, а неявка стоит барберу
+слота. Канал решает одну задачу: за час до подтверждённого визита прислать одно системное
+уведомление с салоном, мастером, услугой и временем. Это **только доставка**: у клиента нет
+инбокса, статуса прочтения и истории уведомлений, строка живёт до доставки и удаляется
+ретенцией. В срез не входят iOS/APNs (`PushPlatform.Ios` зарезервирован), deep link на
+конкретную запись, маркетинговые рассылки и уведомления о модерации.
+
+### 20.2 Поток: create → deliver → cleanup
+
+Воркер — `Web/Push/PushDispatchService.cs`, отдельный `BackgroundService` по образцу
+`EmailDispatchService`, а не шаг `ReminderDispatchService`: у канала свой интервал
+(`Push:IntervalSeconds`), свой флаг и своя очередь, поэтому выключение push не трогает
+Telegram-напоминания барберу и наоборот. Первый тик выполняется сразу при старте (рестарт не
+должен откладывать напоминание), затем `PeriodicTimer` на `Push:IntervalSeconds` (по умолчанию
+60 с); каждый шаг идёт в собственном `IServiceScopeFactory`-scope, потому что обработчики
+scoped и держат `ApplicationDbContext`. Уборка запускается не чаще раза в сутки по UTC-дате;
+исключение шага логируется и не убивает цикл, отмена `stoppingToken` — штатный выход. Одна
+строка `LogInformation` на тик: `created/sent/skipped/failed`. `Push:Enabled=false` выключает
+воркер целиком: он только ждёт тики, не создаёт строк и не пишет сводку. Воркер
+зарегистрирован как singleton + `AddHostedService(sp => sp.GetRequiredService<PushDispatchService>())`,
+поэтому интеграционный тест вызывает `RunTickAsync` у того же экземпляра, а не поднимает второй.
+
+1. **Создание** — `CreateDuePushNotificationsHandler`. Окно: `now < start_at <= now + lead`, где
+   `lead` — `Push:ReminderLeadMinutes` (60). Выбираются только `Confirmed`-брони с
+   `user_id IS NOT NULL` (гостю push отправить некуда) и `created_at <= start_at − lead`.
+   Снимок салона/мастера/услуги/пояса читается inner join'ами `bookings → barber_profiles →
+   barber_services → hair_services → salons`; историческая строка без любого звена выпадает —
+   как в напоминании барберу. Дедупликацию держит уникальный индекс по `booking_id` и
+   `INSERT … ON CONFLICT DO NOTHING`; `TryAddAsync` возвращает, была ли строка вставлена.
+   Ошибка доменной валидации логируется предупреждением с кодом, а не роняет тик.
+   После простоя тик может впервые увидеть визит за десять минут до начала: окно формально
+   открыто, но «Через час» — ложь. Такие визиты пропускаются и считаются в
+   `CreateDuePushNotificationsResult.SkippedLate`, если до начала осталось меньше
+   `lead − clamp(2 × IntervalSeconds, 1 с, 300 с)`; обычный 60-секундный тик укладывается,
+   а «проснулись поздно» — нет. Точная формула и границы — в 20.7.
+2. **Доставка** — `DeliverPendingPushNotificationsHandler`. Пачка забирается одним SQL:
+   `UPDATE … SET next_attempt_at = now + lease WHERE id IN (SELECT … WHERE delivery = Pending AND
+   delivery_attempts < 5 AND (next_attempt_at IS NULL OR next_attempt_at <= now) ORDER BY created_at
+   LIMIT batch FOR UPDATE SKIP LOCKED) RETURNING id`. Аренда — 5 минут, поэтому второй инстанс
+   или параллельный тик занятые строки не выбирает. Затем повод перепроверяется по актуальной
+   брони: не `Confirmed` (отменена, завершена, неявка, удалена) — `Skipped` с причиной
+   `booking is not confirmed`; `StartAt` не совпадает со снимком (перенос) — `booking was
+   rescheduled`; начало уже наступило — `window closed`. Дальше: push не настроен — dev mode
+   либо `Pending` (см. 20.5); нет устройств — `no registered device`. В доставку идут только
+   токены `PushPlatform.Android`: `Ios`-строки хранятся для будущего APNs-слайса, через FCM не
+   отправляются и не удаляются. Каждое сообщение уходит отдельным запросом на каждый токен
+   (FCM HTTP v1 не умеет batch); успех хотя бы одного устройства — `Sent`. Токен удаляется,
+   только если FCM вернул разобранный `UNREGISTERED` (или документированное сообщение о
+   недействительном registration token); `404` на чужой проект и `400` на кривое тело — не
+   повод удалять устройство и повторяются как временные. Если мёртвыми оказались все токены —
+   `Skipped` с причиной `no registered device`. Любая другая ошибка транспорта — `MarkFailed`:
+   строка остаётся `Pending` с `next_attempt_at` через 1, 5 или 15 минут; когда бюджет попыток
+   исчерпан — терминальный `Failed`, `next_attempt_at = null`, `last_error` — **код** первой
+   транспортной ошибки (`push.send` или `push.unavailable`), не текст внешнего сервиса;
+   `push.tokenUnregistered` до `MarkFailed` не доходит — такой токен удаляется.
+3. **Уборка** — `CleanupPushNotificationsHandler`: удаляет `push_notifications` старше
+   `Push:RetentionDays` (30 дней) по `created_at` и `push_device_tokens` старше
+   `Push:DeviceTokenRetentionDays` (180 дней) по `last_seen_at`. Ноль или отрицательное значение
+   конфигурации заменяется значением по умолчанию, а не удаляет всё; оба `DELETE` идемпотентны.
+   Это по одному неограниченному `ExecuteDelete` на таблицу, как уведомления барбера и
+   `email_outbox`: отдельной пачки или курсора у ретенции нет.
+
+### 20.3 Схема (миграция `20261115154114_AddPushNotifications`)
+
+| Таблица | Колонки | Ограничения и индексы |
+|---|---|---|
+| `push_device_tokens` | `id` uuid PK (UUIDv7 из домена), `user_id` uuid NOT NULL, `token` varchar(512) NOT NULL, `platform` smallint NOT NULL, `last_seen_at` timestamptz, `created_at`/`updated_at` timestamptz | FK `fk_push_device_tokens_users_user_id` → `users(id)` `ON DELETE CASCADE`; `ck_push_device_tokens_platform` (`platform IN (1, 2)`); `ck_push_device_tokens_token_length` (`char_length(token) BETWEEN 1 AND 512`); `ux_push_device_tokens_token` (unique); `ix_push_device_tokens_user_id` |
+| `push_notifications` | `id` uuid PK, `user_id` uuid NOT NULL, `booking_id` uuid NOT NULL, `start_at` timestamptz NOT NULL, `salon_name` varchar(200) NULL, `barber_name` varchar(120) NULL, `service_name` varchar(200) NULL, `salon_time_zone_id` varchar(100) NULL, `delivery` smallint NOT NULL, `delivery_attempts` int NOT NULL, `next_attempt_at` timestamptz NULL, `last_error` varchar(500) NULL, `created_at`/`updated_at` timestamptz | FK `fk_push_notifications_users_user_id` → `users(id)` `ON DELETE CASCADE`; `ck_push_notifications_delivery` (`delivery IN (0,1,2,3)`); `ck_push_notifications_delivery_attempts` (`delivery_attempts BETWEEN 0 AND 5`); `ux_push_notifications_booking_id` (unique); `ix_push_notifications_user_id`; `ix_push_notifications_dispatch` (`(created_at) WHERE delivery = 0 AND delivery_attempts < 5`) |
+
+`push_notifications` — снимок на момент создания, поэтому внешнего ключа на каталог и на
+`bookings` нет: строка переживает переименование услуги и удаление салона, а перепроверка
+доставки читает бронь отдельно. FK на `users` есть и каскадный: очередь не переживает удаление
+аккаунта, в отличие от истории визитов. `ix_push_notifications_dispatch` повторяет фильтр
+claim-запроса (`delivery = Pending AND delivery_attempts < 5`), ключ — `created_at`, а
+`next_attempt_at` (включая `IS NULL`) остаётся предикатом после индекса: он меняется на каждой
+аренде, и держать его в ключе значило бы переписывать индекс каждый тик. `push_device_tokens` тоже живёт только с аккаунтом —
+удаление пользователя каскадом уносит его устройства. Предел `Push:MaxTokensPerUser` (5) — не
+check-ограничение: регистрация берёт `pg_advisory_xact_lock(hashtextextended(user_id::text, 0))`
+и в той же транзакции удаляет строки сверх лимита, оставляя самые свежие по
+`last_seen_at DESC, id DESC`; блокировка не даёт двум параллельным входам оставить шесть
+токенов. Токен уникален и при повторной регистрации с другого аккаунта **переходит** к новому
+владельцу (`ON CONFLICT (token) DO UPDATE`), а не падает на уникальности: телефон принадлежит
+устройству, и push о чужом визите прежнему владельцу был бы утечкой. Upsert обновляет
+`platform`, а `last_seen_at`/`updated_at` пишет через `GREATEST`, чтобы часы старого инстанса не
+откатили отметку назад. Аудит в обе таблицы не пишется — это очередь доставки, как
+`email_outbox`.
+
+### 20.4 API: регистрация устройства
+
+| Метод | Маршрут | Тело | Ответ |
+|---|---|---|---|
+| POST | `api/push/devices` | `{ "token": "<fcm>", "platform": "Android" }` | `204`; upsert по токену, повтор не откатывает `last_seen_at` (`GREATEST`) и обновляет `platform`, токен из другого аккаунта переходит к текущему |
+| POST | `api/push/devices/unregister` | `{ "token": "<fcm>" }` | `204` всегда: неизвестный, чужой и пустой токен — успех без эффекта |
+
+Оба маршрута закрыты fallback-политикой аутентификации: подходит Bearer и cookie, аноним
+получает `401`; роль не проверяется, потому что push о визите нужен любому аккаунту с бронью, а
+владелец всегда берётся из сессии (`ICurrentUser.RequireUserId`), идентификатора пользователя в
+теле нет. Cookie-мутация проходит глобальный antiforgery-фильтр (`X-CSRF-TOKEN`), Bearer-клиент
+его не требует; глобальный лимит записи `30/мин` на `sub` действует как на любой `POST`.
+Ошибки полей — `400 pushDeviceToken.token.invalid` / `.token.tooLong` / `.platform.unknown` с
+`invalidField`; платформа передаётся именем (`"Android"`), целые числа запрещены настройками
+JSON, поэтому неизвестное имя отвергает уже модель запроса. `platform` принимает `Android` и
+зарезервированный `Ios`: iOS-строка сохраняется для будущего APNs-слайса, но через FCM не
+отправляется (20.2). Регистрация одного пользователя сериализуется advisory-блокировкой, поэтому
+предел устройств не превышается даже при двух параллельных входах. `unregister` не возвращает
+`404`: ответ не должен работать oracle'ом «зарегистрирован ли этот токен у другого аккаунта».
+Контракты — `Contracts/Push/RegisterPushDevice/RegisterPushDeviceRequest.cs` и
+`Contracts/Push/UnregisterPushDevice/UnregisterPushDeviceRequest.cs`.
+
+### 20.5 Конфигурация (`Push`)
+
+| Ключ | По умолчанию | Диапазон | Смысл |
+|---|---|---|---|
+| `Enabled` | `false`; `true` в Development | bool | включает воркер; `false` — ни строк, ни отправок, ни журнальной сводки |
+| `IntervalSeconds` | `60` | `1..3600` | период тика |
+| `BatchSize` | `20` | `1..1000` | строк доставки за тик |
+| `ReminderLeadMinutes` | `60` | `1..1440` | окно создания; текст «Через час…» фиксирован продуктом, поэтому при смене окна его нужно менять в коде (`PushMessages`), общей подстановки нет |
+| `MaxAttempts` | `5` | `1..100` в конфигурации, фактически `1..5` | бюджет попыток; домен и check-ограничение обрезают значение до `Constants.MAX_NOTIFICATION_DELIVERY_ATTEMPTS` (5), большее число ведёт себя как 5 |
+| `RetentionDays` | `30` | `1..365` | хранение строк `push_notifications` |
+| `DeviceTokenRetentionDays` | `180` | `1..365` | хранение токенов без повторной регистрации |
+| `MaxTokensPerUser` | `5` | `1..100` | устройств на пользователя; лишние удаляются по `last_seen_at` |
+| `ProjectId` | `""` | — | идентификатор проекта Firebase; пустой — канал не настроен |
+| `ServiceAccountJson` | `""` | — | JSON сервисного аккаунта целиком; только user secrets/переменные окружения |
+| `ServiceAccountPath` | `""` | — | путь к тому же JSON, если секрет монтируется файлом; альтернатива строке |
+
+`StartupSettings.Load` проверяет числовые диапазоны и флаг; `ProjectId`, ключ и путь не
+валидируются, чтобы старт без credentials оставался штатным. Дополнительно требуется
+`ReminderLeadMinutes * 60 >= IntervalSeconds`: окно короче одного тика могло бы не попасть ни в
+один тик, и напоминание не создалось бы никогда (неверное значение роняет старт).
+`PushOptions.IsConfigured` = непустой `ProjectId` **и** разбираемый ключ (из
+`ServiceAccountJson` либо из файла `ServiceAccountPath`); ключ читается лениво один раз, файл
+читается один раз, ошибка чтения — «ключа нет», а не исключение. `ToString()` печатает только
+`Enabled`/`IsConfigured`: ни PEM, ни адрес сервисного аккаунта, ни токен в журнал не попадают.
+
+`DevMode` — **не ключ конфигурации**: композиционный корень выставляет его из
+`IHostEnvironment.IsDevelopment()` (`Program.cs`). `appsettings.Development.json` лишь включает
+`Push:Enabled=true` без ключей. В Development такая пара — режим разработки: текст собирается и
+пишется в журнал (`Information`, без токена), строка становится `Skipped` с причиной
+`push is not configured`, HTTP-запроса нет. В остальных окружениях включённый, но ненастроенный
+канал ведёт себя иначе: строки остаются `Pending` (уйдут после починки конфигурации), а воркер
+пишет одно предупреждение на процесс, а не на каждую строку каждого тика. В бою
+`Push:Enabled=false` (значение `appsettings.json`) — канал выключен целиком, пока не поправлена
+Политика (§20.9).
+
+### 20.6 Транспорт FCM HTTP v1 без NuGet-пакета
+
+`BarberSearch.Infrastructure.Push` не тянет Firebase Admin SDK, Google OAuth и JWT-пакеты:
+только `Microsoft.Extensions.Http`/`DependencyInjection.Abstractions`/`Logging.Abstractions` и
+BCL (`HttpClient`, `RSA`, `System.Text.Json`). `FcmPushSender` (`IPushSender`) делает
+`POST https://fcm.googleapis.com/v1/projects/{projectId}/messages:send` через именованный
+`HttpClient` `fcm` с таймаутом 10 с; тело — `{"message":{ token, notification:{title,body},
+data:{type:"booking.reminder", bookingId:"<guid:D>"}, android:{priority:"high",
+notification:{channel_id:"reminders"}} }}`. `android.priority=high` и канал `reminders`
+обязательны: без канала Android 8+ молча отбрасывает уведомление, а канал создаёт мобильное
+приложение. В `data` нет ничего, кроме типа и идентификатора визита.
+
+`FcmAccessTokenProvider` собирает RS256-JWT сервисного аккаунта вручную: `iss = client_email`,
+`scope = https://www.googleapis.com/auth/firebase.messaging`, `aud = token_uri` (по умолчанию
+`https://oauth2.googleapis.com/token`), `iat`/`exp` — час; подпись — `RSA.SignData(...,
+SHA256, Pkcs1)`. JWT меняется на access-токен формой `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=…`;
+токен кэшируется до `expires_in − 60 с`, доступ к кэшу закрыт `SemaphoreSlim` с повторной
+проверкой под замком, поэтому тик из 20 сообщений не делает 20 запросов за токеном. На
+`401/403` `FcmPushSender` сбрасывает **именно отвергнутый** токен
+(`FcmAccessTokenProvider.Invalidate`) и повторяет отправку один раз со свежим access-токеном;
+без этого все повторы до истечения часа отправляли бы тот же отвергнутый токен. Секреты
+(PEM, `assertion`, access-токен) не логируются и не попадают в текст ошибки.
+
+Мёртвый токен определяется только разобранным телом ответа, а не кодом состояния: нужен
+`error.status = UNREGISTERED`, элемент `error.details[].errorCode = UNREGISTERED` или
+документированное сообщение «not a valid FCM registration token» / «registration token is not
+valid». Такой ответ —
+`push.tokenUnregistered`, строка устройства удаляется. `404` по другой причине (неверный проект
+или эндпоинт) — `push.unavailable` с повтором, `400` без признака мёртвого токена (кривое тело) —
+`push.send` с повтором; устройство в обоих случаях сохраняется. `401/403` — credentials
+(`push.unavailable`), `429`/`5xx`/сеть/таймаут — `push.send`. Тело ответа FCM не логируется (в
+нём может быть эхо запроса), а в `last_error` строки попадает код ошибки, не текст сервиса.
+Если канал не настроен, `SendAsync` не делает HTTP-запрос и возвращает `push.unavailable`; в
+обычном режиме сюда не попадаем, потому что обработчик доставки сам решает про dev mode или
+`Pending` (20.5). Реальная отправка в FCM в этом срезе не проверялась — нет проекта Firebase;
+транспорт покрыт тестами с подменённым `HttpMessageHandler`/`IPushSender`.
+
+### 20.7 Окно напоминания и правило «бронь создана внутри окна»
+
+Создание идёт по полуинтервалу `(now, now + lead]`: ровно `now + lead` ещё попадает (последняя
+минута, когда напоминание полезно), `now + lead + 1 с` — уже нет; `start_at <= now` не попадает
+никогда. Отдельно отсекается бронь, оформленная **внутри** окна: если запись на 13:50 создана в
+13:40, push «через час» в 13:40 бессмыслен и раздражает, поэтому условие
+`created_at <= start_at − lead` стоит и в SQL (`PushSourceRepository`), и в обработчике — как
+последняя защита при другом значении окна. Есть и третье отсечение — «слишком поздно»: если до
+начала осталось меньше `lead − clamp(2 × IntervalSeconds, 1 с, 300 с)`, визит пропускается
+(`CreateDuePushNotificationsResult.SkippedLate`), потому что после простоя «через час» за десять
+минут до визита было бы ложью; обычный тик в 60 секунд укладывается в допуск, а «проснулись
+поздно» — нет. Слово «сегодня»/«завтра» считается по локальной дате
+**салона** (не сервера и не UTC): напоминание за час до полуночи пересекает сутки, и UTC дал бы
+неверное слово; неизвестный IANA-пояс не роняет отправку — время показывается в UTC, как в
+напоминании барберу. Заголовок: `Через час: салон «{SalonName}»`, при пустом снимке салона —
+`Через час — визит к мастеру`. Тело: `Мастер {BarberName} · {ServiceName} · сегодня в {HH:mm}`
+(или `завтра`); отсутствующие части просто выпадают, «null» в тексте не появляется. Тексты
+живут в `Application/Push/PushMessages.cs` и проверяются на точное совпадение. Ни имени, ни
+телефона, ни заметки клиента в сообщении нет и быть не может: `PushMessages.Reminder` получает
+только снимок визита (152-ФЗ).
+
+### 20.8 Файлы
+
+| Слой | Где |
+|---|---|
+| Domain | `Domain/Push/PushPlatform.cs`, `PushDelivery.cs`, `PushDeviceToken.cs`, `PushNotification.cs`; константы длины — `Domain/Constants.cs` |
+| Application | `Push/PushOptions.cs`, `PushMessage.cs`, `PushMessages.cs`, `PushReminderBooking.cs`, `ServiceAccountKey.cs`, порты `IPushSender`/`IPushNotificationRepository`/`IPushDeviceTokenRepository`/`IPushSourceRepository`; `Push/RegisterPushDevice/*`, `Push/UnregisterPushDevice/*`, `Push/CreateDuePushNotifications/*`, `Push/DeliverPendingPushNotifications/*`, `Push/CleanupPushNotifications/*` |
+| Contracts | `Contracts/Push/RegisterPushDevice/RegisterPushDeviceRequest.cs`, `Contracts/Push/UnregisterPushDevice/UnregisterPushDeviceRequest.cs`; коды — `Contracts/Common/ApiErrorCodes.cs` (`Push.Send`/`Unavailable`/`TokenUnregistered`, префиксы `pushNotification.*`) |
+| Infrastructure.Postgresql | `Configurations/PushDeviceTokenConfiguration.cs`, `Configurations/PushNotificationConfiguration.cs`; `Repositories/PushDeviceTokenRepository.cs`, `PushNotificationRepository.cs`, `PushSourceRepository.cs`; `Migrations/20261115154114_AddPushNotifications*`; DbSet-ы в `ApplicationDbContext` |
+| Infrastructure.Push | `FcmPushSender.cs`, `FcmAccessTokenProvider.cs`, `PushSenderExtensions.cs`; проект ссылается на `Application`, `Contracts`, `Shared` |
+| Web | `Controllers/PushDevicesController.cs`, `Push/PushDispatchService.cs`, `Push/PushTickResult.cs`, `Program.cs` (`AddPushSender` + воркер), `Deployment/StartupSettings.cs` (диапазоны), `appsettings*.json` |
+
+### 20.9 Приватность: почему в бою `Enabled=false`
+
+152-ФЗ: токен FCM идентифицирует устройство, а Google — сторонний обработчик, которому этот
+идентификатор передаётся за границу. Опубликованная Политика этого не разрешает: в §7.2 прямо
+сказано «Трансграничная передача персональных данных не осуществляется», а в §7.1 перечислены
+только инфраструктурные провайдеры, без Google. Поэтому production-конфигурация оставляет
+`Push:Enabled=false`; включение FCM в бою требует **сначала** поправить `/privacy`: §3.1 —
+добавить токен устройства в перечень данных, §4 — цель и срок, §7.1 — Google как обработчик,
+§7.2 — трансграничную передачу. Вместе с текстом поднимается `PrivacyPolicy.Version`
+(`backend/.../Application/Privacy/PrivacyPolicy.cs`, `frontend/src/lib/legal.ts`,
+`mobile/.../Core/Legal/PrivacyPolicy.cs`) и синхронно
+`frontend/src/i18n/messages/en/privacy.json`, иначе тесты согласия и `auth.register.consentVersion`
+разойдутся. Режим разработки ничего не нарушает: он не делает HTTP-запросов, не логирует токен и
+помечает строку `Skipped`. В самом push нет ПДн клиента — только снимок салона, мастера, услуги
+и времени (D3), поэтому и текст, и `data` физически не могут унести имя, телефон или заметку.
+
+### 20.10 Тесты
+
+- **Domain (625):** `PushDeviceTokenTests` — валидация токена/платформы/времени, `Touch` без
+  отката назад, `TransferTo`; `PushNotificationTests` — обязательные поля, пределы снимков,
+  переходы `MarkSent`/`MarkSkipped`/`MarkFailed`, обрезка `last_error`, бюджет попыток.
+- **Application (1044):** `PushMessageTests` — точные заголовок/тело, «сегодня»/«завтра» по
+  поясу салона, UTC для неизвестного пояса, деградация без салона/мастера/услуги;
+  `PushRegistrationTests` — upsert, передача владения, предел устройств, невозврат
+  `last_seen_at` назад, идемпотентное снятие; `PushCreationTests` — окно `(now, now+lead]`,
+  бронь, созданная внутри окна, только `Confirmed`, гость без `user_id`, дедупликация и
+  допуск на опоздание тика (ровно на границе — создаётся, на секунду позже — `SkippedLate`);
+  `PushDeliveryTests` — причины пропуска, аренда/повтор, backoff 1/5/15, `Failed` после
+  исчерпания бюджета, удаление мёртвого токена, iOS-токены не отправляются и не удаляются,
+  dev mode и `Pending` вне Development; `PushCleanupTests` — обе границы ретенции и значения по
+  умолчанию. Фейки — `Fakes/FakePush*Repository.cs`, `FakePushSender.cs`.
+- **Infrastructure (414):** `PushModelTests` — таблицы, check-ограничения, индексы, каскадный FK
+  на `users` у обеих таблиц и отсутствие FK на бронь, фильтр dispatch-индекса;
+  `PushOptionsTests` — `IsConfigured`, разбор ключа, ленивое чтение; `PushStartupSettingsTests` —
+  диапазоны секции `Push` и `ReminderLeadMinutes * 60 >= IntervalSeconds`;
+  `FcmPushSenderTests` — URL/заголовок `Bearer`, тело сообщения, мёртвый токен только по
+  разобранному `UNREGISTERED`/документированному сообщению, `404` чужого проекта как
+  `push.unavailable`, `400` кривого тела как `push.send`, `401/403` с обновлением access-токена
+  и одним повтором, кэш OAuth-токена, отсутствие секретов в ошибках (`RecordingLogger`).
+- **Integration (337; 12 новых):** `PushDeviceApiTests` — аноним `401`, идемпотентная
+  регистрация и снятие, передача токена другому аккаунту, чужой `unregister` без эффекта,
+  пустой токен `400 pushDeviceToken.token.invalid`, `GREATEST` для старых часов и параллельные
+  регистрации, не превышающие предел устройств; `PushReminderTests` — создание и доставка в
+  окне, два параллельных тика дают одну строку, бронь внутри окна не получает push, нет
+  устройства — `Skipped`, ненастроенный канал вне Development оставляет строку `Pending`,
+  выключенный воркер не создаёт строк. `TestApp` включает `Push__Enabled=true`, ставит интервал
+  3600 с и позволяет вызвать `RunPushTickAsync`; `CapturingPushSender` подменяет FCM.
+- Сборка решения — 0 warnings / 0 errors, `has-pending-model-changes` чисто, миграция проверена
+  накатом/откатом/повторным накатом на локальной PostgreSQL 16. Реальная доставка FCM не
+  выполнялась: проекта Firebase нет, поэтому проверены транспорт (HTTP-фейк) и весь путь
+  create → deliver → cleanup на реальной БД.
 

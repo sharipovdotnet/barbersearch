@@ -7,6 +7,7 @@ using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Core.Push;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -67,6 +68,17 @@ public sealed partial class ProfileViewModel : ObservableObject
     private readonly IAuthApi _authApi;
     private readonly IAccountApi _accountApi;
     private readonly TokenSession _session;
+    private readonly IPushRegistrar _push;
+
+    /// <summary>
+    /// Сколько ждём снятия устройства при выходе.
+    /// </summary>
+    /// <remarks>
+    /// Снятие идёт с Bearer и должно случиться раньше, чем logout отзовёт пару, но сбой
+    /// сети не имеет права задерживать выход: пять секунд — это уже щедро для одного
+    /// <c>POST</c> без тела.
+    /// </remarks>
+    private static readonly TimeSpan PushUnregisterTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Профиль из базы; <c>null</c>, пока он не загружен или после выхода.
@@ -79,15 +91,22 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <param name="authApi">Вход и выход.</param>
     /// <param name="accountApi">Профиль текущего пользователя.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
-    public ProfileViewModel(IAuthApi authApi, IAccountApi accountApi, TokenSession session)
+    /// <param name="push">Регистратор push: переключатель напоминаний.</param>
+    public ProfileViewModel(
+        IAuthApi authApi,
+        IAccountApi accountApi,
+        TokenSession session,
+        IPushRegistrar push)
     {
         ArgumentNullException.ThrowIfNull(authApi);
         ArgumentNullException.ThrowIfNull(accountApi);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(push);
 
         _authApi = authApi;
         _accountApi = accountApi;
         _session = session;
+        _push = push;
     }
 
     /// <summary>
@@ -245,6 +264,44 @@ public sealed partial class ProfileViewModel : ObservableObject
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
     /// <summary>
+    /// Настроен ли push: строка «Присылать напоминания» видна только тогда.
+    /// </summary>
+    /// <remarks>
+    /// Без <c>push.json</c> приложение не показывает ни переключателя, ни разрешений: обещать
+    /// настройку, которой нет, хуже, чем не показывать её вовсе.
+    /// </remarks>
+    public bool IsPushConfigured => _push.IsConfigured;
+
+    /// <summary>
+    /// Переключатель «Присылать напоминания».
+    /// </summary>
+    /// <remarks>
+    /// Значение — выбор человека, а не фактическая доставка: при запрещённом разрешении
+    /// переключатель остаётся включённым, а <see cref="NotificationsStatusText"/> объясняет,
+    /// что именно нужно разрешить.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _notificationsEnabled;
+
+    /// <summary>
+    /// Подсказка под переключателем: почему напоминания не придут.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNotificationsStatus))]
+    private string _notificationsStatusText = string.Empty;
+
+    /// <summary>
+    /// Показывать ли «Открыть настройки»: только когда разрешение запрещено.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showNotificationSettings;
+
+    /// <summary>
+    /// Есть ли подсказка о состоянии уведомлений.
+    /// </summary>
+    public bool HasNotificationsStatus => !string.IsNullOrEmpty(NotificationsStatusText);
+
+    /// <summary>
     /// Видна ли форма входа; вычисляется из состояния экрана.
     /// </summary>
     public bool IsFormVisible => !IsAuthenticated && !IsLoading;
@@ -345,6 +402,14 @@ public sealed partial class ProfileViewModel : ObservableObject
         {
             IsLoading = false;
         }
+
+        // Push не держит экран в состоянии загрузки: диалог разрешения и токен FCM могут
+        // занять секунды, а индикатор профиля уже не нужен. Регистрацию ведут старт
+        // приложения и вход; здесь только тихо обновляется строка состояния.
+        if (IsAuthenticated)
+        {
+            _ = RefreshNotificationsAsync(CancellationToken.None);
+        }
     }
 
     /// <summary>
@@ -369,6 +434,12 @@ public sealed partial class ProfileViewModel : ObservableObject
         ProfileError = null;
         Email = string.Empty;
         Password = string.Empty;
+
+        // Переключатель возвращается к сохранённому выбору: после следующего входа устройство
+        // зарегистрируется за новым пользователем, и строка не должна показывать чужое состояние.
+        NotificationsEnabled = _push.IsUserEnabled;
+        NotificationsStatusText = string.Empty;
+        ShowNotificationSettings = false;
     }
 
     /// <summary>
@@ -447,6 +518,13 @@ public sealed partial class ProfileViewModel : ObservableObject
         {
             IsSigningIn = false;
         }
+
+        // Регистрация после входа идёт своим ходом: системный диалог разрешения и ответ FCM
+        // не должны держать кнопку «Входим…» — вход уже состоялся.
+        if (IsAuthenticated)
+        {
+            _ = RefreshNotificationsAsync(CancellationToken.None);
+        }
     }
 
     /// <summary>
@@ -466,6 +544,15 @@ public sealed partial class ProfileViewModel : ObservableObject
         try
         {
             var refreshToken = _session.RefreshToken;
+
+            // Снимать устройство нужно до запроса выхода: POST unregister идёт с Bearer,
+            // а logout отзывает refresh-токен — после него пара мертва и запрос получил бы
+            // 401, оставив токен за вышедшим аккаунтом. Таймаут короткий: сбой push не
+            // должен задерживать выход.
+            using (var pushTimeout = new CancellationTokenSource(PushUnregisterTimeout))
+            {
+                await _push.UnregisterAsync(pushTimeout.Token);
+            }
 
             try
             {
@@ -554,6 +641,38 @@ public sealed partial class ProfileViewModel : ObservableObject
     private void ForgotPassword() => ForgotPasswordRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Включает или выключает напоминания по переключателю «Присылать напоминания».
+    /// </summary>
+    /// <remarks>
+    /// Команда не показывает ошибку: включение без разрешения — нормальное состояние,
+    /// а не сбой, и объясняется строкой под переключателем. Значение переключателя
+    /// возвращается к сохранённому выбору регистратора — человек мог не дать разрешение,
+    /// но сам выбор остаётся его.
+    /// </remarks>
+    /// <param name="enabled">Новое положение переключателя.</param>
+    [RelayCommand]
+    private async Task ToggleNotificationsAsync(bool enabled)
+    {
+        if (!_push.IsConfigured)
+        {
+            return;
+        }
+
+        NotificationsEnabled = enabled;
+
+        var result = await _push.SetEnabledAsync(enabled);
+
+        NotificationsEnabled = _push.IsUserEnabled;
+        ApplyPushResult(result);
+    }
+
+    /// <summary>
+    /// Открывает настройки телефона, где включаются уведомления приложения.
+    /// </summary>
+    [RelayCommand]
+    private void OpenNotificationSettings() => _push.OpenSettings();
+
+    /// <summary>
     /// Читает профиль и раскладывает его по свойствам экрана.
     /// </summary>
     /// <remarks>
@@ -635,6 +754,70 @@ public sealed partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(IsProfileVisible));
         OnPropertyChanged(nameof(ShowProfileLoading));
         OnPropertyChanged(nameof(ShowProfileError));
+    }
+
+    /// <summary>
+    /// Сверяет состояние push с телефоном и сервером.
+    /// </summary>
+    /// <remarks>
+    /// Первый вызов после входа — единственное место, где запрашивается разрешение на
+    /// уведомления: <c>EnsureRegisteredAsync</c> делает это сам, а экран только показывает
+    /// результат. Без <c>push.json</c> метод не делает ничего, поэтому настройка не появляется
+    /// и разрешение не спрашивается.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private async Task RefreshNotificationsAsync(CancellationToken cancellationToken)
+    {
+        if (!_push.IsConfigured)
+        {
+            return;
+        }
+
+        try
+        {
+            NotificationsEnabled = _push.IsUserEnabled;
+
+            var result = await _push.EnsureRegisteredAsync(cancellationToken);
+
+            ApplyPushResult(result);
+        }
+        catch (Exception)
+        {
+            // Метод запускается без ожидания: сбой push не должен становиться
+            // необработанным исключением в фоне. Регистратор и сам не бросает — это страховка.
+        }
+    }
+
+    /// <summary>
+    /// Переводит состояние токена в строку под переключателем.
+    /// </summary>
+    /// <remarks>
+    /// Тексты — только для двух случаев, когда человеку есть что сделать: запрещённое
+    /// разрешение (включить в настройках) и устройство без сервисов Google Play. Временный
+    /// сбой сети, успех и выключенный переключатель молчат: подсказка на каждый визит была
+    /// бы шумом, а «недоступно на устройстве» было бы неправдой при обычном обрыве связи.
+    /// </remarks>
+    private void ApplyPushResult(PushTokenResult result)
+    {
+        switch (result.Status)
+        {
+            case PushTokenStatus.Denied:
+                NotificationsStatusText = Loc.T(
+                    "Уведомления выключены в настройках телефона. Разрешите их, чтобы получать напоминания.");
+                ShowNotificationSettings = true;
+                break;
+
+            case PushTokenStatus.Unavailable:
+                NotificationsStatusText = Loc.T("Уведомления недоступны на этом устройстве");
+                ShowNotificationSettings = false;
+                break;
+
+            default:
+                // Available, Disabled и TransientFailure: показывать нечего, попытка повторится.
+                NotificationsStatusText = string.Empty;
+                ShowNotificationSettings = false;
+                break;
+        }
     }
 
     /// <summary>
