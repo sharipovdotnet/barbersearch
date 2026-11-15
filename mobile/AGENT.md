@@ -174,6 +174,27 @@ A local backend is required before running (`backend/docker compose up -d` +
   empty value and the filter is optional; and the additional-service field has no `<datalist>`
   suggestions, because there is no native equivalent and the filter itself is free text. Both are
   recorded here instead of being left as silent omissions.
+- **The search reads the device position, and the server puts the nearest first.** On the first
+  «Найти» the screen asks for the location permission, reads the position with
+  `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs battery
+  and time), and sends the pair as optional `latitude`/`longitude` query parameters of the same
+  `GET api/barbers` request — no second endpoint and no client-side re-sorting: the keyset page must
+  stay ordered as it is returned. The server ranks by the distance to the barber's nearest active
+  salon and returns `distanceKm`, so each row shows «850 м» / «1,2 км» next to the rating and the
+  list says «Сначала ближайшие мастера»; without coordinates the order stays the web's rating one.
+  The distance is a local flat approximation on the server, not a geodesic: at city distances the
+  order is the same and the cost is one `sqrt` per row, which is recorded in `backend/AGENT.md`.
+  Three mobile decisions follow from the phone. The permission is requested on the first search, not
+  at launch, because the person has just asked for a barber nearby. A refusal or a missing GPS fix
+  never blocks the search: the request goes out without coordinates, and the results section shows
+  the reason with «Повторить», which resets the remembered attempt — a person may have allowed
+  access in the phone settings. And the position is read once per screen (a successful fix lives as
+  long as the page, a failed one is not retried by every «Найти»), because nobody moves across town
+  between two searches and an Android permission dialog must not reappear on each tap. Android asks
+  for `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` (from 12 the person chooses the
+  precision); iOS carries `NSLocationWhenInUseUsageDescription` with the Russian text, because the
+  system dialog follows the device language while the interface defaults to Russian. The web has no
+  geolocation at all, so this is a mobile-only feature with its own wording rather than a port.
 - **The interface speaks Russian and English, and the web is the source of both.** The approach is
   the web's gettext one: the key is the Russian source string, and `Localization/messages/en.json` in
   Core holds the translation. `Loc.T("…")` in code and `{loc:Translate Key='…'}` in XAML cover every
@@ -215,8 +236,11 @@ A local backend is required before running (`backend/docker compose up -d` +
 
 The mobile MVP is blocked by three backend changes (`backend/`) that do not exist yet:
 
-1. **Geo search.** `Salon` has coordinates, but the public catalog does not expose them and search
-   filters by city only. Needed: an endpoint of points within a radius/bbox for the map screen.
+1. **Geo points for the map.** `Salon` has coordinates and the public search now ranks by the
+   distance to the nearest one, but there is still no public endpoint of points within a radius or
+   bbox for the map screen, and the search response exposes the distance rather than the
+   coordinates. Needed: a points endpoint (and coordinates in the public projection) before the
+   «Карта» tab can draw anything.
 2. **Reading favourites.** `POST`/`DELETE /api/users/{id}/favorites/{barberProfileId}` exist, but
    there is no `GET` for the list.
 3. **Push.** There is no infrastructure at all: no device/token table, no FCM/APNs, no client

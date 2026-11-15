@@ -179,6 +179,46 @@ public static class BarberText
         value is null ? "—" : value.Value.ToString("0.0", Loc.Culture);
 
     /// <summary>
+    /// Расстояние до барбера: «850 м», «1,2 км», «12 км».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Метры — до километра и с округлением до 10 м: сервер считает расстояние по
+    /// приближённой формуле, и лишний знак обещал бы точность, которой нет. До 10 км —
+    /// один знак после запятой, дальше — целые километры: так строка не скачет по ширине.
+    /// </para>
+    /// <para>
+    /// Отрицательное, бесконечное или отсутствующее расстояние даёт пустую строку: карточка
+    /// просто не показывает подпись. Переводятся только единицы, число берёт культуру языка.
+    /// </para>
+    /// </remarks>
+    /// <param name="distanceKm">Расстояние в километрах из выдачи; <c>null</c> — неизвестно.</param>
+    /// <returns>Строка расстояния или пустая.</returns>
+    public static string Distance(double? distanceKm)
+    {
+        if (distanceKm is not { } value || !double.IsFinite(value) || value < 0)
+        {
+            return string.Empty;
+        }
+
+        var meters = Math.Round(value * 100, MidpointRounding.AwayFromZero) * 10;
+
+        if (meters < 1000)
+        {
+            return string.Concat(
+                Math.Max(meters, 10).ToString("0", Loc.Culture),
+                " ",
+                Loc.T("м"));
+        }
+
+        var kilometers = value < 10
+            ? value.ToString("0.0", Loc.Culture)
+            : Math.Round(value).ToString("0", Loc.Culture);
+
+        return string.Concat(kilometers, " ", Loc.T("км"));
+    }
+
+    /// <summary>
     /// Счётчик найденных барберов: «Показан 1 барбер», «Показаны 2 барбера»,
     /// «Показаны 5 барберов».
     /// </summary>

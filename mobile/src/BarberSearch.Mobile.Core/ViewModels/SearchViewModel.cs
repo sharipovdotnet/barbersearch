@@ -7,6 +7,7 @@ using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Core.Location;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -61,8 +62,13 @@ public sealed partial class SearchViewModel : ObservableObject
     private static string EmptyFiltersText => Loc.T("Попробуйте другой язык, специализацию, услугу или дополнительную услугу.");
     private static string EmptyNoBarbersTitleText => Loc.T("Барберов пока нет");
     private static string EmptyNoBarbersText => Loc.T("Пока никто не подтверждён. Загляните позже.");
+    private static string LocationDeniedText => Loc.T(
+        "Геопозиция недоступна — показываем всех мастеров. Разрешите доступ в настройках телефона.");
+    private static string LocationUnavailableText => Loc.T(
+        "Не удалось определить геопозицию — показываем всех мастеров.");
 
     private readonly IBarberSearchApi _api;
+    private readonly ILocationService _locationService;
     private readonly TimeProvider _timeProvider;
 
     private bool _isInitialized;
@@ -70,19 +76,34 @@ public sealed partial class SearchViewModel : ObservableObject
     private BarberSearchFilters? _appliedFilters;
     private DateOnly _dateOptionsToday;
 
+    // Геопозиция читается один раз на экран: после отказа система не дёргается на каждый
+    // «Найти», иначе Android показывал бы диалог разрешения повторно. «Повторить» в подсказке
+    // сбрасывает этот флаг и пробует снова.
+    private bool _locationAttempted;
+    private GeoPosition? _position;
+    private LocationStatus? _locationStatus;
+
     /// <summary>
     /// Создаёт ViewModel поиска.
     /// </summary>
     /// <param name="api">Чтения API: поиск и справочники фильтров.</param>
+    /// <param name="locationService">
+    /// Геопозиция для сортировки «сначала ближайшие»; отказ и недоступность не блокируют поиск.
+    /// </param>
     /// <param name="timeProvider">
     /// Текущий день устройства: от него отсчитывается список дат, поэтому тест задаёт его сам.
     /// </param>
-    public SearchViewModel(IBarberSearchApi api, TimeProvider timeProvider)
+    public SearchViewModel(
+        IBarberSearchApi api,
+        ILocationService locationService,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(api);
+        ArgumentNullException.ThrowIfNull(locationService);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _api = api;
+        _locationService = locationService;
         _timeProvider = timeProvider;
 
         FillLanguages();
@@ -165,6 +186,20 @@ public sealed partial class SearchViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
     private bool _isLoading;
+
+    /// <summary>
+    /// Идёт чтение геопозиции: экран объясняет задержку перед запросом выдачи.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLocating;
+
+    /// <summary>
+    /// Подсказка о том, что геопозиции нет; <c>null</c>, когда сортировка по расстоянию работает
+    /// или поиск ещё не запускался.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLocationHint))]
+    private string? _locationHint;
 
     /// <summary>
     /// Текст ошибки поиска для пользователя; <c>null</c>, когда ошибки нет.
@@ -299,6 +334,23 @@ public sealed partial class SearchViewModel : ObservableObject
     public bool ShowResultsCount => Barbers.Count > 0;
 
     /// <summary>
+    /// Есть ли подсказка о недоступной геопозиции.
+    /// </summary>
+    public bool HasLocationHint => LocationHint is not null;
+
+    /// <summary>
+    /// Показан ли список в порядке «сначала ближайшие».
+    /// </summary>
+    /// <remarks>
+    /// Подпись появляется только у непустой выдачи: пустой экран уже объясняет себя
+    /// подсказкой, и «сначала ближайшие» над ним ничего не добавляет. Кроме того, нужен хотя бы
+    /// один барбер с расстоянием: сервер, который ещё не знает координат, вернул бы прежний
+    /// порядок по рейтингу, и подпись обманывала бы.
+    /// </remarks>
+    public bool ShowNearbySort => _position is not null
+        && Barbers.Any(barber => barber.DistanceKm is not null);
+
+    /// <summary>
     /// Счётчик найденных: «Показаны 2 барбера».
     /// </summary>
     public string ResultsCountText => BarberText.ShownBarbers(Barbers.Count);
@@ -333,6 +385,11 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Перед запросом список очищается: старые карточки под новым фильтром — ложь, так же
     /// поступает веб. Ошибки API и сети превращаются в текст для пользователя, отмена —
     /// штатный выход без сообщения: пользователь сам закрыл экран.
+    /// <para>
+    /// Геопозиция читается до запроса выдачи и только один раз на экран. Отказ или отсутствие
+    /// GPS не блокируют поиск: запрос уходит без координат, а экран показывает подсказку
+    /// с «Повторить».
+    /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     [RelayCommand]
@@ -347,6 +404,8 @@ public sealed partial class SearchViewModel : ObservableObject
 
         try
         {
+            filters = await ApplyLocationAsync(filters, cancellationToken);
+
             var page = await _api.SearchBarbersAsync(filters, cancellationToken: cancellationToken);
 
             Barbers.Clear();
@@ -375,9 +434,83 @@ public sealed partial class SearchViewModel : ObservableObject
         finally
         {
             IsLoading = false;
+            UpdateLocationHint();
             NotifyResultsChanged();
             SearchCompleted?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Повторяет чтение геопозиции и поиск: подсказка под списком объясняет, что расстояния нет.
+    /// </summary>
+    /// <remarks>
+    /// Сбрасывает запомненный отказ: человек мог разрешить доступ в настройках телефона, и без
+    /// сброса экран до перезапуска приложения продолжал бы показывать всех подряд.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [RelayCommand]
+    private async Task RetryLocationAsync(CancellationToken cancellationToken)
+    {
+        _locationAttempted = false;
+        _position = null;
+        _locationStatus = null;
+        LocationHint = null;
+
+        await SearchAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Дочитывает геопозицию и добавляет её в фильтры, если координаты есть.
+    /// </summary>
+    /// <remarks>
+    /// Повторный заход не переспрашивает систему, пока попытка уже была: иначе каждый «Найти»
+    /// после отказа заново открывал бы диалог разрешения. Успешные координаты остаются на всё
+    /// время жизни экрана — за минуты поиска человек не переезжает.
+    /// </remarks>
+    /// <param name="filters">Фильтры без координат.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Фильтры с координатами, если они получены, иначе исходные.</returns>
+    private async Task<BarberSearchFilters> ApplyLocationAsync(
+        BarberSearchFilters filters,
+        CancellationToken cancellationToken)
+    {
+        if (!_locationAttempted)
+        {
+            IsLocating = true;
+
+            try
+            {
+                var result = await _locationService.GetPositionAsync(cancellationToken);
+
+                _position = result.Position;
+                _locationStatus = result.Status;
+                _locationAttempted = true;
+            }
+            finally
+            {
+                IsLocating = false;
+            }
+        }
+
+        return _position is { } position
+            ? filters with
+            {
+                Latitude = position.Latitude,
+                Longitude = position.Longitude,
+            }
+            : filters;
+    }
+
+    /// <summary>
+    /// Показывает или скрывает подсказку о недоступной геопозиции.
+    /// </summary>
+    private void UpdateLocationHint()
+    {
+        LocationHint = !_locationAttempted || _position is not null
+            ? null
+            : _locationStatus == LocationStatus.Denied
+                ? LocationDeniedText
+                : LocationUnavailableText;
     }
 
     /// <summary>
@@ -572,6 +705,7 @@ public sealed partial class SearchViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyDescription));
         OnPropertyChanged(nameof(ShowResultsCount));
         OnPropertyChanged(nameof(ResultsCountText));
+        OnPropertyChanged(nameof(ShowNearbySort));
     }
 
     /// <summary>

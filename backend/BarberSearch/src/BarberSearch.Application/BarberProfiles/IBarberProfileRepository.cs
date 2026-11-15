@@ -254,7 +254,9 @@ public interface IBarberProfileRepository
     /// а результат сразу проецируется в <see cref="BarberSearchItemResponse"/>.
     /// <see cref="BarberSearchFilter.HairServiceId"/> — услуга справочника
     /// (<c>hair_services.id</c>), не строка «услуга барбера» (R-20).
-    /// Порядок — <c>rating DESC NULLS LAST, id</c>; keyset-условие берётся из
+    /// Порядок — <c>rating DESC NULLS LAST, id</c>; при заданном
+    /// <see cref="BarberSearchFilter.Location"/> — <c>distance IS NULL, distance, id</c>, где
+    /// расстояние считается до ближайшего активного салона профиля. Keyset-условие берётся из
     /// <see cref="BarberSearchFilter.Cursor"/>.
     /// </remarks>
     /// <param name="filter">Фильтры, позиция курсора и лимит строк.</param>

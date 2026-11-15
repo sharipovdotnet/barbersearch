@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using BarberSearch.Domain.BarberProfiles.Enums;
@@ -118,7 +119,8 @@ public sealed class BarberSearchApiTests
               "city": "Тюмень",
               "primaryPlaceKind": "Salon",
               "additionalServices": ["борода"],
-              "avatarUrl": null
+              "avatarUrl": null,
+              "distanceKm": 1.2
             }
           ],
           "nextCursor": null
@@ -160,12 +162,15 @@ public sealed class BarberSearchApiTests
                 HairServiceId = HairServiceId,
                 Language = Language.En,
                 AdditionalService = "борода",
+                Latitude = 56.8389,
+                Longitude = 60.6057,
             },
             pageSize: 10);
 
         var barber = Assert.Single(page.Items);
         Assert.Equal("Алиса", barber.DisplayName);
         Assert.Equal(4.5m, barber.Rating);
+        Assert.Equal(1.2, barber.DistanceKm);
         Assert.Null(page.NextCursor);
 
         var query = Uri.UnescapeDataString(handler.LastRequestUri!.Query);
@@ -175,7 +180,40 @@ public sealed class BarberSearchApiTests
         Assert.Contains(string.Concat("hairServiceId=", HairServiceId.ToString("D")), query, StringComparison.Ordinal);
         Assert.Contains("language=En", query, StringComparison.Ordinal);
         Assert.Contains("additionalService=борода", query, StringComparison.Ordinal);
+        Assert.Contains("latitude=56.8389", query, StringComparison.Ordinal);
+        Assert.Contains("longitude=60.6057", query, StringComparison.Ordinal);
         Assert.Contains("pageSize=10", query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchBarbersAsync_CoordinatesIgnoreCurrentCulture()
+    {
+        var previous = CultureInfo.CurrentCulture;
+
+        try
+        {
+            // Телефон с русской локалью не должен отправить «56,8389»: сервер ответил бы 400.
+            CultureInfo.CurrentCulture = new CultureInfo("ru-RU");
+
+            var handler = new StubHandler(HttpStatusCode.OK, """{"items":[],"nextCursor":null}""", "application/json");
+            using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+            var api = new BarberSearchApi(httpClient);
+
+            await api.SearchBarbersAsync(new BarberSearchFilters
+            {
+                Latitude = 56.8389,
+                Longitude = 60.6057,
+            });
+
+            var query = handler.LastRequestUri!.Query;
+
+            Assert.Contains("latitude=56.8389", query, StringComparison.Ordinal);
+            Assert.Contains("longitude=60.6057", query, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 
     [Fact]

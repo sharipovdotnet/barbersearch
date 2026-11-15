@@ -12,10 +12,12 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// Обработчик поиска барберов.
 /// </summary>
 /// <remarks>
-/// Обработчик отвечает за контракт пагинации: проверяет размер страницы, декодирует курсор,
-/// читает на одну строку больше запрошенного и кодирует курсор следующей страницы.
-/// Сами фильтры и порядок <c>rating DESC NULLS LAST, id</c> строит репозиторий — это один
-/// SQL-запрос с проекцией в <see cref="BarberSearchItemResponse"/>, без Include коллекций.
+/// Обработчик отвечает за контракт пагинации: проверяет размер страницы и пару координат
+/// клиента, декодирует курсор, читает на одну строку больше запрошенного и кодирует курсор
+/// следующей страницы. Сами фильтры и порядок строит репозиторий — один SQL-запрос
+/// с проекцией в <see cref="BarberSearchItemResponse"/>, без Include коллекций: без координат
+/// это <c>rating DESC NULLS LAST, id</c>, с координатами — расстояние до ближайшего активного
+/// салона и <c>id</c> (рейтинг в гео-режиме не участвует).
 /// </remarks>
 public sealed class SearchBarbersHandler
     : IQueryHandler<PagedResponse<BarberSearchItemResponse>, SearchBarbersQuery>
@@ -45,11 +47,22 @@ public sealed class SearchBarbersHandler
             return pageSizeError;
         }
 
+        // Геопозиция проверяется до курсора и до репозитория: половина пары, NaN и выход
+        // за диапазон — ошибка запроса, которую нельзя «исправить» молчаливым откатом
+        // к сортировке по рейтингу.
+        var locationResult = SearchLocation.TryCreate(query.Latitude, query.Longitude);
+        if (locationResult.IsFailure)
+        {
+            return locationResult.Error;
+        }
+
+        var location = locationResult.Value;
+
         BarberSearchCursor? cursor = null;
 
         if (!string.IsNullOrWhiteSpace(query.Cursor))
         {
-            var decoded = BarberSearchCursor.Decode(query.Cursor);
+            var decoded = BarberSearchCursor.Decode(query.Cursor, isGeoSearch: location is not null);
             if (decoded.IsFailure)
             {
                 return decoded.Error;
@@ -86,7 +99,8 @@ public sealed class SearchBarbersHandler
                 ? null
                 : query.AdditionalService.Trim(),
             Cursor: cursor,
-            Limit: pageSize + 1);
+            Limit: pageSize + 1,
+            Location: location);
 
         var rowsResult = await _repository.SearchAsync(filter, cancellationToken);
         if (rowsResult.IsFailure)
@@ -101,11 +115,29 @@ public sealed class SearchBarbersHandler
             : rows.ToList();
 
         var nextCursor = hasNextPage && items.Count > 0
-            ? new BarberSearchCursor(items[^1].Rating, items[^1].Id).Encode()
+            ? BuildNextCursor(items[^1], location is not null)
             : null;
 
         return new PagedResponse<BarberSearchItemResponse>(items, nextCursor);
     }
+
+    /// <summary>
+    /// Строит курсор следующей страницы по последней строке текущей.
+    /// </summary>
+    /// <remarks>
+    /// В гео-режиме ключ продолжения — расстояние, а не рейтинг: рейтинг в гео-порядке
+    /// не участвует, и курсор с рейтингом указывал бы на чужую сортировку. Рейтинг всё равно
+    /// остаётся в курсоре: формат версии 2 общий для обоих режимов, а в гео-режиме он
+    /// не используется при фильтрации.
+    /// </remarks>
+    /// <param name="item">Последняя строка страницы.</param>
+    /// <param name="isGeoSearch">Идёт ли поиск с координатами клиента.</param>
+    private static string BuildNextCursor(
+        BarberSearchItemResponse item,
+        bool isGeoSearch)
+        => isGeoSearch
+            ? new BarberSearchCursor(item.Rating, item.Id, item.DistanceKm).Encode()
+            : new BarberSearchCursor(item.Rating, item.Id).Encode();
 
     /// <summary>
     /// Разбирает язык фильтра по имени enum без учёта регистра.

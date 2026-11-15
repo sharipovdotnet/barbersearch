@@ -67,6 +67,15 @@ form submits only on «Найти», and empty values are omitted from the query
 enum name (`Ru`, `En`, …), and the additional service is a case-insensitive substring of the
 barber's own list.
 
+The same request carries an optional `latitude`/`longitude` pair. On the first «Найти» the screen
+asks for the location permission and reads the device position (medium accuracy, 10-second timeout,
+a fresh last-known fix is reused for five minutes); a refusal or a missing fix does not block the
+search — the request just goes without coordinates and the screen says why, with «Повторить». With
+the pair the server orders the page by the distance to the barber's nearest active salon, sets the
+`distanceKm` of every row and the card shows «850 м» / «1,2 км». Without it the order stays the
+web's rating one. The position is read once per screen and is never stored or sent anywhere except
+that search request. The backend side is recorded in `../backend/AGENT.md`.
+
 The two catalog selects are filled from the public reads `GET api/specializations` and
 `GET api/hair-services` (bare arrays, no paging), requested in parallel once per screen. Their
 failure does not block city, date or language: the form shows «Не удалось загрузить фильтры.» with
@@ -326,7 +335,9 @@ cursor handling, both kinds of review errors and the «Дальше» → «По
 viewer's counter and caption, and the card's new sections with their hide rules. The password-reset
 slice adds the anonymous request client (body, `204`, `ProblemDetails`) and its screen ViewModel:
 the client-side email checks, the exact «Проверьте почту» wording, the server's failures, the local
-cooldown and its 60-second tick.
+cooldown and its 60-second tick. The geo-search slice adds the invariant formatting of the
+coordinate pair, the search ViewModel's location states (position sent, refusal and unavailable
+with their hints, a single read per screen, the retry) and `BarberText.Distance` in both languages.
 
 ## iOS
 

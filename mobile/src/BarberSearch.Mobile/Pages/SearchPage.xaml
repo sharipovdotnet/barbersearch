@@ -131,10 +131,49 @@
                     Text="{Binding ResultsCountText}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
+                <!-- Порядок выдачи меняется геопозицией, и экран говорит об этом прямо. -->
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding ShowNearbySort}"
+                    Text="{loc:Translate Key='Сначала ближайшие мастера'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!--
+                    Чтение геопозиции идёт до запроса выдачи: индикатор и подпись объясняют,
+                    почему «Найти» отвечает не сразу.
+                -->
+                <HorizontalStackLayout IsVisible="{Binding IsLocating}" Spacing="8">
+                    <ActivityIndicator IsRunning="{Binding IsLocating}" VerticalOptions="Center" />
+                    <Label
+                        FontSize="12"
+                        Text="{loc:Translate Key='Определяем геопозицию…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
                 <ActivityIndicator
                     HorizontalOptions="Start"
                     IsRunning="{Binding IsLoading}"
                     IsVisible="{Binding IsLoading}" />
+
+                <!-- Отказ в геопозиции не блокирует поиск: подсказка объясняет порядок и даёт повтор. -->
+                <Border
+                    IsVisible="{Binding HasLocationHint}"
+                    Padding="12"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding LocationHint}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Button
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding RetryLocationCommand}"
+                            Text="{loc:Translate Key='Повторить'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
 
                 <VerticalStackLayout IsVisible="{Binding HasError}" Spacing="8">
                     <Label
@@ -164,7 +203,18 @@
                                     <Label
                                         Text="{Binding City}"
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                    <Label Text="{Binding Rating, Converter={StaticResource RatingText}}" />
+
+                                    <!-- Рейтинг слева, расстояние справа; без геопозиции расстояние скрыто. -->
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Label Text="{Binding Rating, Converter={StaticResource RatingText}}" />
+                                        <Label
+                                            Grid.Column="1"
+                                            FontSize="12"
+                                            IsVisible="{Binding DistanceKm, Converter={StaticResource NotNull}}"
+                                            Text="{Binding DistanceKm, Converter={StaticResource DistanceText}}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                            VerticalOptions="Center" />
+                                    </Grid>
                                 </VerticalStackLayout>
                             </Border>
                         </DataTemplate>

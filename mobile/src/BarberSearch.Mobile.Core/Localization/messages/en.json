@@ -392,5 +392,12 @@
   "Адрес:": "Address:",
   "Письмо действует 24 часа.": "The link is valid for 24 hours.",
 
-  "Экран появится после того, как в API будет поиск по координатам.": "This screen will appear once the API can search by coordinates."
+  "Экран появится после того, как в API будет поиск по координатам.": "This screen will appear once the API can search by coordinates.",
+
+  "м": "m",
+  "км": "km",
+  "Сначала ближайшие мастера": "Nearest first",
+  "Определяем геопозицию…": "Detecting your location…",
+  "Геопозиция недоступна — показываем всех мастеров. Разрешите доступ в настройках телефона.": "Location is unavailable — showing all barbers. Allow access in your phone settings.",
+  "Не удалось определить геопозицию — показываем всех мастеров.": "Could not determine your location — showing all barbers."
 }
