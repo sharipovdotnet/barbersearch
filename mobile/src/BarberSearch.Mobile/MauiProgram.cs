@@ -1,3 +1,4 @@
+using System.Reflection;
 using BarberSearch.Mobile.Auth;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
@@ -5,6 +6,7 @@ using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Configuration;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.Location;
@@ -24,33 +26,32 @@ namespace BarberSearch.Mobile;
 public static class MauiProgram
 {
     /// <summary>
-    /// Адрес локального бэкенда.
+    /// Ключ метаданных сборки, в которые .csproj пишет хост из <c>-p:DevApiHost</c>.
     /// </summary>
-    /// <remarks>
-    /// Эмулятор Android видит хост разработчика как <c>10.0.2.2</c>, симулятор iOS — как
-    /// <c>localhost</c>. Адрес стенда появится здесь же, когда он будет.
-    /// </remarks>
-    private const string DevelopmentApiBaseAddress =
-#if ANDROID
-        "http://10.0.2.2:5243";
-#else
-        "http://localhost:5243";
-#endif
+    private const string DevelopmentHostMetadataKey = "BarberSearch.DevApiHost";
 
     /// <summary>
-    /// Адрес публичного сайта: правовые документы открываются в браузере, а не в приложении.
+    /// Хост локального бэкенда, заданный при сборке, или <c>null</c>, если он не задан.
     /// </summary>
     /// <remarks>
-    /// Совпадает с <c>App:PublicUrl</c> бэкенда в разработке — сайт запускается на 5173.
-    /// Эмулятор Android видит хост как <c>10.0.2.2</c>, симулятор iOS — как <c>localhost</c>.
-    /// Адрес стенда появится здесь же, когда он будет.
+    /// Пример: <c>dotnet build -f net10.0-android -p:DevApiHost=192.168.1.10</c> — телефон в той же
+    /// сети, без проброса портов. Значение читается только в отладочной сборке: в релизе такого
+    /// параметра нет, а рефлексия в урезанной сборке — лишний риск. Без параметра хост выбирается
+    /// по устройству, см. <see cref="DevelopmentEndpoints"/>.
     /// </remarks>
-    private const string DevelopmentSiteBaseAddress =
-#if ANDROID
-        "http://10.0.2.2:5173";
+    private static string? ConfiguredDevelopmentHost
+    {
+        get
+        {
+#if DEBUG
+            return typeof(MauiProgram).Assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(attribute => attribute.Key == DevelopmentHostMetadataKey)?.Value;
 #else
-        "http://localhost:5173";
+            return null;
 #endif
+        }
+    }
 
     /// <summary>
     /// Создаёт и настраивает MAUI-приложение.
@@ -73,8 +74,14 @@ public static class MauiProgram
                 fonts.AddFont("Geist-SemiBold.ttf", "GeistSemiBold");
             });
 
-        builder.Services.AddSingleton(BarberSearchApiOptions.FromBaseAddress(DevelopmentApiBaseAddress));
-        builder.Services.AddSingleton(LegalOptions.FromBaseAddress(DevelopmentSiteBaseAddress));
+        // Адрес бэкенда и сайта — по устройству и сборке: эмулятор видит машину по 10.0.2.2,
+        // реальный телефон — по localhost через `adb reverse`, а -p:DevApiHost задаёт хост явно.
+        var developmentHost = ResolveDevelopmentHost();
+        var apiBaseAddress = DevelopmentEndpoints.ApiBaseAddress(developmentHost);
+        var siteBaseAddress = DevelopmentEndpoints.SiteBaseAddress(developmentHost);
+
+        builder.Services.AddSingleton(BarberSearchApiOptions.FromBaseAddress(apiBaseAddress));
+        builder.Services.AddSingleton(LegalOptions.FromBaseAddress(siteBaseAddress));
 
         // Язык интерфейса читается один раз на старте: XAML-разметка и статические форматтеры
         // берут его из модульного Loc, а приложение может его сменить из «Профиля».
@@ -171,6 +178,22 @@ public static class MauiProgram
 
         return builder.Build();
     }
+
+    /// <summary>
+    /// Выбирает хост локального бэкенда для устройства, на котором запущено приложение.
+    /// </summary>
+    /// <remarks>
+    /// Эмулятор Android видит машину разработчика как <c>10.0.2.2</c>, а реальный телефон — нет:
+    /// на телефоне этот адрес указывает на сам телефон. Телефон ходит на <c>localhost</c>, который
+    /// на компьютер пробрасывает <c>adb reverse tcp:5243 tcp:5243</c> (и <c>tcp:5173</c> для
+    /// сайта), поэтому адрес не зависит от IP-адреса машины и её брандмауэра, а меняется одной
+    /// командой на подключение. Заданный при сборке хост важнее правила — см.
+    /// <see cref="DevelopmentEndpoints"/>.
+    /// </remarks>
+    private static string ResolveDevelopmentHost() => DevelopmentEndpoints.ResolveHost(
+        ConfiguredDevelopmentHost,
+        androidPlatform: DeviceInfo.Current.Platform == DevicePlatform.Android,
+        virtualDevice: DeviceInfo.Current.DeviceType == DeviceType.Virtual);
 
     /// <summary>
     /// Общие настройки любого клиента API: адрес, таймаут и никаких логов с телами запросов.
