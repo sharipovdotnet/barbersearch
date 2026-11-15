@@ -299,6 +299,149 @@ public sealed class BookingsViewModelTests
     }
 
     [Fact]
+    public async Task AutoRefreshAsync_LoadedList_SilentlyReplacesFirstPage()
+    {
+        using var harness = new Harness();
+        var calls = 0;
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return Task.FromResult(calls == 1
+                ? Page(
+                [
+                    Booking(FirstBookingId, startAt: At(2026, 11, 20, 15, 30)),
+                    Booking(SecondBookingId, startAt: At(2026, 11, 22, 9, 0)),
+                ])
+                : Page([Booking(RefreshedBookingId, startAt: At(2026, 11, 25, 12, 0))]));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.AutoRefreshAsync();
+
+        Assert.False(viewModel.IsRefreshing);
+        Assert.False(viewModel.ShowLoading);
+        Assert.False(viewModel.ShowError);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.Single(viewModel.UpcomingGroups);
+        Assert.Equal(RefreshedBookingId, Assert.Single(viewModel.UpcomingGroups[0]).Id);
+
+        // Ровно один запрос на вызов, первая страница и без курсора; карточка барбера — из кэша.
+        Assert.Equal(2, harness.Bookings.Requests.Count);
+        Assert.Null(harness.Bookings.Requests[1].Cursor);
+        Assert.Equal(BookingsViewModel.PageSize, harness.Bookings.Requests[1].PageSize);
+        Assert.Single(harness.Barber.ProfileCalls);
+    }
+
+    [Fact]
+    public async Task AutoRefreshAsync_TooManyRequests_KeepsRowsWithoutError()
+    {
+        using var harness = new Harness();
+        harness.Bookings.GetBookings = (_, _, _) => Task.FromResult(Page(
+        [
+            Booking(FirstBookingId, startAt: At(2026, 11, 20, 15, 30)),
+            Booking(SecondBookingId, startAt: At(2026, 11, 22, 9, 0)),
+        ]));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromException<PagedResponse<BookingResponse>>(ApiError(HttpStatusCode.TooManyRequests));
+
+        var viewModel = harness.ViewModel;
+
+        var exception = await Record.ExceptionAsync(viewModel.AutoRefreshAsync);
+
+        Assert.Null(exception);
+        Assert.False(viewModel.IsRefreshing);
+        Assert.False(viewModel.ShowError);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.Equal(2, viewModel.UpcomingGroups.SelectMany(group => group).Count());
+        Assert.Equal(2, harness.Bookings.Requests.Count);
+    }
+
+    [Fact]
+    public async Task AutoRefreshAsync_WithoutSession_MakesNoRequests()
+    {
+        using var harness = new Harness(authenticated: false);
+
+        await harness.ViewModel.AutoRefreshAsync();
+
+        Assert.False(harness.ViewModel.IsSignedIn);
+        Assert.True(harness.ViewModel.ShowGate);
+        Assert.Equal(0, harness.Account.Calls);
+        Assert.Empty(harness.Bookings.Requests);
+        Assert.Empty(harness.Barber.ProfileCalls);
+    }
+
+    [Fact]
+    public async Task AutoRefreshAsync_SecondPageLoaded_DoesNothing()
+    {
+        using var harness = new Harness();
+        harness.Bookings.GetBookings = (_, _, cursor) => Task.FromResult(cursor is null
+            ? Page(
+                [.. Enumerable.Range(100, BookingsViewModel.PageSize).Select(NumberedBooking)],
+                "c1")
+            : Page([.. Enumerable.Range(200, 5).Select(NumberedBooking)]));
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+
+        var rows = viewModel.UpcomingGroups.SelectMany(group => group).ToList();
+        var requests = harness.Bookings.Requests.Count;
+
+        Assert.Equal(BookingsViewModel.PageSize + 5, rows.Count);
+
+        // Ответ на случай запроса: если автообновление всё же сходит в сеть, список изменится.
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromResult(Page([Booking(RefreshedBookingId, startAt: At(2026, 11, 25, 12, 0))]));
+
+        await viewModel.AutoRefreshAsync();
+
+        Assert.Equal(requests, harness.Bookings.Requests.Count);
+        Assert.Equal(
+            rows.Select(row => row.Id),
+            viewModel.UpcomingGroups.SelectMany(group => group).Select(row => row.Id));
+        Assert.DoesNotContain(
+            viewModel.UpcomingGroups.SelectMany(group => group),
+            row => row.Id == RefreshedBookingId);
+    }
+
+    [Fact]
+    public async Task AutoRefreshAsync_ConcurrentCalls_SendOneRequest()
+    {
+        using var harness = new Harness();
+        harness.Bookings.GetBookings = (_, _, _) => Task.FromResult(Page(
+            [Booking(FirstBookingId, startAt: At(2026, 11, 20, 15, 30))]));
+
+        await harness.ViewModel.InitializeAsync();
+
+        var requests = harness.Bookings.Requests.Count;
+
+        // Ответ придержан: первый вызов висит в полёте, второй обязан выйти по флагу.
+        var held = new TaskCompletionSource<PagedResponse<BookingResponse>>();
+        harness.Bookings.GetBookings = (_, _, _) => held.Task;
+
+        var first = harness.ViewModel.AutoRefreshAsync();
+
+        await harness.ViewModel.AutoRefreshAsync();
+
+        Assert.Equal(requests + 1, harness.Bookings.Requests.Count);
+
+        held.SetResult(Page([Booking(RefreshedBookingId, startAt: At(2026, 11, 25, 12, 0))]));
+        await first;
+
+        Assert.Equal(requests + 1, harness.Bookings.Requests.Count);
+        Assert.Equal(RefreshedBookingId, Assert.Single(Assert.Single(harness.ViewModel.UpcomingGroups)).Id);
+    }
+
+    [Fact]
     public async Task InitializeAsync_NetworkError_ShowsRetryableError()
     {
         using var harness = new Harness();
@@ -693,6 +836,13 @@ public sealed class BookingsViewModelTests
             null,
             (startAt ?? At(2026, 11, 20, 15, 30)).AddDays(-1),
             hasReview);
+
+    /// <summary>
+    /// Строка с уникальным id для списков в несколько страниц: номер задаёт хвост GUID
+    /// и не пересекается с константами теста.
+    /// </summary>
+    private static BookingResponse NumberedBooking(int number) =>
+        Booking(Guid.Parse($"9e200000-0000-4000-8000-{number:D12}"));
 
     private static BookingResponse HistoryBooking() => Booking(
         HistoryBookingId,

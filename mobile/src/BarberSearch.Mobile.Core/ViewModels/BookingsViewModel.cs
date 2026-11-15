@@ -25,9 +25,11 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// услуга, салон и пояс догружаются публичной карточкой и кэшируются на жизнь ViewModel.
 /// </para>
 /// <para>
-/// Фонового опроса нет (веб опрашивает «Предстоящие» раз в минуту): список обновляется при
-/// появлении вкладки, свайпом и после действий. Обратный отсчёт считает таймер страницы,
-/// а не сеть. Это решение среза, записанное в <c>mobile/AGENT.md</c> §5.
+/// Список обновляется сам раз в 30 секунд, пока вкладка видна: <see cref="AutoRefreshAsync"/>
+/// вызывает таймер страницы и перечитывает первую страницу молча, не показывая индикатор.
+/// Свайп, появление вкладки и действия тоже обновляют список; отдельной кнопки «Обновить»
+/// нет. Обратный отсчёт считает другой таймер страницы, а не сеть. Решение записано в
+/// <c>mobile/AGENT.md</c> §5.
 /// </para>
 /// <para>
 /// Ошибки показываются по статусу и публичным кодам, никогда по английскому <c>detail</c>.
@@ -81,6 +83,7 @@ public sealed partial class BookingsViewModel : ObservableObject
 
     private Guid? _userId;
     private bool _isActionRunning;
+    private bool _isAutoRefreshing;
     private BookingsTab _tab = BookingsTab.Upcoming;
 
     /// <summary>
@@ -312,6 +315,51 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Тихо перечитывает первую страницу активной вкладки по таймеру страницы.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Вызывается каждые 30 секунд, пока вкладка видна. Индикатор не показывается: строки
+    /// остаются на экране до ответа, а ошибка тихого обновления их не стирает — иначе один
+    /// пропавший пакет каждые полминуты гасил бы уже показанный список.
+    /// </para>
+    /// <para>
+    /// Обновление пропускается, когда экран занят другим: пользователь не вошёл, идёт отмена,
+    /// свайп-обновление, первая загрузка или догрузка страницы. Список, в котором догрузили
+    /// вторую страницу, тоже не трогается: тихое обновление заменило бы его первой страницей
+    /// и выбросило строки, до которых пользователь уже долистал.
+    /// </para>
+    /// </remarks>
+    public async Task AutoRefreshAsync()
+    {
+        if (!IsSignedIn || _isActionRunning || IsRefreshing || _isAutoRefreshing)
+        {
+            return;
+        }
+
+        var state = ActiveState;
+
+        if (!state.HasLoaded
+            || state.IsFirstLoading
+            || state.IsLoadingMore
+            || state.ItemCount > PageSize)
+        {
+            return;
+        }
+
+        _isAutoRefreshing = true;
+
+        try
+        {
+            await LoadFirstPageAsync(state, FirstPageMode.Silent, CancellationToken.None);
+        }
+        finally
+        {
+            _isAutoRefreshing = false;
+        }
+    }
+
+    /// <summary>
     /// Сбрасывает экран в гейт входа и стирает данные предыдущего пользователя.
     /// </summary>
     /// <remarks>
@@ -339,7 +387,8 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// Пересчитывает время, отсчёт и доступность переноса во всех строках.
     /// </summary>
     /// <remarks>
-    /// Вызывается минутным таймером страницы: сеть при этом не трогается.
+    /// Вызывается минутным таймером страницы и сразу после возврата приложения из фона: сеть
+    /// при этом не трогается.
     /// </remarks>
     public void RecomputeTimes()
     {
@@ -1233,6 +1282,11 @@ public sealed partial class BookingsViewModel : ObservableObject
         /// Ошибка догрузки; <c>null</c>, когда догрузка прошла.
         /// </summary>
         public string? LoadMoreError { get; set; }
+
+        /// <summary>
+        /// Сколько строк уже загружено: больше страницы — список догружали.
+        /// </summary>
+        public int ItemCount => Groups.Sum(group => group.Count);
 
         /// <summary>
         /// Поколение ответов: старый ответ после смены вкладки или обновления отбрасывается.
