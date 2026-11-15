@@ -3,9 +3,10 @@
     x:Class="BarberSearch.Mobile.Pages.BookingsPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:BookingsViewModel"
-    Title="Записи">
+    Title="{loc:Translate Key='Записи'}">
 
     <!--
         Экран собран из трёх состояний одной вкладки: гейт входа, первая загрузка/ошибка и
@@ -33,7 +34,7 @@
                     Command="{Binding DismissAnnouncementCommand}"
                     MinimumHeightRequest="44"
                     MinimumWidthRequest="44"
-                    Text="Закрыть"
+                    Text="{loc:Translate Key='Закрыть'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
             </Grid>
         </Border>
@@ -43,7 +44,7 @@
             <Button
                 BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                 Command="{Binding SelectUpcomingCommand}"
-                Text="Предстоящие"
+                Text="{loc:Translate Key='Предстоящие'}"
                 TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}">
                 <Button.Triggers>
                     <DataTrigger
@@ -63,7 +64,7 @@
                 Grid.Column="1"
                 BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                 Command="{Binding SelectHistoryCommand}"
-                Text="История"
+                Text="{loc:Translate Key='История'}"
                 TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}">
                 <Button.Triggers>
                     <DataTrigger
@@ -91,35 +92,35 @@
                         FontSize="20"
                         HorizontalTextAlignment="Center"
                         LineBreakMode="WordWrap"
-                        Text="Войдите, чтобы увидеть записи">
+                        Text="{loc:Translate Key='Войдите, чтобы увидеть записи'}">
                         <Label.Triggers>
                             <DataTrigger
                                 Binding="{Binding IsSessionExpired}"
                                 TargetType="Label"
                                 Value="True">
-                                <Setter Property="Text" Value="Сессия истекла" />
+                                <Setter Property="Text" Value="{loc:Translate Key='Сессия истекла'}" />
                             </DataTrigger>
                         </Label.Triggers>
                     </Label>
                     <Label
                         HorizontalTextAlignment="Center"
                         LineBreakMode="WordWrap"
-                        Text="Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю."
+                        Text="{loc:Translate Key='Здесь собраны ваши визиты: время, статус и отмена. Вход по email и паролю.'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
                         <Label.Triggers>
                             <DataTrigger
                                 Binding="{Binding IsSessionExpired}"
                                 TargetType="Label"
                                 Value="True">
-                                <Setter Property="Text" Value="Войдите снова, чтобы увидеть свои записи." />
+                                <Setter Property="Text" Value="{loc:Translate Key='Войдите снова, чтобы увидеть свои записи.'}" />
                             </DataTrigger>
                         </Label.Triggers>
                     </Label>
-                    <Button Command="{Binding SignInCommand}" Text="Войти" />
+                    <Button Command="{Binding SignInCommand}" Text="{loc:Translate Key='Войти'}" />
                     <Button
                         BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                         Command="{Binding SearchCommand}"
-                        Text="Вернуться к поиску"
+                        Text="{loc:Translate Key='Вернуться к поиску'}"
                         TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 </VerticalStackLayout>
             </ScrollView>
@@ -134,7 +135,7 @@
                     IsRunning="{Binding ShowLoading}" />
                 <Label
                     HorizontalTextAlignment="Center"
-                    Text="Загружаем записи…"
+                    Text="{loc:Translate Key='Загружаем записи…'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 
@@ -148,13 +149,13 @@
                     FontSize="16"
                     HorizontalTextAlignment="Center"
                     LineBreakMode="WordWrap"
-                    Text="Не удалось загрузить записи" />
+                    Text="{loc:Translate Key='Не удалось загрузить записи'}" />
                 <Label
                     HorizontalTextAlignment="Center"
                     LineBreakMode="WordWrap"
                     Text="{Binding ErrorMessage}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                <Button Command="{Binding RetryCommand}" HorizontalOptions="Center" Text="Повторить" />
+                <Button Command="{Binding RetryCommand}" HorizontalOptions="Center" Text="{loc:Translate Key='Повторить'}" />
             </VerticalStackLayout>
 
             <!-- Список активной вкладки: свайп вниз обновляет, прокрутка догружает. -->
@@ -221,7 +222,7 @@
                                             StrokeShape="RoundRectangle 8">
                                             <Label
                                                 FontSize="12"
-                                                Text="Ближайшая запись"
+                                                Text="{loc:Translate Key='Ближайшая запись'}"
                                                 TextColor="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
                                         </Border>
                                         <Border
@@ -346,7 +347,7 @@
                                             Clicked="OnCancelClicked"
                                             IsEnabled="{Binding CanCancel}"
                                             IsVisible="{Binding CanCancel}"
-                                            Text="Отменить"
+                                            Text="{loc:Translate Key='Отменить'}"
                                             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
                                             <Button.Triggers>
                                                 <DataTrigger
@@ -362,18 +363,18 @@
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                             Clicked="OnRescheduleClicked"
                                             IsVisible="{Binding CanReschedule}"
-                                            Text="Перенести"
+                                            Text="{loc:Translate Key='Перенести'}"
                                             TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                                         <Button
                                             Margin="0,0,8,8"
                                             Clicked="OnReviewClicked"
                                             IsVisible="{Binding CanReview}"
-                                            Text="Оставить отзыв" />
+                                            Text="{loc:Translate Key='Оставить отзыв'}" />
                                         <Label
                                             Margin="0,0,8,8"
                                             FontSize="12"
                                             IsVisible="{Binding ShowReviewSent}"
-                                            Text="Отзыв отправлен"
+                                            Text="{loc:Translate Key='Отзыв отправлен'}"
                                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                                             VerticalOptions="Center" />
                                     </FlexLayout>
@@ -405,7 +406,7 @@
                                     Command="{Binding SearchCommand}"
                                     HorizontalOptions="Center"
                                     IsVisible="{Binding IsUpcomingSelected}"
-                                    Text="Найти барбера" />
+                                    Text="{loc:Translate Key='Найти барбера'}" />
                             </VerticalStackLayout>
                         </ContentView>
                     </CollectionView.EmptyView>
@@ -419,25 +420,25 @@
                                 Spacing="8">
                                 <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
                                 <Label
-                                    Text="Идёт догрузка…"
+                                    Text="{loc:Translate Key='Идёт догрузка…'}"
                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                                     VerticalOptions="Center" />
                             </HorizontalStackLayout>
                             <VerticalStackLayout IsVisible="{Binding ShowLoadMoreError}" Spacing="8">
                                 <Label
                                     LineBreakMode="WordWrap"
-                                    Text="Не удалось загрузить ещё записи."
+                                    Text="{loc:Translate Key='Не удалось загрузить ещё записи.'}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
                                 <Button
                                     Command="{Binding RetryLoadMoreCommand}"
                                     HorizontalOptions="Start"
-                                    Text="Повторить" />
+                                    Text="{loc:Translate Key='Повторить'}" />
                             </VerticalStackLayout>
                             <Label
                                 FontSize="12"
                                 IsVisible="{Binding ShowProfilesWarning}"
                                 LineBreakMode="WordWrap"
-                                Text="Часть карточек барберов не загрузилась — имена и адреса могут быть неполными."
+                                Text="{loc:Translate Key='Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         </VerticalStackLayout>
                     </CollectionView.Footer>

@@ -31,6 +31,8 @@ mobile app: a schedule and working hours are not filled in from a phone.
 | Solution | `mobile/BarberSearch.Mobile.sln` |
 | App (MAUI) | `mobile/src/BarberSearch.Mobile` |
 | Core without MAUI (HTTP client, ViewModels) | `mobile/src/BarberSearch.Mobile.Core` |
+| Interface language, English catalog | `mobile/src/BarberSearch.Mobile.Core/Localization` |
+| App language switch and XAML `Translate` markup | `mobile/src/BarberSearch.Mobile/Localization` |
 | Core tests | `mobile/tests/BarberSearch.Mobile.Core.Tests` |
 | API contracts (project reference) | `backend/BarberSearch/src/BarberSearch.Contracts` |
 | Git root | `D:\Projects\barbersearch` — the mobile app sits inside the repository, not next to it |
@@ -166,6 +168,24 @@ A local backend is required before running (`backend/docker compose up -d` +
   empty value and the filter is optional; and the additional-service field has no `<datalist>`
   suggestions, because there is no native equivalent and the filter itself is free text. Both are
   recorded here instead of being left as silent omissions.
+- **The interface speaks Russian and English, and the web is the source of both.** The approach is
+  the web's gettext one: the key is the Russian source string, and `Localization/messages/en.json` in
+  Core holds the translation. `Loc.T("…")` in code and `{loc:Translate Key='…'}` in XAML cover every
+  visible label, placeholder, dialog and error; formatting helpers take the culture from the chosen
+  language (`ru-RU` / `en-GB`), so dates stay day-month, time stays 24-hour and the price is
+  «2 400 ₽» / «RUB 2,400». The default is Russian, and the choice is stored in `Preferences` under
+  `barbersearch.locale` — the web's key, but the phone's own storage. The web puts the switcher in
+  the header; mobile has no header, so the compact RU/EN pair lives at the top of «Профиль», the only
+  settings screen. Changing the language persists the choice and **rebuilds Shell from DI**: the
+  pages and ViewModels are transient, so their strings are created again with the new language, and
+  the app returns to «Профиль». This is the phone's equivalent of a page reload — the alternative,
+  an event in every ViewModel, would be a second, fragile localization mechanism. Because pages are
+  rebuilt, the singleton session subscriptions of `ProfilePage` and `BookingsPage` are attached on
+  appearing and detached on disappearing. The English catalog follows the frontend glossary and
+  wording, including the browser's `en-GB` conventions; an untranslated string stays Russian rather
+  than turning into a key. One surface stays outside the catalog on purpose: the calendar drawn by
+  the native date picker keeps the device language, as the browser-drawn calendar does on the web;
+  every date the app formats itself is localized.
 
 ## 6. What the backend still lacks
 
@@ -268,7 +288,9 @@ The port is done: this is the state to keep, not a plan.
 2. A screen repeats the web structure and its three states — loading, content, error; the empty
    state keeps the web wording instead of a new sentence.
 3. Wording is taken from the web, in Russian, and follows the frontend glossary term by term
-   (booking, slot, no-show…). One concept — one word in both clients.
+   (booking, slot, no-show…). One concept — one word in both clients. English is taken from the
+   same catalog where the web already has it (`frontend/src/i18n/messages/en`), and new mobile-only
+   strings follow the same glossary and tone.
 4. Port principles, not markup: no Tailwind classes, no shadcn/Base UI components, no `data-*`
    state attributes, no hover-only affordances. Touch instead: targets ≥ 44 pt, no hover, primary
    actions within thumb reach rather than pinned to the top edge.

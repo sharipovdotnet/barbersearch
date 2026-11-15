@@ -8,8 +8,8 @@ namespace BarberSearch.Mobile.Pages;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Страница — singleton (см. <c>MauiProgram</c>), поэтому подписка на сессию живёт столько же,
-/// сколько приложение: отписываться и бояться утечки не нужно. Обработку события держим
+/// Страница создаётся заново вместе с Shell (смена языка пересобирает интерфейс), поэтому
+/// подписка на singleton-сессию снимается при уходе со страницы. Обработку события держим
 /// здесь, а не во ViewModel: <see cref="TokenSession.SessionEnded"/> приходит с сетевого
 /// потока, а Core не знает про диспетчер MAUI — переключение на UI-поток и есть работа
 /// страницы.
@@ -22,6 +22,7 @@ namespace BarberSearch.Mobile.Pages;
 public partial class ProfilePage : ContentPage
 {
     private readonly ProfileViewModel _viewModel;
+    private readonly TokenSession _session;
 
     /// <summary>
     /// Создаёт экран и подписывается на завершение сессии и переходы в разделы.
@@ -36,10 +37,9 @@ public partial class ProfilePage : ContentPage
         InitializeComponent();
 
         _viewModel = viewModel;
+        _session = session;
 
         BindingContext = viewModel;
-
-        session.SessionEnded += OnSessionEnded;
 
         _viewModel.EditProfileRequested += OnEditProfileRequested;
         _viewModel.ReviewsRequested += OnReviewsRequested;
@@ -61,7 +61,20 @@ public partial class ProfilePage : ContentPage
     {
         base.OnAppearing();
 
+        _session.SessionEnded -= OnSessionEnded;
+        _session.SessionEnded += OnSessionEnded;
+
         await _viewModel.InitializeAsync();
+    }
+
+    /// <summary>
+    /// Снимает подписку на singleton-сессию, пока страница не на экране.
+    /// </summary>
+    protected override void OnDisappearing()
+    {
+        _session.SessionEnded -= OnSessionEnded;
+
+        base.OnDisappearing();
     }
 
     /// <summary>

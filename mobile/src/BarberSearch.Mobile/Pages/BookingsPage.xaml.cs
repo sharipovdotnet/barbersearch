@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Pages;
@@ -8,9 +9,9 @@ namespace BarberSearch.Mobile.Pages;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Страница — singleton (см. <c>MauiProgram</c>): ViewModel создаётся ею один раз, поэтому
-/// состояние вкладки переживает переключения между разделами. Подписки на сессию и события
-/// ViewModel живут столько же, сколько приложение, и отписываться от них не нужно.
+/// Страница создаётся заново вместе с Shell (смена языка пересобирает интерфейс), поэтому
+/// подписка на singleton-сессию снимается при уходе со страницы. События ViewModel живут
+/// столько же, сколько сама страница, — их источник ей и принадлежит.
 /// </para>
 /// <para>
 /// Минутный таймер считает обратный отсчёт и доступность переноса без сети: ViewModel этого
@@ -23,6 +24,7 @@ public partial class BookingsPage : ContentPage
     private const int RecomputeIntervalSeconds = 60;
 
     private readonly BookingsViewModel _viewModel;
+    private readonly TokenSession _session;
 
     private IDispatcherTimer? _timeTimer;
 
@@ -39,10 +41,9 @@ public partial class BookingsPage : ContentPage
         InitializeComponent();
 
         _viewModel = viewModel;
+        _session = session;
 
         BindingContext = viewModel;
-
-        session.SessionEnded += OnSessionEnded;
 
         _viewModel.RescheduleRequested += OnRescheduleRequested;
         _viewModel.ReviewRequested += OnReviewRequested;
@@ -62,6 +63,9 @@ public partial class BookingsPage : ContentPage
     {
         base.OnAppearing();
 
+        _session.SessionEnded -= OnSessionEnded;
+        _session.SessionEnded += OnSessionEnded;
+
         _timeTimer ??= CreateTimeTimer();
         _timeTimer.Start();
 
@@ -74,6 +78,8 @@ public partial class BookingsPage : ContentPage
     protected override void OnDisappearing()
     {
         _timeTimer?.Stop();
+
+        _session.SessionEnded -= OnSessionEnded;
 
         base.OnDisappearing();
     }
@@ -157,11 +163,11 @@ public partial class BookingsPage : ContentPage
         }
 
         var accepted = await DisplayAlertAsync(
-            "Отменить запись?",
-            "Отмена необратима. Вернуть запись нельзя — придётся записываться заново. "
-                + "Время может занять другой клиент.",
-            "Отменить запись",
-            "Не отменять");
+            Loc.T("Отменить запись?"),
+            Loc.T(
+                "Отмена необратима. Вернуть запись нельзя — придётся записываться заново. Время может занять другой клиент."),
+            Loc.T("Отменить запись"),
+            Loc.T("Не отменять"));
 
         if (!accepted)
         {
@@ -172,7 +178,7 @@ public partial class BookingsPage : ContentPage
 
         if (error is not null)
         {
-            await DisplayAlertAsync("Отмена записи", error, "Понятно");
+            await DisplayAlertAsync(Loc.T("Отмена записи"), error, Loc.T("Понятно"));
         }
     }
 

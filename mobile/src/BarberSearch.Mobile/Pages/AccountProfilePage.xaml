@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.AccountProfilePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:AccountProfileViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Профиль">
+    Title="{loc:Translate Key='Профиль'}">
 
     <Grid Padding="16">
 
@@ -19,7 +20,7 @@
                 IsRunning="{Binding ShowLoading}" />
             <Label
                 HorizontalTextAlignment="Center"
-                Text="Загружаем профиль…"
+                Text="{loc:Translate Key='Загружаем профиль…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         </VerticalStackLayout>
 
@@ -32,7 +33,7 @@
                 FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
-                Text="Не удалось загрузить профиль" />
+                Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
@@ -41,7 +42,7 @@
             <Button
                 Command="{Binding RetryCommand}"
                 HorizontalOptions="Center"
-                Text="Повторить" />
+                Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
         <ScrollView IsVisible="{Binding ShowContent}">
@@ -50,7 +51,7 @@
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="Имя, телефон и данные аккаунта. Email меняется в карточке выше, пароль — в разделе «Безопасность»."
+                    Text="{loc:Translate Key='Имя, телефон и данные аккаунта. Email меняется в карточке выше, пароль — в разделе «Безопасность».'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <!-- Карточка «Email»: заявка на новый адрес, а не мгновенная смена. -->
@@ -66,7 +67,7 @@
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="Email используется для входа. Новый адрес подтверждается ссылкой из письма."
+                            Text="{loc:Translate Key='Email используется для входа. Новый адрес подтверждается ссылкой из письма.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label
@@ -111,7 +112,7 @@
                             FontSize="12"
                             IsVisible="{Binding HasEmailAnnouncement}"
                             LineBreakMode="WordWrap"
-                            Text="На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке."
+                            Text="{loc:Translate Key='На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <!-- Форма заявки вместо модального диалога: в MAUI его нет. -->
@@ -119,10 +120,10 @@
                             <Label
                                 FontSize="12"
                                 LineBreakMode="WordWrap"
-                                Text="На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке."
+                                Text="{loc:Translate Key='На новый адрес придёт ссылка для подтверждения, на старый — уведомление. Адрес изменится после перехода по ссылке.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
-                            <Label Text="Новый email" />
+                            <Label Text="{loc:Translate Key='Новый email'}" />
                             <Entry
                                 Keyboard="Email"
                                 MaxLength="{Binding MaxEmailLength}"
@@ -134,7 +135,7 @@
                                 Text="{Binding NewEmailError}"
                                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                            <Label Text="Текущий пароль" />
+                            <Label Text="{loc:Translate Key='Текущий пароль'}" />
                             <Entry IsPassword="True" Text="{Binding EmailCurrentPassword}" />
                             <Label
                                 FontSize="12"
@@ -163,7 +164,7 @@
                                     Margin="0,0,8,8"
                                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                     Command="{Binding CancelEmailChangeCommand}"
-                                    Text="Отмена"
+                                    Text="{loc:Translate Key='Отмена'}"
                                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                             </FlexLayout>
                         </VerticalStackLayout>
@@ -179,14 +180,14 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Личные данные" />
+                            Text="{loc:Translate Key='Личные данные'}" />
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="Имя и телефон видны вам и администратору. Барбер увидит имя в записи."
+                            Text="{loc:Translate Key='Имя и телефон видны вам и администратору. Барбер увидит имя в записи.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
-                        <Label Text="Имя" />
+                        <Label Text="{loc:Translate Key='Имя'}" />
                         <Entry MaxLength="{Binding MaxNameLength}" Text="{Binding FirstName}" />
                         <Label
                             FontSize="12"
@@ -195,7 +196,7 @@
                             Text="{Binding FirstNameError}"
                             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                        <Label Text="Фамилия" />
+                        <Label Text="{loc:Translate Key='Фамилия'}" />
                         <Entry MaxLength="{Binding MaxNameLength}" Text="{Binding LastName}" />
                         <Label
                             FontSize="12"
@@ -204,7 +205,7 @@
                             Text="{Binding LastNameError}"
                             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                        <Label Text="Телефон" />
+                        <Label Text="{loc:Translate Key='Телефон'}" />
                         <Entry
                             Keyboard="Telephone"
                             MaxLength="{Binding MaxPhoneLength}"
@@ -213,7 +214,7 @@
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="Необязательно. По этому номеру с вами может связаться салон."
+                            Text="{loc:Translate Key='Необязательно. По этому номеру с вами может связаться салон.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label
@@ -237,7 +238,7 @@
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                 Command="{Binding CancelCommand}"
                                 IsEnabled="{Binding CanCancel}"
-                                Text="Отменить"
+                                Text="{loc:Translate Key='Отменить'}"
                                 TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                         </FlexLayout>
 
@@ -259,27 +260,27 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Аккаунт" />
+                            Text="{loc:Translate Key='Аккаунт'}" />
                         <Label
                             FontSize="12"
-                            Text="Служебные данные аккаунта."
+                            Text="{loc:Translate Key='Служебные данные аккаунта.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label
                             FontSize="12"
-                            Text="Роль"
+                            Text="{loc:Translate Key='Роль'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Label FontSize="14" Text="{Binding RoleText}" />
 
                         <Label
                             FontSize="12"
-                            Text="Аккаунт создан"
+                            Text="{loc:Translate Key='Аккаунт создан'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Label FontSize="14" Text="{Binding CreatedAtText}" />
 
                         <Label
                             FontSize="12"
-                            Text="Последний вход"
+                            Text="{loc:Translate Key='Последний вход'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Label FontSize="14" Text="{Binding LastLoginText}" />
                     </VerticalStackLayout>

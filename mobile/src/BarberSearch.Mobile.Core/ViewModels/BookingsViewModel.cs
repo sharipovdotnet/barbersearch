@@ -8,6 +8,7 @@ using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -42,27 +43,27 @@ public sealed partial class BookingsViewModel : ObservableObject
 
     private const int MaxParallelProfiles = 4;
 
-    private const string LoadErrorText = "Не удалось загрузить записи.";
-    private const string LoadMoreErrorText = "Не удалось загрузить ещё записи.";
-    private const string NetworkErrorText =
-        "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText =
-        "Слишком много запросов. Подождите минуту и повторите.";
-    private const string CancelFailedText = "Не удалось отменить запись.";
+    private static string LoadErrorText => Loc.T("Не удалось загрузить записи.");
+    private static string LoadMoreErrorText => Loc.T("Не удалось загрузить ещё записи.");
+    private static string NetworkErrorText => Loc.T(
+        "Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T(
+        "Слишком много запросов. Подождите минуту и повторите.");
+    private static string CancelFailedText => Loc.T("Не удалось отменить запись.");
 
     /// <summary>
     /// Сноска под списком, когда часть карточек барберов не загрузилась.
     /// </summary>
-    public const string ProfilesWarningText =
-        "Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.";
+    public static string ProfilesWarningText => Loc.T(
+        "Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.");
 
-    private const string UpcomingEmptyTitle = "Пока ни одной записи";
-    private const string UpcomingEmptyDescription =
+    private static string UpcomingEmptyTitle => Loc.T("Пока ни одной записи");
+    private static string UpcomingEmptyDescription => Loc.T(
         "Выберите барбера, услугу и свободное время — запись появится здесь. "
-        + "Прошлые визиты останутся в истории.";
-    private const string HistoryEmptyTitle = "История пока пуста";
-    private const string HistoryEmptyDescription =
-        "После визита здесь останется запись и можно будет оставить отзыв.";
+        + "Прошлые визиты останутся в истории.");
+    private static string HistoryEmptyTitle => Loc.T("История пока пуста");
+    private static string HistoryEmptyDescription => Loc.T(
+        "После визита здесь останется запись и можно будет оставить отзыв.");
 
     private readonly IBookingsApi _bookingsApi;
     private readonly IBarberSearchApi _barberApi;

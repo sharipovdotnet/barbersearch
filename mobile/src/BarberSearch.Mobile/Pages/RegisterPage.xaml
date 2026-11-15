@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.RegisterPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:RegisterViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Регистрация">
+    Title="{loc:Translate Key='Регистрация'}">
 
     <!--
         Форма повторяет веб (frontend/src/components/register-form.tsx): имя и фамилия,
@@ -22,10 +23,10 @@
                 <Label
                     FontSize="14"
                     LineBreakMode="WordWrap"
-                    Text="Создайте аккаунт, чтобы записываться к барберам."
+                    Text="{loc:Translate Key='Создайте аккаунт, чтобы записываться к барберам.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
-                <Label Text="Имя" />
+                <Label Text="{loc:Translate Key='Имя'}" />
                 <Entry IsEnabled="{Binding IsFormEnabled}" Text="{Binding FirstName}" />
                 <Label
                     FontSize="12"
@@ -34,7 +35,7 @@
                     Text="{Binding FirstNameError}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                <Label Text="Фамилия" />
+                <Label Text="{loc:Translate Key='Фамилия'}" />
                 <Entry IsEnabled="{Binding IsFormEnabled}" Text="{Binding LastName}" />
                 <Label
                     FontSize="12"
@@ -56,7 +57,7 @@
                     Text="{Binding EmailError}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                <Label Text="Пароль" />
+                <Label Text="{loc:Translate Key='Пароль'}" />
                 <Entry
                     IsEnabled="{Binding IsFormEnabled}"
                     IsPassword="True"
@@ -64,7 +65,7 @@
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="Минимум 12 символов. Не должен совпадать с email, именем или фамилией."
+                    Text="{loc:Translate Key='Минимум 12 символов. Не должен совпадать с email, именем или фамилией.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <Label
                     FontSize="12"
@@ -73,7 +74,7 @@
                     Text="{Binding PasswordError}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                <Label Text="Повтор пароля" />
+                <Label Text="{loc:Translate Key='Повтор пароля'}" />
                 <Entry
                     IsEnabled="{Binding IsFormEnabled}"
                     IsPassword="True"
@@ -97,14 +98,14 @@
                     <Label
                         Grid.Column="1"
                         LineBreakMode="WordWrap"
-                        Text="Я согласен на обработку персональных данных"
+                        Text="{loc:Translate Key='Я согласен на обработку персональных данных'}"
                         VerticalTextAlignment="Center" />
                 </Grid>
 
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="Для регистрации и использования аккаунта, оформления и сопровождения записей."
+                    Text="{loc:Translate Key='Для регистрации и использования аккаунта, оформления и сопровождения записей.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <Button
@@ -139,7 +140,7 @@
                     HorizontalOptions="Center"
                     Spacing="4">
                     <Label
-                        Text="Уже есть аккаунт?"
+                        Text="{loc:Translate Key='Уже есть аккаунт?'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                         VerticalTextAlignment="Center" />
                     <Button
@@ -147,7 +148,7 @@
                         BackgroundColor="Transparent"
                         Clicked="OnSignInClicked"
                         HorizontalOptions="Start"
-                        Text="Войти"
+                        Text="{loc:Translate Key='Войти'}"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
                 </HorizontalStackLayout>
 
@@ -163,16 +164,16 @@
                 FontFamily="GeistSemiBold"
                 FontSize="20"
                 HorizontalTextAlignment="Center"
-                Text="Аккаунт создан" />
+                Text="{loc:Translate Key='Аккаунт создан'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
-                Text="Автоматический вход не удался, но аккаунт уже существует — повторно регистрироваться не нужно. Войдите с тем же email и паролем."
+                Text="{loc:Translate Key='Автоматический вход не удался, но аккаунт уже существует — повторно регистрироваться не нужно. Войдите с тем же email и паролем.'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             <Button
                 Command="{Binding SignInCommand}"
                 HorizontalOptions="Center"
-                Text="Войти" />
+                Text="{loc:Translate Key='Войти'}" />
         </VerticalStackLayout>
 
     </Grid>

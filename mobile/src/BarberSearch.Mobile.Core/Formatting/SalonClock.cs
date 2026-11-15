@@ -1,4 +1,5 @@
 using System.Globalization;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.Formatting;
 
@@ -23,11 +24,6 @@ namespace BarberSearch.Mobile.Core.Formatting;
 /// </remarks>
 public static class SalonClock
 {
-    /// <summary>
-    /// Культура показа дат и цен: русская, задана явно и не зависит от настроек устройства.
-    /// </summary>
-    private static readonly CultureInfo RuCulture = CultureInfo.GetCultureInfo("ru-RU");
-
     /// <summary>
     /// Ищет пояс по IANA-идентификатору, не бросая исключений.
     /// </summary>
@@ -111,7 +107,7 @@ public static class SalonClock
     /// <param name="date">Локальная дата салона.</param>
     /// <returns>День недели и число с месяцем.</returns>
     public static string FormatDate(DateOnly date) =>
-        date.ToDateTime(TimeOnly.MinValue).ToString("dddd, d MMMM", RuCulture);
+        date.ToDateTime(TimeOnly.MinValue).ToString("dddd, d MMMM", Loc.Culture);
 
     /// <summary>
     /// Дата без дня недели: «15 ноября».
@@ -122,7 +118,7 @@ public static class SalonClock
     /// <param name="date">Календарная дата.</param>
     /// <returns>Число и месяц в родительном падеже.</returns>
     public static string FormatDayMonth(DateOnly date) =>
-        date.ToDateTime(TimeOnly.MinValue).ToString("d MMMM", RuCulture);
+        date.ToDateTime(TimeOnly.MinValue).ToString("d MMMM", Loc.Culture);
 
     /// <summary>
     /// Дата с коротким днём недели: «пн, 17 ноября».
@@ -130,7 +126,7 @@ public static class SalonClock
     /// <param name="date">Календарная дата.</param>
     /// <returns>Сокращённый день недели, число и месяц.</returns>
     public static string FormatWeekdayDate(DateOnly date) =>
-        date.ToDateTime(TimeOnly.MinValue).ToString("ddd, d MMMM", RuCulture);
+        date.ToDateTime(TimeOnly.MinValue).ToString("ddd, d MMMM", Loc.Culture);
 
     /// <summary>
     /// Сегодняшняя календарная дата в поясе салона.

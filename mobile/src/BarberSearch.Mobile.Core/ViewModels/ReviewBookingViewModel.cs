@@ -3,6 +3,7 @@ using System.Net;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -30,18 +31,20 @@ public sealed partial class ReviewBookingViewModel : ObservableObject
     private const string RatingCode = "review.rating";
     private const string TextTooLongCode = "review.text.tooLong";
 
-    private const string RatingRequiredText = "Поставьте оценку от 1 до 5.";
-    private const string BookingNotCompletedText = "Отзыв можно оставить только после завершённого визита.";
-    private const string RatingInvalidText = "Оценка должна быть от 1 до 5.";
-    private const string TextTooLongText = "Слишком длинный текст: максимум 2000 символов.";
-    private const string AlreadyReviewedText = "По этой записи уже есть отзыв — второй оставить нельзя.";
-    private const string ForbiddenText = "Оставить отзыв может только клиент этой записи.";
-    private const string SubmitFailedText = "Не удалось отправить отзыв.";
-    private const string NetworkErrorText =
-        "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText =
-        "Слишком много запросов. Подождите минуту и повторите.";
-    private const string SessionExpiredText = "Сессия истекла — войдите снова.";
+    private static string RatingRequiredText => Loc.T("Поставьте оценку от 1 до 5.");
+    private static string BookingNotCompletedText => Loc.T("Отзыв можно оставить только после завершённого визита.");
+    private static string RatingInvalidText => Loc.T("Оценка должна быть от 1 до 5.");
+    private static string TextTooLongText => Loc.T(
+        "Слишком длинный текст: максимум {0} символов.",
+        BookingText.ReviewTextMaxLength);
+    private static string AlreadyReviewedText => Loc.T("По этой записи уже есть отзыв — второй оставить нельзя.");
+    private static string ForbiddenText => Loc.T("Оставить отзыв может только клиент этой записи.");
+    private static string SubmitFailedText => Loc.T("Не удалось отправить отзыв.");
+    private static string NetworkErrorText => Loc.T(
+        "Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T(
+        "Слишком много запросов. Подождите минуту и повторите.");
+    private static string SessionExpiredText => Loc.T("Сессия истекла — войдите снова.");
 
     private readonly IReviewsApi _reviewsApi;
 
@@ -126,7 +129,7 @@ public sealed partial class ReviewBookingViewModel : ObservableObject
     public string RatingText =>
         HasRating
             ? string.Concat(Rating.ToString(CultureInfo.InvariantCulture), " / 5")
-            : "не выбрана";
+            : Loc.T("не выбрана");
 
     /// <summary>
     /// Счётчик комментария: «0 / 2000».
@@ -144,7 +147,7 @@ public sealed partial class ReviewBookingViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке: во время запроса — «Отправляем…».
     /// </summary>
-    public string SubmitText => IsSubmitting ? "Отправляем…" : "Отправить отзыв";
+    public string SubmitText => IsSubmitting ? Loc.T("Отправляем…") : Loc.T("Отправить отзыв");
 
     /// <summary>
     /// Есть ли ошибка, которую надо показать.

@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Pages;
@@ -101,9 +102,9 @@ public partial class SecurityPage : ContentPage
         }
 
         await DisplayAlertAsync(
-            "Пароль изменён",
-            "Войдите снова с новым паролем.",
-            "Хорошо");
+            Loc.T("Пароль изменён"),
+            Loc.T("Войдите снова с новым паролем."),
+            Loc.T("Хорошо"));
 
         await _viewModel.SignOutAsync();
     }

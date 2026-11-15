@@ -3,9 +3,10 @@
     x:Class="BarberSearch.Mobile.Pages.BarberPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:BarberCardViewModel"
-    Title="Барбер">
+    Title="{loc:Translate Key='Барбер'}">
 
     <Grid>
 
@@ -58,7 +59,7 @@
                                     IsVisible="{Binding IsVerified}"
                                     StrokeShape="RoundRectangle 6"
                                     StrokeThickness="0">
-                                    <Label FontSize="12" Text="Проверен" />
+                                    <Label FontSize="12" Text="{loc:Translate Key='Проверен'}" />
                                 </Border>
                             </HorizontalStackLayout>
                             <Label Text="{Binding RatingText}" />
@@ -86,7 +87,7 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Работы" />
+                            Text="{loc:Translate Key='Работы'}" />
                         <FlexLayout
                             AlignContent="Start"
                             BindableLayout.ItemsSource="{Binding Photos}"
@@ -126,11 +127,11 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Услуги" />
+                            Text="{loc:Translate Key='Услуги'}" />
                         <Label
                             IsVisible="{Binding HasNoServices}"
                             LineBreakMode="WordWrap"
-                            Text="Услуги пока не добавлены."
+                            Text="{loc:Translate Key='Услуги пока не добавлены.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
                             <BindableLayout.ItemTemplate>
@@ -165,12 +166,12 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Свободное время" />
+                            Text="{loc:Translate Key='Свободное время'}" />
 
                         <Label
                             IsVisible="{Binding HasNoSalons}"
                             LineBreakMode="WordWrap"
-                            Text="Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено."
+                            Text="{loc:Translate Key='Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <VerticalStackLayout IsVisible="{Binding HasSalons}" Spacing="8">
@@ -179,7 +180,7 @@
                                 <VerticalStackLayout Spacing="2">
                                     <Label
                                         FontSize="12"
-                                        Text="Услуга"
+                                        Text="{loc:Translate Key='Услуга'}"
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                     <Picker
                                         ItemsSource="{Binding ServiceOptions}"
@@ -190,7 +191,7 @@
                                 <VerticalStackLayout Grid.Column="1" Spacing="2">
                                     <Label
                                         FontSize="12"
-                                        Text="Салон"
+                                        Text="{loc:Translate Key='Салон'}"
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                     <Picker
                                         IsVisible="{Binding HasMultipleSalons}"
@@ -209,7 +210,7 @@
                             <VerticalStackLayout Spacing="2">
                                 <Label
                                     FontSize="12"
-                                    Text="Дата"
+                                    Text="{loc:Translate Key='Дата'}"
                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                 <DatePicker
                                     Date="{Binding SelectedDate, Mode=OneWay}"
@@ -234,7 +235,7 @@
                                 <Button
                                     Command="{Binding RetrySlotsCommand}"
                                     HorizontalOptions="Start"
-                                    Text="Повторить" />
+                                    Text="{loc:Translate Key='Повторить'}" />
                             </VerticalStackLayout>
 
                             <Label
@@ -277,7 +278,7 @@
                             <Label
                                 IsVisible="{Binding ShowSlotsHint}"
                                 LineBreakMode="WordWrap"
-                                Text="Выберите услугу, чтобы записаться."
+                                Text="{loc:Translate Key='Выберите услугу, чтобы записаться.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                             <!-- Панель записи: сводка, комментарий, отправка и подтверждение. -->
@@ -290,7 +291,7 @@
                                     <Label
                                         FontFamily="GeistMedium"
                                         IsVisible="{Binding IsSummaryVisible}"
-                                        Text="Запись на приём" />
+                                        Text="{loc:Translate Key='Запись на приём'}" />
 
                                     <VerticalStackLayout IsVisible="{Binding IsSummaryVisible}" Spacing="2">
                                         <Label FontFamily="GeistMedium" Text="{Binding SummaryDateText}" />
@@ -315,14 +316,14 @@
                                         <Button
                                             Clicked="OnSignInClicked"
                                             MinimumHeightRequest="44"
-                                            Text="Войти" />
+                                            Text="{loc:Translate Key='Войти'}" />
                                     </VerticalStackLayout>
 
                                     <VerticalStackLayout IsVisible="{Binding IsBookFormVisible}" Spacing="8">
                                         <VerticalStackLayout Spacing="2">
                                             <Label
                                                 FontSize="12"
-                                                Text="Комментарий (необязательно)"
+                                                Text="{loc:Translate Key='Комментарий (необязательно)'}"
                                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                             <Editor
                                                 AutoSize="TextChanges"
@@ -343,19 +344,19 @@
 
                                     <VerticalStackLayout IsVisible="{Binding IsSuccessVisible}" Spacing="8">
                                         <HorizontalStackLayout Spacing="8">
-                                            <Label FontFamily="GeistMedium" Text="Заявка отправлена" />
+                                            <Label FontFamily="GeistMedium" Text="{loc:Translate Key='Заявка отправлена'}" />
                                             <Label
-                                                Text="Ждёт подтверждения"
+                                                Text="{loc:Translate Key='Ждёт подтверждения'}"
                                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                         </HorizontalStackLayout>
                                         <Label
                                             LineBreakMode="WordWrap"
-                                            Text="Барбер подтвердит запись."
+                                            Text="{loc:Translate Key='Барбер подтвердит запись.'}"
                                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                         <Button
                                             Command="{Binding BookAgainCommand}"
                                             IsVisible="{Binding IsBookAgainVisible}"
-                                            Text="Записаться ещё раз" />
+                                            Text="{loc:Translate Key='Записаться ещё раз'}" />
                                     </VerticalStackLayout>
 
                                     <Button
@@ -369,7 +370,7 @@
 
                             <Label
                                 FontSize="12"
-                                Text="Время — местное для салона."
+                                Text="{loc:Translate Key='Время — местное для салона.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         </VerticalStackLayout>
@@ -387,7 +388,7 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="О мастере" />
+                            Text="{loc:Translate Key='О мастере'}" />
 
                         <Label
                             IsVisible="{Binding HasBio}"
@@ -397,7 +398,7 @@
                         <VerticalStackLayout IsVisible="{Binding HasLanguages}" Spacing="6">
                             <Label
                                 FontSize="12"
-                                Text="Языки"
+                                Text="{loc:Translate Key='Языки'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <FlexLayout BindableLayout.ItemsSource="{Binding LanguageChips}" Wrap="Wrap">
                                 <BindableLayout.ItemTemplate>
@@ -452,7 +453,7 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Отзывы" />
+                            Text="{loc:Translate Key='Отзывы'}" />
 
                         <Label
                             FontFamily="GeistMedium"
@@ -472,17 +473,17 @@
                             <Button
                                 Command="{Binding Reviews.RetryFirstPageCommand}"
                                 HorizontalOptions="Start"
-                                Text="Повторить" />
+                                Text="{loc:Translate Key='Повторить'}" />
                         </VerticalStackLayout>
 
                         <Label
                             IsVisible="{Binding Reviews.IsEmpty}"
-                            Text="Пока нет отзывов."
+                            Text="{loc:Translate Key='Пока нет отзывов.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label
                             IsVisible="{Binding Reviews.IsPageEmpty}"
-                            Text="На этой странице отзывов нет."
+                            Text="{loc:Translate Key='На этой странице отзывов нет.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Reviews.Items}" Spacing="12">
@@ -532,7 +533,7 @@
                                     Command="{Binding Reviews.PreviousPageCommand}"
                                     IsEnabled="{Binding Reviews.CanGoPrevious}"
                                     MinimumHeightRequest="44"
-                                    Text="Назад" />
+                                    Text="{loc:Translate Key='Назад'}" />
                                 <Label
                                     Grid.Column="1"
                                     FontSize="12"
@@ -563,7 +564,7 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Специализации" />
+                            Text="{loc:Translate Key='Специализации'}" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Specializations}" Spacing="12">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="vm:BarberSpecializationOption">
@@ -597,7 +598,7 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Оплата" />
+                            Text="{loc:Translate Key='Оплата'}" />
                         <FlexLayout BindableLayout.ItemsSource="{Binding PaymentChips}" Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
@@ -628,7 +629,7 @@
                             Margin="0,0,0,8"
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Правила визита" />
+                            Text="{loc:Translate Key='Правила визита'}" />
                         <Label
                             LineBreakMode="WordWrap"
                             Text="{Binding LatePolicyText}" />
@@ -653,11 +654,11 @@
                 FontFamily="GeistSemiBold"
                 FontSize="18"
                 HorizontalTextAlignment="Center"
-                Text="Барбер не найден" />
+                Text="{loc:Translate Key='Барбер не найден'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
-                Text="Возможно, профиль скрыт или ссылка устарела."
+                Text="{loc:Translate Key='Возможно, профиль скрыт или ссылка устарела.'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         </VerticalStackLayout>
 
@@ -671,7 +672,7 @@
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
                 Text="{Binding LoadErrorText}" />
-            <Button Command="{Binding RetryLoadCommand}" HorizontalOptions="Center" Text="Повторить" />
+            <Button Command="{Binding RetryLoadCommand}" HorizontalOptions="Center" Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
     </Grid>

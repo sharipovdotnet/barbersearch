@@ -6,6 +6,7 @@ using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -42,23 +43,24 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </remarks>
     private const int DateHorizonDays = 30;
 
-    private const string AnyLanguageText = "Любой язык";
-    private const string AnySpecializationText = "Любая специализация";
-    private const string AnyServiceText = "Любая услуга";
-    private const string AnyDateText = "Любая дата";
-    private const string LoadingText = "Загрузка…";
-    private const string CatalogsLoadFailedText = "Не удалось загрузить фильтры.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string RateLimitText = "Слишком много запросов. Подождите минуту и повторите.";
-    private const string NoSearchHintText = "Введите город и нажмите «Найти»";
-    private const string EmptyCityTitleText = "В этом городе никого не нашли";
-    private const string EmptyCityText = "Проверьте написание — город учитывается точно, например «Москва».";
-    private const string EmptyDateTitleText = "На выбранную дату никого не нашли";
-    private const string EmptyDateText = "Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.";
-    private const string EmptyFiltersTitleText = "С такими фильтрами никого не нашли";
-    private const string EmptyFiltersText = "Попробуйте другой язык, специализацию, услугу или дополнительную услугу.";
-    private const string EmptyNoBarbersTitleText = "Барберов пока нет";
-    private const string EmptyNoBarbersText = "Пока никто не подтверждён. Загляните позже.";
+    private static string AnyLanguageText => Loc.T("Любой язык");
+    private static string AnySpecializationText => Loc.T("Любая специализация");
+    private static string AnyServiceText => Loc.T("Любая услуга");
+    private static string AnyDateText => Loc.T("Любая дата");
+    private static string LoadingText => Loc.T("Загрузка…");
+    private static string CatalogsLoadFailedText => Loc.T("Не удалось загрузить фильтры.");
+    private static string SearchFailedText => Loc.T("Не удалось загрузить барберов.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string RateLimitText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
+    private static string NoSearchHintText => Loc.T("Введите город и нажмите «Найти»");
+    private static string EmptyCityTitleText => Loc.T("В этом городе никого не нашли");
+    private static string EmptyCityText => Loc.T("Проверьте написание — город учитывается точно, например «Москва».");
+    private static string EmptyDateTitleText => Loc.T("На выбранную дату никого не нашли");
+    private static string EmptyDateText => Loc.T("Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.");
+    private static string EmptyFiltersTitleText => Loc.T("С такими фильтрами никого не нашли");
+    private static string EmptyFiltersText => Loc.T("Попробуйте другой язык, специализацию, услугу или дополнительную услугу.");
+    private static string EmptyNoBarbersTitleText => Loc.T("Барберов пока нет");
+    private static string EmptyNoBarbersText => Loc.T("Пока никто не подтверждён. Загляните позже.");
 
     private readonly IBarberSearchApi _api;
     private readonly TimeProvider _timeProvider;
@@ -361,9 +363,10 @@ public sealed partial class SearchViewModel : ObservableObject
         {
             // Отмена — не ошибка: пользователь сам остановил поиск.
         }
-        catch (BarberSearchApiException exception)
+        catch (BarberSearchApiException)
         {
-            ErrorMessage = exception.Message;
+            // Английский detail сервера не показывается: текст для человека живёт на клиенте.
+            ErrorMessage = SearchFailedText;
         }
         catch (HttpRequestException)
         {

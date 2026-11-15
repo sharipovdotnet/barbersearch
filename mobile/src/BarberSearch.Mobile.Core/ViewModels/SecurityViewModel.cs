@@ -7,6 +7,7 @@ using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -35,28 +36,28 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </remarks>
 public sealed partial class SecurityViewModel : ObservableObject
 {
-    private const string LoadFailedText = "Не удалось загрузить профиль.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText = "Слишком много запросов. Подождите минуту и повторите.";
+    private static string LoadFailedText => Loc.T("Не удалось загрузить профиль.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
 
-    private const string CurrentPasswordRequiredText = "Введите текущий пароль.";
-    private const string NewPasswordRequiredText = "Введите новый пароль.";
-    private const string PasswordTooShortText = "Минимум 12 символов.";
-    private const string PasswordTooLongText = "Максимум 128 символов.";
-    private const string PasswordSameAsCurrentText = "Новый пароль должен отличаться от текущего.";
-    private const string PasswordMismatchText = "Пароли не совпадают.";
-    private const string InvalidCurrentPasswordText = "Текущий пароль неверный.";
-    private const string PasswordCommonText = "Этот пароль слишком распространён.";
-    private const string PasswordEqualsEmailText = "Пароль не должен совпадать с email.";
-    private const string PasswordEqualsNameText = "Пароль не должен совпадать с именем или фамилией.";
-    private const string ChangePasswordFailedText = "Не удалось сменить пароль.";
-    private const string PasswordChangedText =
-        "Пароль изменён. Остальные сессии входа завершены — здесь вы остались.";
+    private static string CurrentPasswordRequiredText => Loc.T("Введите текущий пароль.");
+    private static string NewPasswordRequiredText => Loc.T("Введите новый пароль.");
+    private static string PasswordTooShortText => Loc.T("Минимум 12 символов.");
+    private static string PasswordTooLongText => Loc.T("Максимум 128 символов.");
+    private static string PasswordSameAsCurrentText => Loc.T("Новый пароль должен отличаться от текущего.");
+    private static string PasswordMismatchText => Loc.T("Пароли не совпадают.");
+    private static string InvalidCurrentPasswordText => Loc.T("Текущий пароль неверный.");
+    private static string PasswordCommonText => Loc.T("Этот пароль слишком распространён.");
+    private static string PasswordEqualsEmailText => Loc.T("Пароль не должен совпадать с email.");
+    private static string PasswordEqualsNameText => Loc.T("Пароль не должен совпадать с именем или фамилией.");
+    private static string ChangePasswordFailedText => Loc.T("Не удалось сменить пароль.");
+    private static string PasswordChangedText => Loc.T(
+        "Пароль изменён. Остальные сессии входа завершены — здесь вы остались.");
 
-    private const string EmailCooldownText = "Письмо уже отправлено. Повторите через минуту.";
-    private const string EmailUnavailableText = "Отправка писем пока не настроена.";
-    private const string EmailSendFailedText = "Не удалось отправить письмо. Попробуйте позже.";
-    private const string EmailInvalidLinkText = "Ссылка недействительна или устарела.";
+    private static string EmailCooldownText => Loc.T("Письмо уже отправлено. Повторите через минуту.");
+    private static string EmailUnavailableText => Loc.T("Отправка писем пока не настроена.");
+    private static string EmailSendFailedText => Loc.T("Не удалось отправить письмо. Попробуйте позже.");
+    private static string EmailInvalidLinkText => Loc.T("Ссылка недействительна или устарела.");
 
     private const string InvalidCurrentPasswordCode = "auth.changePassword.invalidCurrentPassword";
     private const string PasswordRequiredCode = "auth.password.required";
@@ -282,14 +283,16 @@ public sealed partial class SecurityViewModel : ObservableObject
     /// <summary>
     /// Подпись статуса: «Адрес подтверждён.» / «Адрес не подтверждён.».
     /// </summary>
-    public string IsEmailVerifiedText => IsEmailVerified ? "Адрес подтверждён." : "Адрес не подтверждён.";
+    public string IsEmailVerifiedText => IsEmailVerified
+        ? Loc.T("Адрес подтверждён.")
+        : Loc.T("Адрес не подтверждён.");
 
     /// <summary>
     /// Объяснение под заголовком карточки подтверждения.
     /// </summary>
     public string VerificationDescription => IsEmailVerified
-        ? "Адрес подтверждён: на него можно получать письма о записях."
-        : "Адрес пока не подтверждён. Подтвердите его по ссылке из письма — пароль и вход это не ограничивает.";
+        ? Loc.T("Адрес подтверждён: на него можно получать письма о записях.")
+        : Loc.T("Адрес пока не подтверждён. Подтвердите его по ссылке из письма — пароль и вход это не ограничивает.");
 
     /// <summary>
     /// Показывать кнопку повторной отправки: только для неподтверждённого и загруженного профиля.
@@ -312,13 +315,10 @@ public sealed partial class SecurityViewModel : ObservableObject
     /// Надпись на кнопке отправки письма.
     /// </summary>
     public string ResendButtonText => IsSendingVerification
-        ? "Отправляем письмо…"
+        ? Loc.T("Отправляем письмо…")
         : IsCooldownActive
-            ? string.Concat(
-                "Повторить через ",
-                CooldownRemaining.ToString(CultureInfo.InvariantCulture),
-                " с")
-            : "Отправить письмо ещё раз";
+            ? Loc.T("Повторить через {0} с", CooldownRemaining.ToString(CultureInfo.InvariantCulture))
+            : Loc.T("Отправить письмо ещё раз");
 
     /// <summary>
     /// Идёт кулдаун отправки письма.
@@ -373,7 +373,9 @@ public sealed partial class SecurityViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке смены пароля.
     /// </summary>
-    public string ChangePasswordButtonText => IsChangingPassword ? "Сохраняем…" : "Сменить пароль";
+    public string ChangePasswordButtonText => IsChangingPassword
+        ? Loc.T("Сохраняем…")
+        : Loc.T("Сменить пароль");
 
     /// <summary>
     /// Проверяет сессию и читает профиль при появлении экрана.
@@ -647,7 +649,7 @@ public sealed partial class SecurityViewModel : ObservableObject
         {
             await _accountApi.RequestEmailVerificationAsync();
 
-            VerificationNotice = string.Concat("Письмо отправлено на ", Email, ".");
+            VerificationNotice = Loc.T("Письмо отправлено на {0}.", Email);
             StartCooldown();
         }
         catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)

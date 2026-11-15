@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -44,12 +45,12 @@ public sealed partial class ForgotPasswordViewModel : ObservableObject
     /// </summary>
     private const int ResendCooldownSeconds = 60;
 
-    private const string EmailRequiredText = "Введите email.";
-    private const string EmailInvalidText = "Проверьте email: нужен адрес вида name@example.com.";
-    private const string TooManyAttemptsText = "Слишком много попыток. Подождите минуту и повторите.";
-    private const string UnavailableText = "Сброс пароля по почте пока не настроен.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string FallbackText = "Не удалось отправить ссылку. Попробуйте позже.";
+    private static string EmailRequiredText => Loc.T("Введите email.");
+    private static string EmailInvalidText => Loc.T("Проверьте email: нужен адрес вида name@example.com.");
+    private static string TooManyAttemptsText => Loc.T("Слишком много попыток. Подождите минуту и повторите.");
+    private static string UnavailableText => Loc.T("Сброс пароля по почте пока не настроен.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string FallbackText => Loc.T("Не удалось отправить ссылку. Попробуйте позже.");
 
     private readonly IAuthApi _authApi;
 
@@ -146,7 +147,9 @@ public sealed partial class ForgotPasswordViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке отправки: во время запроса — «Отправляем…».
     /// </summary>
-    public string SendButtonText => IsSubmitting ? "Отправляем…" : "Отправить ссылку";
+    public string SendButtonText => IsSubmitting
+        ? Loc.T("Отправляем…")
+        : Loc.T("Отправить ссылку");
 
     /// <summary>
     /// Есть ошибка поля «Email».
@@ -176,13 +179,10 @@ public sealed partial class ForgotPasswordViewModel : ObservableObject
     /// Надпись на кнопке повторной отправки.
     /// </summary>
     public string ResendButtonText => IsSubmitting
-        ? "Отправляем…"
+        ? Loc.T("Отправляем…")
         : IsCooldownActive
-            ? string.Concat(
-                "Повторить через ",
-                CooldownRemaining.ToString(CultureInfo.InvariantCulture),
-                " с")
-            : "Отправить ещё раз";
+            ? Loc.T("Повторить через {0} с", CooldownRemaining.ToString(CultureInfo.InvariantCulture))
+            : Loc.T("Отправить ещё раз");
 
     /// <summary>
     /// Объяснение на карточке успеха: адрес и срок жизни ссылки.
@@ -191,10 +191,9 @@ public sealed partial class ForgotPasswordViewModel : ObservableObject
     /// Формулировка «если аккаунт с адресом … существует» — не осторожность, а контракт:
     /// сервер не сообщает, есть ли такой пользователь, и экран не имеет права намекнуть.
     /// </remarks>
-    public string SentDescription => string.Concat(
-        "Если аккаунт с адресом ",
-        SentEmail,
-        " существует, мы отправили на него ссылку для сброса пароля. Ссылка действует 30 минут.");
+    public string SentDescription => Loc.T(
+        "Если аккаунт с адресом {0} существует, мы отправили на него ссылку для сброса пароля. Ссылка действует 30 минут.",
+        SentEmail);
 
     /// <summary>
     /// Проверяет адрес и просит сервер отправить ссылку.

@@ -1,5 +1,6 @@
 using System.Globalization;
 using BarberSearch.Contracts.Reviews.GetMyReviews;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.Formatting;
 
@@ -28,19 +29,17 @@ public static class ReviewText
     /// <summary>
     /// Подпись опубликованного отзыва.
     /// </summary>
-    public const string Published = "Опубликован";
+    public static string Published => Loc.T("Опубликован");
 
     /// <summary>
     /// Подпись отзыва, ожидающего проверки.
     /// </summary>
-    public const string OnModeration = "На модерации";
+    public static string OnModeration => Loc.T("На модерации");
 
     /// <summary>
     /// Тело отзыва, когда комментария нет.
     /// </summary>
-    public const string NoComment = "Без комментария.";
-
-    private static readonly CultureInfo RuCulture = CultureInfo.GetCultureInfo("ru-RU");
+    public static string NoComment => Loc.T("Без комментария.");
 
     /// <summary>
     /// Подпись статуса публикации.
@@ -83,7 +82,7 @@ public static class ReviewText
     /// <param name="timeZone">Пояс салона; <c>null</c> — UTC.</param>
     /// <returns>Дата без времени.</returns>
     public static string ReviewDate(DateTimeOffset createdAt, TimeZoneInfo? timeZone) =>
-        ToLocal(createdAt, timeZone).ToString("d MMMM yyyy", RuCulture);
+        ToLocal(createdAt, timeZone).ToString("d MMMM yyyy", Loc.Culture);
 
     /// <summary>
     /// Момент визита в поясе салона: «15 ноября 2026 в 18:30».
@@ -99,9 +98,9 @@ public static class ReviewText
     {
         var local = ToLocal(startAt, timeZone);
 
-        return string.Concat(
-            local.ToString("d MMMM yyyy", RuCulture),
-            " в ",
+        return Loc.T(
+            "{0} в {1}",
+            local.ToString("d MMMM yyyy", Loc.Culture),
             local.ToString("HH:mm", CultureInfo.InvariantCulture));
     }
 

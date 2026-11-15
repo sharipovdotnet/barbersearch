@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.RescheduleBookingPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:RescheduleBookingViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Перенести запись">
+    Title="{loc:Translate Key='Перенести запись'}">
 
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="16">
@@ -36,7 +37,7 @@
                     <Label
                         FontSize="12"
                         LineBreakMode="WordWrap"
-                        Text="Длительность и цена не изменятся"
+                        Text="{loc:Translate Key='Длительность и цена не изменятся'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 </VerticalStackLayout>
             </Border>
@@ -45,7 +46,7 @@
             <VerticalStackLayout Spacing="4">
                 <Label
                     FontSize="12"
-                    Text="Дата"
+                    Text="{loc:Translate Key='Дата'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <DatePicker
                     Date="{Binding SelectedDate, Mode=TwoWay}"
@@ -59,7 +60,7 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="16"
-                    Text="Свободное время" />
+                    Text="{loc:Translate Key='Свободное время'}" />
 
                 <ActivityIndicator
                     HorizontalOptions="Start"
@@ -86,7 +87,7 @@
                     <Button
                         Command="{Binding RetrySlotsCommand}"
                         HorizontalOptions="Start"
-                        Text="Повторить" />
+                        Text="{loc:Translate Key='Повторить'}" />
                 </VerticalStackLayout>
 
                 <Label

@@ -5,6 +5,7 @@ using BarberSearch.Contracts.Reviews.UpdateReview;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -37,28 +38,28 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// </summary>
     public const int PageSize = 10;
 
-    private const string LoadErrorText = "Не удалось загрузить отзывы.";
-    private const string LoadMoreErrorText = "Не удалось загрузить следующие отзывы.";
-    private const string NetworkErrorText =
-        "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText =
-        "Слишком много запросов. Подождите минуту и повторите.";
-    private const string DeletedAnnouncement = "Отзыв удалён.";
-    private const string AlreadyDeletedAnnouncement = "Этот отзыв уже удалён.";
-    private const string UpdatedAnnouncement = "Отзыв обновлён.";
-    private const string DeleteForbiddenText = "Удалить отзыв может только его автор.";
-    private const string DeleteFailedText = "Не удалось удалить отзыв.";
+    private static string LoadErrorText => Loc.T("Не удалось загрузить отзывы.");
+    private static string LoadMoreErrorText => Loc.T("Не удалось загрузить следующие отзывы.");
+    private static string NetworkErrorText => Loc.T(
+        "Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T(
+        "Слишком много запросов. Подождите минуту и повторите.");
+    private static string DeletedAnnouncement => Loc.T("Отзыв удалён.");
+    private static string AlreadyDeletedAnnouncement => Loc.T("Этот отзыв уже удалён.");
+    private static string UpdatedAnnouncement => Loc.T("Отзыв обновлён.");
+    private static string DeleteForbiddenText => Loc.T("Удалить отзыв может только его автор.");
+    private static string DeleteFailedText => Loc.T("Не удалось удалить отзыв.");
 
     /// <summary>
     /// Текст пустого состояния.
     /// </summary>
-    public const string EmptyTitle = "Пока нет отзывов.";
+    public static string EmptyTitle => Loc.T("Пока нет отзывов.");
 
     /// <summary>
     /// Объяснение пустого состояния.
     /// </summary>
-    public const string EmptyDescription =
-        "Отзыв можно оставить в «Моих записях» после завершённого визита.";
+    public static string EmptyDescription =>
+        Loc.T("Отзыв можно оставить в «Моих записях» после завершённого визита.");
 
     private readonly IReviewsApi _reviewsApi;
     private readonly TokenSession _session;

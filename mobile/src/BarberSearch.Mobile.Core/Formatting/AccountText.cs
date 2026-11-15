@@ -1,6 +1,7 @@
 using System.Globalization;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Users;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.Formatting;
 
@@ -26,17 +27,15 @@ public static class AccountText
     /// <summary>
     /// Значение поля, у которого ещё нет данных: последнего входа не было.
     /// </summary>
-    public const string Never = "Ещё не было";
+    public static string Never => Loc.T("Ещё не было");
 
     /// <summary>
     /// Подпись имени, когда его нет ни в профиле, ни в email.
     /// </summary>
-    public const string FallbackName = "Профиль";
-
-    private static readonly CultureInfo RuCulture = CultureInfo.GetCultureInfo("ru-RU");
+    public static string FallbackName => Loc.T("Профиль");
 
     /// <summary>
-    /// Русские подписи ролей; значения API остаются английскими.
+    /// Подписи ролей; значения API остаются английскими.
     /// </summary>
     private static readonly Dictionary<UserRole, string> Roles = new()
     {
@@ -51,7 +50,7 @@ public static class AccountText
     /// <param name="role">Роль из профиля.</param>
     /// <returns>Русская подпись; неизвестная роль показывается как есть.</returns>
     public static string RoleText(UserRole role) =>
-        Roles.TryGetValue(role, out var text) ? text : role.ToString();
+        Loc.T(Roles.TryGetValue(role, out var text) ? text : role.ToString());
 
     /// <summary>
     /// Полное имя для шапки профиля: «Ева Клиентова».
@@ -129,9 +128,9 @@ public static class AccountText
 
         var local = TimeZoneInfo.ConvertTime(instant, timeZone);
 
-        return string.Concat(
-            local.ToString("ddd, d MMMM", RuCulture),
-            " в ",
+        return Loc.T(
+            "{0} в {1}",
+            local.ToString("ddd, d MMMM", Loc.Culture),
             local.ToString("HH:mm", CultureInfo.InvariantCulture));
     }
 
@@ -162,6 +161,6 @@ public static class AccountText
             ? word[..2]
             : word[..1];
 
-        return letter.ToUpper(RuCulture);
+        return letter.ToUpper(Loc.Culture);
     }
 }

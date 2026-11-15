@@ -3,11 +3,12 @@
     x:Class="BarberSearch.Mobile.Pages.ReviewBookingPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:pages="clr-namespace:BarberSearch.Mobile.Pages"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:ReviewBookingViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Отзыв о визите">
+    Title="{loc:Translate Key='Отзыв о визите'}">
 
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="16">
@@ -17,7 +18,7 @@
                     FontFamily="GeistSemiBold"
                     FontSize="20"
                     LineBreakMode="WordWrap"
-                    Text="Отзыв о визите" />
+                    Text="{loc:Translate Key='Отзыв о визите'}" />
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="16"
@@ -34,14 +35,14 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="16"
-                    Text="Оценка" />
+                    Text="{loc:Translate Key='Оценка'}" />
                 <FlexLayout
                     AlignItems="Center"
                     Direction="Row"
                     Wrap="Wrap">
                     <Label
                         HeightRequest="44"
-                        SemanticProperties.Description="1 из 5"
+                        SemanticProperties.Description="{loc:Translate Key='1 из 5'}"
                         Text="★"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
@@ -66,7 +67,7 @@
                     </Label>
                     <Label
                         HeightRequest="44"
-                        SemanticProperties.Description="2 из 5"
+                        SemanticProperties.Description="{loc:Translate Key='2 из 5'}"
                         Text="★"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
@@ -91,7 +92,7 @@
                     </Label>
                     <Label
                         HeightRequest="44"
-                        SemanticProperties.Description="3 из 5"
+                        SemanticProperties.Description="{loc:Translate Key='3 из 5'}"
                         Text="★"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
@@ -116,7 +117,7 @@
                     </Label>
                     <Label
                         HeightRequest="44"
-                        SemanticProperties.Description="4 из 5"
+                        SemanticProperties.Description="{loc:Translate Key='4 из 5'}"
                         Text="★"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
@@ -141,7 +142,7 @@
                     </Label>
                     <Label
                         HeightRequest="44"
-                        SemanticProperties.Description="5 из 5"
+                        SemanticProperties.Description="{loc:Translate Key='5 из 5'}"
                         Text="★"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
@@ -176,7 +177,7 @@
             <VerticalStackLayout Spacing="4">
                 <Label
                     FontSize="12"
-                    Text="Комментарий — необязательно"
+                    Text="{loc:Translate Key='Комментарий — необязательно'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <Border
                     Padding="8"
@@ -186,7 +187,7 @@
                         AutoSize="TextChanges"
                         MaxLength="{Binding MaxTextLength}"
                         MinimumHeightRequest="88"
-                        Placeholder="Что понравилось, что можно улучшить"
+                        Placeholder="{loc:Translate Key='Что понравилось, что можно улучшить'}"
                         Text="{Binding Text}" />
                 </Border>
                 <Label
@@ -197,7 +198,7 @@
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="Отзыв появится на карточке барбера после проверки модератором."
+                    Text="{loc:Translate Key='Отзыв появится на карточке барбера после проверки модератором.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 

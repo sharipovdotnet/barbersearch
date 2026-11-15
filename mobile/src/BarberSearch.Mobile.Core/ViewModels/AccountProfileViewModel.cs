@@ -6,6 +6,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -34,27 +35,27 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </remarks>
 public sealed partial class AccountProfileViewModel : ObservableObject
 {
-    private const string LoadFailedText = "Не удалось загрузить профиль.";
-    private const string SaveFailedText = "Не удалось сохранить профиль.";
-    private const string SavedText = "Изменения сохранены.";
-    private const string NameRequiredText = "Введите имя.";
-    private const string LastNameRequiredText = "Введите фамилию.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText = "Слишком много запросов. Подождите минуту и повторите.";
-    private const string SessionExpiredText = "Сессия истекла — войдите снова.";
+    private static string LoadFailedText => Loc.T("Не удалось загрузить профиль.");
+    private static string SaveFailedText => Loc.T("Не удалось сохранить профиль.");
+    private static string SavedText => Loc.T("Изменения сохранены.");
+    private static string NameRequiredText => Loc.T("Введите имя.");
+    private static string LastNameRequiredText => Loc.T("Введите фамилию.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
+    private static string SessionExpiredText => Loc.T("Сессия истекла — войдите снова.");
 
-    private const string EmailRequiredText = "Введите email.";
-    private const string EmailInvalidText = "Похоже, в адресе опечатка.";
-    private const string PasswordRequiredText = "Введите текущий пароль.";
-    private const string EmailChangeFailedText = "Не удалось изменить email. Попробуйте позже.";
-    private const string EmailChangeNewEmailCodeText = "Проверьте email: нужен адрес вида name@example.com.";
-    private const string EmailChangeSameEmailText = "Этот адрес уже указан в профиле.";
-    private const string EmailChangeInvalidPasswordText = "Текущий пароль неверный.";
-    private const string EmailChangeTakenText = "Этот адрес уже занят. Укажите другой.";
-    private const string EmailCooldownText = "Письмо уже отправлено. Повторите через минуту.";
-    private const string EmailUnavailableText = "Отправка писем пока не настроена.";
-    private const string EmailInvalidLinkText = "Ссылка недействительна или устарела.";
-    private const string EmailTooManyAttemptsText = "Слишком много попыток. Подождите минуту и повторите.";
+    private static string EmailRequiredText => Loc.T("Введите email.");
+    private static string EmailInvalidText => Loc.T("Похоже, в адресе опечатка.");
+    private static string PasswordRequiredText => Loc.T("Введите текущий пароль.");
+    private static string EmailChangeFailedText => Loc.T("Не удалось изменить email. Попробуйте позже.");
+    private static string EmailChangeNewEmailCodeText => Loc.T("Проверьте email: нужен адрес вида name@example.com.");
+    private static string EmailChangeSameEmailText => Loc.T("Этот адрес уже указан в профиле.");
+    private static string EmailChangeInvalidPasswordText => Loc.T("Текущий пароль неверный.");
+    private static string EmailChangeTakenText => Loc.T("Этот адрес уже занят. Укажите другой.");
+    private static string EmailCooldownText => Loc.T("Письмо уже отправлено. Повторите через минуту.");
+    private static string EmailUnavailableText => Loc.T("Отправка писем пока не настроена.");
+    private static string EmailInvalidLinkText => Loc.T("Ссылка недействительна или устарела.");
+    private static string EmailTooManyAttemptsText => Loc.T("Слишком много попыток. Подождите минуту и повторите.");
 
     private const string UpdateFirstNameCode = "user.updateProfile.firstName";
     private const string UpdateLastNameCode = "user.updateProfile.lastName";
@@ -324,7 +325,9 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// <summary>
     /// Подпись статуса подтверждения email.
     /// </summary>
-    public string EmailStatusText => IsEmailVerified ? "Адрес подтверждён." : "Адрес не подтверждён.";
+    public string EmailStatusText => IsEmailVerified
+        ? Loc.T("Адрес подтверждён.")
+        : Loc.T("Адрес не подтверждён.");
 
     /// <summary>
     /// Показывать предупреждение о неподтверждённом адресе в карточке email.
@@ -401,22 +404,21 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке сохранения.
     /// </summary>
-    public string SaveButtonText => IsSaving ? "Сохраняем…" : "Сохранить";
+    public string SaveButtonText => IsSaving ? Loc.T("Сохраняем…") : Loc.T("Сохранить");
 
     /// <summary>
     /// Надпись на кнопке смены email: во время кулдауна — обратный отсчёт.
     /// </summary>
     public string EmailButtonText => IsCooldownActive
-        ? string.Concat(
-            "Повторить через ",
-            CooldownRemaining.ToString(CultureInfo.InvariantCulture),
-            " с")
-        : "Изменить email";
+        ? Loc.T("Повторить через {0} с", CooldownRemaining.ToString(CultureInfo.InvariantCulture))
+        : Loc.T("Изменить email");
 
     /// <summary>
     /// Надпись на кнопке отправки письма.
     /// </summary>
-    public string SendEmailButtonText => IsSendingEmail ? "Отправляем письмо…" : "Отправить письмо";
+    public string SendEmailButtonText => IsSendingEmail
+        ? Loc.T("Отправляем письмо…")
+        : Loc.T("Отправить письмо");
 
     /// <summary>
     /// Можно ли нажать «Отправить письмо»: во время запроса кнопка заблокирована.
@@ -753,7 +755,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
             IsEmailFormOpen = false;
             NewEmail = string.Empty;
             EmailCurrentPassword = string.Empty;
-            EmailAnnouncement = string.Concat("Письмо отправлено на ", newEmail);
+            EmailAnnouncement = Loc.T("Письмо отправлено на {0}", newEmail);
 
             StartCooldown();
         }

@@ -4,6 +4,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -38,12 +39,12 @@ public sealed partial class BarberReviewsSection : ObservableObject
     /// </summary>
     public const int PageSize = 10;
 
-    private const string FirstPageFailedValue = "Не удалось загрузить отзывы.";
-    private const string NextPageFailedValue = "Не удалось загрузить следующие отзывы.";
-    private const string RateLimitValue = "Слишком много запросов. Подождите минуту и повторите.";
-    private const string NetworkValue = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string RetryValue = "Повторить";
-    private const string NextValue = "Дальше";
+    private static string FirstPageFailedValue => Loc.T("Не удалось загрузить отзывы.");
+    private static string NextPageFailedValue => Loc.T("Не удалось загрузить следующие отзывы.");
+    private static string RateLimitValue => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
+    private static string NetworkValue => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string RetryValue => Loc.T("Повторить");
+    private static string NextValue => Loc.T("Дальше");
 
     private readonly IBarberSearchApi _api;
     private readonly List<ReviewPage> _pages = [];

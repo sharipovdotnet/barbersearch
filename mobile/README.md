@@ -240,6 +240,22 @@ the card already loaded the gallery), swiping pages them, the caption and the «
 follow the current frame, and the system back button returns to the card. The web's arrow buttons
 and keyboard shortcuts are deliberately dropped — on a phone the gesture is the control.
 
+## Localization
+
+The interface is Russian and English, like the web. The approach is gettext: the key is the Russian
+source string, and `src/BarberSearch.Mobile.Core/Localization/messages/en.json` holds the English
+translation. Code calls `Loc.T("…")`; XAML uses `{loc:Translate Key='…'}`. A missing translation
+falls back to the Russian source instead of a key.
+
+The language is chosen by the compact RU/EN pair at the top of the «Профиль» tab (the web's header
+switcher has no direct phone equivalent), defaults to Russian and is stored in `Preferences` under
+`barbersearch.locale`. Changing it rebuilds Shell from DI, so pages and ViewModels are created with
+the new language; the app returns to «Профиль», and in-tab state starts over as after a page reload.
+Formatting follows the language: `ru-RU` / `en-GB`, 24-hour time, day-month dates and
+«2 400 ₽» / «RUB 2,400». `tests/BarberSearch.Mobile.Core.Tests/LocalizationTests.cs` covers the
+catalog, the Russian three-form and English two-form plurals, and the English date, price and
+counter conventions.
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):

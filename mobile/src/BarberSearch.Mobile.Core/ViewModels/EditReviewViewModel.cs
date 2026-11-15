@@ -6,6 +6,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -28,21 +29,23 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </remarks>
 public sealed partial class EditReviewViewModel : ObservableObject
 {
-    private const string RatingInvalidText = "Оценка должна быть от 1 до 5.";
-    private const string TextTooLongText = "Слишком длинный текст: максимум 2000 символов.";
-    private const string ConflictText = "Отзыв изменился в другой вкладке — обновите список.";
-    private const string NotFoundText = "Отзыв больше не существует.";
-    private const string ForbiddenText = "Править отзыв может только его автор.";
-    private const string SaveFailedText = "Не удалось сохранить отзыв.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText = "Слишком много запросов. Подождите минуту и повторите.";
+    private static string RatingInvalidText => Loc.T("Оценка должна быть от 1 до 5.");
+    private static string TextTooLongText => Loc.T(
+        "Слишком длинный текст: максимум {0} символов.",
+        BookingText.ReviewTextMaxLength);
+    private static string ConflictText => Loc.T("Отзыв изменился в другой вкладке — обновите список.");
+    private static string NotFoundText => Loc.T("Отзыв больше не существует.");
+    private static string ForbiddenText => Loc.T("Править отзыв может только его автор.");
+    private static string SaveFailedText => Loc.T("Не удалось сохранить отзыв.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
 
-    private const string HintsPublishedChangedText =
-        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке барбера.";
-    private const string HintsPublishedUnchangedText =
-        "Оценку можно изменить сразу: повторная проверка нужна только для текста.";
-    private const string HintsModerationText =
-        "Отзыв на проверке: изменения появятся на карточке после одобрения.";
+    private static string HintsPublishedChangedText => Loc.T(
+        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке барбера.");
+    private static string HintsPublishedUnchangedText => Loc.T(
+        "Оценку можно изменить сразу: повторная проверка нужна только для текста.");
+    private static string HintsModerationText => Loc.T(
+        "Отзыв на проверке: изменения появятся на карточке после одобрения.");
 
     private const string RatingCode = "review.update.rating";
     private const string TextTooLongCode = "review.update.text.tooLong";
@@ -140,7 +143,7 @@ public sealed partial class EditReviewViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке сохранения.
     /// </summary>
-    public string SaveButtonText => IsSaving ? "Сохраняем…" : "Сохранить";
+    public string SaveButtonText => IsSaving ? Loc.T("Сохраняем…") : Loc.T("Сохранить");
 
     /// <summary>
     /// Счётчик комментария: «0 / 2000».

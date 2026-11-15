@@ -8,6 +8,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -50,28 +51,28 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// </summary>
     private const int SlotHorizonDays = 30;
 
-    private const string NoReviewsTextValue = "Пока нет отзывов";
-    private const string VenueFallbackText = "Салон";
-    private const string NotWorkingDayValue = "В этот день барбер не работает.";
-    private const string NoFreeTimeValue = "Свободного времени на этот день нет.";
-    private const string ProfileLoadFailedValue = "Не удалось загрузить профиль барбера.";
-    private const string SlotsLoadFailedValue = "Не удалось загрузить свободное время.";
-    private const string RateLimitValue = "Слишком много запросов. Подождите минуту и повторите.";
-    private const string NetworkValue = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string BookingFailedValue = "Не удалось записаться.";
-    private const string SessionExpiredValue = "Сессия истекла — войдите снова.";
-    private const string SignInToBookValue = "Войдите, чтобы подтвердить запись";
-    private const string OverlapValue = "Это время только что заняли. Выберите другое.";
-    private const string LockTimeoutValue = "Не удалось занять время, попробуйте ещё раз.";
-    private const string StartAtInPastValue = "Это время уже прошло. Обновите свободное время.";
-    private const string StartAtTooFarValue = "Это время слишком далеко. Обновите свободное время.";
-    private const string ServiceGoneValue = "Эта услуга или салон больше недоступны.";
-    private const string RetryValue = "Повторить";
-    private const string BookValue = "Записаться";
-    private const string SendingValue = "Отправляем…";
-    private const string ChangeTimeValue = "Выбрать другое время";
-    private const string RefreshSlotsValue = "Обновить свободное время";
-    private const string TryAgainValue = "Попробовать снова";
+    private static string NoReviewsTextValue => Loc.T("Пока нет отзывов");
+    private static string VenueFallbackText => Loc.T("Салон");
+    private static string NotWorkingDayValue => Loc.T("В этот день барбер не работает.");
+    private static string NoFreeTimeValue => Loc.T("Свободного времени на этот день нет.");
+    private static string ProfileLoadFailedValue => Loc.T("Не удалось загрузить профиль барбера.");
+    private static string SlotsLoadFailedValue => Loc.T("Не удалось загрузить свободное время.");
+    private static string RateLimitValue => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
+    private static string NetworkValue => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string BookingFailedValue => Loc.T("Не удалось записаться.");
+    private static string SessionExpiredValue => Loc.T("Сессия истекла — войдите снова.");
+    private static string SignInToBookValue => Loc.T("Войдите, чтобы подтвердить запись");
+    private static string OverlapValue => Loc.T("Это время только что заняли. Выберите другое.");
+    private static string LockTimeoutValue => Loc.T("Не удалось занять время, попробуйте ещё раз.");
+    private static string StartAtInPastValue => Loc.T("Это время уже прошло. Обновите свободное время.");
+    private static string StartAtTooFarValue => Loc.T("Это время слишком далеко. Обновите свободное время.");
+    private static string ServiceGoneValue => Loc.T("Эта услуга или салон больше недоступны.");
+    private static string RetryValue => Loc.T("Повторить");
+    private static string BookValue => Loc.T("Записаться");
+    private static string SendingValue => Loc.T("Отправляем…");
+    private static string ChangeTimeValue => Loc.T("Выбрать другое время");
+    private static string RefreshSlotsValue => Loc.T("Обновить свободное время");
+    private static string TryAgainValue => Loc.T("Попробовать снова");
 
     // Коды создания брони живут в Application/Domain и на клиенте сравниваются строкой,
     // как auth.login.* в ProfileViewModel: в Contracts их нет.
@@ -339,7 +340,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
             var salon = Salons.FirstOrDefault(item => item.IsPrimary) ?? Salons.FirstOrDefault();
 
             return salon is null
-                ? "Салон не указан"
+                ? Loc.T("Салон не указан")
                 : BarberText.Place(salon.Kind, salon.Name, salon.City);
         }
     }
@@ -410,7 +411,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// </summary>
     public string ExperienceText => _profile is null
         ? string.Empty
-        : string.Concat("Стаж: ", BarberText.Experience(_profile.YearsOfExperience));
+        : Loc.T("Стаж: {0}", BarberText.Experience(_profile.YearsOfExperience));
 
     /// <summary>
     /// Есть ли языки общения.
@@ -449,7 +450,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// </summary>
     public string LatePolicyText => _latePolicy.Length == 0
         ? string.Empty
-        : string.Concat("Опоздания: ", _latePolicy);
+        : Loc.T("Опоздания: {0}", _latePolicy);
 
     /// <summary>
     /// Есть ли правило опозданий: пустая строка и пробелы секции не создают.
@@ -595,8 +596,8 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <summary>
     /// Сколько символов комментария ещё помещается.
     /// </summary>
-    public string NoteHintText => string.Concat(
-        "Осталось ",
+    public string NoteHintText => Loc.T(
+        "Осталось {0}",
         (MaxNoteLength - CustomerNote.Length).ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>
@@ -1042,11 +1043,11 @@ public sealed partial class BarberCardViewModel : ObservableObject
             LanguageChips.Add(BarberText.LanguageText(language));
         }
 
-        AddInfoList("Дополнительные услуги", profile.AdditionalServices);
-        AddInfoList("Сертификаты и обучение", profile.CertificatesAndTraining);
-        AddInfoList("Достижения", profile.Achievements);
-        AddInfoList("Особенности", profile.Goodies);
-        AddInfoList("Формат общения", profile.CommunicationFormat);
+        AddInfoList(Loc.T("Дополнительные услуги"), profile.AdditionalServices);
+        AddInfoList(Loc.T("Сертификаты и обучение"), profile.CertificatesAndTraining);
+        AddInfoList(Loc.T("Достижения"), profile.Achievements);
+        AddInfoList(Loc.T("Особенности"), profile.Goodies);
+        AddInfoList(Loc.T("Формат общения"), profile.CommunicationFormat);
 
         foreach (var specialization in profile.Specializations)
         {

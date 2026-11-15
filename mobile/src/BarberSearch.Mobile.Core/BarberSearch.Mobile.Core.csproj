@@ -10,6 +10,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      Английский каталог — встроенный ресурс, а не файл на диске: приложению не нужны
+      файловые операции в рантайме, а каталог переезжает вместе со сборкой на обе платформы.
+    -->
+    <EmbeddedResource Include="Localization\messages\en.json">
+      <LogicalName>BarberSearch.Mobile.Core.Localization.messages.en.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Тесты собирают исключение API напрямую: фабрика из ответа требует настоящий HttpResponseMessage. -->
     <InternalsVisibleTo Include="BarberSearch.Mobile.Core.Tests" />
   </ItemGroup>
