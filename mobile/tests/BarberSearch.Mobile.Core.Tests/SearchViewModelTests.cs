@@ -69,7 +69,7 @@ public sealed class SearchViewModelTests
         await viewModel.SearchCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.HasError);
-        Assert.Equal("Сервер не смог выполнить поиск.", viewModel.ErrorMessage);
+        Assert.Equal("Не удалось загрузить барберов.", viewModel.ErrorMessage);
         Assert.False(viewModel.IsLoading);
         Assert.Empty(viewModel.Barbers);
         Assert.False(viewModel.ShowEmptyState);

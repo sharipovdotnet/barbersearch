@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.PortfolioPhotoPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:PortfolioViewerViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Работы">
+    Title="{loc:Translate Key='Работы'}">
 
     <Grid Padding="16" RowDefinitions="*,Auto" RowSpacing="12">
 

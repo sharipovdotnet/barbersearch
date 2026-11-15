@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.SecurityPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:SecurityViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Безопасность">
+    Title="{loc:Translate Key='Безопасность'}">
 
     <Grid Padding="16">
 
@@ -19,7 +20,7 @@
                 IsRunning="{Binding ShowLoading}" />
             <Label
                 HorizontalTextAlignment="Center"
-                Text="Загружаем профиль…"
+                Text="{loc:Translate Key='Загружаем профиль…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         </VerticalStackLayout>
 
@@ -32,7 +33,7 @@
                 FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
-                Text="Не удалось загрузить профиль" />
+                Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
@@ -41,7 +42,7 @@
             <Button
                 Command="{Binding RetryCommand}"
                 HorizontalOptions="Center"
-                Text="Повторить" />
+                Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
         <ScrollView IsVisible="{Binding ShowContent}">
@@ -50,7 +51,7 @@
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="Пароль, вход и подтверждение адреса. Остальные настройки аккаунта — в профиле."
+                    Text="{loc:Translate Key='Пароль, вход и подтверждение адреса. Остальные настройки аккаунта — в профиле.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <!-- Карточка «Пароль»: раскрывающаяся форма вместо модального диалога. -->
@@ -62,21 +63,21 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Пароль" />
+                            Text="{loc:Translate Key='Пароль'}" />
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="Пароль от 12 символов. После смены остальные сессии входа завершатся — здесь вы останетесь."
+                            Text="{loc:Translate Key='Пароль от 12 символов. После смены остальные сессии входа завершатся — здесь вы останетесь.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Button
                             Command="{Binding OpenPasswordFormCommand}"
                             HorizontalOptions="Start"
                             IsVisible="{Binding ShowOpenPasswordButton}"
-                            Text="Сменить пароль" />
+                            Text="{loc:Translate Key='Сменить пароль'}" />
 
                         <VerticalStackLayout IsVisible="{Binding IsPasswordFormOpen}" Spacing="8">
-                            <Label Text="Текущий пароль" />
+                            <Label Text="{loc:Translate Key='Текущий пароль'}" />
                             <Entry IsPassword="True" Text="{Binding CurrentPassword}" />
                             <Label
                                 FontSize="12"
@@ -85,7 +86,7 @@
                                 Text="{Binding CurrentPasswordError}"
                                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                            <Label Text="Новый пароль" />
+                            <Label Text="{loc:Translate Key='Новый пароль'}" />
                             <Entry IsPassword="True" Text="{Binding NewPassword}" />
                             <Label
                                 FontSize="12"
@@ -94,7 +95,7 @@
                                 Text="{Binding NewPasswordError}"
                                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                            <Label Text="Повторите пароль" />
+                            <Label Text="{loc:Translate Key='Повторите пароль'}" />
                             <Entry IsPassword="True" Text="{Binding ConfirmPassword}" />
                             <Label
                                 FontSize="12"
@@ -123,7 +124,7 @@
                                     Margin="0,0,8,8"
                                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                     Command="{Binding CancelPasswordChangeCommand}"
-                                    Text="Отмена"
+                                    Text="{loc:Translate Key='Отмена'}"
                                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                             </FlexLayout>
                         </VerticalStackLayout>
@@ -146,7 +147,7 @@
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
-                            Text="Подтверждение email" />
+                            Text="{loc:Translate Key='Подтверждение email'}" />
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
@@ -156,7 +157,7 @@
                         <HorizontalStackLayout Spacing="4">
                             <Label
                                 FontSize="14"
-                                Text="Адрес:"
+                                Text="{loc:Translate Key='Адрес:'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Label
                                 FontSize="14"
@@ -194,7 +195,7 @@
                         <Label
                             FontSize="12"
                             IsVisible="{Binding ShowResendButton}"
-                            Text="Письмо действует 24 часа."
+                            Text="{loc:Translate Key='Письмо действует 24 часа.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label

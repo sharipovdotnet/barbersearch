@@ -45,7 +45,7 @@ public sealed class BarberTextTests
 
     [Theory]
     [InlineData(PaymentMethod.Cash, "Наличные")]
-    [InlineData(PaymentMethod.Card, "Карта")]
+    [InlineData(PaymentMethod.Card, "Банковская карта")]
     [InlineData(PaymentMethod.DigitalWallet, "Цифровой кошелёк")]
     [InlineData(PaymentMethod.Sbp, "СБП")]
     [InlineData(PaymentMethod.BankTransfer, "Перевод")]

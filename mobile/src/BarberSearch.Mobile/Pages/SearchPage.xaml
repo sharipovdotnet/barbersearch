@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.SearchPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:search="clr-namespace:BarberSearch.Contracts.BarberProfiles.SearchBarbers;assembly=BarberSearch.Contracts"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:SearchViewModel"
-    Title="Поиск">
+    Title="{loc:Translate Key='Поиск'}">
 
     <ScrollView x:Name="PageScroll">
         <VerticalStackLayout Padding="16" Spacing="16">
@@ -21,10 +22,10 @@
                     <VerticalStackLayout Spacing="2">
                         <Label
                             FontSize="12"
-                            Text="Город салона"
+                            Text="{loc:Translate Key='Город салона'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Entry
-                            Placeholder="Москва"
+                            Placeholder="{loc:Translate Key='Москва'}"
                             ReturnCommand="{Binding SearchCommand}"
                             Text="{Binding City}" />
                     </VerticalStackLayout>
@@ -33,7 +34,7 @@
                         <VerticalStackLayout Spacing="2">
                             <Label
                                 FontSize="12"
-                                Text="Дата"
+                                Text="{loc:Translate Key='Дата'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Picker
                                 ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchDateOption}"
@@ -44,7 +45,7 @@
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
                             <Label
                                 FontSize="12"
-                                Text="Язык"
+                                Text="{loc:Translate Key='Язык'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Picker
                                 ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchLanguageOption}"
@@ -61,7 +62,7 @@
                         <VerticalStackLayout IsVisible="{Binding ShowSpecializationPicker}" Spacing="2">
                             <Label
                                 FontSize="12"
-                                Text="Специализация"
+                                Text="{loc:Translate Key='Специализация'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Picker
                                 IsEnabled="{Binding IsCatalogsEnabled}"
@@ -73,7 +74,7 @@
                         <VerticalStackLayout IsVisible="{Binding ShowHairServicePicker}" Spacing="2">
                             <Label
                                 FontSize="12"
-                                Text="Услуга"
+                                Text="{loc:Translate Key='Услуга'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Picker
                                 IsEnabled="{Binding IsCatalogsEnabled}"
@@ -86,10 +87,10 @@
                     <VerticalStackLayout Spacing="2">
                         <Label
                             FontSize="12"
-                            Text="Дополнительная услуга"
+                            Text="{loc:Translate Key='Дополнительная услуга'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Entry
-                            Placeholder="Например, борода"
+                            Placeholder="{loc:Translate Key='Например, борода'}"
                             ReturnCommand="{Binding SearchCommand}"
                             Text="{Binding AdditionalService}" />
                     </VerticalStackLayout>
@@ -108,12 +109,12 @@
                             <Button
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                 Command="{Binding RetryCatalogsCommand}"
-                                Text="Повторить"
+                                Text="{loc:Translate Key='Повторить'}"
                                 TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                         </VerticalStackLayout>
                     </Border>
 
-                    <Button Command="{Binding SearchCommand}" Text="Найти" />
+                    <Button Command="{Binding SearchCommand}" Text="{loc:Translate Key='Найти'}" />
                 </VerticalStackLayout>
             </Border>
 
@@ -122,7 +123,7 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="16"
-                    Text="Барберы рядом" />
+                    Text="{loc:Translate Key='Барберы рядом'}" />
 
                 <Label
                     FontSize="12"
@@ -143,7 +144,7 @@
                     <Button
                         BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                         Command="{Binding SearchCommand}"
-                        Text="Повторить"
+                        Text="{loc:Translate Key='Повторить'}"
                         TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 </VerticalStackLayout>
 
@@ -163,7 +164,7 @@
                                     <Label
                                         Text="{Binding City}"
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                    <Label Text="{Binding Rating, StringFormat='Рейтинг: {0}'}" />
+                                    <Label Text="{Binding Rating, Converter={StaticResource RatingText}}" />
                                 </VerticalStackLayout>
                             </Border>
                         </DataTemplate>

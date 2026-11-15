@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Pages;
@@ -119,11 +120,11 @@ public partial class MyReviewsPage : ContentPage
         }
 
         var accepted = await DisplayAlertAsync(
-            "Удалить отзыв?",
-            "Удаление необратимо.\n\nОтзыв исчезнет навсегда, восстановить его нельзя. "
-                + "По этой записи можно будет оставить новый отзыв.",
-            "Удалить отзыв",
-            "Не удалять");
+            Loc.T("Удалить отзыв?"),
+            Loc.T(
+                "Удаление необратимо.\n\nОтзыв исчезнет навсегда, восстановить его нельзя. По этой записи можно будет оставить новый отзыв."),
+            Loc.T("Удалить отзыв"),
+            Loc.T("Не удалять"));
 
         if (!accepted)
         {
@@ -134,7 +135,7 @@ public partial class MyReviewsPage : ContentPage
 
         if (error is not null)
         {
-            await DisplayAlertAsync("Удаление отзыва", error, "Понятно");
+            await DisplayAlertAsync(Loc.T("Удаление отзыва"), error, Loc.T("Понятно"));
         }
     }
 

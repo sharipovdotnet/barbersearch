@@ -1,6 +1,7 @@
 using System.Globalization;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.Formatting;
 
@@ -14,13 +15,13 @@ namespace BarberSearch.Mobile.Core.Formatting;
 /// чтобы экран не форматировал строки сам: одна копия текста на два клиента.
 /// </para>
 /// <para>
-/// Культура задана явно (<c>ru-RU</c>): приложение русскоязычное, а настройки устройства
-/// в другой локали дали бы «2,400 ₽» вместо «2 400 ₽».
+/// Культура берётся из выбранного языка (<c>ru-RU</c> или <c>en-GB</c>), а не из настроек
+/// устройства: иначе телефон в другой локали дал бы «2,400 ₽» вместо «2 400 ₽» или
+/// американский порядок даты. Английский вариант — тот же, что в вебе.
 /// </para>
 /// </remarks>
 public static class BarberText
 {
-    private static readonly CultureInfo RuCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     /// <summary>
     /// Русские подписи грейдов; значения API остаются английскими.
@@ -58,7 +59,7 @@ public static class BarberText
     /// <param name="grade">Грейд из карточки.</param>
     /// <returns>Русская подпись.</returns>
     public static string GradeText(Grade grade) =>
-        Grades.TryGetValue(grade, out var text) ? text : "Без грейда";
+        Loc.T(Grades.TryGetValue(grade, out var text) ? text : "Без грейда");
 
     /// <summary>
     /// Короткая подпись вида места: «Барбершоп», «Кабинет», «На дому».
@@ -66,7 +67,7 @@ public static class BarberText
     /// <param name="kind">Вид места приёма.</param>
     /// <returns>Русская подпись.</returns>
     public static string PlaceKindText(PlaceKind kind) =>
-        PlaceKinds.TryGetValue(kind, out var text) ? text : "Место приёма";
+        Loc.T(PlaceKinds.TryGetValue(kind, out var text) ? text : "Место приёма");
 
     /// <summary>
     /// Место приёма в шапке карточки: название, город и вид места.
@@ -86,12 +87,14 @@ public static class BarberText
 
         if (kind == PlaceKind.Home)
         {
-            return string.IsNullOrWhiteSpace(city) ? placeKind : string.Concat("На дому в ", city);
+            return string.IsNullOrWhiteSpace(city)
+                ? placeKind
+                : Loc.T("На дому в {0}", city);
         }
 
         if (kind == PlaceKind.Mobile)
         {
-            return "Выезд по городу";
+            return Loc.T("Выезд по городу");
         }
 
         var place = string.Join(
@@ -115,8 +118,11 @@ public static class BarberText
     public static string Price(decimal value)
     {
         var format = value % 1m == 0m ? "#,##0" : "#,##0.##";
+        var number = value.ToString(format, Loc.Culture);
 
-        return string.Concat(value.ToString(format, RuCulture), "\u00A0₽");
+        return Loc.Locale == Locale.En
+            ? string.Concat("RUB ", number)
+            : string.Concat(number, "\u00A0₽");
     }
 
     /// <summary>
@@ -133,12 +139,18 @@ public static class BarberText
 
         if (totalMinutes < 60)
         {
-            return string.Concat(totalMinutes.ToString(CultureInfo.InvariantCulture), " мин");
+            return string.Concat(
+                totalMinutes.ToString(CultureInfo.InvariantCulture),
+                " ",
+                Loc.T("мин"));
         }
 
         var hours = totalMinutes / 60;
         var minutes = totalMinutes % 60;
-        var hoursText = string.Concat(hours.ToString(CultureInfo.InvariantCulture), " ч");
+        var hoursText = string.Concat(
+            hours.ToString(CultureInfo.InvariantCulture),
+            " ",
+            Loc.T("ч"));
 
         return minutes == 0
             ? hoursText
@@ -146,7 +158,8 @@ public static class BarberText
                 hoursText,
                 " ",
                 minutes.ToString(CultureInfo.InvariantCulture),
-                " мин");
+                " ",
+                Loc.T("мин"));
     }
 
     /// <summary>
@@ -154,22 +167,8 @@ public static class BarberText
     /// </summary>
     /// <param name="count">Число опубликованных отзывов.</param>
     /// <returns>Строка счётчика.</returns>
-    public static string Reviews(int count)
-    {
-        var rest = Math.Abs(count) % 100;
-        var last = rest % 10;
-
-        var form = rest is >= 11 and <= 14
-            ? "отзывов"
-            : last switch
-            {
-                1 => "отзыв",
-                2 or 3 or 4 => "отзыва",
-                _ => "отзывов",
-            };
-
-        return string.Concat(count.ToString(CultureInfo.InvariantCulture), " ", form);
-    }
+    public static string Reviews(int count) =>
+        Loc.Plural(PluralKey.Reviews, count);
 
     /// <summary>
     /// Рейтинг с одним знаком после запятой; <c>null</c> — прочерк.
@@ -177,7 +176,7 @@ public static class BarberText
     /// <param name="value">Средний рейтинг 1.00..5.00.</param>
     /// <returns>«4,8» или «—».</returns>
     public static string Rating(decimal? value) =>
-        value is null ? "—" : value.Value.ToString("0.0", RuCulture);
+        value is null ? "—" : value.Value.ToString("0.0", Loc.Culture);
 
     /// <summary>
     /// Счётчик найденных барберов: «Показан 1 барбер», «Показаны 2 барбера»,
@@ -190,27 +189,13 @@ public static class BarberText
     /// </remarks>
     /// <param name="count">Сколько барберов показано.</param>
     /// <returns>Строка счётчика.</returns>
-    public static string ShownBarbers(int count)
-    {
-        var rest = Math.Abs(count) % 100;
-        var last = rest % 10;
-
-        var form = rest is >= 11 and <= 14
-            ? "Показаны {0} барберов"
-            : last switch
-            {
-                1 => "Показан {0} барбер",
-                2 or 3 or 4 => "Показаны {0} барбера",
-                _ => "Показаны {0} барберов",
-            };
-
-        return string.Format(CultureInfo.InvariantCulture, form, count);
-    }
+    public static string ShownBarbers(int count) =>
+        Loc.Plural(PluralKey.ShownBarbers, count);
 
     /// <summary>
     /// Подпись подтверждённого профиля.
     /// </summary>
-    public const string Verified = "Проверен";
+    public static string Verified => Loc.T("Проверен");
 
     /// <summary>
     /// Русские подписи языков общения: самоназвания, как в вебе, а не перевод.
@@ -231,7 +216,10 @@ public static class BarberText
     private static readonly Dictionary<PaymentMethod, string> PaymentMethods = new()
     {
         [PaymentMethod.Cash] = "Наличные",
-        [PaymentMethod.Card] = "Карта",
+        // «Карта» — ещё и вкладка «Карта»; в каталоге это разные понятия, поэтому способ
+        // оплаты подписан полнее. По-русски «Банковская карта» — тот же смысл, а английский
+        // перевод остаётся вебовским «Card».
+        [PaymentMethod.Card] = "Банковская карта",
         [PaymentMethod.DigitalWallet] = "Цифровой кошелёк",
         [PaymentMethod.Sbp] = "СБП",
         [PaymentMethod.BankTransfer] = "Перевод",
@@ -247,22 +235,8 @@ public static class BarberText
     /// </remarks>
     /// <param name="years">Стаж в годах.</param>
     /// <returns>Число и форма слова.</returns>
-    public static string Experience(int years)
-    {
-        var rest = Math.Abs(years) % 100;
-        var last = rest % 10;
-
-        var form = rest is >= 11 and <= 14
-            ? "лет"
-            : last switch
-            {
-                1 => "год",
-                2 or 3 or 4 => "года",
-                _ => "лет",
-            };
-
-        return string.Concat(years.ToString(CultureInfo.InvariantCulture), " ", form);
-    }
+    public static string Experience(int years) =>
+        Loc.Plural(PluralKey.Experience, years);
 
     /// <summary>
     /// Подпись языка: «Русский», «English», «Кыргызча».
@@ -278,7 +252,7 @@ public static class BarberText
     /// <param name="method">Способ оплаты из карточки.</param>
     /// <returns>Русская подпись.</returns>
     public static string PaymentText(PaymentMethod method) =>
-        PaymentMethods.TryGetValue(method, out var text) ? text : method.ToString();
+        Loc.T(PaymentMethods.TryGetValue(method, out var text) ? text : method.ToString());
 
     /// <summary>
     /// Инициалы для заглушки аватара: первые буквы первых двух слов.
@@ -320,10 +294,9 @@ public static class BarberText
     /// <returns>Подпись либо шаблон «Работа барбера N, фото M».</returns>
     public static string PhotoAlt(string barberName, int number, string? description) =>
         string.IsNullOrWhiteSpace(description)
-            ? string.Concat(
-                "Работа барбера ",
+            ? Loc.T(
+                "Работа барбера {0}, фото {1}",
                 barberName ?? string.Empty,
-                ", фото ",
                 number.ToString(CultureInfo.InvariantCulture))
             : description.Trim();
 
@@ -333,7 +306,7 @@ public static class BarberText
     /// <param name="caption">Подпись фотографии.</param>
     /// <returns>Текст для <c>SemanticProperties.Hint</c>.</returns>
     public static string PhotoOpenHint(string caption) =>
-        string.Concat("Открыть фото: ", caption ?? string.Empty);
+        Loc.T("Открыть фото: {0}", caption ?? string.Empty);
 
     /// <summary>
     /// Счётчик кадров: «3 из 12».
@@ -341,9 +314,9 @@ public static class BarberText
     /// <param name="current">Номер текущего кадра с единицы.</param>
     /// <param name="total">Всего кадров.</param>
     /// <returns>Номер и общее число.</returns>
-    public static string PhotoCounter(int current, int total) => string.Concat(
+    public static string PhotoCounter(int current, int total) => Loc.T(
+        "{0} из {1}",
         current.ToString(CultureInfo.InvariantCulture),
-        " из ",
         total.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
@@ -364,14 +337,15 @@ public static class BarberText
 
         if (count <= 0)
         {
-            return string.Concat("0 из ", totalText);
+            return Loc.T("0 из {0}", totalText);
         }
 
-        return string.Concat(
-            (offset + 1).ToString(CultureInfo.InvariantCulture),
-            "–",
-            (offset + count).ToString(CultureInfo.InvariantCulture),
-            " из ",
+        return Loc.T(
+            "{0} из {1}",
+            string.Concat(
+                (offset + 1).ToString(CultureInfo.InvariantCulture),
+                "–",
+                (offset + count).ToString(CultureInfo.InvariantCulture)),
             totalText);
     }
 }

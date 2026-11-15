@@ -7,6 +7,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Legal;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -52,24 +53,28 @@ public sealed partial class RegisterViewModel : ObservableObject
 
     // Сообщения клиентских проверок и серверных кодов совпадают дословно: человек не должен
     // видеть два разных текста об одном и том же правиле.
-    private const string FirstNameRequiredText = "Введите имя.";
-    private const string LastNameRequiredText = "Введите фамилию.";
-    private const string EmailRequiredText = "Введите email.";
-    private const string EmailInvalidText = "Проверьте email: нужен адрес вида name@example.com.";
-    private const string PasswordRequiredText = "Введите пароль.";
-    private const string PasswordTooShortText = "Пароль должен быть не короче 12 символов.";
-    private const string PasswordTooLongText = "Пароль должен быть не длиннее 128 символов.";
-    private const string PasswordCommonText = "Этот пароль слишком распространён. Выберите другой.";
-    private const string PasswordEqualsEmailText = "Пароль не должен совпадать с email.";
-    private const string PasswordEqualsNameText = "Пароль не должен совпадать с именем или фамилией.";
-    private const string PasswordRepeatText = "Пароли не совпадают.";
-    private const string ConsentRequiredText = "Отметьте согласие на обработку персональных данных.";
-    private const string ConsentVersionText =
-        "Политика обработки персональных данных обновилась. Обновите приложение и подтвердите согласие снова.";
-    private const string EmailTakenText = "Аккаунт с таким email уже есть. Войдите или укажите другой адрес.";
-    private const string RateLimitText = "Слишком много попыток регистрации. Подождите минуту и повторите.";
-    private const string FallbackText = "Не удалось создать аккаунт. Попробуйте ещё раз.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
+    private static string FirstNameRequiredText => Loc.T("Введите имя.");
+    private static string LastNameRequiredText => Loc.T("Введите фамилию.");
+    private static string EmailRequiredText => Loc.T("Введите email.");
+    private static string EmailInvalidText => Loc.T("Проверьте email: нужен адрес вида name@example.com.");
+    private static string PasswordRequiredText => Loc.T("Введите пароль.");
+    private static string PasswordTooShortText => Loc.T(
+        "Пароль должен быть не короче {0} символов.",
+        MinPasswordLength);
+    private static string PasswordTooLongText => Loc.T(
+        "Пароль должен быть не длиннее {0} символов.",
+        MaxPasswordLength);
+    private static string PasswordCommonText => Loc.T("Этот пароль слишком распространён. Выберите другой.");
+    private static string PasswordEqualsEmailText => Loc.T("Пароль не должен совпадать с email.");
+    private static string PasswordEqualsNameText => Loc.T("Пароль не должен совпадать с именем или фамилией.");
+    private static string PasswordRepeatText => Loc.T("Пароли не совпадают.");
+    private static string ConsentRequiredText => Loc.T("Отметьте согласие на обработку персональных данных.");
+    private static string ConsentVersionText => Loc.T(
+        "Политика обработки персональных данных обновилась. Обновите приложение и подтвердите согласие снова.");
+    private static string EmailTakenText => Loc.T("Аккаунт с таким email уже есть. Войдите или укажите другой адрес.");
+    private static string RateLimitText => Loc.T("Слишком много попыток регистрации. Подождите минуту и повторите.");
+    private static string FallbackText => Loc.T("Не удалось создать аккаунт. Попробуйте ещё раз.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
 
     /// <summary>
     /// Коды, которые сервер отдаёт на регистрацию; в Contracts объявлены не все.
@@ -84,11 +89,6 @@ public sealed partial class RegisterViewModel : ObservableObject
     private const string PasswordCommonCode = "auth.password.common";
     private const string PasswordEqualsEmailCode = "auth.password.equalsEmail";
     private const string PasswordEqualsNameCode = "auth.password.equalsName";
-
-    /// <summary>
-    /// Культура подписи редакции Политики: та же, что у русского текста интерфейса.
-    /// </summary>
-    private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     private readonly IAuthApi _authApi;
     private readonly TokenSession _session;
@@ -115,10 +115,17 @@ public sealed partial class RegisterViewModel : ObservableObject
         _authApi = authApi;
         _session = session;
         _legal = legal;
-        _privacyPolicyLinkText = string.Concat(
-            "Политика обработки персональных данных (редакция от ",
-            PrivacyPolicy.EditionDate.ToString("d MMMM yyyy 'г.'", RussianCulture),
-            ").");
+
+        var date = PrivacyPolicy.EditionDate.ToString("d MMMM yyyy", Loc.Culture);
+
+        if (Loc.Locale == Locale.Ru)
+        {
+            date = string.Concat(date, " г.");
+        }
+
+        _privacyPolicyLinkText = Loc.T(
+            "Политика обработки персональных данных (редакция от {0}).",
+            date);
     }
 
     /// <summary>
@@ -250,7 +257,9 @@ public sealed partial class RegisterViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке регистрации: во время запроса — «Создаём аккаунт…».
     /// </summary>
-    public string RegisterButtonText => IsSubmitting ? "Создаём аккаунт…" : "Зарегистрироваться";
+    public string RegisterButtonText => IsSubmitting
+        ? Loc.T("Создаём аккаунт…")
+        : Loc.T("Зарегистрироваться");
 
     /// <summary>
     /// Есть ошибка поля «Имя».
@@ -291,10 +300,9 @@ public sealed partial class RegisterViewModel : ObservableObject
     /// Подпись ссылки на Политику с датой редакции.
     /// </summary>
     /// <remarks>
-    /// Формат — длинная дата русской культуры: она даёт ту же подпись, что
-    /// <c>Intl.DateTimeFormat</c> веба, включая «г.». Локаль приложения одна, поэтому
-    /// культура здесь константа, а не выбор пользователя. Строка собирается один раз
-    /// в конструкторе: редакция — константа сборки, меняться на лету ей нечем.
+    /// Формат — длинная дата выбранной культуры: русская версия добавляет «г.», как
+    /// <c>Intl.DateTimeFormat</c> веба, английская обходится без него. Редакция — константа
+    /// сборки; смена языка пересобирает экран, и подпись пересчитывается.
     /// </remarks>
     public string PrivacyPolicyLinkText => _privacyPolicyLinkText;
 

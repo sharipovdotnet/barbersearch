@@ -1,5 +1,6 @@
 using System.Globalization;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.Formatting;
 
@@ -13,9 +14,10 @@ namespace BarberSearch.Mobile.Core.Formatting;
 /// одна копия текста на два клиента.
 /// </para>
 /// <para>
-/// Культура задана явно (<c>ru-RU</c>): настройки телефона в другой локали дали бы «15 Nov»
-/// и другую форму месяца. Обратный отсчёт повторяет правило веба: он существует только до
-/// семи дней — на дальнем горизонте точность минуты ничего не значит.
+/// Культура берётся из выбранного языка (<c>ru-RU</c> или <c>en-GB</c>), а не из настроек
+/// телефона: иначе локаль устройства дала бы «15 Nov» и другую форму месяца. Английский
+/// вариант — тот же <c>en-GB</c>, что в вебе. Обратный отсчёт повторяет правило веба: он
+/// существует только до семи дней — на дальнем горизонте точность минуты ничего не значит.
 /// </para>
 /// </remarks>
 public static class BookingText
@@ -23,33 +25,31 @@ public static class BookingText
     /// <summary>
     /// Подпись барбера, пока карточка не загрузилась.
     /// </summary>
-    public const string BarberFallback = "Барбер";
+    public static string BarberFallback => Loc.T("Барбер");
 
     /// <summary>
     /// Подпись услуги, пока карточка не загрузилась.
     /// </summary>
-    public const string ServiceFallback = "Услуга";
+    public static string ServiceFallback => Loc.T("Услуга");
 
     /// <summary>
     /// Подпись салона, пока карточка не загрузилась.
     /// </summary>
-    public const string SalonFallback = "Салон";
+    public static string SalonFallback => Loc.T("Салон");
 
     /// <summary>
     /// Объявление после успешно отправленного отзыва: он уходит на модерацию.
     /// </summary>
-    public const string ReviewSubmittedAnnouncement =
-        "Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.";
+    public static string ReviewSubmittedAnnouncement => Loc.T(
+        "Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.");
 
     /// <summary>
     /// Максимальная длина комментария к отзыву — та же, что проверяет сервер.
     /// </summary>
     public const int ReviewTextMaxLength = 2000;
 
-    private static readonly CultureInfo RuCulture = CultureInfo.GetCultureInfo("ru-RU");
-
     /// <summary>
-    /// Русские подписи статусов; значения API остаются английскими.
+    /// Подписи статусов; значения API остаются английскими.
     /// </summary>
     private static readonly Dictionary<BookingStatus, string> Statuses = new()
     {
@@ -66,21 +66,21 @@ public static class BookingText
     /// <param name="status">Статус из ответа API.</param>
     /// <returns>Русская подпись; неизвестный статус показывается как есть.</returns>
     public static string Status(BookingStatus status) =>
-        Statuses.TryGetValue(status, out var text) ? text : status.ToString();
+        Loc.T(Statuses.TryGetValue(status, out var text) ? text : status.ToString());
 
     /// <summary>
     /// Короткая дата строки списка: «сб, 15 нояб.».
     /// </summary>
     /// <param name="date">Локальная дата салона.</param>
     /// <returns>День недели, число и сокращённый месяц.</returns>
-    public static string ShortDate(DateOnly date) => date.ToString("ddd, d MMM", RuCulture);
+    public static string ShortDate(DateOnly date) => date.ToString("ddd, d MMM", Loc.Culture);
 
     /// <summary>
     /// Короткий день недели: «сб».
     /// </summary>
     /// <param name="date">Локальная дата салона.</param>
     /// <returns>Сокращённый день недели.</returns>
-    public static string Weekday(DateOnly date) => date.ToString("ddd", RuCulture);
+    public static string Weekday(DateOnly date) => date.ToString("ddd", Loc.Culture);
 
     /// <summary>
     /// Заголовок группы месяцев: «Ноябрь 2026».
@@ -93,7 +93,7 @@ public static class BookingText
     /// <returns>Месяц с заголовочной буквой и год.</returns>
     public static string MonthTitle(DateOnly date)
     {
-        var month = date.ToString("MMMM", RuCulture);
+        var month = date.ToString("MMMM", Loc.Culture);
         var capitalized = char.ToUpperInvariant(month[0]) + month[1..];
 
         return string.Concat(capitalized, " ", date.Year.ToString(CultureInfo.InvariantCulture));
@@ -109,9 +109,9 @@ public static class BookingText
     {
         var local = timeZone is null ? instant.ToUniversalTime() : SalonClock.ToLocal(instant, timeZone);
 
-        return string.Concat(
-            local.ToString("ddd, d MMMM", RuCulture),
-            " в ",
+        return Loc.T(
+            "{0} в {1}",
+            local.ToString("ddd, d MMMM", Loc.Culture),
             local.ToString("HH:mm", CultureInfo.InvariantCulture));
     }
 
@@ -139,25 +139,25 @@ public static class BookingText
 
         if (minutes < 1)
         {
-            return "меньше минуты";
+            return Loc.T("меньше минуты");
         }
 
         if (minutes < 60)
         {
-            return string.Concat("через ", Plural(minutes, "минуту", "минуты", "минут"));
+            return Loc.T("через {0}", Loc.Plural(PluralKey.Minutes, minutes));
         }
 
         var hours = (int)Math.Round(minutes / 60.0, MidpointRounding.AwayFromZero);
 
         if (hours < 24)
         {
-            return string.Concat("через ", Plural(hours, "час", "часа", "часов"));
+            return Loc.T("через {0}", Loc.Plural(PluralKey.Hours, hours));
         }
 
         var days = (int)Math.Round(hours / 24.0, MidpointRounding.AwayFromZero);
 
         return days <= 7
-            ? string.Concat("через ", Plural(days, "день", "дня", "дней"))
+            ? Loc.T("через {0}", Loc.Plural(PluralKey.Days, days))
             : null;
     }
 
@@ -167,7 +167,7 @@ public static class BookingText
     /// <param name="note">Заметка из ответа API.</param>
     /// <returns>Подписанная строка либо <c>null</c>, если заметки нет.</returns>
     public static string? BarberNote(string? note) =>
-        string.IsNullOrWhiteSpace(note) ? null : string.Concat("Барбер: ", note.Trim());
+        string.IsNullOrWhiteSpace(note) ? null : Loc.T("Барбер: {0}", note.Trim());
 
     /// <summary>
     /// Заметка клиента строкой карточки: «Вы: Покороче сзади».
@@ -175,7 +175,7 @@ public static class BookingText
     /// <param name="note">Заметка из ответа API.</param>
     /// <returns>Подписанная строка либо <c>null</c>, если заметки нет.</returns>
     public static string? CustomerNote(string? note) =>
-        string.IsNullOrWhiteSpace(note) ? null : string.Concat("Вы: ", note.Trim());
+        string.IsNullOrWhiteSpace(note) ? null : Loc.T("Вы: {0}", note.Trim());
 
     /// <summary>
     /// Причина отмены для истории: с причиной или «Причина отмены не указана».
@@ -188,8 +188,8 @@ public static class BookingText
     /// <returns>Строка для карточки.</returns>
     public static string CancellationReason(string? reason) =>
         string.IsNullOrWhiteSpace(reason)
-            ? "Причина отмены не указана"
-            : string.Concat("Причина отмены: ", reason.Trim());
+            ? Loc.T("Причина отмены не указана")
+            : Loc.T("Причина отмены: {0}", reason.Trim());
 
     /// <summary>
     /// Объявление об отмене: «Запись на {when} отменена.».
@@ -197,7 +197,7 @@ public static class BookingText
     /// <param name="when">Момент визита в поясе салона.</param>
     /// <returns>Текст баннера.</returns>
     public static string CancelAnnouncement(string when) =>
-        string.Concat("Запись на ", when, " отменена.");
+        Loc.T("Запись на {0} отменена.", when);
 
     /// <summary>
     /// Объявление о переносе: «Визит перенесён на {when}.».
@@ -205,30 +205,6 @@ public static class BookingText
     /// <param name="when">Новый момент визита в поясе салона.</param>
     /// <returns>Текст баннера.</returns>
     public static string RescheduleAnnouncement(string when) =>
-        string.Concat("Визит перенесён на ", when, ".");
+        Loc.T("Визит перенесён на {0}.", when);
 
-    /// <summary>
-    /// Склоняет существительное после числа: «1 минуту», «2 минуты», «5 минут».
-    /// </summary>
-    /// <param name="count">Число (неотрицательное).</param>
-    /// <param name="one">Форма для 1, 21, 31…</param>
-    /// <param name="few">Форма для 2–4, 22–24…</param>
-    /// <param name="many">Форма для 0, 5–20, 25–30…</param>
-    /// <returns>Число и правильная форма слова.</returns>
-    private static string Plural(int count, string one, string few, string many)
-    {
-        var rest = Math.Abs(count) % 100;
-        var last = rest % 10;
-
-        var form = rest is >= 11 and <= 14
-            ? many
-            : last switch
-            {
-                1 => one,
-                2 or 3 or 4 => few,
-                _ => many,
-            };
-
-        return string.Concat(count.ToString(CultureInfo.InvariantCulture), " ", form);
-    }
 }

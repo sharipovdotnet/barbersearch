@@ -3,16 +3,27 @@
     x:Class="BarberSearch.Mobile.Pages.ProfilePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:ProfileViewModel"
-    Title="Профиль">
+    Title="{loc:Translate Key='Профиль'}">
 
     <!--
         Вкладка «Профиль» — хаб: без сессии форма входа, с сессией карточка личности и
         переходы в разделы. Состояния лежат в одной ячейке сетки и показываются
         взаимоисключающе: так ни одно из них не толкает остальные.
     -->
-    <Grid Padding="16">
+    <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="8">
+
+        <!--
+            Переключатель языка стоит на вкладке «Профиль»: в вебе он в шапке, а на телефоне
+            «Профиль» — единственный экран настроек. Смена языка пересобирает Shell.
+        -->
+        <HorizontalStackLayout Grid.Row="0" HorizontalOptions="End">
+            <loc:LanguageSwitcher />
+        </HorizontalStackLayout>
+
+        <Grid Grid.Row="1">
 
         <ActivityIndicator
             HorizontalOptions="Center"
@@ -26,7 +37,7 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="20"
-                    Text="Вход в BarberSearch" />
+                    Text="{loc:Translate Key='Вход в BarberSearch'}" />
 
                 <VerticalStackLayout Spacing="4">
                     <Label Text="Email" />
@@ -38,7 +49,7 @@
                 </VerticalStackLayout>
 
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Пароль" />
+                    <Label Text="{loc:Translate Key='Пароль'}" />
                     <Entry
                         IsEnabled="{Binding IsFormEnabled}"
                         IsPassword="True"
@@ -61,7 +72,7 @@
                     FontSize="14"
                     HorizontalOptions="End"
                     MinimumHeightRequest="44"
-                    Text="Забыли пароль?"
+                    Text="{loc:Translate Key='Забыли пароль?'}"
                     TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
                 <Button
@@ -76,7 +87,7 @@
                     HorizontalOptions="Center"
                     Spacing="4">
                     <Label
-                        Text="Нет аккаунта?"
+                        Text="{loc:Translate Key='Нет аккаунта?'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                         VerticalTextAlignment="Center" />
                     <Button
@@ -84,7 +95,7 @@
                         BackgroundColor="Transparent"
                         Command="{Binding RegisterCommand}"
                         HorizontalOptions="Start"
-                        Text="Зарегистрироваться"
+                        Text="{loc:Translate Key='Зарегистрироваться'}"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
                 </HorizontalStackLayout>
 
@@ -101,7 +112,7 @@
                 IsRunning="{Binding ShowProfileLoading}" />
             <Label
                 HorizontalTextAlignment="Center"
-                Text="Загружаем профиль…"
+                Text="{loc:Translate Key='Загружаем профиль…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         </VerticalStackLayout>
 
@@ -115,7 +126,7 @@
                 FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
-                Text="Не удалось загрузить профиль" />
+                Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
@@ -124,7 +135,7 @@
             <Button
                 Command="{Binding RetryProfileCommand}"
                 HorizontalOptions="Center"
-                Text="Повторить" />
+                Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
         <ScrollView IsVisible="{Binding IsProfileVisible}">
@@ -198,7 +209,7 @@
                     HorizontalOptions="Start"
                     IsVisible="{Binding ShowEmailWarning}"
                     Padding="0"
-                    Text="Email не подтверждён"
+                    Text="{loc:Translate Key='Email не подтверждён'}"
                     TextColor="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
 
                 <!-- Ошибка тихого обновления: данные на экране остаются, есть чем повторить. -->
@@ -210,23 +221,23 @@
                     <Button
                         Command="{Binding RetryProfileCommand}"
                         HorizontalOptions="Start"
-                        Text="Повторить" />
+                        Text="{loc:Translate Key='Повторить'}" />
                 </VerticalStackLayout>
 
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding EditProfileCommand}"
-                    Text="Личные данные"
+                    Text="{loc:Translate Key='Личные данные'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding ReviewsCommand}"
-                    Text="Мои отзывы"
+                    Text="{loc:Translate Key='Мои отзывы'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding SecurityCommand}"
-                    Text="Безопасность"
+                    Text="{loc:Translate Key='Безопасность'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
@@ -236,6 +247,8 @@
 
             </VerticalStackLayout>
         </ScrollView>
+
+        </Grid>
 
     </Grid>
 

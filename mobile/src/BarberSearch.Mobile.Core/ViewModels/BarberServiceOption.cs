@@ -1,5 +1,6 @@
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.ViewModels;
 
@@ -64,8 +65,12 @@ public sealed class BarberServiceOption
     /// Пункт «Любая услуга»: слоты видны, но запись недоступна.
     /// </summary>
     /// <returns>Пункт без услуги справочника.</returns>
-    public static BarberServiceOption AnyService() =>
-        new(null, "Любая услуга", 0m, string.Empty, string.Empty, "Любая услуга");
+    public static BarberServiceOption AnyService()
+    {
+        var text = Loc.T("Любая услуга");
+
+        return new(null, text, 0m, string.Empty, string.Empty, text);
+    }
 
     /// <summary>
     /// Собирает пункт из строки прайса карточки.

@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 
 namespace BarberSearch.Mobile.Core.ViewModels;
 
@@ -50,12 +51,12 @@ public sealed class SearchDateOption
     {
         if (date == today)
         {
-            return new SearchDateOption(date, string.Concat("Сегодня, ", SalonClock.FormatDayMonth(date)));
+            return new SearchDateOption(date, Loc.T("Сегодня, {0}", SalonClock.FormatDayMonth(date)));
         }
 
         if (date == today.AddDays(1))
         {
-            return new SearchDateOption(date, string.Concat("Завтра, ", SalonClock.FormatDayMonth(date)));
+            return new SearchDateOption(date, Loc.T("Завтра, {0}", SalonClock.FormatDayMonth(date)));
         }
 
         return new SearchDateOption(date, SalonClock.FormatWeekdayDate(date));

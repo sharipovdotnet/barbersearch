@@ -3,10 +3,11 @@
     x:Class="BarberSearch.Mobile.Pages.MyReviewsPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:MyReviewsViewModel"
     Shell.TabBarIsVisible="False"
-    Title="Мои отзывы">
+    Title="{loc:Translate Key='Мои отзывы'}">
 
     <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="12">
 
@@ -29,7 +30,7 @@
                     Command="{Binding DismissAnnouncementCommand}"
                     MinimumHeightRequest="44"
                     MinimumWidthRequest="44"
-                    Text="Закрыть"
+                    Text="{loc:Translate Key='Закрыть'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
             </Grid>
         </Border>
@@ -46,7 +47,7 @@
                     IsRunning="{Binding ShowLoading}" />
                 <Label
                     HorizontalTextAlignment="Center"
-                    Text="Загружаем отзывы…"
+                    Text="{loc:Translate Key='Загружаем отзывы…'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 
@@ -60,7 +61,7 @@
                     FontSize="16"
                     HorizontalTextAlignment="Center"
                     LineBreakMode="WordWrap"
-                    Text="Не удалось загрузить отзывы" />
+                    Text="{loc:Translate Key='Не удалось загрузить отзывы'}" />
                 <Label
                     HorizontalTextAlignment="Center"
                     LineBreakMode="WordWrap"
@@ -69,7 +70,7 @@
                 <Button
                     Command="{Binding RetryCommand}"
                     HorizontalOptions="Center"
-                    Text="Повторить" />
+                    Text="{loc:Translate Key='Повторить'}" />
             </VerticalStackLayout>
 
             <!-- Список: свайп вниз обновляет первую страницу, прокрутка догружает. -->
@@ -183,14 +184,14 @@
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                             Clicked="OnEditClicked"
                                             IsEnabled="{Binding IsNotDeleting}"
-                                            Text="Изменить"
+                                            Text="{loc:Translate Key='Изменить'}"
                                             TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                                         <Button
                                             Margin="0,0,8,8"
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                             Clicked="OnDeleteClicked"
                                             IsEnabled="{Binding IsNotDeleting}"
-                                            Text="Удалить"
+                                            Text="{loc:Translate Key='Удалить'}"
                                             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
                                     </FlexLayout>
 
@@ -220,7 +221,7 @@
                                 <Button
                                     Clicked="OnGoToBookingsClicked"
                                     HorizontalOptions="Center"
-                                    Text="Перейти к записям" />
+                                    Text="{loc:Translate Key='Перейти к записям'}" />
                             </VerticalStackLayout>
                         </ContentView>
                     </CollectionView.EmptyView>
@@ -234,19 +235,19 @@
                                 Spacing="8">
                                 <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
                                 <Label
-                                    Text="Идёт догрузка…"
+                                    Text="{loc:Translate Key='Идёт догрузка…'}"
                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                                     VerticalOptions="Center" />
                             </HorizontalStackLayout>
                             <VerticalStackLayout IsVisible="{Binding ShowLoadMoreError}" Spacing="8">
                                 <Label
                                     LineBreakMode="WordWrap"
-                                    Text="Не удалось загрузить следующие отзывы."
+                                    Text="{loc:Translate Key='Не удалось загрузить следующие отзывы.'}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
                                 <Button
                                     Command="{Binding RetryLoadMoreCommand}"
                                     HorizontalOptions="Start"
-                                    Text="Повторить" />
+                                    Text="{loc:Translate Key='Повторить'}" />
                             </VerticalStackLayout>
                         </VerticalStackLayout>
                     </CollectionView.Footer>

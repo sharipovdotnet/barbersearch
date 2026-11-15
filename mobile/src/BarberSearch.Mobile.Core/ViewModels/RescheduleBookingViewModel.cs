@@ -5,6 +5,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -29,15 +30,15 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
 {
     private const int MaxDaysAhead = 90;
 
-    private const string SlotsLoadErrorText = "Не удалось загрузить свободное время.";
-    private const string SubmitFailedText = "Не удалось перенести запись.";
-    private const string NoWorkingDayText = "В этот день барбер не работает.";
-    private const string NoFreeTimeText = "Свободного времени на этот день нет.";
-    private const string NetworkErrorText =
-        "Нет связи с сервером. Проверьте подключение и повторите попытку.";
-    private const string TooManyRequestsText =
-        "Слишком много запросов. Подождите минуту и повторите.";
-    private const string SessionExpiredText = "Сессия истекла — войдите снова.";
+    private static string SlotsLoadErrorText => Loc.T("Не удалось загрузить свободное время.");
+    private static string SubmitFailedText => Loc.T("Не удалось перенести запись.");
+    private static string NoWorkingDayText => Loc.T("В этот день барбер не работает.");
+    private static string NoFreeTimeText => Loc.T("Свободного времени на этот день нет.");
+    private static string NetworkErrorText => Loc.T(
+        "Нет связи с сервером. Проверьте подключение и повторите попытку.");
+    private static string TooManyRequestsText => Loc.T(
+        "Слишком много запросов. Подождите минуту и повторите.");
+    private static string SessionExpiredText => Loc.T("Сессия истекла — войдите снова.");
 
     private const string RescheduleOverlapCode = "booking.update.overlap";
 
@@ -193,7 +194,7 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     /// <summary>
     /// Надпись на кнопке: во время запроса — «Переносим…».
     /// </summary>
-    public string SubmitText => IsSubmitting ? "Переносим…" : "Перенести визит";
+    public string SubmitText => IsSubmitting ? Loc.T("Переносим…") : Loc.T("Перенести визит");
 
     /// <summary>
     /// Показывать пустой день: рабочих часов нет или свободного времени не осталось.
@@ -508,47 +509,47 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleOverlap)
             || HasCode(exception, RescheduleOverlapCode))
         {
-            return ("Это время уже занято. Выберите другое.", true);
+            return (Loc.T("Это время уже занято. Выберите другое."), true);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleSlot))
         {
-            return ("Это время больше не доступно. Выберите другое.", true);
+            return (Loc.T("Это время больше не доступно. Выберите другое."), true);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleStartAtInPast))
         {
-            return ("Это время уже прошло. Выберите другое.", true);
+            return (Loc.T("Это время уже прошло. Выберите другое."), true);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleStartAtTooFar))
         {
-            return ("Слишком далеко в будущем.", false);
+            return (Loc.T("Слишком далеко в будущем."), false);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleStatus))
         {
-            return ("Запись уже нельзя перенести — обновите страницу.", false);
+            return (Loc.T("Запись уже нельзя перенести — обновите страницу."), false);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.RescheduleLockTimeout))
         {
-            return ("Не удалось перенести: попробуйте ещё раз.", true);
+            return (Loc.T("Не удалось перенести: попробуйте ещё раз."), true);
         }
 
         if (HasCode(exception, ApiErrorCodes.Booking.UpdateConcurrencyConflict))
         {
-            return ("Запись изменилась — обновите страницу.", true);
+            return (Loc.T("Запись изменилась — обновите страницу."), true);
         }
 
         if (exception.StatusCode == HttpStatusCode.NotFound)
         {
-            return ("Запись не найдена.", false);
+            return (Loc.T("Запись не найдена."), false);
         }
 
         if (exception.StatusCode == HttpStatusCode.Forbidden)
         {
-            return ("Это запись другого клиента.", false);
+            return (Loc.T("Это запись другого клиента."), false);
         }
 
         return (DescribeApiFailure(exception), false);

@@ -5,6 +5,12 @@ namespace BarberSearch.Mobile;
 
 public partial class AppShell : Shell
 {
+	/// <summary>
+	/// Маршруты Shell регистрируются один раз: смена языка создаёт новый Shell, но таблица
+	/// маршрутов у Shell глобальная, и повторная регистрация того же маршрута — ошибка.
+	/// </summary>
+	private static bool _routesRegistered;
+
 	public AppShell(IServiceProvider services)
 	{
 		ArgumentNullException.ThrowIfNull(services);
@@ -15,6 +21,13 @@ public partial class AppShell : Shell
 		MapTab.Content = services.GetRequiredService<MapPage>();
 		BookingsTab.Content = services.GetRequiredService<BookingsPage>();
 		ProfileTab.Content = services.GetRequiredService<ProfilePage>();
+
+		if (_routesRegistered)
+		{
+			return;
+		}
+
+		_routesRegistered = true;
 
 		// Карточка барбера — не вкладка, а маршрут поверх стека «Поиска»: так возврат
 		// к списку сохраняет и город, и найденных барберов.

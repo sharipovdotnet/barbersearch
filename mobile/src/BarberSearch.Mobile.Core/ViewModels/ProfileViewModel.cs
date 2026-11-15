@@ -6,6 +6,7 @@ using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
+using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -44,24 +45,24 @@ public sealed partial class ProfileViewModel : ObservableObject
     private const string InvalidCredentialsCode = "auth.login.invalidCredentials";
     private const string InactiveCode = "auth.login.inactive";
 
-    private const string InvalidCredentialsText = "Неверный email или пароль.";
-    private const string TooManyAttemptsText = "Слишком много попыток входа. Подождите минуту и повторите.";
-    private const string LockedOutText = "Слишком много неудачных попыток. Вход временно заблокирован — попробуйте позже.";
-    private const string InactiveText = "Аккаунт деактивирован. Восстановить доступ поможет поддержка.";
-    private const string SignInFailedText = "Не удалось войти. Попробуйте ещё раз.";
-    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
+    private static string InvalidCredentialsText => Loc.T("Неверный email или пароль.");
+    private static string TooManyAttemptsText => Loc.T("Слишком много попыток входа. Подождите минуту и повторите.");
+    private static string LockedOutText => Loc.T("Слишком много неудачных попыток. Вход временно заблокирован — попробуйте позже.");
+    private static string InactiveText => Loc.T("Аккаунт деактивирован. Восстановить доступ поможет поддержка.");
+    private static string SignInFailedText => Loc.T("Не удалось войти. Попробуйте ещё раз.");
+    private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
 
     /// <summary>
     /// Заголовок ошибки загрузки профиля — дословно из веб-кабинета.
     /// </summary>
-    private const string ProfileLoadFailedTitle = "Не удалось загрузить профиль";
+    private static string ProfileLoadFailedTitle => Loc.T("Не удалось загрузить профиль");
 
     /// <summary>
     /// Причина ошибки второй строкой: тот же заголовок, но с точкой, как в вебе.
     /// </summary>
-    private const string ProfileLoadFailedText = "Не удалось загрузить профиль.";
+    private static string ProfileLoadFailedText => Loc.T("Не удалось загрузить профиль.");
 
-    private const string SessionExpiredText = "Сессия истекла — войдите снова.";
+    private static string SessionExpiredText => Loc.T("Сессия истекла — войдите снова.");
 
     private readonly IAuthApi _authApi;
     private readonly IAccountApi _accountApi;
@@ -297,12 +298,12 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <summary>
     /// Надпись на кнопке входа: во время запроса — «Входим…».
     /// </summary>
-    public string LoginButtonText => IsSigningIn ? "Входим…" : "Войти";
+    public string LoginButtonText => IsSigningIn ? Loc.T("Входим…") : Loc.T("Войти");
 
     /// <summary>
     /// Надпись на кнопке выхода: во время запроса — «Выходим…».
     /// </summary>
-    public string LogoutButtonText => IsSigningOut ? "Выходим…" : "Выйти";
+    public string LogoutButtonText => IsSigningOut ? Loc.T("Выходим…") : Loc.T("Выйти");
 
     /// <summary>
     /// Проверяет сохранённую сессию и тихо обновляет профиль при каждом появлении вкладки.
@@ -624,7 +625,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         Initials = AccountText.Initials(profile);
         RoleText = AccountText.RoleText(profile.Role);
         IsEmailVerified = profile.IsEmailVerified;
-        EmailStatusText = profile.IsEmailVerified ? "Адрес подтверждён." : "Адрес не подтверждён.";
+        EmailStatusText = profile.IsEmailVerified
+            ? Loc.T("Адрес подтверждён.")
+            : Loc.T("Адрес не подтверждён.");
 
         OnPropertyChanged(nameof(ShowEmailWarning));
 
@@ -672,6 +675,6 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </summary>
     private static string DescribeFailure(BarberSearchApiException exception, string fallback) =>
         exception.StatusCode == HttpStatusCode.TooManyRequests
-            ? "Слишком много запросов. Подождите минуту и повторите."
+            ? Loc.T("Слишком много запросов. Подождите минуту и повторите.")
             : fallback;
 }

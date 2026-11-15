@@ -6,7 +6,9 @@ using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Legal;
+using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.ViewModels;
+using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Pages;
 using Microsoft.Extensions.Logging;
 
@@ -70,6 +72,14 @@ public static class MauiProgram
         builder.Services.AddSingleton(BarberSearchApiOptions.FromBaseAddress(DevelopmentApiBaseAddress));
         builder.Services.AddSingleton(LegalOptions.FromBaseAddress(DevelopmentSiteBaseAddress));
 
+        // Язык интерфейса читается один раз на старте: XAML-разметка и статические форматтеры
+        // берут его из модульного Loc, а приложение может его сменить из «Профиля».
+        var localeStore = new PreferencesLocaleStore();
+        var localization = new BarberSearch.Mobile.Core.Localization.Localization(localeStore);
+
+        builder.Services.AddSingleton<ILocaleStore>(localeStore);
+        builder.Services.AddSingleton<ILocalization>(localization);
+
         // Пара токенов живёт в защищённом хранилище платформы; Core про него не знает.
         builder.Services.AddSingleton<ITokenStore, SecureStorageTokenStore>();
         builder.Services.AddSingleton<TokenSession>();
@@ -130,11 +140,16 @@ public static class MauiProgram
         builder.Services.AddTransient<EditReviewPage>();
         builder.Services.AddTransient<RegisterPage>();
         builder.Services.AddTransient<ForgotPasswordPage>();
-        builder.Services.AddSingleton<MapPage>();
-        builder.Services.AddSingleton<BookingsPage>();
-        builder.Services.AddSingleton<ProfilePage>();
 
-        builder.Services.AddSingleton<AppShell>();
+        // Вкладки тоже transient: смена языка пересобирает Shell, и каждая страница должна
+        // получить ViewModel с новым языком. Состояние вкладки сохраняется между визитами,
+        // пока Shell один; после смены языка экран начинается заново, как после перезагрузки
+        // страницы в вебе.
+        builder.Services.AddTransient<MapPage>();
+        builder.Services.AddTransient<BookingsPage>();
+        builder.Services.AddTransient<ProfilePage>();
+
+        builder.Services.AddTransient<AppShell>();
 
 #if DEBUG
         builder.Logging.AddDebug();

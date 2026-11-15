@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Localization.LanguageSwitcher"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization">
+
+    <!--
+        Компактная пара RU/EN, как переключатель в шапке веба: две кнопки вместо селекта.
+        Самоназвания языков не переводятся; текущий язык выделен фоном Muted, как в вебе.
+    -->
+    <Border
+        Padding="2"
+        SemanticProperties.Description="{loc:Translate Key='Язык интерфейса'}"
+        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+        StrokeShape="RoundRectangle 8">
+        <HorizontalStackLayout Spacing="2">
+            <Button
+                x:Name="RussianButton"
+                BackgroundColor="Transparent"
+                Clicked="OnRussianClicked"
+                CornerRadius="6"
+                FontFamily="GeistMedium"
+                FontSize="12"
+                HeightRequest="44"
+                Padding="0"
+                SemanticProperties.Description="RU — Русский"
+                Text="RU"
+                WidthRequest="44" />
+            <Button
+                x:Name="EnglishButton"
+                BackgroundColor="Transparent"
+                Clicked="OnEnglishClicked"
+                CornerRadius="6"
+                FontFamily="GeistMedium"
+                FontSize="12"
+                HeightRequest="44"
+                Padding="0"
+                SemanticProperties.Description="EN — English"
+                Text="EN"
+                WidthRequest="44" />
+        </HorizontalStackLayout>
+    </Border>
+
+</ContentView>

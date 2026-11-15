@@ -712,7 +712,7 @@ public sealed class BarberCardViewModelTests
         Assert.True(harness.ViewModel.HasPayments);
         Assert.Equal(3, harness.ViewModel.PaymentChips.Count);
         Assert.Equal("Наличные", harness.ViewModel.PaymentChips[0]);
-        Assert.Equal("Карта", harness.ViewModel.PaymentChips[1]);
+        Assert.Equal("Банковская карта", harness.ViewModel.PaymentChips[1]);
         Assert.Equal("СБП", harness.ViewModel.PaymentChips[2]);
     }
 
