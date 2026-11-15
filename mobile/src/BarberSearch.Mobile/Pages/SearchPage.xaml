@@ -139,17 +139,14 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <!--
-                    Чтение геопозиции идёт до запроса выдачи: индикатор и подпись объясняют,
-                    почему «Найти» отвечает не сразу.
+                    Чтение геопозиции идёт до запроса выдачи: подпись объясняет, почему «Найти»
+                    отвечает не сразу. Свой индикатор не нужен — основной уже вращается.
                 -->
-                <HorizontalStackLayout IsVisible="{Binding IsLocating}" Spacing="8">
-                    <ActivityIndicator IsRunning="{Binding IsLocating}" VerticalOptions="Center" />
-                    <Label
-                        FontSize="12"
-                        Text="{loc:Translate Key='Определяем геопозицию…'}"
-                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
-                        VerticalOptions="Center" />
-                </HorizontalStackLayout>
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding IsLocating}"
+                    Text="{loc:Translate Key='Определяем геопозицию…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <ActivityIndicator
                     HorizontalOptions="Start"
