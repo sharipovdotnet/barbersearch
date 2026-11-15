@@ -17,28 +17,16 @@
         <HorizontalStackLayout Spacing="2">
             <Button
                 x:Name="RussianButton"
-                BackgroundColor="Transparent"
                 Clicked="OnRussianClicked"
-                CornerRadius="6"
-                FontFamily="GeistMedium"
-                FontSize="12"
-                HeightRequest="44"
-                Padding="0"
                 SemanticProperties.Description="RU — Русский"
-                Text="RU"
-                WidthRequest="44" />
+                Style="{StaticResource SegmentButton}"
+                Text="RU" />
             <Button
                 x:Name="EnglishButton"
-                BackgroundColor="Transparent"
                 Clicked="OnEnglishClicked"
-                CornerRadius="6"
-                FontFamily="GeistMedium"
-                FontSize="12"
-                HeightRequest="44"
-                Padding="0"
                 SemanticProperties.Description="EN — English"
-                Text="EN"
-                WidthRequest="44" />
+                Style="{StaticResource SegmentButton}"
+                Text="EN" />
         </HorizontalStackLayout>
     </Border>
 

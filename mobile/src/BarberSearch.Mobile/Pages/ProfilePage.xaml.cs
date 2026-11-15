@@ -1,5 +1,6 @@
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.ViewModels;
+using BarberSearch.Mobile.Theming;
 
 namespace BarberSearch.Mobile.Pages;
 
@@ -29,15 +30,19 @@ public partial class ProfilePage : ContentPage
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
     /// <param name="session">Сессия, чьё завершение возвращает форму входа.</param>
-    public ProfilePage(ProfileViewModel viewModel, TokenSession session)
+    /// <param name="themes">Сервис темы для переключателя «Системная / Светлая / Тёмная».</param>
+    public ProfilePage(ProfileViewModel viewModel, TokenSession session, ThemeService themes)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(themes);
 
         InitializeComponent();
 
         _viewModel = viewModel;
         _session = session;
+
+        ThemeSwitch.Initialize(themes);
 
         BindingContext = viewModel;
 

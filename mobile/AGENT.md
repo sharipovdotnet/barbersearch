@@ -186,6 +186,24 @@ A local backend is required before running (`backend/docker compose up -d` +
   than turning into a key. One surface stays outside the catalog on purpose: the calendar drawn by
   the native date picker keeps the device language, as the browser-drawn calendar does on the web;
   every date the app formats itself is localized.
+- **The theme is a device setting with its own switch, and it follows the system by default.** The
+  web's `index.css` already carries a `.dark` palette but no toggle — frontend/AGENT.md §7.4 leaves
+  the default open — so the phone is where the choice becomes reachable. `Colors.xaml` is unchanged:
+  its light/`…Dark` pairs were the port's starting point and every use site already picked a side
+  through `AppThemeBinding`. `ThemePreference` in Core (`System`/`Light`/`Dark`, stored as
+  `system`/`light`/`dark`) and `PreferencesThemeStore` under `barbersearch.theme` hold the choice;
+  `ThemeService` maps it to `Application.UserAppTheme`, so `AppThemeBinding` repaints the open pages
+  in place. Unlike the language, changing the theme does **not** rebuild Shell: no string changes,
+  only the palette, so the tab and its state stay where they are. The three-segment switcher sits
+  next to the RU/EN pair at the top of «Профиль» and shares `SegmentButton`/`SegmentButtonSelected`
+  with it; those styles are theme-aware, while the old code-behind painted the selected language
+  with `Muted`/`Foreground` directly and would have kept the light shade after switching to dark.
+  Android's system bars sit outside `AppThemeBinding`: on API 24–34 `PlatformTheme` colours them and
+  flips the icon appearance at startup (`MainActivity`) and on every `RequestedThemeChanged`. From
+  Android 15 the system draws the status bar itself in edge-to-edge mode and ignores
+  `SetStatusBarColor`, so `PlatformTheme` leaves the whole call out on 35+ — toggling only the icons
+  there would put dark icons on the platform's dark bar. iOS takes the window's user-interface style
+  from the same theme and needs no platform code.
 
 ## 6. What the backend still lacks
 
@@ -258,6 +276,11 @@ The port is done: this is the state to keep, not a plan.
   `DestructiveSolid`, `Success`, `Warning` — each with a light value and a `…Dark` twin, and every
   use site chooses the theme through `AppThemeBinding`. `Styles.xaml` styles controls only through
   those keys.
+- **The palette has a switch, not a second set of styles.** `AppThemeBinding` follows the device
+  theme; the three-segment control on «Профиль» stores an override in `Preferences`
+  (`barbersearch.theme`) and applies it through `Application.UserAppTheme`. Its selected segment is
+  the same `Muted`/`Foreground` pair and 44 pt target as the language pair, so the control adds no
+  colour, size or state of its own; §5 records why the phone is where the switch exists.
 - **The template palette is gone, not extended.** `Primary #512BD4`, `Secondary #DFD8F7`,
   `Tertiary`, `Gray*`, `Magenta`, `MidnightBlue`, `OffBlack`, `Danger #DC2626` and the `*Brush`
   duplicates were deleted. `Platforms/Android/Resources/values/colors.xml` carries the same
