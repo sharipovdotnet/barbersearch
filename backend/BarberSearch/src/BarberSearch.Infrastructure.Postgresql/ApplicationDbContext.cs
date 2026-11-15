@@ -5,13 +5,14 @@ using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.BarberSpecializations;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.EmailChanges;
-using BarberSearch.Domain.EmailVerifications;
 using BarberSearch.Domain.EmailOutbox;
+using BarberSearch.Domain.EmailVerifications;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Notifications;
 using BarberSearch.Domain.PasswordResets;
 using BarberSearch.Domain.PortfolioPhotos;
+using BarberSearch.Domain.Push;
 using BarberSearch.Domain.RefreshTokens;
 using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
@@ -71,6 +72,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<BarberNotification> BarberNotifications => Set<BarberNotification>();
     public DbSet<BarberNotificationSettings> BarberNotificationSettings =>
         Set<BarberNotificationSettings>();
+
+    // Push-напоминания клиенту и токены его устройств
+    public DbSet<PushNotification> PushNotifications => Set<PushNotification>();
+    public DbSet<PushDeviceToken> PushDeviceTokens => Set<PushDeviceToken>();
 
     // Идемпотентность вебхука Telegram (инфраструктурная таблица)
     public DbSet<TelegramUpdate> TelegramUpdates => Set<TelegramUpdate>();

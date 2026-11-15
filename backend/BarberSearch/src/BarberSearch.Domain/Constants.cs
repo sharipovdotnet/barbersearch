@@ -139,6 +139,16 @@ public static class Constants
     public const int MAX_NOTIFICATION_SALON_NAME_LENGTH = 200;
     public const int MAX_NOTIFICATION_TIME_ZONE_ID_LENGTH = 100;
 
+    // Push-напоминание клиенту хранит снимок имени мастера: предел совпадает с
+    // DisplayName.MAX_LENGTH и с колонкой barber_name, поэтому домен отклонит длинную
+    // строку раньше, чем её отвергнет схема.
+    public const int MAX_NOTIFICATION_BARBER_NAME_LENGTH = 120;
+
+    // Токен FCM — непрозрачная строка устройства; 512 — верхняя граница колонки.
+    // Токен не является персональными данными сам по себе, но идентифицирует устройство,
+    // поэтому в лог он не попадает никогда (AGENT.md §13).
+    public const int MAX_PUSH_DEVICE_TOKEN_LENGTH = 512;
+
     // Текст последней ошибки доставки — диагностика без ПДн, а не сообщение пользователю.
     public const int MAX_NOTIFICATION_LAST_ERROR_LENGTH = 500;
 

@@ -1,7 +1,7 @@
 using System.Globalization;
-using BarberSearch.Application.Emails;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Infrastructure.Email;
+using BarberSearch.Infrastructure.Push;
 using BarberSearch.Infrastructure.Telegram;
 using BarberSearch.Web;
 using BarberSearch.Web.Auth;
@@ -10,8 +10,8 @@ using BarberSearch.Web.Deployment;
 using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
+using BarberSearch.Web.Push;
 using BarberSearch.Web.Storage;
-using Microsoft.Extensions.Hosting;
 using Serilog;
 
 // Bootstrap-логгер пишет в консоль, пока хост не собран: упавшая проверка конфигурации ниже
@@ -89,6 +89,21 @@ try
     // фоновый сервис (тот же приём, что у RefreshTokenCleanupService).
     builder.Services.AddSingleton<ReminderDispatchService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ReminderDispatchService>());
+
+    // Push клиенту: FCM HTTP v1 без отдельного NuGet-пакета (подпись JWT и POST — в
+    // Infrastructure.Push). Настройки уже проверены StartupSettings по диапазонам; секреты
+    // не проверяются: пустой ключ — режим разработки или выключенный канал, а не падение старта.
+    // DevMode — единственное, что приходит не из конфигурации: только Development получает
+    // право «залогировать текст и пометить Skipped», в бою без ключей строки ждут Pending.
+    builder.Services.AddPushSender(startup.Push with
+    {
+        DevMode = builder.Environment.IsDevelopment()
+    });
+
+    // Воркер push. Тот же приём с синглтоном: интеграционный тест вызывает RunTickAsync
+    // у того же экземпляра, а не создаёт второй фоновый сервис.
+    builder.Services.AddSingleton<PushDispatchService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<PushDispatchService>());
 
     // Ключи Data Protection лежат на постоянном томе и общие для всех инстансов.
     builder.Services.AddPersistentDataProtection(startup.DataProtection);

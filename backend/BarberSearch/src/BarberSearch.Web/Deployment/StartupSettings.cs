@@ -1,7 +1,7 @@
 using System.Globalization;
 using BarberSearch.Application.Emails;
+using BarberSearch.Application.Push;
 using BarberSearch.Web.Auth;
-using Microsoft.AspNetCore.Http;
 
 namespace BarberSearch.Web.Deployment;
 
@@ -27,6 +27,17 @@ public sealed record StartupSettings
     private const string EMAIL_OUTBOX_INTERVAL_SECONDS_KEY = "EmailOutbox:IntervalSeconds";
     private const string EMAIL_OUTBOX_MAX_ATTEMPTS_KEY = "EmailOutbox:MaxAttempts";
     private const string EMAIL_OUTBOX_RETENTION_DAYS_KEY = "EmailOutbox:RetentionDays";
+    private const string PUSH_ENABLED_KEY = "Push:Enabled";
+    private const string PUSH_INTERVAL_SECONDS_KEY = "Push:IntervalSeconds";
+    private const string PUSH_BATCH_SIZE_KEY = "Push:BatchSize";
+    private const string PUSH_REMINDER_LEAD_MINUTES_KEY = "Push:ReminderLeadMinutes";
+    private const string PUSH_MAX_ATTEMPTS_KEY = "Push:MaxAttempts";
+    private const string PUSH_RETENTION_DAYS_KEY = "Push:RetentionDays";
+    private const string PUSH_DEVICE_TOKEN_RETENTION_DAYS_KEY = "Push:DeviceTokenRetentionDays";
+    private const string PUSH_MAX_TOKENS_PER_USER_KEY = "Push:MaxTokensPerUser";
+    private const string PUSH_PROJECT_ID_KEY = "Push:ProjectId";
+    private const string PUSH_SERVICE_ACCOUNT_JSON_KEY = "Push:ServiceAccountJson";
+    private const string PUSH_SERVICE_ACCOUNT_PATH_KEY = "Push:ServiceAccountPath";
 
     /// <summary>
     /// Строка подключения PostgreSQL.
@@ -81,6 +92,17 @@ public sealed record StartupSettings
     /// продолжают писать письма в таблицу, а воркер только ждёт включения флага.
     /// </remarks>
     public required EmailOutboxOptions EmailOutbox { get; init; }
+
+    /// <summary>
+    /// Проверенные настройки push-канала: воркер, пачка, окно напоминания, попытки и ретенции.
+    /// </summary>
+    /// <remarks>
+    /// Проверяются только числовые диапазоны и флаг. Сам сервисный ключ и project id
+    /// не валидируются: приложение обязано собираться и работать без credentials
+    /// (<c>Push:Enabled=false</c> или режим разработки), а «битый ключ» — выключенный канал,
+    /// а не падение старта.
+    /// </remarks>
+    public required PushOptions Push { get; init; }
 
     /// <summary>
     /// Читает и проверяет конфигурацию.
@@ -183,8 +205,85 @@ public sealed record StartupSettings
                     EmailOutboxOptions.DEFAULT_RETENTION_DAYS,
                     min: 1,
                     max: 365)
-            }
+            },
+            Push = ReadPushOptions(configuration)
         };
+    }
+
+    /// <summary>
+    /// Читает и проверяет секцию <c>Push</c>.
+    /// </summary>
+    /// <remarks>
+    /// Числовые диапазоны проверяются здесь, секрет — нет. Дополнительно требуется, чтобы
+    /// окно напоминания было не короче одного тика: иначе тик мог бы не попасть ни в одно
+    /// окно, и напоминание не создалось бы никогда.
+    /// </remarks>
+    /// <param name="configuration">Конфигурация приложения.</param>
+    /// <exception cref="InvalidOperationException">Значение вне диапазона или окно короче тика.</exception>
+    private static PushOptions ReadPushOptions(IConfiguration configuration)
+    {
+        var options = new PushOptions
+        {
+            // Включение воркера — необязательный флаг; пустая строка трактуется как false.
+            Enabled = bool.TryParse(configuration[PUSH_ENABLED_KEY], out var pushEnabled)
+                      && pushEnabled,
+            IntervalSeconds = ReadInt(
+                configuration,
+                PUSH_INTERVAL_SECONDS_KEY,
+                PushOptions.DEFAULT_INTERVAL_SECONDS,
+                min: 1,
+                max: 3600),
+            BatchSize = ReadInt(
+                configuration,
+                PUSH_BATCH_SIZE_KEY,
+                PushOptions.DEFAULT_BATCH_SIZE,
+                min: 1,
+                max: 1000),
+            ReminderLeadMinutes = ReadInt(
+                configuration,
+                PUSH_REMINDER_LEAD_MINUTES_KEY,
+                PushOptions.DEFAULT_REMINDER_LEAD_MINUTES,
+                min: 1,
+                max: 1440),
+            MaxAttempts = ReadInt(
+                configuration,
+                PUSH_MAX_ATTEMPTS_KEY,
+                PushOptions.DEFAULT_MAX_ATTEMPTS,
+                min: 1,
+                max: 100),
+            RetentionDays = ReadInt(
+                configuration,
+                PUSH_RETENTION_DAYS_KEY,
+                PushOptions.DEFAULT_RETENTION_DAYS,
+                min: 1,
+                max: 365),
+            DeviceTokenRetentionDays = ReadInt(
+                configuration,
+                PUSH_DEVICE_TOKEN_RETENTION_DAYS_KEY,
+                PushOptions.DEFAULT_DEVICE_TOKEN_RETENTION_DAYS,
+                min: 1,
+                max: 365),
+            MaxTokensPerUser = ReadInt(
+                configuration,
+                PUSH_MAX_TOKENS_PER_USER_KEY,
+                PushOptions.DEFAULT_MAX_TOKENS_PER_USER,
+                min: 1,
+                max: 100),
+            // Секреты не проверяются и не логируются: пустое значение — штатное состояние.
+            ProjectId = configuration[PUSH_PROJECT_ID_KEY],
+            ServiceAccountJson = configuration[PUSH_SERVICE_ACCOUNT_JSON_KEY],
+            ServiceAccountPath = configuration[PUSH_SERVICE_ACCOUNT_PATH_KEY]
+        };
+
+        if (options.ReminderLeadMinutes * 60 < options.IntervalSeconds)
+        {
+            throw new InvalidOperationException(
+                "Push:ReminderLeadMinutes must cover at least one Push:IntervalSeconds tick: "
+                + $"{options.ReminderLeadMinutes} minutes is shorter than "
+                + $"{options.IntervalSeconds} seconds.");
+        }
+
+        return options;
     }
 
     /// <summary>
