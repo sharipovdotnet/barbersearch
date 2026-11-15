@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:theming="clr-namespace:BarberSearch.Mobile.Theming"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:ProfileViewModel"
     Title="{loc:Translate Key='Профиль'}">
@@ -16,12 +17,21 @@
     <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="8">
 
         <!--
-            Переключатель языка стоит на вкладке «Профиль»: в вебе он в шапке, а на телефоне
-            «Профиль» — единственный экран настроек. Смена языка пересобирает Shell.
+            Переключатели темы и языка стоят на вкладке «Профиль»: язык в вебе живёт в шапке,
+            а переключателя темы там пока нет; на телефоне «Профиль» — единственный экран
+            настроек. Смена языка пересобирает Shell, смена темы — нет: AppThemeBinding
+            перекрашивает страницы на месте. FlexLayout переносит пару на вторую строку на
+            узком экране вместо обрезки.
         -->
-        <HorizontalStackLayout Grid.Row="0" HorizontalOptions="End">
+        <FlexLayout
+            Grid.Row="0"
+            AlignItems="Center"
+            Direction="Row"
+            JustifyContent="End"
+            Wrap="Wrap">
+            <theming:ThemeSwitcher x:Name="ThemeSwitch" Margin="0,0,8,0" />
             <loc:LanguageSwitcher />
-        </HorizontalStackLayout>
+        </FlexLayout>
 
         <Grid Grid.Row="1">
 

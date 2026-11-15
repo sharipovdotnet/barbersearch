@@ -7,9 +7,11 @@ using BarberSearch.Mobile.Core.Api.Reviews;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Pages;
+using BarberSearch.Mobile.Theming;
 using Microsoft.Extensions.Logging;
 
 namespace BarberSearch.Mobile;
@@ -79,6 +81,11 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ILocaleStore>(localeStore);
         builder.Services.AddSingleton<ILocalization>(localization);
+
+        // Тема — настройка устройства, поэтому хранится рядом с языком, но отдельно:
+        // выбор переживает перезапуск, а по умолчанию приложение следует теме системы.
+        builder.Services.AddSingleton<IThemeStore, PreferencesThemeStore>();
+        builder.Services.AddSingleton<ThemeService>();
 
         // Пара токенов живёт в защищённом хранилище платформы; Core про него не знает.
         builder.Services.AddSingleton<ITokenStore, SecureStorageTokenStore>();

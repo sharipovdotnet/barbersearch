@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Theming.ThemeSwitcher"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization">
+
+    <!--
+        Выбор темы рядом с выбором языка. На телефоне «Профиль» — единственный экран
+        настроек, поэтому переключатель стоит в его верхней строке, там же, где в вебе
+        стоял бы переключатель шапки. Три сегмента вместо селекта: выбор в одно касание,
+        а вид тот же, что у пары RU/EN, — те же токены и тот же стиль сегмента.
+    -->
+    <Border
+        Padding="2"
+        SemanticProperties.Description="{loc:Translate Key='Тема оформления'}"
+        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+        StrokeShape="RoundRectangle 8">
+        <HorizontalStackLayout Spacing="2">
+            <Button
+                x:Name="SystemButton"
+                Clicked="OnSystemClicked"
+                SemanticProperties.Description="{loc:Translate Key='Следовать теме системы'}"
+                Style="{StaticResource SegmentButton}"
+                Text="{loc:Translate Key='Системная'}" />
+            <Button
+                x:Name="LightButton"
+                Clicked="OnLightClicked"
+                SemanticProperties.Description="{loc:Translate Key='Светлая тема'}"
+                Style="{StaticResource SegmentButton}"
+                Text="{loc:Translate Key='Светлая'}" />
+            <Button
+                x:Name="DarkButton"
+                Clicked="OnDarkClicked"
+                SemanticProperties.Description="{loc:Translate Key='Тёмная тема'}"
+                Style="{StaticResource SegmentButton}"
+                Text="{loc:Translate Key='Тёмная'}" />
+        </HorizontalStackLayout>
+    </Border>
+
+</ContentView>

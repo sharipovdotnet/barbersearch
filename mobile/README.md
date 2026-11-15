@@ -256,6 +256,28 @@ Formatting follows the language: `ru-RU` / `en-GB`, 24-hour time, day-month date
 catalog, the Russian three-form and English two-form plurals, and the English date, price and
 counter conventions.
 
+## Theme
+
+The app ships the web's two palettes: `Colors.xaml` holds every token twice (light value and a
+`…Dark` twin), and each use site picks a side with `AppThemeBinding`. No third palette is introduced
+on the phone.
+
+`AppThemeBinding` follows the device theme until the person chooses otherwise. The three-segment
+switcher at the top of «Профиль», next to RU/EN, offers «Системная» (the default), «Светлая» and
+«Тёмная». The choice is stored in `Preferences` under `barbersearch.theme` and applied through
+`Application.UserAppTheme`. Switching does not rebuild Shell — the open pages repaint in place, so
+the tab and its state survive, unlike a language change. The selected segment is styled through
+`SegmentButton` / `SegmentButtonSelected` in `Styles.xaml`, so it follows the palette instead of
+remembering the colours of the click.
+
+The web design system has the same `.dark` tokens but no toggle yet (frontend/AGENT.md §7.4), so the
+mobile switch is the first place the dark palette is reachable. On Android 24–34 the status and
+navigation bars are coloured from the same theme (`Theming/PlatformTheme` with the
+`Platforms/Android` implementation, including the icon colour); from Android 15 the system draws the
+status bar itself in edge-to-edge mode, so it keeps its own colour. iOS takes the window's
+appearance from the same theme. `tests/BarberSearch.Mobile.Core.Tests/ThemingTests.cs` covers the
+stored codes, the System default and the write/read round-trip.
+
 ## Build and run
 
 Local backend first (see `../backend/AGENT.md` §5):

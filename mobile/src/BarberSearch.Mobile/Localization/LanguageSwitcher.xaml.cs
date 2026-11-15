@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Theming;
 using Locale = BarberSearch.Mobile.Core.Localization.Locale;
 
 namespace BarberSearch.Mobile.Localization;
@@ -76,19 +77,6 @@ public partial class LanguageSwitcher : ContentView
         StyleButton(EnglishButton, !isRussian);
     }
 
-    private static void StyleButton(Button button, bool isSelected)
-    {
-        button.BackgroundColor = isSelected ? Resource("Muted") : Colors.Transparent;
-        button.TextColor = isSelected ? Resource("Foreground") : Resource("MutedForeground");
-    }
-
-    private static Color Resource(string name)
-    {
-        var suffix = Application.Current?.RequestedTheme == AppTheme.Dark ? "Dark" : string.Empty;
-
-        return Application.Current?.Resources.TryGetValue(name + suffix, out var value) == true
-            && value is Color color
-            ? color
-            : Colors.Transparent;
-    }
+    private static void StyleButton(Button button, bool isSelected) =>
+        SegmentedButtonStyle.Apply(button, isSelected);
 }
