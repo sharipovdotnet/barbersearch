@@ -155,11 +155,21 @@ ordered by value); that request is best-effort — if it fails the field simply 
 and still filters by whatever the visitor types. Only «Найти» sends a request; filters live in
 React state, not in the URL.
 
+The city field also suggests canonical names from DaData through `GET /api/addresses/cities`
+(the shared endpoint of the salon form, proxied by the server). After two characters the shared
+combobox opens a server-filtered list; a picked row writes the bare city, not the «г. …» label,
+so the exact case-sensitive `salon.City` match works. Enter over a highlighted row selects it
+instead of submitting; with no highlight it submits the typed text, as before. The endpoint
+requires a signed-in user, so a guest gets a silent `401`: no popup, no error, the field stays
+a free-text input.
+
 - `src/lib/barber-search.ts` — filters, `emptyBarberSearchFilters`/`normalizeBarberSearchFilters`, `BarberSearchItem`, `searchBarbers()`.
 - `src/hooks/use-barber-search.ts` — pages, abort of stale requests, retry, load-more state.
 - `src/hooks/use-search-catalogs.ts` — parallel catalogue read, abort on unmount, retry.
 - `src/lib/specializations.ts`, `src/lib/hair-services.ts` — catalogue types and requests.
 - `src/lib/additional-services.ts` — suggestions for the additional-service input.
+- `src/lib/address-suggestions.ts`, `src/hooks/use-address-suggestions.ts` — city/address suggestions, debounce and guards.
+- `src/components/suggestion-combobox.tsx` — combobox shared by the landing city filter and the salon form.
 - `src/components/home/` — hero/search form, results grid, cards and the account CTA.
 
 ## Barber profile
