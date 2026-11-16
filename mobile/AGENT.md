@@ -449,14 +449,19 @@ The port is done: this is the state to keep, not a plan.
   the `.csproj` use `#171717` for the same reason.
 - **The launcher icon and splash are the Hairo wordmark, not the template's `.NET` marks.** The
   purple `#512BD4` square with the `.NET` logotype the MAUI template ships is gone: `appicon.svg`
-  is a `#171717` square, and `appiconfg.svg` / `splash.svg` carry «Hairo» set in Geist SemiBold and
-  converted to outlines, so rasterizing needs no font and no machine can shift the letterforms. The
-  wordmark spans 54% of the icon's square — inside the 66% circle Android's adaptive masks cannot
-  clip, and small enough that the `monochrome` layer the resizetizer derives from the same file
-  still reads — and 75% of the square on the splash. The mark is the product's name, not just a
-  picture: `ApplicationTitle` and the Shell title are `Hairo`, and the sign-in heading reads
-  «Вход в Hairo». Identifiers are not text and keep their names: the namespaces, the project files,
-  `ru.barbersearch.mobile` and the URLs still say `BarberSearch`.
+  is a `#171717` square, and `appiconfg.svg` carries «Hairo» set in Geist SemiBold and converted to
+  outlines, so rasterizing needs no font and no machine can shift the letterforms. The wordmark
+  spans 54% of the icon's square — inside the 66% circle Android's adaptive masks cannot clip, and
+  small enough that the `monochrome` layer the resizetizer derives from the same file still reads.
+  The splash repeats the wordmark at 75% of the square with the app's scissors under it: a launch
+  screen has no MAUI runtime to host `Controls/ScissorsMark`, so the mark is a static copy of the
+  same path scaled from its 24 canvas to 45% of the wordmark's width, and the two share one
+  centred lockup with equal margins, because the name alone left the black screen looking like a
+  placeholder. The icon keeps the name alone — the adaptive mask has no room under the text. The
+  name is the product's mark, not just a picture: `ApplicationTitle` and the Shell title are
+  `Hairo`, and the sign-in heading reads «Вход в Hairo». Identifiers are not text and keep their
+  names: the namespaces, the project files, `ru.barbersearch.mobile` and the URLs still say
+  `BarberSearch`.
 - **The in-app mark is the web header's scissors, and it is geometry rather than a picture.** The
   app wears the lucide `scissors` of `site-header.tsx` — the same five figures on a 24 canvas with
   stroke 2, the two circles as arcs and the three cuts as segments. The geometry is declared once in
@@ -465,10 +470,10 @@ The port is done: this is the state to keep, not a plan.
   icons. An SVG in `Resources/Images` would be rasterized with one baked colour. The path is not a
   `GeometryGroup` of `EllipseGeometry`/`LineGeometry`: that reads better but on Android (MAUI
   10.0.110, API 36) renders a stray line and ring instead of the scissors — the string is a fix,
-  not a preference. It appears in four places. A masthead above the search form gives the app's
-  empty top the web header's lockup at phone scale — a 48 pt `Primary` tile, «Hairo» in Geist
-  SemiBold 24 and the landing headline (`home-hero.tsx`) as the tagline, taken from the catalog in
-  both languages. The empty-results block ports the web's empty-state card from
+  not a preference. In the app it appears in four places. A masthead above the search form gives
+  the app's empty top the web header's lockup at phone scale — a 48 pt `Primary` tile, «Hairo» in
+  Geist SemiBold 24 and the landing headline (`home-hero.tsx`) as the tagline, taken from the
+  catalog in both languages. The empty-results block ports the web's empty-state card from
   `barber-results.tsx` — dashed `Border`, `Muted` circle, centred title in `GeistMedium` and muted
   description — and keeps the scissors where the web draws its `Search` icon: the empty screen then
   carries the product's face instead of a second magnifier under the «Найти» button. The top bar of
