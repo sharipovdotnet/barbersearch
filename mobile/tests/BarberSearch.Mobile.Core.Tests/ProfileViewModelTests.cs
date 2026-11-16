@@ -264,6 +264,7 @@ public sealed class ProfileViewModelTests
         Assert.Equal(0, accountApi.ProfileCalls);
         Assert.False(viewModel.IsAuthenticated);
         Assert.False(viewModel.IsLoading);
+        Assert.False(viewModel.ShowLoading);
         Assert.True(viewModel.IsFormVisible);
         Assert.Null(viewModel.ErrorMessage);
     }
@@ -285,6 +286,30 @@ public sealed class ProfileViewModelTests
         Assert.Equal(UserEmail, viewModel.ProfileEmail);
         Assert.Equal("Ева Клиентова", viewModel.DisplayName);
         Assert.Empty(viewModel.Password);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_FirstProfileLoad_ShowsOneSpinner()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi();
+        var viewModel = CreateViewModel(session, accountApi: accountApi);
+        var spinnerWhileReading = false;
+
+        accountApi.Profile = () =>
+        {
+            // Пока идёт первое чтение профиля, страница показывает ровно один индикатор:
+            // им же покрыта загрузка профиля, поэтому второго спиннера на экране нет.
+            spinnerWhileReading = viewModel.ShowLoading && viewModel.ShowProfileLoading;
+
+            return Task.FromResult(ProfileOf());
+        };
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(spinnerWhileReading);
+        Assert.False(viewModel.ShowLoading);
     }
 
     [Fact]
@@ -367,6 +392,7 @@ public sealed class ProfileViewModelTests
         Assert.Equal("Анна Клиентова", viewModel.DisplayName);
         Assert.False(viewModel.IsLoading);
         Assert.False(viewModel.IsProfileLoading);
+        Assert.False(viewModel.ShowLoading);
         Assert.False(viewModel.ShowProfileLoading);
     }
 
@@ -401,9 +427,21 @@ public sealed class ProfileViewModelTests
         var viewModel = CreateViewModel(session, accountApi: accountApi);
 
         await viewModel.InitializeAsync();
-        accountApi.Profile = () => Task.FromResult(ProfileOf());
+
+        // Повтор после ошибки — это первая загрузка без данных: индикатор нужен и тогда,
+        // когда проверка сессии уже прошла (IsLoading снят), поэтому сторожа — ShowLoading.
+        var spinnerWhileRetrying = false;
+        accountApi.Profile = () =>
+        {
+            spinnerWhileRetrying = viewModel.ShowLoading;
+
+            return Task.FromResult(ProfileOf());
+        };
+
         await viewModel.RetryProfileCommand.ExecuteAsync(null);
 
+        Assert.True(spinnerWhileRetrying);
+        Assert.False(viewModel.ShowLoading);
         Assert.Null(viewModel.ProfileError);
         Assert.False(viewModel.ShowProfileError);
         Assert.Equal("Ева Клиентова", viewModel.DisplayName);

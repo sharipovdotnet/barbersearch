@@ -41,12 +41,6 @@
 
         <Grid Grid.Row="1">
 
-        <ActivityIndicator
-            HorizontalOptions="Center"
-            IsRunning="{Binding IsLoading}"
-            IsVisible="{Binding IsLoading}"
-            VerticalOptions="Center" />
-
         <ScrollView IsVisible="{Binding IsFormVisible}">
             <VerticalStackLayout Padding="0,24,0,0" Spacing="12">
 
@@ -135,16 +129,22 @@
             </VerticalStackLayout>
         </ScrollView>
 
-        <!-- Первая загрузка профиля: индикатор вместо пустой карточки. -->
+        <!--
+            Загрузка — одна окружность на весь экран: проверка сессии и первая загрузка
+            профиля идут подряд, и отдельный спиннер профиля оказывался на экране вместе с
+            общим, из-за чего две окружности пересекались. Подпись появляется только тогда,
+            когда читается профиль: до ответа о сессии обещать «Загружаем профиль…» нечего.
+        -->
         <VerticalStackLayout
-            IsVisible="{Binding ShowProfileLoading}"
+            IsVisible="{Binding ShowLoading}"
             Spacing="8"
             VerticalOptions="Center">
             <ActivityIndicator
                 HorizontalOptions="Center"
-                IsRunning="{Binding ShowProfileLoading}" />
+                IsRunning="{Binding ShowLoading}" />
             <Label
                 HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsProfileLoading}"
                 Text="{loc:Translate Key='Загружаем профиль…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
         </VerticalStackLayout>
