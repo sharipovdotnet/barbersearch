@@ -460,16 +460,19 @@ The port is done: this is the state to keep, not a plan.
   placeholder. On Android 12+ the splash is the same lockup as an `AnimatedVectorDrawable`:
   `Platforms/Android/Resources/drawable/hairo_splash_lockup.xml` repeats both outlines from
   `splash.svg` at two-thirds of its 432 dp canvas, which the system draws at 288 dp, so the mark
-  keeps the raster's 192 dp instead of jumping in size, and `hairo_splash_animated.xml` rocks its
-  scissors group around the blades' crossing point (0° → −14° → +10° → −8° → 0° over 900 ms,
-  ending upright); the system splash plays an AVD but never a raster. `MainActivity` takes
-  `Theme.Hairo.Splash` over `Maui.SplashTheme`; the `values-v31/styles.xml` override points the
-  animated icon at that AVD and gives Android 12 the duration, while iOS and older Android keep the
-  static `splash.svg`. The icon keeps the name alone — the adaptive mask has no room under the
-  text. The name is the product's mark, not just a picture: `ApplicationTitle` and the Shell title
-  are `Hairo`, and the sign-in heading reads «Вход в Hairo». Identifiers are not text and keep
-  their names: the namespaces, the project files, `ru.barbersearch.mobile` and the URLs still say
-  `BarberSearch`.
+  keeps the raster's 192 dp instead of jumping in size, and `hairo_splash_animated.xml` snips: the
+  two rigid blades (`blade_upper` / `blade_lower`, split at the crossing) turn in opposite
+  directions, opening 14° and closing again in a 700 ms loop for as long as the system splash is
+  up, so the launch reads as a haircut rather than a rocking logo. The animated copy closes the
+  4-unit lucide gap in the lower blade, because a half with a floating dash cannot be a rigid
+  blade; the static splash and the in-app `ScissorsMark` keep the gap. The system splash plays an
+  AVD but never a raster. `MainActivity` takes `Theme.Hairo.Splash` over `Maui.SplashTheme`; the
+  `values-v31/styles.xml` override points the animated icon at that AVD and gives Android 12 the
+  duration, while iOS and older Android keep the static `splash.svg`. The icon keeps the name alone
+  — the adaptive mask has no room under the text. The name is the product's mark, not just a
+  picture: `ApplicationTitle` and the Shell title are `Hairo`, and the sign-in heading reads
+  «Вход в Hairo». Identifiers are not text and keep their names: the namespaces, the project files,
+  `ru.barbersearch.mobile` and the URLs still say `BarberSearch`.
 - **The in-app mark is the web header's scissors, and it is geometry rather than a picture.** The
   app wears the lucide `scissors` of `site-header.tsx` — the same five figures on a 24 canvas with
   stroke 2, the two circles as arcs and the three cuts as segments. The geometry is declared once in

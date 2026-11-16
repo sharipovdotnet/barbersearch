@@ -3,8 +3,11 @@
     Заставка как вектор для системного splash-экрана Android 12+ (см. values-v31/styles.xml).
     Холст 432dp — размер, в который система кладёт AnimatedVectorDrawable; рисунок на 456 единиц
     уменьшен до 2/3 холста, чтобы на экране надпись и ножницы вышли того же размера, что и
-    в растровом splash.svg, и попали в безопасную зону маски. Группа scissors — цель анимации
-    из hairo_splash_animated.xml; координаты внутри неё — холст 24 из Controls/ScissorsMark.xaml.
+    в растровом splash.svg, и попали в безопасную зону маски. Группы blade_upper и blade_lower —
+    цели анимации из hairo_splash_animated.xml: это две жёсткие половины ножниц, которые
+    поворачиваются вокруг перекрестия. Нижнее лезвие здесь непрерывное: lucide-разрыв у
+    перекрестия оставлен в статичном splash.svg и в ScissorsMark, но для «чиканья» половины
+    должны быть цельными. Координаты — холст 24 из Controls/ScissorsMark.xaml.
     iOS и Android до 12 остаются на растровом splash.svg.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -28,13 +31,26 @@
             android:translateX="136"
             android:translateY="202.5">
             <group
-                android:name="scissors"
+                android:name="blade_upper"
                 android:pivotX="12"
                 android:pivotY="12">
                 <path
                     android:fillColor="#00000000"
-                    android:name="scissors_path"
-                    android:pathData="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
+                    android:name="blade_upper_path"
+                    android:pathData="M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M20 4L8.12 15.88"
+                    android:strokeColor="#FAFAFA"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:strokeWidth="2" />
+            </group>
+            <group
+                android:name="blade_lower"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:fillColor="#00000000"
+                    android:name="blade_lower_path"
+                    android:pathData="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L20 20"
                     android:strokeColor="#FAFAFA"
                     android:strokeLineCap="round"
                     android:strokeLineJoin="round"
