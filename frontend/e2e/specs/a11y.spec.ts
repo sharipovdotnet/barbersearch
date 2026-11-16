@@ -2,6 +2,11 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import {
+  expectActiveSuggestion,
+  expectOpenSuggestionList,
+  mockAddressSuggestions,
+} from '../fixtures/suggestions'
 import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
@@ -281,6 +286,38 @@ test.describe('axe: кабинет барбера', () => {
       test.info()
     )
   })
+
+  test('/barber/salons: подсказки города в форме создания', async ({ page }) => {
+    // Провайдер выключен: без мока список не открылся бы, и скан проверял бы
+    // закрытую форму. Мок — только транспорт, интерфейс и ARIA настоящие.
+    await mockAddressSuggestions(page)
+
+    await page.goto('/barber/salons')
+    await expect(
+      page.getByRole('heading', { name: 'Мои салоны', level: 1 })
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: 'Создать салон' }).click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+
+    const city = dialog.getByLabel('Город')
+
+    await city.fill('Екат')
+    await expectOpenSuggestionList(page, city, 'Подсказки города')
+    await city.press('ArrowDown')
+    await expectActiveSuggestion(page, city, 'г. Екатеринбург')
+
+    // Скан идёт с открытым списком: `role="listbox"` с подписью, `aria-expanded`,
+    // `aria-controls` и `aria-activedescendant` — всё уже выставлено.
+    await expectNoBlockingViolations(
+      page,
+      '/barber/salons + подсказки',
+      test.info()
+    )
+  })
 })
 
 test.describe('axe: профиль барбера', () => {
@@ -413,6 +450,39 @@ test.describe('axe: админка', () => {
     await expectNoBlockingViolations(
       page,
       '/admin/catalogue?tab=salons + форма',
+      test.info()
+    )
+  })
+
+  test('/admin/catalogue?tab=salons: подсказки города поверх формы', async ({
+    page,
+  }) => {
+    await mockAddressSuggestions(page)
+
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto('salons')
+    await catalogue.waitForRows()
+    await catalogue
+      .editButton(fixtures.catalogueLabels.hiddenSalon)
+      .click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+
+    const city = dialog.getByLabel('Город')
+
+    await city.fill('Екат')
+    await expectOpenSuggestionList(page, city, 'Подсказки города')
+    await city.press('ArrowDown')
+    await expectActiveSuggestion(page, city, 'г. Екатеринбург')
+
+    // Popup живёт в портале диалога, но axe сканирует всю страницу: открытый
+    // список не должен прятать диалог от проверки critical/serious.
+    await expectNoBlockingViolations(
+      page,
+      '/admin/catalogue?tab=salons + подсказки',
       test.info()
     )
   })

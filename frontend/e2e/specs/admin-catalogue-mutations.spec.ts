@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { adminCatalogueMutation } from '../fixtures/api'
+import { mockAddressSuggestions } from '../fixtures/suggestions'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
 
 /**
@@ -155,39 +156,9 @@ test.describe('админка: каталог, действия', () => {
       longitude: 30.3141,
     }
 
-    await page.route('**/api/addresses/cities*', (route) =>
-      route.fulfill({
-        json: [
-          {
-            providerId: 'e2e-city',
-            display: 'г. Екатеринбург',
-            city: 'Екатеринбург',
-            region: 'Свердловская обл.',
-            country: 'Россия',
-            latitude: 56.8389,
-            longitude: 60.5975,
-          },
-        ],
-      })
-    )
-    await page.route('**/api/addresses/suggest*', (route) =>
-      route.fulfill({
-        json: [
-          {
-            providerId: 'e2e-address',
-            display: 'г. Екатеринбург, ул. Ленина, д. 1',
-            address: 'ул. Ленина, 1',
-            city: 'Екатеринбург',
-            region: 'Свердловская обл.',
-            country: 'Россия',
-            postalCode: '620000',
-            latitude: 56.8389,
-            longitude: 60.5975,
-            timeZoneId: null,
-          },
-        ],
-      })
-    )
+    // Те же заглушки, что и в `salon-suggestions.spec.ts`: провайдер по умолчанию
+    // выключен (`Enabled=false`), а данные обязаны проходить `response-guards`.
+    await mockAddressSuggestions(page)
 
     await catalogue.goto('salons')
     await catalogue.waitForRows()
@@ -199,10 +170,14 @@ test.describe('админка: каталог, действия', () => {
       await expect(dialog).toBeVisible()
 
       await dialog.getByLabel('Город').fill('Екат')
-      await dialog.getByRole('option', { name: 'г. Екатеринбург' }).click()
+      // Popup живёт в портале на `body`, а не внутри диалога: ищем пункты на странице.
+      // `exact` обязателен: в общих заглушках есть ещё «г. Екатеринбург, пос. Исток».
+      await page
+        .getByRole('option', { name: 'г. Екатеринбург', exact: true })
+        .click()
 
       await dialog.getByLabel('Адрес', { exact: true }).fill('ул. Лен')
-      await dialog
+      await page
         .getByRole('option', { name: 'г. Екатеринбург, ул. Ленина, д. 1' })
         .click()
 
