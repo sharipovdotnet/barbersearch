@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Controls.ScissorsMark"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!--
+        Контур — lucide scissors из шапки веба (site-header.tsx): пять фигур на холсте 24×24
+        и штрих 2. Записан строкой, потому что GeometryGroup из EllipseGeometry/LineGeometry
+        на Android отрисовывается мусором; цвет задаёт StrokeColor, а не сам файл.
+    -->
+    <Path
+        x:Name="Mark"
+        Data="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
+        HeightRequest="24"
+        HorizontalOptions="Center"
+        StrokeLineCap="Round"
+        StrokeLineJoin="Round"
+        StrokeThickness="2"
+        VerticalOptions="Center"
+        WidthRequest="24" />
+
+</ContentView>

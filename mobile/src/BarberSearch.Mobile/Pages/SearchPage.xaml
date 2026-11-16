@@ -6,19 +6,24 @@
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:addr="clr-namespace:BarberSearch.Contracts.Addresses.SuggestCities;assembly=BarberSearch.Contracts"
     xmlns:search="clr-namespace:BarberSearch.Contracts.BarberProfiles.SearchBarbers;assembly=BarberSearch.Contracts"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:SearchViewModel"
     Title="{loc:Translate Key='Поиск'}">
+
+    <!-- Заголовок навигации: ножницы перед названием раздела, как логотип в шапке веба. -->
+    <Shell.TitleView>
+        <controls:BrandTitleView Text="{loc:Translate Key='Поиск'}" />
+    </Shell.TitleView>
 
     <ScrollView x:Name="PageScroll">
         <VerticalStackLayout Padding="16" Spacing="16">
 
             <!--
                 Шапка раздела: логотип веба (ножницы + имя) вместо пустого верха над формой.
-                Знак — тот же, что в site-header.tsx, но крупнее и в плашке Primary: на
-                телефоне 16 pt из шапки сайта потерялись бы. Контур записан строкой, как
-                в SVG lucide: круг — две дуги, остальное — отрезки. Подпись — заголовок
-                витрины (home-hero.tsx), а не новая строка.
+                Знак берётся из ScissorsMark — тот же контур, что в site-header.tsx, но крупнее
+                и в плашке Primary: на телефоне 16 pt из шапки сайта потерялись бы. Подпись —
+                заголовок витрины (home-hero.tsx), а не новая строка.
             -->
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                 <Border
@@ -28,16 +33,7 @@
                     StrokeShape="RoundRectangle 10"
                     VerticalOptions="Center"
                     WidthRequest="48">
-                    <Path
-                        Data="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
-                        HeightRequest="24"
-                        HorizontalOptions="Center"
-                        Stroke="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}"
-                        StrokeLineCap="Round"
-                        StrokeLineJoin="Round"
-                        StrokeThickness="2"
-                        VerticalOptions="Center"
-                        WidthRequest="24" />
+                    <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
                 </Border>
                 <VerticalStackLayout
                     Grid.Column="1"
@@ -320,16 +316,7 @@
                             Stroke="Transparent"
                             StrokeShape="RoundRectangle 24"
                             WidthRequest="48">
-                            <Path
-                                Data="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
-                                HeightRequest="24"
-                                HorizontalOptions="Center"
-                                Stroke="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
-                                StrokeLineCap="Round"
-                                StrokeLineJoin="Round"
-                                StrokeThickness="2"
-                                VerticalOptions="Center"
-                                WidthRequest="24" />
+                            <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         </Border>
                         <VerticalStackLayout Spacing="4">
                             <Label

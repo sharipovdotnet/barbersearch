@@ -4,9 +4,15 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:BookingsViewModel"
     Title="{loc:Translate Key='Записи'}">
+
+    <!-- Заголовок навигации: ножницы перед названием раздела, как логотип в шапке веба. -->
+    <Shell.TitleView>
+        <controls:BrandTitleView Text="{loc:Translate Key='Записи'}" />
+    </Shell.TitleView>
 
     <!--
         Экран собран из трёх состояний одной вкладки: гейт входа, первая загрузка/ошибка и

@@ -458,21 +458,27 @@ The port is done: this is the state to keep, not a plan.
   «Вход в Hairo». Identifiers are not text and keep their names: the namespaces, the project files,
   `ru.barbersearch.mobile` and the URLs still say `BarberSearch`.
 - **The in-app mark is the web header's scissors, and it is geometry rather than a picture.** The
-  search screen wears the lucide `scissors` of `site-header.tsx` — the same five figures on a 24
-  canvas with stroke 2 — written as one path string on each `Path`, the two circles as arcs and the
-  three cuts as segments. A stroke on the shape takes `PrimaryForeground` / `MutedForeground`
-  through `AppThemeBinding`, so the mark follows the theme like the tab icons; an SVG in
-  `Resources/Images` would be rasterized with one baked colour. The path is not a `GeometryGroup`
-  of `EllipseGeometry`/`LineGeometry`: that reads better but on Android (MAUI 10.0.110, API 36)
-  renders a stray line and ring instead of the scissors — the string is a fix, not a preference.
-  It appears in two places. A masthead above the search form gives the app's
+  app wears the lucide `scissors` of `site-header.tsx` — the same five figures on a 24 canvas with
+  stroke 2, the two circles as arcs and the three cuts as segments. The geometry is declared once in
+  `Controls/ScissorsMark.xaml`; `Path` is sealed, so the mark is a `ContentView` that wraps it and
+  exposes `StrokeColor`, and the inner `Path` repaints through `AppThemeBinding` exactly like the tab
+  icons. An SVG in `Resources/Images` would be rasterized with one baked colour. The path is not a
+  `GeometryGroup` of `EllipseGeometry`/`LineGeometry`: that reads better but on Android (MAUI
+  10.0.110, API 36) renders a stray line and ring instead of the scissors — the string is a fix,
+  not a preference. It appears in four places. A masthead above the search form gives the app's
   empty top the web header's lockup at phone scale — a 48 pt `Primary` tile, «Hairo» in Geist
   SemiBold 24 and the landing headline (`home-hero.tsx`) as the tagline, taken from the catalog in
   both languages. The empty-results block ports the web's empty-state card from
   `barber-results.tsx` — dashed `Border`, `Muted` circle, centred title in `GeistMedium` and muted
   description — and keeps the scissors where the web draws its `Search` icon: the empty screen then
-  carries the product's face instead of a second magnifier under the «Найти» button. That one icon
-  is the deliberate divergence from the web, recorded here rather than left silent.
+  carries the product's face instead of a second magnifier under the «Найти» button. The top bar of
+  each of the four root tabs puts the same mark before the section name through
+  `Controls/BrandTitleView` in `Shell.TitleView`, so the bar reads like the web header; Shell has
+  no shared title view, so every root page sets its own, and the text repeats the catalog key of
+  the page's `Title`. On the signed-out «Профиль» the sign-in block opens with a lockup — a 40 pt
+  `Primary` tile with the mark and «Вход в Hairo» — so the form does not start on a bare line of
+  text. The empty-state icon is the deliberate divergence from the web, recorded here rather than
+  left silent.
 - **Values are the web's `oklch`, converted to sRGB hex.** MAUI does not parse `oklch()`, so the
   hex is a lossless transcription, checked by contrast rather than by eye: `--destructive` `#CE0000`
   still gives 5.79:1 on white, as `index.css` records for issue #34. Translucent tokens keep their
