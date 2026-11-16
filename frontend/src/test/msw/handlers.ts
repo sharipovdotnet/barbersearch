@@ -236,4 +236,9 @@ export const handlers = [
   http.get('/api/specializations', () =>
     HttpResponse.json([catalogueSpecialization])
   ),
+  // Подсказки города и адреса дергает любая форма салона, как только в поле
+  // появляется минимальная строка. По умолчанию провайдер «ничего не нашёл»:
+  // сценарии с выдачей, `409` и `429` собираются в тестах через `server.use`.
+  http.get('/api/addresses/cities', () => HttpResponse.json([])),
+  http.get('/api/addresses/suggest', () => HttpResponse.json([])),
 ]

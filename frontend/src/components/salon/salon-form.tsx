@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from 'react'
 
+import { SuggestionCombobox } from '@/components/salon/suggestion-combobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -32,6 +33,21 @@ import {
   updateSalonContactInfo,
   updateSalonLocation,
 } from '@/lib/admin-catalogue'
+import {
+  ADDRESS_SUGGESTIONS_MIN_LENGTH,
+  applyAddressSuggestion,
+  applyCitySuggestion,
+  addressSuggestionSnapshot,
+  CITY_SUGGESTIONS_MIN_LENGTH,
+  clearSuggestedFields,
+  detachSuggestedField,
+  fetchAddressSuggestions,
+  fetchCitySuggestions,
+  type AddressSuggestion,
+  type AddressSuggestionSnapshot,
+  type CitySuggestion,
+  type SuggestedAddressField,
+} from '@/lib/address-suggestions'
 import { createOwnSalon } from '@/lib/barber-salons'
 import {
   defaultIsListed,
@@ -94,6 +110,17 @@ export function SalonDialogForm({
   const [errors, setErrors] = useState<SalonFormErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
+  /**
+   * `providerId` выбранного города и снимок подсказанного адреса.
+   *
+   * Оба живут только в состоянии диалога: в `SalonFormValues` их нет, и в тело
+   * запроса они не попадают. `providerId` уточняет город для подсказок адреса,
+   * снимок помнит, что именно пришло из подсказки, чтобы смена города не стирала
+   * значения, введённые руками.
+   */
+  const [cityProviderId, setCityProviderId] = useState<string | null>(null)
+  const [addressSnapshot, setAddressSnapshot] =
+    useState<AddressSuggestionSnapshot | null>(null)
 
   const isOwner = scope === 'owner'
   const isEdit = mode === 'edit'
@@ -130,6 +157,58 @@ export function SalonDialogForm({
   ) {
     setForm((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: undefined }))
+    setFormError(null)
+  }
+
+  /** Ручной ввод города: выбранный провайдер и подсказанный адрес больше не валидны. */
+  function changeCity(value: string) {
+    setForm((current) =>
+      clearSuggestedFields({ ...current, city: value }, addressSnapshot)
+    )
+    setCityProviderId(null)
+    setAddressSnapshot(null)
+    setErrors((current) => ({ ...current, city: undefined }))
+    setFormError(null)
+  }
+
+  function selectCity(suggestion: CitySuggestion) {
+    setForm((current) =>
+      applyCitySuggestion(clearSuggestedFields(current, addressSnapshot), suggestion)
+    )
+    setCityProviderId(suggestion.providerId)
+    setAddressSnapshot(null)
+    setErrors((current) => ({ ...current, city: undefined }))
+    setFormError(null)
+  }
+
+  /** Ручной ввод адреса: индекс и координаты выбранного дома больше к нему не относятся. */
+  function changeAddress(value: string) {
+    setForm((current) =>
+      detachSuggestedField({ ...current, address: value }, addressSnapshot, 'address')
+    )
+    setErrors((current) => ({ ...current, address: undefined }))
+    setFormError(null)
+  }
+
+  function selectAddress(suggestion: AddressSuggestion) {
+    setForm((current) =>
+      applyAddressSuggestion(current, suggestion, { showPostalCode })
+    )
+    setAddressSnapshot(addressSuggestionSnapshot(suggestion, { showPostalCode }))
+    setErrors((current) => ({ ...current, address: undefined }))
+    setFormError(null)
+  }
+
+  /** Ручная правка подсказанного поля: остальные поля снимка не трогаем. */
+  function updateSuggested(field: SuggestedAddressField, value: string) {
+    setForm((current) => {
+      const next: SalonFormValues = { ...current }
+
+      next[field] = value
+
+      return detachSuggestedField(next, addressSnapshot, field)
+    })
+    setErrors((current) => ({ ...current, [field]: undefined }))
     setFormError(null)
   }
 
@@ -332,39 +411,52 @@ export function SalonDialogForm({
               <FieldError id="salon-name-error">{errors.name}</FieldError>
             </Field>
 
-            <Field
+            <SuggestionCombobox<AddressSuggestion>
+              id="salon-address"
               className="sm:col-span-4"
-              data-invalid={Boolean(errors.address)}
-            >
-              <FieldLabel htmlFor="salon-address">{t('Адрес')}</FieldLabel>
-              <Input
-                id="salon-address"
-                name="address"
-                value={form.address}
-                autoFocus={initialFocus === 'location'}
-                disabled={isPending}
-                aria-invalid={Boolean(errors.address)}
-                aria-describedby={
-                  errors.address ? 'salon-address-error' : undefined
-                }
-                onChange={(event) => update('address', event.target.value)}
-              />
-              <FieldError id="salon-address-error">{errors.address}</FieldError>
-            </Field>
+              label={t('Адрес')}
+              value={form.address}
+              onValueChange={changeAddress}
+              onSelect={selectAddress}
+              getKey={(suggestion) => suggestion.providerId ?? suggestion.display}
+              getLabel={(suggestion) => suggestion.display}
+              fetchSuggestions={(query, signal) =>
+                fetchAddressSuggestions({
+                  query,
+                  cityProviderId,
+                  city: form.city,
+                  signal,
+                })
+              }
+              minLength={ADDRESS_SUGGESTIONS_MIN_LENGTH}
+              listLabel={t('Подсказки адреса')}
+              placeholder={t('Начните вводить улицу или дом')}
+              hint={
+                form.city.trim() === '' ? t('Сначала выберите город.') : undefined
+              }
+              enabled={!isPending && form.city.trim() !== ''}
+              autoFocus={initialFocus === 'location'}
+              disabled={isPending}
+              error={errors.address}
+            />
 
-            <Field className="sm:col-span-2" data-invalid={Boolean(errors.city)}>
-              <FieldLabel htmlFor="salon-city">{t('Город')}</FieldLabel>
-              <Input
-                id="salon-city"
-                name="city"
-                value={form.city}
-                disabled={isPending}
-                aria-invalid={Boolean(errors.city)}
-                aria-describedby={errors.city ? 'salon-city-error' : undefined}
-                onChange={(event) => update('city', event.target.value)}
-              />
-              <FieldError id="salon-city-error">{errors.city}</FieldError>
-            </Field>
+            <SuggestionCombobox<CitySuggestion>
+              id="salon-city"
+              className="sm:col-span-2"
+              label={t('Город')}
+              value={form.city}
+              onValueChange={changeCity}
+              onSelect={selectCity}
+              getKey={(suggestion) => suggestion.providerId ?? suggestion.display}
+              getLabel={(suggestion) => suggestion.display}
+              fetchSuggestions={fetchCitySuggestions}
+              minLength={CITY_SUGGESTIONS_MIN_LENGTH}
+              listLabel={t('Подсказки города')}
+              placeholder={t('Начните вводить город')}
+              enabled={!isPending}
+              disabled={isPending}
+              error={errors.city}
+            />
 
             <Field
               className="sm:col-span-2"
@@ -395,7 +487,9 @@ export function SalonDialogForm({
                   name="postalCode"
                   value={form.postalCode}
                   disabled={isPending}
-                  onChange={(event) => update('postalCode', event.target.value)}
+                  onChange={(event) =>
+                    updateSuggested('postalCode', event.target.value)
+                  }
                 />
               </Field>
             )}
@@ -438,7 +532,9 @@ export function SalonDialogForm({
                     ? 'salon-latitude-error salon-coordinates-hint'
                     : 'salon-coordinates-hint'
                 }
-                onChange={(event) => update('latitude', event.target.value)}
+                onChange={(event) =>
+                  updateSuggested('latitude', event.target.value)
+                }
               />
               <FieldError id="salon-latitude-error">
                 {errors.latitude}
@@ -462,7 +558,9 @@ export function SalonDialogForm({
                     ? 'salon-longitude-error salon-coordinates-hint'
                     : 'salon-coordinates-hint'
                 }
-                onChange={(event) => update('longitude', event.target.value)}
+                onChange={(event) =>
+                  updateSuggested('longitude', event.target.value)
+                }
               />
               <FieldError id="salon-longitude-error">
                 {errors.longitude}
@@ -475,7 +573,7 @@ export function SalonDialogForm({
                 className="sm:col-span-6"
               >
                 {t(
-                  'Скопируйте координаты из карт — встроенной карты и геокодера нет.'
+                  'Скопируйте координаты из карт или выберите подсказку адреса — встроенной карты нет.'
                 )}
               </FieldDescription>
             )}

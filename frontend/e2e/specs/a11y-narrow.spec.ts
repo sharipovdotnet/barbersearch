@@ -2,6 +2,11 @@ import { expect, test } from '../fixtures/test'
 
 import { fixtures, storageStatePath } from '../fixtures/accounts'
 import { expectNoBlockingViolations } from '../fixtures/axe'
+import {
+  expectActiveSuggestion,
+  expectOpenSuggestionList,
+  mockAddressSuggestions,
+} from '../fixtures/suggestions'
 import { AdminAuditPage } from '../pages/admin-audit-page'
 import { AdminBookingsPage } from '../pages/admin-bookings-page'
 import { AdminCataloguePage } from '../pages/admin-catalogue-page'
@@ -309,6 +314,66 @@ test.describe('axe: 320 px, расписание барбера', () => {
       test.info()
     )
   })
+
+  test('«Мои салоны»: подсказки города в форме создания на 320', async ({
+    page,
+  }) => {
+    await mockAddressSuggestions(page)
+
+    await page.goto('/barber/salons')
+    await expect(
+      page.getByRole('heading', { name: 'Мои салоны', level: 1 })
+    ).toBeVisible()
+
+    await page.getByRole('button', { name: 'Создать салон' }).click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+
+    const city = dialog.getByLabel('Город')
+
+    await city.fill('Екат')
+
+    const listbox = await expectOpenSuggestionList(
+      page,
+      city,
+      'Подсказки города'
+    )
+
+    await city.press('ArrowDown')
+    await expectActiveSuggestion(page, city, 'г. Екатеринбург')
+
+    // Попап не вылезает за 320 px и не расширяет страницу: у него своя
+    // прокрутка, а не горизонтальный скролл документа.
+    const popup = listbox.locator('xpath=..')
+    const popupBox = await popup.boundingBox()
+    const viewport = page.viewportSize()
+
+    expect(popupBox).not.toBeNull()
+    expect(viewport).not.toBeNull()
+
+    if (popupBox !== null && viewport !== null) {
+      expect(popupBox.x).toBeGreaterThanOrEqual(0)
+      expect(popupBox.x + popupBox.width).toBeLessThanOrEqual(
+        viewport.width + 0.5
+      )
+    }
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/barber/salons + подсказки @320',
+      test.info()
+    )
+  })
 })
 
 test.describe('axe: 320 px, профиль барбера', () => {
@@ -499,6 +564,64 @@ test.describe('axe: 320 px, админка без выбранной строк�
     await expectNoBlockingViolations(
       page,
       '/admin/catalogue?tab=salons @320',
+      test.info()
+    )
+  })
+
+  test('каталог: подсказки города в форме правки на 320', async ({ page }) => {
+    await mockAddressSuggestions(page)
+
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto('salons')
+    await catalogue.waitForRows()
+    await catalogue
+      .editButton(fixtures.catalogueLabels.hiddenSalon)
+      .click()
+
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+
+    const city = dialog.getByLabel('Город')
+
+    await city.fill('Екат')
+
+    const listbox = await expectOpenSuggestionList(
+      page,
+      city,
+      'Подсказки города'
+    )
+
+    await city.press('ArrowDown')
+    await expectActiveSuggestion(page, city, 'г. Екатеринбург')
+
+    // Попап не выходит за 320 px и не даёт горизонтального скролла.
+    const popup = listbox.locator('xpath=..')
+    const popupBox = await popup.boundingBox()
+    const viewport = page.viewportSize()
+
+    expect(popupBox).not.toBeNull()
+    expect(viewport).not.toBeNull()
+
+    if (popupBox !== null && viewport !== null) {
+      expect(popupBox.x).toBeGreaterThanOrEqual(0)
+      expect(popupBox.x + popupBox.width).toBeLessThanOrEqual(
+        viewport.width + 0.5
+      )
+    }
+
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth
+    )
+
+    expect(overflow).toBeLessThanOrEqual(0)
+
+    await expectNoBlockingViolations(
+      page,
+      '/admin/catalogue?tab=salons + подсказки @320',
       test.info()
     )
   })

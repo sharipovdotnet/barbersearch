@@ -68,6 +68,10 @@ import type { BarberClient } from '@/lib/barber-clients'
 import type { BarberGrade } from '@/lib/barber-grade'
 import type { DayOfWeek, Language, PaymentMethod, ServiceCategory } from '@/lib/barber-profile-labels'
 import type {
+  AddressSuggestion,
+  CitySuggestion,
+} from '@/lib/address-suggestions'
+import type {
   BarberSchedule,
   BarberScheduleDay,
   BarberScheduleException,
@@ -526,6 +530,48 @@ export function isSalonDirectoryItem(
 }
 
 export const isSalonDirectoryList = isArrayOf(isSalonDirectoryItem)
+
+/**
+ * Подсказка города.
+ *
+ * `providerId` и координаты необязательны: провайдер может их не вернуть. Пустое имя
+ * города считается битым ответом — его нельзя положить в поле формы.
+ */
+export function isCitySuggestion(value: unknown): value is CitySuggestion {
+  return (
+    isRecord(value) &&
+    isNullableString(value.providerId) &&
+    isNonEmptyString(value.display) &&
+    isNonEmptyString(value.city) &&
+    isNullableString(value.region) &&
+    isString(value.country) &&
+    isNullableNumber(value.latitude) &&
+    isNullableNumber(value.longitude)
+  )
+}
+
+export const isCitySuggestionList = isArrayOf(isCitySuggestion)
+
+/** Подсказка адреса внутри города; индекс и `timeZoneId` могут отсутствовать. */
+export function isAddressSuggestion(
+  value: unknown
+): value is AddressSuggestion {
+  return (
+    isRecord(value) &&
+    isNullableString(value.providerId) &&
+    isNonEmptyString(value.display) &&
+    isNullableString(value.address) &&
+    isString(value.city) &&
+    isNullableString(value.region) &&
+    isString(value.country) &&
+    isNullableString(value.postalCode) &&
+    isNullableNumber(value.latitude) &&
+    isNullableNumber(value.longitude) &&
+    isNullableString(value.timeZoneId)
+  )
+}
+
+export const isAddressSuggestionList = isArrayOf(isAddressSuggestion)
 
 /** Привязанный салон в списке «Мои салоны». */
 export function isBarberSalonSummary(
