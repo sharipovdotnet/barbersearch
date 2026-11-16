@@ -1,4 +1,5 @@
 using System.Net;
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -135,6 +136,105 @@ public sealed class SearchViewModelTests
         Assert.Null(filters.SpecializationId);
         Assert.Null(filters.HairServiceId);
         Assert.Equal(string.Empty, filters.AdditionalService);
+    }
+
+    [Fact]
+    public void City_TwoCharacters_ShowsSuggestionsFromServer()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CitySuggestions =
+        [
+            Suggestion("Москва", "г. Москва"),
+            Suggestion("Московский", "г. Московский"),
+        ];
+
+        var viewModel = Create(api);
+
+        viewModel.City = "Мо";
+
+        Assert.Equal("Мо", Assert.Single(api.CitySuggestionQueries));
+        Assert.Equal(2, viewModel.CitySuggestions.Items.Count);
+        Assert.True(viewModel.CitySuggestions.IsVisible);
+        Assert.False(viewModel.CitySuggestions.IsEmpty);
+    }
+
+    [Fact]
+    public void City_OneCharacter_DoesNotQuery()
+    {
+        var api = FakeApi.Returning(Page());
+        var viewModel = Create(api);
+
+        viewModel.City = "М";
+
+        Assert.Empty(api.CitySuggestionQueries);
+        Assert.False(viewModel.CitySuggestions.IsVisible);
+    }
+
+    [Fact]
+    public void UseCitySuggestion_PutsBareCityAndClosesList()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CitySuggestions = [Suggestion("Москва", "г. Москва")];
+
+        var viewModel = Create(api);
+
+        viewModel.City = "Мо";
+
+        var suggestion = Assert.Single(viewModel.CitySuggestions.Items);
+
+        viewModel.UseCitySuggestionCommand.Execute(suggestion);
+
+        // В поле — голое имя города: сервер сравнивает город точно, «г. Москва» не нашло бы салон.
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Empty(viewModel.CitySuggestions.Items);
+        Assert.False(viewModel.CitySuggestions.IsVisible);
+
+        // Для выбранного города новый запрос не уходит: список не открывается сразу после выбора.
+        Assert.Equal("Мо", Assert.Single(api.CitySuggestionQueries));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ClosesSuggestions()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CitySuggestions = [Suggestion("Москва", "г. Москва")];
+
+        var viewModel = Create(api);
+
+        viewModel.City = "Мо";
+
+        Assert.True(viewModel.CitySuggestions.IsVisible);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.CitySuggestions.IsVisible);
+        Assert.Empty(viewModel.CitySuggestions.Items);
+        Assert.Equal("Мо", Assert.Single(api.SearchCalls).City);
+    }
+
+    [Fact]
+    public async Task City_SuggestionsFailure_HidesListWithoutBreakingSearch()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        api.CitySuggestionsFailure = new BarberSearchApiException(
+            HttpStatusCode.Conflict,
+            "Подсказки выключены.",
+            ["addressSuggestions.unavailable"],
+            new Dictionary<string, string[]>());
+
+        var viewModel = Create(api);
+
+        viewModel.City = "Екат";
+
+        // Отказ подсказок — тихий: поле остаётся вводом, поиск не получает ошибку.
+        Assert.False(viewModel.CitySuggestions.IsVisible);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.Equal("Екат", viewModel.City);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Single(viewModel.Barbers);
+        Assert.False(viewModel.HasError);
     }
 
     [Fact]
@@ -464,7 +564,9 @@ public sealed class SearchViewModelTests
         new(
             api,
             locationService ?? new FakeLocationService(LocationResult.Unavailable()),
-            new FixedTimeProvider(Today));
+            new FixedTimeProvider(Today),
+            // Подсказки без паузы: тест набирает город и сразу видит результат, не ожидая 250 мс.
+            new CitySuggestions(api, static (_, _) => Task.CompletedTask));
 
     private static PagedResponse<BarberSearchItemResponse> Page(params BarberSearchItemResponse[] items) =>
         new(items, NextCursor: null);
@@ -485,6 +587,15 @@ public sealed class SearchViewModelTests
         ["борода"],
         null,
         distanceKm);
+
+    private static CitySuggestionResponse Suggestion(string city, string display) => new(
+        string.Concat("fias-", city),
+        display,
+        city,
+        "Московская обл.",
+        "Россия",
+        55.7558,
+        37.6173);
 
     /// <summary>
     /// Подменённая геопозиция: запоминает число чтений и отдаёт заданный результат.
@@ -533,6 +644,12 @@ public sealed class SearchViewModelTests
 
         public Exception? CatalogFailure { get; set; }
 
+        public IReadOnlyList<CitySuggestionResponse> CitySuggestions { get; set; } = [];
+
+        public Exception? CitySuggestionsFailure { get; set; }
+
+        public List<string> CitySuggestionQueries { get; } = [];
+
         public List<BarberSearchFilters> SearchCalls { get; } = [];
 
         public int SpecializationCalls { get; private set; }
@@ -569,6 +686,17 @@ public sealed class SearchViewModelTests
             CatalogFailure is null
                 ? Task.FromResult(HairServices)
                 : Task.FromException<IReadOnlyList<HairServiceResponse>>(CatalogFailure);
+
+        public Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
+            string query,
+            CancellationToken cancellationToken = default)
+        {
+            CitySuggestionQueries.Add(query);
+
+            return CitySuggestionsFailure is null
+                ? Task.FromResult(CitySuggestions)
+                : Task.FromException<IReadOnlyList<CitySuggestionResponse>>(CitySuggestionsFailure);
+        }
 
         public Task<BarberProfileResponse> GetBarberProfileAsync(
             Guid id,

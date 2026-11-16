@@ -1,4 +1,5 @@
 using System.Net;
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -474,6 +475,11 @@ public sealed class BarberReviewsSectionTests
         public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Секция отзывов не читает справочник услуг.");
+
+        public Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
+            string query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Секция отзывов не читает подсказки города.");
 
         public Task<BarberProfileResponse> GetBarberProfileAsync(
             Guid id,

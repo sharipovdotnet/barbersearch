@@ -1,3 +1,4 @@
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Mobile.Core.ViewModels;
 
@@ -48,6 +49,26 @@ public partial class SearchPage : ContentPage
         base.OnAppearing();
 
         await _viewModel.InitializeAsync();
+    }
+
+    /// <summary>
+    /// Подставляет выбранную подсказку города и убирает клавиатуру.
+    /// </summary>
+    /// <remarks>
+    /// Выбор — это конец ввода: клавиатура закрывается, иначе она осталась бы поверх формы
+    /// с уже выбранным городом. Сама подстановка живёт в ViewModel и проверяется без страницы.
+    /// </remarks>
+    /// <param name="sender">Жест тапа по строке подсказки.</param>
+    /// <param name="e">Параметр жеста — подсказка города.</param>
+    private void OnCitySuggestionTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is not CitySuggestionResponse suggestion)
+        {
+            return;
+        }
+
+        _viewModel.UseCitySuggestionCommand.Execute(suggestion);
+        CityEntry.Unfocus();
     }
 
     /// <summary>

@@ -71,11 +71,17 @@ there is no session, and email with “Выйти” after it.
 
 The «Поиск» tab carries the web's six filters: city, date, language, specialization, hair service
 and an additional-service substring (`GET api/barbers?city=&date=&language=&specializationId=&
-hairServiceId=&additionalService=&pageSize=`). Nothing is requested while a field is edited: the
-form submits only on «Найти», and empty values are omitted from the query, exactly as in
-`frontend/src/lib/barber-search.ts`. The server compares the city exactly, the language is one
-enum name (`Ru`, `En`, …), and the additional service is a case-insensitive substring of the
-barber's own list.
+hairServiceId=&additionalService=&pageSize=`). The form submits only on «Найти», and empty values
+are omitted from the query, exactly as in `frontend/src/lib/barber-search.ts`. The server compares
+the city exactly, the language is one enum name (`Ru`, `En`, …), and the additional service is a
+case-insensitive substring of the barber's own list.
+
+The city field suggests cities while typing: `GET api/addresses/cities` (the backend's DaData
+proxy) is asked after a 250 ms pause once two characters are typed, and up to eight rows appear
+under the field. A tap fills the bare city name — the server compares city strings exactly, so
+«г. Москва» from the list would never match — and the list closes. Only this request leaves the
+screen before «Найти»; a failed suggestion call (feature off, rate limit, no network) is silent and
+leaves the field a plain input, and an empty answer shows «Ничего не найдено.».
 
 The same request carries an optional `latitude`/`longitude` pair. On the first «Найти» the screen
 asks for the location permission and reads the device position (medium accuracy, 10-second timeout,

@@ -168,6 +168,9 @@ public static class MauiProgram
         // без эмулятора и без разрешений ОС.
         builder.Services.AddSingleton<ILocationService, MauiLocationService>();
 
+        // Подсказки города — часть экрана «Поиск»: одна секция на один ViewModel, поэтому
+        // transient рядом с ним, а не синглтон.
+        builder.Services.AddTransient<CitySuggestions>();
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
         builder.Services.AddTransient<RegisterViewModel>();

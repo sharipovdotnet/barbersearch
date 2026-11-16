@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -19,6 +20,11 @@ namespace BarberSearch.Mobile.Core.Api;
 /// </remarks>
 public sealed class BarberSearchApi : IBarberSearchApi
 {
+    /// <summary>
+    /// Сколько подсказок города просить у сервера: восемь — его же максимум и значение по умолчанию.
+    /// </summary>
+    private const int CitySuggestionsLimit = 8;
+
     private readonly HttpClient _httpClient;
 
     /// <summary>
@@ -70,6 +76,19 @@ public sealed class BarberSearchApi : IBarberSearchApi
         CancellationToken cancellationToken = default) =>
         await GetCatalogAsync<HairServiceResponse>("api/hair-services", cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
+        string query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+
+        return await GetCatalogAsync<CitySuggestionResponse>(
+                BuildCitySuggestionsPath(query),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async Task<BarberProfileResponse> GetBarberProfileAsync(
@@ -256,6 +275,22 @@ public sealed class BarberSearchApi : IBarberSearchApi
 
         return items ?? throw new InvalidOperationException("The API returned an empty catalog response.");
     }
+
+    /// <summary>
+    /// Собирает адрес подсказок города.
+    /// </summary>
+    /// <remarks>
+    /// Запрос тримится и уходит экранированным: город может содержать дефис, пробел или точку.
+    /// Лимит передаётся явно, чтобы клиент не зависел от серверного значения по умолчанию, если
+    /// оно изменится. Пустой запрос отсекает <see cref="GetCitySuggestionsAsync"/>: сервер
+    /// ответил бы <c>400</c> на строку короче двух символов, а порог проверяет вызывающий.
+    /// </remarks>
+    private static string BuildCitySuggestionsPath(string query) =>
+        string.Concat(
+            "api/addresses/cities?query=",
+            Uri.EscapeDataString(query.Trim()),
+            "&limit=",
+            CitySuggestionsLimit.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Собирает адрес сетки слотов.

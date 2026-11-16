@@ -1,4 +1,5 @@
 using System.Net;
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.Auth.Me;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
@@ -1018,6 +1019,11 @@ public sealed class BookingsViewModelTests
         public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Экран записей не читает справочник услуг.");
+
+        public Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
+            string query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает подсказки города.");
 
         public Task<BarberSlotsResponse> GetSlotsAsync(
             Guid barberProfileId,

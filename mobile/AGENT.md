@@ -210,6 +210,23 @@ in Core owns both base addresses.
   precision); iOS carries `NSLocationWhenInUseUsageDescription` with the Russian text, because the
   system dialog follows the device language while the interface defaults to Russian. The web has no
   geolocation at all, so this is a mobile-only feature with its own wording rather than a port.
+- **The city filter suggests cities while typing, and that suggestion endpoint became public.** The
+  field asks `GET api/addresses/cities` after a 250 ms pause (the web's debounce), from two
+  characters and for at most eight suggestions, and a chosen row replaces the text with the bare city
+  name: the server compares `Salon.City` exactly, so «Екатеринбург» from a suggestion finds salons
+  while «г. Екатеринбург» does not. The list is a `BindableLayout` of rows under the field instead of
+  a web-style popup — MAUI has no native combobox, and a hand-built overlay over a scrolling form
+  would cost more than it adds on a phone. Its state lives in `CitySuggestions`, owned by
+  `SearchViewModel` the way «Отзывы» is owned by the card: still one ViewModel per screen, not a
+  second `BindingContext`. Everything about it is silent on failure: 409 (suggestions off), 401, 429,
+  5xx and a dead network only close the list, the field stays a plain input, and an empty answer shows
+  the web's «Ничего не найдено.». Two consequences are mobile-only. The endpoint used to be
+  `[Authorize]`d, which would have hidden suggestions on the app's main tab because the search works
+  before sign-in; the cities action is now `[AllowAnonymous]` while address suggestions stay
+  authenticated, and anonymous calls share the IP partition of the `addresses` limiter (60 a minute,
+  after which the list simply does not open). And the app never keeps `providerId`: the search
+  filters by the city string, while the provider token belongs to the web salon form's address
+  suggestions.
 - **The interface speaks Russian and English, and the web is the source of both.** The approach is
   the web's gettext one: the key is the Russian source string, and `Localization/messages/en.json` in
   Core holds the translation. `Loc.T("…")` in code and `{loc:Translate Key='…'}` in XAML cover every

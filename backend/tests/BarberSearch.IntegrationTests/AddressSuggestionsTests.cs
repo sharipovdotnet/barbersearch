@@ -10,9 +10,9 @@ using Xunit;
 namespace BarberSearch.IntegrationTests;
 
 /// <summary>
-/// API подсказок города и адреса: доступ только аутентифицированным, точные имена полей
-/// JSON, разные пороги запроса у городов и адреса, передача <c>cityProviderId</c>
-/// и отказ без вызова провайдера.
+/// API подсказок города и адреса: город доступен анонимно, адрес — только после входа,
+/// точные имена полей JSON, разные пороги запроса у городов и адреса, передача
+/// <c>cityProviderId</c> и отказ без вызова провайдера.
 /// </summary>
 /// <remarks>
 /// Внешний DaData не вызывается: <see cref="TestApp"/> подставляет фейковый
@@ -46,17 +46,39 @@ public sealed class AddressSuggestionsTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Anonymous_requests_are_rejected()
+    public async Task Anonymous_gets_city_suggestions_but_not_address_suggestions()
     {
-        await using var app = await TestApp.StartAsync(_database);
+        var provider = new FakeAddressSuggestionsProvider();
+
+        await using var app = await TestApp.StartAsync(
+            _database,
+            EnabledConfiguration,
+            addressSuggestionsProvider: provider);
+
         using var client = app.CreateClient();
 
-        using var cities = await client.GetAsync($"{CitiesEndpoint}?query=Екат");
-        using var suggest = await client.GetAsync(
-            $"{SuggestEndpoint}?query={Uri.EscapeDataString("ул. Ленина")}");
+        // Город подсказывают фильтру публичной витрины и мобильному поиску: вход не нужен.
+        using (var cities = await client.GetAsync($"{CitiesEndpoint}?query=Екат"))
+        {
+            Assert.Equal(HttpStatusCode.OK, cities.StatusCode);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, cities.StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, suggest.StatusCode);
+            using var document = JsonDocument.Parse(await cities.Content.ReadAsStringAsync());
+            var item = Assert.Single(document.RootElement.EnumerateArray());
+
+            Assert.Equal("г. Екатеринбург", item.GetProperty("display").GetString());
+            Assert.Equal("Екатеринбург", item.GetProperty("city").GetString());
+        }
+
+        // Адрес остаётся закрытым: форма салона требует входа, квота не тратится анонимно.
+        using (var suggest = await client.GetAsync(
+                   $"{SuggestEndpoint}?query={Uri.EscapeDataString("ул. Ленина")}"))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, suggest.StatusCode);
+        }
+
+        // До порта дошёл только публичный запрос города.
+        var request = Assert.Single(provider.Requests);
+        Assert.Equal(AddressSuggestionBound.City, request.Bound);
     }
 
     [Fact(Timeout = 180_000)]
