@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Анимация ножниц для системного splash-экрана Android 12+: два качания вокруг точки
+    пересечения лезвий (12,12 на холсте 24) и возврат в исходное положение. Анимация конечная:
+    если система держит splash дольше 900 мс, ножницы остаются ровными, а не замирают под углом.
+    iOS и Android до 12 остаются на растровом splash.svg — там анимировать нечем.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/hairo_splash_lockup">
+    <target android:name="scissors">
+        <aapt:attr name="android:animation">
+            <set android:ordering="sequentially">
+                <objectAnimator
+                    android:duration="200"
+                    android:interpolator="@android:interpolator/accelerate_decelerate"
+                    android:propertyName="rotation"
+                    android:valueFrom="0"
+                    android:valueTo="-14" />
+                <objectAnimator
+                    android:duration="260"
+                    android:interpolator="@android:interpolator/fast_out_slow_in"
+                    android:propertyName="rotation"
+                    android:valueFrom="-14"
+                    android:valueTo="10" />
+                <objectAnimator
+                    android:duration="200"
+                    android:interpolator="@android:interpolator/accelerate_decelerate"
+                    android:propertyName="rotation"
+                    android:valueFrom="10"
+                    android:valueTo="-8" />
+                <objectAnimator
+                    android:duration="240"
+                    android:interpolator="@android:interpolator/fast_out_slow_in"
+                    android:propertyName="rotation"
+                    android:valueFrom="-8"
+                    android:valueTo="0" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

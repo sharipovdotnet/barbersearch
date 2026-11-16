@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Тема запуска приложения. Наследует Maui.SplashTheme, поэтому фон и растровый splash для
+        iOS и Android до 12 остаются штатными; Android 12+ подменяет иконку на анимированную
+        в values-v31/styles.xml.
+    -->
+    <style name="Theme.Hairo.Splash" parent="Maui.SplashTheme" />
+</resources>

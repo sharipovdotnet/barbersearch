@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Android 12+ рисует свой splash-экран и проигрывает только AnimatedVectorDrawable; статичную
+        картинку он не двигает, поэтому здесь иконка — hairo_splash_animated. 900 — длительность
+        анимации ножниц; на Android 13+ система берёт её из самого AVD, на 12-м без этого атрибута
+        анимация не запускается.
+    -->
+    <style name="Theme.Hairo.Splash" parent="Maui.SplashTheme">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/hairo_splash_animated</item>
+        <item name="android:windowSplashScreenAnimationDuration">900</item>
+    </style>
+</resources>
