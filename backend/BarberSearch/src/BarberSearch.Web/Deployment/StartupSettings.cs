@@ -1,4 +1,5 @@
 using System.Globalization;
+using BarberSearch.Application.Addresses;
 using BarberSearch.Application.Emails;
 using BarberSearch.Application.Push;
 using BarberSearch.Web.Auth;
@@ -38,6 +39,15 @@ public sealed record StartupSettings
     private const string PUSH_PROJECT_ID_KEY = "Push:ProjectId";
     private const string PUSH_SERVICE_ACCOUNT_JSON_KEY = "Push:ServiceAccountJson";
     private const string PUSH_SERVICE_ACCOUNT_PATH_KEY = "Push:ServiceAccountPath";
+    private const string ADDRESS_SUGGESTIONS_ENABLED_KEY = "AddressSuggestions:Enabled";
+    private const string ADDRESS_SUGGESTIONS_BASE_URL_KEY = "AddressSuggestions:BaseUrl";
+    private const string ADDRESS_SUGGESTIONS_API_KEY_KEY = "AddressSuggestions:ApiKey";
+    private const string ADDRESS_SUGGESTIONS_TIMEOUT_SECONDS_KEY = "AddressSuggestions:TimeoutSeconds";
+    private const string ADDRESS_SUGGESTIONS_MIN_QUERY_LENGTH_KEY = "AddressSuggestions:MinQueryLength";
+    private const string ADDRESS_SUGGESTIONS_MIN_CITY_QUERY_LENGTH_KEY =
+        "AddressSuggestions:MinCityQueryLength";
+    private const string ADDRESS_SUGGESTIONS_MAX_SUGGESTIONS_KEY = "AddressSuggestions:MaxSuggestions";
+    private const string ADDRESS_SUGGESTIONS_CACHE_TTL_SECONDS_KEY = "AddressSuggestions:CacheTtlSeconds";
 
     /// <summary>
     /// Строка подключения PostgreSQL.
@@ -103,6 +113,20 @@ public sealed record StartupSettings
     /// а не падение старта.
     /// </remarks>
     public required PushOptions Push { get; init; }
+
+    /// <summary>
+    /// Проверенные настройки подсказок города и адреса: флаг, адрес провайдера, ключ и пределы.
+    /// </summary>
+    /// <remarks>
+    /// Пустая или выключенная секция — нормальное состояние, а не ошибка конфигурации:
+    /// приложение обязано собираться и стартовать без ключа внешнего провайдера, как с пустыми
+    /// секциями <c>Telegram</c> и <c>Push</c>. Выключенная фича не роняет старт: обработчики
+    /// не вызывают провайдера и сразу отвечают <c>409 addressSuggestions.unavailable</c>, а форма
+    /// салона остаётся набором обычных текстовых полей. Значение
+    /// <see cref="AddressSuggestionsOptions.ApiKey"/> никогда не проверяется на «правильность»
+    /// и не попадает ни в одно сообщение: при включённой фиче требуется лишь непустой ключ.
+    /// </remarks>
+    public required AddressSuggestionsOptions AddressSuggestions { get; init; }
 
     /// <summary>
     /// Читает и проверяет конфигурацию.
@@ -206,7 +230,8 @@ public sealed record StartupSettings
                     min: 1,
                     max: 365)
             },
-            Push = ReadPushOptions(configuration)
+            Push = ReadPushOptions(configuration),
+            AddressSuggestions = ReadAddressSuggestions(configuration, environment)
         };
     }
 
@@ -281,6 +306,116 @@ public sealed record StartupSettings
                 "Push:ReminderLeadMinutes must cover at least one Push:IntervalSeconds tick: "
                 + $"{options.ReminderLeadMinutes} minutes is shorter than "
                 + $"{options.IntervalSeconds} seconds.");
+        }
+
+        return options;
+    }
+
+    /// <summary>
+    /// Читает и проверяет секцию <c>AddressSuggestions</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Диапазоны проверяются всегда, секрет — только при включённой фиче. Выключенная фича
+    /// с пустым ключом и незаполненным адресом — штатное состояние: подсказки — прогрессивное
+    /// улучшение, и их отсутствие не должно мешать старту. Проверки включаются вместе с флагом
+    /// <c>AddressSuggestions:Enabled=true</c>, потому что иначе вызов ушёл бы провайдеру
+    /// с пустым <c>Authorization</c>, а платная квота тратилась бы на заведомо неудачные запросы.
+    /// </para>
+    /// <para>
+    /// Схема адреса зависит от окружения: в <c>Production</c> принимается только <c>https</c>.
+    /// Ключ провайдера уходит в заголовке <c>Authorization</c>, и по открытому <c>http</c> его
+    /// прочитал бы любой узел на пути; для платного внешнего API это недопустимо. В
+    /// <c>Development</c> и <c>Testing</c> <c>http</c> разрешён: локальный стаб подсказок
+    /// поднимается без TLS, и запрет сделал бы проверку контракта без интернета невозможной.
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">Конфигурация приложения.</param>
+    /// <param name="environment">Окружение хоста: от него зависит разрешённая схема <c>BaseUrl</c>.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Включённая фича без ключа, <c>BaseUrl</c> не абсолютный URI или <c>http</c> в
+    /// <c>Production</c>; значение вне диапазона.
+    /// </exception>
+    private static AddressSuggestionsOptions ReadAddressSuggestions(
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
+    {
+        // Флаг необязателен: пустая строка, как и у Push, трактуется как false.
+        var configuredBaseUrl = configuration[ADDRESS_SUGGESTIONS_BASE_URL_KEY];
+        var options = new AddressSuggestionsOptions
+        {
+            Enabled = bool.TryParse(configuration[ADDRESS_SUGGESTIONS_ENABLED_KEY], out var enabled)
+                      && enabled,
+            BaseUrl = string.IsNullOrWhiteSpace(configuredBaseUrl)
+                ? AddressSuggestionsOptions.DEFAULT_BASE_URL
+                : configuredBaseUrl,
+            // Секрет не проверяется и не логируется: пустое значение при выключенной фиче — норма.
+            ApiKey = configuration[ADDRESS_SUGGESTIONS_API_KEY_KEY],
+            TimeoutSeconds = ReadInt(
+                configuration,
+                ADDRESS_SUGGESTIONS_TIMEOUT_SECONDS_KEY,
+                AddressSuggestionsOptions.DEFAULT_TIMEOUT_SECONDS,
+                min: 1,
+                max: 15),
+            MinQueryLength = ReadInt(
+                configuration,
+                ADDRESS_SUGGESTIONS_MIN_QUERY_LENGTH_KEY,
+                AddressSuggestionsOptions.DEFAULT_MIN_QUERY_LENGTH,
+                min: 2,
+                max: 10),
+            MinCityQueryLength = ReadInt(
+                configuration,
+                ADDRESS_SUGGESTIONS_MIN_CITY_QUERY_LENGTH_KEY,
+                AddressSuggestionsOptions.DEFAULT_MIN_CITY_QUERY_LENGTH,
+                min: 1,
+                max: 10),
+            MaxSuggestions = ReadInt(
+                configuration,
+                ADDRESS_SUGGESTIONS_MAX_SUGGESTIONS_KEY,
+                AddressSuggestionsOptions.DEFAULT_MAX_SUGGESTIONS,
+                min: 1,
+                max: 10),
+            CacheTtlSeconds = ReadInt(
+                configuration,
+                ADDRESS_SUGGESTIONS_CACHE_TTL_SECONDS_KEY,
+                AddressSuggestionsOptions.DEFAULT_CACHE_TTL_SECONDS,
+                min: 0,
+                max: 86400)
+        };
+
+        if (!options.Enabled)
+        {
+            return options;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ApiKey))
+        {
+            throw new InvalidOperationException(
+                """
+                AddressSuggestions:ApiKey is required when AddressSuggestions:Enabled=true.
+                Set the environment variable AddressSuggestions__ApiKey (or user secrets in Development).
+                The key is never stored in appsettings.json and never logged.
+                """);
+        }
+
+        if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+        {
+            throw new InvalidOperationException(
+                "AddressSuggestions:BaseUrl must be an absolute URI, e.g. "
+                + AddressSuggestionsOptions.DEFAULT_BASE_URL
+                + ". The configured value is not printed.");
+        }
+
+        // Production требует https: ключ провайдера уходит в заголовке Authorization.
+        // В Development/Testing http разрешён — там поднимают локальный стаб подсказок.
+        if (environment.IsProduction()
+            && !string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "AddressSuggestions:BaseUrl must use https in Production: "
+                + "the provider API key travels in a request header, and plain http "
+                + "would expose it to every hop. http is accepted only in Development/Testing "
+                + "for a local stub.");
         }
 
         return options;

@@ -1583,6 +1583,63 @@ public static class ApiErrorCodes
     }
 
     /// <summary>
+    /// Подсказки города и адреса: валидация запроса и недоступность провайдера.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Оба эндпоинта проксируют подсказки от внешнего провайдера, поэтому ошибки делятся на
+    /// две группы: ошибки ввода (<c>Error.Validation</c>, <c>400</c>, с <c>invalidField</c>)
+    /// и недоступность (<c>Error.Conflict</c>, <c>409</c>). Коды валидации родились в
+    /// Application (<c>AddressSuggestionQueryValidator</c>) и перечислены здесь, потому что
+    /// клиент ветвится по ним.
+    /// </para>
+    /// <para>
+    /// Ключ провайдера, запрос и адрес в тексты ошибок не попадают: клиенту достаточно кода.
+    /// </para>
+    /// </remarks>
+    public static class AddressSuggestions
+    {
+        /// <summary>
+        /// Запрос короче минимальной длины (у города и адреса пороги разные); <c>400</c>,
+        /// <c>invalidField = "query"</c>.
+        /// </summary>
+        public const string QueryTooShort = "addressSuggestions.query.tooShort";
+
+        /// <summary>
+        /// Запрос длиннее <c>120</c> символов; <c>400</c>, <c>invalidField = "query"</c>.
+        /// </summary>
+        public const string QueryTooLong = "addressSuggestions.query.tooLong";
+
+        /// <summary>
+        /// Свободный текст города длиннее <c>100</c> символов; <c>400</c>,
+        /// <c>invalidField = "city"</c>.
+        /// </summary>
+        public const string CityTooLong = "addressSuggestions.city.tooLong";
+
+        /// <summary>
+        /// <c>cityProviderId</c> длиннее <c>64</c> символов или содержит пробелы; <c>400</c>,
+        /// <c>invalidField = "cityProviderId"</c>.
+        /// </summary>
+        /// <remarks>
+        /// Это непрозрачный токен провайдера, а не <c>Guid</c>: формат не проверяется, поэтому
+        /// второй провайдер с другими идентификаторами не потребует правки контракта.
+        /// </remarks>
+        public const string CityProviderIdInvalid = "addressSuggestions.cityProviderId";
+
+        /// <summary>
+        /// Подсказки выключены, ключ пуст или провайдер ответил ошибкой; <c>409</c>.
+        /// </summary>
+        /// <remarks>
+        /// В <c>Shared.ErrorType</c> нет варианта «недоступно», а расширять его ради <c>503</c>
+        /// нельзя. Тем же словом <c>unavailable</c> отвечают почта (<c>409</c>,
+        /// <see cref="Auth.EmailVerificationUnavailable"/>) и push
+        /// (<see cref="Push.Unavailable"/>), поэтому «провайдер недоступен» — конфликт состояния
+        /// сервера, а не ошибка клиента.
+        /// </remarks>
+        public const string Unavailable = "addressSuggestions.unavailable";
+    }
+
+    /// <summary>
     /// Суффикс нарушения уникальности; <c>409</c>.
     /// </summary>
     /// <param name="codePrefix">Префикс операции, например <c>booking.add</c>.</param>

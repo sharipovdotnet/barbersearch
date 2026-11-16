@@ -14,7 +14,7 @@ namespace BarberSearch.Web.Deployment;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Три лимита с окном в минуту и очередью <c>0</c> (лишний запрос получает <c>429</c> сразу,
+/// Четыре лимита с окном в минуту и очередью <c>0</c> (лишний запрос получает <c>429</c> сразу,
 /// а не ждёт в очереди):
 /// </para>
 /// <list type="bullet">
@@ -36,6 +36,15 @@ namespace BarberSearch.Web.Deployment;
 /// <c>sub</c>), а без него — на адрес; <c>GET</c>/<c>HEAD</c>/<c>OPTIONS</c>/<c>TRACE</c>
 /// не ограничиваются. Он закрывает <c>POST api/bookings</c> и <c>POST api/reviews</c>
 /// (каждая бронь берёт advisory lock и занимает слот) без атрибутов на десятках действий.
+/// </description></item>
+/// <item><description>
+/// <c>addresses</c> — 60 запросов в минуту на пользователя для подсказок города и адреса
+/// (<c>GET api/addresses/cities</c> и <c>GET api/addresses/suggest</c>). Партиция — тот же
+/// ключ, что у лимита записи: claim <c>sub</c>, иначе <c>Connection.RemoteIpAddress</c>,
+/// иначе <see cref="UnknownPartitionKey"/>. Квота платная (каждый запрос уходит внешнему
+/// провайдеру), поэтому лимит считается на пользователя, а не общий на IP: за одним NAT
+/// сидят разные барберы и администраторы. Как и глобальный лимит, политика читает <c>sub</c>,
+/// поэтому <c>UseRateLimiter</c> обязан идти после <c>UseAuthentication</c>.
 /// </description></item>
 /// </list>
 /// <para>
@@ -79,6 +88,16 @@ public static class RateLimitSettings
     public const int WritePermitLimit = 30;
 
     /// <summary>
+    /// Имя политики подсказок адреса (<c>[EnableRateLimiting("addresses")]</c>).
+    /// </summary>
+    public const string AddressesPolicyName = "addresses";
+
+    /// <summary>
+    /// Лимит подсказок адреса: запросов в минуту на пользователя (или адрес, если пользователя нет).
+    /// </summary>
+    public const int AddressesPermitLimit = 60;
+
+    /// <summary>
     /// Окно всех лимитов.
     /// </summary>
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
@@ -108,6 +127,7 @@ public static class RateLimitSettings
 
         options.AddPolicy(AuthPolicyName, AuthPartition);
         options.AddPolicy(ReadsPolicyName, ReadsPartition);
+        options.AddPolicy(AddressesPolicyName, AddressesPartition);
 
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(WritePartition);
         options.OnRejected = OnRejected;
@@ -140,6 +160,25 @@ public static class RateLimitSettings
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: IpPartitionKey(context),
             factory: _ => FixedWindow(ReadPermitLimit));
+    }
+
+    /// <summary>
+    /// Партиция политики подсказок адреса: 60 запросов в минуту на пользователя.
+    /// </summary>
+    /// <remarks>
+    /// Ключ — тот же, что у глобального лимита записи (<see cref="WritePartitionKey"/>):
+    /// <c>sub</c>, иначе адрес клиента, иначе <see cref="UnknownPartitionKey"/>. Так квота
+    /// считается на аккаунт, а не на IP: подсказки стоят денег у провайдера, и один барбер
+    /// за общим NAT не должен исчерпывать лимит коллег. Адрес клиента здесь — резерв на
+    /// случай запроса без <c>sub</c> (например, если политику когда-нибудь откроют анонимно).
+    /// </remarks>
+    public static RateLimitPartition<string> AddressesPartition(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: WritePartitionKey(context),
+            factory: _ => FixedWindow(AddressesPermitLimit));
     }
 
     /// <summary>

@@ -197,3 +197,19 @@ GET {{host}}/api/reviews?barberProfileId={{barberProfileId}}
 Accept: application/json
 
 ###
+
+# Подсказки города и адреса: оба эндпоинта требуют аутентифицированную сессию — сначала
+# выполните вход через POST {{host}}/api/auth/login (§17): cookie-сессию .http-клиент отправит сам.
+# Только чтение: в БД и журнал аудита они ничего не пишут, ключ провайдера остаётся на сервере.
+# 409 addressSuggestions.unavailable = провайдер выключен или упал: форма остаётся обычным текстовым вводом.
+GET {{host}}/api/addresses/cities?query=Екат
+Accept: application/json
+
+###
+
+# Город выбран: его providerId из ответа городов уходит в cityProviderId, чтобы улицы искались
+# внутри этого города. Без выбора города работает свободный текст city=…
+GET {{host}}/api/addresses/suggest?query=ул. Лен&cityProviderId=<fias из ответа городов>
+Accept: application/json
+
+###

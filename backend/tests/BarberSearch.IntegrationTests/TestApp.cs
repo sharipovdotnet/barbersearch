@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Addresses;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Application.Privacy;
 using BarberSearch.Application.Push;
@@ -162,7 +163,9 @@ public sealed class TestApp : IAsyncDisposable
     /// <para>
     /// <paramref name="timeProvider"/> и <paramref name="telegramSender"/> заменяют
     /// регистрации Web: тестам нужно двигать «сейчас» и перехватывать сообщения, не
-    /// отправляя их в настоящий Telegram.
+    /// отправляя их в настоящий Telegram. <paramref name="addressSuggestionsProvider"/>
+    /// подменяет порт подсказок адреса, чтобы тесты не ходили в DaData и могли видеть
+    /// дошедший до провайдера запрос.
     /// </para>
     /// </remarks>
     public static async Task<TestApp> StartAsync(
@@ -171,7 +174,8 @@ public sealed class TestApp : IAsyncDisposable
         TimeProvider? timeProvider = null,
         ITelegramSender? telegramSender = null,
         IEmailSender? emailSender = null,
-        IPushSender? pushSender = null)
+        IPushSender? pushSender = null,
+        IAddressSuggestionsProvider? addressSuggestionsProvider = null)
     {
         ArgumentNullException.ThrowIfNull(database);
 
@@ -212,7 +216,8 @@ public sealed class TestApp : IAsyncDisposable
                 timeProvider,
                 telegramSender,
                 emailSender,
-                pushSender);
+                pushSender,
+                addressSuggestionsProvider);
 
             var client = factory.CreateClient(new WebApplicationFactoryClientOptions
             {
@@ -281,17 +286,20 @@ public sealed class TestApp : IAsyncDisposable
         private readonly ITelegramSender? _telegramSender;
         private readonly IEmailSender? _emailSender;
         private readonly IPushSender? _pushSender;
+        private readonly IAddressSuggestionsProvider? _addressSuggestionsProvider;
 
         public IntegrationWebApplicationFactory(
             TimeProvider? timeProvider,
             ITelegramSender? telegramSender,
             IEmailSender? emailSender,
-            IPushSender? pushSender)
+            IPushSender? pushSender,
+            IAddressSuggestionsProvider? addressSuggestionsProvider)
         {
             _timeProvider = timeProvider;
             _telegramSender = telegramSender;
             _emailSender = emailSender;
             _pushSender = pushSender;
+            _addressSuggestionsProvider = addressSuggestionsProvider;
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -338,6 +346,14 @@ public sealed class TestApp : IAsyncDisposable
                 {
                     services.RemoveAll<IPushSender>();
                     services.AddSingleton(_pushSender);
+                }
+
+                if (_addressSuggestionsProvider is not null)
+                {
+                    // Подсказки адреса — внешний платный провайдер: тест подставляет порт,
+                    // чтобы не ходить в сеть и видеть запрос, дошедший до адаптера.
+                    services.RemoveAll<IAddressSuggestionsProvider>();
+                    services.AddSingleton(_addressSuggestionsProvider);
                 }
             });
         }

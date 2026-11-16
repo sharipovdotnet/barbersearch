@@ -1,12 +1,12 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: **13 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> Code state: **14 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **625 domain + 1044 application + 414 infrastructure + 337 integration (2420 total)**;
-> the three unit projects are green locally (2026-11-15), integration runs on PostgreSQL
-> (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
+> Tests: **625 domain + 1068 application + 452 infrastructure + 343 integration (2488 total)**;
+> the three unit projects and the integration project are green locally (2026-11-16),
+> integration runs on PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
 
 ---
 
@@ -63,7 +63,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (nine src projects + four test projects) |
+| Target framework | `net10.0` (ten src projects + four test projects) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
@@ -86,7 +86,7 @@ Package versions are inline in `.csproj`. `global.json`, `Directory.Build.props`
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 13 projects (nine src + four test)
+    ├── BarberSearch.sln                  ← 14 projects (ten src + four test)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -162,6 +162,12 @@ backend/                                  ← workspace root
         │   ├── PushSenderExtensions.cs   ← AddPushSender: PushOptions, именованный HttpClient, синглтоны
         │   └── BarberSearch.Infrastructure.Push.csproj → Application, Contracts, Shared
         │
+        ├── BarberSearch.Infrastructure.Geocoding/      ← external geo adapters: address suggestions now, geocoding/reverse geocoding later
+        │   ├── DadataAddressSuggestionsProvider.cs  ← DaData Suggest API over a named HttpClient
+        │   ├── CachedAddressSuggestionsProvider.cs  ← TTL decorator on ConcurrentDictionary + TimeProvider
+        │   ├── AddressSuggestionsExtensions.cs      ← AddAddressSuggestions: options, named client, adapter, cache
+        │   └── BarberSearch.Infrastructure.Geocoding.csproj → Application, Contracts, Shared
+        │
         └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
@@ -172,7 +178,7 @@ backend/                                  ← workspace root
             ├── OpenApi/                  ← Bearer security scheme для Swagger UI
             ├── Common/                   ← ApiController (Result → HTTP) + FailureProblemDetails (ErrorType → status)
             │                               + MediaDelivery (разбор ?size, ETag/304, политика кэша)
-            ├── Controllers/              ← 33 контроллера: 32 доменных (149 endpoints) + AuthController (14 actions)
+            ├── Controllers/              ← 34 контроллера: 33 доменных (151 endpoints) + AuthController (14 actions)
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
@@ -242,6 +248,10 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 `Application` только (транспорт Bot API не знает домена и EF; Web видит и его настройки —
 контроллеру вебхука нужен `WebhookSecret`) · `BarberSearch.Infrastructure.Push` → `Application`,
 `Contracts`, `Shared` (FCM-транспорт не знает домена и EF; коды ошибок берёт из `Contracts`) ·
+`BarberSearch.Infrastructure.Geocoding` → `Application`, `Contracts`, `Shared` (the external
+geo-adapter family: DaData address suggestions behind `IAddressSuggestionsProvider` today,
+geocoding/reverse geocoding later; it knows neither the domain nor EF, and reaches the vendor
+through the named `geocoding` `HttpClient`) ·
 `Shared` → CSharpFunctionalExtensions.
 
 > Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
@@ -260,7 +270,13 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 > or contains `*` (R-47). The push chain is registered next to the email one: `AddPushSender(startup.Push)`
 > binds the `Push` section (already range-checked), registers the named `fcm` `HttpClient`, the OAuth
 > token provider and `IPushSender`; `PushDispatchService` is a singleton hosted service so tests can
-> call the same instance's `RunTickAsync` (§20).
+> call the same instance's `RunTickAsync` (§20). Next to `AddPushSender` the composition root calls
+> `AddAddressSuggestions(startup.AddressSuggestions)`: it registers the already range-checked
+> `AddressSuggestions` section, the named `geocoding` `HttpClient` with its timeout, the DaData
+> adapter and the TTL cache decorator behind `IAddressSuggestionsProvider`. A disabled provider does
+> not break startup: with `AddressSuggestions:Enabled=false` and an empty key the host still starts
+> and both endpoints answer `409 addressSuggestions.unavailable`, so the salon form stays plain text
+> (§12.10).
 
 ---
 
@@ -366,7 +382,7 @@ its environment variables.
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all thirteen projects. Verify with:
+`BarberSearch.sln` lists all fourteen projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
@@ -375,7 +391,7 @@ dotnet sln BarberSearch/BarberSearch.sln list
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
 `BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`,
 `BarberSearch.Infrastructure.Email`, `BarberSearch.Infrastructure.Telegram`,
-`BarberSearch.Infrastructure.Push`, `Shared`,
+`BarberSearch.Infrastructure.Push`, `BarberSearch.Infrastructure.Geocoding`, `Shared`,
 `..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
 `..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`,
 `..\tests\BarberSearch.Infrastructure.UnitTests\BarberSearch.Infrastructure.UnitTests.csproj`,
@@ -411,11 +427,17 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 `ProjectConfigurationPlatforms`, GUID проекта — `{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}`;
 проект не вложен ни в одну папку решения, путь — `src\BarberSearch.Infrastructure.Push\…csproj`.
 
-Since 2026-10-25 (R-54) all thirteen `Project(…)` entries use the SDK-style project type GUID
+**`BarberSearch.Infrastructure.Geocoding` добавлен 2026-11-16 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Infrastructure.Push`, четыре строки
+`ProjectConfigurationPlatforms`, GUID проекта — `{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}`;
+проект не вложен ни в одну папку решения, путь —
+`src\BarberSearch.Infrastructure.Geocoding\…csproj`.
+
+Since 2026-10-25 (R-54) all fourteen `Project(…)` entries use the SDK-style project type GUID
 `{9A19103F-16F7-4668-BE54-9A1E7A4F7556}`; the legacy C# project-type GUID is gone. The solution
 folder `tests` keeps `{2150E333-…}`. Nothing else in the file was touched: project GUIDs, paths,
 configurations and the order of the lines are unchanged. `dotnet sln list` still prints the same
-thirteen projects, and Debug and Release build with 0 errors / 0 warnings.
+fourteen projects, and Debug and Release build with 0 errors / 0 warnings.
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
 > adds `x64`/`x86` solution configurations for every project and nests the new project into the
@@ -435,7 +457,7 @@ tree without trouble. Retry that one command with the `danger-full-access` sandb
 run it from a normal developer shell — then both commands succeed:
 
 ```powershell
-dotnet build BarberSearch/BarberSearch.sln     # 13 projects, 0 errors, 0 warnings
+dotnet build BarberSearch/BarberSearch.sln     # 14 projects, 0 errors, 0 warnings
 ```
 
 If the session is ever confined again, the symptom is
@@ -565,6 +587,7 @@ Target layering (bold = already exists):
 BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [DONE]
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
 BarberSearch.Infrastructure.Push → FCM HTTP v1 transport, OAuth token, no FCM SDK   [DONE]
+BarberSearch.Infrastructure.Geocoding → DaData address suggestions, cache decorator, no vendor SDK   [DONE]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
@@ -973,13 +996,13 @@ The rules below were pushed to the application layer because the aggregate canno
 
 | Слой | Статус |
 |---|---|
-| Solution | ✅ 13 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
+| Solution | ✅ 14 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 30 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
 | Tests | ✅ 625 domain + 1044 application + 414 infrastructure + 337 integration (2420 total); unit-проекты зелёные локально (2026-11-15), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 170 обработчиков (124 command + 46 query), 22 абстракции репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 53 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 27 конфигураций, 22 репозитория, `IUnitOfWork`, 27 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита; `push_device_tokens` и `push_notifications` — обе с FK на `users` `ON DELETE CASCADE`, без аудита (§20) |
-| Web | ✅ 33 контроллера / 163 endpoint (149 доменных + 14 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний барберу), `EmailDispatchService` (воркер outbox, §19) и `PushDispatchService` (воркер push, §20); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
+| Web | ✅ 34 контроллера / 165 endpoint (151 доменных + 14 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний барберу), `EmailDispatchService` (воркер outbox, §19) и `PushDispatchService` (воркер push, §20); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
 
@@ -1390,7 +1413,7 @@ Suggested order:
    where review→rating recalculation and the two rules in §7.6 belong.
    **Partly done:** the project exists (→ `Domain`, `Shared`), declares ten repository
    abstractions — each in the folder of its entity, e.g. `Users/IUserRepository.cs`,
-   `Reviews/IReviewRepository.cs` — and carries **163 handlers (118 command + 45 query)** in per-entity
+   `Reviews/IReviewRepository.cs` — and carries **165 handlers (118 command + 47 query)** in per-entity
    folders (`{Entity}/{Operation}/{Type}.cs`, folder = type name without the
    `Command`/`Query`/`Handler` suffix, namespace = folder path). The contracts live in
    `Abstractions/`; `DependencyInjection.AddApplication()` registers every handler by assembly
@@ -1511,12 +1534,46 @@ Suggested order:
     (`approve`/`reject`, причина отказа 1..500). Админский `POST api/salons` по-прежнему создаёт
     сразу `Active`-салон. `IsActive` остаётся видимостью, публичная выдача требует ещё
     `ModerationStatus == Active`. Имя салона неизменно (переименование — отдельный срез),
-    координаты вводятся вручную (карта/геокодер — отдельное решение), повторная отправка после
-    отказа не реализована — UI не показывает мёртвую кнопку. Аудит: `moderationStatus` в
+    координаты по-прежнему можно ввести вручную, а подсказки города и адреса (2026-11-16) —
+    прогрессивное улучшение ввода, а не новые обязательные поля (см. ниже); повторная отправка
+    после отказа не реализована — UI не показывает мёртвую кнопку. Аудит: `moderationStatus` в
     allowlist, `ownerUserId`/`rejectionReason` — нет (§17.8). Владелец управляет составом салона:
     читает прикреплённых барберов, ищет кандидатов по имени/email, прикрепляет и открепляет их
     (`GET/POST/DELETE api/salons/{id}/barbers`, `GET .../barber-candidates`); привязка — та же
     строка `barber_salons`, первый салон профиля становится основным, владельца убрать нельзя.
+
+    **Подсказки города и адреса (2026-11-16, срез «address suggestions»).** Сначала город, затем
+    адрес: форма салона подсказывает города, а выбранный город фильтрует подсказки улиц. Оба
+    чтения идут через бэкенд — `GET api/addresses/cities` и `GET api/addresses/suggest` — под
+    `[Authorize]` (все сценарии заполнения адреса уже аутентифицированы, а квота провайдера
+    платная) и политикой лимитера `addresses` (60/мин на пользователя: ключ — claim `sub`,
+    иначе адрес клиента). У ответов свой TTL-кэш на `ConcurrentDictionary` + `TimeProvider`
+    (по умолчанию 900 с, `0` выключает); в БД и аудит они ничего не пишут, домен не меняют.
+    Провайдер — DaData Suggest API за портом `IAddressSuggestionsProvider` (адаптер
+    `DadataAddressSuggestionsProvider` в `BarberSearch.Infrastructure.Geocoding`), поэтому смена
+    вендора не трогает Application и HTTP-контракт. Ключ живёт только на сервере
+    (`AddressSuggestions:ApiKey`, в окружении — `AddressSuggestions__ApiKey`) и не попадает ни в
+    ответ, ни в лог; запросы уходят вендору, то есть строка адреса обрабатывается внешним
+    сервисом — в журнале остаются только провайдер, bound, статус, длительность и длина запроса,
+    без самого запроса, адреса, координат, ключа и тела ответа. `AddressSuggestions:Enabled=false`
+    по умолчанию: без ключа старт проходит, а оба эндпоинта отвечают
+    `409 addressSuggestions.unavailable` — подсказки остаются прогрессивным улучшением, поля
+    формы — обычным текстом.
+
+    Выбранный город даёт `providerId` (у DaData — `fias_id`); клиент возвращает его в
+    `cityProviderId`, и подсказки адреса фильтруются по `city_fias_id`. Если город ввели руками,
+    работает фильтр по строке `city`, а без города запрос уходит без фильтра — приоритет именно
+    такой, чтобы одноимённые города не смешивались, но ручной ввод не ломался. **Граница среза
+    (осознанная, а не недосмотр):** `providerId` возвращается клиенту и передаётся обратно, но
+    **не сохраняется**; `fias_id` и нормализованного адреса в БД нет; пояс из координат не
+    выводится (`timeZoneId` в ответе адреса всегда `null` — поле зарезервировано под следующий
+    срез); каталога городов из БД для публичного поиска нет (города приходят от провайдера:
+    `SELECT DISTINCT city` не даёт `fias` и не знает городов без салонов). Сервер по-прежнему
+    **доверяет** координатам из `POST api/salons` и `PUT api/salons/{id}/location`: сверка
+    «адрес ↔ координаты» (резолв по `providerId` при сохранении) — следующий срез, поэтому домен
+    пока молча примет адрес одного города с координатами другого. Это зафиксировано сознательно,
+    чтобы следующий срез не выглядел внезапным.
+
 11. **Place kind and unlisted places** — **decided 2026-11-06 and implemented (issue-54):**
     место приёма имеет тип `Salon.Kind` (`PlaceKind`: `Salon`, `RentalStudio`, `SoloStudio`,
     `Home`, `Mobile`) и отдельный флаг `Salon.IsListed`, **не** выводимый из типа. Скрытыми
@@ -2383,7 +2440,7 @@ Caching before measuring is how a system becomes fast and wrong at the same time
 
 ## 16. Web / API layer (added 2026-10-16)
 
-**32 domain controllers (+ `AuthController`), 163 endpoints: 149 domain + 14 auth** — one endpoint
+**33 domain controllers (+ `AuthController`), 165 endpoints: 151 domain + 14 auth** — one endpoint
 per Application operation, plus the fourteen `AuthController` actions (§17). The route always names
 the aggregate that owns the child entity:
 
@@ -2421,6 +2478,7 @@ the aggregate that owns the child entity:
 | `BarberRequestsController` | `api/barber-requests` | 2 (create + mine) |
 | `AdminBarberRequestsController` | `api/admin/barber-requests` | 4 (list + by id + approve + reject, admin only) |
 | `PushDevicesController` | `api/push/devices` | 2 (register + unregister an FCM device; any authenticated role, `204`, §20.4) |
+| `AddressesController` | `api/addresses` | 2 (city and address suggestions; any authenticated role, `addresses` limiter, §12) |
 
 The push device routes are the customer half of §20; both answer `204` and take the owner from the
 session, never from the body:
@@ -2429,6 +2487,14 @@ session, never from the body:
 |---|---|---|---|
 | POST | `api/push/devices` | fallback auth (Bearer или cookie), rate limit записи | `{ token, platform: "Android" }` → `204`; upsert по токену: повтор обновляет `last_seen_at`, токен из другого аккаунта переходит к текущему; ошибки полей — `400 pushDeviceToken.token.invalid` / `.token.tooLong` / `.platform.unknown`, аноним — `401` |
 | POST | `api/push/devices/unregister` | fallback auth, rate limit записи | `{ token }` → `204`; удаляет только собственный токен, неизвестный/чужой/пустой — успех без эффекта (ответ не работает oracle'ом) |
+
+The address-suggestion routes back the salon form (§12.10); both are `[Authorize]`d, limited by the
+`addresses` policy (60/min per user) and read-only — no database, audit or domain writes:
+
+| Метод | Маршрут | Доступ | Что делает |
+|---|---|---|---|
+| GET | `api/addresses/cities` | fallback auth (Bearer или cookie), лимитер `addresses` 60/мин на пользователя | `?query=…&limit=…`: `query` ≥ 2 символов после trim, `limit` зажимается в `1..8` без `400`; `200` — голый JSON-массив `{ providerId, display, city, region, country, latitude, longitude }`, пусто — `200 []`; `400 addressSuggestions.query.tooShort` / `.query.tooLong`, `401`, `409 addressSuggestions.unavailable`, `429` |
+| GET | `api/addresses/suggest` | fallback auth (Bearer или cookie), лимитер `addresses` 60/мин на пользователя | `?query=…&cityProviderId=…&city=…&limit=…`: `query` ≥ 3 символов; `cityProviderId` — непрозрачный `providerId` из ответа городов и важнее свободного `city`; `200` — массив с `postalCode`, `latitude`, `longitude` и `timeZoneId: null`; `400 addressSuggestions.query.tooShort` / `.query.tooLong` / `.city.tooLong` / `.cityProviderId`; `401`, `409`, `429` |
 
 Conventions:
 
@@ -2454,8 +2520,9 @@ Conventions:
   записи 30/мин на `sub`, а без него — на IP (R-22, §17.5); на большинстве write-действий
   атрибутов `[EnableRateLimiting]` нет. `GET`/`HEAD`/`OPTIONS`/`TRACE` не ограничиваются, а `429`
   приходит как `ProblemDetails` с `Retry-After` и `errorCodes: ["rateLimit.exceeded"]`. Явные
-  политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48) и `reads` (120/мин на IP)
-  на семи публичных read-действиях (R-25, §17.5).
+  политики — `auth` (10/мин) в `AuthController` (включая `logout`, R-48), `reads` (120/мин на IP)
+  на семи публичных read-действиях (R-25, §17.5) и `addresses` (60/мин на пользователя) на двух
+  действиях `AddressesController` (§12.10).
 - Create endpoints answer **201** with `CreatedResourceResponse`; since 2026-10-25 (R-42) none of
   them set a `Location` header, because none has a self-URI readable right after creation. There is
   now exactly one exception, added 2026-11-10 (issue-83): `POST api/barber-profiles` answers `201`

@@ -34,6 +34,8 @@ public class RateLimitSettingsTests
         Assert.Equal(10, RateLimitSettings.AuthPermitLimit);
         Assert.Equal("reads", RateLimitSettings.ReadsPolicyName);
         Assert.Equal(120, RateLimitSettings.ReadPermitLimit);
+        Assert.Equal("addresses", RateLimitSettings.AddressesPolicyName);
+        Assert.Equal(60, RateLimitSettings.AddressesPermitLimit);
         Assert.Equal(30, RateLimitSettings.WritePermitLimit);
         Assert.Equal(TimeSpan.FromMinutes(1), RateLimitSettings.Window);
     }
@@ -79,6 +81,27 @@ public class RateLimitSettingsTests
 
         Assert.Equal("unknown", RateLimitSettings.WritePartitionKey(withoutIp));
         Assert.Equal("unknown", RateLimitSettings.WritePartition(withoutIp).PartitionKey);
+    }
+
+    [Fact]
+    public void AddressesPartition_UsesTheUserKeyWhenSubjectIsPresent()
+    {
+        var authenticated = CreateContext(HttpMethods.Get);
+        authenticated.User = CreatePrincipal(UserId);
+
+        Assert.Equal(
+            "user:" + UserId,
+            RateLimitSettings.AddressesPartition(authenticated).PartitionKey);
+
+        var byIp = CreateContext(HttpMethods.Get);
+        byIp.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.8");
+
+        Assert.Equal("ip:203.0.113.8", RateLimitSettings.AddressesPartition(byIp).PartitionKey);
+
+        var withoutIp = CreateContext(HttpMethods.Get);
+        withoutIp.Connection.RemoteIpAddress = null;
+
+        Assert.Equal("unknown", RateLimitSettings.AddressesPartition(withoutIp).PartitionKey);
     }
 
     [Fact]
