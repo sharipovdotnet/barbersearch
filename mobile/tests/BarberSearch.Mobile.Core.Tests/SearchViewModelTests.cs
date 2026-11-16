@@ -213,7 +213,7 @@ public sealed class SearchViewModelTests
     }
 
     [Fact]
-    public void City_SuggestionsFailure_HidesListWithoutBreakingSearch()
+    public async Task City_SuggestionsFailure_HidesListWithoutBreakingSearch()
     {
         var api = FakeApi.Returning(Page(Barber("Алиса")));
         api.CitySuggestionsFailure = new BarberSearchApiException(
@@ -230,6 +230,11 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.CitySuggestions.IsVisible);
         Assert.Null(viewModel.ErrorMessage);
         Assert.Equal("Екат", viewModel.City);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Single(viewModel.Barbers);
+        Assert.False(viewModel.HasError);
     }
 
     [Fact]
