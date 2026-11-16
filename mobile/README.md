@@ -104,6 +104,18 @@ the results repeats the web's plural (`Показан 1 барбер`, `Пока
 `Показаны 5 барберов`). A finished search scrolls the page to the results, the way the web scrolls
 to `#barbers` after submit.
 
+The screen opens with the product's mark: the web header's scissors (`site-header.tsx`, lucide
+`scissors`) in a `Primary` tile beside «Hairo», with the landing headline
+(`home-hero.tsx`) as the tagline. The mark is the lucide path itself — the two circles as arcs, the
+three cuts as segments — written on each `Path`, so its `Stroke` follows the theme through
+`AppThemeBinding` like the tab icons; an SVG in `Resources/Images` would stay one colour. A
+`GeometryGroup` of `EllipseGeometry`/`LineGeometry` reads better in XAML but draws a stray line and
+ring on Android (MAUI 10.0.110, API 36), so the single path string is deliberate. The empty results
+block copies the web's empty-state card (`barber-results.tsx`): a dashed `Border`, a `Muted` circle
+with the mark and centred text. The web puts its `Search` icon in that circle; the phone keeps the
+scissors on purpose, so the empty screen carries the product's face instead of repeating the
+«Найти» button above it.
+
 The date filter is a picker, not a calendar: MAUI's `DatePicker` cannot be empty, and the filter is
 optional. Its first item is «Любая дата», then today and the next 30 days in the device's calendar
 (the web uses the browser date). The bounded list and the dropped `<datalist>` hints of the

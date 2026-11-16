@@ -14,6 +14,48 @@
         <VerticalStackLayout Padding="16" Spacing="16">
 
             <!--
+                Шапка раздела: логотип веба (ножницы + имя) вместо пустого верха над формой.
+                Знак — тот же, что в site-header.tsx, но крупнее и в плашке Primary: на
+                телефоне 16 pt из шапки сайта потерялись бы. Контур записан строкой, как
+                в SVG lucide: круг — две дуги, остальное — отрезки. Подпись — заголовок
+                витрины (home-hero.tsx), а не новая строка.
+            -->
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <Border
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                    HeightRequest="48"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 10"
+                    VerticalOptions="Center"
+                    WidthRequest="48">
+                    <Path
+                        Data="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
+                        HeightRequest="24"
+                        HorizontalOptions="Center"
+                        Stroke="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}"
+                        StrokeLineCap="Round"
+                        StrokeLineJoin="Round"
+                        StrokeThickness="2"
+                        VerticalOptions="Center"
+                        WidthRequest="24" />
+                </Border>
+                <VerticalStackLayout
+                    Grid.Column="1"
+                    Spacing="2"
+                    VerticalOptions="Center">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="24"
+                        Text="Hairo" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Найди барбера и запишись за минуту'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <!--
                 Форма поиска: те же шесть фильтров, что на витрине веба, разложенные под палец.
                 Справочники приходят из API, поэтому их селекты ждут загрузки и умеют «Повторить».
             -->
@@ -257,24 +299,54 @@
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
 
-                <!-- Пустое состояние: подсказка зависит от последних отправленных фильтров. -->
-                <VerticalStackLayout
+                <!--
+                    Пустое состояние: подсказка зависит от последних отправленных фильтров.
+                    Коробка повторяет пустую выдачу веба (barber-results.tsx): пунктирная
+                    рамка, кружок Muted со знаком и текст по центру. Знак — ножницы шапки:
+                    в вебе здесь лупа Search, но пустому экрану на телефоне нужен бренд,
+                    а не второй «поиск» рядом с кнопкой «Найти».
+                -->
+                <Border
                     Margin="0,24,0,0"
+                    Padding="24,40"
                     IsVisible="{Binding ShowEmptyState}"
-                    Spacing="8">
-                    <Label
-                        FontFamily="GeistSemiBold"
-                        FontSize="16"
-                        HorizontalTextAlignment="Center"
-                        IsVisible="{Binding HasEmptyTitle}"
-                        LineBreakMode="WordWrap"
-                        Text="{Binding EmptyTitle}" />
-                    <Label
-                        HorizontalTextAlignment="Center"
-                        LineBreakMode="WordWrap"
-                        Text="{Binding EmptyDescription}"
-                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                </VerticalStackLayout>
+                    StrokeDashArray="4,4"
+                    StrokeShape="RoundRectangle 14">
+                    <VerticalStackLayout Spacing="12">
+                        <Border
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="48"
+                            HorizontalOptions="Center"
+                            Stroke="Transparent"
+                            StrokeShape="RoundRectangle 24"
+                            WidthRequest="48">
+                            <Path
+                                Data="M6 3a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M8.12 8.12L12 12 M20 4L8.12 15.88 M6 15a3 3 0 1 1 0 6a3 3 0 1 1 0-6 M14.8 14.8L20 20"
+                                HeightRequest="24"
+                                HorizontalOptions="Center"
+                                Stroke="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                StrokeLineCap="Round"
+                                StrokeLineJoin="Round"
+                                StrokeThickness="2"
+                                VerticalOptions="Center"
+                                WidthRequest="24" />
+                        </Border>
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                FontFamily="GeistMedium"
+                                FontSize="16"
+                                HorizontalTextAlignment="Center"
+                                IsVisible="{Binding HasEmptyTitle}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding EmptyTitle}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding EmptyDescription}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
             </VerticalStackLayout>
 
         </VerticalStackLayout>
