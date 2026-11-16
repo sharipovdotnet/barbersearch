@@ -361,6 +361,13 @@ in Core owns both base addresses.
   until `/privacy` is amended and `PrivacyPolicy.Version` is bumped (`backend/AGENT.md` §20.9); a
   build without `push.json` sends nothing anywhere.
 
+- **The «Профиль» tab runs one typographic step above the rest of the app.** Screen title 22, card
+  title / person name 18, body 16, meta 14 — exactly one step up the same 12/14/16/18/20 scale, no
+  new size or font. The smallest text in the product (email verification status, role, reminder
+  caption) lives on that tab, and the tab exists to read one's own account data; other pages keep
+  the default body of 14. This is a deliberate deviation from the web's text-xs/text-sm pairing on
+  that page, recorded here rather than left silent.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:
