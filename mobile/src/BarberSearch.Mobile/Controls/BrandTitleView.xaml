@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Controls.BrandTitleView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls">
+
+    <!--
+        Заголовок навигационной панели: ножницы и название раздела, как логотип и имя в шапке
+        веба. Текст приходит из свойства Text, поэтому локаль одна на всех страницах.
+    -->
+    <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+        <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+        <Label
+            x:Name="TitleLabel"
+            FontFamily="GeistSemiBold"
+            FontSize="20"
+            TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}"
+            VerticalOptions="Center" />
+    </HorizontalStackLayout>
+
+</ContentView>

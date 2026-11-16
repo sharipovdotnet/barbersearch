@@ -4,7 +4,13 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     Title="{loc:Translate Key='Карта'}">
+
+    <!-- Заголовок навигации: ножницы перед названием раздела, как логотип в шапке веба. -->
+    <Shell.TitleView>
+        <controls:BrandTitleView Text="{loc:Translate Key='Карта'}" />
+    </Shell.TitleView>
 
     <VerticalStackLayout Padding="24" Spacing="8" VerticalOptions="Center">
         <Label

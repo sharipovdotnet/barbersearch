@@ -5,9 +5,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:theming="clr-namespace:BarberSearch.Mobile.Theming"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:ProfileViewModel"
     Title="{loc:Translate Key='Профиль'}">
+
+    <!-- Заголовок навигации: ножницы перед названием раздела, как логотип в шапке веба. -->
+    <Shell.TitleView>
+        <controls:BrandTitleView Text="{loc:Translate Key='Профиль'}" />
+    </Shell.TitleView>
 
     <!--
         Вкладка «Профиль» — хаб: без сессии форма входа, с сессией карточка личности и
@@ -44,10 +50,27 @@
         <ScrollView IsVisible="{Binding IsFormVisible}">
             <VerticalStackLayout Padding="0,24,0,0" Spacing="12">
 
-                <Label
-                    FontFamily="GeistSemiBold"
-                    FontSize="20"
-                    Text="{loc:Translate Key='Вход в Hairo'}" />
+                <!--
+                    Вход начинается со знака бренда: тот же логотип, что на поиске, но
+                    компактнее — плашка 40 и заголовок рядом, чтобы форма не открывалась
+                    голой строкой на пустом экране.
+                -->
+                <HorizontalStackLayout Spacing="12">
+                    <Border
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                        HeightRequest="40"
+                        Stroke="Transparent"
+                        StrokeShape="RoundRectangle 8"
+                        VerticalOptions="Center"
+                        WidthRequest="40">
+                        <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                    </Border>
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="20"
+                        Text="{loc:Translate Key='Вход в Hairo'}"
+                        VerticalOptions="Center" />
+                </HorizontalStackLayout>
 
                 <VerticalStackLayout Spacing="4">
                     <Label Text="Email" />
