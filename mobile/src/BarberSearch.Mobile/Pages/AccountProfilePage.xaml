@@ -184,7 +184,7 @@
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="{loc:Translate Key='Имя и телефон видны вам и администратору. Барбер увидит имя в записи.'}"
+                            Text="{loc:Translate Key='Имя и телефон видны вам и администратору. Мастер увидит имя в записи.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <Label Text="{loc:Translate Key='Имя'}" />

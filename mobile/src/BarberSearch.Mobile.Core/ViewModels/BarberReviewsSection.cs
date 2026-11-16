@@ -166,7 +166,7 @@ public sealed partial class BarberReviewsSection : ObservableObject
     /// Вызывается карточкой после загрузки профиля. При <paramref name="total"/> = 0 запрос
     /// не делается вовсе: сервер вернул бы пустую страницу, а экран и так знает ответ.
     /// </remarks>
-    /// <param name="profileId">Идентификатор профиля барбера.</param>
+    /// <param name="profileId">Идентификатор профиля мастера.</param>
     /// <param name="timeZoneId">IANA-пояс основного салона; неизвестный — UTC.</param>
     /// <param name="total">Число опубликованных отзывов из профиля.</param>
     /// <param name="summaryText">Сводка — тот же текст рейтинга, что в шапке карточки.</param>

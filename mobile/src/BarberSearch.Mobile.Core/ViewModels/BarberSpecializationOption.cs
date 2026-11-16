@@ -3,7 +3,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 namespace BarberSearch.Mobile.Core.ViewModels;
 
 /// <summary>
-/// Специализация барбера: название из справочника и описание.
+/// Специализация мастера: название из справочника и описание.
 /// </summary>
 /// <remarks>
 /// Порядок — серверный (по имени справочника): карточка его не пересортировывает, чтобы
@@ -35,7 +35,7 @@ public sealed class BarberSpecializationOption
     /// <summary>
     /// Собирает пункт из ответа карточки.
     /// </summary>
-    /// <param name="specialization">Специализация барбера.</param>
+    /// <param name="specialization">Специализация мастера.</param>
     /// <returns>Пункт списка «Специализации».</returns>
     public static BarberSpecializationOption From(BarberProfileSpecializationResponse specialization)
     {

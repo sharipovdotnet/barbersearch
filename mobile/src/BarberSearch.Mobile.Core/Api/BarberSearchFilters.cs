@@ -3,7 +3,7 @@ using BarberSearch.Domain.BarberProfiles.Enums;
 namespace BarberSearch.Mobile.Core.Api;
 
 /// <summary>
-/// Фильтры публичного поиска барберов: те же шесть, что на витрине веба.
+/// Фильтры публичного поиска мастеров: те же шесть, что на витрине веба.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -31,7 +31,7 @@ public sealed record BarberSearchFilters
     public string City { get; init; } = string.Empty;
 
     /// <summary>
-    /// Календарная дата, на которую у барбера есть рабочий день; <c>null</c> — без фильтра.
+    /// Календарная дата, на которую у мастера есть рабочий день; <c>null</c> — без фильтра.
     /// </summary>
     public DateOnly? Date { get; init; }
 
@@ -53,7 +53,7 @@ public sealed record BarberSearchFilters
 
     /// <summary>
     /// Подстрока дополнительной услуги; пустая строка — без фильтра. Сервер сравнивает её
-    /// без учёта регистра с любым элементом списка дополнительных услуг барбера.
+    /// без учёта регистра с любым элементом списка дополнительных услуг мастера.
     /// </summary>
     public string AdditionalService { get; init; } = string.Empty;
 

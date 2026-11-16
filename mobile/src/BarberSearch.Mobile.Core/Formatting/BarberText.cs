@@ -6,7 +6,7 @@ using BarberSearch.Mobile.Core.Localization;
 namespace BarberSearch.Mobile.Core.Formatting;
 
 /// <summary>
-/// Тексты карточки барбера: грейд, место приёма, цена, длительность, отзывы.
+/// Тексты карточки мастера: грейд, место приёма, цена, длительность, отзывы.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,13 +30,13 @@ public static class BarberText
     {
         [Grade.None] = "Без грейда",
         [Grade.Intern] = "Стажёр",
-        [Grade.JuniorBarber] = "Младший барбер",
-        [Grade.MiddleBarber] = "Барбер",
-        [Grade.SeniorBarber] = "Старший барбер",
+        [Grade.JuniorBarber] = "Младший мастер",
+        [Grade.MiddleBarber] = "Мастер",
+        [Grade.SeniorBarber] = "Старший мастер",
         [Grade.ArtDirector] = "Арт-директор",
         [Grade.BarberSchoolTrainer] = "Тренер школы",
         [Grade.Manager] = "Управляющий",
-        [Grade.CompetitionBarber] = "Соревновательный барбер",
+        [Grade.CompetitionBarber] = "Соревновательный мастер",
         [Grade.BrandAmbassador] = "Амбассадор бренда",
         [Grade.BarbershopOwner] = "Владелец барбершопа",
     };
@@ -179,7 +179,7 @@ public static class BarberText
         value is null ? "—" : value.Value.ToString("0.0", Loc.Culture);
 
     /// <summary>
-    /// Расстояние до барбера: «850 м», «1,2 км», «12 км».
+    /// Расстояние до мастера: «850 м», «1,2 км», «12 км».
     /// </summary>
     /// <remarks>
     /// <para>
@@ -219,15 +219,15 @@ public static class BarberText
     }
 
     /// <summary>
-    /// Счётчик найденных барберов: «Показан 1 барбер», «Показаны 2 барбера»,
-    /// «Показаны 5 барберов».
+    /// Счётчик найденных мастеров: «Показан 1 мастер», «Показаны 2 мастера»,
+    /// «Показаны 5 мастеров».
     /// </summary>
     /// <remarks>
-    /// Формы повторяют плюрал <c>shownBarbers</c> веба: 11–14 всегда «барберов», дальше —
+    /// Формы повторяют плюрал <c>shownBarbers</c> веба: 11–14 всегда «мастеров», дальше —
     /// по последней цифре. Отрицательных значений не бывает, но берётся модуль, чтобы строка
     /// не сломалась на мусорных данных.
     /// </remarks>
-    /// <param name="count">Сколько барберов показано.</param>
+    /// <param name="count">Сколько мастеров показано.</param>
     /// <returns>Строка счётчика.</returns>
     public static string ShownBarbers(int count) =>
         Loc.Plural(PluralKey.ShownBarbers, count);
@@ -331,11 +331,11 @@ public static class BarberText
     /// <param name="barberName">Имя мастера.</param>
     /// <param name="number">Номер фотографии с единицы.</param>
     /// <param name="description">Подпись фотографии; может быть пустой.</param>
-    /// <returns>Подпись либо шаблон «Работа барбера N, фото M».</returns>
+    /// <returns>Подпись либо шаблон «Работа мастера N, фото M».</returns>
     public static string PhotoAlt(string barberName, int number, string? description) =>
         string.IsNullOrWhiteSpace(description)
             ? Loc.T(
-                "Работа барбера {0}, фото {1}",
+                "Работа мастера {0}, фото {1}",
                 barberName ?? string.Empty,
                 number.ToString(CultureInfo.InvariantCulture))
             : description.Trim();

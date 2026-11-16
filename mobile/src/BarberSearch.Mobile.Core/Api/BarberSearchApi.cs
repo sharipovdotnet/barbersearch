@@ -12,7 +12,7 @@ using BarberSearch.Contracts.Specializations.GetSpecializations;
 namespace BarberSearch.Mobile.Core.Api;
 
 /// <summary>
-/// HTTP-клиент публичных чтений: поиск, справочники фильтров, карточка барбера и слоты.
+/// HTTP-клиент публичных чтений: поиск, справочники фильтров, карточка мастера и слоты.
 /// </summary>
 /// <remarks>
 /// Клиент тонкий: адрес, сериализация и разбор ошибок. Никакой бизнес-логики здесь нет —

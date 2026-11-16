@@ -99,9 +99,9 @@ failure does not block city, date or language: the form shows «Не удало�
 empty hides its own select, as on the web.
 
 The empty state keeps the web's wording and priority: a city is more specific than a date, a date
-more specific than the other filters, and without filters «Барберов пока нет». The counter above
-the results repeats the web's plural (`Показан 1 барбер`, `Показаны 2 барбера`,
-`Показаны 5 барберов`). A finished search scrolls the page to the results, the way the web scrolls
+more specific than the other filters, and without filters «Мастеров пока нет». The counter above
+the results repeats the web's plural (`Показан 1 мастер`, `Показаны 2 мастера`,
+`Показаны 5 мастеров`). A finished search scrolls the page to the results, the way the web scrolls
 to `#barbers` after submit.
 
 The screen opens with the product's mark: the web header's scissors (`site-header.tsx`, lucide
@@ -156,7 +156,7 @@ tab; switching tabs inside the screen otherwise requests nothing.
 service, salon or time zone names — so each row is completed from the public barber card
 (`GET api/barbers/{id}`): the barber and salon names, the service by `barberServiceId`, the address,
 and the IANA zone used to show the time. Cards are cached per profile for the lifetime of the screen,
-at most four are requested at once, and a failed profile leaves the neutral labels («Барбер»,
+at most four are requested at once, and a failed profile leaves the neutral labels («Мастер»,
 «Услуга», «Салон») with the time in UTC plus a footnote under the list.
 
 `POST api/bookings/{id}/cancellation` (no body — the customer never writes a reason),

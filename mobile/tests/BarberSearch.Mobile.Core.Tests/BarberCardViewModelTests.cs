@@ -21,7 +21,7 @@ using BarberSearch.Mobile.Core.ViewModels;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки карточки барбера: загрузка, выбор услуги/салона/даты, слоты и отправка брони.
+/// Проверки карточки мастера: загрузка, выбор услуги/салона/даты, слоты и отправка брони.
 /// </summary>
 /// <remarks>
 /// Тексты сверяются дословно с вебом (<c>frontend/src/hooks/use-create-booking.ts</c>,
@@ -64,8 +64,8 @@ public sealed class BarberCardViewModelTests
         Assert.True(viewModel.HasProfile);
         Assert.True(viewModel.IsContentVisible);
         Assert.False(viewModel.IsLoading);
-        Assert.Equal("Тимур Барберов", viewModel.DisplayName);
-        Assert.Equal("Старший барбер", viewModel.GradeText);
+        Assert.Equal("Тимур Мастеров", viewModel.DisplayName);
+        Assert.Equal("Старший мастер", viewModel.GradeText);
         Assert.Equal("4,8 · 12 отзывов", viewModel.RatingText);
         Assert.StartsWith("E2E Studio", viewModel.PlaceText, StringComparison.Ordinal);
 
@@ -318,7 +318,7 @@ public sealed class BarberCardViewModelTests
         await harness.ViewModel.InitializeAsync(ProfileId);
 
         Assert.True(harness.ViewModel.HasEmptySlots);
-        Assert.Equal("В этот день барбер не работает.", harness.ViewModel.EmptySlotsText);
+        Assert.Equal("В этот день мастер не работает.", harness.ViewModel.EmptySlotsText);
         Assert.Empty(harness.ViewModel.Slots);
     }
 
@@ -536,7 +536,7 @@ public sealed class BarberCardViewModelTests
         // плитка сетки маленькая, и качать полноразмерный кадр ради неё незачем.
         Assert.Equal("http://localhost:5243/api/media/portfolio/photo-1.webp?size=md", photo.TileImageUrl);
         Assert.Equal("http://localhost:5243/api/media/portfolio/photo-1.webp", photo.ImageUrl);
-        Assert.Equal("Работа барбера Тимур Барберов, фото 1", photo.AltText);
+        Assert.Equal("Работа мастера Тимур Мастеров, фото 1", photo.AltText);
     }
 
     [Fact]
@@ -575,7 +575,7 @@ public sealed class BarberCardViewModelTests
         Assert.False(harness.ViewModel.ShowInitials);
         // 192 px на 64 pt при тройной плотности: тот же вариант, что в вебе.
         Assert.Equal("http://localhost:5243/api/media/avatars/avatar.webp?size=md", harness.ViewModel.AvatarImageUrl);
-        Assert.Equal("ТБ", harness.ViewModel.Initials);
+        Assert.Equal("ТМ", harness.ViewModel.Initials);
     }
 
     [Fact]
@@ -589,7 +589,7 @@ public sealed class BarberCardViewModelTests
         Assert.False(harness.ViewModel.HasAvatar);
         Assert.True(harness.ViewModel.ShowInitials);
         Assert.Null(harness.ViewModel.AvatarImageUrl);
-        Assert.Equal("ТБ", harness.ViewModel.Initials);
+        Assert.Equal("ТМ", harness.ViewModel.Initials);
     }
 
     [Fact]
@@ -830,7 +830,7 @@ public sealed class BarberCardViewModelTests
         IReadOnlyList<BarberProfileServiceResponse>? services = null,
         IReadOnlyList<BarberProfileSalonResponse>? salons = null,
         string? avatarUrl = null,
-        string displayName = "Тимур Барберов",
+        string displayName = "Тимур Мастеров",
         string? bio = null,
         int yearsOfExperience = 11,
         IReadOnlyList<Language>? languages = null,
@@ -1059,7 +1059,7 @@ public sealed class BarberCardViewModelTests
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Карточка не ищет барберов.");
+            throw new NotSupportedException("Карточка не ищет мастеров.");
 
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
             CancellationToken cancellationToken = default) =>

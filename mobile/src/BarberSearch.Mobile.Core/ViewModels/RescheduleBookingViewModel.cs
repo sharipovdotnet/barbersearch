@@ -32,7 +32,7 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
 
     private static string SlotsLoadErrorText => Loc.T("Не удалось загрузить свободное время.");
     private static string SubmitFailedText => Loc.T("Не удалось перенести запись.");
-    private static string NoWorkingDayText => Loc.T("В этот день барбер не работает.");
+    private static string NoWorkingDayText => Loc.T("В этот день мастер не работает.");
     private static string NoFreeTimeText => Loc.T("Свободного времени на этот день нет.");
     private static string NetworkErrorText => Loc.T(
         "Нет связи с сервером. Проверьте подключение и повторите попытку.");
@@ -77,7 +77,7 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     public ObservableCollection<BarberSlotOption> Slots { get; } = [];
 
     /// <summary>
-    /// Имя барбера из карточки: «Тимур Барберов».
+    /// Имя мастера из карточки: «Тимур Мастеров».
     /// </summary>
     [ObservableProperty]
     private string _barberName = BookingText.BarberFallback;
@@ -145,7 +145,7 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     private string? _slotsError;
 
     /// <summary>
-    /// Рабочий ли день у барбера: от этого зависит текст пустого дня.
+    /// Рабочий ли день у мастера: от этого зависит текст пустого дня.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EmptyDayText))]

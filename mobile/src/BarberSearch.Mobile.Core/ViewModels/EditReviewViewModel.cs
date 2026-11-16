@@ -41,7 +41,7 @@ public sealed partial class EditReviewViewModel : ObservableObject
     private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
 
     private static string HintsPublishedChangedText => Loc.T(
-        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке барбера.");
+        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке мастера.");
     private static string HintsPublishedUnchangedText => Loc.T(
         "Оценку можно изменить сразу: повторная проверка нужна только для текста.");
     private static string HintsModerationText => Loc.T(
@@ -78,7 +78,7 @@ public sealed partial class EditReviewViewModel : ObservableObject
     public event EventHandler<UpdateReviewResponse>? Saved;
 
     /// <summary>
-    /// Имя барбера: по кому отзыв.
+    /// Имя мастера: по кому отзыв.
     /// </summary>
     [ObservableProperty]
     private string _barberName = BookingText.BarberFallback;

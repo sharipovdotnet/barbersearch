@@ -23,9 +23,9 @@ namespace BarberSearch.Mobile.Core.Formatting;
 public static class BookingText
 {
     /// <summary>
-    /// Подпись барбера, пока карточка не загрузилась.
+    /// Подпись мастера, пока карточка не загрузилась.
     /// </summary>
-    public static string BarberFallback => Loc.T("Барбер");
+    public static string BarberFallback => Loc.T("Мастер");
 
     /// <summary>
     /// Подпись услуги, пока карточка не загрузилась.
@@ -41,7 +41,7 @@ public static class BookingText
     /// Объявление после успешно отправленного отзыва: он уходит на модерацию.
     /// </summary>
     public static string ReviewSubmittedAnnouncement => Loc.T(
-        "Спасибо! Отзыв отправлен на проверку: он появится на карточке барбера после модерации.");
+        "Спасибо! Отзыв отправлен на проверку: он появится на карточке мастера после модерации.");
 
     /// <summary>
     /// Максимальная длина комментария к отзыву — та же, что проверяет сервер.
@@ -162,12 +162,12 @@ public static class BookingText
     }
 
     /// <summary>
-    /// Заметка барбера строкой карточки: «Барбер: Покороче сзади».
+    /// Заметка мастера строкой карточки: «Мастер: Покороче сзади».
     /// </summary>
     /// <param name="note">Заметка из ответа API.</param>
     /// <returns>Подписанная строка либо <c>null</c>, если заметки нет.</returns>
     public static string? BarberNote(string? note) =>
-        string.IsNullOrWhiteSpace(note) ? null : Loc.T("Барбер: {0}", note.Trim());
+        string.IsNullOrWhiteSpace(note) ? null : Loc.T("Мастер: {0}", note.Trim());
 
     /// <summary>
     /// Заметка клиента строкой карточки: «Вы: Покороче сзади».
@@ -181,7 +181,7 @@ public static class BookingText
     /// Причина отмены для истории: с причиной или «Причина отмены не указана».
     /// </summary>
     /// <remarks>
-    /// Причину оставляет только барбер: клиент отменяет без неё, и тогда строка честно
+    /// Причину оставляет только мастер: клиент отменяет без неё, и тогда строка честно
     /// говорит, что причины нет, а не прячет сам факт отмены.
     /// </remarks>
     /// <param name="reason">Причина из ответа API.</param>

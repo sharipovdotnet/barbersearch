@@ -68,7 +68,7 @@ public sealed partial class BarberSlotOption : ObservableObject
 /// <param name="Date">Локальная дата салона, на которую считались слоты.</param>
 /// <param name="TimeZoneId">Пояс салона из ответа слотов.</param>
 /// <param name="SalonId">Салон, в котором создаётся бронь.</param>
-/// <param name="BarberServiceId">Услуга барбера — то, что принимает <c>POST api/bookings</c>.</param>
+/// <param name="BarberServiceId">Услуга мастера — то, что принимает <c>POST api/bookings</c>.</param>
 /// <param name="StartAt">Начало в UTC.</param>
 /// <param name="EndAt">Окончание в UTC.</param>
 /// <param name="ServiceName">Название услуги для сводки.</param>

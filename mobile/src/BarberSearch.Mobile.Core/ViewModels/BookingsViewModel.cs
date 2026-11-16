@@ -21,7 +21,7 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// <para>
 /// Два независимых списка (<c>upcoming</c> и <c>past</c>) с собственными курсорами и
 /// состоянием: переключение вкладок внутри экрана ничего не перезапрашивает, а история
-/// грузится лениво при первом открытии. Строки приходят без имён, поэтому имя барбера,
+/// грузится лениво при первом открытии. Строки приходят без имён, поэтому имя мастера,
 /// услуга, салон и пояс догружаются публичной карточкой и кэшируются на жизнь ViewModel.
 /// </para>
 /// <para>
@@ -54,14 +54,14 @@ public sealed partial class BookingsViewModel : ObservableObject
     private static string CancelFailedText => Loc.T("Не удалось отменить запись.");
 
     /// <summary>
-    /// Сноска под списком, когда часть карточек барберов не загрузилась.
+    /// Сноска под списком, когда часть карточек мастеров не загрузилась.
     /// </summary>
     public static string ProfilesWarningText => Loc.T(
-        "Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.");
+        "Часть карточек мастеров не загрузилась — имена и адреса могут быть неполными.");
 
     private static string UpcomingEmptyTitle => Loc.T("Пока ни одной записи");
     private static string UpcomingEmptyDescription => Loc.T(
-        "Выберите барбера, услугу и свободное время — запись появится здесь. "
+        "Выберите мастера, услугу и свободное время — запись появится здесь. "
         + "Прошлые визиты останутся в истории.");
     private static string HistoryEmptyTitle => Loc.T("История пока пуста");
     private static string HistoryEmptyDescription => Loc.T(
@@ -74,7 +74,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
-    /// Кэш карточек барберов: <c>null</c> — карточка не загрузилась, повторять запрос не нужно.
+    /// Кэш карточек мастеров: <c>null</c> — карточка не загрузилась, повторять запрос не нужно.
     /// </summary>
     private readonly Dictionary<Guid, BarberProfileResponse?> _profiles = [];
 
@@ -90,7 +90,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// Создаёт экран записей.
     /// </summary>
     /// <param name="bookingsApi">Список, отмена и перенос.</param>
-    /// <param name="barberApi">Публичная карточка барбера для имён и адресов.</param>
+    /// <param name="barberApi">Публичная карточка мастера для имён и адресов.</param>
     /// <param name="accountApi">Текущий пользователь: без него список не сузить до своих.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
     /// <param name="timeProvider">Часы: отсчёт и правила действий проверяются без ожидания.</param>
@@ -133,7 +133,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     public event EventHandler? SignInRequested;
 
     /// <summary>
-    /// Нажата «Вернуться к поиску» или «Найти барбера»: страница уводит на поиск.
+    /// Нажата «Вернуться к поиску» или «Найти мастера»: страница уводит на поиск.
     /// </summary>
     public event EventHandler? SearchRequested;
 
@@ -172,7 +172,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     private bool _isRefreshing;
 
     /// <summary>
-    /// Хотя бы одна карточка барбера не загрузилась: под списком сноска.
+    /// Хотя бы одна карточка мастера не загрузилась: под списком сноска.
     /// </summary>
     [ObservableProperty]
     private bool _showProfilesWarning;
@@ -1024,11 +1024,11 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Загружает карточки незакэшированных барберов, не больше четырёх одновременно.
+    /// Загружает карточки незакэшированных мастеров, не больше четырёх одновременно.
     /// </summary>
     /// <remarks>
     /// Один упавший профиль не ломает список: строка остаётся с подписями-заглушками,
-    /// а под списком появляется сноска. Повторно тот же барбер не запрашивается — в том
+    /// а под списком появляется сноска. Повторно тот же мастер не запрашивается — в том
     /// числе после ошибки, иначе один мёртвый профиль тормозил бы каждую страницу.
     /// </remarks>
     private async Task ResolveProfilesAsync(IEnumerable<Guid> barberProfileIds)
@@ -1045,7 +1045,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Загружает одну карточку барбера и применяет её к строкам обеих вкладок.
+    /// Загружает одну карточку мастера и применяет её к строкам обеих вкладок.
     /// </summary>
     private async Task FetchProfileAsync(Guid barberProfileId)
     {
@@ -1087,7 +1087,7 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Применяет карточку (или её отсутствие) ко всем строкам этого барбера.
+    /// Применяет карточку (или её отсутствие) ко всем строкам этого мастера.
     /// </summary>
     /// <remarks>
     /// Пояс салона приходит только с карточкой, а заголовок месяца считается в поясе салона.

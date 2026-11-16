@@ -46,7 +46,7 @@
                     <Label
                         FontSize="12"
                         LineBreakMode="WordWrap"
-                        Text="{loc:Translate Key='Найди барбера и запишись за минуту'}"
+                        Text="{loc:Translate Key='Найди мастера и запишись за минуту'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 </VerticalStackLayout>
             </Grid>
@@ -200,7 +200,7 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="16"
-                    Text="{loc:Translate Key='Барберы рядом'}" />
+                    Text="{loc:Translate Key='Мастера рядом'}" />
 
                 <Label
                     FontSize="12"

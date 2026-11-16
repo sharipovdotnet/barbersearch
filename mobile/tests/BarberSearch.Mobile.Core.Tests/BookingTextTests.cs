@@ -102,7 +102,7 @@ public sealed class BookingTextTests
 
     [Fact]
     public void BarberNote_Text_TrimsAndSignsNote() =>
-        Assert.Equal("Барбер: x", BookingText.BarberNote("  x "));
+        Assert.Equal("Мастер: x", BookingText.BarberNote("  x "));
 
     [Fact]
     public void CustomerNote_Text_TrimsAndSignsNote() =>
@@ -118,7 +118,7 @@ public sealed class BookingTextTests
 
     [Fact]
     public void CancellationReason_Text_ShowsReason() =>
-        Assert.Equal("Причина отмены: Барбер заболел", BookingText.CancellationReason("Барбер заболел"));
+        Assert.Equal("Причина отмены: Мастер заболел", BookingText.CancellationReason("Мастер заболел"));
 
     [Fact]
     public void CancelAnnouncement_Moment_ReturnsBanner() =>

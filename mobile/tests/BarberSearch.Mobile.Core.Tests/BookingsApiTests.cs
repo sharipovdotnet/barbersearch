@@ -193,7 +193,7 @@ public sealed class BookingsApiTests
 
         Assert.Equal(BookingId, booking.Id);
 
-        // userId == null — бронь создана барбером для гостя (walk-in); это не ошибка разбора.
+        // userId == null — бронь создана мастером для гостя (walk-in); это не ошибка разбора.
         Assert.Null(booking.UserId);
         Assert.Equal(BarberProfileId, booking.BarberProfileId);
         Assert.Equal(BarberServiceId, booking.BarberServiceId);
@@ -212,8 +212,8 @@ public sealed class BookingsApiTests
         // Статус приходит строкой; ApiJson.Options разбирает перечисления только так.
         Assert.Equal(BookingStatus.Cancelled, booking.Status);
 
-        // Причина отмены остаётся в истории, даже когда отменил барбер, а не клиент.
-        Assert.Equal("Барбер заболел", booking.CancellationReason);
+        // Причина отмены остаётся в истории, даже когда отменил мастер, а не клиент.
+        Assert.Equal("Мастер заболел", booking.CancellationReason);
         Assert.True(booking.HasReview);
 
         // null в nextCursor — страница последняя; клиент не должен догадываться об этом сам.
@@ -398,7 +398,7 @@ public sealed class BookingsApiTests
               "idempotencyKey": "0123456789abcdef0123456789abcdef",
               "customerNote": null,
               "barberNote": null,
-              "cancellationReason": "Барбер заболел",
+              "cancellationReason": "Мастер заболел",
               "createdAt": "2026-11-01T10:00:00+03:00",
               "hasReview": true
             }

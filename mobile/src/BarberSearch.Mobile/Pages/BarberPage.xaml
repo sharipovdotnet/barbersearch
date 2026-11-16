@@ -6,7 +6,7 @@
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:BarberCardViewModel"
-    Title="{loc:Translate Key='Барбер'}">
+    Title="{loc:Translate Key='Мастер'}">
 
     <Grid>
 
@@ -171,7 +171,7 @@
                         <Label
                             IsVisible="{Binding HasNoSalons}"
                             LineBreakMode="WordWrap"
-                            Text="{loc:Translate Key='Барбер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.'}"
+                            Text="{loc:Translate Key='Мастер пока не указал место приёма. Онлайн-запись появится, когда место будет добавлено.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                         <VerticalStackLayout IsVisible="{Binding HasSalons}" Spacing="8">
@@ -351,7 +351,7 @@
                                         </HorizontalStackLayout>
                                         <Label
                                             LineBreakMode="WordWrap"
-                                            Text="{loc:Translate Key='Барбер подтвердит запись.'}"
+                                            Text="{loc:Translate Key='Мастер подтвердит запись.'}"
                                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                         <Button
                                             Command="{Binding BookAgainCommand}"
@@ -654,7 +654,7 @@
                 FontFamily="GeistSemiBold"
                 FontSize="18"
                 HorizontalTextAlignment="Center"
-                Text="{loc:Translate Key='Барбер не найден'}" />
+                Text="{loc:Translate Key='Мастер не найден'}" />
             <Label
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"

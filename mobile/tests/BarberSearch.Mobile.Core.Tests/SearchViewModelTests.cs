@@ -40,7 +40,7 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.IsLoading);
         Assert.Null(viewModel.ErrorMessage);
         Assert.False(viewModel.HasError);
-        Assert.Equal("Показаны 2 барбера", viewModel.ResultsCountText);
+        Assert.Equal("Показаны 2 мастера", viewModel.ResultsCountText);
         Assert.False(viewModel.ShowEmptyState);
         Assert.Equal("Тюмень", Assert.Single(api.SearchCalls).City);
     }
@@ -71,7 +71,7 @@ public sealed class SearchViewModelTests
         await viewModel.SearchCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.HasError);
-        Assert.Equal("Не удалось загрузить барберов.", viewModel.ErrorMessage);
+        Assert.Equal("Не удалось загрузить мастеров.", viewModel.ErrorMessage);
         Assert.False(viewModel.IsLoading);
         Assert.Empty(viewModel.Barbers);
         Assert.False(viewModel.ShowEmptyState);
@@ -405,7 +405,7 @@ public sealed class SearchViewModelTests
 
         Assert.Equal("На выбранную дату никого не нашли", viewModel.EmptyTitle);
         Assert.Equal(
-            "Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.",
+            "Фильтр оставляет мастеров с рабочим днём в этот день недели. Попробуйте другую дату.",
             viewModel.EmptyDescription);
     }
 
@@ -431,7 +431,7 @@ public sealed class SearchViewModelTests
 
         await viewModel.SearchCommand.ExecuteAsync(null);
 
-        Assert.Equal("Барберов пока нет", viewModel.EmptyTitle);
+        Assert.Equal("Мастеров пока нет", viewModel.EmptyTitle);
         Assert.Equal("Пока никто не подтверждён. Загляните позже.", viewModel.EmptyDescription);
     }
 
@@ -701,7 +701,7 @@ public sealed class SearchViewModelTests
         public Task<BarberProfileResponse> GetBarberProfileAsync(
             Guid id,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Поиск не читает карточку барбера.");
+            throw new NotSupportedException("Поиск не читает карточку мастера.");
 
         public Task<BarberSlotsResponse> GetSlotsAsync(
             Guid barberProfileId,

@@ -5,7 +5,7 @@ using BarberSearch.Mobile.Core.ViewModels;
 namespace BarberSearch.Mobile.Pages;
 
 /// <summary>
-/// Вкладка «Поиск»: фильтры витрины и найденные барберы.
+/// Вкладка «Поиск»: фильтры витрины и найденные мастера.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -72,7 +72,7 @@ public partial class SearchPage : ContentPage
     }
 
     /// <summary>
-    /// Открывает карточку барбера, по которой нажали.
+    /// Открывает карточку мастера, по которой нажали.
     /// </summary>
     /// <param name="sender">Жест тапа.</param>
     /// <param name="e">Параметр жеста — строка выдачи.</param>

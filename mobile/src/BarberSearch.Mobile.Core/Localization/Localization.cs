@@ -139,9 +139,9 @@ public sealed class Localization : ILocalization
             [PluralKey.Hours] = new("{0} час", "{0} часа", "{0} часов", null),
             [PluralKey.Days] = new("{0} день", "{0} дня", "{0} дней", null),
             [PluralKey.ShownBarbers] = new(
-                "Показан {0} барбер",
-                "Показаны {0} барбера",
-                "Показаны {0} барберов",
+                "Показан {0} мастер",
+                "Показаны {0} мастера",
+                "Показаны {0} мастеров",
                 null),
         };
 

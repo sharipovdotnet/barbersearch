@@ -20,7 +20,7 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </para>
 /// <para>
 /// Отзыв создаётся скрытым и уходит на модерацию, поэтому экран прямо говорит, что он
-/// появится на карточке барбера после проверки. Ошибки разбираются по публичным кодам:
+/// появится на карточке мастера после проверки. Ошибки разбираются по публичным кодам:
 /// порядок — коды, потом <c>409</c>, потом <c>403</c>; веб проверяет <c>409</c> раньше кода
 /// <c>bookingNotCompleted</c> и на нём соврал бы.
 /// </para>
@@ -67,7 +67,7 @@ public sealed partial class ReviewBookingViewModel : ObservableObject
     public event EventHandler? Submitted;
 
     /// <summary>
-    /// Имя барбера из карточки: по кому отзыв.
+    /// Имя мастера из карточки: по кому отзыв.
     /// </summary>
     [ObservableProperty]
     private string _barberName = BookingText.BarberFallback;

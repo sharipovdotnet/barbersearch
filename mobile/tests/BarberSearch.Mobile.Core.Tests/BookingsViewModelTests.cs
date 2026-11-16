@@ -30,8 +30,8 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// <remarks>
 /// Время салона сверяется на московском поясе и фиксированном «сейчас»: 22:00 UTC 14 ноября —
 /// это уже 15-е в Москве, поэтому дата и месяц не могут браться из пояса устройства.
-/// Строки списка приходят без имён, поэтому карточка барбера подменяется фейком и её вызовы
-/// считаются: один барбер — один запрос за жизнь экрана.
+/// Строки списка приходят без имён, поэтому карточка мастера подменяется фейком и её вызовы
+/// считаются: один мастер — один запрос за жизнь экрана.
 /// </remarks>
 public sealed class BookingsViewModelTests
 {
@@ -105,7 +105,7 @@ public sealed class BookingsViewModelTests
     }
 
     /// <summary>
-    /// Пояс салона приходит только с карточкой барбера: визит в 22:30 UTC 30 ноября — это уже
+    /// Пояс салона приходит только с карточкой мастера: визит в 22:30 UTC 30 ноября — это уже
     /// 1 декабря в Москве, поэтому после ответа карточки группа переезжает в «Декабрь 2026».
     /// </summary>
     [Fact]
@@ -330,7 +330,7 @@ public sealed class BookingsViewModelTests
         Assert.Single(viewModel.UpcomingGroups);
         Assert.Equal(RefreshedBookingId, Assert.Single(viewModel.UpcomingGroups[0]).Id);
 
-        // Ровно один запрос на вызов, первая страница и без курсора; карточка барбера — из кэша.
+        // Ровно один запрос на вызов, первая страница и без курсора; карточка мастера — из кэша.
         Assert.Equal(2, harness.Bookings.Requests.Count);
         Assert.Null(harness.Bookings.Requests[1].Cursor);
         Assert.Equal(BookingsViewModel.PageSize, harness.Bookings.Requests[1].PageSize);
@@ -496,7 +496,7 @@ public sealed class BookingsViewModelTests
 
         Assert.All(rows, row =>
         {
-            Assert.Equal("Тимур Барберов", row.BarberName);
+            Assert.Equal("Тимур Мастеров", row.BarberName);
             Assert.Equal("Стрижка", row.ServiceName);
             Assert.Equal("E2E Studio", row.SalonName);
             Assert.Equal("Москва, ул. Тверская, 1", row.CityAddress);
@@ -522,7 +522,7 @@ public sealed class BookingsViewModelTests
 
         var item = Assert.Single(Assert.Single(harness.ViewModel.UpcomingGroups));
 
-        Assert.Equal("Барбер", item.BarberName);
+        Assert.Equal("Мастер", item.BarberName);
         Assert.Equal("Услуга", item.ServiceName);
         Assert.Equal("Салон", item.SalonName);
         Assert.Null(item.TimeZone);
@@ -869,7 +869,7 @@ public sealed class BookingsViewModelTests
             BarberProfileId,
             Guid.Parse("9e200000-0000-4000-8000-0000000000ff"),
             null,
-            "Тимур Барберов",
+            "Тимур Мастеров",
             Grade.SeniorBarber,
             null,
             11,
@@ -986,8 +986,8 @@ public sealed class BookingsViewModelTests
     }
 
     /// <summary>
-    /// Подменённый клиент карточки барбера: отдаёт имена, услугу, салон и пояс и считает
-    /// запросы — «один барбер — одна карточка» проверяется именно по ним.
+    /// Подменённый клиент карточки мастера: отдаёт имена, услугу, салон и пояс и считает
+    /// запросы — «один мастер — одна карточка» проверяется именно по ним.
     /// </summary>
     private sealed class FakeBarberApi : IBarberSearchApi
     {
@@ -1010,7 +1010,7 @@ public sealed class BookingsViewModelTests
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Экран записей не ищет барберов.");
+            throw new NotSupportedException("Экран записей не ищет мастеров.");
 
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
             CancellationToken cancellationToken = default) =>
@@ -1031,14 +1031,14 @@ public sealed class BookingsViewModelTests
             Guid? hairServiceId,
             Guid? salonId,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Экран записей не читает слоты барбера.");
+            throw new NotSupportedException("Экран записей не читает слоты мастера.");
 
         public Task<PagedResponse<BarberSearch.Contracts.Reviews.GetReviews.ReviewResponse>> GetReviewsAsync(
             Guid barberProfileId,
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Экран записей не читает отзывы барбера.");
+            throw new NotSupportedException("Экран записей не читает отзывы мастера.");
     }
 
     /// <summary>

@@ -15,7 +15,7 @@ using CommunityToolkit.Mvvm.Input;
 namespace BarberSearch.Mobile.Core.ViewModels;
 
 /// <summary>
-/// Экран поиска: фильтры витрины, справочники, список найденных барберов и состояние загрузки.
+/// Экран поиска: фильтры витрины, справочники, список найденных мастеров и состояние загрузки.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -53,17 +53,17 @@ public sealed partial class SearchViewModel : ObservableObject
     private static string AnyDateText => Loc.T("Любая дата");
     private static string LoadingText => Loc.T("Загрузка…");
     private static string CatalogsLoadFailedText => Loc.T("Не удалось загрузить фильтры.");
-    private static string SearchFailedText => Loc.T("Не удалось загрузить барберов.");
+    private static string SearchFailedText => Loc.T("Не удалось загрузить мастеров.");
     private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
     private static string RateLimitText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
     private static string NoSearchHintText => Loc.T("Введите город и нажмите «Найти»");
     private static string EmptyCityTitleText => Loc.T("В этом городе никого не нашли");
     private static string EmptyCityText => Loc.T("Проверьте написание — город учитывается точно, например «Москва».");
     private static string EmptyDateTitleText => Loc.T("На выбранную дату никого не нашли");
-    private static string EmptyDateText => Loc.T("Фильтр оставляет барберов с рабочим днём в этот день недели. Попробуйте другую дату.");
+    private static string EmptyDateText => Loc.T("Фильтр оставляет мастеров с рабочим днём в этот день недели. Попробуйте другую дату.");
     private static string EmptyFiltersTitleText => Loc.T("С такими фильтрами никого не нашли");
     private static string EmptyFiltersText => Loc.T("Попробуйте другой язык, специализацию, услугу или дополнительную услугу.");
-    private static string EmptyNoBarbersTitleText => Loc.T("Барберов пока нет");
+    private static string EmptyNoBarbersTitleText => Loc.T("Мастеров пока нет");
     private static string EmptyNoBarbersText => Loc.T("Пока никто не подтверждён. Загляните позже.");
     private static string LocationDeniedText => Loc.T(
         "Геопозиция недоступна — показываем всех мастеров. Разрешите доступ в настройках телефона.");
@@ -141,7 +141,7 @@ public sealed partial class SearchViewModel : ObservableObject
     public CitySuggestions CitySuggestions { get; }
 
     /// <summary>
-    /// Найденные барберы в порядке выдачи сервера.
+    /// Найденные мастера в порядке выдачи сервера.
     /// </summary>
     public ObservableCollection<BarberSearchItemResponse> Barbers { get; } = [];
 
@@ -365,14 +365,14 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <remarks>
     /// Подпись появляется только у непустой выдачи: пустой экран уже объясняет себя
     /// подсказкой, и «сначала ближайшие» над ним ничего не добавляет. Кроме того, нужен хотя бы
-    /// один барбер с расстоянием: сервер, который ещё не знает координат, вернул бы прежний
+    /// один мастер с расстоянием: сервер, который ещё не знает координат, вернул бы прежний
     /// порядок по рейтингу, и подпись обманывала бы.
     /// </remarks>
     public bool ShowNearbySort => _position is not null
         && Barbers.Any(barber => barber.DistanceKm is not null);
 
     /// <summary>
-    /// Счётчик найденных: «Показаны 2 барбера».
+    /// Счётчик найденных: «Показаны 2 мастера».
     /// </summary>
     public string ResultsCountText => BarberText.ShownBarbers(Barbers.Count);
 

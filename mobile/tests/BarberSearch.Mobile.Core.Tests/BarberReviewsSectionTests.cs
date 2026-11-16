@@ -466,7 +466,7 @@ public sealed class BarberReviewsSectionTests
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Секция отзывов не ищет барберов.");
+            throw new NotSupportedException("Секция отзывов не ищет мастеров.");
 
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
             CancellationToken cancellationToken = default) =>

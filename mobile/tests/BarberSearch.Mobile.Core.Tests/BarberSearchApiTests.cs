@@ -27,7 +27,7 @@ public sealed class BarberSearchApiTests
           "id": "9e100000-0000-4000-8000-000000000001",
           "userId": "9e100000-0000-4000-8000-000000000005",
           "avatarUrl": null,
-          "displayName": "Тимур Барберов",
+          "displayName": "Тимур Мастеров",
           "grade": "SeniorBarber",
           "bio": "Стригу с 2015 года.",
           "yearsOfExperience": 11,
@@ -277,7 +277,7 @@ public sealed class BarberSearchApiTests
 
         var profile = await api.GetBarberProfileAsync(BarberProfileId);
 
-        Assert.Equal("Тимур Барберов", profile.DisplayName);
+        Assert.Equal("Тимур Мастеров", profile.DisplayName);
         Assert.Equal(2, profile.Services.Count);
 
         var active = profile.Services[0];

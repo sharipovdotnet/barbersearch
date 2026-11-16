@@ -111,7 +111,7 @@ public partial class BookingsPage : ContentPage
     /// </summary>
     /// <remarks>
     /// Данные передаются объектами, а не идентификатором: <c>GET api/bookings/{id}</c> нет,
-    /// а строка уже содержит и бронь, и загруженную карточку барбера.
+    /// а строка уже содержит и бронь, и загруженную карточку мастера.
     /// </remarks>
     private async void OnRescheduleRequested(object? sender, BookingListItem item)
     {
@@ -147,7 +147,7 @@ public partial class BookingsPage : ContentPage
     }
 
     /// <summary>
-    /// Возвращает к поиску барбера.
+    /// Возвращает к поиску мастера.
     /// </summary>
     private async void OnSearchRequested(object? sender, EventArgs e)
     {

@@ -50,7 +50,7 @@ public sealed class ReviewsApiTests
         using var document = JsonDocument.Parse(handler.LastBody!);
         var root = document.RootElement;
 
-        // Автор и барбер в запросе не передаются: их выводит сервер из токена и брони.
+        // Автор и мастер в запросе не передаются: их выводит сервер из токена и брони.
         Assert.Equal(BookingId.ToString("D"), root.GetProperty("bookingId").GetString());
         Assert.Equal(5, root.GetProperty("rating").GetInt32());
         Assert.Equal("Отличная стрижка", root.GetProperty("text").GetString());
@@ -223,7 +223,7 @@ public sealed class ReviewsApiTests
         Assert.Null(item.Text);
         Assert.False(item.IsPublished);
         Assert.Equal(BarberId, item.Barber.Id);
-        Assert.Equal("Иван Барбер", item.Barber.DisplayName);
+        Assert.Equal("Иван Мастер", item.Barber.DisplayName);
         Assert.Equal(BookingId, item.Visit.BookingId);
         Assert.Equal(VisitStart, item.Visit.StartAt);
         Assert.Equal("Europe/Moscow", item.Visit.TimeZoneId);
@@ -341,7 +341,7 @@ public sealed class ReviewsApiTests
               "updatedAt": "2026-11-15T10:00:00+00:00",
               "barber": {
                 "id": "{{BarberId:D}}",
-                "displayName": "Иван Барбер"
+                "displayName": "Иван Мастер"
               },
               "visit": {
                 "bookingId": "{{BookingId:D}}",

@@ -301,7 +301,7 @@ public sealed class CitySuggestionsTests
             string? cursor = null,
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Подсказки не ищут барберов.");
+            throw new NotSupportedException("Подсказки не ищут мастеров.");
 
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
             CancellationToken cancellationToken = default) =>

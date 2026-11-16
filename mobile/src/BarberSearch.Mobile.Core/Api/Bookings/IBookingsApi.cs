@@ -44,7 +44,7 @@ public interface IBookingsApi
     /// <param name="cursor">Курсор следующей страницы из предыдущего ответа.</param>
     /// <param name="pageSize">Размер страницы; сервер по умолчанию отдаёт 20.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns>Страница записей без имён барбера и салона.</returns>
+    /// <returns>Страница записей без имён мастера и салона.</returns>
     /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
     Task<PagedResponse<BookingResponse>> GetBookingsAsync(
         BookingScope scope,
@@ -57,7 +57,7 @@ public interface IBookingsApi
     /// Отменяет запись.
     /// </summary>
     /// <remarks>
-    /// Тело не отправляется: клиент причину не пишет, её оставляет только барбер, поэтому
+    /// Тело не отправляется: клиент причину не пишет, её оставляет только мастер, поэтому
     /// <c>cancellationReason</c> в ответе останется <c>null</c>. Успех — <c>204</c> без тела.
     /// </remarks>
     /// <param name="bookingId">Идентификатор брони.</param>
@@ -86,7 +86,7 @@ public interface IBookingsApi
     /// Переносит визит на начало слота.
     /// </summary>
     /// <remarks>
-    /// Меняются только <c>startAt</c>/<c>endAt</c>: услуга, салон, барбер и цена остаются
+    /// Меняются только <c>startAt</c>/<c>endAt</c>: услуга, салон, мастер и цена остаются
     /// прежними. <paramref name="startAt"/> отправляется ровно тем инстантом, который пришёл из
     /// <see cref="GetRescheduleSlotsAsync"/>: сервер сравнивает абсолютные моменты и сам берёт
     /// конец слота. Успех — <c>204</c> без тела.

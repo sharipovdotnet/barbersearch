@@ -387,7 +387,7 @@ public sealed class MyReviewsViewModelTests
         int rating = 5,
         string? text = "Отлично",
         bool isPublished = true,
-        string barberName = "Игорь Барбер") =>
+        string barberName = "Игорь Мастер") =>
         new(
             Guid.CreateVersion7(),
             rating,

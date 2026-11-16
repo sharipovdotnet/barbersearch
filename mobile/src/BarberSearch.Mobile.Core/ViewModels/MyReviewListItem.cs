@@ -10,8 +10,8 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="MyReviewResponse"/> несёт всё для строки — оценку, текст, статус, барбера и
-/// визит, поэтому список не догружает ни карточку барбера, ни бронь. Пояс салона
+/// <see cref="MyReviewResponse"/> несёт всё для строки — оценку, текст, статус, мастера и
+/// визит, поэтому список не догружает ни карточку мастера, ни бронь. Пояс салона
 /// разрешается один раз в конструкторе: <c>visit.timeZoneId</c> не меняется, а перевод
 /// времени нужен при каждой смене оценки или текста.
 /// </para>
@@ -54,12 +54,12 @@ public sealed partial class MyReviewListItem : ObservableObject
     public Guid Id { get; }
 
     /// <summary>
-    /// Профиль барбера — для перехода на его карточку.
+    /// Профиль мастера — для перехода на его карточку.
     /// </summary>
     public Guid BarberId { get; }
 
     /// <summary>
-    /// Имя барбера из ответа.
+    /// Имя мастера из ответа.
     /// </summary>
     public string BarberName { get; }
 

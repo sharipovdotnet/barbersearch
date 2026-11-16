@@ -9,11 +9,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace BarberSearch.Mobile.Core.ViewModels;
 
 /// <summary>
-/// Строка списка записей: бронь вместе с данными карточки барбера.
+/// Строка списка записей: бронь вместе с данными карточки мастера.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="BookingResponse"/> несёт только идентификаторы барбера, услуги и салона, поэтому
+/// <see cref="BookingResponse"/> несёт только идентификаторы мастера, услуги и салона, поэтому
 /// имя, адрес и пояс приходят из публичной карточки отдельным запросом. До её ответа строка
 /// живёт с нейтральными подписями и временем в UTC: список не ждёт карточек, иначе одна
 /// упавшая карточка держала бы весь экран.
@@ -91,12 +91,12 @@ public sealed partial class BookingListItem : ObservableObject
     public decimal Price => _booking.Price;
 
     /// <summary>
-    /// Профиль барбера — по нему догружаются имя, услуга, салон и пояс.
+    /// Профиль мастера — по нему догружаются имя, услуга, салон и пояс.
     /// </summary>
     public Guid BarberProfileId => _booking.BarberProfileId;
 
     /// <summary>
-    /// Услуга барбера, по которой считается длительность и находится название.
+    /// Услуга мастера, по которой считается длительность и находится название.
     /// </summary>
     public Guid BarberServiceId => _booking.BarberServiceId;
 
@@ -150,7 +150,7 @@ public sealed partial class BookingListItem : ObservableObject
     private string _priceText = string.Empty;
 
     /// <summary>
-    /// Имя барбера из карточки; до её ответа — «Барбер».
+    /// Имя мастера из карточки; до её ответа — «Мастер».
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ServiceAndSalonText))]
@@ -222,7 +222,7 @@ public sealed partial class BookingListItem : ObservableObject
     private bool _canReschedule;
 
     /// <summary>
-    /// Заметка барбера строкой карточки; <c>null</c>, если заметки нет.
+    /// Заметка мастера строкой карточки; <c>null</c>, если заметки нет.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasBarberNote))]
@@ -243,7 +243,7 @@ public sealed partial class BookingListItem : ObservableObject
     private string? _cancellationText;
 
     /// <summary>
-    /// Карточка барбера уже загрузилась: имя, адрес и пояс настоящие.
+    /// Карточка мастера уже загрузилась: имя, адрес и пояс настоящие.
     /// </summary>
     [ObservableProperty]
     private bool _isProfileResolved;
@@ -291,7 +291,7 @@ public sealed partial class BookingListItem : ObservableObject
     public bool ShowReviewSent => Status == BookingStatus.Completed && HasReview;
 
     /// <summary>
-    /// Есть ли строка заметки барбера.
+    /// Есть ли строка заметки мастера.
     /// </summary>
     public bool HasBarberNote => !string.IsNullOrEmpty(BarberNoteText);
 
@@ -306,14 +306,14 @@ public sealed partial class BookingListItem : ObservableObject
     public bool HasCancellationText => !string.IsNullOrEmpty(CancellationText);
 
     /// <summary>
-    /// Применяет карточку барбера: имя, услугу, салон, адрес, пояс и длительность.
+    /// Применяет карточку мастера: имя, услугу, салон, адрес, пояс и длительность.
     /// </summary>
     /// <remarks>
     /// <c>null</c> означает, что карточку получить не удалось (или услуга выключена, или салон
     /// отвязан). Тогда строка остаётся с подписями-заглушками и временем в UTC: врать чужим
-    /// именем хуже, чем показать «Барбер».
+    /// именем хуже, чем показать «Мастер».
     /// </remarks>
-    /// <param name="profile">Карточка барбера либо <c>null</c>.</param>
+    /// <param name="profile">Карточка мастера либо <c>null</c>.</param>
     public void ApplyProfile(BarberProfileResponse? profile)
     {
         var service = profile?.Services.FirstOrDefault(candidate =>
