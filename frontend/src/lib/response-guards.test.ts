@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isAddressSuggestion,
+  isAddressSuggestionList,
   isAdminAuditPage,
   isAdminAvatarPhoto,
   isAdminBarber,
@@ -20,6 +22,8 @@ import {
   isBarberSalonSummary,
   isBarberSearchItem,
   isBooking,
+  isCitySuggestion,
+  isCitySuggestionList,
   isCreatedResource,
   isHairServiceOption,
   isMyProfile,
@@ -1280,5 +1284,97 @@ describe('isScheduleConflicts', () => {
     )
     expect(isScheduleConflicts({ items: [CONFLICT] })).toBe(false)
     expect(isScheduleConflicts(null)).toBe(false)
+  })
+})
+
+/**
+ * Подсказки DaData: `providerId`, регион, координаты и индекс приходят необязательными,
+ * а пустой город или строка списка ломают поле формы — такие ответы guard отвергает.
+ */
+describe('isCitySuggestionList / isAddressSuggestionList', () => {
+  const CITY = {
+    providerId: '2763c110-cb8b-416a-9dac-ad28a55b4402',
+    display: 'г. Екатеринбург',
+    city: 'Екатеринбург',
+    region: 'Свердловская обл.',
+    country: 'Россия',
+    latitude: 56.8389,
+    longitude: 60.5975,
+  }
+
+  const ADDRESS = {
+    providerId: 'f0a1b2c3-0000-4000-8000-000000000001',
+    display: 'г. Екатеринбург, ул. Ленина, д. 1',
+    address: 'ул. Ленина, 1',
+    city: 'Екатеринбург',
+    region: 'Свердловская обл.',
+    country: 'Россия',
+    postalCode: '620000',
+    latitude: 56.8389,
+    longitude: 60.5975,
+    timeZoneId: null,
+  }
+
+  it('принимает подсказку города и лишние поля', () => {
+    expect(isCitySuggestion({ ...CITY, kind: 'CITY' })).toBe(true)
+    expect(isCitySuggestionList([CITY, CITY])).toBe(true)
+    expect(isCitySuggestionList([])).toBe(true)
+  })
+
+  it('принимает null в необязательных полях города', () => {
+    expect(
+      isCitySuggestion({
+        ...CITY,
+        providerId: null,
+        region: null,
+        latitude: null,
+        longitude: null,
+      })
+    ).toBe(true)
+  })
+
+  it('отвергает город без обязательного поля', () => {
+    const { city, ...withoutCity } = CITY
+    const { display, ...withoutDisplay } = CITY
+
+    expect(city).toBe('Екатеринбург')
+    expect(display).toBe('г. Екатеринбург')
+    expect(isCitySuggestion(withoutCity)).toBe(false)
+    expect(isCitySuggestion(withoutDisplay)).toBe(false)
+    expect(isCitySuggestion({ ...CITY, city: '' })).toBe(false)
+  })
+
+  it('отвергает нечисловые координаты и не-массив', () => {
+    expect(isCitySuggestion({ ...CITY, latitude: '56.8' })).toBe(false)
+    expect(isCitySuggestion({ ...CITY, longitude: Number.NaN })).toBe(false)
+    expect(isCitySuggestionList({ items: [CITY] })).toBe(false)
+    expect(isCitySuggestionList(null)).toBe(false)
+  })
+
+  it('принимает адрес с null-полями', () => {
+    expect(
+      isAddressSuggestion({
+        ...ADDRESS,
+        providerId: null,
+        address: null,
+        region: null,
+        postalCode: null,
+        latitude: null,
+        longitude: null,
+        timeZoneId: null,
+      })
+    ).toBe(true)
+    expect(isAddressSuggestionList([ADDRESS])).toBe(true)
+  })
+
+  it('отвергает адрес без `display` и с числовым индексом', () => {
+    const { display, ...withoutDisplay } = ADDRESS
+
+    expect(display).toBe('г. Екатеринбург, ул. Ленина, д. 1')
+    expect(isAddressSuggestion(withoutDisplay)).toBe(false)
+    expect(isAddressSuggestion({ ...ADDRESS, postalCode: 620000 })).toBe(false)
+    expect(isAddressSuggestion({ ...ADDRESS, latitude: null, longitude: '1' })).toBe(
+      false
+    )
   })
 })

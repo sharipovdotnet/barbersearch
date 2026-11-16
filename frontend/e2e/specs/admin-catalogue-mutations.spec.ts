@@ -133,6 +133,108 @@ test.describe('админка: каталог, действия', () => {
     }
   })
 
+  /**
+   * Подсказки города и адреса: провайдер по умолчанию выключен (`Enabled=false`),
+   * поэтому оба ответа подменяются через `page.route`. Проверяем, что выбор подсказки
+   * доходит до тела `PUT` без `providerId` и `region`.
+   */
+  test('подсказки адреса заполняют поля и не отправляют providerId', async ({
+    page,
+    playwright,
+  }) => {
+    const catalogue = new AdminCataloguePage(page)
+    const label = fixtures.catalogueLabels.hiddenSalon
+    const salonPath = `/api/salons/${fixtures.hiddenSalonId}/location`
+    const original = {
+      address: 'ул. Северная, 2',
+      city: 'Санкт-Петербург',
+      country: 'Russia',
+      postalCode: '190000',
+      timeZoneId: 'Europe/Moscow',
+      latitude: 59.9386,
+      longitude: 30.3141,
+    }
+
+    await page.route('**/api/addresses/cities*', (route) =>
+      route.fulfill({
+        json: [
+          {
+            providerId: 'e2e-city',
+            display: 'г. Екатеринбург',
+            city: 'Екатеринбург',
+            region: 'Свердловская обл.',
+            country: 'Россия',
+            latitude: 56.8389,
+            longitude: 60.5975,
+          },
+        ],
+      })
+    )
+    await page.route('**/api/addresses/suggest*', (route) =>
+      route.fulfill({
+        json: [
+          {
+            providerId: 'e2e-address',
+            display: 'г. Екатеринбург, ул. Ленина, д. 1',
+            address: 'ул. Ленина, 1',
+            city: 'Екатеринбург',
+            region: 'Свердловская обл.',
+            country: 'Россия',
+            postalCode: '620000',
+            latitude: 56.8389,
+            longitude: 60.5975,
+            timeZoneId: null,
+          },
+        ],
+      })
+    )
+
+    await catalogue.goto('salons')
+    await catalogue.waitForRows()
+
+    try {
+      await catalogue.editButton(label).click()
+
+      const dialog = catalogue.dialog
+      await expect(dialog).toBeVisible()
+
+      await dialog.getByLabel('Город').fill('Екат')
+      await dialog.getByRole('option', { name: 'г. Екатеринбург' }).click()
+
+      await dialog.getByLabel('Адрес', { exact: true }).fill('ул. Лен')
+      await dialog
+        .getByRole('option', { name: 'г. Екатеринбург, ул. Ленина, д. 1' })
+        .click()
+
+      await expect(dialog.getByLabel('Почтовый индекс')).toHaveValue('620000')
+      await expect(dialog.getByLabel('Широта')).toHaveValue('56.8389')
+
+      const requestPromise = page.waitForRequest(
+        (request) =>
+          request.method() === 'PUT' &&
+          new URL(request.url()).pathname === salonPath
+      )
+
+      await dialog.getByRole('button', { name: 'Сохранить' }).click()
+
+      const body = (await requestPromise).postDataJSON()
+
+      expect(body).toMatchObject({
+        address: 'ул. Ленина, 1',
+        city: 'Екатеринбург',
+        postalCode: '620000',
+        latitude: 56.8389,
+        longitude: 60.5975,
+        timeZoneId: 'Europe/Moscow',
+      })
+      expect(body).not.toHaveProperty('providerId')
+      expect(body).not.toHaveProperty('region')
+      await expect(page.getByText('Изменения сохранены')).toBeVisible()
+    } finally {
+      await adminCatalogueMutation(playwright, 'PUT', salonPath, original)
+    }
+  })
+
   test('пустая форма создания показывает клиентские ошибки без запроса', async ({
     page,
   }) => {
