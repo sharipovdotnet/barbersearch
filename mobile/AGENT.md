@@ -68,6 +68,15 @@ On Windows only Android builds: the iOS target needs macOS with Xcode 26. The wh
 (`dotnet build BarberSearch.Mobile.sln`) fails on iOS on Windows — that is expected, build the app
 project with `-f net10.0-android`.
 
+Adding or removing an Android package changes the resource ids that managed code sees, and an
+incremental build can keep an old `_Microsoft.Android.Resource.Designer.dll` next to a freshly
+linked APK. The app then starts and dies on the first Shell frame with
+`java.lang.IllegalArgumentException: This component requires that you specify a valid TextAppearance
+attribute` — `PlatformInterop.CreateNavigationBar` receives a stale `Resource.Attribute` id, which
+resolves to an unrelated style, and `BottomNavigationView` refuses it. No code is involved: delete
+`src/BarberSearch.Mobile/obj` and `bin` (or Rebuild) and install again. The same mismatch makes any
+other `Resource.*` id wrong, so treat the crash as a build-cache symptom, not a theme bug.
+
 Push needs no Firebase project at build time. Without `Resources/Raw/push.json` the Android app
 compiles and behaves exactly as before: no notification permission, no «Присылать напоминания» row,
 no Firebase initialization. A project is needed only to exercise real delivery; see §5 and the
