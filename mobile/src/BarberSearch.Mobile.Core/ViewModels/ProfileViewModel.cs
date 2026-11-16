@@ -148,6 +148,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFormVisible))]
     [NotifyPropertyChangedFor(nameof(IsProfileVisible))]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileError))]
     private bool _isLoading = true;
@@ -163,6 +164,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFormVisible))]
     [NotifyPropertyChangedFor(nameof(IsProfileVisible))]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileError))]
     private bool _isAuthenticated;
@@ -172,6 +174,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProfileVisible))]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileError))]
     private bool _isProfileLoading;
@@ -216,6 +219,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProfileVisible))]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileLoading))]
     [NotifyPropertyChangedFor(nameof(ShowProfileError))]
     private string? _profileEmail;
@@ -311,6 +315,17 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </summary>
     public bool IsProfileVisible =>
         IsAuthenticated && !IsLoading && !ShowProfileLoading && !ShowProfileError;
+
+    /// <summary>
+    /// Виден ли индикатор загрузки: проверка сессии либо первая загрузка профиля.
+    /// </summary>
+    /// <remarks>
+    /// Одно состояние на оба шага. На старте проверка сессии идёт без паузы, и отдельный
+    /// спиннер профиля оказывался на экране вместе с общим: две окружности в одной ячейке
+    /// сетки пересекались. Тихое обновление сюда не входит — данные уже показаны, и
+    /// подменять их спиннером значит мигать при каждом возврате на вкладку.
+    /// </remarks>
+    public bool ShowLoading => IsLoading || ShowProfileLoading;
 
     /// <summary>
     /// Идёт первая загрузка профиля: карточки ещё нечего показать.
@@ -752,6 +767,7 @@ public sealed partial class ProfileViewModel : ObservableObject
 
         // Показ хаба зависит от наличия профиля и email: одно уведомление на оба.
         OnPropertyChanged(nameof(IsProfileVisible));
+        OnPropertyChanged(nameof(ShowLoading));
         OnPropertyChanged(nameof(ShowProfileLoading));
         OnPropertyChanged(nameof(ShowProfileError));
     }
