@@ -81,7 +81,7 @@ public partial class MyReviewsPage : ContentPage
     }
 
     /// <summary>
-    /// Открывает карточку барбера по строке отзыва.
+    /// Открывает карточку мастера по строке отзыва.
     /// </summary>
     private async void OnBarberClicked(object? sender, EventArgs e)
     {

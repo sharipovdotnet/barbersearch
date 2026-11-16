@@ -237,7 +237,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     private string _initials = string.Empty;
 
     /// <summary>
-    /// Русская подпись роли: «Клиент», «Барбер», «Администратор».
+    /// Русская подпись роли: «Клиент», «Мастер», «Администратор».
     /// </summary>
     [ObservableProperty]
     private string _roleText = string.Empty;

@@ -412,7 +412,7 @@
                                     Command="{Binding SearchCommand}"
                                     HorizontalOptions="Center"
                                     IsVisible="{Binding IsUpcomingSelected}"
-                                    Text="{loc:Translate Key='Найти барбера'}" />
+                                    Text="{loc:Translate Key='Найти мастера'}" />
                             </VerticalStackLayout>
                         </ContentView>
                     </CollectionView.EmptyView>
@@ -444,7 +444,7 @@
                                 FontSize="12"
                                 IsVisible="{Binding ShowProfilesWarning}"
                                 LineBreakMode="WordWrap"
-                                Text="{loc:Translate Key='Часть карточек барберов не загрузилась — имена и адреса могут быть неполными.'}"
+                                Text="{loc:Translate Key='Часть карточек мастеров не загрузилась — имена и адреса могут быть неполными.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         </VerticalStackLayout>
                     </CollectionView.Footer>

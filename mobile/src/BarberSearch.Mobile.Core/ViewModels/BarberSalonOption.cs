@@ -57,7 +57,7 @@ public sealed class BarberSalonOption
     public PlaceKind Kind { get; }
 
     /// <summary>
-    /// Основной ли это салон барбера: с него открывается карточка.
+    /// Основной ли это салон мастера: с него открывается карточка.
     /// </summary>
     public bool IsPrimary { get; }
 
@@ -69,7 +69,7 @@ public sealed class BarberSalonOption
     /// <summary>
     /// Собирает пункт из салона карточки.
     /// </summary>
-    /// <param name="salon">Салон барбера вместе с расписанием.</param>
+    /// <param name="salon">Салон мастера вместе с расписанием.</param>
     /// <returns>Пункт для <c>Picker</c> и выбора места.</returns>
     public static BarberSalonOption From(BarberProfileSalonResponse salon)
     {

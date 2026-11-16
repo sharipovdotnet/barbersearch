@@ -23,7 +23,7 @@
                 <Label
                     FontSize="14"
                     LineBreakMode="WordWrap"
-                    Text="{loc:Translate Key='Создайте аккаунт, чтобы записываться к барберам.'}"
+                    Text="{loc:Translate Key='Создайте аккаунт, чтобы записываться к мастерам.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <Label Text="{loc:Translate Key='Имя'}" />

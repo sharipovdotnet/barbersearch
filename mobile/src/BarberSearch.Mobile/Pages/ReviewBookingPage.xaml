@@ -198,7 +198,7 @@
                 <Label
                     FontSize="12"
                     LineBreakMode="WordWrap"
-                    Text="{loc:Translate Key='Отзыв появится на карточке барбера после проверки модератором.'}"
+                    Text="{loc:Translate Key='Отзыв появится на карточке мастера после проверки модератором.'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 

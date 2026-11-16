@@ -16,7 +16,7 @@ using CommunityToolkit.Mvvm.Input;
 namespace BarberSearch.Mobile.Core.ViewModels;
 
 /// <summary>
-/// Карточка барбера и запись: шапка, услуги, свободное время и панель брони.
+/// Карточка мастера и запись: шапка, услуги, свободное время и панель брони.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -53,9 +53,9 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
     private static string NoReviewsTextValue => Loc.T("Пока нет отзывов");
     private static string VenueFallbackText => Loc.T("Салон");
-    private static string NotWorkingDayValue => Loc.T("В этот день барбер не работает.");
+    private static string NotWorkingDayValue => Loc.T("В этот день мастер не работает.");
     private static string NoFreeTimeValue => Loc.T("Свободного времени на этот день нет.");
-    private static string ProfileLoadFailedValue => Loc.T("Не удалось загрузить профиль барбера.");
+    private static string ProfileLoadFailedValue => Loc.T("Не удалось загрузить профиль мастера.");
     private static string SlotsLoadFailedValue => Loc.T("Не удалось загрузить свободное время.");
     private static string RateLimitValue => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
     private static string NetworkValue => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
@@ -111,7 +111,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private DateOnly _maxDate;
 
     /// <summary>
-    /// Создаёт карточку барбера.
+    /// Создаёт карточку мастера.
     /// </summary>
     /// <param name="api">Публичные чтения: карточка, слоты и отзывы.</param>
     /// <param name="apiOptions">Адрес API: от него зависят абсолютные адреса медиа.</param>
@@ -254,7 +254,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     public ObservableCollection<BarberServiceOption> ServiceOptions { get; } = [];
 
     /// <summary>
-    /// Салоны барбера вместе с поясами.
+    /// Салоны мастера вместе с поясами.
     /// </summary>
     public ObservableCollection<BarberSalonOption> Salons { get; } = [];
 
@@ -309,7 +309,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     public bool HasLoadError => LoadErrorText is not null;
 
     /// <summary>
-    /// Имя барбера.
+    /// Имя мастера.
     /// </summary>
     public string DisplayName => _profile?.DisplayName ?? string.Empty;
 
@@ -356,12 +356,12 @@ public sealed partial class BarberCardViewModel : ObservableObject
     public bool HasNoServices => Services.Count == 0;
 
     /// <summary>
-    /// Есть ли у барбера хотя бы один салон: без места приёма записываться некуда.
+    /// Есть ли у мастера хотя бы один салон: без места приёма записываться некуда.
     /// </summary>
     public bool HasSalons => Salons.Count > 0;
 
     /// <summary>
-    /// Нужно ли показать, что барбер не указал место приёма.
+    /// Нужно ли показать, что мастер не указал место приёма.
     /// </summary>
     public bool HasNoSalons => Salons.Count == 0;
 
@@ -1006,7 +1006,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
         _latePolicy = profile.LatePolicy?.Trim() ?? string.Empty;
 
-        // Пояс отзывов — пояс основного салона: отзыв относится к барберу, а не к текущему
+        // Пояс отзывов — пояс основного салона: отзыв относится к мастеру, а не к текущему
         // выбору в «Свободном времени».
         var primarySalon = profile.Salons.FirstOrDefault(salon => salon.IsPrimary)
             ?? (profile.Salons.Count > 0 ? profile.Salons[0] : null);

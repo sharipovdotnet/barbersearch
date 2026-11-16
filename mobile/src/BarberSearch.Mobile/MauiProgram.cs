@@ -151,7 +151,7 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IBookingsApi, BookingsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
-        // Отзыв — третья запись с Bearer: автора сервер берёт из токена, барбера — из брони.
+        // Отзыв — третья запись с Bearer: автора сервер берёт из токена, мастера — из брони.
         builder.Services.AddHttpClient<IReviewsApi, ReviewsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 

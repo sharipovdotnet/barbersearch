@@ -22,7 +22,7 @@ namespace BarberSearch.Mobile.Core.Api;
 public interface IBarberSearchApi
 {
     /// <summary>
-    /// Ищет барберов с фильтрами витрины и keyset-пагинацией.
+    /// Ищет мастеров с фильтрами витрины и keyset-пагинацией.
     /// </summary>
     /// <param name="filters">
     /// Фильтры: город, дата, язык, специализация, услуга справочника и дополнительная услуга.
@@ -91,13 +91,13 @@ public interface IBarberSearchApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Публичная карточка барбера: шапка, услуги, салоны и специализации.
+    /// Публичная карточка мастера: шапка, услуги, салоны и специализации.
     /// </summary>
     /// <remarks>
     /// Выключенные услуги сервер отдаёт вместе с активными (<c>IsActive = false</c>), а скрытый
     /// или неподтверждённый профиль — <c>404</c>. Оба случая разбирает экран, а не клиент.
     /// </remarks>
-    /// <param name="id">Идентификатор профиля барбера.</param>
+    /// <param name="id">Идентификатор профиля мастера.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Карточка профиля.</returns>
     /// <exception cref="BarberSearchApiException">Профиль не найден или API ответил ошибкой.</exception>
@@ -106,17 +106,17 @@ public interface IBarberSearchApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Свободные слоты барбера на локальную дату салона.
+    /// Свободные слоты мастера на локальную дату салона.
     /// </summary>
     /// <remarks>
     /// <paramref name="date"/> — календарная дата салона, а не инстант: без <paramref name="salonId"/>
     /// сервер берёт основной салон, без <paramref name="hairServiceId"/> шаг сетки — 30 минут.
     /// Пару <c>barberServiceId</c> + <c>durationMinutes</c> для брони отдаёт сам ответ.
     /// </remarks>
-    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
     /// <param name="slotDate">Локальная дата салона.</param>
     /// <param name="hairServiceId">Услуга справочника; <c>null</c> — «Любая услуга».</param>
-    /// <param name="salonId">Салон; <c>null</c> — основной салон барбера.</param>
+    /// <param name="salonId">Салон; <c>null</c> — основной салон мастера.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Сетка слотов с поясом салона и длительностью шага.</returns>
     /// <exception cref="BarberSearchApiException">Услуга, салон или профиль недоступны.</exception>
@@ -128,14 +128,14 @@ public interface IBarberSearchApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Опубликованные отзывы барбера: страница с непрозрачным курсором.
+    /// Опубликованные отзывы мастера: страница с непрозрачным курсором.
     /// </summary>
     /// <remarks>
     /// Это анонимное чтение: сервер не требует токен и не отдаёт автора, услугу и салон
     /// в <see cref="ReviewResponse"/>. Порядок — свежие сверху; <paramref name="cursor"/>
     /// возвращается из ответа как есть и не разбирается.
     /// </remarks>
-    /// <param name="barberProfileId">Идентификатор профиля барбера; обязателен.</param>
+    /// <param name="barberProfileId">Идентификатор профиля мастера; обязателен.</param>
     /// <param name="cursor">Курсор следующей страницы; <c>null</c> — первая.</param>
     /// <param name="pageSize">Размер страницы; <c>null</c> — серверный по умолчанию (20).</param>
     /// <param name="cancellationToken">Токен отмены.</param>

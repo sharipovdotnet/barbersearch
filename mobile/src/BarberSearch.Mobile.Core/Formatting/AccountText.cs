@@ -40,7 +40,7 @@ public static class AccountText
     private static readonly Dictionary<UserRole, string> Roles = new()
     {
         [UserRole.Customer] = "Клиент",
-        [UserRole.Barber] = "Барбер",
+        [UserRole.Barber] = "Мастер",
         [UserRole.Admin] = "Администратор",
     };
 

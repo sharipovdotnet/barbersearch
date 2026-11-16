@@ -104,6 +104,6 @@ public sealed class PortfolioViewerViewModelTests
                 PhotoModerationStatus.Approved,
                 RejectionReason: null),
             BaseAddress,
-            "Тимур Барберов",
+            "Тимур Мастеров",
             number: 1);
 }

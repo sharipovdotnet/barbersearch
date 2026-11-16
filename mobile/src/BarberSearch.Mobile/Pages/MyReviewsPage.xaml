@@ -155,7 +155,7 @@
                                             VerticalOptions="Center" />
                                     </Grid>
 
-                                    <!-- Барбер: нажатие открывает его карточку. -->
+                                    <!-- Мастер: нажатие открывает его карточку. -->
                                     <Button
                                         BackgroundColor="Transparent"
                                         Clicked="OnBarberClicked"

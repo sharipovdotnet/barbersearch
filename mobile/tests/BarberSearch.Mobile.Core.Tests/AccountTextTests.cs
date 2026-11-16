@@ -42,7 +42,7 @@ public sealed class AccountTextTests
 
     [Theory]
     [InlineData(UserRole.Customer, "Клиент")]
-    [InlineData(UserRole.Barber, "Барбер")]
+    [InlineData(UserRole.Barber, "Мастер")]
     [InlineData(UserRole.Admin, "Администратор")]
     public void RoleText_KnownRole_ShowsRussianCaption(UserRole role, string expected) =>
         Assert.Equal(expected, AccountText.RoleText(role));

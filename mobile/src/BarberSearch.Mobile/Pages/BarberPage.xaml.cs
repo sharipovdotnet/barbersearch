@@ -3,7 +3,7 @@ using BarberSearch.Mobile.Core.ViewModels;
 namespace BarberSearch.Mobile.Pages;
 
 /// <summary>
-/// Карточка барбера и запись: услуга, салон, дата, слот и подтверждение.
+/// Карточка мастера и запись: услуга, салон, дата, слот и подтверждение.
 /// </summary>
 /// <remarks>
 /// <para>

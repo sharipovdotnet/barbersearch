@@ -4,7 +4,7 @@ using BarberSearch.Mobile.Core.Formatting;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки новых текстов карточки барбера: стаж, языки, оплата, инициалы, портфолио и диапазон.
+/// Проверки новых текстов карточки мастера: стаж, языки, оплата, инициалы, портфолио и диапазон.
 /// </summary>
 /// <remarks>
 /// Строки сверяются дословно с вебом (<c>frontend/src/lib/barber-grade.ts</c>,
@@ -56,8 +56,8 @@ public sealed class BarberTextTests
 
     [Theory]
     [InlineData("Тимур", "Т")]
-    [InlineData("Тимур Барберов", "ТБ")]
-    [InlineData("Тимур Ахмедович Барберов", "ТА")]
+    [InlineData("Тимур Мастеров", "ТМ")]
+    [InlineData("Тимур Ахмедович Мастеров", "ТА")]
     public void Initials_NameWithWords_TakesFirstLettersOfFirstTwo(string displayName, string expected)
     {
         // Инициалы — заглушка аватара: двух букв достаточно, третье слово отбрасывается.
@@ -89,7 +89,7 @@ public sealed class BarberTextTests
     public void PhotoAlt_NoDescription_BuildsTemplateWithNameAndNumber(string? description)
     {
         Assert.Equal(
-            "Работа барбера Тимур, фото 3",
+            "Работа мастера Тимур, фото 3",
             BarberText.PhotoAlt("Тимур", 3, description));
     }
 
@@ -124,16 +124,16 @@ public sealed class BarberTextTests
     }
 
     [Theory]
-    [InlineData(1, "Показан 1 барбер")]
-    [InlineData(2, "Показаны 2 барбера")]
-    [InlineData(4, "Показаны 4 барбера")]
-    [InlineData(5, "Показаны 5 барберов")]
-    [InlineData(11, "Показаны 11 барберов")]
-    [InlineData(21, "Показан 21 барбер")]
-    [InlineData(22, "Показаны 22 барбера")]
+    [InlineData(1, "Показан 1 мастер")]
+    [InlineData(2, "Показаны 2 мастера")]
+    [InlineData(4, "Показаны 4 мастера")]
+    [InlineData(5, "Показаны 5 мастеров")]
+    [InlineData(11, "Показаны 11 мастеров")]
+    [InlineData(21, "Показан 21 мастер")]
+    [InlineData(22, "Показаны 22 мастера")]
     public void ShownBarbers_VariousCounts_ReturnsWebPluralForm(int count, string expected)
     {
-        // Формы повторяют плюрал shownBarbers веба: 11–14 всегда «барберов», дальше —
+        // Формы повторяют плюрал shownBarbers веба: 11–14 всегда «мастеров», дальше —
         // по последней цифре. Счётчик стоит над выдачей, поэтому ошибка видна сразу.
         Assert.Equal(expected, BarberText.ShownBarbers(count));
     }

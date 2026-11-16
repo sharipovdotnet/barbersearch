@@ -42,7 +42,7 @@ public sealed class BarberServiceOption
     public string Name { get; }
 
     /// <summary>
-    /// Цена у этого барбера; для «Любой услуги» — ноль, он никогда не попадает в бронь.
+    /// Цена у этого мастера; для «Любой услуги» — ноль, он никогда не попадает в бронь.
     /// </summary>
     public decimal Price { get; }
 
@@ -75,7 +75,7 @@ public sealed class BarberServiceOption
     /// <summary>
     /// Собирает пункт из строки прайса карточки.
     /// </summary>
-    /// <param name="service">Услуга барбера с ценой и длительностью.</param>
+    /// <param name="service">Услуга мастера с ценой и длительностью.</param>
     /// <returns>Пункт для списка и <c>Picker</c>.</returns>
     public static BarberServiceOption From(BarberProfileServiceResponse service)
     {

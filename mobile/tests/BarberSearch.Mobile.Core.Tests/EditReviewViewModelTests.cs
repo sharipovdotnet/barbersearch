@@ -22,7 +22,7 @@ public sealed class EditReviewViewModelTests
     private const string PublishedHint =
         "Оценку можно изменить сразу: повторная проверка нужна только для текста.";
     private const string ResubmissionHint =
-        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке барбера.";
+        "Изменение текста вернёт отзыв на проверку: до одобрения он не покажется на карточке мастера.";
     private const string ModerationHint =
         "Отзыв на проверке: изменения появятся на карточке после одобрения.";
 
@@ -233,7 +233,7 @@ public sealed class EditReviewViewModelTests
             isPublished,
             new DateTimeOffset(2026, 11, 15, 10, 30, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 11, 15, 10, 30, 0, TimeSpan.Zero),
-            new MyReviewBarberResponse(Guid.CreateVersion7(), "Игорь Барбер"),
+            new MyReviewBarberResponse(Guid.CreateVersion7(), "Игорь Мастер"),
             new MyReviewVisitResponse(
                 Guid.CreateVersion7(),
                 new DateTimeOffset(2026, 11, 15, 10, 30, 0, TimeSpan.Zero),

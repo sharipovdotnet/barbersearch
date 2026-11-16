@@ -18,7 +18,7 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// Проверки экрана «Перенести запись»: дата визита, границы, сетка слотов и отправка переноса.
 /// </summary>
 /// <remarks>
-/// Строка списка собирается из <see cref="BookingResponse"/> и карточки барбера: без карточки
+/// Строка списка собирается из <see cref="BookingResponse"/> и карточки мастера: без карточки
 /// у неё нет пояса салона, и «сегодня» считалось бы в UTC. Время визита — 15:30 UTC, то есть
 /// 18:30 в Москве; «сейчас» — 14 ноября, поэтому визит ещё впереди и перенос доступен.
 /// </remarks>
@@ -199,7 +199,7 @@ public sealed class RescheduleBookingViewModelTests
 
         Assert.False(harness.ViewModel.IsWorkingDay);
         Assert.True(harness.ViewModel.ShowEmptyDay);
-        Assert.Equal("В этот день барбер не работает.", harness.ViewModel.EmptyDayText);
+        Assert.Equal("В этот день мастер не работает.", harness.ViewModel.EmptyDayText);
         Assert.Empty(harness.ViewModel.Slots);
     }
 
@@ -295,14 +295,14 @@ public sealed class RescheduleBookingViewModelTests
     }
 
     /// <summary>
-    /// Карточка барбера: московский салон и активная услуга на 45 минут.
+    /// Карточка мастера: московский салон и активная услуга на 45 минут.
     /// </summary>
     private static BarberProfileResponse ProfileResponse() =>
         new(
             BarberProfileId,
             UserId,
             null,
-            "Тимур Барберов",
+            "Тимур Мастеров",
             Grade.SeniorBarber,
             null,
             11,
