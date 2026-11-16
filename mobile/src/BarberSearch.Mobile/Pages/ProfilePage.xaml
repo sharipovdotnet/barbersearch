@@ -19,6 +19,11 @@
         Вкладка «Профиль» — хаб: без сессии форма входа, с сессией карточка личности и
         переходы в разделы. Состояния лежат в одной ячейке сетки и показываются
         взаимоисключающе: так ни одно из них не толкает остальные.
+
+        Текст на этой вкладке на одну ступень крупнее остального приложения: body 16 вместо 14,
+        meta 14 вместо 12, шкала та же. «Профиль» — место, где живёт самый мелкий текст
+        приложения (статус email, роль, подпись напоминаний), и люди с плохим зрением не
+        могут его прочитать; отклонение записано в AGENT.md §5.
     -->
     <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="8">
 
@@ -61,13 +66,13 @@
                     </Border>
                     <Label
                         FontFamily="GeistSemiBold"
-                        FontSize="20"
+                        FontSize="22"
                         Text="{loc:Translate Key='Вход в Hairo'}"
                         VerticalOptions="Center" />
                 </HorizontalStackLayout>
 
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Email" />
+                    <Label FontSize="16" Text="Email" />
                     <Entry
                         IsEnabled="{Binding IsFormEnabled}"
                         Keyboard="Email"
@@ -76,7 +81,7 @@
                 </VerticalStackLayout>
 
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="{loc:Translate Key='Пароль'}" />
+                    <Label FontSize="16" Text="{loc:Translate Key='Пароль'}" />
                     <Entry
                         IsEnabled="{Binding IsFormEnabled}"
                         IsPassword="True"
@@ -86,6 +91,7 @@
                 </VerticalStackLayout>
 
                 <Label
+                    FontSize="16"
                     IsVisible="{Binding HasError}"
                     LineBreakMode="WordWrap"
                     Text="{Binding ErrorMessage}"
@@ -96,7 +102,7 @@
                     Padding="0"
                     BackgroundColor="Transparent"
                     Command="{Binding ForgotPasswordCommand}"
-                    FontSize="14"
+                    FontSize="16"
                     HorizontalOptions="End"
                     MinimumHeightRequest="44"
                     Text="{loc:Translate Key='Забыли пароль?'}"
@@ -104,6 +110,7 @@
 
                 <Button
                     Command="{Binding LoginCommand}"
+                    FontSize="16"
                     IsEnabled="{Binding IsFormEnabled}"
                     MinimumHeightRequest="44"
                     Text="{Binding LoginButtonText}" />
@@ -114,6 +121,7 @@
                     HorizontalOptions="Center"
                     Spacing="4">
                     <Label
+                        FontSize="16"
                         Text="{loc:Translate Key='Нет аккаунта?'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
                         VerticalTextAlignment="Center" />
@@ -121,6 +129,7 @@
                         Padding="0"
                         BackgroundColor="Transparent"
                         Command="{Binding RegisterCommand}"
+                        FontSize="16"
                         HorizontalOptions="Start"
                         Text="{loc:Translate Key='Зарегистрироваться'}"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
@@ -143,6 +152,7 @@
                 HorizontalOptions="Center"
                 IsRunning="{Binding ShowLoading}" />
             <Label
+                FontSize="16"
                 HorizontalTextAlignment="Center"
                 IsVisible="{Binding IsProfileLoading}"
                 Text="{loc:Translate Key='Загружаем профиль…'}"
@@ -156,17 +166,19 @@
             VerticalOptions="Center">
             <Label
                 FontFamily="GeistSemiBold"
-                FontSize="16"
+                FontSize="18"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
                 Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
             <Label
+                FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
                 Text="{Binding ProfileError}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             <Button
                 Command="{Binding RetryProfileCommand}"
+                FontSize="16"
                 HorizontalOptions="Center"
                 Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
@@ -189,7 +201,7 @@
                             WidthRequest="56">
                             <Label
                                 FontFamily="GeistSemiBold"
-                                FontSize="20"
+                                FontSize="22"
                                 HorizontalTextAlignment="Center"
                                 Text="{Binding Initials}"
                                 TextColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}"
@@ -198,19 +210,19 @@
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
                             <Label
                                 FontFamily="GeistSemiBold"
-                                FontSize="16"
+                                FontSize="18"
                                 LineBreakMode="TailTruncation"
                                 Text="{Binding DisplayName}" />
                             <Label
-                                FontSize="14"
+                                FontSize="16"
                                 LineBreakMode="TailTruncation"
                                 Text="{Binding ProfileEmail}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Label
-                                FontSize="12"
+                                FontSize="14"
                                 Text="{Binding RoleText}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Label FontSize="12" Text="{Binding EmailStatusText}">
+                            <Label FontSize="14" Text="{Binding EmailStatusText}">
                                 <Label.Triggers>
                                     <DataTrigger
                                         Binding="{Binding IsEmailVerified}"
@@ -238,7 +250,7 @@
                 <Button
                     BackgroundColor="Transparent"
                     Command="{Binding SecurityCommand}"
-                    FontSize="14"
+                    FontSize="16"
                     HorizontalOptions="Start"
                     IsVisible="{Binding ShowEmailWarning}"
                     Padding="0"
@@ -248,11 +260,13 @@
                 <!-- Ошибка тихого обновления: данные на экране остаются, есть чем повторить. -->
                 <VerticalStackLayout IsVisible="{Binding HasProfileError}" Spacing="8">
                     <Label
+                        FontSize="16"
                         LineBreakMode="WordWrap"
                         Text="{Binding ProfileError}"
                         TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
                     <Button
                         Command="{Binding RetryProfileCommand}"
+                        FontSize="16"
                         HorizontalOptions="Start"
                         Text="{loc:Translate Key='Повторить'}" />
                 </VerticalStackLayout>
@@ -268,6 +282,7 @@
                         ColumnSpacing="12"
                         MinimumHeightRequest="44">
                         <Label
+                            FontSize="16"
                             Text="{loc:Translate Key='Присылать напоминания'}"
                             VerticalTextAlignment="Center" />
                         <Switch
@@ -277,7 +292,7 @@
                             VerticalOptions="Center" />
                     </Grid>
                     <Label
-                        FontSize="12"
+                        FontSize="14"
                         IsVisible="{Binding HasNotificationsStatus}"
                         LineBreakMode="WordWrap"
                         Text="{Binding NotificationsStatusText}"
@@ -286,7 +301,7 @@
                         Padding="0"
                         BackgroundColor="Transparent"
                         Command="{Binding OpenNotificationSettingsCommand}"
-                        FontSize="14"
+                        FontSize="16"
                         HorizontalOptions="Start"
                         IsVisible="{Binding ShowNotificationSettings}"
                         MinimumHeightRequest="44"
@@ -297,21 +312,25 @@
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding EditProfileCommand}"
+                    FontSize="16"
                     Text="{loc:Translate Key='Личные данные'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding ReviewsCommand}"
+                    FontSize="16"
                     Text="{loc:Translate Key='Мои отзывы'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding SecurityCommand}"
+                    FontSize="16"
                     Text="{loc:Translate Key='Безопасность'}"
                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding LogoutCommand}"
+                    FontSize="16"
                     Text="{Binding LogoutButtonText}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
