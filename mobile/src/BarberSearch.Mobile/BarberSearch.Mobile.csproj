@@ -21,7 +21,7 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Отображаемое имя и идентификатор приложения. -->
-		<ApplicationTitle>BarberSearch</ApplicationTitle>
+		<ApplicationTitle>Hairo</ApplicationTitle>
 		<!--
 			Идентификатор нужен до публикации в сторах: сменить его после выпуска нельзя.
 			Выбран по будущему домену; поменять здесь, если домен будет другим.

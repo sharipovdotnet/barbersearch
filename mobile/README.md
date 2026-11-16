@@ -459,6 +459,12 @@ ports:
 dotnet build src/BarberSearch.Mobile/BarberSearch.Mobile.csproj -f net10.0-android -p:DevApiHost=192.168.1.10
 ```
 
+If the app starts and immediately closes right after a package was added or removed, the cause is a
+stale build cache rather than the code: the resource ids managed code uses and the ones in the APK
+disagree, and the bottom tab bar throws `This component requires that you specify a valid
+TextAppearance attribute`. Delete `src/BarberSearch.Mobile/obj` and `bin` (or Rebuild in the IDE),
+then install again.
+
 ## Tests
 
 ```powershell
