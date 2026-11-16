@@ -48,6 +48,7 @@
         <ProjectReference Include="..\BarberSearch.Infrastructure.Email\BarberSearch.Infrastructure.Email.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Push\BarberSearch.Infrastructure.Push.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Telegram\BarberSearch.Infrastructure.Telegram.csproj" />
+        <ProjectReference Include="..\BarberSearch.Infrastructure.Geocoding\BarberSearch.Infrastructure.Geocoding.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using BarberSearch.Application.Notifications;
 using BarberSearch.Infrastructure.Email;
+using BarberSearch.Infrastructure.Geocoding;
 using BarberSearch.Infrastructure.Push;
 using BarberSearch.Infrastructure.Telegram;
 using BarberSearch.Web;
@@ -99,6 +100,13 @@ try
     {
         DevMode = builder.Environment.IsDevelopment()
     });
+
+    // Подсказки адреса: провайдер выключен по умолчанию. Выключенная фича не роняет старт —
+    // ключа нет, эндпоинты сразу отвечают 409 addressSuggestions.unavailable, а внешний
+    // провайдер не вызывается ни разу (проверка сидит в обработчике, а не в адаптере).
+    // Ключ провайдера остаётся на сервере: клиент ходит через бэкенд, поэтому в ответы
+    // и в браузер/мобильное приложение он не попадает.
+    builder.Services.AddAddressSuggestions(startup.AddressSuggestions);
 
     // Воркер push. Тот же приём с синглтоном: интеграционный тест вызывает RunTickAsync
     // у того же экземпляра, а не создаёт второй фоновый сервис.

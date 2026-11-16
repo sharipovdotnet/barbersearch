@@ -18,6 +18,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.Push", "src\BarberSearch.Infrastructure.Push\BarberSearch.Infrastructure.Push.csproj", "{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Infrastructure.Geocoding", "src\BarberSearch.Infrastructure.Geocoding\BarberSearch.Infrastructure.Geocoding.csproj", "{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Application", "src\BarberSearch.Application\BarberSearch.Application.csproj", "{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BarberSearch.Contracts", "src\BarberSearch.Contracts\BarberSearch.Contracts.csproj", "{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}"
@@ -66,6 +68,10 @@ Global
 		{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0A9DD236-A446-4745-BBDA-EA7D45EBA3FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6E1F3A57-2C4B-49D8-8F0A-7B3D5C9E1A24}.Release|Any CPU.Build.0 = Release|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26FBB8AC-0F48-441F-AE0B-BEDF1030A39E}.Release|Any CPU.ActiveCfg = Release|Any CPU
