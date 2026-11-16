@@ -1,6 +1,11 @@
 import { expect, test } from '../fixtures/test'
 
 import { fixtures, pageSize } from '../fixtures/accounts'
+import {
+  expectOpenSuggestionList,
+  mockAddressSuggestions,
+  type CitySuggestionMock,
+} from '../fixtures/suggestions'
 import { LandingPage } from '../pages/landing-page'
 import { LoginDialog } from '../pages/login-dialog'
 
@@ -11,6 +16,21 @@ import { LoginDialog } from '../pages/login-dialog'
  * чтобы правку было видно в диффе.
  */
 test.use({ storageState: { cookies: [], origins: [] } })
+
+/**
+ * Подсказка города для витрины: провайдер в тестовой среде выключен,
+ * поэтому ответ подменяется через `page.route` (`e2e/fixtures/suggestions.ts`).
+ * Город — тот же, что в сиде, иначе после выбора нечего показать.
+ */
+const MOSCOW_SUGGESTION: CitySuggestionMock = {
+  providerId: 'e2e-city-msk',
+  display: 'г. Москва',
+  city: 'Москва',
+  region: 'Москва',
+  country: 'Россия',
+  latitude: 55.7558,
+  longitude: 37.6173,
+}
 
 test.describe('витрина и вход', () => {
   test('поиск по городу: карточки, счётчик и «Показать ещё» добавляет страницу', async ({
@@ -52,6 +72,62 @@ test.describe('витрина и вход', () => {
     await landing.search('Канзас-Сити')
     await expect(page.getByText('В этом городе никого не нашли')).toBeVisible()
     await expect(landing.cards).toHaveCount(0)
+  })
+
+  test('подсказки города: выбор подставляет город, Enter не отправляет форму', async ({
+    page,
+  }) => {
+    const landing = new LandingPage(page)
+    const searchRequests: string[] = []
+
+    await mockAddressSuggestions(page, { cities: [MOSCOW_SUGGESTION] })
+
+    // Витрина ищет без фильтров сразу при монтировании: интересны только запросы,
+    // которые случатся после того, как форма уже отрисована.
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+
+      if (url.pathname === '/api/barbers') {
+        searchRequests.push(request.url())
+      }
+    })
+
+    await landing.goto()
+    await expect(landing.counter).toHaveText('Показаны 12 барберов')
+    searchRequests.length = 0
+
+    const input = landing.cityInput
+
+    await input.fill('Мос')
+
+    const listbox = await expectOpenSuggestionList(
+      page,
+      input,
+      'Подсказки города'
+    )
+    await expect(
+      listbox.getByRole('option', { name: 'г. Москва' })
+    ).toBeVisible()
+
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+
+    // В поле — голое имя города: сервер сравнивает `salon.City` точно.
+    await expect(input).toHaveValue('Москва')
+    await expect(listbox).toBeHidden()
+    // Enter выбрал пункт, а не отправил форму: иначе поиск пошёл бы раньше кнопки.
+    expect(searchRequests).toStrictEqual([])
+
+    const request = page.waitForRequest(
+      (candidate) => new URL(candidate.url()).pathname === '/api/barbers'
+    )
+
+    await landing.submit.click()
+
+    expect(
+      new URL((await request).url()).searchParams.get('city')
+    ).toBe('Москва')
+    await expect(landing.counter).toHaveText('Показаны 12 барберов')
   })
 
   test('пустая отправка: клиентские ошибки, без запроса на сервер', async ({ page }) => {

@@ -19,6 +19,11 @@ export type SuggestionComboboxProps<T> = {
   /** id поля и основа для id ошибки и подсказки: на него опираются тесты формы. */
   id: string
   label: string
+  /**
+   * Подпись только для скринридера. У полей формы поиска на витрине нет видимых
+   * подписей: текст живёт в `placeholder`, а `label` остаётся доступным именем.
+   */
+  labelHidden?: boolean
   value: string
   /** Ручной ввод: каждая правка сбрасывает выбор, сделанный подсказкой. */
   onValueChange: (value: string) => void
@@ -40,22 +45,31 @@ export type SuggestionComboboxProps<T> = {
   /** Пока `false`, в сеть не ходим: например, адрес без выбранного города. */
   enabled?: boolean
   className?: string
+  /**
+   * Классы самого `<input>`. Форма поиска держит все контролы одной высоты (`h-10`),
+   * а форма салона оставляет базовую высоту `Input`.
+   */
+  inputClassName?: string
 }
 
 /**
  * Поле с серверными подсказками на Base UI Combobox.
  *
- * Примитив не фильтрует выдачу повторно (`filter={null}`): поиск идёт на сервере, и
- * клиентская фильтрация только спрятала бы часть ответа. Поле остаётся обычным
- * `<input>` с ролью combobox — существующие `getByLabel('Город')` и `.fill(...)`
- * продолжают работать.
+ * Одинаково работает в форме салона (город и адрес) и в фильтре города на витрине:
+ * поиск идёт на сервере, поэтому примитив не фильтрует выдачу повторно
+ * (`filter={null}`) — клиентская фильтрация только спрятала бы часть ответа. Поле
+ * остаётся обычным `<input>` с ролью combobox — существующие `getByLabel('Город')`
+ * и `.fill(...)` продолжают работать.
  *
  * Недоступность подсказок — тихая: список просто не открывается, а поле остаётся
  * редактируемым. Пустой ответ — не ошибка, а «Ничего не найдено.» внутри списка.
+ * Это важно и на витрине: эндпоинт подсказок требует входа, поэтому гость просто
+ * печатает город руками и поиск работает как раньше.
  */
 export function SuggestionCombobox<T>({
   id,
   label,
+  labelHidden,
   value,
   onValueChange,
   onSelect,
@@ -72,6 +86,7 @@ export function SuggestionCombobox<T>({
   autoFocus,
   enabled = true,
   className,
+  inputClassName,
 }: SuggestionComboboxProps<T>) {
   const { t } = useI18n()
   const { items, status } = useAddressSuggestions(
@@ -121,7 +136,15 @@ export function SuggestionCombobox<T>({
 
   return (
     <Field className={className} data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel
+        htmlFor={id}
+        // `sr-only` не снимает `w-fit` у FieldLabel: ширина остаётся по тексту, но
+        // элемент обрезан. `pointer-events-none` гарантирует, что невидимая подпись
+        // не перехватит клик по верхней кромке поля.
+        className={labelHidden ? 'sr-only pointer-events-none' : undefined}
+      >
+        {label}
+      </FieldLabel>
       <ComboboxPrimitive.Root
         items={items}
         filter={null}
@@ -135,7 +158,7 @@ export function SuggestionCombobox<T>({
       >
         <ComboboxPrimitive.Input
           id={id}
-          render={<Input />}
+          render={<Input className={inputClassName} />}
           placeholder={placeholder}
           disabled={disabled}
           autoFocus={autoFocus}

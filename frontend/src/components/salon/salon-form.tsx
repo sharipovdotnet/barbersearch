@@ -7,7 +7,7 @@ import {
   type FormEvent,
 } from 'react'
 
-import { SuggestionCombobox } from '@/components/salon/suggestion-combobox'
+import { SuggestionCombobox } from '@/components/suggestion-combobox'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {

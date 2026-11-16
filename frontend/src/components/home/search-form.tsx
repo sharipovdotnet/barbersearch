@@ -1,11 +1,17 @@
 import { Loader2, Search } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
+import { SuggestionCombobox } from '@/components/suggestion-combobox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSearchCatalogs } from '@/hooks/use-search-catalogs'
 import { useI18n } from '@/i18n'
+import {
+  CITY_SUGGESTIONS_MIN_LENGTH,
+  fetchCitySuggestions,
+  type CitySuggestion,
+} from '@/lib/address-suggestions'
 import type { BarberSearchFilters } from '@/lib/barber-search'
 import {
   LANGUAGE_LABELS,
@@ -43,6 +49,13 @@ function todayLocal(): string {
  * Все запросы уходят только по submit — изменение поля ничего не перезапрашивает.
  * Справочники грузятся отдельно: их ошибка не блокирует город, дату и язык.
  * Пустой справочник скрывает свой селект, чтобы не висел мёртвый список.
+ *
+ * Город — поле с серверными подсказками DaData (`GET /api/addresses/cities`).
+ * Выбор пункта подставляет голое имя города, а не подпись из списка: сервер
+ * сравнивает `salon.City` точно, поэтому «Екатеринбург» из подсказки находит
+ * салоны, а набранное «Екат» — нет. Подсказки — прогрессивное улучшение:
+ * эндпоинт требует входа, и у гостя список просто не открывается, а поле
+ * остаётся обычным свободным вводом (401 там тихий, как и 409).
  *
  * Дополнительная услуга — свободный текст с подсказками `<datalist>`: значения
  * приходят из карточек барберов, но выбрать можно и частичное совпадение
@@ -86,17 +99,23 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
       onSubmit={handleSubmit}
     >
       <div className="min-w-0 sm:col-span-2 lg:min-w-56 lg:flex-[2]">
-        <Label htmlFor="search-city" className="sr-only">
-          {t('Город салона')}
-        </Label>
-        <Input
+        <SuggestionCombobox<CitySuggestion>
           id="search-city"
-          name="city"
+          label={t('Город салона')}
+          labelHidden
           value={city}
+          // Ручной ввод оставляем как есть: свободный город без подсказки — норма.
+          onValueChange={setCity}
+          // Город пишем по `city`, а не по подписи: подпись — «г. Екатеринбург».
+          onSelect={(suggestion) => setCity(suggestion.city)}
+          getKey={(suggestion) => suggestion.providerId ?? suggestion.display}
+          getLabel={(suggestion) => suggestion.display}
+          fetchSuggestions={fetchCitySuggestions}
+          minLength={CITY_SUGGESTIONS_MIN_LENGTH}
+          listLabel={t('Подсказки города')}
           placeholder={t('Москва')}
-          autoComplete="address-level2"
-          className="h-10"
-          onChange={(event) => setCity(event.target.value)}
+          // Все контролы формы одной высоты; базовая высота `Input` — `h-8`.
+          inputClassName="h-10"
         />
       </div>
 

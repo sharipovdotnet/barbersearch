@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { SuggestionCombobox } from '@/components/salon/suggestion-combobox'
+import { SuggestionCombobox } from '@/components/suggestion-combobox'
 import {
   CITY_SUGGESTIONS_MIN_LENGTH,
   fetchCitySuggestions,
