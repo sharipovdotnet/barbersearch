@@ -438,6 +438,14 @@ The port is done: this is the state to keep, not a plan.
   duplicates were deleted. `Platforms/Android/Resources/values/colors.xml` carries the same
   `--primary` / `--background` values for the platform chrome, and the icon and splash colours in
   the `.csproj` use `#171717` for the same reason.
+- **The launcher icon and splash are the Hairo wordmark, not the template's `.NET` marks.** The
+  purple `#512BD4` square with the `.NET` logotype the MAUI template ships is gone: `appicon.svg`
+  is a `#171717` square, and `appiconfg.svg` / `splash.svg` carry «Hairo» set in Geist SemiBold and
+  converted to outlines, so rasterizing needs no font and no machine can shift the letterforms. The
+  wordmark spans 54% of the icon's square — inside the 66% circle Android's adaptive masks cannot
+  clip, and small enough that the `monochrome` layer the resizetizer derives from the same file
+  still reads — and 75% of the square on the splash. The name on the icon is a wordmark, not the
+  app title: `ApplicationTitle` stays `BarberSearch`.
 - **Values are the web's `oklch`, converted to sRGB hex.** MAUI does not parse `oklch()`, so the
   hex is a lossless transcription, checked by contrast rather than by eye: `--destructive` `#CE0000`
   still gives 5.79:1 on white, as `index.css` records for issue #34. Translucent tokens keep their
