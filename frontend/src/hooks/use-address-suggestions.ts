@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '@/lib/api'
 import { SUGGESTIONS_DEBOUNCE_MS } from '@/lib/address-suggestions'
@@ -13,8 +13,6 @@ export type AddressSuggestionsStatus =
 export type AddressSuggestionsController<T> = {
   items: T[]
   status: AddressSuggestionsStatus
-  /** Повтор последнего запроса; нужен, когда строка не менялась. */
-  retry: () => void
 }
 
 type SuggestionsState<T> = {
@@ -43,7 +41,6 @@ export function useAddressSuggestions<T>(
 ): AddressSuggestionsController<T> {
   const key = query.trim()
   const [state, setState] = useState<SuggestionsState<T> | null>(null)
-  const [attempts, setAttempts] = useState({ key, count: 0 })
   const [isUnavailable, setIsUnavailable] = useState(false)
   const versionRef = useRef(0)
   const loadRef = useRef(load)
@@ -54,7 +51,6 @@ export function useAddressSuggestions<T>(
     loadRef.current = load
   })
 
-  const attempt = attempts.key === key ? attempts.count : 0
   const current = state?.key === key ? state : null
 
   useEffect(() => {
@@ -106,31 +102,18 @@ export function useAddressSuggestions<T>(
       versionRef.current += 1
       controller.abort()
     }
-  }, [key, minLength, attempt, isUnavailable])
-
-  const retry = useCallback(() => {
-    if (key.length < minLength) {
-      return
-    }
-
-    setState(null)
-    setAttempts((previous) => ({
-      key,
-      count: previous.key === key ? previous.count + 1 : 1,
-    }))
-  }, [key, minLength])
+  }, [key, minLength, isUnavailable])
 
   if (isUnavailable) {
-    return { items: [], status: 'hidden', retry }
+    return { items: [], status: 'hidden' }
   }
 
   if (key.length < minLength) {
-    return { items: [], status: 'idle', retry }
+    return { items: [], status: 'idle' }
   }
 
   return {
     items: current?.items ?? [],
     status: current?.status ?? 'loading',
-    retry,
   }
 }

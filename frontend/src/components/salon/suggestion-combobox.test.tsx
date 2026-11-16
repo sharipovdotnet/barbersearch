@@ -268,6 +268,52 @@ describe('SuggestionCombobox: клавиатура и состояния', () =>
     expect(input).toHaveValue('Ек')
   })
 
+  it('две подсказки с одинаковой подписью не дают дублирующихся ключей', async () => {
+    const user = userEvent.setup()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const duplicates: CitySuggestion[] = [
+      {
+        providerId: null,
+        display: 'г. Казань',
+        city: 'Казань',
+        region: null,
+        country: 'Россия',
+        latitude: null,
+        longitude: null,
+      },
+      {
+        providerId: null,
+        display: 'г. Казань',
+        city: 'Казань',
+        region: null,
+        country: 'Россия',
+        latitude: null,
+        longitude: null,
+      },
+    ]
+
+    server.use(
+      http.get(CITY_REQUESTS, () => HttpResponse.json(duplicates))
+    )
+
+    try {
+      render(<CityField />)
+
+      await user.type(screen.getByLabelText('Город'), 'Каз')
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByRole('option', { name: 'г. Казань' })
+        ).toHaveLength(2)
+      })
+      // React ругается в console.error на повторяющийся key: его быть не должно.
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   it('пустой ответ — «Ничего не найдено.», а не ошибка поля', async () => {
     const user = userEvent.setup()
 

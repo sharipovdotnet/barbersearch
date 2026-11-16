@@ -149,9 +149,12 @@ export function SuggestionCombobox<T>({
           <ComboboxPrimitive.Positioner sideOffset={4} className="z-50">
             <ComboboxPrimitive.Popup className="max-h-64 w-(--anchor-width) overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
               <ComboboxPrimitive.List aria-label={listLabel}>
-                {(item: T) => (
+                {(item: T, index: number) => (
                   <ComboboxPrimitive.Item
-                    key={getKey(item)}
+                    // Ключ `getKey` уникален не всегда: провайдер может вернуть `null`
+                    // `providerId` и две подсказки с одинаковой подписью. Индекс в ключе
+                    // разводит такие пары, не меняя сравнение элементов по значению.
+                    key={`${getKey(item)}#${index}`}
                     value={item}
                     className={cn(
                       'cursor-default rounded-md px-2 py-1.5 text-sm select-none',
