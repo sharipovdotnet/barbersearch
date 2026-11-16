@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    «Чиканье» ножниц на системном splash-экране Android 12+: две половины вращаются вокруг
+    перекрестия в противоположные стороны и по очереди раскрываются и смыкаются, как ножницы
+    в руке. Анимация бесконечная: цикл 700 мс, и ножницы чикают, пока система держит splash,
+    а не замирают через полсекунды; половины при этом всегда возвращаются в сомкнутое
+    положение. iOS и Android до 12 остаются на растровом splash.svg — там анимировать нечем.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/hairo_splash_lockup">
+    <target android:name="blade_upper">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="350"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="rotation"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="0"
+                android:valueTo="-14" />
+        </aapt:attr>
+    </target>
+    <target android:name="blade_lower">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="350"
+                android:interpolator="@android:interpolator/fast_out_slow_in"
+                android:propertyName="rotation"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="0"
+                android:valueTo="14" />
+        </aapt:attr>
+    </target>
+</animated-vector>

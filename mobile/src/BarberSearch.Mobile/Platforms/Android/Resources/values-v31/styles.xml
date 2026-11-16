@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Android 12+ рисует свой splash-экран и проигрывает только AnimatedVectorDrawable; статичную
+        картинку он не двигает, поэтому здесь иконка — hairo_splash_animated. 700 — один полный
+        цикл чиканья для Android 12: на нём анимация останавливается сомкнутой. На 13+ система
+        сама берёт длительность из AVD, и бесконечное чиканье идёт, пока splash не закроется.
+    -->
+    <style name="Theme.Hairo.Splash" parent="Maui.SplashTheme">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/hairo_splash_animated</item>
+        <item name="android:windowSplashScreenAnimationDuration">700</item>
+    </style>
+</resources>
