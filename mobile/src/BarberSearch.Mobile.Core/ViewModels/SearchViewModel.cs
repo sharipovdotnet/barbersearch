@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Net;
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
@@ -29,7 +30,9 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// показали ошибку; пустой результат — это список без элементов и подсказка из веба.
 /// </para>
 /// <para>
-/// Запрос уходит только по нажатию «Найти»: правка фильтра ничего не перезапрашивает.
+/// Поиск уходит только по нажатию «Найти»: правка фильтра ничего не перезапрашивает.
+/// Исключение — подсказки города: они читаются по паузе в наборе, но выдачу не трогают
+/// (<see cref="CitySuggestions"/>).
 /// </para>
 /// </remarks>
 public sealed partial class SearchViewModel : ObservableObject
@@ -93,18 +96,24 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <param name="timeProvider">
     /// Текущий день устройства: от него отсчитывается список дат, поэтому тест задаёт его сам.
     /// </param>
+    /// <param name="citySuggestions">
+    /// Подсказки города под полем; живут рядом с экраном, потому что повторяют его судьбу.
+    /// </param>
     public SearchViewModel(
         IBarberSearchApi api,
         ILocationService locationService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        CitySuggestions citySuggestions)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(locationService);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(citySuggestions);
 
         _api = api;
         _locationService = locationService;
         _timeProvider = timeProvider;
+        CitySuggestions = citySuggestions;
 
         FillLanguages();
         RefreshDateOptions();
@@ -118,6 +127,18 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Событие нужно вёрстке: сама прокрутка — платформенная операция, а Core про неё не знает.
     /// </remarks>
     public event EventHandler? SearchCompleted;
+
+    /// <summary>
+    /// Подсказки города под полем «Город»: список, пустой ответ и тихий отказ.
+    /// </summary>
+    /// <remarks>
+    /// Отдельная секция, а не поля экрана: у подсказок своя жизнь — дебаунс, отмена запроса и
+    /// закрытие по выбору, — и держать её рядом с фильтрами и выдачей значило бы смешать два
+    /// состояния в одном файле. Экран по-прежнему один, <see cref="CitySuggestions"/> не второй
+    /// <c>BindingContext</c>: страница биндится к <see cref="SearchViewModel"/>, а к подсказкам
+    /// обращается через это свойство.
+    /// </remarks>
+    public CitySuggestions CitySuggestions { get; }
 
     /// <summary>
     /// Найденные барберы в порядке выдачи сервера.
@@ -379,6 +400,29 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Подставляет выбранную подсказку в фильтр города.
+    /// </summary>
+    /// <remarks>
+    /// В поле идёт голое имя города (<see cref="CitySuggestionResponse.City"/>), а не подпись из
+    /// списка: сервер сравнивает город точно, поэтому «Екатеринбург» из подсказки находит салоны,
+    /// а «г. Екатеринбург» — уже нет. Список закрывается здесь, клавиатуру убирает страница:
+    /// это платформенная операция, и Core про неё не знает.
+    /// </remarks>
+    /// <param name="suggestion">Подсказка, по которой нажали.</param>
+    [RelayCommand]
+    private void UseCitySuggestion(CitySuggestionResponse suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+
+        CitySuggestions.Select(suggestion);
+
+        if (!string.Equals(City, suggestion.City, StringComparison.Ordinal))
+        {
+            City = suggestion.City;
+        }
+    }
+
+    /// <summary>
     /// Загружает первую страницу выдачи по текущим фильтрам.
     /// </summary>
     /// <remarks>
@@ -395,6 +439,9 @@ public sealed partial class SearchViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchAsync(CancellationToken cancellationToken)
     {
+        // Список подсказок не переживает отправку формы: он относится к вводу, а не к выдаче.
+        CitySuggestions.Close();
+
         var filters = BuildFilters();
 
         IsLoading = true;
@@ -719,4 +766,13 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     partial void OnIsCatalogsLoadingChanged(bool value) => NotifyCatalogOptionsChanged();
+
+    /// <summary>
+    /// Каждый символ города запускает подсказки; паузу и отмену держит секция.
+    /// </summary>
+    /// <remarks>
+    /// Задача намеренно не ожидается: ввод не должен ждать ни паузы, ни сети. Ошибки внутри
+    /// секции пойманы, поэтому бросить здесь нечего.
+    /// </remarks>
+    partial void OnCityChanged(string value) => _ = CitySuggestions.QueryAsync(value);
 }

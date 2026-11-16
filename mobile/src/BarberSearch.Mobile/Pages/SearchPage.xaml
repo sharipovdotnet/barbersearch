@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:addr="clr-namespace:BarberSearch.Contracts.Addresses.SuggestCities;assembly=BarberSearch.Contracts"
     xmlns:search="clr-namespace:BarberSearch.Contracts.BarberProfiles.SearchBarbers;assembly=BarberSearch.Contracts"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:SearchViewModel"
@@ -25,9 +26,47 @@
                             Text="{loc:Translate Key='Город салона'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                         <Entry
+                            x:Name="CityEntry"
                             Placeholder="{loc:Translate Key='Москва'}"
                             ReturnCommand="{Binding SearchCommand}"
                             Text="{Binding City}" />
+
+                        <!--
+                            Подсказки города — строки прямо под полем: у MAUI нет нативного
+                            комбобокса, а выпадающее окно пришлось бы рисовать вручную поверх
+                            формы. Строка 44 pt: палец попадает с первого раза, как у карточек.
+                        -->
+                        <Border
+                            Margin="0,4,0,0"
+                            IsVisible="{Binding CitySuggestions.IsVisible}"
+                            Padding="0"
+                            StrokeShape="RoundRectangle 10">
+                            <VerticalStackLayout>
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding CitySuggestions.Items}" Spacing="0">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="addr:CitySuggestionResponse">
+                                            <Label
+                                                Padding="12,12"
+                                                FontSize="16"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding Display}">
+                                                <Label.GestureRecognizers>
+                                                    <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCitySuggestionTapped" />
+                                                </Label.GestureRecognizers>
+                                            </Label>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <!-- Пустой ответ — не ошибка: текст веба, а поле остаётся вводом. -->
+                                <Label
+                                    Padding="12,12"
+                                    FontSize="14"
+                                    IsVisible="{Binding CitySuggestions.IsEmpty}"
+                                    Text="{loc:Translate Key='Ничего не найдено.'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            </VerticalStackLayout>
+                        </Border>
                     </VerticalStackLayout>
 
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="12">

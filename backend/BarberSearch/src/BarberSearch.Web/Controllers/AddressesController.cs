@@ -16,10 +16,11 @@ namespace BarberSearch.Web.Controllers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Вызывать может только аутентифицированный пользователь (клиент, барбер или администратор):
-/// заполнение адреса идёт из формы салона, а она доступна лишь после входа. Аноним получает
-/// <c>401</c>, поэтому платная квота провайдера не бывает анонимной и не тратится на
-/// злоупотребление.
+/// Подсказки города анонимны: фильтр «Город» стоит на публичной витрине и в мобильном
+/// приложении, где поиск работает без входа, а подсказка — прогрессивное улучшение поля.
+/// Подсказки адреса остаются только для аутентифицированного пользователя (клиент, барбер или
+/// администратор): заполнение адреса идёт из формы салона, а она доступна лишь после входа,
+/// поэтому платная квота провайдера не тратится анонимно на улицы и дома.
 /// </para>
 /// <para>
 /// Оба действия ограничены политикой <c>addresses</c> — 60 запросов в минуту на пользователя
@@ -27,7 +28,7 @@ namespace BarberSearch.Web.Controllers;
 /// с <c>Retry-After</c> и кодом <c>rateLimit.exceeded</c>.
 /// </para>
 /// <para>
-/// Ошибки общие для обоих действий: <c>401</c> — аноним; <c>400</c> — валидация с
+/// Ошибки <c>400</c> общие для обоих действий — валидация с
 /// <c>invalidField</c> (<c>addressSuggestions.query.tooShort</c>,
 /// <c>addressSuggestions.query.tooLong</c>, <c>addressSuggestions.city.tooLong</c>,
 /// <c>addressSuggestions.cityProviderId</c>); <c>409 addressSuggestions.unavailable</c> —
@@ -58,9 +59,10 @@ public sealed class AddressesController : ApiController
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Аутентифицированное действие с лимитом <c>addresses</c> 60 запросов в минуту на
-    /// пользователя. Ответ — голый JSON-массив <c>CitySuggestionResponse</c>; если совпадений
-    /// нет, приходит <c>200 []</c>, а не ошибка.
+    /// Публичное действие: аноним допускается, потому что город подсказывают фильтру витрины
+    /// и мобильного поиска, доступного до входа. Лимит <c>addresses</c> — 60 запросов в минуту
+    /// на пользователя, а без входа — на адрес клиента. Ответ — голый JSON-массив
+    /// <c>CitySuggestionResponse</c>; если совпадений нет, приходит <c>200 []</c>, а не ошибка.
     /// </para>
     /// <para>
     /// <paramref name="query"/> тримится. Короче <c>AddressSuggestions:MinCityQueryLength</c>
@@ -79,6 +81,7 @@ public sealed class AddressesController : ApiController
     /// <param name="limit">Сколько подсказок вернуть; по умолчанию и максимум — 8.</param>
     /// <param name="handler">Обработчик запроса.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
+    [AllowAnonymous]
     [HttpGet("cities")]
     public async Task<ActionResult<IReadOnlyList<CitySuggestionResponse>>> Cities(
         [FromQuery] string? query,

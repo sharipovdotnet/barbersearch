@@ -1,3 +1,4 @@
+using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
@@ -15,8 +16,8 @@ namespace BarberSearch.Mobile.Core.Api;
 /// Интерфейс существует ради тестов ViewModel: экраны зависят от него, а не от
 /// <see cref="HttpClient"/>, поэтому проверяются без сети и без эмулятора. Набор методов растёт
 /// вместе с экранами — «на всякий случай» сюда ничего не добавляется. Поиск, справочники для его
-/// фильтров, карточка и слоты — публичные чтения, поэтому живут здесь и ходят на клиент без
-/// авторизационного обработчика.
+/// фильтров, подсказки города, карточка и слоты — публичные чтения, поэтому живут здесь и ходят на
+/// клиент без авторизационного обработчика.
 /// </remarks>
 public interface IBarberSearchApi
 {
@@ -61,6 +62,32 @@ public interface IBarberSearchApi
     /// <returns>Активные услуги в порядке сервера.</returns>
     /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
     Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Публичные подсказки города по началу названия — прокси DaData на сервере.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ответ — голый массив без пагинации, порядок серверный (по релевантности); пусто — не
+    /// ошибка, а «ничего не найдено». Подсказка заполняет поле городом
+    /// (<see cref="CitySuggestionResponse.City"/>), а <see cref="CitySuggestionResponse.Display"/>
+    /// нужен только строке списка: сервер сравнивает город точно, и «Екатеринбург» из подсказки
+    /// находит салоны, а набранное «Екат» — нет.
+    /// </para>
+    /// <para>
+    /// Запрос короче двух символов сервер отвергает кодом
+    /// <c>addressSuggestions.query.tooShort</c>, поэтому порог проверяет вызывающий: экран
+    /// не дёргает сеть на первой букве. Лимит подсказок фиксирован — восемь, как на сервере.
+    /// </para>
+    /// </remarks>
+    /// <param name="query">Начало названия города; тримится.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Подсказки города в порядке сервера.</returns>
+    /// <exception cref="ArgumentException">Запрос пуст или состоит из пробелов.</exception>
+    /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
+    Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
+        string query,
         CancellationToken cancellationToken = default);
 
     /// <summary>

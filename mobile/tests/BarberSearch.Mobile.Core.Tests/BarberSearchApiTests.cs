@@ -584,6 +584,92 @@ public sealed class BarberSearchApiTests
         Assert.Contains("hairServices.get.failed", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public async Task GetCitySuggestionsAsync_SendsTrimmedEscapedQueryAndFixedLimit()
+    {
+        const string json = """
+            [
+              {
+                "providerId": "fias-moscow",
+                "display": "г. Москва",
+                "city": "Москва",
+                "region": "Москва",
+                "country": "Россия",
+                "latitude": 55.7558,
+                "longitude": 37.6173
+              }
+            ]
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.OK, json, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var items = await api.GetCitySuggestionsAsync("  Екат бург  ");
+
+        var city = Assert.Single(items);
+
+        Assert.Equal("fias-moscow", city.ProviderId);
+        Assert.Equal("г. Москва", city.Display);
+        Assert.Equal("Москва", city.City);
+        Assert.Equal("Москва", city.Region);
+        Assert.Equal("Россия", city.Country);
+        Assert.Equal(55.7558, city.Latitude);
+        Assert.Equal(37.6173, city.Longitude);
+
+        Assert.Equal("/api/addresses/cities", handler.LastRequestUri!.AbsolutePath);
+
+        // Пробелы вокруг запроса срезаны, а сам запрос уходит экранированным: иначе пробел
+        // разорвал бы query-параметр, а кириллица зависела бы от кодировки HttpClient.
+        var rawQuery = handler.LastRequestUri.Query;
+
+        Assert.Contains(
+            string.Concat("query=", Uri.EscapeDataString("Екат бург")),
+            rawQuery,
+            StringComparison.Ordinal);
+        Assert.Contains("limit=8", rawQuery, StringComparison.Ordinal);
+        Assert.DoesNotContain("Екат", rawQuery, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetCitySuggestionsAsync_Conflict_TurnsIntoException()
+    {
+        const string problemJson = """
+            {
+              "title": "Conflict",
+              "status": 409,
+              "detail": "Подсказки недоступны.",
+              "errorCodes": ["addressSuggestions.unavailable"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.Conflict, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetCitySuggestionsAsync("Екат"));
+
+        Assert.Equal(HttpStatusCode.Conflict, exception.StatusCode);
+        Assert.Contains("addressSuggestions.unavailable", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetCitySuggestionsAsync_BlankQuery_ThrowsWithoutRequest(string? query)
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "[]", "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        // Пустой запрос — ошибка вызывающего: сервер ответил бы 400, и сеть для этого не нужна.
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => api.GetCitySuggestionsAsync(query!));
+
+        Assert.Null(handler.LastRequestUri);
+    }
+
     /// <summary>
     /// Подменённый обработчик: отдаёт заранее заданный ответ и запоминает адрес запроса.
     /// </summary>

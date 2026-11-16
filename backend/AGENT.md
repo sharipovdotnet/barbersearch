@@ -1544,10 +1544,14 @@ Suggested order:
 
     **Подсказки города и адреса (2026-11-16, срез «address suggestions»).** Сначала город, затем
     адрес: форма салона подсказывает города, а выбранный город фильтрует подсказки улиц. Оба
-    чтения идут через бэкенд — `GET api/addresses/cities` и `GET api/addresses/suggest` — под
-    `[Authorize]` (все сценарии заполнения адреса уже аутентифицированы, а квота провайдера
-    платная) и политикой лимитера `addresses` (60/мин на пользователя: ключ — claim `sub`,
-    иначе адрес клиента). У ответов свой TTL-кэш на `ConcurrentDictionary` + `TimeProvider`
+    чтения идут через бэкенд — `GET api/addresses/cities` и `GET api/addresses/suggest` — и
+    ограничены политикой лимитера `addresses` (60/мин на пользователя: ключ — claim `sub`, иначе
+    адрес клиента). `suggest` закрыт `[Authorize]` (все сценарии заполнения адреса уже
+    аутентифицированы, а квота провайдера платная), а `cities` с 2026-11-16 доступен анонимно
+    (`[AllowAnonymous]`): город подсказывают фильтру публичной витрины и мобильному поиску,
+    который работает без входа; анонимные запросы делят IP-партицию, поэтому после 60 подсказок
+    с адреса список до конца минуты не открывается, а поле остаётся обычным вводом. У ответов
+    свой TTL-кэш на `ConcurrentDictionary` + `TimeProvider`
     (по умолчанию 900 с, `0` выключает); в БД и аудит они ничего не пишут, домен не меняют.
     Провайдер — DaData Suggest API за портом `IAddressSuggestionsProvider` (адаптер
     `DadataAddressSuggestionsProvider` в `BarberSearch.Infrastructure.Geocoding`), поэтому смена
@@ -2478,7 +2482,7 @@ the aggregate that owns the child entity:
 | `BarberRequestsController` | `api/barber-requests` | 2 (create + mine) |
 | `AdminBarberRequestsController` | `api/admin/barber-requests` | 4 (list + by id + approve + reject, admin only) |
 | `PushDevicesController` | `api/push/devices` | 2 (register + unregister an FCM device; any authenticated role, `204`, §20.4) |
-| `AddressesController` | `api/addresses` | 2 (city and address suggestions; any authenticated role, `addresses` limiter, §12) |
+| `AddressesController` | `api/addresses` | 2 (city suggestions anonymous, address suggestions any authenticated role, `addresses` limiter, §12) |
 
 The push device routes are the customer half of §20; both answer `204` and take the owner from the
 session, never from the body:
@@ -2488,12 +2492,14 @@ session, never from the body:
 | POST | `api/push/devices` | fallback auth (Bearer или cookie), rate limit записи | `{ token, platform: "Android" }` → `204`; upsert по токену: повтор обновляет `last_seen_at`, токен из другого аккаунта переходит к текущему; ошибки полей — `400 pushDeviceToken.token.invalid` / `.token.tooLong` / `.platform.unknown`, аноним — `401` |
 | POST | `api/push/devices/unregister` | fallback auth, rate limit записи | `{ token }` → `204`; удаляет только собственный токен, неизвестный/чужой/пустой — успех без эффекта (ответ не работает oracle'ом) |
 
-The address-suggestion routes back the salon form (§12.10); both are `[Authorize]`d, limited by the
-`addresses` policy (60/min per user) and read-only — no database, audit or domain writes:
+The address-suggestion routes back the salon form (§12.10) and the public city filter; both are
+limited by the `addresses` policy (60/min per user, anonymous by IP) and read-only — no database,
+audit or domain writes. Address suggestions are `[Authorize]`d; city suggestions are
+`[AllowAnonymous]` because the storefront and the mobile search suggest a city before sign-in:
 
 | Метод | Маршрут | Доступ | Что делает |
 |---|---|---|---|
-| GET | `api/addresses/cities` | fallback auth (Bearer или cookie), лимитер `addresses` 60/мин на пользователя | `?query=…&limit=…`: `query` ≥ 2 символов после trim, `limit` зажимается в `1..8` без `400`; `200` — голый JSON-массив `{ providerId, display, city, region, country, latitude, longitude }`, пусто — `200 []`; `400 addressSuggestions.query.tooShort` / `.query.tooLong`, `401`, `409 addressSuggestions.unavailable`, `429` |
+| GET | `api/addresses/cities` | анонимно, лимитер `addresses` 60/мин (без входа — по IP) | `?query=…&limit=…`: `query` ≥ 2 символов после trim, `limit` зажимается в `1..8` без `400`; `200` — голый JSON-массив `{ providerId, display, city, region, country, latitude, longitude }`, пусто — `200 []`; `400 addressSuggestions.query.tooShort` / `.query.tooLong`, `409 addressSuggestions.unavailable`, `429` |
 | GET | `api/addresses/suggest` | fallback auth (Bearer или cookie), лимитер `addresses` 60/мин на пользователя | `?query=…&cityProviderId=…&city=…&limit=…`: `query` ≥ 3 символов; `cityProviderId` — непрозрачный `providerId` из ответа городов и важнее свободного `city`; `200` — массив с `postalCode`, `latitude`, `longitude` и `timeZoneId: null`; `400 addressSuggestions.query.tooShort` / `.query.tooLong` / `.city.tooLong` / `.cityProviderId`; `401`, `409`, `429` |
 
 Conventions:
