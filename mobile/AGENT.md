@@ -444,8 +444,10 @@ The port is done: this is the state to keep, not a plan.
   converted to outlines, so rasterizing needs no font and no machine can shift the letterforms. The
   wordmark spans 54% of the icon's square — inside the 66% circle Android's adaptive masks cannot
   clip, and small enough that the `monochrome` layer the resizetizer derives from the same file
-  still reads — and 75% of the square on the splash. The name on the icon is a wordmark, not the
-  app title: `ApplicationTitle` stays `BarberSearch`.
+  still reads — and 75% of the square on the splash. The mark is the product's name, not just a
+  picture: `ApplicationTitle` and the Shell title are `Hairo`, and the sign-in heading reads
+  «Вход в Hairo». Identifiers are not text and keep their names: the namespaces, the project files,
+  `ru.barbersearch.mobile` and the URLs still say `BarberSearch`.
 - **Values are the web's `oklch`, converted to sRGB hex.** MAUI does not parse `oklch()`, so the
   hex is a lossless transcription, checked by contrast rather than by eye: `--destructive` `#CE0000`
   still gives 5.79:1 on white, as `index.css` records for issue #34. Translucent tokens keep their

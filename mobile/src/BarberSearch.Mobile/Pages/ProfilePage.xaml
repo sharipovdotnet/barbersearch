@@ -47,7 +47,7 @@
                 <Label
                     FontFamily="GeistSemiBold"
                     FontSize="20"
-                    Text="{loc:Translate Key='Вход в BarberSearch'}" />
+                    Text="{loc:Translate Key='Вход в Hairo'}" />
 
                 <VerticalStackLayout Spacing="4">
                     <Label Text="Email" />
