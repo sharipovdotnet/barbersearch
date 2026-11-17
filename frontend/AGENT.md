@@ -483,6 +483,10 @@ $env:Email__UseTls = 'false'; $env:Email__FromAddress = 'no-reply@barbersearch.t
 $env:App__PublicUrl = 'http://localhost:5173'
 # Outbox-воркер шлёт письма раз в 1 с (дефолтные 30 с не успевают в 10-секундный wait Playwright)
 $env:EmailOutbox__IntervalSeconds = '1'
+# Мутационные сценарии делают десятки записей в минуту за несколько аккаунтов сразу:
+# с прод-квотой 30/мин прогон упирается в 429 (квота, не дефект). Стенд поднимает
+# только лимит записи; дефолт продакшена остаётся 30 (backend/AGENT.md §17.5).
+$env:RateLimiting__WritePermitLimit = '240'
 # Хранилище: локально каталог вне workspace; в CI media-сценарии идут в MinIO
 # (Storage:Provider=S3, бакет barbersearch) — тот же srcset/304/404 проверяет S3-ветку.
 # Для локального S3: backend/docker compose up -d minio + Storage__S3__* (backend/.env.example).

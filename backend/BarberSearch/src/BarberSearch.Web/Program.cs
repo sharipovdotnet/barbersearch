@@ -174,8 +174,26 @@ try
     // Перебор паролей не должен быть бесплатным: 10 попыток в минуту на адрес. Отдельно
     // ограничена запись — 30 запросов в минуту на пользователя (sub), а без него на адрес:
     // спам POST api/bookings и api/reviews не должен занимать слоты настоящим клиентам.
+    // Квоту записи можно поднять конфигурацией — стенд сквозных тестов делает это
+    // (frontend-e2e задаёт RateLimiting__WritePermitLimit), прод-значение по умолчанию
+    // остаётся 30.
     // Ответ 429 — ProblemDetails с Retry-After и кодом rateLimit.exceeded.
-    builder.Services.AddRateLimiter(RateLimitSettings.Configure);
+    var writePermitLimit = RateLimitSettings.WritePermitLimit;
+
+    if (int.TryParse(
+        builder.Configuration[RateLimitSettings.WritePermitLimitConfigurationKey],
+        out var configuredWritePermitLimit))
+    {
+        writePermitLimit = configuredWritePermitLimit;
+    }
+
+    if (writePermitLimit <= 0)
+    {
+        throw new InvalidOperationException(
+            $"{RateLimitSettings.WritePermitLimitConfigurationKey} must be a positive integer.");
+    }
+
+    builder.Services.AddRateLimiter(options => RateLimitSettings.Configure(options, writePermitLimit));
 
     // CORS нужен только если браузерный клиент живёт на другом источнике. Список проверен
     // StartupSettings: wildcard запрещён, потому что политика разрешает credentials.
