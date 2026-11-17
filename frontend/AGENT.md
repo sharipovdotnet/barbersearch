@@ -1,7 +1,9 @@
 # AGENT.md — BarberSearch (frontend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: branch `features/issue-54` (default `main`). The landing page searches real
+> Code state: the trunk is `main`; every change happens on a short-lived `features/issue-N` branch
+> cut from the freshly fetched `origin/main` (§18), so this file deliberately names no "current" or
+> "working" branch. The landing page searches real
 > barbers through `GET /api/barbers` (city + date, keyset pagination) and every result card
 > links to the public profile at `/barbers/{id}` (`GET /api/barbers/{id}`: services, salons,
 > weekly schedule, specializations, rating), where the «Свободное время» section reads
@@ -150,7 +152,7 @@ Technical approach:
 | Workspace (session cwd) | `D:\Projects\barbersearch\frontend` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/salon-owner-attach-barbers` (default: `main`) |
+| Default branch | `main` — the only trunk; every branch is cut from it, and no "working branch" is pinned here (§18) |
 | Backend | `..\backend`, API at `http://localhost:5243` (`http` profile) |
 | Backend context | `..\backend\AGENT.md` — §5 commands, §16 read endpoints, §17 auth |
 | Domain glossary | `..\GLOSSARY.md` |
@@ -3793,6 +3795,15 @@ do not shift.
 
 ## 18. Working rules for this repo
 
+- **Branch before the first edit — mandatory.** If a task requires changing **at least one
+  tracked file** (anything `git ls-files` lists: code, tests, `AGENT.md`/docs, CI config), create
+  a new branch **from `main` first**, and only then change the files. The order is not optional
+  and not "commit later onto a new branch": `git fetch origin && git checkout -b
+  features/issue-N origin/main`, then edit, then commit, then open the PR against `main`.
+  Never edit a tracked file while on `main`, and never do it on a branch that was not cut from
+  `main` (§2, and «Branch base» below). Read-only work — reading files, `npm run lint`,
+  `npm test`, `git status|diff|log|show` — may run on any branch and changes nothing, so it
+  needs no new branch.
 - **Read before writing.** UI work starts with §7–§8; API work with §9; every change with §10.
 - **Contract-first with the backend.** The API shape is owned by `../backend` (`backend/AGENT.md`
   §16–§17). Do not invent endpoints, rename fields client-side, or fork response types. If a
@@ -3810,7 +3821,8 @@ do not shift.
   local `main`: `git fetch origin && git checkout -b features/issue-N origin/main`. If a branch
   was started elsewhere, rebase or reset it onto `origin/main` before the first push. Changes
   reach `main` only through a PR opened against `main`; a PR never targets another feature
-  branch.
+  branch. This is the same rule as «Branch before the first edit» above, seen from the other
+  side: the branch exists *before* the first file change, not after it.
 - **Commits.** Branches follow `features/issue-N`. Commit style observed in history:
   `feat(frontend): …`, `chore(frontend): …`, `docs: …`, `ci: …` — imperative English subject,
   one logical change per commit.
