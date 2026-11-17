@@ -164,14 +164,18 @@
             IsVisible="{Binding ShowProfileError}"
             Spacing="12"
             VerticalOptions="Center">
+            <!--
+                Заголовок и причина — общий для приложения размер отказа (16 и 14), не
+                увеличенная шкала этой вкладки: «Не удалось загрузить …» должно читаться
+                одинаково на «Записях» и «Профиле».
+            -->
             <Label
                 FontFamily="GeistSemiBold"
-                FontSize="18"
+                FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
                 Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
             <Label
-                FontSize="16"
                 HorizontalTextAlignment="Center"
                 LineBreakMode="WordWrap"
                 Text="{Binding ProfileError}"
