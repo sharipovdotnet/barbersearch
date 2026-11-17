@@ -1283,7 +1283,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_push_notifications_delivery_attempts", "delivery_attempts BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3, 4, 5, 6)");
+                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3, 4, 5, 6, 7, 8)");
                         });
                 });
 

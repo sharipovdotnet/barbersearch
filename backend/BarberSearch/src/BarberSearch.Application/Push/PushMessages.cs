@@ -16,7 +16,9 @@ namespace BarberSearch.Application.Push;
 /// события создания — <c>Вы записались: салон «Барбершоп»</c> или
 /// <c>Вас записали: салон «Барбершоп»</c>, события статуса — <c>Ваша запись подтверждена:
 /// салон «Барбершоп»</c>, <c>Ваша запись отменена: салон «Барбершоп»</c> и
-/// <c>Ваша запись перенесена: салон «Барбершоп»</c>. Поэтому они живут в одном месте, а не
+/// <c>Ваша запись перенесена: салон «Барбершоп»</c>, а клиентские отмена и перенос с другой
+/// поверхности — <c>Вы отменили запись: салон «Барбершоп»</c> и
+/// <c>Вы перенесли запись: салон «Барбершоп»</c>. Поэтому они живут в одном месте, а не
 /// собираются по месту отправки, и проверяются тестами на точное совпадение.
 /// </para>
 /// <para>
@@ -72,6 +74,16 @@ public static class PushMessages
     /// Заголовок события «запись перенесена» без снимка салона.
     /// </summary>
     public const string RESCHEDULED_DEFAULT_TITLE = "Ваша запись перенесена";
+
+    /// <summary>
+    /// Заголовок события «клиент отменил запись сам» без снимка салона.
+    /// </summary>
+    public const string CUSTOMER_CANCELLED_DEFAULT_TITLE = "Вы отменили запись";
+
+    /// <summary>
+    /// Заголовок события «клиент перенёс визит сам» без снимка салона.
+    /// </summary>
+    public const string CUSTOMER_RESCHEDULED_DEFAULT_TITLE = "Вы перенесли запись";
 
     /// <summary>
     /// Слово для визита в те же локальные сутки салона.
@@ -138,11 +150,13 @@ public static class PushMessages
             PushNotificationKind.BookingCreatedByBarber =>
                 Created(notification, now, createdByBarber: true),
 
-            // Все три события статуса — про клиента, а не про автора действия: заголовок
+            // Все события статуса — про клиента, а не про автора действия: заголовок
             // и тип различаются, тело собирается одинаково (AGENT.md §20.11).
             PushNotificationKind.BookingConfirmed
                 or PushNotificationKind.BookingCancelledByBarber
-                or PushNotificationKind.BookingRescheduledByBarber =>
+                or PushNotificationKind.BookingRescheduledByBarber
+                or PushNotificationKind.BookingCancelledByCustomer
+                or PushNotificationKind.BookingRescheduledByCustomer =>
                 Status(notification, now),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(notification),
@@ -192,6 +206,8 @@ public static class PushMessages
             PushNotificationKind.BookingConfirmed => CONFIRMED_DEFAULT_TITLE,
             PushNotificationKind.BookingCancelledByBarber => CANCELLED_DEFAULT_TITLE,
             PushNotificationKind.BookingRescheduledByBarber => RESCHEDULED_DEFAULT_TITLE,
+            PushNotificationKind.BookingCancelledByCustomer => CUSTOMER_CANCELLED_DEFAULT_TITLE,
+            PushNotificationKind.BookingRescheduledByCustomer => CUSTOMER_RESCHEDULED_DEFAULT_TITLE,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(kind),
                 kind,
@@ -236,7 +252,7 @@ public static class PushMessages
 
     /// <summary>
     /// Тип события статуса для <c>data.type</c>: по нему мобильное приложение выбирает
-    /// обработчик перехода (все три открывают «Записи»).
+    /// обработчик перехода (все события статуса открывают «Записи»).
     /// </summary>
     private static string StatusType(PushNotificationKind kind)
         => kind switch
@@ -244,6 +260,10 @@ public static class PushMessages
             PushNotificationKind.BookingConfirmed => PushMessage.BOOKING_CONFIRMED_TYPE,
             PushNotificationKind.BookingCancelledByBarber => PushMessage.BOOKING_CANCELLED_TYPE,
             PushNotificationKind.BookingRescheduledByBarber => PushMessage.BOOKING_RESCHEDULED_TYPE,
+            PushNotificationKind.BookingCancelledByCustomer
+                => PushMessage.BOOKING_CANCELLED_BY_CUSTOMER_TYPE,
+            PushNotificationKind.BookingRescheduledByCustomer
+                => PushMessage.BOOKING_RESCHEDULED_BY_CUSTOMER_TYPE,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(kind),
                 kind,
@@ -286,23 +306,61 @@ public static class PushMessages
         PushNotification notification,
         DateTimeOffset now,
         TimeZoneInfo timeZone)
+        => ComposeVisitBody(
+            notification.BarberName,
+            notification.ServiceName,
+            notification.StartAt,
+            now,
+            timeZone);
+
+    /// <summary>
+    /// Собирает тело письма о визите по снимку каталога: та же фраза, что у push-события
+    /// статуса, — письмо и уведомление должны говорить одно и то же.
+    /// </summary>
+    /// <param name="snapshot">Снимок салона, мастера, услуги и пояса.</param>
+    /// <param name="startAt">Время визита.</param>
+    /// <param name="now">Текущий момент в UTC.</param>
+    public static string ComposeVisitBody(
+        PushBookingSnapshot snapshot,
+        DateTimeOffset startAt,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        return ComposeVisitBody(
+            snapshot.BarberName,
+            snapshot.ServiceName,
+            startAt,
+            now,
+            ResolveTimeZone(snapshot.SalonTimeZoneId));
+    }
+
+    /// <summary>
+    /// Общая сборка тела: части снимка выпадают по отдельности, «null» в тексте не появляется.
+    /// </summary>
+    private static string ComposeVisitBody(
+        string? barberName,
+        string? serviceName,
+        DateTimeOffset startAt,
+        DateTimeOffset now,
+        TimeZoneInfo timeZone)
     {
         var builder = new StringBuilder();
 
-        if (!string.IsNullOrWhiteSpace(notification.BarberName))
+        if (!string.IsNullOrWhiteSpace(barberName))
         {
-            builder.Append("Мастер ").Append(notification.BarberName.Trim()).Append(PART_SEPARATOR);
+            builder.Append("Мастер ").Append(barberName.Trim()).Append(PART_SEPARATOR);
         }
 
-        if (!string.IsNullOrWhiteSpace(notification.ServiceName))
+        if (!string.IsNullOrWhiteSpace(serviceName))
         {
-            builder.Append(notification.ServiceName.Trim()).Append(PART_SEPARATOR);
+            builder.Append(serviceName.Trim()).Append(PART_SEPARATOR);
         }
 
         builder
-            .Append(CreationDayWord(notification.StartAt, now, timeZone))
+            .Append(CreationDayWord(startAt, now, timeZone))
             .Append(" в ")
-            .Append(SalonTimeZone.FormatTimeOfDay(notification.StartAt, timeZone));
+            .Append(SalonTimeZone.FormatTimeOfDay(startAt, timeZone));
 
         return builder.ToString();
     }

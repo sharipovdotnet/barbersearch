@@ -244,13 +244,15 @@ returns it to moderation, and only the server decides.
 
 ## Push notifications
 
-The channel carries five kinds of Android notification. The hour-before reminder
+The channel carries seven kinds of Android notification. The hour-before reminder
 (`booking.reminder`) announces a **confirmed** booking; the booking-creation event
-(`booking.created`) covers both "you booked" and "the barber booked you"; and three barber-driven
-status events announce a confirmation (`booking.confirmed`), a cancellation
-(`booking.cancelled`) and a reschedule (`booking.rescheduled`). Only the barber or an admin
-triggers the status events — a customer's own cancel or reschedule sends nothing, because the
-customer already knows. All texts are composed
+(`booking.created`) covers both "you booked" and "the barber booked you"; and five booking-change
+events announce a confirmation (`booking.confirmed`), a cancellation (`booking.cancelled`), a
+reschedule (`booking.rescheduled`), and a customer's own cancellation or reschedule made outside
+the app (`booking.cancelledByCustomer`, `booking.rescheduledByCustomer`). The customer's own
+action produces a push only when it happened outside the app: a booking, cancel or reschedule from
+the app shows its result on the screen (a cancel or reschedule also queues an email), while the
+same action from the web pushes. All texts are composed
 by the server (`backend/AGENT.md` §20) and arrive ready — the app never formats push text, because
 FCM shows a `notification` payload even when the process is dead, and the server owns the salon's
 zone and the «сегодня»/«завтра» word. A typical reminder:
@@ -267,14 +269,23 @@ only the salon, master, service and time. The data payload carries the event `ty
 server has it, the `bookingId`: the reminder sends
 `{"type":"booking.reminder","bookingId":"<guid>"}`, the creation event
 `{"type":"booking.created","bookingId":"<guid>"}`, and the status events use
-`booking.confirmed`, `booking.cancelled` and `booking.rescheduled` with the same shape; the client
-never requires the id. All five arrive on the Android channel `reminders` / «Напоминания», all
+`booking.confirmed`, `booking.cancelled`, `booking.rescheduled`, `booking.cancelledByCustomer`
+and `booking.rescheduledByCustomer` with the same shape; the client
+never requires the id. All seven arrive on the Android channel `reminders` / «Напоминания», all
 reuse the «Присылать напоминания» toggle (switching it off unregisters the device, so none of them
 can be delivered), and all open the «Записи» tab on a tap. The creation and status events are
 composed on the worker's next tick, so an event can trail the action by up to one tick, and a guest
 booking (no account) gets no push. The cancellation text deliberately carries no reason: the push
 message stays free of customer data, and the reason would need a new snapshot and its own privacy
 review.
+
+On the three write requests it makes for a booking — create (`POST api/bookings`), cancel
+(`POST api/bookings/{id}/cancellation`) and reschedule (`POST api/bookings/{id}/reschedule`) — the
+app sends `X-Client-Surface: app`. The header tells the backend which surface is acting, so the
+app's own action does not come back as a push; a cancel or reschedule also queues an email to the
+verified address. A missing or unknown header means "another surface" and the backend pushes: the
+header is diagnostic, never validated, and an older client without it keeps receiving
+notifications.
 
 ### `push.json`
 

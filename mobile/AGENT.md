@@ -283,17 +283,25 @@ in Core owns both base addresses.
   default. `DevelopmentEndpoints` in Core owns the rule and both base addresses, so the choice is one
   tested function rather than two `#if` constants.
 - **The reminder text is composed by the server, in Russian, and the channel is Android/FCM-first.**
-  The channel carries five events: the hour-before reminder (`booking.reminder`); the
+  The channel carries seven events: the hour-before reminder (`booking.reminder`); the
   booking-creation event (`booking.created`), which the server sends both when the customer books a
-  barber and when a barber books the customer; and three status events produced by a barber action —
-  confirmation (`booking.confirmed`), cancellation (`booking.cancelled`) and reschedule
-  (`booking.rescheduled`). For those three, the barber action is what produces the push: a customer's
-  own cancel or reschedule sends none. All five texts are composed by the server, all five open
-  «Записи», and all five reuse the same `reminders` channel and the same «Присылать напоминания»
-  switch. Switching reminders off unregisters the device, so while the switch is off the server
-  cannot send any of them, the three status events included; a separate toggle would need a second
-  registration concept and is out of scope. The creation event arrives on the worker's next tick, and
-  a guest booking (no account) produces none. The app never formats push text. FCM delivers a
+  barber outside the app and when a barber books the customer; and five booking-change events —
+  confirmation (`booking.confirmed`), cancellation (`booking.cancelled`), reschedule
+  (`booking.rescheduled`), and a customer's own cancellation or reschedule made outside the app
+  (`booking.cancelledByCustomer`, `booking.rescheduledByCustomer`). Silence follows the request
+  surface, not the author: a customer's own create, cancel or reschedule from the app produces no
+  push — the screen already confirmed the result, and a cancel or reschedule queues an email to the
+  verified address instead — while the same action from the web does. Barber and admin actions
+  always push, even
+  with the `app` header. The app marks itself with `X-Client-Surface: app` on the create, cancel
+  and reschedule requests; the backend treats a missing or unknown header as another surface and
+  pushes, and never rejects the request over it. All seven texts are composed by the server, all
+  seven open «Записи», and all seven reuse the same `reminders` channel and the same «Присылать
+  напоминания» switch. Switching reminders off unregisters the device, so while the switch is off
+  the server cannot send any of them, the five booking-change events included; a separate toggle
+  would need a second registration concept and is out of scope. The creation event arrives on the
+  worker's next tick when it pushes, and a guest booking (no account) produces none. The app never
+  formats push text. FCM delivers a
   `notification` payload that Android shows
   even when the process is dead, so the title and body must exist before any app code runs; a data-only
   message with a background handler would be unreliable on modern Android and would add a second
@@ -349,7 +357,7 @@ in Core owns both base addresses.
   which attempts to unregister the device and keeps the marker if the request fails, so the next
   ensure retries while the toggle is off. The switch and the `reminders` channel are shared with
   every booking event, none of which has a toggle of its own: switching reminders off stops every
-  push the channel carries, the reminder and all four booking events. The channel is `reminders`,
+  push the channel carries, the reminder and all six booking events. The channel is `reminders`,
   importance `Default`; its
   visible name and description are localized keys «Напоминания» / «Напоминания о записях» and are
   created/updated by `App` **after** localization is initialized (not in `MauiProgram`), only when
@@ -359,7 +367,7 @@ in Core owns both base addresses.
   `...default_notification_channel_id=reminders`, so a background notification shown by the system
   gets the same icon and channel. `POST_NOTIFICATIONS` is declared in the manifest and requested
   only after push is configured. A foreground message is posted locally (`AndroidNotifications`), a
-  background one is shown by the system. A tap on any of the five events opens the «Записи» tab via
+  background one is shown by the system. A tap on any of the seven events opens the «Записи» tab via
   `//bookings`: cold start reads the extras in `MainActivity.OnCreate` **only when
   `savedInstanceState is null`** (a restored process must not jump tabs), warm start in
   `OnNewIntent` (`LaunchMode.SingleTop`), and the router waits for `Shell.Current`. There is no

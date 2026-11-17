@@ -154,6 +154,8 @@ public class PushNotificationTests
         Assert.Equal(4, (int)PushNotificationKind.BookingConfirmed);
         Assert.Equal(5, (int)PushNotificationKind.BookingCancelledByBarber);
         Assert.Equal(6, (int)PushNotificationKind.BookingRescheduledByBarber);
+        Assert.Equal(7, (int)PushNotificationKind.BookingCancelledByCustomer);
+        Assert.Equal(8, (int)PushNotificationKind.BookingRescheduledByCustomer);
     }
 
     [Fact]

@@ -796,6 +796,32 @@ public class PushDeliveryTests
     }
 
     [Fact]
+    public async Task Delivery_CustomerCancelled_SkipsWhenBookingIsActiveAgain()
+    {
+        // Событие отмены, созданное клиентом с веба, устарело: визит снова активен
+        // (не Cancelled), и сообщение об отмене было бы ложью.
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCancelledByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is not cancelled", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
     public async Task Deliver_WhenCancellationVisitAlreadyStarted_MarksSkipped()
     {
         var context = CreateContext();
@@ -898,6 +924,33 @@ public class PushDeliveryTests
     }
 
     [Fact]
+    public async Task Delivery_CustomerRescheduled_SkipsWhenVisitIsTerminal()
+    {
+        // Клиентский перенос с веба проверяется тем же правилом, что и барберский:
+        // завершённый визит двигать уже нечего, событие устарело.
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Complete().IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingRescheduledByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is not active", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
     public async Task Deliver_WhenRescheduleVisitAlreadyStarted_MarksSkipped()
     {
         var context = CreateContext();
@@ -923,7 +976,9 @@ public class PushDeliveryTests
     [Theory]
     [InlineData(PushNotificationKind.BookingConfirmed, "confirmation event")]
     [InlineData(PushNotificationKind.BookingCancelledByBarber, "cancellation event")]
+    [InlineData(PushNotificationKind.BookingCancelledByCustomer, "cancellation event")]
     [InlineData(PushNotificationKind.BookingRescheduledByBarber, "reschedule event")]
+    [InlineData(PushNotificationKind.BookingRescheduledByCustomer, "reschedule event")]
     public async Task Deliver_WhenStatusEventIsNotConfigured_LogsItsKindName(
         PushNotificationKind kind,
         string label)
@@ -931,7 +986,8 @@ public class PushDeliveryTests
         var context = CreateContext(pushConfigured: false, devMode: true);
         var startAt = Now.AddMinutes(20);
         var booking = CreateConfirmedBooking(startAt);
-        if (kind == PushNotificationKind.BookingCancelledByBarber)
+        if (kind is PushNotificationKind.BookingCancelledByBarber
+            or PushNotificationKind.BookingCancelledByCustomer)
         {
             Assert.True(booking.Cancel("Барбер заболел").IsSuccess);
         }

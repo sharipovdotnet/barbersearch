@@ -73,6 +73,20 @@ public sealed class BookingsApiTests
     }
 
     [Fact]
+    public async Task CreateBooking_SendsClientSurfaceHeader()
+    {
+        var handler = new StubHandler(HttpStatusCode.Created, CreatedJson());
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BookingsApi(httpClient);
+
+        await api.CreateBookingAsync(Request());
+
+        // Имя и значение — контракт с сервером, поэтому сверяем литералы, а не константы
+        // клиента: иначе ошибка в константе прошла бы вместе с тестом.
+        Assert.Equal("app", handler.LastHeaders["X-Client-Surface"]);
+    }
+
+    [Fact]
     public async Task CreateBookingAsync_Note_PassedAsIs()
     {
         var handler = new StubHandler(HttpStatusCode.Created, CreatedJson());
@@ -150,6 +164,20 @@ public sealed class BookingsApiTests
 
         // Первая страница: курсора нет вовсе, а не пустая строка в адресе.
         Assert.False(query.ContainsKey("cursor"));
+    }
+
+    [Fact]
+    public async Task GetBookings_DoesNotSendClientSurfaceHeader()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, """{"items":[],"nextCursor":null}""");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BookingsApi(httpClient);
+
+        await api.GetBookingsAsync(BookingScope.Upcoming, UserId);
+
+        // Заголовок поверхности относится только к изменению записи: на общем HttpClient его
+        // нет, поэтому чтение уходит без него.
+        Assert.False(handler.LastHeaders.ContainsKey("X-Client-Surface"));
     }
 
     [Fact]
@@ -263,6 +291,18 @@ public sealed class BookingsApiTests
     }
 
     [Fact]
+    public async Task CancelBooking_SendsClientSurfaceHeader()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BookingsApi(httpClient);
+
+        await api.CancelBookingAsync(BookingId);
+
+        Assert.Equal("app", handler.LastHeaders["X-Client-Surface"]);
+    }
+
+    [Fact]
     public async Task CancelBookingAsync_Conflict_ThrowsWithCode()
     {
         const string problemJson = """
@@ -364,6 +404,18 @@ public sealed class BookingsApiTests
         Assert.Equal(slot.StartAt.UtcDateTime, parsed.StartAt.UtcDateTime);
     }
 
+    [Fact]
+    public async Task RescheduleBooking_SendsClientSurfaceHeader()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BookingsApi(httpClient);
+
+        await api.RescheduleBookingAsync(BookingId, StartAt);
+
+        Assert.Equal("app", handler.LastHeaders["X-Client-Surface"]);
+    }
+
     private static CreateBookingRequest Request() => new(
         BarberProfileId,
         BarberServiceId,
@@ -433,13 +485,16 @@ public sealed class BookingsApiTests
     }
 
     /// <summary>
-    /// Подменённый обработчик: отдаёт заданный ответ и запоминает метод, адрес и тело.
+    /// Подменённый обработчик: отдаёт заданный ответ и запоминает метод, адрес, заголовки и тело.
     /// </summary>
     private sealed class StubHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
     {
         public HttpMethod? LastMethod { get; private set; }
 
         public Uri? LastRequestUri { get; private set; }
+
+        public Dictionary<string, string> LastHeaders { get; private set; } =
+            new(StringComparer.Ordinal);
 
         public string? LastBody { get; private set; }
 
@@ -449,6 +504,14 @@ public sealed class BookingsApiTests
         {
             LastMethod = request.Method;
             LastRequestUri = request.RequestUri;
+
+            // Копия, а не ссылка: запрос освобождается сразу после ответа, а тест читает
+            // заголовки уже после возврата клиента.
+            LastHeaders = request.Headers.ToDictionary(
+                header => header.Key,
+                header => string.Join(",", header.Value),
+                StringComparer.Ordinal);
+
             LastBody = request.Content is null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);

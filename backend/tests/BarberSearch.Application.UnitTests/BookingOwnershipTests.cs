@@ -1,4 +1,5 @@
 using BarberSearch.Application.Bookings.AddBookingBarberNote;
+using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Bookings.CancelBooking;
 using BarberSearch.Application.Bookings.ConfirmBooking;
 using BarberSearch.Application.Bookings.MarkBookingNoShow;
@@ -6,6 +7,7 @@ using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Users;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 using Xunit;
@@ -214,11 +216,13 @@ public class BookingOwnershipTests
         var bookings = new FakeBookingRepository();
         bookings.Add(booking);
         var push = new FakeBookingStatusPushNotifier();
+        var email = new FakeBookingChangeEmailNotifier();
         var handler = new CancelBookingHandler(
             bookings,
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(clientId),
             push,
+            email,
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -228,8 +232,76 @@ public class BookingOwnershipTests
         Assert.True(result.IsSuccess);
         Assert.Equal(BookingStatus.Cancelled, booking.Status);
 
-        // Клиент отменил сам: push ему не нужен, он уже знает о своём действии.
-        Assert.Equal(0, push.Calls);
+        // Обработчик вызывает уведомители всегда: вид выбирается по автору, а молчание —
+        // по поверхности, и решает это уведомитель, а не обработчик.
+        Assert.Equal(1, push.Calls);
+        Assert.Equal(BookingStatusChange.CancelledByCustomer, push.LastChange);
+        Assert.Equal(1, email.CancelledCalls);
+        Assert.True(email.LastIsClientOwner);
+    }
+
+    [Fact]
+    public async Task Handler_CustomerCancelFromApp_QueuesEmail()
+    {
+        // Настоящий уведомитель с фейковыми репозиториями: письмо ставится в outbox, если
+        // клиент-владелец отменил запись в приложении, а адрес подтверждён.
+        var users = new FakeUserRepository();
+        var customer = CreateCustomer("cancel-app@barbersearch.test", verified: true);
+        users.Add(customer);
+        var booking = CreateBooking(customer.Id, Guid.CreateVersion7());
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var outbox = new FakeEmailOutboxRepository();
+        var email = CreateEmailNotifier(users, outbox, isMobileApp: true);
+        var handler = new CancelBookingHandler(
+            bookings,
+            new FakeBarberProfileRepository(),
+            new FakeCurrentUser(customer.Id),
+            new FakeBookingStatusPushNotifier(),
+            email,
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+
+        var row = Assert.Single(outbox.Rows);
+        Assert.Equal(customer.Email, row.ToEmail);
+        Assert.Equal("Запись отменена — Салон «Барбершоп»", row.Subject);
+        Assert.Equal($"booking:{booking.Id:D}:cancelled", row.DeduplicationKey);
+        Assert.Equal(1, users.GetByIdCallCount);
+    }
+
+    [Fact]
+    public async Task Handler_CustomerCancelFromApp_UnverifiedEmail_QueuesNothing()
+    {
+        // Опечатка в неподтверждённом адресе не должна увести детали визита постороннему:
+        // уведомитель молча пропускает, а команда остаётся успешной.
+        var users = new FakeUserRepository();
+        var customer = CreateCustomer("cancel-unverified@barbersearch.test", verified: false);
+        users.Add(customer);
+        var booking = CreateBooking(customer.Id, Guid.CreateVersion7());
+        var bookings = new FakeBookingRepository();
+        bookings.Add(booking);
+        var outbox = new FakeEmailOutboxRepository();
+        var handler = new CancelBookingHandler(
+            bookings,
+            new FakeBarberProfileRepository(),
+            new FakeCurrentUser(customer.Id),
+            new FakeBookingStatusPushNotifier(),
+            CreateEmailNotifier(users, outbox, isMobileApp: true),
+            NullLogger<CancelBookingHandler>.Instance);
+
+        var result = await handler.Handle(
+            new CancelBookingCommand(booking.Id),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Empty(outbox.Rows);
     }
 
     [Fact]
@@ -244,6 +316,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7()),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -270,6 +343,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7()),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -300,6 +374,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             new FakeBookingStatusPushNotifier(),
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -326,6 +401,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -357,6 +433,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -388,6 +465,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -412,6 +490,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -448,6 +527,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(
@@ -503,4 +583,36 @@ public class BookingOwnershipTests
         Assert.Equal(ErrorType.FORBIDDEN, result.Error.Errors[0].Type);
         Assert.Null(booking.BarberNote);
     }
+
+    /// <summary>
+    /// Клиент с подтверждённым или неподтверждённым адресом: письмо уходит только на
+    /// подтверждённый.
+    /// </summary>
+    private static User CreateCustomer(string email, bool verified)
+    {
+        var user = User.Create(email, "hash", "Ivan", "Petrov").Value;
+
+        if (verified)
+        {
+            Assert.True(user.MarkEmailAsVerified().IsSuccess);
+        }
+
+        return user;
+    }
+
+    /// <summary>
+    /// Настоящий <see cref="BookingChangeEmailNotifier"/> с фейковыми репозиториями: тест
+    /// проверяет гейт поверхности и подтверждение адреса, а не HTTP.
+    /// </summary>
+    private static BookingChangeEmailNotifier CreateEmailNotifier(
+        FakeUserRepository users,
+        FakeEmailOutboxRepository outbox,
+        bool isMobileApp)
+        => new(
+            new FakeClientSurface { IsMobileApp = isMobileApp },
+            users,
+            outbox,
+            new FakePushSourceRepository(),
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            NullLogger<BookingChangeEmailNotifier>.Instance);
 }

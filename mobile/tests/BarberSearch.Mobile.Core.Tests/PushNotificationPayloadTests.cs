@@ -138,6 +138,44 @@ public sealed class PushNotificationPayloadTests
     }
 
     [Fact]
+    public void Payload_CustomerCancelled_RoutesToBookings()
+    {
+        // Отмена клиентом с веба: приложение получает push, потому что само действие
+        // происходило не в нём.
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingCancelledByCustomerType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingCancelledByCustomerType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void Payload_CustomerRescheduled_RoutesToBookings()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingRescheduledByCustomerType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingRescheduledByCustomerType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
     public void TryParse_InvalidBookingId_LeavesBookingIdEmpty()
     {
         var extras = new Dictionary<string, string>(StringComparer.Ordinal)

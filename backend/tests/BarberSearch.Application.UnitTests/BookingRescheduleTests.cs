@@ -1,9 +1,11 @@
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
+using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Bookings.RescheduleBooking;
 using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
@@ -44,7 +46,12 @@ public class BookingRescheduleTests
         Assert.True(booking.Confirm().IsSuccess);
         var bookings = AddBooking(booking);
         var push = new FakeBookingStatusPushNotifier();
-        var handler = CreateHandler(bookings, salon, pushNotifier: push);
+        var email = new FakeBookingChangeEmailNotifier();
+        var handler = CreateHandler(
+            bookings,
+            salon,
+            pushNotifier: push,
+            emailNotifier: email);
 
         var result = await handler.Handle(
             new RescheduleBookingCommand(booking.Id, FreeSlot),
@@ -57,8 +64,41 @@ public class BookingRescheduleTests
         Assert.Equal(45m, booking.Price);
         Assert.Equal(1, bookings.UpdateCalls);
 
-        // Клиент перенёс сам: push ему не нужен, он уже знает о своём действии.
-        Assert.Equal(0, push.Calls);
+        // Вид выбирается по автору, а молчание — по поверхности: обработчик вызывает оба
+        // уведомителя всегда, даже когда клиент перенёс визит сам.
+        Assert.Equal(1, push.Calls);
+        Assert.Equal(BookingStatusChange.RescheduledByCustomer, push.LastChange);
+        Assert.Equal(1, email.RescheduledCalls);
+        Assert.True(email.LastIsClientOwner);
+        Assert.Equal(FreeSlot, email.LastStartAt);
+    }
+
+    [Fact]
+    public async Task Handler_CustomerRescheduleFromWeb_QueuesNoEmail()
+    {
+        // Письмо — замена push'у только в приложении: с веба тот же перенос уходит push'ем,
+        // поэтому outbox остаётся пустым.
+        var salon = CreateSalon();
+        var users = new FakeUserRepository();
+        var customer = User.Create("reschedule-web@barbersearch.test", "hash", "Ivan", "Petrov").Value;
+        Assert.True(customer.MarkEmailAsVerified().IsSuccess);
+        users.Add(customer);
+        var booking = CreateBooking(salon.Id, userId: customer.Id);
+        var bookings = AddBooking(booking);
+        var outbox = new FakeEmailOutboxRepository();
+        var handler = CreateHandler(
+            bookings,
+            salon,
+            currentUser: new FakeCurrentUser(customer.Id),
+            emailNotifier: CreateRealEmailNotifier(users, outbox, isMobileApp: false));
+
+        var result = await handler.Handle(
+            new RescheduleBookingCommand(booking.Id, FreeSlot),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(FreeSlot, booking.StartAt);
+        Assert.Empty(outbox.Rows);
     }
 
     [Fact]
@@ -600,7 +640,8 @@ public class BookingRescheduleTests
         bool isWorkingDay = true,
         int contextDurationMinutes = 30,
         IReadOnlyList<TimeOffInterval>? timeOffs = null,
-        FakeBookingStatusPushNotifier? pushNotifier = null)
+        FakeBookingStatusPushNotifier? pushNotifier = null,
+        IBookingChangeEmailNotifier? emailNotifier = null)
     {
         salons ??= CreateSalons(salon);
         profiles ??= CreateProfiles(
@@ -616,9 +657,26 @@ public class BookingRescheduleTests
             new FakeUnitOfWork(salons),
             currentUser ?? new FakeCurrentUser(ClientId),
             pushNotifier ?? new FakeBookingStatusPushNotifier(),
+            emailNotifier ?? new FakeBookingChangeEmailNotifier(),
             new FakeTimeProvider(now ?? Now),
             NullLogger<RescheduleBookingHandler>.Instance);
     }
+
+    /// <summary>
+    /// Настоящий <see cref="BookingChangeEmailNotifier"/> с фейковыми репозиториями: тест
+    /// проверяет гейт поверхности и подтверждение адреса, а не HTTP.
+    /// </summary>
+    private static BookingChangeEmailNotifier CreateRealEmailNotifier(
+        FakeUserRepository users,
+        FakeEmailOutboxRepository outbox,
+        bool isMobileApp)
+        => new(
+            new FakeClientSurface { IsMobileApp = isMobileApp },
+            users,
+            outbox,
+            new FakePushSourceRepository(),
+            new FakeTimeProvider(Now),
+            NullLogger<BookingChangeEmailNotifier>.Instance);
 
     private static FakeSalonRepository CreateSalons(Salon salon)
     {

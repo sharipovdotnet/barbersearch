@@ -111,7 +111,7 @@ public class PushModelTests
         Assert.NotNull(entity);
 
         Assert.Equal(
-            "kind IN (1, 2, 3, 4, 5, 6)",
+            "kind IN (1, 2, 3, 4, 5, 6, 7, 8)",
             Assert.Single(
                 entity.GetCheckConstraints(),
                 check => check.Name == "ck_push_notifications_kind").Sql);
@@ -176,6 +176,11 @@ public class PushModelTests
         Assert.Contains(
             context.Database.GetMigrations(),
             migration => migration.EndsWith("_AddPushBookingStatusEvents", StringComparison.Ordinal));
+        Assert.Contains(
+            context.Database.GetMigrations(),
+            migration => migration.EndsWith(
+                "_AddCustomerBookingPushEvents",
+                StringComparison.Ordinal));
 
         // Снимок модели обновлён вместе с миграцией: следующая миграция не должна
         // неожиданно «находить» незакоммиченные изменения.

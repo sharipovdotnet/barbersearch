@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Contracts.Common;
@@ -14,11 +15,16 @@ namespace BarberSearch.Application.Bookings.CancelBooking;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Клиенту push нужен только тогда, когда запись отменил кто-то другой: барбер профиля или
-/// администратор. Отмена самим клиентом (<c>isClientOwner</c>) уведомления не создаёт — он
-/// только что совершил действие и знает о нём; мобильного приложения для барбера нет, поэтому
-/// уведомлять в этом сценарии некого. Сбой постановки в очередь логируется предупреждением
-/// и не меняет результат команды.
+/// Уведомление выбирается по <b>поверхности</b>, а не по автору. Отмена клиентом в мобильном
+/// приложении push не создаёт — экран уже подтвердил действие, — но ставит письмо на
+/// подтверждённый адрес. Отмена клиентом с веба и отмена барбером или администратором
+/// создают push всегда; молчание здесь означало бы, что клиент не узнает об отмене
+/// (AGENT.md §20.11).
+/// </para>
+/// <para>
+/// Вид уведомления выбирается по <c>isClientOwner</c>: хендлер вызывает уведомитель всегда,
+/// а гейт поверхности живёт в нём. Сбой постановки в очередь или письма логируется
+/// предупреждением и не меняет результат команды.
 /// </para>
 /// </remarks>
 public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
@@ -27,6 +33,7 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
     private readonly IBarberProfileRepository _barberProfiles;
     private readonly ICurrentUser _currentUser;
     private readonly IBookingStatusPushNotifier _pushNotifier;
+    private readonly IBookingChangeEmailNotifier _emailNotifier;
     private readonly ILogger<CancelBookingHandler> _logger;
 
     public CancelBookingHandler(
@@ -34,12 +41,14 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         IBarberProfileRepository barberProfiles,
         ICurrentUser currentUser,
         IBookingStatusPushNotifier pushNotifier,
+        IBookingChangeEmailNotifier emailNotifier,
         ILogger<CancelBookingHandler> logger)
     {
         _repository = repository;
         _barberProfiles = barberProfiles;
         _currentUser = currentUser;
         _pushNotifier = pushNotifier;
+        _emailNotifier = emailNotifier;
         _logger = logger;
     }
 
@@ -112,18 +121,23 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
             booking.Id,
             isBarberCancellation);
 
-        // Клиент-владелец уведомления не получает: он сам только что отменил запись.
-        // Барбер и администратор — получают; у гостевой брони получателя нет, и уведомитель
-        // вернёт успешный no-op.
-        if (!isClientOwner)
-        {
-            await BookingStatusPush.NotifyAsync(
-                _pushNotifier,
-                _logger,
-                booking,
-                BookingStatusChange.CancelledByBarber,
-                cancellationToken);
-        }
+        // Уведомитель вызывается всегда: молчание — свойство поверхности, а не автора.
+        // Клиентская отмена из приложения гаснет в уведомителе, а с веба — уходит push'ем.
+        // Гостевой брони и адресата может не быть: оба уведомителя вернут успешный no-op.
+        var change = isClientOwner
+            ? BookingStatusChange.CancelledByCustomer
+            : BookingStatusChange.CancelledByBarber;
+
+        await BookingStatusPush.NotifyAsync(
+            _pushNotifier,
+            _logger,
+            booking,
+            change,
+            cancellationToken);
+
+        // Письмо заменяет push тогда и только тогда, когда клиент отменил запись в том же
+        // приложении; решение целиком живёт в уведомителе (isClientOwner + IsMobileApp).
+        await _emailNotifier.NotifyCancelledAsync(booking, isClientOwner, cancellationToken);
 
         return UnitResult.Success<Failure>();
     }

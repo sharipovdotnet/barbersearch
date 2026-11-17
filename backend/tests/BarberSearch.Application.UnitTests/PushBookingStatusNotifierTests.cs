@@ -132,6 +132,103 @@ public class PushBookingStatusNotifierTests
     }
 
     [Fact]
+    public async Task Notify_CustomerCancelledFromApp_DoesNotEnqueue()
+    {
+        var context = CreateContext(isMobileApp: true);
+        var booking = CreateBooking();
+        Assert.True(booking.Cancel().IsSuccess);
+
+        var result = await context.Notifier.NotifyAsync(
+            booking,
+            BookingStatusChange.CancelledByCustomer,
+            CancellationToken.None);
+
+        // Отмена в приложении: экран уже показал результат, push не создаётся.
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, context.Source.GetSnapshotCalls);
+        Assert.Equal(0, context.Notifications.AddCalls);
+        Assert.Empty(context.Notifications.Items);
+    }
+
+    [Fact]
+    public async Task Notify_CustomerCancelledFromWeb_EnqueuesCustomerCancelled()
+    {
+        var context = CreateContext(isMobileApp: false);
+        var booking = CreateBooking();
+        Assert.True(booking.Cancel().IsSuccess);
+
+        var result = await context.Notifier.NotifyAsync(
+            booking,
+            BookingStatusChange.CancelledByCustomer,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.BookingCancelledByCustomer, notification.Kind);
+        Assert.Equal(StartAt, notification.StartAt);
+    }
+
+    [Fact]
+    public async Task Notify_CustomerRescheduledFromApp_DoesNotEnqueue()
+    {
+        var context = CreateContext(isMobileApp: true);
+        var booking = CreateBooking();
+        var newStart = StartAt.AddHours(3);
+        Assert.True(booking.Reschedule(newStart, newStart.AddMinutes(30)).IsSuccess);
+
+        var result = await context.Notifier.NotifyAsync(
+            booking,
+            BookingStatusChange.RescheduledByCustomer,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, context.Source.GetSnapshotCalls);
+        Assert.Equal(0, context.Notifications.AddCalls);
+        Assert.Empty(context.Notifications.Items);
+    }
+
+    [Fact]
+    public async Task Notify_CustomerRescheduledFromWeb_EnqueuesCustomerRescheduled()
+    {
+        var context = CreateContext(isMobileApp: false);
+        var booking = CreateBooking();
+        var newStart = StartAt.AddHours(3);
+        Assert.True(booking.Reschedule(newStart, newStart.AddMinutes(30)).IsSuccess);
+
+        var result = await context.Notifier.NotifyAsync(
+            booking,
+            BookingStatusChange.RescheduledByCustomer,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.BookingRescheduledByCustomer, notification.Kind);
+        Assert.Equal(newStart, notification.StartAt);
+    }
+
+    [Fact]
+    public async Task Notify_AdminCancelledFromApp_StillEnqueuesBarberCancelled()
+    {
+        // Регрессия: заголовок app не должен гасить действие сотрудника. Администратор
+        // отменяет запись со своего стола поддержки, и клиент обязан получить push.
+        var context = CreateContext(isMobileApp: true);
+        var booking = CreateBooking();
+        Assert.True(booking.Cancel("Отменено администратором").IsSuccess);
+
+        var result = await context.Notifier.NotifyAsync(
+            booking,
+            BookingStatusChange.CancelledByBarber,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.BookingCancelledByBarber, notification.Kind);
+    }
+
+    [Fact]
     public async Task Notify_TwiceForTheSameStart_EnqueuesOneRow()
     {
         var context = CreateContext();
@@ -316,20 +413,23 @@ public class PushBookingStatusNotifierTests
             guestFirstName: "Гость",
             guestPhone: "+70000000000").Value;
 
-    private static Context CreateContext(bool enabled = true)
+    private static Context CreateContext(bool enabled = true, bool isMobileApp = false)
     {
         var source = new FakePushSourceRepository();
         var notifications = new FakePushNotificationRepository();
+        var clientSurface = new FakeClientSurface { IsMobileApp = isMobileApp };
         var notifier = new BookingStatusPushNotifier(
             source,
             notifications,
-            new PushOptions { Enabled = enabled });
+            new PushOptions { Enabled = enabled },
+            clientSurface);
 
-        return new Context(notifier, source, notifications);
+        return new Context(notifier, source, notifications, clientSurface);
     }
 
     private sealed record Context(
         BookingStatusPushNotifier Notifier,
         FakePushSourceRepository Source,
-        FakePushNotificationRepository Notifications);
+        FakePushNotificationRepository Notifications,
+        FakeClientSurface ClientSurface);
 }
