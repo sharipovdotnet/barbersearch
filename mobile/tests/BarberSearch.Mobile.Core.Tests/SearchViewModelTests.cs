@@ -830,24 +830,463 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.IsAutoRetrying);
     }
 
+    [Fact]
+    public async Task StartAutoRetry_CatalogsTransportFailure_RetriesUntilSuccess()
+    {
+        var api = FakeApi.Returning(Page());
+        api.SpecializationsRespond = call => call < 2 ? SpecializationsRefused() : SpecializationsOk();
+        api.HairServicesRespond = call => call < 2 ? HairServicesRefused() : HairServicesOk();
+
+        var viewModel = Create(api, catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.HasCatalogsError);
+
+        viewModel.StartAutoRetry();
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.True(viewModel.IsCatalogsEnabled);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task StartAutoRetry_CatalogsTerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = ApiError(statusCode);
+
+        var viewModel = Create(api, catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal("Не удалось загрузить фильтры.", viewModel.CatalogsErrorText);
+    }
+
+    [Fact]
+    public async Task ColdStartOffline_CatalogsTransportFailure_Visible_RecoversThroughLoop()
+    {
+        var gate = new TaskCompletionSource();
+        var api = FakeApi.Returning(Page());
+        api.SpecializationsRespond = call => call < 2 ? SpecializationsRefused() : SpecializationsOk();
+        api.HairServicesRespond = call => call < 2 ? HairServicesRefused() : HairServicesOk();
+
+        var viewModel = Create(api, catalogsAutoRetry: GatedRetry(gate.Task));
+
+        // Страница видна до первой загрузки — как в OnAppearing у SearchPage.
+        viewModel.StartAutoRetry();
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+
+        // Сеть вернулась: оба справочника отвечают.
+        api.SpecializationsRespond = _ => SpecializationsOk();
+        api.HairServicesRespond = _ => HairServicesOk();
+
+        gate.SetResult();
+
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.True(viewModel.IsCatalogsEnabled);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_CatalogsWhileWaiting_StopsFurtherAttempts()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api, catalogsAutoRetry: StopAfterFirstAttemptRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+
+        viewModel.StopAutoRetry();
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task RetryCatalogsCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api, catalogsAutoRetry: HangingRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+
+        api.CatalogFailure = null;
+        api.Specializations = [new SpecializationResponse(SpecializationId, "Классика", null)];
+        api.HairServices = [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)];
+
+        // Кнопка «Повторить» — та же загрузка справочников: цикл останавливается, чтение идёт сразу.
+        await viewModel.RetryCatalogsCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.SpecializationCalls);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+    }
+
+    [Fact]
+    public async Task RetryCatalogsCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var api = FakeApi.Returning(Page());
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<IReadOnlyList<SpecializationResponse>>();
+
+        api.SpecializationsRespond = call => call switch
+        {
+            0 or 1 => SpecializationsRefused(),
+            2 => silentAttempt.Task,
+            _ => SpecializationsOk(),
+        };
+        api.HairServicesRespond = call => call < 2 ? HairServicesRefused() : HairServicesOk();
+
+        var viewModel = Create(api, catalogsAutoRetry: StopThenGateRetry(restartGate.Task));
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+
+        // Кнопка при работающем цикле читает сразу: к возврату команды запрос уже ушёл,
+        // а перезапущенный цикл ждёт паузы — второго запроса без неё нет.
+        await viewModel.RetryCatalogsCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.SpecializationCalls);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: первая же тихая попытка падает
+        // снова, и цикл повторяет её до успеха.
+        restartGate.SetResult();
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.Equal(4, api.SpecializationCalls);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_CatalogsFailedSilentAttempt_KeepsErrorAndLoadedCatalog()
+    {
+        var api = FakeApi.Returning(Page());
+        var silentAttempt = new TaskCompletionSource<IReadOnlyList<HairServiceResponse>>();
+
+        api.SpecializationsRespond = _ => SpecializationsOk();
+        api.HairServicesRespond = call => call == 0 ? HairServicesRefused() : silentAttempt.Task;
+
+        var viewModel = Create(api, catalogsAutoRetry: StopAfterFirstAttemptRetry());
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+
+        viewModel.StartAutoRetry();
+
+        // Попытка висит: тихий режим не имеет права стереть ни причину, ни загруженный справочник,
+        // иначе экран мигал бы формой на каждой паузе между повторами.
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.False(viewModel.IsCatalogsLoading);
+        Assert.Equal(1, api.SpecializationCalls);
+
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+
+        viewModel.StopAutoRetry();
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_DuringCatalogsSilentAttempt_KeepsError()
+    {
+        var api = FakeApi.Returning(Page());
+        var silentAttempt = new TaskCompletionSource<IReadOnlyList<HairServiceResponse>>();
+
+        api.SpecializationsRespond = _ => SpecializationsOk();
+        api.HairServicesRespond = call => call == 0 ? HairServicesRefused() : silentAttempt.Task;
+
+        var viewModel = Create(api, catalogsAutoRetry: StopAfterFirstAttemptRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        viewModel.StopAutoRetry();
+
+        // Отмена попытки не оставляет форму пустой: причина, кнопка и загруженный справочник живы.
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+
+        silentAttempt.SetCanceled();
+        await viewModel.CatalogsAutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task AutoRetry_CatalogsTimeout_ShowsNetworkText()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = new TaskCanceledException("timeout");
+
+        var viewModel = Create(api, catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи».
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
+
+        api.CatalogFailure = null;
+
+        viewModel.StartAutoRetry();
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task IsCatalogsAutoRetrying_TogglesWithLoopState()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api, catalogsAutoRetry: HangingRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+
+        viewModel.StopAutoRetry();
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+
+        await viewModel.CatalogsAutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task AutoRetry_AfterServicesFailure_RetriesOnlyFailedCatalog()
+    {
+        var api = FakeApi.Returning(Page());
+
+        api.SpecializationsRespond = _ => SpecializationsOk();
+        api.HairServicesFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api, catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.HasCatalogsError);
+        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal(1, api.SpecializationCalls);
+        Assert.Equal(1, api.HairServiceCalls);
+
+        api.HairServicesFailure = null;
+        api.HairServices = [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)];
+
+        viewModel.StartAutoRetry();
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        // Снимок — какие из двух запросов упали: удавшаяся специализация заново не читается.
+        Assert.Equal(1, api.SpecializationCalls);
+        Assert.Equal(2, api.HairServiceCalls);
+        Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+    }
+
+    [Fact]
+    public async Task AutoRetry_CatalogsFailure_DoesNotStartResultsRetry()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+
+        api.SpecializationsRespond = call => call == 0 ? SpecializationsRefused() : SpecializationsOk();
+        api.HairServicesRespond = call => call == 0 ? HairServicesRefused() : HairServicesOk();
+
+        var viewModel = Create(api, autoRetry: FastRetry(), catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.False(viewModel.AutoRetry.IsRunning);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+
+        await viewModel.CatalogsAutoRetryCompletion;
+
+        // Сбой справочников не включает повтор выдачи: это два независимых чтения.
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.Empty(api.SearchCalls);
+        Assert.Empty(viewModel.Barbers);
+        Assert.False(viewModel.HasCatalogsError);
+    }
+
+    [Fact]
+    public async Task AutoRetry_ResultsFailure_DoesNotRetryCatalogs()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        api.Respond = call => call == 0
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new HttpRequestException("refused"))
+            : Task.FromResult(Page(Barber("Алиса")));
+        api.Specializations = [new SpecializationResponse(SpecializationId, "Классика", null)];
+        api.HairServices = [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)];
+
+        var viewModel = Create(api, autoRetry: FastRetry(), catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+
+        viewModel.StartAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        // Сбой выдачи не трогает справочники: второй цикл не делает ни одной попытки.
+        Assert.Equal(1, api.SpecializationCalls);
+        Assert.Equal(1, api.HairServiceCalls);
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.HasCatalogsError);
+        Assert.Single(viewModel.Barbers);
+    }
+
+    [Fact]
+    public async Task StartAutoRetry_RateLimitedCatalogs_DoesNotStart()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = ApiError(HttpStatusCode.TooManyRequests);
+
+        var viewModel = Create(api, catalogsAutoRetry: FastRetry());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Слишком много запросов. Подождите минуту и повторите.", viewModel.CatalogsErrorText);
+
+        viewModel.StartAutoRetry();
+
+        // 429 в справочниках не повторяется: лимитер просит подождать, и текст остаётся на экране.
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal("Слишком много запросов. Подождите минуту и повторите.", viewModel.CatalogsErrorText);
+    }
+
+    [Fact]
+    public async Task AutoRetry_TerminalAfterRetryable_DoesNotRestart()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Respond = call => call == 0
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new HttpRequestException("refused"))
+            : Task.FromException<PagedResponse<BarberSearchItemResponse>>(ApiError(HttpStatusCode.NotFound));
+
+        var viewModel = Create(api, autoRetry: HangingRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+
+        // Кнопка при работающем цикле читает сразу — и получает окончательный отказ. Старый
+        // «транспорт» не должен оживить цикл на отказе, который не изменится.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.False(viewModel.IsAutoRetrying);
+        Assert.Equal("Не удалось загрузить мастеров.", viewModel.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task AutoRetry_CatalogsTerminalAfterRetryable_DoesNotRestart()
+    {
+        var api = FakeApi.Returning(Page());
+        api.CatalogFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api, catalogsAutoRetry: HangingRetry());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsCatalogsAutoRetrying);
+
+        api.CatalogFailure = ApiError(HttpStatusCode.NotFound);
+
+        await viewModel.RetryCatalogsCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
+        Assert.False(viewModel.IsCatalogsAutoRetrying);
+        Assert.Equal("Не удалось загрузить фильтры.", viewModel.CatalogsErrorText);
+    }
+
     /// <summary>
     /// Создаёт ViewModel с фиксированным «сегодня»: список дат не зависит от машины теста.
     /// </summary>
     /// <remarks>
     /// Без явной геопозиции подменённый сервис отвечает «недоступна»: старые проверки поиска
-    /// не должны незаметно зависеть от координат.
+    /// не должны незаметно зависеть от координат. Второй цикл передаётся отдельным параметром:
+    /// у справочников своя жизнь, и общий цикл связал бы их сбои с выдачей.
     /// </remarks>
     private static SearchViewModel Create(
         FakeApi api,
         ILocationService? locationService = null,
-        AutoRetryLoop? autoRetry = null) =>
+        AutoRetryLoop? autoRetry = null,
+        AutoRetryLoop? catalogsAutoRetry = null) =>
         new(
             api,
             locationService ?? new FakeLocationService(LocationResult.Unavailable()),
             new FixedTimeProvider(Today),
             // Подсказки без паузы: тест набирает город и сразу видит результат, не ожидая 250 мс.
             new CitySuggestions(api, static (_, _) => Task.CompletedTask),
-            autoRetry);
+            autoRetry,
+            catalogsAutoRetry);
 
     /// <summary>
     /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
@@ -903,6 +1342,15 @@ public sealed class SearchViewModelTests
             [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
 
     /// <summary>
+    /// Цикл, который ждёт внешнего сигнала перед каждой попыткой: так видно состояние цикла
+    /// до первой попытки, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop GatedRetry(Task gate) =>
+        new(
+            (_, _) => gate,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
     /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
     /// </summary>
     private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
@@ -912,6 +1360,38 @@ public sealed class SearchViewModelTests
 
         return pending.Task;
     }
+
+    /// <summary>
+    /// Успешный справочник специализаций — для проверок частичного успеха и повтора.
+    /// </summary>
+    private static Task<IReadOnlyList<SpecializationResponse>> SpecializationsOk() =>
+        Task.FromResult<IReadOnlyList<SpecializationResponse>>(
+            [new SpecializationResponse(SpecializationId, "Классика", null)]);
+
+    /// <summary>
+    /// Успешный справочник услуг — для проверок частичного успеха и повтора.
+    /// </summary>
+    private static Task<IReadOnlyList<HairServiceResponse>> HairServicesOk() =>
+        Task.FromResult<IReadOnlyList<HairServiceResponse>>(
+            [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)]);
+
+    /// <summary>
+    /// Сетевая ошибка справочника специализаций.
+    /// </summary>
+    private static Task<IReadOnlyList<SpecializationResponse>> SpecializationsRefused() =>
+        Task.FromException<IReadOnlyList<SpecializationResponse>>(new HttpRequestException("refused"));
+
+    /// <summary>
+    /// Сетевая ошибка справочника услуг.
+    /// </summary>
+    private static Task<IReadOnlyList<HairServiceResponse>> HairServicesRefused() =>
+        Task.FromException<IReadOnlyList<HairServiceResponse>>(new HttpRequestException("refused"));
+
+    /// <summary>
+    /// Ответ API с ошибкой без кодов: важен только статус.
+    /// </summary>
+    private static BarberSearchApiException ApiError(HttpStatusCode statusCode) =>
+        new(statusCode, "Request failed.", [], new Dictionary<string, string[]>());
 
     private static PagedResponse<BarberSearchItemResponse> Page(params BarberSearchItemResponse[] items) =>
         new(items, NextCursor: null);
@@ -987,7 +1467,30 @@ public sealed class SearchViewModelTests
 
         public IReadOnlyList<HairServiceResponse> HairServices { get; set; } = [];
 
+        /// <summary>
+        /// Сбой обоих справочников сразу: старый путь, который должны продолжать работать.
+        /// </summary>
         public Exception? CatalogFailure { get; set; }
+
+        /// <summary>
+        /// Сбой только специализаций: частичный успех услуг проверяется отдельно.
+        /// </summary>
+        public Exception? SpecializationsFailure { get; set; }
+
+        /// <summary>
+        /// Сбой только услуг: частичный успех специализаций проверяется отдельно.
+        /// </summary>
+        public Exception? HairServicesFailure { get; set; }
+
+        /// <summary>
+        /// Ответ специализаций по номеру вызова (с нуля): так проверяется повтор до успеха.
+        /// </summary>
+        public Func<int, Task<IReadOnlyList<SpecializationResponse>>>? SpecializationsRespond { get; set; }
+
+        /// <summary>
+        /// Ответ услуг по номеру вызова (с нуля): так проверяется повтор до успеха.
+        /// </summary>
+        public Func<int, Task<IReadOnlyList<HairServiceResponse>>>? HairServicesRespond { get; set; }
 
         public IReadOnlyList<CitySuggestionResponse> CitySuggestions { get; set; } = [];
 
@@ -998,6 +1501,8 @@ public sealed class SearchViewModelTests
         public List<BarberSearchFilters> SearchCalls { get; } = [];
 
         public int SpecializationCalls { get; private set; }
+
+        public int HairServiceCalls { get; private set; }
 
         /// <summary>
         /// Ответ выдачи по номеру вызова (с нуля): так проверяются сбои, повтор и успех после них.
@@ -1024,18 +1529,36 @@ public sealed class SearchViewModelTests
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
             CancellationToken cancellationToken = default)
         {
-            SpecializationCalls++;
+            var call = SpecializationCalls++;
 
-            return CatalogFailure is null
+            if (SpecializationsRespond is { } respond)
+            {
+                return respond(call);
+            }
+
+            var failure = SpecializationsFailure ?? CatalogFailure;
+
+            return failure is null
                 ? Task.FromResult(Specializations)
-                : Task.FromException<IReadOnlyList<SpecializationResponse>>(CatalogFailure);
+                : Task.FromException<IReadOnlyList<SpecializationResponse>>(failure);
         }
 
         public Task<IReadOnlyList<HairServiceResponse>> GetHairServicesAsync(
-            CancellationToken cancellationToken = default) =>
-            CatalogFailure is null
+            CancellationToken cancellationToken = default)
+        {
+            var call = HairServiceCalls++;
+
+            if (HairServicesRespond is { } respond)
+            {
+                return respond(call);
+            }
+
+            var failure = HairServicesFailure ?? CatalogFailure;
+
+            return failure is null
                 ? Task.FromResult(HairServices)
-                : Task.FromException<IReadOnlyList<HairServiceResponse>>(CatalogFailure);
+                : Task.FromException<IReadOnlyList<HairServiceResponse>>(failure);
+        }
 
         public Task<IReadOnlyList<CitySuggestionResponse>> GetCitySuggestionsAsync(
             string query,

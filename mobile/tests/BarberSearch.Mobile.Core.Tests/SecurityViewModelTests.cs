@@ -36,6 +36,8 @@ public sealed class SecurityViewModelTests
     private const string PasswordChangedText =
         "Пароль изменён. Остальные сессии входа завершены — здесь вы остались.";
 
+    private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
+
     [Fact]
     public async Task InitializeAsync_VerifiedEmail_HidesResendButton()
     {
@@ -393,6 +395,313 @@ public sealed class SecurityViewModelTests
         Assert.False(harness.ViewModel.IsPasswordFormOpen);
     }
 
+    [Fact]
+    public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
+    {
+        var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls <= 3
+                ? Task.FromException<MyProfileResponse>(new HttpRequestException("refused"))
+                : Task.FromResult(ProfileOf(true));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.ShowError);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(3, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.ShowContent);
+        Assert.Equal(UserEmail, harness.ViewModel.Email);
+        Assert.False(harness.ViewModel.ShowError);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task StartAutoRetry_TerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        var harness = new Harness(autoRetry: FastRetry());
+        harness.AccountApi.Profile = () => Task.FromException<MyProfileResponse>(
+            ApiError(statusCode, "user.notFound"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Equal(1, harness.AccountApi.ProfileCalls);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_WhileWaiting_StopsFurtherAttempts()
+    {
+        var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        harness.AccountApi.Profile = () => Task.FromException<MyProfileResponse>(
+            new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Equal(2, harness.AccountApi.ProfileCalls);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task RetryCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        var harness = new Harness(autoRetry: HangingRetry());
+        var calls = 0;
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<MyProfileResponse>(new HttpRequestException("refused"))
+                : Task.FromResult(ProfileOf(true));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+
+        // «Повторить» — это «повторить сейчас»: цикл останавливается, чтение идёт без паузы.
+        await harness.ViewModel.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, harness.AccountApi.ProfileCalls);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.True(harness.ViewModel.ShowContent);
+        Assert.False(harness.ViewModel.ShowError);
+    }
+
+    [Fact]
+    public async Task RetryCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<MyProfileResponse>();
+        var harness = new Harness(autoRetry: StopThenGateRetry(restartGate.Task));
+        var calls = 0;
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls switch
+            {
+                1 or 2 => Task.FromException<MyProfileResponse>(new HttpRequestException("refused")),
+                3 => silentAttempt.Task,
+                _ => Task.FromResult(ProfileOf(true)),
+            };
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+
+        await viewModel.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: тихая попытка падает снова, и
+        // цикл повторяет до успеха.
+        restartGate.SetResult();
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.AutoRetry.Attempts);
+        Assert.Equal(4, calls);
+        Assert.True(viewModel.ShowContent);
+        Assert.False(viewModel.ShowError);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_FailedSilentAttempt_KeepsProfile()
+    {
+        var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<MyProfileResponse>();
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<MyProfileResponse>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.True(viewModel.ShowError);
+        Assert.NotNull(viewModel.ErrorMessage);
+
+        viewModel.StartAutoRetry();
+
+        // Попытка висит: причина и «Повторить» остаются на месте, пока ответа нет — иначе
+        // блок с кнопкой исчезал бы на каждой паузе.
+        Assert.Equal(1, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.ShowError);
+        Assert.Equal(NetworkText, viewModel.ErrorMessage);
+        Assert.True(viewModel.IsAutoRetrying);
+        Assert.False(viewModel.ShowLoading);
+
+        retry.SetException(new HttpRequestException("refused"));
+
+        Assert.True(viewModel.ShowError);
+        Assert.Equal(NetworkText, viewModel.ErrorMessage);
+
+        viewModel.StopAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_DuringSilentAttempt_KeepsProfile()
+    {
+        var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<MyProfileResponse>();
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<MyProfileResponse>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.StartAutoRetry();
+
+        // Отменённая попытка не имеет права унести с собой причину: иначе экран остался бы
+        // пустым и нажать было бы нечего.
+        viewModel.StopAutoRetry();
+        retry.SetCanceled();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.True(viewModel.ShowError);
+        Assert.Equal(NetworkText, viewModel.ErrorMessage);
+        Assert.False(viewModel.IsAutoRetrying);
+        Assert.False(viewModel.ShowLoading);
+    }
+
+    [Fact]
+    public async Task AutoRetry_Timeout_ShowsNetworkText()
+    {
+        var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<MyProfileResponse>(new TaskCanceledException("timeout"))
+                : Task.FromResult(ProfileOf(true));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи».
+        Assert.Equal(NetworkText, harness.ViewModel.ErrorMessage);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.ShowContent);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_TerminalAfterRetryable_DoesNotRestart()
+    {
+        var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.AccountApi.Profile = () =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<MyProfileResponse>(new HttpRequestException("refused"))
+                : Task.FromException<MyProfileResponse>(
+                    ApiError(HttpStatusCode.NotFound, "user.notFound"));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Equal("Не удалось загрузить профиль.", harness.ViewModel.ErrorMessage);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+
+        // Вид сбоя запомнен для неуспеха, а не для «повторяемого»: иначе старый транспорт
+        // пережил бы 404 и новое появление страницы снова запустило бы цикл на отказе.
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Equal(2, harness.AccountApi.ProfileCalls);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task IsAutoRetrying_TogglesWithLoopState()
+    {
+        var harness = new Harness(autoRetry: HangingRetry());
+        harness.AccountApi.Profile = () => Task.FromException<MyProfileResponse>(
+            new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+
+        await harness.ViewModel.AutoRetryCompletion;
+    }
+
     private static async Task<Harness> CreateOpenedAsync(
         bool isEmailVerified = true,
         string current = "",
@@ -433,11 +742,78 @@ public sealed class SecurityViewModelTests
         new(statusCode, "Request failed.", [errorCode], new Dictionary<string, string[]>());
 
     /// <summary>
+    /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
+    /// </summary>
+    private static AutoRetryLoop FastRetry() =>
+        new(
+            static (_, _) => Task.CompletedTask,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза проходит сразу, а вторая висит до остановки: так видно
+    /// состояние между попытками, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop StopAfterFirstAttemptRetry()
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) => Interlocked.Increment(ref waits) == 1
+                ? Task.CompletedTask
+                : WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, у которого первая пауза висит до остановки, а следующая ждёт внешнего сигнала:
+    /// так видно и работу цикла до нажатия кнопки, и его перезапуск после неё, без таймеров.
+    /// </summary>
+    private static AutoRetryLoop StopThenGateRetry(Task restartGate)
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) =>
+            {
+                var wait = Interlocked.Increment(ref waits);
+
+                return wait == 1
+                    ? WaitForCancellationAsync(cancellationToken)
+                    : wait == 2
+                        ? restartGate
+                        : Task.CompletedTask;
+            },
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, который висит на первой же паузе: проверяется остановка до всякой попытки.
+    /// </summary>
+    private static AutoRetryLoop HangingRetry() =>
+        new(
+            (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
+    /// </summary>
+    private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+
+        return pending.Task;
+    }
+
+    /// <summary>
     /// Собранный экран: сессия с парой, фальшивые клиенты и открытый ViewModel.
     /// </summary>
     private sealed class Harness
     {
-        public Harness(bool withTokens = true, bool isEmailVerified = true)
+        public Harness(
+            bool withTokens = true,
+            bool isEmailVerified = true,
+            AutoRetryLoop? autoRetry = null)
         {
             Store = new FakeTokenStore
             {
@@ -447,7 +823,7 @@ public sealed class SecurityViewModelTests
 
             AccountApi.Profile = () => Task.FromResult(ProfileOf(isEmailVerified));
 
-            ViewModel = new SecurityViewModel(AccountApi, AuthApi, Session);
+            ViewModel = new SecurityViewModel(AccountApi, AuthApi, Session, autoRetry);
         }
 
         public FakeTokenStore Store { get; }

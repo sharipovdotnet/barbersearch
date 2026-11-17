@@ -84,6 +84,11 @@
                         LineBreakMode="WordWrap"
                         Text="{Binding SlotsError}"
                         TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding IsAutoRetrying}"
+                        Text="{loc:Translate Key='Пробуем снова…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                     <Button
                         Command="{Binding RetrySlotsCommand}"
                         HorizontalOptions="Start"

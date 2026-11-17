@@ -414,8 +414,638 @@ public sealed class BarberReviewsSectionTests
         Assert.Equal(2, pageChanges);
     }
 
-    private static Task InitializeSectionAsync(BarberReviewsSection section, int total = 12) =>
+    [Fact]
+    public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
+    {
+        var api = new FakeBarberApi();
+        var calls = 0;
+
+        api.Reviews = (_, _, _) =>
+        {
+            calls++;
+
+            return calls <= 2
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page(Reviews(10), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, FastRetry());
+
+        await InitializeSectionAsync(section);
+
+        Assert.True(section.HasFirstError);
+        Assert.Equal(NetworkText, section.FirstErrorText);
+
+        section.StartAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(2, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.HasFirstError);
+        Assert.Equal(10, section.Items.Count);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StartAutoRetry_NextPageTransportFailure_RetriesUntilSuccess()
+    {
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls <= 2
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page(Reviews(2), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, FastRetry());
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        Assert.True(section.HasPageError);
+        Assert.Equal(NetworkText, section.PageErrorText);
+
+        section.StartAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(2, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.HasPageError);
+        Assert.Equal(2, section.Items.Count);
+        Assert.Equal("11–12 из 12", section.PageRangeText);
+        Assert.Equal("Дальше", section.NextPageButtonText);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task StartAutoRetry_TerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        var api = new FakeBarberApi
+        {
+            Reviews = (_, _, _) => Task.FromException<PagedResponse<ReviewResponse>>(ApiError(statusCode)),
+        };
+        var section = new BarberReviewsSection(api, FastRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        // Окончательный отказ повторять нечего: цикл не стартует, текст и «Повторить» остаются.
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.True(section.HasFirstError);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_WhileWaiting_StopsFurtherAttempts()
+    {
+        var api = new FakeBarberApi
+        {
+            Reviews = (_, _, _) =>
+                Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused")),
+        };
+        var section = new BarberReviewsSection(api, StopAfterFirstAttemptRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        // Первая пауза проходит сразу, вторая висит: попытка уже сделана, следующая ждёт.
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.True(section.IsAutoRetrying);
+
+        section.StopAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.True(section.HasFirstError);
+    }
+
+    [Fact]
+    public async Task RetryFirstPageCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        var api = new FakeBarberApi();
+        var calls = 0;
+
+        api.Reviews = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page(Reviews(10), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, HangingRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+
+        // «Повторить» — это «повторить сейчас»: цикл останавливается, чтение идёт сразу.
+        await section.RetryFirstPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.ReviewCalls.Count);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.False(section.HasFirstError);
+        Assert.Equal(10, section.Items.Count);
+    }
+
+    [Fact]
+    public async Task RetryFirstPageCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<PagedResponse<ReviewResponse>>();
+        var api = new FakeBarberApi();
+        var calls = 0;
+
+        api.Reviews = (_, _, _) =>
+        {
+            calls++;
+
+            return calls switch
+            {
+                1 or 2 => Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused")),
+                3 => silentAttempt.Task,
+                _ => Task.FromResult(Page(Reviews(10), NextCursor: null)),
+            };
+        };
+
+        var section = new BarberReviewsSection(api, StopThenGateRetry(restartGate.Task));
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+
+        // Кнопка при работающем цикле читает сразу: к возврату команды ручной запрос уже ушёл,
+        // а перезапущенный цикл ждёт паузы — второго запроса без неё нет.
+        await section.RetryFirstPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(NetworkText, section.FirstErrorText);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: тихая попытка начинается, но причина
+        // на экране остаётся — иначе блок ошибки исчез бы на время запроса.
+        restartGate.SetResult();
+
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(NetworkText, section.FirstErrorText);
+        Assert.False(section.IsFirstLoading);
+        Assert.True(section.IsAutoRetrying);
+
+        silentAttempt.SetException(new HttpRequestException("refused"));
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(2, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(4, calls);
+        Assert.False(section.HasFirstError);
+        Assert.Equal(10, section.Items.Count);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task NextPageCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page(Reviews(2), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, HangingRetry());
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        section.StartAutoRetry();
+
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, api.ReviewCalls.Count);
+        Assert.Equal("c1", api.ReviewCalls[^1].Cursor);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.False(section.HasPageError);
+        Assert.Equal(2, section.Items.Count);
+        Assert.Equal("11–12 из 12", section.PageRangeText);
+    }
+
+    [Fact]
+    public async Task NextPageCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<PagedResponse<ReviewResponse>>();
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls switch
+            {
+                1 or 2 => Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused")),
+                3 => silentAttempt.Task,
+                _ => Task.FromResult(Page(Reviews(2), NextCursor: null)),
+            };
+        };
+
+        var section = new BarberReviewsSection(api, StopThenGateRetry(restartGate.Task));
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        section.StartAutoRetry();
+
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, nextCalls);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(10, section.Items.Count);
+        Assert.True(section.HasPageError);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни, а строки и «Повторить» остаются.
+        restartGate.SetResult();
+
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(10, section.Items.Count);
+        Assert.True(section.HasPageError);
+
+        silentAttempt.SetException(new HttpRequestException("refused"));
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(2, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(4, nextCalls);
+        Assert.False(section.HasPageError);
+        Assert.Equal(2, section.Items.Count);
+        Assert.Equal("11–12 из 12", section.PageRangeText);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_FailedSilentAttempt_KeepsReviews()
+    {
+        var retry = new TaskCompletionSource<PagedResponse<ReviewResponse>>();
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        var section = new BarberReviewsSection(api, StopAfterFirstAttemptRetry());
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(NetworkText, section.PageErrorText);
+
+        section.StartAutoRetry();
+
+        // Тихая попытка не стирает причину, строки, курсор и кнопку: человек продолжает видеть
+        // те же отзывы, пока ответа нет. Спиннер первой загрузки при этом не включается.
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(NetworkText, section.PageErrorText);
+        Assert.Equal(10, section.Items.Count);
+        Assert.True(section.CanGoNext);
+        Assert.Equal("Повторить", section.NextPageButtonText);
+        Assert.True(section.IsPagerVisible);
+        Assert.False(section.IsFirstLoading);
+
+        retry.SetException(ApiError(HttpStatusCode.NotFound));
+        await section.ReviewsAutoRetryCompletion;
+
+        // Неудача оставляет строки и курсор, а причину обновляет: экран говорит, чем кончилось.
+        Assert.Equal(10, section.Items.Count);
+        Assert.True(section.HasPageError);
+        Assert.Equal(NextPageFailedText, section.PageErrorText);
+        Assert.True(section.CanGoNext);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_DuringSilentAttempt_KeepsReviews()
+    {
+        var retry = new TaskCompletionSource<PagedResponse<ReviewResponse>>();
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        var section = new BarberReviewsSection(api, StopAfterFirstAttemptRetry());
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        section.StartAutoRetry();
+
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.Equal(NetworkText, section.PageErrorText);
+        Assert.Equal(10, section.Items.Count);
+
+        // Уход со страницы отменяет попытку; отменённая попытка не имеет права унести с собой
+        // причину, строки и курсор — иначе вернувшийся экран остался бы без «Повторить».
+        section.StopAutoRetry();
+        retry.SetCanceled();
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.True(section.HasPageError);
+        Assert.Equal(NetworkText, section.PageErrorText);
+        Assert.Equal(10, section.Items.Count);
+        Assert.True(section.CanGoNext);
+        Assert.Equal("Повторить", section.NextPageButtonText);
+        Assert.False(section.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_Timeout_ShowsNetworkText()
+    {
+        var api = new FakeBarberApi();
+        var calls = 0;
+
+        api.Reviews = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new TaskCanceledException("timeout"))
+                : Task.FromResult(Page(Reviews(10), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, FastRetry());
+
+        await InitializeSectionAsync(section);
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи»,
+        // а не тихая отмена.
+        Assert.Equal(NetworkText, section.FirstErrorText);
+
+        section.StartAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        Assert.Equal(1, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.HasFirstError);
+        Assert.Equal(10, section.Items.Count);
+    }
+
+    [Fact]
+    public async Task AutoRetry_NextPageFailure_RetriesSameCursor()
+    {
+        var api = new FakeBarberApi();
+        var nextCalls = 0;
+
+        api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(Page(Reviews(10), "c1"));
+            }
+
+            nextCalls++;
+
+            return nextCalls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page(Reviews(2), NextCursor: null));
+        };
+
+        var section = new BarberReviewsSection(api, FastRetry());
+
+        await InitializeSectionAsync(section);
+        await section.NextPageCommand.ExecuteAsync(null);
+
+        Assert.True(section.HasPageError);
+
+        section.StartAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        // Повтор несёт курсор упавшей страницы, а не пересобранный из текущего состояния.
+        Assert.Equal("c1", api.ReviewCalls[^1].Cursor);
+        Assert.Equal(10, api.ReviewCalls[^1].PageSize);
+
+        // Успешный повтор остался на той же странице и не перескочил: показана вторая, а «Назад»
+        // возвращает загруженную первую.
+        Assert.Equal(2, section.Items.Count);
+        Assert.Equal("11–12 из 12", section.PageRangeText);
+        Assert.False(section.HasPageError);
+        Assert.Equal("Дальше", section.NextPageButtonText);
+
+        section.PreviousPageCommand.Execute(null);
+
+        Assert.Equal(10, section.Items.Count);
+        Assert.Equal("1–10 из 12", section.PageRangeText);
+    }
+
+    [Fact]
+    public async Task IsAutoRetrying_TogglesWithLoopState()
+    {
+        var api = new FakeBarberApi
+        {
+            Reviews = (_, _, _) =>
+                Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused")),
+        };
+        var section = new BarberReviewsSection(api, HangingRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+        Assert.True(section.IsAutoRetrying);
+
+        section.StopAutoRetry();
+        Assert.False(section.IsAutoRetrying);
+
+        await section.ReviewsAutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task AutoRetry_TerminalAfterRetryable_DoesNotRestart()
+    {
+        var api = new FakeBarberApi();
+        var calls = 0;
+
+        api.Reviews = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromException<PagedResponse<ReviewResponse>>(ApiError(HttpStatusCode.NotFound));
+        };
+
+        var section = new BarberReviewsSection(api, HangingRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        Assert.True(section.IsAutoRetrying);
+        Assert.Equal(NetworkText, section.FirstErrorText);
+
+        // «Повторить» останавливает цикл и читает сразу; новый окончательный сбой не имеет права
+        // оживить фон памятью о прошлом Transport.
+        await section.RetryFirstPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.True(section.HasFirstError);
+        Assert.Equal(FirstPageFailedText, section.FirstErrorText);
+    }
+
+    [Fact]
+    public async Task RetryFirstPageCommand_WhenPageHidden_DoesNotStartAutoRetry()
+    {
+        var api = new FakeBarberApi
+        {
+            Reviews = (_, _, _) =>
+                Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused")),
+        };
+        var section = new BarberReviewsSection(api, HangingRetry());
+
+        await InitializeSectionAsync(section);
+
+        section.StartAutoRetry();
+
+        Assert.True(section.IsAutoRetrying);
+
+        // Уход со страницы гасит цикл; кнопка «повторить сейчас» не имеет права включить фон
+        // и оставить его работать на скрытом экране.
+        section.StopAutoRetry();
+        await section.ReviewsAutoRetryCompletion;
+
+        await section.RetryFirstPageCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.ReviewCalls.Count);
+        Assert.Equal(0, section.ReviewsAutoRetry.Attempts);
+        Assert.False(section.IsAutoRetrying);
+        Assert.True(section.HasFirstError);
+    }
+
+    private static Task<ApiFailureKind> InitializeSectionAsync(BarberReviewsSection section, int total = 12) =>
         section.InitializeAsync(ProfileId, "Europe/Moscow", total, SummaryText);
+
+    /// <summary>
+    /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
+    /// </summary>
+    private static AutoRetryLoop FastRetry() =>
+        new(
+            static (_, _) => Task.CompletedTask,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза проходит сразу, а вторая висит до остановки: так видно
+    /// состояние между попытками, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop StopAfterFirstAttemptRetry()
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) => Interlocked.Increment(ref waits) == 1
+                ? Task.CompletedTask
+                : WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, у которого первая пауза висит до остановки, а следующая ждёт внешнего сигнала:
+    /// так видно и работу цикла до нажатия кнопки, и его перезапуск после неё, без таймеров.
+    /// </summary>
+    private static AutoRetryLoop StopThenGateRetry(Task restartGate)
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) =>
+            {
+                var wait = Interlocked.Increment(ref waits);
+
+                return wait == 1
+                    ? WaitForCancellationAsync(cancellationToken)
+                    : wait == 2
+                        ? restartGate
+                        : Task.CompletedTask;
+            },
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, который висит на первой же паузе: проверяется остановка до всякой попытки.
+    /// </summary>
+    private static AutoRetryLoop HangingRetry() =>
+        new(
+            (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
+    /// </summary>
+    private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+
+        return pending.Task;
+    }
 
     private static PagedResponse<ReviewResponse> Page(
         IReadOnlyList<ReviewResponse> items,

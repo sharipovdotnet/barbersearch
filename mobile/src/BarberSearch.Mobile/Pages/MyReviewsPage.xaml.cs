@@ -30,6 +30,11 @@ public partial class MyReviewsPage : ContentPage
     private readonly MyReviewsViewModel _viewModel;
     private readonly TokenSession _session;
 
+    /// <summary>
+    /// Область «страница видна»: из неё растут циклы автоповтора, пока экран на виду.
+    /// </summary>
+    private IDisposable? _visibility;
+
     private bool _isNavigating;
 
     /// <summary>
@@ -53,14 +58,26 @@ public partial class MyReviewsPage : ContentPage
     }
 
     /// <summary>
-    /// Читает список при первом появлении и подписывается на завершение сессии.
+    /// Читает список при первом появлении, подписывается на завершение сессии и сообщает,
+    /// что страница видна.
     /// </summary>
+    /// <remarks>
+    /// Область видимости создаётся до первой загрузки: сбой, пришедший из неё, уже может
+    /// запустить автоповтор. Она же слушает уход приложения в фон — <c>OnDisappearing</c> там
+    /// не вызывается. <c>async void</c> здесь — единственная допустимая форма переопределения.
+    /// </remarks>
     protected override async void OnAppearing()
     {
         base.OnAppearing();
 
         _session.SessionEnded -= OnSessionEnded;
         _session.SessionEnded += OnSessionEnded;
+
+        _visibility?.Dispose();
+        _visibility = PageVisibility.Watch(
+            this,
+            _viewModel.StartAutoRetry,
+            _viewModel.StopAutoRetry);
 
         await _viewModel.InitializeAsync();
 
@@ -71,10 +88,17 @@ public partial class MyReviewsPage : ContentPage
     }
 
     /// <summary>
-    /// Снимает подписку, пока страница не на экране.
+    /// Останавливает автоповтор и снимает подписку, пока страница не на экране.
     /// </summary>
+    /// <remarks>
+    /// <see cref="IDisposable.Dispose"/> сам сообщает «скрыта» и снимает подписку на окно,
+    /// поэтому отдельного вызова <c>StopAutoRetry</c> здесь нет.
+    /// </remarks>
     protected override void OnDisappearing()
     {
+        _visibility?.Dispose();
+        _visibility = null;
+
         _session.SessionEnded -= OnSessionEnded;
 
         base.OnDisappearing();

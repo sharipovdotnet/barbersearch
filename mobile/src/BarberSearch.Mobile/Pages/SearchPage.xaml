@@ -183,6 +183,11 @@
                                 LineBreakMode="WordWrap"
                                 Text="{Binding CatalogsErrorText}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding IsCatalogsAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Button
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                                 Command="{Binding RetryCatalogsCommand}"

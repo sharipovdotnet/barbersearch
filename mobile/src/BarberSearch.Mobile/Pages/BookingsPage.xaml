@@ -441,6 +441,12 @@
                                     LineBreakMode="WordWrap"
                                     Text="{loc:Translate Key='Не удалось загрузить ещё записи.'}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    HorizontalOptions="Start"
+                                    IsVisible="{Binding IsLoadMoreAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                 <Button
                                     Command="{Binding RetryLoadMoreCommand}"
                                     HorizontalOptions="Start"

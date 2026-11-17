@@ -374,11 +374,16 @@ in Core owns both base addresses.
   On a phone a manual retry asks the person to notice the failure, guess when the network came back
   and tap again for every attempt — nobody does that. The «Записи» tab had already chosen the
   automatic side (a silent 30-second refresh, no «Обновить» button, see above), and the retry button
-  was the last place where the product asked to be poked. So the pilot gives three screens a loop of
-  their own: the search results, the first page of «Записи», and the barber card's profile and slots.
-  Only reads. Writes — booking, cancel, reschedule, review submit, sign-in and registration, password
-  and email changes, the reminder switch — keep their «Повторить» untouched: after a failure their
-  outcome is unknown, and a silent repeat could book twice or hide a refusal the person must see.
+  was the last place where the product asked to be poked. The mechanism started as a pilot on three
+  screens and is now on every read in the product: the search results and the search catalogs, the
+  first page and the next page of «Записи», the first page and the next page of «Мои отзывы», the
+  barber card's profile-with-slots and its reviews, the «Профиль» hub, «Личные данные»,
+  «Безопасность», and the slots grid of the reschedule screen. Only reads. Writes — booking, cancel,
+  reschedule submit, review submit, edit and delete, profile and email save, sign-in and registration,
+  password change, the reminder switch — keep their «Повторить» untouched: after a failure their
+  outcome is unknown, and a silent repeat could book twice or hide a refusal the person must see. City
+  suggestions are the one read outside the rule on purpose: they are a limiter and an input aid, not
+  an answer, and they already stay silent on every failure.
   The decision lives in Core. `ApiFailureClassifier` turns an exception into `ApiFailureKind`:
   `Transport` — no answer at all (DNS, TCP, TLS, a dropped connection, and the 30-second
   `HttpClient.Timeout`, which arrives as a `TaskCanceledException` and used to be swallowed by
@@ -387,13 +392,20 @@ in Core owns both base addresses.
   anything unknown, where a repeat only repeats the refusal; `None` — a real cancellation, which is
   not an error and shows no message. `AutoRetryLoop` waits 1, 2, 4, 8, 15 and 30 seconds, repeats the
   last interval, and stops on success, on a terminal answer, or when the screen leaves. The loop is
-  armed by `StartAutoRetry` and disarmed by `StopAutoRetry` from the page — `PageVisibility` for the
-  search and the card (appearing plus `Window.Stopped`/`Resumed`), the tab's own `_isVisible`
-  plumbing for «Записи», which already stopped its timers in the background — so a request is never
-  made from a hidden window, and an attempt that was already waiting is cancelled on the way out.
-  The loop deliberately keeps the caller's context instead of `ConfigureAwait(false)`: an attempt is
+  armed by `StartAutoRetry` and disarmed by `StopAutoRetry` from the page — `PageVisibility` for every
+  new page (appearing plus `Window.Stopped`/`Resumed`), the tab's own `_isVisible` plumbing for
+  «Записи», which already stopped its timers in the background — so a request is never made from a
+  hidden window, and an attempt that was already waiting is cancelled on the way out. The loop
+  deliberately keeps the caller's context instead of `ConfigureAwait(false)`: an attempt is
   ViewModel code that updates bindings, and a continuation on a pool thread would repaint from a
   foreign thread.
+  A screen with two independent reads arms two loops, one per read: «Записи» (first page and next
+  page), the search (results and catalogs) and the barber card (profile-with-slots and reviews). The
+  loops never arm each other — a broken catalog list is no reason to re-run the search, and a failed
+  review page is no reason to re-read the profile. The reviews loop is owned by the card but lives on
+  the section, which has no lifecycle and no binding context of its own: the card arms it, and the
+  failure it reports back is the heaviest of the attempt, so a profile that recovered in the same
+  attempt cannot stop the retry of reviews that did not.
   The button keeps its wording and its place: it stops the loop, loads at once and restarts the loop
   only if the new failure is retryable again — it cannot arm a page that has already left. While the
   loop runs, the error card keeps its title, its reason and its button and adds one muted line,
@@ -402,23 +414,48 @@ in Core owns both base addresses.
   `FirstPageMode.Retry`, which does not clear the message until the answer — the old silent mode
   blanked the card into an empty screen for the length of every request — and neither the rows nor
   the reason are erased by a failed attempt. This is a deliberate deviation from §8, where the web
-  only retries on a click, recorded here rather than left as an omission; the other twelve retry
-  buttons keep their behaviour, because they are the write paths and the screens outside the pilot.
+  only retries on a click, recorded here rather than left as an omission; the remaining «Повторить»
+  buttons keep their behaviour, because they are the write paths.
   Two more rules keep a silent attempt honest. A retry repeats the request that failed rather than a
-  fresh one built from the form: the search remembers the filters of the failed attempt, coordinates
-  included, because they are attached after the form is read — so a field edited while the error card
-  is up still waits for «Найти», the same rule as above. And a silent attempt never repaints the
-  failure as a loading screen: the reason, the rows and the button stay until the answer. That is
-  why the barber card needed a silent mode of its own and «Записи» a `FirstPageMode.Retry`: a load
-  that clears its error text and flips its spinner at the start of an attempt makes the whole block
-  with «Повторить» vanish between attempts, and a cancelled attempt that never restores the text
-  leaves the card blank with nothing to press. A `401` still ends the session, a `429` keeps its own
-  text, and a terminal answer stops the loop instead of spinning on a refusal. Tests add 65 cases
-  (711 total): the classifier and the loop themselves, and per pilot screen the retry-until-success,
-  the terminal refusal that never starts the loop, the stop on leaving, the button that loads at once
-  and restarts only on a new retryable failure, the failed silent attempt that keeps what is shown,
-  the timeout that finally shows «Нет связи с сервером…», the retry that outlives a form edit, and
-  the «Пробуем снова…» line that follows the loop state.
+  fresh one built from the form or from the screen: the search remembers the filters of the failed
+  attempt, coordinates included, because they are attached after the form is read — so a field edited
+  while the error card is up still waits for «Найти»; a load-more retry keeps the cursor and the tab
+  that failed, and an id already in the list is not appended a second time, so a repeat cannot
+  duplicate or reorder rows; the reviews paginator keeps the page number and its cursor, and a
+  successful retry stays on that page instead of skipping ahead; the reschedule slots keep the date
+  that failed, not the one picked since; the catalogs keep which of the two requests failed, and a
+  retry asks only for that one, because a partial success is not thrown away; the profile reads carry
+  no parameters at all, so there is nothing to rebuild. And a silent attempt never repaints the
+  failure as a loading screen: the reason, the rows and the button stay until the answer. That is why
+  the barber card needed a silent mode of its own and «Записи» a `FirstPageMode.Retry`: a load that
+  clears its error text and flips its spinner at the start of an attempt makes the whole block with
+  «Повторить» vanish between attempts, and a cancelled attempt that never restores the text leaves
+  the card blank with nothing to press.
+  Two screens needed a rule of their own. The reviews paginator reuses the «Дальше» button and only
+  its «Повторить» text on failure: `CanGoNext` is `HasPageError || NextCursor is not null`, so the
+  same button means "next", "retry this page" and "next again" without gaining a second control. The
+  «Профиль» hub stops its loop before every push into a child screen (`EditProfile`, `Reviews`,
+  `Security`, `Register`, `ForgotPassword`), because Shell does not raise `OnDisappearing` for a push:
+  without the stop the loop would keep polling the network under the pushed page. Catalog `429` is
+  the one place where `RetryableServer` is not retried: the rate-limit text stays and the loop does
+  not start, while every other read keeps `429` retryable with its own text.
+  «Записи» needed one more rule, found on the phone rather than in a test: its list waits for
+  `GET api/auth/me`, and a cold start without a network failed that read before the list was ever
+  requested — the loop then had no user id to retry with, so the screen froze on «Повторить» while
+  every other screen healed itself. A failed `/me` is therefore a read like any other: it starts the
+  loop on its own (the `/me` kind is remembered separately from the list kind, so a stale list
+  failure cannot arm it), and a retry asks for `/me` first and only then for the first page of the
+  tab that is active when the answer arrives. A `401` from `/me` still ends the session, and a
+  terminal one never arms. The lesson worth keeping: an automatic retry must own every read its
+  screen needs to show data, not only the read that produces the rows.
+  A `401` still ends the session, a terminal answer stops the loop instead of spinning on a refusal,
+  and a real cancellation shows nothing. Tests add 126 cases (837 total): the classifier and the loop
+  themselves, and per screen the retry-until-success, the terminal refusal that never starts the loop,
+  the stop on leaving, the button that loads at once and restarts only on a new retryable failure, the
+  failed silent attempt that keeps what is shown, the timeout that finally shows «Нет связи с
+  сервером…», the retry that outlives a form edit or a tab switch, the two loops that never arm each
+  other, the cold start whose `/me` read fails before the list is ever asked for, and the «Пробуем
+  снова…» line that follows the loop state.
 
 ## 6. What the backend still lacks
 
