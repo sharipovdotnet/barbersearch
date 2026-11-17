@@ -91,6 +91,18 @@ public static class RateLimitSettings
     public const int WritePermitLimit = 30;
 
     /// <summary>
+    /// Ключ конфигурации, переопределяющий лимит записи.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию квота — <see cref="WritePermitLimit"/> (30/мин). Стенд сквозных тестов
+    /// поднимает её: один автоматизированный клиент выполняет десятки записей в минуту за
+    /// несколько аккаунтов сразу, и сценарии упирались в <c>429</c> не из-за дефекта, а из-за
+    /// квоты. Продакшен-значение не меняется: без переменной окружения
+    /// <c>RateLimiting__WritePermitLimit</c> остаётся 30.
+    /// </remarks>
+    public const string WritePermitLimitConfigurationKey = "RateLimiting:WritePermitLimit";
+
+    /// <summary>
     /// Имя политики подсказок адреса (<c>[EnableRateLimiting("addresses")]</c>).
     /// </summary>
     public const string AddressesPolicyName = "addresses";
@@ -120,11 +132,24 @@ public static class RateLimitSettings
     /// <param name="options">Параметры, которые регистрирует <c>AddRateLimiter</c>.</param>
     /// <remarks>
     /// <c>GlobalLimiter</c> проверяется до политики эндпоинта, поэтому запрос записи сначала
-    /// расходует общий лимит 30/мин, а затем — свой более строгий лимит, если он есть.
+    /// расходует общий лимит записи (30/мин по умолчанию, см.
+    /// <see cref="WritePermitLimitConfigurationKey"/>), а затем — свой более строгий лимит,
+    /// если он есть.
     /// </remarks>
-    public static void Configure(RateLimiterOptions options)
+    public static void Configure(RateLimiterOptions options) =>
+        Configure(options, WritePermitLimit);
+
+    /// <summary>
+    /// Применяет настройки с явной квотой записи.
+    /// </summary>
+    /// <param name="options">Параметры, которые регистрирует <c>AddRateLimiter</c>.</param>
+    /// <param name="writePermitLimit">
+    /// Запросов записи в минуту на клиента; по умолчанию <see cref="WritePermitLimit"/>.
+    /// </param>
+    public static void Configure(RateLimiterOptions options, int writePermitLimit)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(writePermitLimit);
 
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
@@ -132,7 +157,8 @@ public static class RateLimitSettings
         options.AddPolicy(ReadsPolicyName, ReadsPartition);
         options.AddPolicy(AddressesPolicyName, AddressesPartition);
 
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(WritePartition);
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(
+            context => WritePartition(context, writePermitLimit));
         options.OnRejected = OnRejected;
     }
 
@@ -191,7 +217,17 @@ public static class RateLimitSettings
     /// Безопасные методы получают <see cref="RateLimitPartition.GetNoLimiter{TKey}"/>:
     /// чтение карточек, слотов, поиска и списков не должно упираться в лимит записи.
     /// </remarks>
-    public static RateLimitPartition<string> WritePartition(HttpContext context)
+    public static RateLimitPartition<string> WritePartition(HttpContext context) =>
+        WritePartition(context, WritePermitLimit);
+
+    /// <summary>
+    /// Партиция глобального лимита с явной квотой записи.
+    /// </summary>
+    /// <param name="context">Текущий запрос.</param>
+    /// <param name="writePermitLimit">Запросов записи в минуту на клиента.</param>
+    public static RateLimitPartition<string> WritePartition(
+        HttpContext context,
+        int writePermitLimit)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -206,7 +242,7 @@ public static class RateLimitSettings
 
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: WritePartitionKey(context),
-            factory: _ => FixedWindow(WritePermitLimit));
+            factory: _ => FixedWindow(writePermitLimit));
     }
 
     /// <summary>

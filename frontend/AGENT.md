@@ -485,6 +485,10 @@ $env:Email__UseTls = 'false'; $env:Email__FromAddress = 'no-reply@barbersearch.t
 $env:App__PublicUrl = 'http://localhost:5173'
 # Outbox-воркер шлёт письма раз в 1 с (дефолтные 30 с не успевают в 10-секундный wait Playwright)
 $env:EmailOutbox__IntervalSeconds = '1'
+# Мутационные сценарии делают десятки записей в минуту за несколько аккаунтов сразу:
+# с прод-квотой 30/мин прогон упирается в 429 (квота, не дефект). Стенд поднимает
+# только лимит записи; дефолт продакшена остаётся 30 (backend/AGENT.md §17.5).
+$env:RateLimiting__WritePermitLimit = '240'
 # Хранилище: локально каталог вне workspace; в CI media-сценарии идут в MinIO
 # (Storage:Provider=S3, бакет barbersearch) — тот же srcset/304/404 проверяет S3-ветку.
 # Для локального S3: backend/docker compose up -d minio + Storage__S3__* (backend/.env.example).
@@ -2570,10 +2574,23 @@ card, the list row and the journal), plus the 320 px axe scene «/barber: диа
 320» in `a11y-narrow.spec.ts`; the figures above stayed the recorded run until 2026-11-16, when the
 suite was rerun for the address-suggestions slice (PR #122): **333 passed, 14 skipped, 0 failed**
 with `--workers=2` (347 tests, 7.3 min; the eight new skips are the mobile duplicates of
-`salon-suggestions.spec.ts`, whose 1280 and 320 widths are set explicitly). Run the
-suite with `--workers=2`: with the machine's default 12 workers the
-read-only a11y and pagination specs time out under CPU load (Vite + API + 12 browsers), which is
-environment, not a regression. The previously documented cache flake is fixed:
+`salon-suggestions.spec.ts`, whose 1280 and 320 widths are set explicitly). On 2026-11-17 the CI run
+turned red twice in a row inside the mutation phase, with two different symptoms of one cause — the
+phase is over-subscribed with two workers. First run: `barber-salons-mutations` kept the create
+dialog on «Слишком много действий подряд. Подождите минуту.», the `429` copy of the global write
+limiter (the mutation specs write well over 30 times per minute across a few shared accounts), so the
+stand now sets `RateLimiting__WritePermitLimit=240` while the production default stays 30
+(backend/AGENT.md §17.5). Second run: «Услуги» restore showed «Не удалось сохранить профиль…», the
+generic branch of a 4xx with `canRetry = false` — the legitimate `409 update.concurrencyConflict`,
+because `barber-profile-mutations`, `barber-profile-photos-mutations` and
+`public-barber-avatar-mutations` write the same `profileBarber` row, and a second scene hit the 30 s
+limit on first paint under the load of the Vite dev server. CI therefore runs **one worker**
+(`workers: isCI ? 1 : undefined`): files never interleave, no cross-file xmin race, and the fixture
+order still comes from project dependencies. The recorded run after both changes: **335 passed,
+14 skipped, 0 failed**, 349 tests, 8.9 min of test time (10 m 55 s job). Locally the suite may run
+with more workers — with the machine's default 12 the read-only a11y and pagination specs time out
+under CPU load (Vite + API + 12 browsers), which is environment, not a regression. The previously
+documented cache flake is fixed:
 `playwright.request.newContext` inherited the scenario's `storageState`, so an "anonymous" media
 request carried the owner's cookie and ASP.NET added `no-store`; every guest context now passes
 `storageState: { cookies: [], origins: [] }` and the public media file is asserted by a real guest

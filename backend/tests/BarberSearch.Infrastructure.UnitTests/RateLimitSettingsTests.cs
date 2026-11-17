@@ -273,6 +273,63 @@ public class RateLimitSettingsTests
         Assert.Contains(ApiErrorCodes.Common.RateLimitExceeded, errorCodes);
     }
 
+    [Fact]
+    public void Configure_HonoursTheExplicitWritePermitLimit()
+    {
+        var options = new RateLimiterOptions();
+        RateLimitSettings.Configure(options, writePermitLimit: 2);
+
+        var limiter = options.GlobalLimiter;
+        Assert.NotNull(limiter);
+
+        var user = CreateContext(HttpMethods.Post);
+        user.User = CreatePrincipal(UserId);
+
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            using var lease = limiter.AttemptAcquire(user);
+            Assert.True(lease.IsAcquired, $"Запрос {attempt} из 2 должен пройти.");
+        }
+
+        using (var rejected = limiter.AttemptAcquire(user))
+        {
+            Assert.False(rejected.IsAcquired);
+        }
+    }
+
+    [Fact]
+    public void Configure_KeepsTheProductionThirtyWritesByDefault()
+    {
+        var options = new RateLimiterOptions();
+        RateLimitSettings.Configure(options);
+
+        var limiter = options.GlobalLimiter;
+        Assert.NotNull(limiter);
+
+        var user = CreateContext(HttpMethods.Post);
+        user.User = CreatePrincipal(UserId);
+
+        for (var attempt = 1; attempt <= RateLimitSettings.WritePermitLimit; attempt++)
+        {
+            using var lease = limiter.AttemptAcquire(user);
+            Assert.True(
+                lease.IsAcquired,
+                $"Запрос {attempt} из {RateLimitSettings.WritePermitLimit} должен пройти.");
+        }
+
+        using var rejected = limiter.AttemptAcquire(user);
+        Assert.False(rejected.IsAcquired);
+    }
+
+    [Fact]
+    public void Configure_RejectsNonPositiveWritePermitLimit()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => RateLimitSettings.Configure(new RateLimiterOptions(), writePermitLimit: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => RateLimitSettings.Configure(new RateLimiterOptions(), writePermitLimit: -1));
+    }
+
     private static DefaultHttpContext CreateContext(string method)
     {
         var context = new DefaultHttpContext();
