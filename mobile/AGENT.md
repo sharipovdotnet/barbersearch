@@ -370,6 +370,56 @@ in Core owns both base addresses.
   its headline stays 16 and its reason 14, the app-wide pair, so the same «Не удалось загрузить …»
   reads the same size on «Записи» and «Профиль».
 
+- **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
+  On a phone a manual retry asks the person to notice the failure, guess when the network came back
+  and tap again for every attempt — nobody does that. The «Записи» tab had already chosen the
+  automatic side (a silent 30-second refresh, no «Обновить» button, see above), and the retry button
+  was the last place where the product asked to be poked. So the pilot gives three screens a loop of
+  their own: the search results, the first page of «Записи», and the barber card's profile and slots.
+  Only reads. Writes — booking, cancel, reschedule, review submit, sign-in and registration, password
+  and email changes, the reminder switch — keep their «Повторить» untouched: after a failure their
+  outcome is unknown, and a silent repeat could book twice or hide a refusal the person must see.
+  The decision lives in Core. `ApiFailureClassifier` turns an exception into `ApiFailureKind`:
+  `Transport` — no answer at all (DNS, TCP, TLS, a dropped connection, and the 30-second
+  `HttpClient.Timeout`, which arrives as a `TaskCanceledException` and used to be swallowed by
+  `catch (OperationCanceledException)` as a cancellation, so the person saw nothing);
+  `RetryableServer` — the server answered 5xx, 408 or 429; `Terminal` — 400/401/403/404/409 and
+  anything unknown, where a repeat only repeats the refusal; `None` — a real cancellation, which is
+  not an error and shows no message. `AutoRetryLoop` waits 1, 2, 4, 8, 15 and 30 seconds, repeats the
+  last interval, and stops on success, on a terminal answer, or when the screen leaves. The loop is
+  armed by `StartAutoRetry` and disarmed by `StopAutoRetry` from the page — `PageVisibility` for the
+  search and the card (appearing plus `Window.Stopped`/`Resumed`), the tab's own `_isVisible`
+  plumbing for «Записи», which already stopped its timers in the background — so a request is never
+  made from a hidden window, and an attempt that was already waiting is cancelled on the way out.
+  The loop deliberately keeps the caller's context instead of `ConfigureAwait(false)`: an attempt is
+  ViewModel code that updates bindings, and a continuation on a pool thread would repaint from a
+  foreign thread.
+  The button keeps its wording and its place: it stops the loop, loads at once and restarts the loop
+  only if the new failure is retryable again — it cannot arm a page that has already left. While the
+  loop runs, the error card keeps its title, its reason and its button and adds one muted line,
+  «Пробуем снова…» (the only new catalog key), so the screen says the app is working instead of
+  looking frozen. A silent attempt also has to keep what is already shown: «Записи» gets
+  `FirstPageMode.Retry`, which does not clear the message until the answer — the old silent mode
+  blanked the card into an empty screen for the length of every request — and neither the rows nor
+  the reason are erased by a failed attempt. This is a deliberate deviation from §8, where the web
+  only retries on a click, recorded here rather than left as an omission; the other twelve retry
+  buttons keep their behaviour, because they are the write paths and the screens outside the pilot.
+  Two more rules keep a silent attempt honest. A retry repeats the request that failed rather than a
+  fresh one built from the form: the search remembers the filters of the failed attempt, coordinates
+  included, because they are attached after the form is read — so a field edited while the error card
+  is up still waits for «Найти», the same rule as above. And a silent attempt never repaints the
+  failure as a loading screen: the reason, the rows and the button stay until the answer. That is
+  why the barber card needed a silent mode of its own and «Записи» a `FirstPageMode.Retry`: a load
+  that clears its error text and flips its spinner at the start of an attempt makes the whole block
+  with «Повторить» vanish between attempts, and a cancelled attempt that never restores the text
+  leaves the card blank with nothing to press. A `401` still ends the session, a `429` keeps its own
+  text, and a terminal answer stops the loop instead of spinning on a refusal. Tests add 65 cases
+  (711 total): the classifier and the loop themselves, and per pilot screen the retry-until-success,
+  the terminal refusal that never starts the loop, the stop on leaving, the button that loads at once
+  and restarts only on a new retryable failure, the failed silent attempt that keeps what is shown,
+  the timeout that finally shows «Нет связи с сервером…», the retry that outlives a form edit, and
+  the «Пробуем снова…» line that follows the loop state.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:

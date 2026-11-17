@@ -32,6 +32,11 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     private bool _isAppeared;
 
     /// <summary>
+    /// Область «страница видна»: из неё растёт автоповтор, пока экран на виду.
+    /// </summary>
+    private IDisposable? _visibility;
+
+    /// <summary>
     /// Создаёт карточку.
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
@@ -85,6 +90,8 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     /// Возврат с вкладки «Профиль» или из просмотра фото не перезагружает карточку: ViewModel
     /// сам решает, что уже загружено, и только перечитывает признак входа. Подписка на смену
     /// страницы отзывов восстанавливается здесь же — страница живёт в стеке и возвращается.
+    /// Область видимости создаётся до загрузки: сбой, пришедший из неё, уже может запустить
+    /// автоповтор.
     /// </remarks>
     protected override async void OnAppearing()
     {
@@ -95,6 +102,12 @@ public partial class BarberPage : ContentPage, IQueryAttributable
         _viewModel.Reviews.PageChanged -= OnReviewsPageChanged;
         _viewModel.Reviews.PageChanged += OnReviewsPageChanged;
 
+        _visibility?.Dispose();
+        _visibility = PageVisibility.Watch(
+            this,
+            _viewModel.StartAutoRetry,
+            _viewModel.StopAutoRetry);
+
         if (_queryApplied)
         {
             await _viewModel.InitializeAsync(_barberId);
@@ -104,8 +117,15 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     /// <summary>
     /// Снимает подписку на смену страницы отзывов, пока страница не на экране.
     /// </summary>
+    /// <remarks>
+    /// <see cref="IDisposable.Dispose"/> области видимости сам сообщает «скрыта» и снимает
+    /// подписку на окно, поэтому отдельного вызова <c>StopAutoRetry</c> здесь нет.
+    /// </remarks>
     protected override void OnDisappearing()
     {
+        _visibility?.Dispose();
+        _visibility = null;
+
         _viewModel.Reviews.PageChanged -= OnReviewsPageChanged;
 
         base.OnDisappearing();

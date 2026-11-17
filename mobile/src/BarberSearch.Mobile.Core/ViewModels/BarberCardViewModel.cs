@@ -37,6 +37,13 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// только его, поэтому перезапрос сетки после успеха не подменяет подтверждение.
 /// Ключ идемпотентности создаётся на попытку и переиспользуется всеми повторами.
 /// </para>
+/// <para>
+/// Пока экран виден, повторяемый сбой чтения лечится сам: профиль, а затем недостающая сетка
+/// повторяются с нарастающей паузой (<see cref="Api.AutoRetryLoop"/>), а под причиной видна
+/// строка «Пробуем снова…». Запись не повторяется: бронь, отмена и отзыв по-прежнему только
+/// по нажатию. «Повторить» у профиля и у слотов значит «повторить сейчас»: останавливает цикл,
+/// читает без паузы и запускает его снова, только если сбой опять повторяемый.
+/// </para>
 /// </remarks>
 public sealed partial class BarberCardViewModel : ObservableObject
 {
@@ -110,6 +117,18 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private DateOnly _minDate;
     private DateOnly _maxDate;
 
+    private readonly AutoRetryLoop _autoRetry;
+
+    /// <summary>
+    /// Вид последнего сбоя чтения профиля или слотов: по нему решает автоповтор.
+    /// </summary>
+    private ApiFailureKind _lastFailureKind;
+
+    /// <summary>
+    /// Страница сейчас видна: без этого сигнала цикл повторов не запускается.
+    /// </summary>
+    private bool _isPageVisible;
+
     /// <summary>
     /// Создаёт карточку мастера.
     /// </summary>
@@ -118,12 +137,17 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <param name="bookingsApi">Создание брони через клиент с Bearer.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
     /// <param name="timeProvider">Текущий момент: «сегодня» в поясе салона проверяется тестом.</param>
+    /// <param name="autoRetry">
+    /// Цикл автоповтора профиля и слотов; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Параметр необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
+    /// </param>
     public BarberCardViewModel(
         IBarberSearchApi api,
         BarberSearchApiOptions apiOptions,
         IBookingsApi bookingsApi,
         TokenSession session,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(apiOptions);
@@ -136,6 +160,9 @@ public sealed partial class BarberCardViewModel : ObservableObject
         _bookingsApi = bookingsApi;
         _session = session;
         _timeProvider = timeProvider;
+
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
 
         Reviews = new BarberReviewsSection(api);
     }
@@ -172,6 +199,16 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private string? _slotsErrorText;
+
+    /// <summary>
+    /// Цикл сам повторяет профиль или слоты: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
 
     /// <summary>
     /// Почему свободного времени нет: нерабочий день или всё занято.
@@ -638,6 +675,52 @@ public sealed partial class BarberCardViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Сообщает, что страница видна, и запускает автоповтор недостающего чтения.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при каждом появлении и каждом возврате из фона. Идемпотентен: без
+    /// повторяемого сбоя, при окончательном отказе, во время загрузки или при работающем цикле
+    /// ничего не делает.
+    /// </para>
+    /// <para>
+    /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
+    /// синхронно меняет привязанное <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
+    /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что страница скрыта, и останавливает автоповтор.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а <see cref="IsAutoRetrying"/>
+    /// сразу становится <c>false</c>: ушедшая страница не показывает повтор и не ходит в сеть.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
     /// Меняет услугу и перезапрашивает сетку: у услуги своя длительность и шаг.
     /// </summary>
     /// <param name="service">Новый пункт выбора; <c>null</c> игнорируется.</param>
@@ -716,8 +799,12 @@ public sealed partial class BarberCardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Повторяет загрузку карточки после ошибки.
+    /// Повторяет загрузку карточки после ошибки — сразу, по кнопке.
     /// </summary>
+    /// <remarks>
+    /// Кнопка значит «повторить сейчас»: цикл автоповтора останавливается, карточка читается
+    /// без паузы, и цикл запускается заново только при повторяемом сбое.
+    /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     [RelayCommand]
     private async Task RetryLoadAsync(CancellationToken cancellationToken)
@@ -727,19 +814,31 @@ public sealed partial class BarberCardViewModel : ObservableObject
             return;
         }
 
+        StopAutoRetryLoop();
+
         await LoadProfileAsync(_barberProfileId, cancellationToken);
+
+        TryStartAutoRetry();
     }
 
     /// <summary>
-    /// Повторяет загрузку свободного времени после ошибки.
+    /// Повторяет загрузку свободного времени после ошибки — сразу, по кнопке.
     /// </summary>
+    /// <remarks>
+    /// Как и у профиля: фон останавливается, сетка читается без паузы, цикл возвращается только
+    /// при повторяемом сбое.
+    /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     [RelayCommand]
     private async Task RetrySlotsAsync(CancellationToken cancellationToken)
     {
+        StopAutoRetryLoop();
+
         SlotsErrorText = null;
 
         await LoadSlotsAsync(cancellationToken);
+
+        TryStartAutoRetry();
     }
 
     /// <summary>
@@ -921,19 +1020,43 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Грузит карточку и сразу за ней сетку слотов.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Идентификатор запоминается до запроса: повторное появление экрана после ошибки не
-    /// должно само повторять сетевой запрос — для этого есть «Повторить».
+    /// должно само повторять сетевой запрос — для этого есть «Повторить» и цикл автоповтора.
+    /// </para>
+    /// <para>
+    /// Сбои сведены классификатором: отмена — тихий выход, «нет связи» — свой текст,
+    /// <c>404</c> — «не найден», <c>429</c> — просьба подождать. Таймаут транспорта больше не
+    /// проглатывается как отмена: человек видит «нет связи», и цикл повторяет чтение.
+    /// </para>
     /// </remarks>
-    private async Task LoadProfileAsync(Guid barberProfileId, CancellationToken cancellationToken)
+    /// <param name="barberProfileId">Профиль, который открыли.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <param name="silent">
+    /// Попытка цикла автоповтора: причина ошибки и индикатор загрузки не меняются на старте,
+    /// иначе на каждой паузе экран показывал бы пустоту вместо уже известного состояния.
+    /// </param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadProfileAsync(
+        Guid barberProfileId,
+        CancellationToken cancellationToken,
+        bool silent = false)
     {
         _barberProfileId = barberProfileId;
         _loadedProfileId = barberProfileId;
         _profile = null;
-        IsLoading = true;
-        IsNotFound = false;
-        LoadErrorText = null;
+
+        if (!silent)
+        {
+            IsLoading = true;
+            IsNotFound = false;
+            LoadErrorText = null;
+        }
 
         RaiseProfileChanged();
+
+        var kind = ApiFailureKind.None;
+        var slotsKind = ApiFailureKind.None;
 
         try
         {
@@ -942,6 +1065,10 @@ public sealed partial class BarberCardViewModel : ObservableObject
             _profile = profile;
             ApplyProfile(profile);
             RaiseProfileChanged();
+
+            // Тихий повтор не стирал причину на старте, поэтому успех снимает её здесь.
+            LoadErrorText = null;
+            _lastFailureKind = ApiFailureKind.None;
 
             // Карточка уже видна: индикатор относится к профилю, а не к сетке слотов.
             IsLoading = false;
@@ -955,34 +1082,50 @@ public sealed partial class BarberCardViewModel : ObservableObject
                 RatingText,
                 cancellationToken);
 
-            await LoadSlotsAsync(cancellationToken);
+            slotsKind = await LoadSlotsAsync(cancellationToken, silent);
             await reviewsTask;
         }
-        catch (OperationCanceledException)
+        catch (Exception exception)
         {
-            // Экран закрыли — состояние не меняем.
-        }
-        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
-        {
-            IsNotFound = true;
-        }
-        catch (BarberSearchApiException exception)
-        {
-            LoadErrorText = DescribeReadFailure(exception, ProfileLoadFailedValue);
-        }
-        catch (HttpRequestException)
-        {
-            LoadErrorText = NetworkValue;
-        }
-        catch (InvalidOperationException)
-        {
-            // Успешный ответ с пустым телом: сервер нарушил контракт, но экран не падает.
-            LoadErrorText = ProfileLoadFailedValue;
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind != ApiFailureKind.None)
+            {
+                if (exception is BarberSearchApiException { StatusCode: HttpStatusCode.NotFound })
+                {
+                    // «Не найден» — доменное состояние экрана, а не текст ошибки.
+                    IsNotFound = true;
+                    kind = ApiFailureKind.Terminal;
+                }
+                else
+                {
+                    LoadErrorText = kind == ApiFailureKind.Transport
+                        ? NetworkValue
+                        : exception is BarberSearchApiException apiException
+                            ? DescribeReadFailure(apiException, ProfileLoadFailedValue)
+                            : ProfileLoadFailedValue;
+                }
+
+                // Вид сбоя запоминается и для окончательного отказа: иначе после прежней
+                // сетевой ошибки «Повторить» снова запустил бы цикл на 400/403/409.
+                _lastFailureKind = kind;
+            }
         }
         finally
         {
             IsLoading = false;
         }
+
+        // Сетка могла упасть уже после успешного профиля: повторять нужно именно её, иначе
+        // сбой слота, случившийся внутри повторной загрузки профиля, остановил бы цикл.
+        var failureKind = kind != ApiFailureKind.None ? kind : slotsKind;
+
+        if (failureKind.IsRetryable())
+        {
+            TryStartAutoRetry();
+        }
+
+        return failureKind;
     }
 
     /// <summary>
@@ -1098,11 +1241,26 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Грузит сетку слотов для текущего выбора.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// В полёте всегда один запрос: новый отменяет предыдущий, а устаревший ответ
     /// отбрасывается по номеру поколения. Старый список не очищается до ответа, чтобы
     /// сетка не мигала; на время запроса выбор слотов выключен.
+    /// </para>
+    /// <para>
+    /// Сбои сведены классификатором: отмена и устаревший ответ — тихий выход, «нет связи» —
+    /// свой текст, <c>429</c> — просьба подождать, пустое тело — «не удалось загрузить».
+    /// Таймаут транспорта больше не проглатывается как отмена, и цикл повторяет сетку.
+    /// </para>
     /// </remarks>
-    private async Task LoadSlotsAsync(CancellationToken cancellationToken)
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <param name="silent">
+    /// Попытка цикла автоповтора: причина ошибки и индикатор загрузки не меняются на старте,
+    /// иначе на каждой паузе карточка ошибки с «Повторить» мигала бы пустотой.
+    /// </param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadSlotsAsync(
+        CancellationToken cancellationToken,
+        bool silent = false)
     {
         if (_profile is null || SelectedSalon is null)
         {
@@ -1112,7 +1270,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
             EmptySlotsText = null;
             NotifySlotsState();
 
-            return;
+            return ApiFailureKind.None;
         }
 
         var generation = ++_slotsGeneration;
@@ -1122,12 +1280,18 @@ public sealed partial class BarberCardViewModel : ObservableObject
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _slotsCts = cts;
 
-        IsSlotsLoading = true;
-        SlotsErrorText = null;
-        EmptySlotsText = null;
+        if (!silent)
+        {
+            IsSlotsLoading = true;
+            SlotsErrorText = null;
+            EmptySlotsText = null;
+        }
+
         _hasSlotsResponse = false;
         _slotsBarberServiceId = null;
         NotifySlotsState();
+
+        var kind = ApiFailureKind.None;
 
         try
         {
@@ -1140,30 +1304,33 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
             if (generation != _slotsGeneration)
             {
-                return;
+                return ApiFailureKind.None;
             }
 
             ApplySlots(response);
+            SlotsErrorText = null;
+            _lastFailureKind = ApiFailureKind.None;
         }
-        catch (OperationCanceledException)
+        catch (Exception exception)
         {
-            // Выбор сменился: ответ устарел.
-        }
-        catch (BarberSearchApiException exception) when (generation == _slotsGeneration)
-        {
-            Slots.Clear();
-            SlotsErrorText = DescribeReadFailure(exception, SlotsLoadFailedValue);
-        }
-        catch (HttpRequestException) when (generation == _slotsGeneration)
-        {
-            Slots.Clear();
-            SlotsErrorText = NetworkValue;
-        }
-        catch (InvalidOperationException) when (generation == _slotsGeneration)
-        {
-            // Пустое тело при 200: сетки нет, но экран обязан показать «Повторить».
-            Slots.Clear();
-            SlotsErrorText = SlotsLoadFailedValue;
+            if (generation != _slotsGeneration)
+            {
+                // Выбор сменился: ответ устарел, и его сбой никого не касается.
+                return ApiFailureKind.None;
+            }
+
+            kind = ApiFailureClassifier.Classify(exception, cts.Token);
+
+            if (kind != ApiFailureKind.None)
+            {
+                Slots.Clear();
+                SlotsErrorText = kind == ApiFailureKind.Transport
+                    ? NetworkValue
+                    : exception is BarberSearchApiException apiException
+                        ? DescribeReadFailure(apiException, SlotsLoadFailedValue)
+                        : SlotsLoadFailedValue;
+                _lastFailureKind = kind;
+            }
         }
         finally
         {
@@ -1175,7 +1342,80 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
             cts.Dispose();
         }
+
+        if (kind.IsRetryable())
+        {
+            TryStartAutoRetry();
+        }
+
+        return kind;
     }
+
+    /// <summary>
+    /// Одна попытка цикла: повторяет то чтение, которое ещё не удалось.
+    /// </summary>
+    /// <remarks>
+    /// Карточка не загрузилась — читаем профиль; профиль уже на экране — значит, не хватает
+    /// сетки. Выбранные дата, салон и услуга не сбрасываются: страница не меняла выбор, и
+    /// повторять запрос нужно с тем же. Уже исправленный сбой (его закрыла кнопка или смена
+    /// выбора) не повторяется: иначе цикл сходил бы в сеть без причины.
+    /// </remarks>
+    private Task<ApiFailureKind> RetryFailedReadAsync(CancellationToken cancellationToken)
+    {
+        if (_profile is null)
+        {
+            return LoadErrorText is null
+                ? Task.FromResult(ApiFailureKind.None)
+                : LoadProfileAsync(_barberProfileId, cancellationToken, silent: true);
+        }
+
+        return SlotsErrorText is null
+            ? Task.FromResult(ApiFailureKind.None)
+            : LoadSlotsAsync(cancellationToken, silent: true);
+    }
+
+    /// <summary>
+    /// Запускает цикл, если страница видна, сбой повторяемый и ничего не грузится.
+    /// </summary>
+    /// <remarks>
+    /// Ошибка профиля и ошибка сетки — два разных чтения, но цикл один: одновременно не
+    /// удалось загрузиться только чему-то одному, и <see cref="RetryFailedReadAsync"/>
+    /// выбирает недостающее. Отдельный метод нужен потому, что «видна» — сигнал страницы, а не
+    /// следствие нажатия: повтор запускается и из завершения загрузки, но только пока страница
+    /// видна.
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible || IsLoading || IsSlotsLoading || _barberProfileId == Guid.Empty)
+        {
+            return;
+        }
+
+        var hasFailure = _profile is null ? LoadErrorText is not null : SlotsErrorText is not null;
+
+        if (!hasFailure || !_lastFailureKind.IsRetryable())
+        {
+            return;
+        }
+
+        _autoRetry.Start(RetryFailedReadAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл, не трогая признак «страница видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопкам «Повторить»: они останавливают фон, но страница остаётся видимой, и после
+    /// ответа цикл имеет право запуститься снова. Публичный <see cref="StopAutoRetry"/>
+    /// дополнительно помечает страницу скрытой — для кнопок это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
     /// Показывает ответ сетки: чипы, пустое состояние и признак выбора.

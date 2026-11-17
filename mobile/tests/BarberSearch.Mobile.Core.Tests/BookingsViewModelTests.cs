@@ -805,6 +805,289 @@ public sealed class BookingsViewModelTests
         Assert.Equal(SecondBookingId, Assert.Single(viewModel.UpcomingGroups[0]).Id);
     }
 
+    [Fact]
+    public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return calls <= 3
+                ? Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page([Booking(FirstBookingId)]));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.ShowError);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(3, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Single(harness.ViewModel.UpcomingGroups);
+        Assert.False(harness.ViewModel.ShowError);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task StartAutoRetry_TerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromException<PagedResponse<BookingResponse>>(ApiError(statusCode));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_WhileWaiting_StopsFurtherAttempts()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task RetryCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        using var harness = new Harness(autoRetry: HangingRetry());
+        var calls = 0;
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(Page([Booking(FirstBookingId)]));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+
+        // «Повторить» — это «повторить сейчас»: цикл останавливается, чтение идёт без паузы.
+        await harness.ViewModel.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, harness.Bookings.Requests.Count);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.Single(harness.ViewModel.UpcomingGroups);
+        Assert.False(harness.ViewModel.ShowError);
+    }
+
+    [Fact]
+    public async Task RetryCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<PagedResponse<BookingResponse>>();
+
+        using var harness = new Harness(autoRetry: StopThenGateRetry(restartGate.Task));
+        var calls = 0;
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return calls switch
+            {
+                1 or 2 => Task.FromException<PagedResponse<BookingResponse>>(
+                    new HttpRequestException("refused")),
+                3 => silentAttempt.Task,
+                _ => Task.FromResult(Page([Booking(FirstBookingId)])),
+            };
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+
+        // Кнопка при работающем цикле читает сразу: к возврату команды ручной запрос уже ушёл,
+        // а перезапущенный цикл ждёт паузы — второго запроса без неё нет.
+        await viewModel.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(2, harness.Bookings.Requests.Count);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: первая же тихая попытка падает
+        // снова, и цикл не сдаётся, а повторяет до успеха.
+        restartGate.SetResult();
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.AutoRetry.Attempts);
+        Assert.Equal(4, calls);
+        Assert.Equal(4, harness.Bookings.Requests.Count);
+        Assert.Single(viewModel.UpcomingGroups);
+        Assert.False(viewModel.ShowError);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_FailedSilentAttempt_KeepsErrorMessage()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<PagedResponse<BookingResponse>>();
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.ShowError);
+        Assert.NotNull(harness.ViewModel.ErrorMessage);
+
+        harness.ViewModel.StartAutoRetry();
+
+        // Попытка висит: повтор не стирает ошибку на старте, иначе карточка с причиной
+        // мигала бы пустым экраном на каждой паузе.
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.ShowError);
+        Assert.NotNull(harness.ViewModel.ErrorMessage);
+        Assert.False(harness.ViewModel.ShowLoading);
+
+        retry.SetException(new HttpRequestException("refused"));
+
+        Assert.True(harness.ViewModel.ShowError);
+        Assert.Equal(NetworkText, harness.ViewModel.ErrorMessage);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_Timeout_ShowsNetworkText()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<PagedResponse<BookingResponse>>(new TaskCanceledException("timeout"))
+                : Task.FromResult(Page([Booking(FirstBookingId)]));
+        };
+
+        await harness.ViewModel.InitializeAsync();
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи»,
+        // а не тихая отмена. Раньше этот случай проглатывался.
+        Assert.Equal(NetworkText, harness.ViewModel.ErrorMessage);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Single(harness.ViewModel.UpcomingGroups);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task IsAutoRetrying_TogglesWithLoopState()
+    {
+        using var harness = new Harness(autoRetry: HangingRetry());
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+
+        await harness.ViewModel.AutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task RetryCommand_WhenPageHidden_DoesNotStartAutoRetry()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+
+        harness.Bookings.GetBookings = (_, _, _) =>
+            Task.FromException<PagedResponse<BookingResponse>>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.ShowError);
+
+        // Вкладка не сообщала о видимости: кнопка «повторить сейчас» не имеет права включить
+        // фон и оставить его работать на скрытом экране.
+        await harness.ViewModel.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StartAutoRetry_WhenUserIdUnknown_DoesNotStart()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+
+        harness.Account.Me = () =>
+            Task.FromException<MeResponse>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.ShowError);
+
+        // Без userId повторять нечего: цикл не должен даже отмечаться запущенным.
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
     private static int UpcomingRequests(Harness harness) =>
         harness.Bookings.Requests.Count(request => request.Scope == BookingScope.Upcoming);
 
@@ -1112,11 +1395,75 @@ public sealed class BookingsViewModelTests
     }
 
     /// <summary>
+    /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
+    /// </summary>
+    private static AutoRetryLoop FastRetry() =>
+        new(
+            static (_, _) => Task.CompletedTask,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза проходит сразу, а вторая висит до остановки: так видно
+    /// состояние между попытками, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop StopAfterFirstAttemptRetry()
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) => Interlocked.Increment(ref waits) == 1
+                ? Task.CompletedTask
+                : WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, у которого первая пауза висит до остановки, а следующая ждёт внешнего сигнала:
+    /// так видно и работу цикла до нажатия кнопки, и его перезапуск после неё, без таймеров.
+    /// </summary>
+    private static AutoRetryLoop StopThenGateRetry(Task restartGate)
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) =>
+            {
+                var wait = Interlocked.Increment(ref waits);
+
+                return wait == 1
+                    ? WaitForCancellationAsync(cancellationToken)
+                    : wait == 2
+                        ? restartGate
+                        : Task.CompletedTask;
+            },
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, который висит на первой же паузе: проверяется остановка до всякой попытки.
+    /// </summary>
+    private static AutoRetryLoop HangingRetry() =>
+        new(
+            (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
+    /// </summary>
+    private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+
+        return pending.Task;
+    }
+
+    /// <summary>
     /// Собранный экран: сессия, подменённые клиенты, управляемые часы и ViewModel.
     /// </summary>
     private sealed class Harness : IDisposable
     {
-        public Harness(bool authenticated = true)
+        public Harness(bool authenticated = true, AutoRetryLoop? autoRetry = null)
         {
             if (authenticated)
             {
@@ -1124,7 +1471,7 @@ public sealed class BookingsViewModelTests
             }
 
             Session = new TokenSession(Store);
-            ViewModel = new BookingsViewModel(Bookings, Barber, Account, Session, Time);
+            ViewModel = new BookingsViewModel(Bookings, Barber, Account, Session, Time, autoRetry);
         }
 
         public FakeBookingsApi Bookings { get; } = new();

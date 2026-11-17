@@ -814,6 +814,453 @@ public sealed class BarberCardViewModelTests
         Assert.Empty(harness.ViewModel.Photos);
     }
 
+    [Fact]
+    public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+        var slots = harness.Api.Slots;
+        var calls = 0;
+
+        harness.Api.Slots = (date, hairServiceId, salonId) =>
+        {
+            calls++;
+
+            return calls <= 3
+                ? Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"))
+                : slots(date, hairServiceId, salonId);
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.True(harness.ViewModel.HasSlotsError);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(3, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.HasSlotsError);
+        Assert.Single(harness.ViewModel.Slots);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task StartAutoRetry_TerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+
+        harness.Api.Slots = (_, _, _) =>
+            Task.FromException<BarberSlotsResponse>(ApiError(statusCode));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_WhileWaiting_StopsFurtherAttempts()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+
+        harness.Api.Slots = (_, _, _) =>
+            Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task RetrySlotsCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        using var harness = new Harness(autoRetry: HangingRetry());
+        var slots = harness.Api.Slots;
+        var calls = 0;
+
+        harness.Api.Slots = (date, hairServiceId, salonId) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"))
+                : slots(date, hairServiceId, salonId);
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+
+        // «Повторить» у сетки — это «повторить сейчас»: цикл останавливается, чтение идёт сразу.
+        await harness.ViewModel.RetrySlotsCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, harness.Api.SlotsCalls.Count);
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.False(harness.ViewModel.HasSlotsError);
+        Assert.Single(harness.ViewModel.Slots);
+    }
+
+    [Fact]
+    public async Task RetrySlotsCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<BarberSlotsResponse>();
+
+        using var harness = new Harness(autoRetry: StopThenGateRetry(restartGate.Task));
+        var slots = harness.Api.Slots;
+        var calls = 0;
+
+        harness.Api.Slots = (date, hairServiceId, salonId) =>
+        {
+            calls++;
+
+            return calls switch
+            {
+                1 or 2 => Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused")),
+                3 => silentAttempt.Task,
+                _ => slots(date, hairServiceId, salonId),
+            };
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+
+        // Кнопка при работающем цикле читает сразу: к возврату команды ручной запрос уже ушёл,
+        // а перезапущенный цикл ждёт паузы — второго запроса без неё нет.
+        await viewModel.RetrySlotsCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(2, harness.Api.SlotsCalls.Count);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: первая же тихая попытка падает
+        // снова, и цикл не сдаётся, а повторяет до успеха.
+        restartGate.SetResult();
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.AutoRetry.Attempts);
+        Assert.Equal(4, calls);
+        Assert.Single(viewModel.Slots);
+        Assert.False(viewModel.HasSlotsError);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_FailedSilentAttempt_KeepsErrorMessage()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<BarberSlotsResponse>();
+
+        harness.Api.Slots = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Equal(NetworkText, harness.ViewModel.SlotsErrorText);
+
+        harness.ViewModel.StartAutoRetry();
+
+        // Тихая попытка не стирает причину на старте: карточка ошибки и «Повторить» остаются
+        // на экране, пока ответ не пришёл, иначе экран мигал бы пустотой на каждой паузе.
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.HasSlotsError);
+        Assert.Equal(NetworkText, harness.ViewModel.SlotsErrorText);
+        Assert.False(harness.ViewModel.IsSlotsLoading);
+
+        retry.SetException(ApiError(HttpStatusCode.BadRequest));
+
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.True(harness.ViewModel.HasSlotsError);
+        Assert.Equal("Не удалось загрузить свободное время.", harness.ViewModel.SlotsErrorText);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_DuringSilentAttempt_KeepsSlotsError()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<BarberSlotsResponse>();
+
+        harness.Api.Slots = (_, _, _) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"))
+                : retry.Task;
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.Equal(NetworkText, harness.ViewModel.SlotsErrorText);
+
+        // Уход со страницы отменяет попытку; отменённая попытка не имеет права унести с собой
+        // причину — иначе вернувшийся экран остался бы без сетки и без «Повторить».
+        harness.ViewModel.StopAutoRetry();
+        retry.SetCanceled();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.True(harness.ViewModel.HasSlotsError);
+        Assert.Equal(NetworkText, harness.ViewModel.SlotsErrorText);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_DuringSilentProfileAttempt_KeepsLoadError()
+    {
+        using var harness = new Harness(autoRetry: StopAfterFirstAttemptRetry());
+        var calls = 0;
+        var retry = new TaskCompletionSource<BarberProfileResponse>();
+
+        harness.Api.Profile = _ => ++calls == 1
+            ? Task.FromException<BarberProfileResponse>(new HttpRequestException("refused"))
+            : retry.Task;
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+
+        harness.ViewModel.StartAutoRetry();
+
+        // Тихий повтор профиля не стирает причину на старте: пока ответа нет, на экране
+        // остаются «Повторить» и объяснение, а не пустая карточка с индикатором.
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+        Assert.False(harness.ViewModel.IsLoading);
+
+        harness.ViewModel.StopAutoRetry();
+        retry.SetCanceled();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_ProfileRecoversButSlotsFail_KeepsRetrying()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+        var profile = harness.Api.Profile;
+        var slots = harness.Api.Slots;
+        var profileCalls = 0;
+        var slotCalls = 0;
+
+        harness.Api.Profile = id => ++profileCalls == 1
+            ? Task.FromException<BarberProfileResponse>(new HttpRequestException("refused"))
+            : profile(id);
+
+        harness.Api.Slots = (date, hairServiceId, salonId) => ++slotCalls == 1
+            ? Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"))
+            : slots(date, hairServiceId, salonId);
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        // Профиль загрузился на первой попытке, а сетка упала — цикл обязан продолжить сетку,
+        // а не остановиться вместе с успехом профиля.
+        Assert.Equal(2, harness.ViewModel.AutoRetry.Attempts);
+        Assert.True(harness.ViewModel.IsContentVisible);
+        Assert.False(harness.ViewModel.HasSlotsError);
+        Assert.Single(harness.ViewModel.Slots);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task RetryLoadCommand_TerminalProfileFailure_DoesNotStartAutoRetry()
+    {
+        using var harness = new Harness(autoRetry: HangingRetry());
+
+        harness.Api.Profile = _ => Task.FromException<BarberProfileResponse>(new HttpRequestException("refused"));
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Сетевой сбой на видимой странице — как раз повод для цикла.
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.Api.Profile = _ => Task.FromException<BarberProfileResponse>(ApiError(HttpStatusCode.BadRequest));
+
+        // Кнопка останавливает фон и читает сразу; окончательный отказ не должен включать его
+        // снова, иначе 400 повторялся бы без конца пауз и без единого шанса на успех.
+        await harness.ViewModel.RetryLoadCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.Equal("Не удалось загрузить профиль мастера.", harness.ViewModel.LoadErrorText);
+    }
+
+    [Fact]
+    public async Task RetrySlotsCommand_WhenPageHidden_DoesNotStartAutoRetry()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+
+        harness.Api.Slots = (_, _, _) =>
+            Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Страница не сообщала о видимости: кнопка «повторить сейчас» не имеет права
+        // включить фон и оставить его работать на скрытом экране.
+        await harness.ViewModel.RetrySlotsCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_Timeout_ShowsNetworkText()
+    {
+        using var harness = new Harness(autoRetry: FastRetry());
+        var slots = harness.Api.Slots;
+        var calls = 0;
+
+        harness.Api.Slots = (date, hairServiceId, salonId) =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<BarberSlotsResponse>(new TaskCanceledException("timeout"))
+                : slots(date, hairServiceId, salonId);
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи»,
+        // а не тихая отмена. Раньше этот случай проглатывался.
+        Assert.Equal(NetworkText, harness.ViewModel.SlotsErrorText);
+
+        harness.ViewModel.StartAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, harness.ViewModel.AutoRetry.Attempts);
+        Assert.False(harness.ViewModel.HasSlotsError);
+        Assert.Single(harness.ViewModel.Slots);
+    }
+
+    [Fact]
+    public async Task IsAutoRetrying_TogglesWithLoopState()
+    {
+        using var harness = new Harness(autoRetry: HangingRetry());
+
+        harness.Api.Slots = (_, _, _) =>
+            Task.FromException<BarberSlotsResponse>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.StartAutoRetry();
+        Assert.True(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+
+        await harness.ViewModel.AutoRetryCompletion;
+    }
+
+    /// <summary>
+    /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
+    /// </summary>
+    private static AutoRetryLoop FastRetry() =>
+        new(
+            static (_, _) => Task.CompletedTask,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза проходит сразу, а вторая висит до остановки: так видно
+    /// состояние между попытками, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop StopAfterFirstAttemptRetry()
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) => Interlocked.Increment(ref waits) == 1
+                ? Task.CompletedTask
+                : WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, у которого первая пауза висит до остановки, а следующая ждёт внешнего сигнала:
+    /// так видно и работу цикла до нажатия кнопки, и его перезапуск после неё, без таймеров.
+    /// </summary>
+    private static AutoRetryLoop StopThenGateRetry(Task restartGate)
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) =>
+            {
+                var wait = Interlocked.Increment(ref waits);
+
+                return wait == 1
+                    ? WaitForCancellationAsync(cancellationToken)
+                    : wait == 2
+                        ? restartGate
+                        : Task.CompletedTask;
+            },
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, который висит на первой же паузе: проверяется остановка до всякой попытки.
+    /// </summary>
+    private static AutoRetryLoop HangingRetry() =>
+        new(
+            (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
+    /// </summary>
+    private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+
+        return pending.Task;
+    }
+
     /// <summary>
     /// Выбирает услугу и первый слот: так выглядит экран перед записью.
     /// </summary>
@@ -1158,7 +1605,7 @@ public sealed class BarberCardViewModelTests
     /// </summary>
     private sealed class Harness : IDisposable
     {
-        public Harness(bool authenticated = true)
+        public Harness(bool authenticated = true, AutoRetryLoop? autoRetry = null)
         {
             if (authenticated)
             {
@@ -1171,7 +1618,8 @@ public sealed class BarberCardViewModelTests
                 BarberSearchApiOptions.FromBaseAddress("http://localhost:5243"),
                 Bookings,
                 Session,
-                new FixedTimeProvider(Now));
+                new FixedTimeProvider(Now),
+                autoRetry);
         }
 
         public FakeBarberApi Api { get; } = new();
