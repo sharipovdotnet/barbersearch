@@ -356,7 +356,7 @@ public sealed class RegisterViewModelTests
         var harness = new Harness();
 
         Assert.Equal(
-            "Политика обработки персональных данных (редакция от 11 ноября 2026 г.).",
+            "Политика обработки персональных данных (редакция от 18 ноября 2026 г.).",
             harness.ViewModel.PrivacyPolicyLinkText);
         Assert.Equal(
             new Uri("http://localhost:5173/privacy"),

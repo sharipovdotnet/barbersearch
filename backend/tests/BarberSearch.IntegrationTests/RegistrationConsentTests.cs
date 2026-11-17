@@ -25,9 +25,10 @@ namespace BarberSearch.IntegrationTests;
 public sealed class RegistrationConsentTests
 {
     /// <summary>
-    /// Текущая редакция Политики на дату этапа: 2026-11-11 — редакция с аватаром (#85).
+    /// Текущая редакция Политики на дату этапа: 2026-11-18 — редакция с транзакционными
+    /// письмами об изменениях записи (§4.1).
     /// </summary>
-    private const string CurrentPolicyVersion = "2026-11-11";
+    private const string CurrentPolicyVersion = "2026-11-18";
 
     /// <summary>
     /// Код отказа «согласие не передано» — литерал из публичного контракта.
