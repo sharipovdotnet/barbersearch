@@ -161,6 +161,12 @@
                     LineBreakMode="WordWrap"
                     Text="{Binding ErrorMessage}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="Center"
+                    IsVisible="{Binding IsAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <Button Command="{Binding RetryCommand}" HorizontalOptions="Center" Text="{loc:Translate Key='Повторить'}" />
             </VerticalStackLayout>
 

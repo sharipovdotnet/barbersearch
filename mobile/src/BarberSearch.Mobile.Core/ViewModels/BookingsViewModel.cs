@@ -32,6 +32,13 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// <c>mobile/AGENT.md</c> §5.
 /// </para>
 /// <para>
+/// Ошибка первой страницы, пока вкладка видна, тоже повторяется сама: сеть, <c>5xx</c> и
+/// таймаут клиента уходят в цикл с нарастающей паузой, а под причиной видна строка «Пробуем
+/// снова…». «Повторить» остаётся и означает «повторить сейчас»: останавливает цикл, читает
+/// без паузы и запускает его снова, только если сбой опять повторяемый. Тридцатисекундное
+/// обновление в этот цикл не входит и живёт своей жизнью.
+/// </para>
+/// <para>
 /// Ошибки показываются по статусу и публичным кодам, никогда по английскому <c>detail</c>.
 /// <c>401</c> гасит сессию и возвращает гейт входа; <c>429</c> и сеть — это разные тексты.
 /// </para>
@@ -86,6 +93,13 @@ public sealed partial class BookingsViewModel : ObservableObject
     private bool _isAutoRefreshing;
     private BookingsTab _tab = BookingsTab.Upcoming;
 
+    private readonly AutoRetryLoop _autoRetry;
+
+    /// <summary>
+    /// Страница сейчас видна: цикл автоповтора работает только пока это так.
+    /// </summary>
+    private bool _isPageVisible;
+
     /// <summary>
     /// Создаёт экран записей.
     /// </summary>
@@ -94,12 +108,17 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// <param name="accountApi">Текущий пользователь: без него список не сузить до своих.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
     /// <param name="timeProvider">Часы: отсчёт и правила действий проверяются без ожидания.</param>
+    /// <param name="autoRetry">
+    /// Цикл автоповтора первой страницы; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Параметр необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
+    /// </param>
     public BookingsViewModel(
         IBookingsApi bookingsApi,
         IBarberSearchApi barberApi,
         IAccountApi accountApi,
         TokenSession session,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(bookingsApi);
         ArgumentNullException.ThrowIfNull(barberApi);
@@ -112,6 +131,9 @@ public sealed partial class BookingsViewModel : ObservableObject
         _accountApi = accountApi;
         _session = session;
         _timeProvider = timeProvider;
+
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
 
         _upcoming = new BookingListState(BookingScope.Upcoming, UpcomingGroups);
         _history = new BookingListState(BookingScope.Past, HistoryGroups);
@@ -170,6 +192,16 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _isRefreshing;
+
+    /// <summary>
+    /// Цикл сам повторяет первую страницу: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
 
     /// <summary>
     /// Хотя бы одна карточка мастера не загрузилась: под списком сноска.
@@ -315,6 +347,54 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Сообщает, что вкладка видна, и запускает автоповтор ошибки первой страницы.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при каждом появлении и каждом возврате из фона. Идемпотентен: без
+    /// ошибки, при окончательном отказе или уже работающем цикле ничего не делает. Повтор
+    /// не запускается и когда показан индикатор первой загрузки — два чтения одного списка
+    /// одновременно не нужны.
+    /// </para>
+    /// <para>
+    /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
+    /// синхронно меняет привязанное <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
+    /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что вкладка скрыта, и останавливает автоповтор.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а <see cref="IsAutoRetrying"/>
+    /// сразу становится <c>false</c>: скрытая вкладка не показывает работающий повтор и не
+    /// ходит в сеть.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
     /// Тихо перечитывает первую страницу активной вкладки по таймеру страницы.
     /// </summary>
     /// <remarks>
@@ -369,6 +449,10 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// </remarks>
     public void ApplySignedOutState()
     {
+        // Выход — это и есть «повторять больше нечего»: цикл мог ждать паузу, пока сессию
+        // гасили, и без остановки сходил бы в сеть без токена.
+        StopAutoRetryLoop();
+
         IsSignedIn = false;
         _userId = null;
         _profiles.Clear();
@@ -681,8 +765,13 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Повторяет первую загрузку активной вкладки после ошибки.
+    /// Повторяет первую загрузку активной вкладки после ошибки — сразу, по кнопке.
     /// </summary>
+    /// <remarks>
+    /// Кнопка «Повторить» значит «повторить сейчас»: сначала цикл автоповтора останавливается,
+    /// затем страница читается без паузы. Если сбой снова повторяемый, цикл запускается заново;
+    /// успех цикл не запускает — повторять больше нечего.
+    /// </remarks>
     [RelayCommand]
     private async Task RetryAsync()
     {
@@ -690,6 +779,8 @@ public sealed partial class BookingsViewModel : ObservableObject
         {
             return;
         }
+
+        StopAutoRetryLoop();
 
         if (_userId is null && !await LoadUserIdAsync(CancellationToken.None))
         {
@@ -701,6 +792,8 @@ public sealed partial class BookingsViewModel : ObservableObject
         NotifyViewState();
 
         await LoadFirstPageAsync(state, FirstPageMode.Initial, CancellationToken.None);
+
+        TryStartAutoRetry();
     }
 
     /// <summary>
@@ -765,17 +858,28 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// Читает первую страницу списка и заменяет его содержимое.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Поколение списка сдвигается на старте: ответ, пришедший после смены вкладки или
     /// обновления, отбрасывается. Ошибка тихого обновления не стирает уже загруженные строки.
+    /// </para>
+    /// <para>
+    /// Сбои сведены классификатором к одному виду: отмена — тихий выход, «нет связи» — свой
+    /// текст, окончательный отказ не повторяется. Таймаут транспорта классификатор уже считает
+    /// «нет связи», поэтому он больше не проглатывается как отмена.
+    /// </para>
     /// </remarks>
-    private async Task LoadFirstPageAsync(
+    /// <param name="state">Вкладка, чью первую страницу читаем.</param>
+    /// <param name="mode">Показывать индикатор, обновлять молча или повторять в фоне.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadFirstPageAsync(
         BookingListState state,
         FirstPageMode mode,
         CancellationToken cancellationToken)
     {
         if (_userId is null)
         {
-            return;
+            return ApiFailureKind.None;
         }
 
         var userId = _userId.Value;
@@ -783,8 +887,14 @@ public sealed partial class BookingsViewModel : ObservableObject
         state.Generation++;
         var generation = state.Generation;
 
-        state.Error = null;
-        state.LoadMoreError = null;
+        if (mode != FirstPageMode.Retry)
+        {
+            // Попытка автоповтора не стирает ошибку до ответа: иначе карточка с причиной и
+            // «Повторить» мигала бы пустым экраном на каждой паузе между попытками.
+            state.Error = null;
+            state.LoadMoreError = null;
+            state.FailureKind = ApiFailureKind.None;
+        }
 
         if (mode == FirstPageMode.Initial)
         {
@@ -792,6 +902,8 @@ public sealed partial class BookingsViewModel : ObservableObject
         }
 
         NotifyViewState();
+
+        var kind = ApiFailureKind.None;
 
         try
         {
@@ -804,7 +916,7 @@ public sealed partial class BookingsViewModel : ObservableObject
 
             if (generation != state.Generation)
             {
-                return;
+                return ApiFailureKind.None;
             }
 
             ReplaceItems(state, page.Items);
@@ -812,30 +924,34 @@ public sealed partial class BookingsViewModel : ObservableObject
             state.HasLoaded = true;
             state.IsDirty = false;
             state.IsFirstLoading = false;
+            state.Error = null;
+            state.LoadMoreError = null;
+            state.FailureKind = ApiFailureKind.None;
 
             NotifyViewState();
 
             await ResolveProfilesAsync(page.Items.Select(booking => booking.BarberProfileId));
         }
-        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        catch (Exception exception)
         {
-            await EndSessionAsync();
-        }
-        catch (BarberSearchApiException exception)
-        {
-            SetPageFailure(state, generation, DescribeFailure(exception, LoadErrorText));
-        }
-        catch (HttpRequestException)
-        {
-            SetPageFailure(state, generation, NetworkErrorText);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            SetPageFailure(state, generation, NetworkErrorText);
-        }
-        catch (OperationCanceledException)
-        {
-            // Отмена страницей — не ошибка.
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind != ApiFailureKind.None)
+            {
+                if (exception is BarberSearchApiException
+                    {
+                        StatusCode: HttpStatusCode.Unauthorized,
+                    })
+                {
+                    // 401 окончателен по классификации и вдобавок гасит сессию: гейт входа
+                    // важнее любого текста в списке.
+                    await EndSessionAsync();
+                }
+                else
+                {
+                    SetPageFailure(state, generation, DescribeFirstPageFailure(exception, kind), kind);
+                }
+            }
         }
         finally
         {
@@ -845,12 +961,42 @@ public sealed partial class BookingsViewModel : ObservableObject
                 NotifyViewState();
             }
         }
+
+        return kind;
+    }
+
+    /// <summary>
+    /// Одна попытка цикла: перечитать первую страницу активной вкладки, не гася ошибку.
+    /// </summary>
+    /// <remarks>
+    /// Вкладку проверяем заново: пока цикл ждал паузу, человек мог переключиться на список без
+    /// ошибки. Тогда повторять нечего, и цикл останавливается вместо тихой загрузки чужой
+    /// вкладки.
+    /// </remarks>
+    private Task<ApiFailureKind> RetryFirstPageAsync(CancellationToken cancellationToken)
+    {
+        var state = ActiveState;
+
+        if (state.Error is null || !state.FailureKind.IsRetryable())
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadFirstPageAsync(state, FirstPageMode.Retry, cancellationToken);
     }
 
     /// <summary>
     /// Показывает ошибку страницы, но не стирает уже показанные строки.
     /// </summary>
-    private void SetPageFailure(BookingListState state, int generation, string message)
+    /// <param name="state">Вкладка, в которой случился сбой.</param>
+    /// <param name="generation">Поколение ответов, к которому относится сбой.</param>
+    /// <param name="message">Текст для человека.</param>
+    /// <param name="kind">Вид сбоя: по нему решает цикл автоповтора.</param>
+    private void SetPageFailure(
+        BookingListState state,
+        int generation,
+        string message,
+        ApiFailureKind kind)
     {
         if (generation != state.Generation)
         {
@@ -858,6 +1004,7 @@ public sealed partial class BookingsViewModel : ObservableObject
         }
 
         state.IsFirstLoading = false;
+        state.FailureKind = kind;
 
         if (state.Groups.Count == 0)
         {
@@ -865,7 +1012,63 @@ public sealed partial class BookingsViewModel : ObservableObject
         }
 
         NotifyViewState();
+
+        // Сбой пришёл, пока вкладка видна: цикл может повторить чтение сам. Если он уже
+        // работает, Start ничего не сделает — второй цикл удвоил бы запросы.
+        TryStartAutoRetry();
     }
+
+    /// <summary>
+    /// Переводит сбой чтения первой страницы в текст, не показывая английский <c>detail</c>.
+    /// </summary>
+    private static string DescribeFirstPageFailure(Exception exception, ApiFailureKind kind) =>
+        kind == ApiFailureKind.Transport
+            ? NetworkErrorText
+            : exception is BarberSearchApiException apiException
+                ? DescribeFailure(apiException, LoadErrorText)
+                : LoadErrorText;
+
+    /// <summary>
+    /// Запускает цикл, если вкладка видна, ошибка повторяемая и ничего не грузится.
+    /// </summary>
+    /// <remarks>
+    /// Ошибка хранится в состоянии вкладки, а не в отдельном поле: переключение вкладок не
+    /// должно оставлять цикл, повторяющий чужой список. Отдельный метод нужен потому, что
+    /// «видна» — сигнал страницы, а не следствие нажатия: повтор после сбоя запускается и из
+    /// завершения загрузки, но только пока вкладка видна.
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible || !IsSignedIn || ShowLoading || _userId is null)
+        {
+            return;
+        }
+
+        var state = ActiveState;
+
+        if (state.Error is null || !state.FailureKind.IsRetryable())
+        {
+            return;
+        }
+
+        _autoRetry.Start(RetryFirstPageAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл, не трогая признак «вкладка видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке «Повторить»: она останавливает фон, но вкладка остаётся видимой, и после
+    /// ответа цикл имеет право запуститься снова. Публичный <see cref="StopAutoRetry"/>
+    /// дополнительно помечает вкладку скрытой — для кнопки это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
     /// Заменяет строки списка страницей с сервера и пересобирает группы месяцев.
@@ -979,6 +1182,12 @@ public sealed partial class BookingsViewModel : ObservableObject
     /// <summary>
     /// Спрашивает <c>/me</c> один раз: идентификатор нужен для <c>userId</c> в списке.
     /// </summary>
+    /// <remarks>
+    /// <c>401</c> по-прежнему гасит сессию. Остальные сбои сведены классификатором: таймаут
+    /// транспорта теперь показывает «нет связи», а не исчезает как отмена. Автоповтор сюда не
+    /// подключается: без <c>userId</c> циклу нечего повторять, и следующий шаг — кнопка.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns><c>true</c>, если пользователь известен.</returns>
     private async Task<bool> LoadUserIdAsync(CancellationToken cancellationToken)
     {
@@ -990,35 +1199,33 @@ public sealed partial class BookingsViewModel : ObservableObject
 
             return true;
         }
-        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        catch (Exception exception)
         {
-            await EndSessionAsync();
+            var kind = ApiFailureClassifier.Classify(exception, cancellationToken);
 
-            return false;
-        }
-        catch (BarberSearchApiException exception)
-        {
-            ActiveState.Error = DescribeFailure(exception, LoadErrorText);
+            if (kind == ApiFailureKind.None)
+            {
+                return false;
+            }
+
+            if (exception is BarberSearchApiException { StatusCode: HttpStatusCode.Unauthorized })
+            {
+                await EndSessionAsync();
+
+                return false;
+            }
+
+            ActiveState.Error = kind == ApiFailureKind.Transport
+                ? NetworkErrorText
+                : exception is BarberSearchApiException apiException
+                    ? DescribeFailure(apiException, LoadErrorText)
+                    : LoadErrorText;
+
+            // Вид сбоя хранится вместе с причиной: без него прежний повторяемый вид
+            // пережил бы этот отказ и «Повторить» снова запустил бы цикл.
+            ActiveState.FailureKind = kind;
             NotifyViewState();
 
-            return false;
-        }
-        catch (HttpRequestException)
-        {
-            ActiveState.Error = NetworkErrorText;
-            NotifyViewState();
-
-            return false;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            ActiveState.Error = NetworkErrorText;
-            NotifyViewState();
-
-            return false;
-        }
-        catch (OperationCanceledException)
-        {
             return false;
         }
     }
@@ -1181,6 +1388,7 @@ public sealed partial class BookingsViewModel : ObservableObject
         state.IsLoadingMore = false;
         state.Error = null;
         state.LoadMoreError = null;
+        state.FailureKind = ApiFailureKind.None;
     }
 
     /// <summary>
@@ -1225,12 +1433,22 @@ public sealed partial class BookingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Режим загрузки первой страницы: показать индикатор или обновить молча.
+    /// Режим загрузки первой страницы: показать индикатор, обновить молча или повторить в фоне.
     /// </summary>
     private enum FirstPageMode
     {
         Initial,
+
         Silent,
+
+        /// <summary>
+        /// Попытка цикла автоповтора: как <see cref="Silent"/>, но ошибка не стирается до ответа.
+        /// </summary>
+        /// <remarks>
+        /// Иначе карточка с причиной и «Повторить» исчезала бы на каждой паузе, и человек видел
+        /// бы мигание пустого экрана вместо того, что уже знает.
+        /// </remarks>
+        Retry,
     }
 
     /// <summary>
@@ -1277,6 +1495,11 @@ public sealed partial class BookingsViewModel : ObservableObject
         /// Ошибка первой страницы; <c>null</c>, когда ошибки нет.
         /// </summary>
         public string? Error { get; set; }
+
+        /// <summary>
+        /// Вид последнего сбоя первой страницы: по нему решает цикл автоповтора.
+        /// </summary>
+        public ApiFailureKind FailureKind { get; set; }
 
         /// <summary>
         /// Ошибка догрузки; <c>null</c>, когда догрузка прошла.

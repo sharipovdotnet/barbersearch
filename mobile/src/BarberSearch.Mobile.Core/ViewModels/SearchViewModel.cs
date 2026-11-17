@@ -34,6 +34,17 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// Исключение — подсказки города: они читаются по паузе в наборе, но выдачу не трогают
 /// (<see cref="CitySuggestions"/>).
 /// </para>
+/// <para>
+/// Пока экран виден, повторяемый сбой выдачи лечится сам: сеть, <c>5xx</c> и таймаут клиента
+/// повторяются с нарастающей паузой (<see cref="Api.AutoRetryLoop"/>), а под причиной ошибки
+/// видна строка «Пробуем снова…». «Повторить» остаётся и означает «повторить сейчас»:
+/// останавливает цикл, читает сразу и запускает его снова, только если сбой снова повторяемый.
+/// Окончательный отказ, отмена и уход со страницы повторов не запускают.
+/// </para>
+/// <para>
+/// Тихий повтор повторяет ровно тот запрос, который упал, а не свежий из формы: пока видна
+/// ошибка, правка полей остаётся в форме, и в сеть она уйдёт только по «Найти».
+/// </para>
 /// </remarks>
 public sealed partial class SearchViewModel : ObservableObject
 {
@@ -86,6 +97,38 @@ public sealed partial class SearchViewModel : ObservableObject
     private GeoPosition? _position;
     private LocationStatus? _locationStatus;
 
+    private readonly AutoRetryLoop _autoRetry;
+
+    /// <summary>
+    /// Фильтры последней неудачной попытки: цикл повторов обязан повторить именно этот запрос.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пока на экране ошибка, человек может править город, дату, язык и услуги. Если бы тихая
+    /// попытка собирала фильтры из формы заново, она отправила бы эту правку, хотя по
+    /// <c>AGENT.md</c> §5 фильтры уходят в запрос только по «Найти». Поэтому повтор берёт
+    /// снимок отправленного запроса целиком: и значения полей, и координаты, которые к нему
+    /// приложила геопозиция.
+    /// </para>
+    /// <para>
+    /// Снимок живёт ровно пока есть повторяемый сбой: успех и окончательный отказ его забывают,
+    /// а новый ручной поиск начинает с чистого листа и запоминает свои фильтры, если упадёт
+    /// повторяемо.
+    /// </para>
+    /// </remarks>
+    private BarberSearchFilters? _retryFilters;
+
+    /// <summary>
+    /// Вид последнего сбоя выдачи: по нему <see cref="StartAutoRetry"/> решает, повторять ли
+    /// запрос сам.
+    /// </summary>
+    private ApiFailureKind _lastFailureKind;
+
+    /// <summary>
+    /// Страница сейчас видна: без этого сигнала цикл повторов не запускается.
+    /// </summary>
+    private bool _isPageVisible;
+
     /// <summary>
     /// Создаёт ViewModel поиска.
     /// </summary>
@@ -99,11 +142,16 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <param name="citySuggestions">
     /// Подсказки города под полем; живут рядом с экраном, потому что повторяют его судьбу.
     /// </param>
+    /// <param name="autoRetry">
+    /// Цикл автоповтора выдачи; <c>null</c> — собственный цикл с обычным расписанием. Параметр
+    /// необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
+    /// </param>
     public SearchViewModel(
         IBarberSearchApi api,
         ILocationService locationService,
         TimeProvider timeProvider,
-        CitySuggestions citySuggestions)
+        CitySuggestions citySuggestions,
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(locationService);
@@ -114,6 +162,9 @@ public sealed partial class SearchViewModel : ObservableObject
         _locationService = locationService;
         _timeProvider = timeProvider;
         CitySuggestions = citySuggestions;
+
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
 
         FillLanguages();
         RefreshDateOptions();
@@ -229,6 +280,16 @@ public sealed partial class SearchViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasError))]
     [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
     private string? _errorMessage;
+
+    /// <summary>
+    /// Цикл сам повторяет выдачу: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
 
     /// <summary>
     /// Идёт загрузка справочников фильтров.
@@ -400,6 +461,54 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Сообщает, что страница видна, и запускает автоповтор, если показывать есть что.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при каждом появлении и каждом возврате из фона. Метод идемпотентен:
+    /// повторный вызов при работающем цикле ничего не делает, а без повторяемого сбоя лишь
+    /// запоминает, что страница видна. Иначе говоря, «видна» — это сигнал, а не команда:
+    /// решение о повторе принимает вид последнего сбоя.
+    /// </para>
+    /// <para>
+    /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
+    /// синхронно меняет привязанное <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
+    /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что страница скрыта, и останавливает автоповтор.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен: остановка уже стоящего цикла ничего не делает. Пауза, запрос в полёте и
+    /// завершение цикла отменяются, а <see cref="IsAutoRetrying"/> сразу становится
+    /// <c>false</c> — экран не показывает работающий повтор поверх ушедшей страницы.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
     /// Подставляет выбранную подсказку в фильтр города.
     /// </summary>
     /// <remarks>
@@ -423,16 +532,18 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Загружает первую страницу выдачи по текущим фильтрам.
+    /// Загружает первую страницу выдачи по текущим фильтрам — вручную, по кнопке «Найти».
     /// </summary>
     /// <remarks>
-    /// Перед запросом список очищается: старые карточки под новым фильтром — ложь, так же
-    /// поступает веб. Ошибки API и сети превращаются в текст для пользователя, отмена —
-    /// штатный выход без сообщения: пользователь сам закрыл экран.
     /// <para>
-    /// Геопозиция читается до запроса выдачи и только один раз на экран. Отказ или отсутствие
-    /// GPS не блокируют поиск: запрос уходит без координат, а экран показывает подсказку
-    /// с «Повторить».
+    /// Перед запросом список очищается: старые карточки под новым фильтром — ложь, так же
+    /// поступает веб. Ошибки API и сети сведены классификатором к одному виду: отмена — тихий
+    /// выход, «нет связи» и отказ сервера — свои тексты для человека.
+    /// </para>
+    /// <para>
+    /// Ручной поиск останавливает автоповтор: человек сам попросил свежий результат, и два
+    /// запроса одновременно ему не нужны. После ответа цикл запускается заново, только если
+    /// сбой повторяемый и страница всё ещё видна.
     /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
@@ -442,16 +553,69 @@ public sealed partial class SearchViewModel : ObservableObject
         // Список подсказок не переживает отправку формы: он относится к вводу, а не к выдаче.
         CitySuggestions.Close();
 
-        var filters = BuildFilters();
+        StopAutoRetryLoop();
 
-        IsLoading = true;
-        ErrorMessage = null;
-        Barbers.Clear();
-        NotifyResultsChanged();
+        // Новый ручной поиск забывает снимок прошлой неудачи: повторять можно только то, что
+        // уйдёт в этом запросе, а не смесь новой формы со старым сбоем.
+        _retryFilters = null;
+
+        await LoadResultsAsync(BuildFilters(), silent: false, cancellationToken);
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Читает выдачу и раскладывает её по экрану; в тихом режиме — без мигания.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ручной режим (<paramref name="silent"/> = <c>false</c>) показывает индикатор и очищает
+    /// старые карточки до ответа. Тихий режим — попытка цикла автоповтора: строки и текст
+    /// ошибки остаются на экране, пока не придёт ответ, иначе каждая пауза между попытками
+    /// мигала бы пустым экраном.
+    /// </para>
+    /// <para>
+    /// Геопозиция читается до ручного запроса и только один раз на экран. Отказ или отсутствие
+    /// GPS не блокируют поиск: запрос уходит без координат, а экран показывает подсказку
+    /// с «Повторить». Тихий повтор не читает геопозицию заново: он несёт снимок уже
+    /// отправленного запроса — с координатами, если они были, и без них, если их не было.
+    /// </para>
+    /// <para>
+    /// Повторяемый сбой запоминает отправленные фильтры целиком, а успех и окончательный отказ
+    /// этот снимок забывают: только он и имеет право уйти в следующую тихую попытку.
+    /// </para>
+    /// </remarks>
+    /// <param name="filters">
+    /// Фильтры запроса: ручной режим собирает их из формы, тихий приносит снимок прошлой неудачи.
+    /// </param>
+    /// <param name="silent">Тихая попытка цикла: не показывать индикатор и не чистить экран.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadResultsAsync(
+        BarberSearchFilters filters,
+        bool silent,
+        CancellationToken cancellationToken)
+    {
+        if (!silent)
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            Barbers.Clear();
+            NotifyResultsChanged();
+        }
+
+        // Снимок того, что реально ушло в сеть: координаты прикладываются уже после сборки
+        // фильтров, и повтор обязан помнить их вместе с полями формы.
+        var sentFilters = filters;
+        var kind = ApiFailureKind.None;
 
         try
         {
-            filters = await ApplyLocationAsync(filters, cancellationToken);
+            if (!silent)
+            {
+                filters = await ApplyLocationAsync(filters, cancellationToken);
+                sentFilters = filters;
+            }
 
             var page = await _api.SearchBarbersAsync(filters, cancellationToken: cancellationToken);
 
@@ -464,28 +628,84 @@ public sealed partial class SearchViewModel : ObservableObject
 
             _appliedFilters = filters;
             _hasSearched = true;
+            ErrorMessage = null;
+            _retryFilters = null;
         }
-        catch (OperationCanceledException)
+        catch (Exception exception)
         {
-            // Отмена — не ошибка: пользователь сам остановил поиск.
-        }
-        catch (BarberSearchApiException)
-        {
-            // Английский detail сервера не показывается: текст для человека живёт на клиенте.
-            ErrorMessage = SearchFailedText;
-        }
-        catch (HttpRequestException)
-        {
-            ErrorMessage = NetworkText;
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind != ApiFailureKind.None)
+            {
+                // Английский detail сервера не показывается: текст для человека живёт на клиенте.
+                // Таймаут транспорта классификатор уже свёл к «нет связи», поэтому он больше не
+                // проглатывается как отмена.
+                ErrorMessage = kind == ApiFailureKind.Transport ? NetworkText : SearchFailedText;
+            }
+
+            // Окончательный отказ повторять нечем, поэтому и снимок ему не нужен.
+            _retryFilters = kind.IsRetryable() ? sentFilters : null;
         }
         finally
         {
-            IsLoading = false;
-            UpdateLocationHint();
+            if (!silent)
+            {
+                IsLoading = false;
+                UpdateLocationHint();
+                SearchCompleted?.Invoke(this, EventArgs.Empty);
+            }
+
             NotifyResultsChanged();
-            SearchCompleted?.Invoke(this, EventArgs.Empty);
         }
+
+        _lastFailureKind = kind;
+
+        return kind;
     }
+
+    /// <summary>
+    /// Запускает цикл, если страница видна, сбой повторяемый и ничего не грузится.
+    /// </summary>
+    /// <remarks>
+    /// Второй цикл поверх первого удвоил бы запросы, поэтому <see cref="AutoRetryLoop.Start"/>
+    /// при работающем цикле ничего не делает. Отдельный метод нужен потому, что «видна» — это
+    /// сигнал страницы, а не следствие нажатия: повтор после сбоя запускается и из фонового
+    /// завершения загрузки, но только пока страница видна.
+    /// <para>
+    /// Делегат замыкает снимок упавшего запроса, а не собирает фильтры заново: правка формы,
+    /// пока видна ошибка, не должна попасть в сеть без «Найти».
+    /// </para>
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible
+            || IsLoading
+            || !HasError
+            || !_lastFailureKind.IsRetryable()
+            || _retryFilters is not { } filters)
+        {
+            return;
+        }
+
+        _autoRetry.Start(cancellationToken =>
+            LoadResultsAsync(filters, silent: true, cancellationToken));
+    }
+
+    /// <summary>
+    /// Останавливает цикл, не трогая признак «страница видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен ручному поиску: он останавливает фон, но страница остаётся видимой, и после
+    /// ответа цикл имеет право запуститься снова. Публичный <see cref="StopAutoRetry"/>
+    /// дополнительно помечает страницу скрытой — для него это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
     /// Повторяет чтение геопозиции и поиск: подсказка под списком объясняет, что расстояния нет.
@@ -581,13 +801,19 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Ошибка справочника не блокирует поиск: город, дата и язык работают и без него, поэтому
-    /// экран показывает текст ошибки с «Повторить», а не отказ всей формы.
+    /// экран показывает текст ошибки с «Повторить», а не отказ всей формы. Сбои сведены
+    /// классификатором; <c>429</c> в справочниках сохраняет свой текст — это просьба сбавить
+    /// темп, а не «нет связи».
     /// </remarks>
-    private async Task LoadCatalogsAsync(CancellationToken cancellationToken)
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя; справочники не участвуют в автоповторе выдачи.</returns>
+    private async Task<ApiFailureKind> LoadCatalogsAsync(CancellationToken cancellationToken)
     {
         IsCatalogsLoading = true;
         CatalogsErrorText = null;
         ShowCatalogPlaceholders();
+
+        var kind = ApiFailureKind.None;
 
         try
         {
@@ -598,20 +824,26 @@ public sealed partial class SearchViewModel : ObservableObject
 
             ApplyCatalogs(await specializationsTask, await hairServicesTask);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception)
         {
-            // Экран закрыли до ответа: следующий показ начнёт загрузку заново.
-            _isInitialized = false;
-        }
-        catch (BarberSearchApiException exception)
-        {
-            CatalogsErrorText = exception.StatusCode == HttpStatusCode.TooManyRequests
-                ? RateLimitText
-                : CatalogsLoadFailedText;
-        }
-        catch (HttpRequestException)
-        {
-            CatalogsErrorText = NetworkText;
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind == ApiFailureKind.None)
+            {
+                // Экран закрыли до ответа: следующий показ начнёт загрузку заново.
+                _isInitialized = false;
+            }
+            else
+            {
+                CatalogsErrorText = kind == ApiFailureKind.Transport
+                    ? NetworkText
+                    : exception is BarberSearchApiException
+                    {
+                        StatusCode: HttpStatusCode.TooManyRequests,
+                    }
+                        ? RateLimitText
+                        : CatalogsLoadFailedText;
+            }
         }
         finally
         {
@@ -624,6 +856,8 @@ public sealed partial class SearchViewModel : ObservableObject
 
             NotifyCatalogOptionsChanged();
         }
+
+        return kind;
     }
 
     /// <summary>

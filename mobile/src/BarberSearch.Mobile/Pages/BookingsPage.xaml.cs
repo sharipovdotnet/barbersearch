@@ -19,8 +19,14 @@ namespace BarberSearch.Mobile.Pages;
 /// этого делать не может, потому что таймер — платформенная сущность MAUI. Отдельной кнопки
 /// «Обновить» нет: список обновляют таймер, свайп, появление вкладки и действия. Таймеры
 /// останавливаются, когда вкладка уходит с экрана и когда приложение уходит в фон: сеть
-/// в невидимом окне не опрашивается. Навигация к экранам переноса и отзыва тоже здесь: Core
-/// не знает ни про Shell, ни про маршруты.
+/// в невидимом окне не опрашивается.
+/// </para>
+/// <para>
+/// Автоповтор ошибки первой страницы живёт по тем же правилам видимости: он включается в
+/// <see cref="OnAppearing"/> до загрузки, а выключается при уходе с вкладки и при уходе
+/// приложения в фон. Это тот же <c>_isVisible</c>, а не второй механизм: две подписки на окно
+/// разошлись бы в том, когда именно страница считается видимой. Навигация к экранам переноса
+/// и отзыва тоже здесь: Core не знает ни про Shell, ни про маршруты.
 /// </para>
 /// </remarks>
 public partial class BookingsPage : ContentPage
@@ -64,7 +70,9 @@ public partial class BookingsPage : ContentPage
     /// <remarks>
     /// Обновление при каждом появлении — это и есть «попробовать ещё раз» после возврата с
     /// другого экрана; ViewModel сам решает, показывать индикатор или обновить молча.
-    /// <c>async void</c> здесь — единственная допустимая форма переопределения.
+    /// Автоповтор ошибки первой страницы включается до загрузки: сбой, пришедший из неё, уже
+    /// может его запустить. <c>async void</c> здесь — единственная допустимая форма
+    /// переопределения.
     /// </remarks>
     protected override async void OnAppearing()
     {
@@ -78,11 +86,13 @@ public partial class BookingsPage : ContentPage
         SubscribeWindowLifecycle();
         StartTimers();
 
+        _viewModel.StartAutoRetry();
+
         await _viewModel.InitializeAsync();
     }
 
     /// <summary>
-    /// Останавливает таймеры, пока вкладка не видна.
+    /// Останавливает таймеры и автоповтор, пока вкладка не видна.
     /// </summary>
     protected override void OnDisappearing()
     {
@@ -90,6 +100,8 @@ public partial class BookingsPage : ContentPage
 
         StopTimers();
         UnsubscribeWindowLifecycle();
+
+        _viewModel.StopAutoRetry();
 
         _session.SessionEnded -= OnSessionEnded;
 
@@ -282,9 +294,13 @@ public partial class BookingsPage : ContentPage
     }
 
     /// <summary>
-    /// Останавливает таймеры, когда приложение ушло в фон.
+    /// Останавливает таймеры и автоповтор, когда приложение ушло в фон.
     /// </summary>
-    private void OnWindowStopped(object? sender, EventArgs e) => StopTimers();
+    private void OnWindowStopped(object? sender, EventArgs e)
+    {
+        StopTimers();
+        _viewModel.StopAutoRetry();
+    }
 
     /// <summary>
     /// Возвращает таймеры, когда приложение снова на экране, и пересчитывает время.
@@ -303,6 +319,7 @@ public partial class BookingsPage : ContentPage
         }
 
         StartTimers();
+        _viewModel.StartAutoRetry();
         _viewModel.RecomputeTimes();
     }
 

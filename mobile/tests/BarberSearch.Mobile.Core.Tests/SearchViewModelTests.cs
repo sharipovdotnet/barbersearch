@@ -553,6 +553,283 @@ public sealed class SearchViewModelTests
         Assert.True(viewModel.ShowNearbySort);
     }
 
+    [Fact]
+    public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, autoRetry: FastRetry());
+
+        api.Respond = call => call < 3
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new HttpRequestException("refused"))
+            : Task.FromResult(Page(Barber("Алиса")));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+
+        viewModel.StartAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(3, viewModel.AutoRetry.Attempts);
+        Assert.Single(viewModel.Barbers);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task StartAutoRetry_TerminalFailure_DoesNotStart(HttpStatusCode statusCode)
+    {
+        var api = FakeApi.Returning(Page());
+        api.Respond = _ => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+            new BarberSearchApiException(
+                statusCode,
+                "Search failed.",
+                ["barberSearch.search.failed"],
+                new Dictionary<string, string[]>()));
+
+        var viewModel = Create(api, autoRetry: FastRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task StopAutoRetry_WhileWaiting_StopsFurtherAttempts()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Respond = _ => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+            new HttpRequestException("refused"));
+
+        var viewModel = Create(api, autoRetry: StopAfterFirstAttemptRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+
+        Assert.Equal(1, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        viewModel.StopAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, viewModel.AutoRetry.Attempts);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task SearchCommand_WhileAutoRetrying_LoadsImmediatelyAndSuccessDoesNotRestart()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        api.Respond = call => call == 0
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new HttpRequestException("refused"))
+            : Task.FromResult(Page(Barber("Алиса")));
+
+        var viewModel = Create(api, autoRetry: HangingRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+
+        // Кнопка «Повторить» — это тот же ручной поиск: цикл останавливается, чтение идёт сразу.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.SearchCalls.Count);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.False(viewModel.IsAutoRetrying);
+        Assert.Single(viewModel.Barbers);
+        Assert.Null(viewModel.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task SearchCommand_WhileAutoRetrying_LoadFailsRetryable_RestartsAndKeepsRetryingUntilSuccess()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var restartGate = new TaskCompletionSource();
+        var silentAttempt = new TaskCompletionSource<PagedResponse<BarberSearchItemResponse>>();
+
+        api.Respond = call => call switch
+        {
+            0 or 1 => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+                new HttpRequestException("refused")),
+            2 => silentAttempt.Task,
+            _ => Task.FromResult(Page(Barber("Алиса"))),
+        };
+
+        var viewModel = Create(api, autoRetry: StopThenGateRetry(restartGate.Task));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+
+        Assert.True(viewModel.IsAutoRetrying);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+
+        // Кнопка при работающем цикле читает сразу: к возврату команды ручной запрос уже ушёл,
+        // а перезапущенный цикл ждёт паузы — второго запроса без неё нет.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, api.SearchCalls.Count);
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        // Повторяемый сбой кнопки возвращает цикл к жизни: первая же тихая попытка падает
+        // снова, и цикл не сдаётся, а повторяет до успеха.
+        restartGate.SetResult();
+        silentAttempt.SetException(new HttpRequestException("refused"));
+
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(2, viewModel.AutoRetry.Attempts);
+        Assert.Equal(4, api.SearchCalls.Count);
+        Assert.Single(viewModel.Barbers);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_AfterFormEdit_RetriesTheFailedFilters()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, autoRetry: FastRetry());
+
+        api.Respond = call => call == 0
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new HttpRequestException("refused"))
+            : Task.FromResult(Page(Barber("Алиса")));
+
+        viewModel.City = "Тюмень";
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+        Assert.Equal("Тюмень", Assert.Single(api.SearchCalls).City);
+
+        // Правка формы без «Найти»: цикл обязан повторить упавший запрос, а не собрать новый.
+        viewModel.City = "Москва";
+
+        viewModel.StartAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(2, api.SearchCalls.Count);
+        Assert.Equal("Тюмень", api.SearchCalls[1].City);
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Null(viewModel.ErrorMessage);
+
+        // Только «Найти» превращает правку формы в запрос — теперь с новым городом.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal("Москва", api.SearchCalls[^1].City);
+    }
+
+    [Fact]
+    public async Task AutoRetry_FailedSilentAttempt_KeepsErrorMessage()
+    {
+        var api = FakeApi.Returning(Page());
+        var pending = new TaskCompletionSource<PagedResponse<BarberSearchItemResponse>>();
+        var viewModel = Create(api, autoRetry: StopAfterFirstAttemptRetry());
+
+        api.Respond = _ => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+            new HttpRequestException("refused"));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.ErrorMessage);
+
+        // Попытка висит: тихий режим не имеет права стереть ошибку на старте, иначе экран
+        // мигал бы пустым состоянием на каждой паузе между повторами.
+        api.Respond = _ => pending.Task;
+
+        viewModel.StartAutoRetry();
+
+        Assert.Equal(1, viewModel.AutoRetry.Attempts);
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.ErrorMessage);
+        Assert.True(viewModel.HasError);
+        Assert.False(viewModel.ShowEmptyState);
+
+        pending.SetException(new HttpRequestException("refused"));
+
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.ErrorMessage);
+        Assert.True(viewModel.HasError);
+
+        viewModel.StopAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task AutoRetry_Timeout_ShowsNetworkText()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса")));
+        var viewModel = Create(api, autoRetry: FastRetry());
+
+        api.Respond = call => call == 0
+            ? Task.FromException<PagedResponse<BarberSearchItemResponse>>(new TaskCanceledException("timeout"))
+            : Task.FromResult(Page(Barber("Алиса")));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        // Таймаут HttpClient приходит отменой, но токен жив: для человека это «нет связи»,
+        // а не тихая отмена. Раньше этот случай проглатывался.
+        Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.ErrorMessage);
+
+        viewModel.StartAutoRetry();
+        await viewModel.AutoRetryCompletion;
+
+        Assert.Equal(1, viewModel.AutoRetry.Attempts);
+        Assert.Single(viewModel.Barbers);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task IsAutoRetrying_TogglesWithLoopState()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Respond = _ => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+            new HttpRequestException("refused"));
+
+        var viewModel = Create(api, autoRetry: HangingRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        viewModel.StartAutoRetry();
+        Assert.True(viewModel.IsAutoRetrying);
+
+        viewModel.StopAutoRetry();
+        Assert.False(viewModel.IsAutoRetrying);
+
+        await viewModel.AutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task SearchCommand_WhenPageHidden_DoesNotStartAutoRetry()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Respond = _ => Task.FromException<PagedResponse<BarberSearchItemResponse>>(
+            new HttpRequestException("refused"));
+
+        var viewModel = Create(api, autoRetry: FastRetry());
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+
+        // Кнопка «Повторить» — та же команда поиска; страница не сообщала о видимости, значит
+        // фон не включается и на скрытом экране сеть не опрашивается.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, viewModel.AutoRetry.Attempts);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
     /// <summary>
     /// Создаёт ViewModel с фиксированным «сегодня»: список дат не зависит от машины теста.
     /// </summary>
@@ -560,13 +837,81 @@ public sealed class SearchViewModelTests
     /// Без явной геопозиции подменённый сервис отвечает «недоступна»: старые проверки поиска
     /// не должны незаметно зависеть от координат.
     /// </remarks>
-    private static SearchViewModel Create(FakeApi api, ILocationService? locationService = null) =>
+    private static SearchViewModel Create(
+        FakeApi api,
+        ILocationService? locationService = null,
+        AutoRetryLoop? autoRetry = null) =>
         new(
             api,
             locationService ?? new FakeLocationService(LocationResult.Unavailable()),
             new FixedTimeProvider(Today),
             // Подсказки без паузы: тест набирает город и сразу видит результат, не ожидая 250 мс.
-            new CitySuggestions(api, static (_, _) => Task.CompletedTask));
+            new CitySuggestions(api, static (_, _) => Task.CompletedTask),
+            autoRetry);
+
+    /// <summary>
+    /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
+    /// </summary>
+    private static AutoRetryLoop FastRetry() =>
+        new(
+            static (_, _) => Task.CompletedTask,
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза проходит сразу, а вторая висит до остановки: так видно
+    /// состояние между попытками, не ожидая реального времени.
+    /// </summary>
+    private static AutoRetryLoop StopAfterFirstAttemptRetry()
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) => Interlocked.Increment(ref waits) == 1
+                ? Task.CompletedTask
+                : WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, у которого первая пауза висит до остановки, а следующая ждёт внешнего сигнала:
+    /// так видно и работу цикла до нажатия кнопки, и его перезапуск после неё, без таймеров.
+    /// </summary>
+    private static AutoRetryLoop StopThenGateRetry(Task restartGate)
+    {
+        var waits = 0;
+
+        return new AutoRetryLoop(
+            (_, cancellationToken) =>
+            {
+                var wait = Interlocked.Increment(ref waits);
+
+                return wait == 1
+                    ? WaitForCancellationAsync(cancellationToken)
+                    : wait == 2
+                        ? restartGate
+                        : Task.CompletedTask;
+            },
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+    }
+
+    /// <summary>
+    /// Цикл, который висит на первой же паузе: проверяется остановка до всякой попытки.
+    /// </summary>
+    private static AutoRetryLoop HangingRetry() =>
+        new(
+            (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Ожидание, которое заканчивается только отменой: Stop проверяется без таймеров.
+    /// </summary>
+    private static Task WaitForCancellationAsync(CancellationToken cancellationToken)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+
+        return pending.Task;
+    }
 
     private static PagedResponse<BarberSearchItemResponse> Page(params BarberSearchItemResponse[] items) =>
         new(items, NextCursor: null);
@@ -654,6 +999,11 @@ public sealed class SearchViewModelTests
 
         public int SpecializationCalls { get; private set; }
 
+        /// <summary>
+        /// Ответ выдачи по номеру вызова (с нуля): так проверяются сбои, повтор и успех после них.
+        /// </summary>
+        public Func<int, Task<PagedResponse<BarberSearchItemResponse>>>? Respond { get; set; }
+
         public static FakeApi Returning(PagedResponse<BarberSearchItemResponse> page) =>
             new(() => Task.FromResult(page));
 
@@ -668,7 +1018,7 @@ public sealed class SearchViewModelTests
         {
             SearchCalls.Add(filters);
 
-            return _response();
+            return Respond is null ? _response() : Respond(SearchCalls.Count - 1);
         }
 
         public Task<IReadOnlyList<SpecializationResponse>> GetSpecializationsAsync(
