@@ -1,5 +1,6 @@
 using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.Bookings.RescheduleBooking;
+using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Salons;
@@ -42,7 +43,8 @@ public class BookingRescheduleTests
         var booking = CreateBooking(salon.Id);
         Assert.True(booking.Confirm().IsSuccess);
         var bookings = AddBooking(booking);
-        var handler = CreateHandler(bookings, salon);
+        var push = new FakeBookingStatusPushNotifier();
+        var handler = CreateHandler(bookings, salon, pushNotifier: push);
 
         var result = await handler.Handle(
             new RescheduleBookingCommand(booking.Id, FreeSlot),
@@ -54,6 +56,9 @@ public class BookingRescheduleTests
         Assert.Equal(BookingStatus.Confirmed, booking.Status);
         Assert.Equal(45m, booking.Price);
         Assert.Equal(1, bookings.UpdateCalls);
+
+        // Клиент перенёс сам: push ему не нужен, он уже знает о своём действии.
+        Assert.Equal(0, push.Calls);
     }
 
     [Fact]
@@ -106,7 +111,8 @@ public class BookingRescheduleTests
         var booking = CreateBooking(salon.Id);
         var bookings = AddBooking(booking);
         var salons = CreateSalons(salon);
-        var handler = CreateHandler(bookings, salon, salons);
+        var push = new FakeBookingStatusPushNotifier();
+        var handler = CreateHandler(bookings, salon, salons, pushNotifier: push);
 
         var result = await handler.Handle(
             new RescheduleBookingCommand(booking.Id, BookingStart),
@@ -116,6 +122,9 @@ public class BookingRescheduleTests
         Assert.Equal(BookingStart, booking.StartAt);
         Assert.Equal(0, bookings.UpdateCalls);
         Assert.Equal(0, salons.GetByIdCalls);
+
+        // Перенос на то же время — не событие: времени не изменилось, push не создаётся.
+        Assert.Equal(0, push.Calls);
     }
 
     [Fact]
@@ -196,10 +205,12 @@ public class BookingRescheduleTests
         var salon = CreateSalon();
         var booking = CreateBooking(salon.Id);
         var bookings = AddBooking(booking);
+        var push = new FakeBookingStatusPushNotifier();
         var handler = CreateHandler(
             bookings,
             salon,
-            currentUser: new FakeCurrentUser(BarberUserId));
+            currentUser: new FakeCurrentUser(BarberUserId),
+            pushNotifier: push);
 
         var result = await handler.Handle(
             new RescheduleBookingCommand(booking.Id, FreeSlot),
@@ -207,6 +218,11 @@ public class BookingRescheduleTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(FreeSlot, booking.StartAt);
+
+        // Барбер перенёс — клиент получает событие с новым временем визита.
+        Assert.Equal(1, push.Calls);
+        Assert.Equal(BookingStatusChange.RescheduledByBarber, push.LastChange);
+        Assert.Equal(FreeSlot, push.LastStartAt);
     }
 
     [Fact]
@@ -237,10 +253,12 @@ public class BookingRescheduleTests
         var salon = CreateSalon();
         var booking = CreateBooking(salon.Id);
         var bookings = AddBooking(booking);
+        var push = new FakeBookingStatusPushNotifier();
         var handler = CreateHandler(
             bookings,
             salon,
-            currentUser: new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true));
+            currentUser: new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
+            pushNotifier: push);
 
         var result = await handler.Handle(
             new RescheduleBookingCommand(booking.Id, FreeSlot),
@@ -248,6 +266,39 @@ public class BookingRescheduleTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(FreeSlot, booking.StartAt);
+
+        // Администратор действует как сотрудник салона: событие то же, время — новое.
+        Assert.Equal(1, push.Calls);
+        Assert.Equal(BookingStatusChange.RescheduledByBarber, push.LastChange);
+        Assert.Equal(FreeSlot, push.LastStartAt);
+    }
+
+    [Fact]
+    public async Task Handle_WhenPushFails_StillSucceeds()
+    {
+        var salon = CreateSalon();
+        var booking = CreateBooking(salon.Id);
+        var bookings = AddBooking(booking);
+        var push = new FakeBookingStatusPushNotifier
+        {
+            Failure = new Failure(Error.Failure(
+                "internal.database",
+                "The push notification could not be saved."))
+        };
+        var handler = CreateHandler(
+            bookings,
+            salon,
+            currentUser: new FakeCurrentUser(BarberUserId),
+            pushNotifier: push);
+
+        var result = await handler.Handle(
+            new RescheduleBookingCommand(booking.Id, FreeSlot),
+            CancellationToken.None);
+
+        // Перенос уже сохранён: сбой уведомления не превращает его в ошибку.
+        Assert.True(result.IsSuccess);
+        Assert.Equal(FreeSlot, booking.StartAt);
+        Assert.Equal(1, bookings.UpdateCalls);
     }
 
     [Fact]
@@ -548,7 +599,8 @@ public class BookingRescheduleTests
         DateTimeOffset? now = null,
         bool isWorkingDay = true,
         int contextDurationMinutes = 30,
-        IReadOnlyList<TimeOffInterval>? timeOffs = null)
+        IReadOnlyList<TimeOffInterval>? timeOffs = null,
+        FakeBookingStatusPushNotifier? pushNotifier = null)
     {
         salons ??= CreateSalons(salon);
         profiles ??= CreateProfiles(
@@ -563,6 +615,7 @@ public class BookingRescheduleTests
             salons,
             new FakeUnitOfWork(salons),
             currentUser ?? new FakeCurrentUser(ClientId),
+            pushNotifier ?? new FakeBookingStatusPushNotifier(),
             new FakeTimeProvider(now ?? Now),
             NullLogger<RescheduleBookingHandler>.Instance);
     }

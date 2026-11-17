@@ -23,7 +23,7 @@ namespace BarberSearch.IntegrationTests;
 /// Проверяется весь путь «POST api/bookings или api/barber/bookings → строка очереди в той же
 /// транзакции → доставка на следующем тике»: строка читается из БД, а сообщение — из
 /// <see cref="CapturingPushSender"/>. Напоминание и событие создания одной брони не конфликтуют
-/// благодаря уникальности пары <c>(booking_id, kind)</c>.
+/// благодаря уникальности тройки <c>(booking_id, kind, start_at)</c>.
 /// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed class PushBookingCreatedTests

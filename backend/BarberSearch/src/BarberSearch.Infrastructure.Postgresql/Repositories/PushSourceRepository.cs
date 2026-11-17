@@ -8,7 +8,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 
 /// <summary>
 /// Источник данных для push-уведомлений клиенту: подтверждённые брони в окне напоминания
-/// и снимок каталога для события создания брони.
+/// и снимок каталога для события о брони (создание и смена статуса).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,8 +24,9 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// </para>
 /// <para>
 /// <see cref="GetBookingSnapshotAsync"/> читает те же каталоги по идентификаторам из брони:
-/// он вызывается в транзакции создания брони, поэтому это один индексированный запрос без
-/// сети. Отсутствующее звено даёт <c>null</c>, а не ошибку.
+/// он вызывается в том же scope, что и сохранение брони (создание или переход статуса),
+/// поэтому это один индексированный запрос без сети. Отсутствующее звено даёт <c>null</c>,
+/// а не ошибку.
 /// </para>
 /// </remarks>
 public sealed class PushSourceRepository : IPushSourceRepository

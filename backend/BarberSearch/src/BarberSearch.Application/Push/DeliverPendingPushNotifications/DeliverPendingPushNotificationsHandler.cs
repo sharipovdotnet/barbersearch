@@ -9,6 +9,10 @@ using Shared;
 
 namespace BarberSearch.Application.Push.DeliverPendingPushNotifications;
 
+// Alias, а не using на пространство имён: рядом живёт BarberSearch.Application.Push.BookingStatus,
+// и без псевдонима имя BookingStatus разрешалось бы в него, а не в доменный enum.
+using BookingStatus = BarberSearch.Domain.Bookings.BookingStatus;
+
 /// <summary>
 /// Обработчик тика доставки: отправляет пачку <c>Pending</c>-уведомлений на устройства.
 /// </summary>
@@ -21,6 +25,17 @@ namespace BarberSearch.Application.Push.DeliverPendingPushNotifications;
 /// <c>booking is cancelled</c>, перенесена — <c>booking was rescheduled</c>, начало
 /// наступило — <c>window closed</c>. <c>Pending</c>-самозапись клиента — ожидаемое
 /// состояние события создания, она доставляется.
+/// </para>
+/// <para>
+/// События статуса проверяются по своему правилу. Подтверждение доставляется только пока
+/// бронь <c>Confirmed</c> (иначе — та же причина <c>booking is not confirmed</c>). Отмена —
+/// только пока бронь <c>Cancelled</c> (<c>booking is not cancelled</c>: запись «ожила» после
+/// отмены, и устаревшее сообщение об отмене было бы ложью). Перенос — только пока визит
+/// активен, то есть не <c>Cancelled</c>/<c>Completed</c>/<c>NoShow</c>
+/// (<c>booking is not active</c>). Общие для всех события статуса проверки: исчезнувшая
+/// бронь — <c>booking was deleted</c>, несовпадение <c>StartAt</c> со снимком —
+/// <c>booking was rescheduled</c> (новый перенос отменяет старый), наступившее начало —
+/// <c>window closed</c>.
 /// </para>
 /// <para>
 /// Одно уведомление — все устройства пользователя: FCM HTTP v1 не умеет батч, поэтому
@@ -60,6 +75,16 @@ public sealed class DeliverPendingPushNotificationsHandler
     /// Причина пропуска «бронь отменена после создания события».
     /// </summary>
     private const string BOOKING_CANCELLED_REASON = "booking is cancelled";
+
+    /// <summary>
+    /// Причина пропуска «бронь больше не отменена» — только для события отмены.
+    /// </summary>
+    private const string BOOKING_NOT_CANCELLED_REASON = "booking is not cancelled";
+
+    /// <summary>
+    /// Причина пропуска «визит больше не активен» — для события переноса.
+    /// </summary>
+    private const string BOOKING_NOT_ACTIVE_REASON = "booking is not active";
 
     /// <summary>
     /// Причина пропуска «визит перенесли после создания уведомления».
@@ -349,7 +374,20 @@ public sealed class DeliverPendingPushNotificationsHandler
     /// <para>
     /// Событие создания доставляется и для <c>Pending</c>-самозаписи клиента: подтверждение
     /// не требуется. Отмена и удаление — разные причины: отменённая бронь ещё существует,
-    /// удалённая — уже нет. Перенос и закрытое окно общие для обоих видов.
+    /// удалённая — уже нет.
+    /// </para>
+    /// <para>
+    /// События статуса проверяют свой повод, а не статус «вообще». Подтверждение требует
+    /// <c>Confirmed</c>: отменённая, завершённая или неявившаяся бронь делает сообщение
+    /// ложью. Отмена требует <c>Cancelled</c>: если запись снова активна, устаревшее
+    /// сообщение об отмене только запутает. Перенос требует активного визита
+    /// (<c>Pending</c> или <c>Confirmed</c>): терминальный визит двигать уже нечего.
+    /// Перенос и закрытое окно общие для всех видов.
+    /// </para>
+    /// <para>
+    /// Неизвестный вид — ошибка программы, а не повод доставить сообщение «на всякий
+    /// случай»: <c>Enum.IsDefined</c> в домене и check-ограничение в базе такого не
+    /// допускают, поэтому здесь исключение.
     /// </para>
     /// </remarks>
     private async Task<Result<string?, Failure>> ResolveSkipReasonAsync(
@@ -359,27 +397,83 @@ public sealed class DeliverPendingPushNotificationsHandler
     {
         var bookingResult = await _bookings.GetByIdAsync(notification.BookingId, cancellationToken);
 
-        if (notification.Kind == PushNotificationKind.Reminder)
+        switch (notification.Kind)
         {
-            if (bookingResult.IsFailure
-                || bookingResult.Value.Status != BookingStatus.Confirmed)
-            {
-                return Result.Success<string?, Failure>(BOOKING_NOT_CONFIRMED_REASON);
-            }
-        }
-        else
-        {
-            if (bookingResult.IsFailure)
-            {
-                return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
-            }
+            case PushNotificationKind.Reminder:
+                if (bookingResult.IsFailure
+                    || bookingResult.Value.Status != BookingStatus.Confirmed)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_NOT_CONFIRMED_REASON);
+                }
 
-            if (bookingResult.Value.Status == BookingStatus.Cancelled)
-            {
-                return Result.Success<string?, Failure>(BOOKING_CANCELLED_REASON);
-            }
+                break;
+
+            case PushNotificationKind.BookingCreatedByCustomer:
+            case PushNotificationKind.BookingCreatedByBarber:
+                if (bookingResult.IsFailure)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
+                }
+
+                if (bookingResult.Value.Status == BookingStatus.Cancelled)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_CANCELLED_REASON);
+                }
+
+                break;
+
+            case PushNotificationKind.BookingConfirmed:
+                if (bookingResult.IsFailure)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
+                }
+
+                if (bookingResult.Value.Status != BookingStatus.Confirmed)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_NOT_CONFIRMED_REASON);
+                }
+
+                break;
+
+            case PushNotificationKind.BookingCancelledByBarber:
+                if (bookingResult.IsFailure)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
+                }
+
+                if (bookingResult.Value.Status != BookingStatus.Cancelled)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_NOT_CANCELLED_REASON);
+                }
+
+                break;
+
+            case PushNotificationKind.BookingRescheduledByBarber:
+                if (bookingResult.IsFailure)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
+                }
+
+                if (bookingResult.Value.Status
+                    is BookingStatus.Cancelled
+                    or BookingStatus.Completed
+                    or BookingStatus.NoShow)
+                {
+                    return Result.Success<string?, Failure>(BOOKING_NOT_ACTIVE_REASON);
+                }
+
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(notification),
+                    notification.Kind,
+                    "Unsupported push notification kind.");
         }
 
+        // Перенос и закрытое окно общие для всех видов: снимок StartAt — это повод, а не
+        // текущее состояние визита. Для переноса он же отсекает устаревшее событие, когда
+        // визит уже перенесли ещё раз.
         if (bookingResult.Value.StartAt != notification.StartAt)
         {
             return Result.Success<string?, Failure>(RESCHEDULED_REASON);
@@ -397,7 +491,16 @@ public sealed class DeliverPendingPushNotificationsHandler
     /// Человекочитаемое название вида уведомления для журнала режима разработки.
     /// </summary>
     private static string KindLabel(PushNotificationKind kind)
-        => kind == PushNotificationKind.Reminder ? "reminder" : "creation event";
+        => kind switch
+        {
+            PushNotificationKind.Reminder => "reminder",
+            PushNotificationKind.BookingCreatedByCustomer
+                or PushNotificationKind.BookingCreatedByBarber => "creation event",
+            PushNotificationKind.BookingConfirmed => "confirmation event",
+            PushNotificationKind.BookingCancelledByBarber => "cancellation event",
+            PushNotificationKind.BookingRescheduledByBarber => "reschedule event",
+            _ => "unknown event"
+        };
 
     /// <summary>
     /// Переводит уведомление в <c>Skipped</c> с причиной и сохраняет его.

@@ -8,19 +8,22 @@ namespace BarberSearch.Mobile.Core.Push;
 /// Сервер кладёт в data-payload только тип сообщения и, когда он есть, идентификатор записи
 /// (<c>{"type":"booking.reminder","bookingId":"&lt;guid&gt;"}</c> либо
 /// <c>{"type":"booking.created"}</c>). Текст — заголовок и тело — уже показан системой либо
-/// локальным уведомлением; для перехода он не нужен. Канал несёт два события: напоминание за час
-/// до визита (<see cref="ReminderType"/>) и создание записи (<see cref="BookingCreatedType"/>) —
-/// и когда клиент записался сам, и когда клиента записал мастер.
+/// локальным уведомлением; для перехода он не нужен. Канал несёт пять событий: напоминание за час
+/// до визита (<see cref="ReminderType"/>); создание записи (<see cref="BookingCreatedType"/>) —
+/// и когда клиент записался сам, и когда клиента записал мастер; и изменения записи мастером —
+/// подтверждение (<see cref="BookingConfirmedType"/>), отмена (<see cref="BookingCancelledType"/>)
+/// и перенос (<see cref="BookingRescheduledType"/>). Три события изменения приходят только от
+/// действия мастера: собственные действия клиента push не порождают.
 /// </para>
 /// <para>
 /// Отдельной deep link-страницы записи нет: <c>GET api/bookings/{id}</c> в API отсутствует,
-/// а список «Записи» и так содержит нужную запись, поэтому оба события открывают вкладку,
+/// а список «Записи» и так содержит нужную запись, поэтому все пять событий открывают вкладку,
 /// а не карточку. Разбор чистый: ни MAUI, ни Shell, поэтому проверяется в тестах без
 /// эмулятора.
 /// </para>
 /// </remarks>
 /// <param name="Type">
-/// Тип сообщения на проводе, например <see cref="ReminderType"/> или <see cref="BookingCreatedType"/>.
+/// Тип сообщения на проводе, например <see cref="ReminderType"/> или <see cref="BookingConfirmedType"/>.
 /// </param>
 /// <param name="BookingId">Запись, к которой относится сообщение, если сервер её прислал.</param>
 public sealed record PushNotificationPayload(string Type, Guid? BookingId)
@@ -34,6 +37,21 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
     /// Тип события о создании записи: клиент записался сам либо мастера записал клиента.
     /// </summary>
     public const string BookingCreatedType = "booking.created";
+
+    /// <summary>
+    /// Тип события о подтверждении записи мастером.
+    /// </summary>
+    public const string BookingConfirmedType = "booking.confirmed";
+
+    /// <summary>
+    /// Тип события об отмене записи мастером.
+    /// </summary>
+    public const string BookingCancelledType = "booking.cancelled";
+
+    /// <summary>
+    /// Тип события о переносе записи мастером.
+    /// </summary>
+    public const string BookingRescheduledType = "booking.rescheduled";
 
     /// <summary>
     /// Маршрут вкладки «Записи».
@@ -58,12 +76,13 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
     /// Куда перейти по нажатию; <c>null</c> — у этого сообщения перехода нет.
     /// </summary>
     /// <remarks>
-    /// Оба известных события открывают «Записи»: напоминание и создание записи ведут в один и
-    /// тот же список, отдельной страницы записи нет.
+    /// Все известные события открывают «Записи»: напоминание, создание и изменения записи ведут
+    /// в один и тот же список, отдельной страницы записи нет.
     /// </remarks>
     public string? Route => Type switch
     {
-        ReminderType or BookingCreatedType => BookingsRoute,
+        ReminderType or BookingCreatedType or BookingConfirmedType or BookingCancelledType
+            or BookingRescheduledType => BookingsRoute,
         _ => null,
     };
 
@@ -103,5 +122,6 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
     }
 
     private static bool IsKnownType(string type) =>
-        type is ReminderType or BookingCreatedType;
+        type is ReminderType or BookingCreatedType or BookingConfirmedType
+            or BookingCancelledType or BookingRescheduledType;
 }

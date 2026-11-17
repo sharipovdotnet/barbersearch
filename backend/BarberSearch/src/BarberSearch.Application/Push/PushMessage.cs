@@ -8,7 +8,9 @@ namespace BarberSearch.Application.Push;
 /// Текст собирается на сервере (<see cref="PushMessages"/>) и приходит сюда готовым:
 /// транспорт не форматирует даты и не знает русского языка. <see cref="BookingId"/> и
 /// <see cref="Type"/> — единственные машинные данные payload'а: по типу клиент выбирает
-/// обработчик перехода, идентификатор визита говорит, куда переходить.
+/// обработчик перехода, идентификатор визита говорит, куда переходить. Тип — единственное,
+/// чем мобильное приложение различает события; все типы (напоминание, создание, три события
+/// статуса) открывают вкладку «Записи», поэтому новый тип не требует нового экрана.
 /// </para>
 /// <para>
 /// Персональных данных клиента в сообщении нет (152-ФЗ): ни имени, ни телефона, ни заметки.
@@ -31,4 +33,19 @@ public sealed record PushMessage(string Title, string Body, Guid BookingId, stri
     /// приходят с одним типом: действие клиента на телефоне одно и то же — открыть запись.
     /// </summary>
     public const string BOOKING_CREATED_TYPE = "booking.created";
+
+    /// <summary>
+    /// Тип события «барбер подтвердил запись».
+    /// </summary>
+    public const string BOOKING_CONFIRMED_TYPE = "booking.confirmed";
+
+    /// <summary>
+    /// Тип события «барбер или администратор отменил запись».
+    /// </summary>
+    public const string BOOKING_CANCELLED_TYPE = "booking.cancelled";
+
+    /// <summary>
+    /// Тип события «барбер или администратор перенёс запись».
+    /// </summary>
+    public const string BOOKING_RESCHEDULED_TYPE = "booking.rescheduled";
 }

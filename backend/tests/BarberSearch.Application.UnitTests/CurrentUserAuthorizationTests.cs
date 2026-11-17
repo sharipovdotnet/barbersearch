@@ -70,6 +70,7 @@ public class CurrentUserAuthorizationTests
             bookings,
             new FakeBarberProfileRepository(),
             FakeCurrentUser.Anonymous(),
+            new FakeBookingStatusPushNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
         var result = await handler.Handle(

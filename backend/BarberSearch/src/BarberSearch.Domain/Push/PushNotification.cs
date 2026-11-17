@@ -29,9 +29,11 @@ namespace BarberSearch.Domain.Push;
 /// <para>
 /// «Сейчас» домен не читает: момент следующей попытки и предел попыток приходят аргументами
 /// от Application (AGENT.md §7.6). Уникальный индекс <c>ux_push_notifications_booking_id</c>
-/// по паре <c>(booking_id, kind)</c> держит правило «одно уведомление каждого вида на визит»
-/// на уровне БД, поэтому повторный тик и второй экземпляр приложения дублей не создают,
-/// а напоминание и событие создания одной брони сосуществуют.
+/// по тройке <c>(booking_id, kind, start_at)</c> держит правило «одно уведомление каждого вида
+/// на визит и его время» на уровне БД, поэтому повторный тик и второй экземпляр приложения
+/// дублей не создают, а напоминание, событие создания и события статуса одной брони
+/// сосуществуют. <c>start_at</c> в ключе появился ради повторных переносов: каждый новый
+/// целевой момент — отдельное событие, а два переноса на одно и то же время — один дубль.
 /// </para>
 /// </remarks>
 public sealed class PushNotification : Entity
@@ -62,12 +64,12 @@ public sealed class PushNotification : Entity
     private const string TIME_ZONE_CODE = "pushNotification.create.salonTimeZoneId";
 
     /// <summary>
-    /// Вид уведомления: напоминание или событие создания брони.
+    /// Вид уведомления: напоминание, событие создания или событие статуса брони.
     /// </summary>
     /// <remarks>
-    /// Вместе с <see cref="BookingId"/> входит в уникальный индекс
-    /// <c>ux_push_notifications_booking_id</c>: на один визит — не больше одного уведомления
-    /// каждого вида.
+    /// Вместе с <see cref="BookingId"/> и <see cref="StartAt"/> входит в уникальный индекс
+    /// <c>ux_push_notifications_booking_id</c>: на один визит и его время — не больше одного
+    /// уведомления каждого вида.
     /// </remarks>
     public PushNotificationKind Kind { get; private set; }
 
@@ -77,12 +79,14 @@ public sealed class PushNotification : Entity
     public Guid UserId { get; private set; }
 
     /// <summary>
-    /// Бронь, к которой относится уведомление; в паре с <see cref="Kind"/> уникальна.
+    /// Бронь, к которой относится уведомление; в паре с <see cref="Kind"/> и
+    /// <see cref="StartAt"/> уникальна.
     /// </summary>
     public Guid BookingId { get; private set; }
 
     /// <summary>
-    /// Начало визита в UTC — снимок на момент создания строки.
+    /// Начало визита в UTC — снимок на момент создания строки. Для события переноса это
+    /// новое время: ключ уникальности отличает его от уведомления о прежнем времени.
     /// </summary>
     public DateTimeOffset StartAt { get; private set; }
 

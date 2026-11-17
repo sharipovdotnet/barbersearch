@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Push.BookingCreated;
+using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Application.Users.Passwords;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +40,12 @@ public static class DependencyInjection
         // CreateBookingHandler внутри транзакции записи, и он не является командой тика.
         // Scoped, потому что пишет через ApplicationDbContext запроса.
         services.AddScoped<IBookingCreatedPushNotifier, BookingCreatedPushNotifier>();
+
+        // Событие статуса — тот же слой и то же время жизни: его вызывают обработчики
+        // подтверждения, отмены и переноса после сохранения брони. Отдельный класс, а не
+        // вторая регистрация BookingCreatedPushNotifier: у них разные контракты, и общий
+        // у них только BookingPushEnqueuer.
+        services.AddScoped<IBookingStatusPushNotifier, BookingStatusPushNotifier>();
 
         services.Scan(scan => scan.FromAssemblies([assembly])
             .AddClasses(classes => classes

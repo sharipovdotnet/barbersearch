@@ -84,6 +84,60 @@ public sealed class PushNotificationPayloadTests
     }
 
     [Fact]
+    public void TryParse_BookingConfirmedExtras_OpensBookingsTab()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingConfirmedType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingConfirmedType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BookingCancelledExtras_OpensBookingsTab()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingCancelledType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingCancelledType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BookingRescheduledExtras_OpensBookingsTab()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingRescheduledType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingRescheduledType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
     public void TryParse_InvalidBookingId_LeavesBookingIdEmpty()
     {
         var extras = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -101,9 +155,11 @@ public sealed class PushNotificationPayloadTests
     [Fact]
     public void TryParse_UnknownType_HasNoTarget()
     {
+        // Тип из будущего среза: приложение не должно открывать вкладку, которую это
+        // уведомление не имело в виду.
         var extras = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["type"] = "booking.cancelled",
+            ["type"] = "booking.something",
             ["bookingId"] = BookingId.ToString("D"),
         };
 

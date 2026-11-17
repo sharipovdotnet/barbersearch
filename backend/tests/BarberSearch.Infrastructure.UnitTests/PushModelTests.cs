@@ -111,7 +111,7 @@ public class PushModelTests
         Assert.NotNull(entity);
 
         Assert.Equal(
-            "kind IN (1, 2, 3)",
+            "kind IN (1, 2, 3, 4, 5, 6)",
             Assert.Single(
                 entity.GetCheckConstraints(),
                 check => check.Name == "ck_push_notifications_kind").Sql);
@@ -138,7 +138,7 @@ public class PushModelTests
             index => index.GetDatabaseName() == "ux_push_notifications_booking_id");
         Assert.True(booking.IsUnique);
         Assert.Equal(
-            ["booking_id", "kind"],
+            ["booking_id", "kind", "start_at"],
             booking.Properties.Select(property => property.GetColumnName()).ToArray());
 
         // Старого индекса «только по booking_id» больше нет: иначе событие создания
@@ -173,6 +173,9 @@ public class PushModelTests
         Assert.Contains(
             context.Database.GetMigrations(),
             migration => migration.EndsWith("_AddPushNotificationKind", StringComparison.Ordinal));
+        Assert.Contains(
+            context.Database.GetMigrations(),
+            migration => migration.EndsWith("_AddPushBookingStatusEvents", StringComparison.Ordinal));
 
         // Снимок модели обновлён вместе с миграцией: следующая миграция не должна
         // неожиданно «находить» незакоммиченные изменения.
