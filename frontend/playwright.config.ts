@@ -13,7 +13,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  workers: isCI ? 2 : undefined,
+  // Один воркер в CI. Мутационные спеки делят несколько аккаунтов и одни и те же
+  // строки: профиль `profileBarber` правят три файла, и два воркера ловили законный
+  // `409 update.concurrencyConflict` в «Услуги»/«Фотографии», а под нагрузкой —
+  // 30-секундные таймауты на первой загрузке. Порядок фаз задают `dependencies`.
+  workers: isCI ? 1 : undefined,
   timeout: 30_000,
   expect: { timeout: 7_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
