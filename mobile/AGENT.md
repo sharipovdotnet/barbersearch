@@ -403,8 +403,10 @@ Until the two items above land, the "Map" and "Favourites" screens have nothing 
 - `dotnet sln add` in `backend/` is forbidden (backend/AGENT.md §5.1); in `mobile/` the solution is
   maintained with a plain `dotnet sln`.
 - **Branch first, then the first edit.** Before a single file in the working tree changes, the work
-  must have a branch of its own; if there is none, create one from an up-to-date `main` —
-  `git switch -c docs/… main`, with `docs/…`, `features/…` or `fix/…` named after the change. A
+  must have a branch of its own; if there is none, create one from the **freshly fetched
+  `origin/main`** — `git fetch origin && git switch -c docs/… origin/main`, with `docs/…`,
+  `features/…` or `fix/…` named after the change. A local `main` that was not fetched first is not a
+  base: it can be behind `origin/main`, and the branch would then start from a stale commit. A
   session never edits on `main` and never picks up a branch left over from another task.
 - **Session end: commit, push, pull request.** Finished work is never left in the working tree.
   When the slice is done, commit it on that branch, push the branch to `origin` and open a pull
