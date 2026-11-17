@@ -366,7 +366,9 @@ in Core owns both base addresses.
   new size or font. The smallest text in the product (email verification status, role, reminder
   caption) lives on that tab, and the tab exists to read one's own account data; other pages keep
   the default body of 14. This is a deliberate deviation from the web's text-xs/text-sm pairing on
-  that page, recorded here rather than left silent.
+  that page, recorded here rather than left silent. The load-failure message is the one exception:
+  its headline stays 16 and its reason 14, the app-wide pair, so the same «Не удалось загрузить …»
+  reads the same size on «Записи» and «Профиль».
 
 ## 6. What the backend still lacks
 
