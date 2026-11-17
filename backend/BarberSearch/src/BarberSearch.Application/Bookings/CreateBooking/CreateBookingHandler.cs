@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BookingCreated;
 using BarberSearch.Application.Salons;
 using BarberSearch.Application.Users;
 using BarberSearch.Contracts.Common;
@@ -85,6 +86,13 @@ namespace BarberSearch.Application.Bookings.CreateBooking;
 /// расхождение часов клиента и сервера. Проверка стоит после ключа идемпотентности: повтор
 /// запроса по ключу возвращает бронь, даже если её начало уже прошло.
 /// </para>
+/// <para>
+/// Внутри той же транзакции, сразу после вставки брони, ставится push-событие о её создании
+/// (<see cref="IBookingCreatedPushNotifier"/>): строка очереди и бронь коммитятся вместе, а
+/// воркер доставит событие на следующем тике. Гостю событие не создаётся (у брони нет
+/// получателя), а сбой постановки в очередь не роняет создание — бронь важнее уведомления,
+/// поэтому ошибка только логируется предупреждением с идентификатором брони.
+/// </para>
 /// </remarks>
 public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
 {
@@ -104,6 +112,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
+    private readonly IBookingCreatedPushNotifier _pushNotifier;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CreateBookingHandler> _logger;
 
@@ -114,6 +123,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         IUserRepository users,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
+        IBookingCreatedPushNotifier pushNotifier,
         TimeProvider timeProvider,
         ILogger<CreateBookingHandler> logger)
     {
@@ -123,6 +133,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         _users = users;
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
+        _pushNotifier = pushNotifier;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -423,6 +434,13 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                 return added.Error;
             }
 
+            // Событие создания ставится в очередь в этой же транзакции: бронь и строка push
+            // коммитятся вместе. Сбой уведомления не должен откатывать бронь — см. NotifyAsync.
+            await NotifyBookingCreatedAsync(
+                booking.Value,
+                createdByBarber: command.CustomerId is not null || hasGuestContact,
+                ct);
+
             return booking.Value.Id;
         }, cancellationToken);
 
@@ -471,5 +489,50 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         }
 
         return created.Error;
+    }
+
+    /// <summary>
+    /// Ставит push-событие о создании брони, не роняя саму бронь.
+    /// </summary>
+    /// <remarks>
+    /// Ошибка постановки в очередь — не ошибка записи: клиент уже получил подтверждение, и
+    /// откатывать бронь из-за push нельзя. В журнал попадают только идентификатор брони и
+    /// коды/тип ошибки: ни имени, ни телефона, ни заметки клиента, ни текста сообщения (152-ФЗ).
+    /// Отмена запроса пробрасывается — незавершённая транзакция всё равно откатится
+    /// <see cref="IUnitOfWork"/>, а исключение транспорта/базы не выходит наружу.
+    /// </remarks>
+    private async Task NotifyBookingCreatedAsync(
+        Booking booking,
+        bool createdByBarber,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var notified = await _pushNotifier.NotifyAsync(
+                booking,
+                createdByBarber,
+                cancellationToken);
+            if (notified.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Booking {BookingId} was created, but its push notification was not enqueued: {Codes}.",
+                    booking.Id,
+                    string.Join(", ", notified.Error.Errors.Select(error => error.Code)));
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // Сбой push не должен откатывать уже вставленную бронь.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            // Тип, а не текст исключения: сообщение может содержать параметры SQL-запроса.
+            _logger.LogWarning(
+                "Booking {BookingId} was created, but its push notification failed: {ErrorType}.",
+                booking.Id,
+                exception.GetType().Name);
+        }
     }
 }

@@ -18,9 +18,11 @@ namespace BarberSearch.Infrastructure.Push;
 /// Пакет для FCM не нужен: адрес — <c>https://fcm.googleapis.com/v1/projects/{projectId}/messages:send</c>,
 /// тело — стандартный <c>{"message":{…}}</c>, авторизация — <c>Bearer</c> из
 /// <see cref="FcmAccessTokenProvider"/>. Сообщение содержит <c>notification</c> (заголовок и
-/// текст), <c>data</c> (<c>type</c> и <c>bookingId</c>) и <c>android.priority=high</c> плюс
-/// <c>android.notification.channel_id="reminders"</c> — канал, который создаёт мобильное
-/// приложение; без него Android 8+ молча отбрасывает уведомление.
+/// текст), <c>data</c> (<c>type</c> из <see cref="PushMessage.Type"/> и <c>bookingId</c>) и
+/// <c>android.priority=high</c> плюс <c>android.notification.channel_id="reminders"</c> —
+/// канал, который создаёт мобильное приложение; без него Android 8+ молча отбрасывает
+/// уведомление. Канал общий для напоминаний и событий создания: это канал доставки, а не
+/// тип сообщения.
 /// </para>
 /// <para>
 /// Ошибки разделены так, как требует <see cref="IPushSender"/>: мёртвый токен — только
@@ -233,7 +235,7 @@ public sealed class FcmPushSender : IPushSender
                 },
                 data = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["type"] = PushMessage.TYPE,
+                    ["type"] = message.Type,
                     ["bookingId"] = message.BookingId.ToString("D")
                 },
                 android = new

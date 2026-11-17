@@ -75,7 +75,7 @@ public class FcmPushSenderTests
             message.GetProperty("notification").GetProperty("body").GetString());
 
         var data = message.GetProperty("data");
-        Assert.Equal(PushMessage.TYPE, data.GetProperty("type").GetString());
+        Assert.Equal(PushMessage.REMINDER_TYPE, data.GetProperty("type").GetString());
         Assert.Equal(BookingId.ToString("D"), data.GetProperty("bookingId").GetString());
 
         var android = message.GetProperty("android");
@@ -83,6 +83,27 @@ public class FcmPushSenderTests
         Assert.Equal(
             "reminders",
             android.GetProperty("notification").GetProperty("channel_id").GetString());
+    }
+
+    [Fact]
+    public async Task Send_ForACreationEvent_PutsTheCreatedTypeAndTheSameChannel()
+    {
+        using var harness = new Harness(ConfiguredOptions());
+        var message = CreateMessage(PushMessage.BOOKING_CREATED_TYPE);
+
+        var result = await harness.Sender.SendAsync(message, "device-token");
+
+        Assert.True(result.IsSuccess);
+
+        using var body = JsonDocument.Parse(harness.Handler.Requests[1].Body);
+        var payload = body.RootElement.GetProperty("message");
+
+        Assert.Equal(
+            PushMessage.BOOKING_CREATED_TYPE,
+            payload.GetProperty("data").GetProperty("type").GetString());
+        Assert.Equal(
+            "reminders",
+            payload.GetProperty("android").GetProperty("notification").GetProperty("channel_id").GetString());
     }
 
     [Fact]
@@ -320,11 +341,12 @@ public class FcmPushSenderTests
             });
     }
 
-    private static PushMessage CreateMessage()
+    private static PushMessage CreateMessage(string type = PushMessage.REMINDER_TYPE)
         => new(
             "Через час: салон «Барбершоп»",
             "Мастер Иван · Стрижка · сегодня в 17:30",
-            BookingId);
+            BookingId,
+            type);
 
     private static PushOptions ConfiguredOptions()
         => new()

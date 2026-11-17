@@ -41,6 +41,7 @@ public class PushCreationTests
         Assert.Equal(1, result.Value.Created);
 
         var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.Reminder, notification.Kind);
         Assert.Equal(UserId, notification.UserId);
         Assert.Equal(booking.BookingId, notification.BookingId);
         Assert.Equal(startAt, notification.StartAt);

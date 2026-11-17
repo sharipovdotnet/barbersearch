@@ -6,7 +6,7 @@ using Entity = BarberSearch.Domain.Common.Entity;
 namespace BarberSearch.Domain.Push;
 
 /// <summary>
-/// Push-напоминание клиенту о подтверждённом визите — строка outbox-очереди.
+/// Push-уведомление клиенту о визите — строка outbox-очереди.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,8 +29,9 @@ namespace BarberSearch.Domain.Push;
 /// <para>
 /// «Сейчас» домен не читает: момент следующей попытки и предел попыток приходят аргументами
 /// от Application (AGENT.md §7.6). Уникальный индекс <c>ux_push_notifications_booking_id</c>
-/// держит правило «одно напоминание на визит» на уровне БД, поэтому повторный тик и второй
-/// экземпляр приложения дублей не создают.
+/// по паре <c>(booking_id, kind)</c> держит правило «одно уведомление каждого вида на визит»
+/// на уровне БД, поэтому повторный тик и второй экземпляр приложения дублей не создают,
+/// а напоминание и событие создания одной брони сосуществуют.
 /// </para>
 /// </remarks>
 public sealed class PushNotification : Entity
@@ -61,12 +62,22 @@ public sealed class PushNotification : Entity
     private const string TIME_ZONE_CODE = "pushNotification.create.salonTimeZoneId";
 
     /// <summary>
+    /// Вид уведомления: напоминание или событие создания брони.
+    /// </summary>
+    /// <remarks>
+    /// Вместе с <see cref="BookingId"/> входит в уникальный индекс
+    /// <c>ux_push_notifications_booking_id</c>: на один визит — не больше одного уведомления
+    /// каждого вида.
+    /// </remarks>
+    public PushNotificationKind Kind { get; private set; }
+
+    /// <summary>
     /// Получатель: клиент, записавшийся на визит.
     /// </summary>
     public Guid UserId { get; private set; }
 
     /// <summary>
-    /// Бронь, о которой напоминаем; уникальна — один визит даёт одно push-напоминание.
+    /// Бронь, к которой относится уведомление; в паре с <see cref="Kind"/> уникальна.
     /// </summary>
     public Guid BookingId { get; private set; }
 
@@ -125,22 +136,24 @@ public sealed class PushNotification : Entity
     }
 
     /// <summary>
-    /// Создаёт напоминание о подтверждённом визите.
+    /// Создаёт уведомление о визите заданного вида.
     /// </summary>
     /// <remarks>
-    /// Обязательны <paramref name="userId"/>, <paramref name="bookingId"/> и
-    /// <paramref name="startAt"/>: напоминание без получателя, визита или времени нечем
-    /// отправить. Снимки необязательны, но их пределы проверяются здесь: строка сверх
-    /// предела не пролезет в колонку.
+    /// Обязательны <paramref name="kind"/>, <paramref name="userId"/>, <paramref name="bookingId"/>
+    /// и <paramref name="startAt"/>: уведомление без получателя, визита, времени или вида нечем
+    /// отправить и не по чему перепроверить. Снимки необязательны, но их пределы проверяются
+    /// здесь: строка сверх предела не пролезет в колонку.
     /// </remarks>
+    /// <param name="kind">Вид уведомления.</param>
     /// <param name="userId">Клиент-получатель.</param>
-    /// <param name="bookingId">Бронь, о которой напоминаем.</param>
+    /// <param name="bookingId">Бронь, к которой относится уведомление.</param>
     /// <param name="startAt">Начало визита в UTC.</param>
     /// <param name="salonName">Снимок названия салона.</param>
     /// <param name="barberName">Снимок имени мастера.</param>
     /// <param name="serviceName">Снимок названия услуги.</param>
     /// <param name="salonTimeZoneId">Снимок пояса салона (IANA).</param>
     public static Result<PushNotification, Failure> Create(
+        PushNotificationKind kind,
         Guid userId,
         Guid bookingId,
         DateTimeOffset startAt,
@@ -150,6 +163,14 @@ public sealed class PushNotification : Entity
         string? salonTimeZoneId)
     {
         var errors = DomainErrors.Collect();
+
+        if (!Enum.IsDefined(kind))
+        {
+            errors.Add(Error.Validation(
+                CREATE_INVALID_CODE,
+                "Push notification kind is not defined.",
+                nameof(kind)));
+        }
 
         if (userId == Guid.Empty)
         {
@@ -184,6 +205,7 @@ public sealed class PushNotification : Entity
 
         return new PushNotification
         {
+            Kind = kind,
             UserId = userId,
             BookingId = bookingId,
             StartAt = startAt,

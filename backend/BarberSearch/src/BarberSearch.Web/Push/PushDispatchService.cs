@@ -7,7 +7,7 @@ using Shared;
 namespace BarberSearch.Web.Push;
 
 /// <summary>
-/// Фоновый воркер push-напоминаний клиентам: создание, доставка и суточная уборка.
+/// Фоновый воркер push-уведомлений клиентам: создание напоминаний, доставка и суточная уборка.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -169,7 +169,7 @@ public sealed class PushDispatchService : BackgroundService
     }
 
     /// <summary>
-    /// Отправляет очередную пачку напоминаний.
+    /// Отправляет очередную пачку уведомлений.
     /// </summary>
     private async Task<(int Sent, int Skipped, int Failed)> DeliverPendingAsync(
         CancellationToken cancellationToken)
@@ -221,7 +221,7 @@ public sealed class PushDispatchService : BackgroundService
     }
 
     /// <summary>
-    /// Удаляет старые напоминания и давно не подтверждённые токены.
+    /// Удаляет старые уведомления и давно не подтверждённые токены.
     /// </summary>
     private async Task<int> CleanupAsync(CancellationToken cancellationToken)
     {

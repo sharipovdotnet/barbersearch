@@ -12,14 +12,14 @@ using Shared;
 namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 
 /// <summary>
-/// Репозиторий очереди push-напоминаний: вставка с дедупликацией, пачка доставки и уборка.
+/// Репозиторий очереди push-уведомлений: вставка с дедупликацией, пачка доставки и уборка.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Вставка идёт сырым <c>INSERT … ON CONFLICT DO NOTHING</c>: дедупликацию держит уникальный
-/// индекс <c>ux_push_notifications_booking_id</c>, а EF Core не умеет выразить «не падать
-/// на конфликте». Метод возвращает <c>false</c>, если напоминание уже есть, — по этому
-/// признаку обработчик считает реально созданные строки.
+/// индекс <c>ux_push_notifications_booking_id</c> по паре <c>(booking_id, kind)</c>, а EF Core
+/// не умеет выразить «не падать на конфликте». Метод возвращает <c>false</c>, если такое
+/// уведомление уже есть, — по этому признаку обработчик считает реально созданные строки.
 /// </para>
 /// <para>
 /// Пачка доставки <b>забирается</b> условным <c>UPDATE … RETURNING</c> с
@@ -59,12 +59,13 @@ public sealed class PushNotificationRepository
             var inserted = await Context.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                  INSERT INTO push_notifications (
-                     id, user_id, booking_id, start_at, salon_name, barber_name,
+                     id, user_id, kind, booking_id, start_at, salon_name, barber_name,
                      service_name, salon_time_zone_id, delivery, delivery_attempts,
                      next_attempt_at, last_error, created_at, updated_at)
                  VALUES (
-                     {notification.Id}, {notification.UserId}, {notification.BookingId},
-                     {notification.StartAt}, {notification.SalonName}, {notification.BarberName},
+                     {notification.Id}, {notification.UserId}, {(short)notification.Kind},
+                     {notification.BookingId}, {notification.StartAt},
+                     {notification.SalonName}, {notification.BarberName},
                      {notification.ServiceName}, {notification.SalonTimeZoneId},
                      {(short)notification.Delivery}, {notification.DeliveryAttempts},
                      {notification.NextAttemptAt}, {notification.LastError},

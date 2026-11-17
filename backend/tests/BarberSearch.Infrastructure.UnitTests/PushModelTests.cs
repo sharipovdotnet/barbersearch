@@ -86,13 +86,20 @@ public class PushModelTests
         Assert.Equal(
             [
                 "barber_name", "booking_id", "created_at", "delivery", "delivery_attempts",
-                "id", "last_error", "next_attempt_at", "salon_name", "salon_time_zone_id",
+                "id", "kind", "last_error", "next_attempt_at", "salon_name", "salon_time_zone_id",
                 "service_name", "start_at", "updated_at", "user_id"
             ],
             entity.GetProperties()
                 .Select(property => property.GetColumnName())
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray());
+
+        // Вид уведомления хранится как smallint: по нему стоят check и составной индекс.
+        var kind = entity.FindProperty(nameof(PushNotification.Kind));
+        Assert.NotNull(kind);
+        Assert.Equal("kind", kind.GetColumnName());
+        Assert.Equal(typeof(PushNotificationKind), kind.ClrType);
+        Assert.Equal("smallint", kind.GetColumnType());
     }
 
     [Fact]
@@ -103,6 +110,11 @@ public class PushModelTests
 
         Assert.NotNull(entity);
 
+        Assert.Equal(
+            "kind IN (1, 2, 3)",
+            Assert.Single(
+                entity.GetCheckConstraints(),
+                check => check.Name == "ck_push_notifications_kind").Sql);
         Assert.Equal(
             "delivery IN (0, 1, 2, 3)",
             Assert.Single(
@@ -125,7 +137,16 @@ public class PushModelTests
             entity.GetIndexes(),
             index => index.GetDatabaseName() == "ux_push_notifications_booking_id");
         Assert.True(booking.IsUnique);
-        Assert.Equal("booking_id", Assert.Single(booking.Properties).GetColumnName());
+        Assert.Equal(
+            ["booking_id", "kind"],
+            booking.Properties.Select(property => property.GetColumnName()).ToArray());
+
+        // Старого индекса «только по booking_id» больше нет: иначе событие создания
+        // вытесняло бы напоминание той же брони.
+        Assert.DoesNotContain(
+            entity.GetIndexes(),
+            index => index.Properties.Count == 1
+                     && index.Properties[0].GetColumnName() == "booking_id");
 
         var dispatch = Assert.Single(
             entity.GetIndexes(),
@@ -149,6 +170,9 @@ public class PushModelTests
         Assert.Contains(
             "20261115154114_AddPushNotifications",
             context.Database.GetMigrations());
+        Assert.Contains(
+            context.Database.GetMigrations(),
+            migration => migration.EndsWith("_AddPushNotificationKind", StringComparison.Ordinal));
 
         // Снимок модели обновлён вместе с миграцией: следующая миграция не должна
         // неожиданно «находить» незакоммиченные изменения.

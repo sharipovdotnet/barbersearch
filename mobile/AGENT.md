@@ -283,8 +283,13 @@ in Core owns both base addresses.
   default. `DevelopmentEndpoints` in Core owns the rule and both base addresses, so the choice is one
   tested function rather than two `#if` constants.
 - **The reminder text is composed by the server, in Russian, and the channel is Android/FCM-first.**
-  The app never formats reminder text. FCM delivers a `notification` payload that Android shows even
-  when the process is dead, so the title and body must exist before any app code runs; a data-only
+  The channel carries two events: the hour-before reminder (`booking.reminder`) and the
+  booking-creation event (`booking.created`), which the server sends both when the customer books a
+  barber and when a barber books the customer. Both texts are composed by the server, both open
+  «Записи», and both reuse the same `reminders` channel and the same «Присылать напоминания» switch.
+  The creation event arrives on the worker's next tick, and a guest booking (no account) produces
+  none. The app never formats reminder text. FCM delivers a `notification` payload that Android shows
+  even when the process is dead, so the title and body must exist before any app code runs; a data-only
   message with a background handler would be unreliable on modern Android and would add a second
   localization path. The server also owns the salon's IANA zone and the «сегодня»/«завтра» word, and
   `PushMessages` is covered byte-for-byte by backend tests. Russian is deliberate: the server stores
@@ -336,7 +341,9 @@ in Core owns both base addresses.
   services / no FCM token shows «Уведомления недоступны на этом устройстве». A transient network
   failure shows no hint at all — the next ensure retries. Switching off calls `SetEnabledAsync(false)`,
   which attempts to unregister the device and keeps the marker if the request fails, so the next
-  ensure retries while the toggle is off. The channel is `reminders`, importance `Default`; its
+  ensure retries while the toggle is off. The switch and the `reminders` channel are shared with
+  the booking-creation event, which has no toggle of its own: switching reminders off stops both
+  kinds of push. The channel is `reminders`, importance `Default`; its
   visible name and description are localized keys «Напоминания» / «Напоминания о записях» and are
   created/updated by `App` **after** localization is initialized (not in `MauiProgram`), only when
   push is configured. Notifications use the monochrome lucide bell vector
@@ -345,15 +352,17 @@ in Core owns both base addresses.
   `...default_notification_channel_id=reminders`, so a background notification shown by the system
   gets the same icon and channel. `POST_NOTIFICATIONS` is declared in the manifest and requested
   only after push is configured. A foreground message is posted locally (`AndroidNotifications`), a
-  background one is shown by the system. A tap opens the «Записи» tab via `//bookings`: cold start
-  reads the extras in `MainActivity.OnCreate` **only when `savedInstanceState is null`** (a restored
-  process must not jump tabs), warm start in `OnNewIntent` (`LaunchMode.SingleTop`), and the router
-  waits for `Shell.Current`. There is no per-booking deep link because `GET api/bookings/{id}` does
-  not exist and the list already shows the visit. Tests add 47 cases (624 total): options parsing and
+  background one is shown by the system. A tap on either event opens the «Записи» tab via
+  `//bookings`: cold start reads the extras in `MainActivity.OnCreate` **only when
+  `savedInstanceState is null`** (a restored process must not jump tabs), warm start in
+  `OnNewIntent` (`LaunchMode.SingleTop`), and the router waits for `Shell.Current`. There is no
+  per-booking deep link because `GET api/bookings/{id}` does not exist and the list already shows
+  the visit. Tests add 47 cases (624 total): options parsing and
   the `Disabled` fallback, the registrar lifecycle (session events and generations, token refresh,
   sign-out-before-logout ordering, failed-unregister retry, transient status, one `POST` per token),
   the API client (`204`, no body), payload parsing/routing and the «Профиль» toggle/status texts
-  (including the rule that a transient failure shows no device hint). iOS compiles after an iOS
+  (including the rule that a transient failure shows no device hint). The booking-creation event
+  adds two payload-routing cases, which brings the suite to 839 tests. iOS compiles after an iOS
   `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
   `[src/BarberSearch.Mobile/Platforms/**/*.cs]` section (the MAUI-mandated `AppDelegate` and
   `AndroidPushPermission` names) plus the pointwise `IPushPermission.cs` entry. No real FCM delivery
@@ -471,8 +480,9 @@ The mobile MVP is blocked by two backend changes (`backend/`) that do not exist 
 
 Push reminders are **no longer** in this list: the backend has device/token tables, the FCM
 transport and the worker (`backend/AGENT.md` §20), and the app registers the device, shows the
-reminder and routes a tap to «Записи». A per-booking deep link is still impossible — there is no
-`GET api/bookings/{id}` — but the list already contains the visit, so the slice does not need it.
+reminder and the booking-creation event, and routes a tap on either to «Записи». A per-booking deep
+link is still impossible — there is no `GET api/bookings/{id}` — but the list already contains the
+visit, so the slice does not need it.
 Until the two items above land, the "Map" and "Favourites" screens have nothing to build on.
 
 ## 7. Working rules

@@ -847,6 +847,101 @@ public class BookingCreateTests
     }
 
     [Fact]
+    public async Task CreateByBarber_ForCustomer_PassesTheBarberCreatedFlag()
+    {
+        var context = CreateContext();
+        var customer = CreateCustomer("push-barber-client@example.com");
+        context.Users.Add(customer);
+        var notifier = new FakeBookingCreatedPushNotifier();
+        var handler = CreateHandler(
+            context,
+            Guid.CreateVersion7(),
+            context.Profile.Id,
+            notifier: notifier);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "push-barber-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request, customer.Id, ConfirmImmediately: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, notifier.Calls);
+        Assert.True(notifier.LastCreatedByBarber);
+        Assert.NotNull(notifier.LastBooking);
+    }
+
+    [Fact]
+    public async Task Create_ByCustomer_PassesTheCustomerCreatedFlag()
+    {
+        var context = CreateContext();
+        var notifier = new FakeBookingCreatedPushNotifier();
+        var handler = CreateHandler(context, notifier: notifier);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "push-customer-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, notifier.Calls);
+        Assert.False(notifier.LastCreatedByBarber);
+    }
+
+    [Fact]
+    public async Task Create_WhenPushNotifierFails_StillCreatesTheBooking()
+    {
+        var context = CreateContext();
+        var notifier = new FakeBookingCreatedPushNotifier
+        {
+            Failure = new Failure(Error.Failure(
+                "internal.database",
+                "The push notification could not be saved."))
+        };
+        var handler = CreateHandler(context, notifier: notifier);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "push-failure-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(1, notifier.Calls);
+    }
+
+    [Fact]
+    public async Task Create_WhenPushNotifierThrows_StillCreatesTheBooking()
+    {
+        var context = CreateContext();
+        var notifier = new FakeBookingCreatedPushNotifier
+        {
+            Exception = new InvalidOperationException("push failed")
+        };
+        var handler = CreateHandler(context, notifier: notifier);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "push-exception-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(1, notifier.Calls);
+    }
+
+    [Fact]
     public async Task CreateByBarber_ForForeignProfile_ReturnsForbiddenAndWritesNothing()
     {
         var context = CreateContext();
@@ -1040,7 +1135,8 @@ public class BookingCreateTests
         Guid? userId = null,
         Guid? barberProfileId = null,
         DateTimeOffset? now = null,
-        FakeUnitOfWork? unitOfWork = null)
+        FakeUnitOfWork? unitOfWork = null,
+        FakeBookingCreatedPushNotifier? notifier = null)
         => new(
             context.Bookings,
             context.Profiles,
@@ -1050,6 +1146,7 @@ public class BookingCreateTests
             new FakeCurrentUser(
                 userId ?? context.UserId,
                 barberProfileId: barberProfileId),
+            notifier ?? new FakeBookingCreatedPushNotifier(),
             new FakeTimeProvider(now ?? Now),
             NullLogger<CreateBookingHandler>.Instance);
 

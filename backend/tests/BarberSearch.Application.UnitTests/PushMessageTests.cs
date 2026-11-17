@@ -138,13 +138,215 @@ public class PushMessageTests
         Assert.DoesNotContain("Клиент", message.Body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void For_WithReminderKind_ReturnsTheSameReminderMessage()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(now.AddMinutes(30), "Барбершоп", "Иван", "Стрижка", SalonTimeZone);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Через час: салон «Барбершоп»", message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:30", message.Body);
+        Assert.Equal(PushMessage.REMINDER_TYPE, message.Type);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithAllSnapshots_ReturnsTheExactRussianText()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы записались: салон «Барбершоп»", message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:30", message.Body);
+        Assert.Equal(PushMessage.BOOKING_CREATED_TYPE, message.Type);
+        Assert.Equal(BookingId, message.BookingId);
+    }
+
+    [Fact]
+    public void CreatedByBarber_WithAllSnapshots_ReturnsTheExactRussianText()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByBarber);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вас записали: салон «Барбершоп»", message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:30", message.Body);
+        Assert.Equal(PushMessage.BOOKING_CREATED_TYPE, message.Type);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithoutSalon_UsesTheDegradedTitle()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            null,
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы записались к мастеру", message.Title);
+    }
+
+    [Fact]
+    public void CreatedByBarber_WithoutSalon_UsesTheDegradedTitle()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "   ",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByBarber);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вас записали к мастеру", message.Title);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithTomorrowSalonDate_UsesTomorrow()
+    {
+        // 18:30 UTC 15 ноября — это 23:30 по Екатеринбургу; визит через полчаса приходится
+        // на 00:00 16 ноября по локальной дате салона, то есть «завтра».
+        var now = new DateTimeOffset(2026, 11, 15, 18, 30, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Мастер Иван · Стрижка · завтра в 00:00", message.Body);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithFarDate_UsesTheGenitiveMonth()
+    {
+        // Горизонт записи — 30 дней, поэтому событие создания приходит и за месяц:
+        // «24 ноября» в родительном падеже, без года.
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var startAt = new DateTimeOffset(2026, 12, 24, 9, 30, 0, TimeSpan.Zero);
+        var notification = Create(
+            startAt,
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Мастер Иван · Стрижка · 24 декабря в 14:30", message.Body);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithoutBarberAndService_OmitsThemWithoutNulls()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 14, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            null,
+            null,
+            "UTC",
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы записались: салон «Барбершоп»", message.Title);
+        Assert.Equal("сегодня в 14:30", message.Body);
+        Assert.DoesNotContain("null", message.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithoutService_KeepsMasterAndTime()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 14, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            null,
+            "UTC",
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Мастер Иван · сегодня в 14:30", message.Body);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_WithUnknownTimeZone_FallsBackToUtc()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 14, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            "Mars/Phobos",
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 14:30", message.Body);
+    }
+
+    [Fact]
+    public void CreatedByCustomer_ContainsNoCustomerPersonalData()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCreatedByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        // Домен и текст не принимают ни имени, ни телефона, ни заметки клиента (152-ФЗ).
+        Assert.Equal(
+            "Вы записались: салон «Барбершоп» | Мастер Иван · Стрижка · сегодня в 17:30",
+            $"{message.Title} | {message.Body}");
+        Assert.DoesNotContain("+7", message.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Клиент", message.Body, StringComparison.Ordinal);
+    }
+
     private static PushNotification Create(
         DateTimeOffset startAt,
         string? salonName,
         string? barberName,
         string? serviceName,
-        string? salonTimeZoneId)
+        string? salonTimeZoneId,
+        PushNotificationKind kind = PushNotificationKind.Reminder)
         => PushNotification.Create(
+            kind,
             UserId,
             BookingId,
             startAt,

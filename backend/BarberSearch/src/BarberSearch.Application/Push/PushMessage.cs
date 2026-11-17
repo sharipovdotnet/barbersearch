@@ -1,14 +1,14 @@
 namespace BarberSearch.Application.Push;
 
 /// <summary>
-/// Готовое push-сообщение: заголовок, текст и визит, к которому оно относится.
+/// Готовое push-сообщение: заголовок, текст, визит и тип для data-payload'а.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Текст собирается на сервере (<see cref="PushMessages"/>) и приходит сюда готовым:
-/// транспорт не форматирует даты и не знает русского языка. <see cref="BookingId"/> —
-/// единственные машинные данные payload'а; тип сообщения фиксирован
-/// <see cref="TYPE"/> и одинаков для всех напоминаний среза.
+/// транспорт не форматирует даты и не знает русского языка. <see cref="BookingId"/> и
+/// <see cref="Type"/> — единственные машинные данные payload'а: по типу клиент выбирает
+/// обработчик перехода, идентификатор визита говорит, куда переходить.
 /// </para>
 /// <para>
 /// Персональных данных клиента в сообщении нет (152-ФЗ): ни имени, ни телефона, ни заметки.
@@ -17,11 +17,18 @@ namespace BarberSearch.Application.Push;
 /// </remarks>
 /// <param name="Title">Заголовок уведомления.</param>
 /// <param name="Body">Текст уведомления.</param>
-/// <param name="BookingId">Визит, о котором напоминаем.</param>
-public sealed record PushMessage(string Title, string Body, Guid BookingId)
+/// <param name="BookingId">Визит, к которому относится уведомление.</param>
+/// <param name="Type">Тип сообщения в <c>data.type</c>.</param>
+public sealed record PushMessage(string Title, string Body, Guid BookingId, string Type)
 {
     /// <summary>
-    /// Тип push-сообщения в data-payload'е; по нему клиент выбирает обработчик перехода.
+    /// Тип напоминания за час до визита.
     /// </summary>
-    public const string TYPE = "booking.reminder";
+    public const string REMINDER_TYPE = "booking.reminder";
+
+    /// <summary>
+    /// Тип события создания брони — оба вида (клиент записался сам и записал барбер)
+    /// приходят с одним типом: действие клиента на телефоне одно и то же — открыть запись.
+    /// </summary>
+    public const string BOOKING_CREATED_TYPE = "booking.created";
 }
