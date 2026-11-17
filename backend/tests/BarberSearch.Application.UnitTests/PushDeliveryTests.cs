@@ -317,6 +317,190 @@ public class PushDeliveryTests
     }
 
     [Fact]
+    public async Task Deliver_ForPendingSelfBooking_MarksSentAndUsesTheCreatedType()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreatePendingBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Sent);
+        Assert.Equal(PushDelivery.Sent, notification.Delivery);
+
+        // Pending-самозапись — ожидаемое состояние события создания, а не повод для пропуска.
+        var call = Assert.Single(context.Sender.Calls);
+        Assert.Equal("Вы записались: салон «Барбершоп»", call.Message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:20", call.Message.Body);
+        Assert.Equal(PushMessage.BOOKING_CREATED_TYPE, call.Message.Type);
+    }
+
+    [Fact]
+    public async Task Deliver_ForBarberCreatedBooking_MarksSentWithTheBarberText()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Sent);
+
+        var call = Assert.Single(context.Sender.Calls);
+        Assert.Equal("Вас записали: салон «Барбершоп»", call.Message.Title);
+        Assert.Equal(PushMessage.BOOKING_CREATED_TYPE, call.Message.Type);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCreationBookingIsGone_MarksSkippedWithTheDeletedReason()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var notification = CreateNotification(
+            Guid.CreateVersion7(),
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was deleted", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCreationBookingWasCancelled_MarksSkippedWithTheCancelledReason()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreatePendingBooking(startAt);
+        Assert.True(booking.Cancel().IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is cancelled", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCreationBookingWasRescheduled_MarksSkippedWithTheRescheduledReason()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreatePendingBooking(startAt);
+        Assert.True(booking.Reschedule(Now.AddHours(2), Now.AddHours(3)).IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was rescheduled", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCreationVisitAlreadyStarted_MarksSkippedWithTheClosedWindowReason()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(-1);
+        var booking = CreatePendingBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("window closed", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCreationEventIsNotConfigured_LogsTheTextWithoutCallingItAReminder()
+    {
+        var context = CreateContext(pushConfigured: false, devMode: true);
+        var startAt = Now.AddMinutes(20);
+        var booking = CreatePendingBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCreatedByCustomer);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("push is not configured", notification.LastError);
+
+        Assert.Contains(
+            context.Logger.Messages,
+            message => message.Contains("Вы записались: салон «Барбершоп»", StringComparison.Ordinal)
+                       && message.Contains(
+                           "Мастер Иван · Стрижка · сегодня в 17:20",
+                           StringComparison.Ordinal));
+        Assert.All(
+            context.Logger.Messages,
+            message => Assert.DoesNotContain("reminder", message, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Deliver_WhenPushIsNotConfigured_LogsTheTextOnceAndMarksSkipped()
     {
         var context = CreateContext(pushConfigured: false, devMode: true);
@@ -434,8 +618,23 @@ public class PushDeliveryTests
         return booking;
     }
 
-    private static PushNotification CreateNotification(Guid bookingId, DateTimeOffset startAt)
+    private static Booking CreatePendingBooking(DateTimeOffset startAt)
+        => Booking.Create(
+            UserId,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            startAt,
+            startAt.AddMinutes(45),
+            1500m,
+            $"key-{Guid.NewGuid()}").Value;
+
+    private static PushNotification CreateNotification(
+        Guid bookingId,
+        DateTimeOffset startAt,
+        PushNotificationKind kind = PushNotificationKind.Reminder)
         => PushNotification.Create(
+            kind,
             UserId,
             bookingId,
             startAt,

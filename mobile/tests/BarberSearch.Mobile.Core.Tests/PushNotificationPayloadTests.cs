@@ -3,7 +3,7 @@ using BarberSearch.Mobile.Core.Push;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки разбора data-payload'а напоминания: тип сообщения и цель перехода.
+/// Проверки разбора data-payload'а push-сообщений: тип сообщения и цель перехода.
 /// </summary>
 /// <remarks>
 /// Разбор чистый (без MAUI и Shell), поэтому проверяется обычным словарём: ровно те extras,
@@ -39,6 +39,41 @@ public sealed class PushNotificationPayloadTests
         var extras = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["type"] = PushNotificationPayload.ReminderType,
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.Null(payload!.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BookingCreatedExtras_OpensBookingsTab()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingCreatedType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BookingCreatedType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BookingCreatedWithoutBookingId_StillOpensBookingsTab()
+    {
+        // Событие создания приходит и без bookingId: и «вы записались», и «вас записали»
+        // открывают список «Записи», а не карточку записи.
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BookingCreatedType,
         };
 
         var parsed = PushNotificationPayload.TryParse(extras, out var payload);

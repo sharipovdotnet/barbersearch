@@ -10,20 +10,23 @@ using Shared;
 namespace BarberSearch.Application.Push.DeliverPendingPushNotifications;
 
 /// <summary>
-/// Обработчик тика доставки: отправляет пачку <c>Pending</c>-напоминаний на устройства.
+/// Обработчик тика доставки: отправляет пачку <c>Pending</c>-уведомлений на устройства.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Сначала проверяется актуальность повода: если визит между созданием и отправкой отменили,
-/// завершили, отметили неявкой или перенесли — напоминание получает <c>Skipped</c> с
-/// стабильной причиной и не уходит. Если начало уже наступило, окно «через час» закрылось —
-/// тоже <c>Skipped</c>. Затем — устройства: без токенов слать некуда (<c>no registered device</c>).
+/// Сначала проверяется актуальность повода, и правило зависит от вида уведомления. Для
+/// напоминания: визит отменили, завершили, отметили неявкой или перенесли — <c>Skipped</c>
+/// с причиной <c>booking is not confirmed</c>; начало уже наступило — <c>window closed</c>.
+/// Для события создания брони: бронь исчезла — <c>booking was deleted</c>, отменена —
+/// <c>booking is cancelled</c>, перенесена — <c>booking was rescheduled</c>, начало
+/// наступило — <c>window closed</c>. <c>Pending</c>-самозапись клиента — ожидаемое
+/// состояние события создания, она доставляется.
 /// </para>
 /// <para>
-/// Одно напоминание — все устройства пользователя: FCM HTTP v1 не умеет батч, поэтому
+/// Одно уведомление — все устройства пользователя: FCM HTTP v1 не умеет батч, поэтому
 /// на каждый токен уходит отдельный запрос. Успех хотя бы одного устройства — <c>Sent</c>.
 /// Токен, который FCM отверг как <c>UNREGISTERED</c>/<c>INVALID_ARGUMENT</c>, удаляется и
-/// не участвует в следующих тиках; если мёртвыми оказались все, напоминание получает
+/// не участвует в следующих тиках; если мёртвыми оказались все, уведомление получает
 /// <c>Skipped</c> с причиной «нет устройства».
 /// </para>
 /// <para>
@@ -33,8 +36,9 @@ namespace BarberSearch.Application.Push.DeliverPendingPushNotifications;
 /// <para>
 /// Режим разработки (<c>PushOptions.DevMode</c>, только Development): <c>Push:Enabled=true</c>
 /// без ключей. Текст собирается и один раз пишется в журнал (без токена), строка становится
-/// <c>Skipped</c> с причиной <c>push is not configured</c> — часовое напоминание не должно
-/// зависать в <c>Pending</c>. В остальных окружениях ненастроенный канал оставляет строки
+/// <c>Skipped</c> с причиной <c>push is not configured</c> — уведомление не должно
+/// зависать в <c>Pending</c>. Строка журнала называет вид уведомления, а не «reminder»
+/// для любого повода. В остальных окружениях ненастроенный канал оставляет строки
 /// <c>Pending</c> (они уйдут после починки конфигурации) и пишет одно предупреждение.
 /// В рабочем режиме ни токен, ни полный текст в журнал не попадают.
 /// </para>
@@ -43,12 +47,22 @@ public sealed class DeliverPendingPushNotificationsHandler
     : ICommandHandler<DeliverPendingPushNotificationsResult, DeliverPendingPushNotificationsCommand>
 {
     /// <summary>
-    /// Причина пропуска «визит больше не подтверждён».
+    /// Причина пропуска «визит больше не подтверждён» — только для напоминания.
     /// </summary>
     private const string BOOKING_NOT_CONFIRMED_REASON = "booking is not confirmed";
 
     /// <summary>
-    /// Причина пропуска «визит перенесли после создания напоминания».
+    /// Причина пропуска «событие создания относится к удалённой брони».
+    /// </summary>
+    private const string BOOKING_DELETED_REASON = "booking was deleted";
+
+    /// <summary>
+    /// Причина пропуска «бронь отменена после создания события».
+    /// </summary>
+    private const string BOOKING_CANCELLED_REASON = "booking is cancelled";
+
+    /// <summary>
+    /// Причина пропуска «визит перенесли после создания уведомления».
     /// </summary>
     private const string RESCHEDULED_REASON = "booking was rescheduled";
 
@@ -112,7 +126,7 @@ public sealed class DeliverPendingPushNotificationsHandler
     }
 
     /// <summary>
-    /// Отправляет очередную пачку напоминаний и возвращает счётчики для лога воркера.
+    /// Отправляет очередную пачку уведомлений и возвращает счётчики для лога воркера.
     /// </summary>
     public async Task<Result<DeliverPendingPushNotificationsResult, Failure>> Handle(
         DeliverPendingPushNotificationsCommand command,
@@ -159,17 +173,19 @@ public sealed class DeliverPendingPushNotificationsHandler
                 continue;
             }
 
-            var message = PushMessages.Reminder(notification, now);
+            var message = PushMessages.For(notification, now);
 
             if (!_pushSender.IsConfigured)
             {
                 if (_options.DevMode)
                 {
                     // Режим разработки: показываем текст, чтобы его можно было проверить глазами,
-                    // но не отправляем и не оставляем строку в Pending навсегда.
+                    // но не отправляем и не оставляем строку в Pending навсегда. Вид уведомления
+                    // называется явно: «reminder» для события создания был бы ложью.
                     _logger.LogInformation(
-                        "Push is not configured: booking {BookingId} reminder would be «{Title}» / «{Body}».",
+                        "Push is not configured: booking {BookingId} {NotificationKind} would be «{Title}» / «{Body}».",
                         notification.BookingId,
+                        KindLabel(notification.Kind),
                         message.Title,
                         message.Body);
 
@@ -186,7 +202,7 @@ public sealed class DeliverPendingPushNotificationsHandler
                     continue;
                 }
 
-                // Бой без ключей — ошибка эксплуатации, а не повод потерять напоминание:
+                // Бой без ключей — ошибка эксплуатации, а не повод потерять уведомление:
                 // строку не трогаем (она останется Pending и уйдёт после починки конфигурации),
                 // предупреждение пишем один раз, а не на каждую строку каждого тика.
                 LogUnconfiguredOnce();
@@ -325,9 +341,16 @@ public sealed class DeliverPendingPushNotificationsHandler
     /// Проверяет, нужна ли ещё доставка; возвращает причину пропуска или <c>null</c>.
     /// </summary>
     /// <remarks>
-    /// Порядок проверок: статус брони, снимок времени, закрытое окно. Отменённая и перенесённая
-    /// бронь — разные причины, потому что они объясняют разное поведение: первая больше не
-    /// существует для клиента, вторая существует, но в другое время.
+    /// <para>
+    /// Вид уведомления решает, какие проверки применимы. Напоминание существует только для
+    /// подтверждённого визита: любой другой статус (в том числе удалённая бронь) — одна
+    /// причина <c>booking is not confirmed</c>, потому что для клиента такой записи больше нет.
+    /// </para>
+    /// <para>
+    /// Событие создания доставляется и для <c>Pending</c>-самозаписи клиента: подтверждение
+    /// не требуется. Отмена и удаление — разные причины: отменённая бронь ещё существует,
+    /// удалённая — уже нет. Перенос и закрытое окно общие для обоих видов.
+    /// </para>
     /// </remarks>
     private async Task<Result<string?, Failure>> ResolveSkipReasonAsync(
         PushNotification notification,
@@ -336,10 +359,25 @@ public sealed class DeliverPendingPushNotificationsHandler
     {
         var bookingResult = await _bookings.GetByIdAsync(notification.BookingId, cancellationToken);
 
-        if (bookingResult.IsFailure
-            || bookingResult.Value.Status != BookingStatus.Confirmed)
+        if (notification.Kind == PushNotificationKind.Reminder)
         {
-            return Result.Success<string?, Failure>(BOOKING_NOT_CONFIRMED_REASON);
+            if (bookingResult.IsFailure
+                || bookingResult.Value.Status != BookingStatus.Confirmed)
+            {
+                return Result.Success<string?, Failure>(BOOKING_NOT_CONFIRMED_REASON);
+            }
+        }
+        else
+        {
+            if (bookingResult.IsFailure)
+            {
+                return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
+            }
+
+            if (bookingResult.Value.Status == BookingStatus.Cancelled)
+            {
+                return Result.Success<string?, Failure>(BOOKING_CANCELLED_REASON);
+            }
         }
 
         if (bookingResult.Value.StartAt != notification.StartAt)
@@ -356,7 +394,13 @@ public sealed class DeliverPendingPushNotificationsHandler
     }
 
     /// <summary>
-    /// Переводит напоминание в <c>Skipped</c> с причиной и сохраняет его.
+    /// Человекочитаемое название вида уведомления для журнала режима разработки.
+    /// </summary>
+    private static string KindLabel(PushNotificationKind kind)
+        => kind == PushNotificationKind.Reminder ? "reminder" : "creation event";
+
+    /// <summary>
+    /// Переводит уведомление в <c>Skipped</c> с причиной и сохраняет его.
     /// </summary>
     private async Task<UnitResult<Failure>> SkipAsync(
         PushNotification notification,
@@ -408,7 +452,7 @@ public sealed class DeliverPendingPushNotificationsHandler
         if (Interlocked.Exchange(ref _unconfiguredWarningLogged, 1) == 0)
         {
             _logger.LogWarning(
-                "Push is enabled but not configured: reminders stay pending until credentials are set.");
+                "Push is enabled but not configured: notifications stay pending until credentials are set.");
         }
     }
 }

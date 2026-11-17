@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Push.BookingCreated;
 using BarberSearch.Application.Reviews;
 using BarberSearch.Application.Users.Passwords;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,11 @@ public static class DependencyInjection
         // команды отзыва (правка, публикация, скрытие), и каждая делает это внутри своей
         // транзакции. С R-35 создание отзыв не пересчитывает: отзыв создаётся скрытым.
         services.AddScoped<ReviewRatingRecalculator>();
+
+        // Событие создания брони — application-сервис, а не обработчик: его вызывает
+        // CreateBookingHandler внутри транзакции записи, и он не является командой тика.
+        // Scoped, потому что пишет через ApplicationDbContext запроса.
+        services.AddScoped<IBookingCreatedPushNotifier, BookingCreatedPushNotifier>();
 
         services.Scan(scan => scan.FromAssemblies([assembly])
             .AddClasses(classes => classes

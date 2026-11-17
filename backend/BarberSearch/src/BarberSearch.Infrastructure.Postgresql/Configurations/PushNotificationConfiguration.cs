@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace BarberSearch.Infrastructure.Postgresql.Configurations;
 
 /// <summary>
-/// Конфигурация таблицы <c>push_notifications</c> — очередь напоминаний клиенту.
+/// Конфигурация таблицы <c>push_notifications</c> — очередь push-уведомлений клиенту.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,8 +16,9 @@ namespace BarberSearch.Infrastructure.Postgresql.Configurations;
 /// переименование услуги и удаление салона; на неё не ссылаются другие таблицы.
 /// </para>
 /// <para>
-/// Уникальный индекс <c>ux_push_notifications_booking_id</c> — одно напоминание на визит:
-/// повторный тик и второй экземпляр приложения дублей не создают
+/// Уникальный индекс <c>ux_push_notifications_booking_id</c> по паре <c>(booking_id, kind)</c>:
+/// на один визит — не больше одного уведомления каждого вида, поэтому событие создания и
+/// напоминание сосуществуют, а повторный тик и второй экземпляр приложения дублей не создают
 /// (<c>INSERT … ON CONFLICT DO NOTHING</c>).
 /// </para>
 /// <para>
@@ -40,6 +41,9 @@ public class PushNotificationConfiguration : IEntityTypeConfiguration<PushNotifi
         builder.ToTable("push_notifications", table =>
         {
             table.HasCheckConstraint(
+                "ck_push_notifications_kind",
+                CheckConstraintSql.EnumIn<PushNotificationKind>("kind"));
+            table.HasCheckConstraint(
                 "ck_push_notifications_delivery",
                 CheckConstraintSql.EnumIn<PushDelivery>("delivery"));
             table.HasCheckConstraint(
@@ -56,6 +60,7 @@ public class PushNotificationConfiguration : IEntityTypeConfiguration<PushNotifi
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
         builder.Property(x => x.UserId).HasColumnName("user_id");
+        builder.Property(x => x.Kind).HasColumnName("kind").HasConversion<short>();
         builder.Property(x => x.BookingId).HasColumnName("booking_id");
         builder.Property(x => x.StartAt).HasColumnName("start_at");
 
@@ -88,8 +93,9 @@ public class PushNotificationConfiguration : IEntityTypeConfiguration<PushNotifi
             .HasConstraintName("fk_push_notifications_users_user_id")
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Один визит — одно напоминание: повторный тик безопасен.
-        builder.HasIndex(x => x.BookingId)
+        // На один визит — одно уведомление каждого вида: событие создания и напоминание
+        // сосуществуют, повторный тик безопасен.
+        builder.HasIndex(x => new { x.BookingId, x.Kind })
             .IsUnique()
             .HasDatabaseName("ux_push_notifications_booking_id");
 

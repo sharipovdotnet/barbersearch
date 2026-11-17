@@ -10,9 +10,10 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// In-memory <see cref="IPushNotificationRepository"/> для тестов обработчиков.
 /// </summary>
 /// <remarks>
-/// <see cref="TryAddAsync"/> повторяет уникальный индекс по <c>booking_id</c>: повтор того же
-/// визита возвращает <c>false</c>, поэтому тест «повторный тик не создаёт дубль» проверяет
-/// поведение обработчика, а не отсутствие дедупликации.
+/// <see cref="TryAddAsync"/> повторяет уникальный индекс по паре <c>(booking_id, kind)</c>:
+/// повтор того же вида для того же визита возвращает <c>false</c>, поэтому тест «повторный
+/// тик не создаёт дубль» проверяет поведение обработчика, а не отсутствие дедупликации.
+/// Напоминание и событие создания одной брони при этом сосуществуют.
 /// </remarks>
 public sealed class FakePushNotificationRepository : IPushNotificationRepository
 {
@@ -44,7 +45,9 @@ public sealed class FakePushNotificationRepository : IPushNotificationRepository
             return Task.FromResult(Result.Failure<bool, Failure>(OnAdd(notification).Error));
         }
 
-        if (_items.Any(candidate => candidate.BookingId == notification.BookingId))
+        if (_items.Any(candidate =>
+                candidate.BookingId == notification.BookingId
+                && candidate.Kind == notification.Kind))
         {
             return Task.FromResult(Result.Success<bool, Failure>(false));
         }

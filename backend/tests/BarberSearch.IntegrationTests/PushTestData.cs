@@ -61,6 +61,22 @@ internal sealed class PushTestData
     }
 
     /// <summary>
+    /// Все push-уведомления таблицы: нужно сценариям, где получателя нет (гостевая бронь)
+    /// или проверяется «не создано ни одной строки».
+    /// </summary>
+    public async Task<IReadOnlyList<PushNotification>> GetAllNotificationsAsync()
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        return await db.PushNotifications
+            .AsNoTracking()
+            .OrderBy(notification => notification.CreatedAt)
+            .ThenBy(notification => notification.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Все токены пользователя без кэша контекста.
     /// </summary>
     public async Task<IReadOnlyList<PushDeviceToken>> GetDeviceTokensAsync(Guid userId)

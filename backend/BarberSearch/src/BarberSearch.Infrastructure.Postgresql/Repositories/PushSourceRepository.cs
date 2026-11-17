@@ -7,7 +7,8 @@ using Shared;
 namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 
 /// <summary>
-/// Источник визитов для push-напоминаний клиентам: подтверждённые брони в окне напоминания.
+/// Источник данных для push-уведомлений клиенту: подтверждённые брони в окне напоминания
+/// и снимок каталога для события создания брони.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,6 +21,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// <c>created_at &lt;= start_at − lead</c> (бронь, оформленная внутри окна, не получает
 /// «через час»). Обработчик повторяет окно в коде, поэтому правило остаётся проверяемым
 /// на фейках, а запрос — лишь сужением выборки.
+/// </para>
+/// <para>
+/// <see cref="GetBookingSnapshotAsync"/> читает те же каталоги по идентификаторам из брони:
+/// он вызывается в транзакции создания брони, поэтому это один индексированный запрос без
+/// сети. Отсутствующее звено даёт <c>null</c>, а не ошибку.
 /// </para>
 /// </remarks>
 public sealed class PushSourceRepository : IPushSourceRepository
@@ -77,5 +83,33 @@ public sealed class PushSourceRepository : IPushSourceRepository
             .ToListAsync(cancellationToken);
 
         return rows;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<PushBookingSnapshot?, Failure>> GetBookingSnapshotAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+    {
+        // Внутренние join'ы: если услуги, её строки справочника, профиля или салона уже нет,
+        // строка не возвращается — текст деградирует, а бронь создаётся.
+        var rows = await (from profile in _context.BarberProfiles.AsNoTracking()
+                          join service in _context.BarberServices.AsNoTracking()
+                              on profile.Id equals service.BarberProfileId
+                          join hairService in _context.HairServices.AsNoTracking()
+                              on service.HairServiceId equals hairService.Id
+                          join salon in _context.Salons.AsNoTracking()
+                              on salonId equals salon.Id
+                          where profile.Id == barberProfileId
+                                && service.Id == barberServiceId
+                          select new PushBookingSnapshot(
+                              salon.Name,
+                              profile.DisplayName.Value,
+                              hairService.Name,
+                              salon.TimeZoneId))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return Result.Success<PushBookingSnapshot?, Failure>(rows);
     }
 }

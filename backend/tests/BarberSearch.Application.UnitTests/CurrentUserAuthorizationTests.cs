@@ -88,6 +88,7 @@ public class CurrentUserAuthorizationTests
     {
         var bookings = new FakeBookingRepository();
         var profiles = new FakeBarberProfileRepository();
+        var notifier = new FakeBookingCreatedPushNotifier();
         var handler = new CreateBookingHandler(
             bookings,
             profiles,
@@ -95,6 +96,7 @@ public class CurrentUserAuthorizationTests
             new FakeUserRepository(),
             new FakeUnitOfWork(),
             FakeCurrentUser.Anonymous(),
+            notifier,
             TimeProvider.System,
             NullLogger<CreateBookingHandler>.Instance);
 
@@ -118,6 +120,7 @@ public class CurrentUserAuthorizationTests
         Assert.Equal(0, bookings.LockCalls);
         Assert.Equal(0, bookings.GetByIdempotencyKeyCalls);
         Assert.Equal(0, bookings.AddCalls);
+        Assert.Equal(0, notifier.Calls);
     }
 
     private static Booking CreateBooking()

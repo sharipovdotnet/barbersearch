@@ -244,10 +244,12 @@ returns it to moderation, and only the server decides.
 
 ## Push reminders
 
-One Android notification an hour before a **confirmed** booking. The text is composed by the
-server (`backend/AGENT.md` §20) and arrives ready — the app never formats reminder text, because
+The channel carries two kinds of Android notification. The hour-before reminder
+(`booking.reminder`) announces a **confirmed** booking; the booking-creation event
+(`booking.created`) covers both "you booked" and "the barber booked you". Both texts are composed
+by the server (`backend/AGENT.md` §20) and arrive ready — the app never formats push text, because
 FCM shows a `notification` payload even when the process is dead, and the server owns the salon's
-zone and the «сегодня»/«завтра» word. A typical message:
+zone and the «сегодня»/«завтра» word. A typical reminder:
 
 ```text
 Через час: салон «Барбершоп»
@@ -257,9 +259,13 @@ zone and the «сегодня»/«завтра» word. A typical message:
 The body says `завтра` when the visit is on the salon's next local date; an unknown IANA zone falls
 back to UTC, and missing snapshots simply drop out of the body (an empty salon gives the fallback
 title «Через час — визит к мастеру»). There is no customer name, phone or note in the message —
-only the salon, master, service and time. The data payload is
-`{"type":"booking.reminder","bookingId":"<guid>"}`, and the Android channel is `reminders` /
-«Напоминания».
+only the salon, master, service and time. The data payload carries the event `type` and, when the
+server has it, the `bookingId`: the reminder sends
+`{"type":"booking.reminder","bookingId":"<guid>"}` and the creation event
+`{"type":"booking.created","bookingId":"<guid>"}`; the client never requires the id. Both arrive on
+the Android channel `reminders` / «Напоминания», both reuse the «Присылать напоминания» toggle, and
+both open the «Записи» tab on a tap. The creation event is composed on the worker's next tick, so it
+can trail the booking by up to one tick, and a guest booking (no account) gets no push.
 
 ### `push.json`
 
@@ -319,7 +325,8 @@ token on another account transfers it server-side.
 ### Toggle, channel and tap
 
 «Профиль» shows a global «Присылать напоминания» switch (44 pt row, on by default) only when push
-is configured; without `push.json` the whole row is hidden. If the permission is denied, the switch
+is configured; without `push.json` the whole row is hidden. The switch is shared by both events —
+there is no separate booking-created toggle. If the permission is denied, the switch
 stays where the person put it and the hint «Уведомления выключены в настройках телефона. Разрешите
 их, чтобы получать напоминания.» appears with «Открыть настройки»; a device without Google Play
 services says «Уведомления недоступны на этом устройстве». A transient network failure shows no
@@ -334,7 +341,7 @@ initialized, not at `MauiProgram` time. Notifications use a monochrome lucide be
 sets `com.google.firebase.messaging.default_notification_icon` and
 `...default_notification_channel_id=reminders`, so a background notification drawn by the system
 gets the same icon and channel. A foreground message is posted locally, a background one is shown
-by the system; a tap opens the «Записи» tab, not a single booking — there is no
+by the system; a tap on either event opens the «Записи» tab, not a single booking — there is no
 `GET api/bookings/{id}`, and the list already shows the visit. Cold-start extras are handled in
 `MainActivity.OnCreate` only when `savedInstanceState is null` (a restored process must not jump
 tabs), warm start in `OnNewIntent` (`LaunchMode.SingleTop`).
@@ -511,7 +518,9 @@ sign-out-before-logout ordering, failed-unregister retry, transient failure, one
 marker clearing), the push API client (both calls are `204` without a body, `ProblemDetails` on
 errors), payload parsing and the «Записи» route, and the «Профиль» switch with its
 denied/unavailable texts and the no-hint rule for a transient failure — 47 new cases, **624 tests**
-in total. The Android build stays at 0 warnings; the iOS C# compile is clean after an iOS
+in total. The booking-creation event adds two payload-routing cases (a `booking.created` tap opens
+«Записи», with or without `bookingId`), which brings the suite to **839 tests**. The Android build
+stays at 0 warnings; the iOS C# compile is clean after an iOS
 `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
 `Platforms/**/*.cs` section (the `AppDelegate`/`AndroidPushPermission` names) plus the pointwise
 `IPushPermission.cs` entry. No real FCM delivery was exercised: there is no Firebase project, so the

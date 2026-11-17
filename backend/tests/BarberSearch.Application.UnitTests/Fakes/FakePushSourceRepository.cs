@@ -26,6 +26,22 @@ public sealed class FakePushSourceRepository : IPushSourceRepository
 
     public int? LastLeadMinutes { get; private set; }
 
+    public int GetSnapshotCalls { get; private set; }
+
+    public (Guid BarberProfileId, Guid BarberServiceId, Guid SalonId)? LastSnapshotKey { get; private set; }
+
+    /// <summary>
+    /// Снимок каталога для события создания; по умолчанию заполнен, чтобы тест проверял
+    /// очередь, а не деградацию текста.
+    /// </summary>
+    public PushBookingSnapshot? Snapshot { get; set; } =
+        new("Барбершоп", "Иван", "Стрижка", "Asia/Yekaterinburg");
+
+    /// <summary>
+    /// Подмена ошибки источника — для проверки «сбой снимка не роняет бронь».
+    /// </summary>
+    public Failure? SnapshotFailure { get; set; }
+
     /// <summary>
     /// Добавляет бронь зарегистрированного клиента; по умолчанию она подтверждена.
     /// </summary>
@@ -91,6 +107,23 @@ public sealed class FakePushSourceRepository : IPushSourceRepository
             .ToList();
 
         return Task.FromResult(Result.Success<IReadOnlyList<PushReminderBooking>, Failure>(rows));
+    }
+
+    public Task<Result<PushBookingSnapshot?, Failure>> GetBookingSnapshotAsync(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        Guid salonId,
+        CancellationToken cancellationToken = default)
+    {
+        GetSnapshotCalls++;
+        LastSnapshotKey = (barberProfileId, barberServiceId, salonId);
+
+        if (SnapshotFailure is { } failure)
+        {
+            return Task.FromResult(Result.Failure<PushBookingSnapshot?, Failure>(failure));
+        }
+
+        return Task.FromResult(Result.Success<PushBookingSnapshot?, Failure>(Snapshot));
     }
 
     private sealed record Row(

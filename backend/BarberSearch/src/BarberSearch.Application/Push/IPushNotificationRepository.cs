@@ -5,14 +5,15 @@ using Shared;
 namespace BarberSearch.Application.Push;
 
 /// <summary>
-/// Доступ к очереди push-напоминаний: вставка с дедупликацией, пачка доставки и уборка.
+/// Доступ к очереди push-уведомлений: вставка с дедупликацией, пачка доставки и уборка.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Дедупликация — обязанность хранилища: уникальный индекс <c>ux_push_notifications_booking_id</c>
-/// и <c>INSERT … ON CONFLICT DO NOTHING</c> делают повторный тик и второй экземпляр
-/// приложения безопасными. <see cref="TryAddAsync"/> сообщает, вставлена ли строка, —
-/// по этому признаку обработчик считает созданные напоминания.
+/// по паре <c>(booking_id, kind)</c> и <c>INSERT … ON CONFLICT DO NOTHING</c> делают повторный
+/// тик и второй экземпляр приложения безопасными, а напоминание и событие создания одной брони
+/// сосуществуют. <see cref="TryAddAsync"/> сообщает, вставлена ли строка, — по этому признаку
+/// обработчик считает созданные уведомления.
 /// </para>
 /// <para>
 /// Пачка доставки <b>забирается</b> атомарно (<c>FOR UPDATE SKIP LOCKED</c> и аренда в
@@ -23,17 +24,17 @@ namespace BarberSearch.Application.Push;
 public interface IPushNotificationRepository
 {
     /// <summary>
-    /// Пытается вставить напоминание, не нарушая дедупликацию по <c>booking_id</c>.
+    /// Пытается вставить уведомление, не нарушая дедупликацию по <c>(booking_id, kind)</c>.
     /// </summary>
-    /// <param name="notification">Новое напоминание в состоянии <c>Pending</c>.</param>
+    /// <param name="notification">Новое уведомление в состоянии <c>Pending</c>.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns><c>true</c>, если строка вставлена; <c>false</c>, если напоминание уже есть.</returns>
+    /// <returns><c>true</c>, если строка вставлена; <c>false</c>, если такое уведомление уже есть.</returns>
     Task<Result<bool, Failure>> TryAddAsync(
         PushNotification notification,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Пачка напоминаний к доставке: <c>Pending</c>, меньше пяти попыток, время попытки наступило.
+    /// Пачка уведомлений к доставке: <c>Pending</c>, меньше пяти попыток, время попытки наступило.
     /// </summary>
     /// <remarks>
     /// Условие: <c>delivery = 0 AND delivery_attempts &lt; 5 AND (next_attempt_at IS NULL OR
@@ -57,7 +58,7 @@ public interface IPushNotificationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Удаляет напоминания старше момента отсечения (<c>Push:RetentionDays</c>).
+    /// Удаляет уведомления старше момента отсечения (<c>Push:RetentionDays</c>).
     /// </summary>
     /// <param name="cutoff">Граница ретенции: всё, что создано раньше, удаляется.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
