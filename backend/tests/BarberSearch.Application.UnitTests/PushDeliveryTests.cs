@@ -601,6 +601,364 @@ public class PushDeliveryTests
                 StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Deliver_ForConfirmedStatus_SendsTheConfirmationTextAndType()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingConfirmed);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Sent);
+        Assert.Equal(PushDelivery.Sent, notification.Delivery);
+
+        var call = Assert.Single(context.Sender.Calls);
+        Assert.Equal("Ваша запись подтверждена: салон «Барбершоп»", call.Message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:20", call.Message.Body);
+        Assert.Equal(PushMessage.BOOKING_CONFIRMED_TYPE, call.Message.Type);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenConfirmedStatusBookingIsNotConfirmed_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreatePendingBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingConfirmed);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is not confirmed", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenConfirmedStatusBookingIsGone_MarksSkippedAsDeleted()
+    {
+        var context = CreateContext();
+        var notification = CreateNotification(
+            Guid.CreateVersion7(),
+            Now.AddMinutes(20),
+            PushNotificationKind.BookingConfirmed);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was deleted", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenConfirmedStatusBookingWasRescheduled_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Reschedule(Now.AddHours(2), Now.AddHours(3)).IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingConfirmed);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was rescheduled", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenConfirmedStatusVisitAlreadyStarted_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(-1);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingConfirmed);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("window closed", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_ForCancellation_SendsTheCancelledTextAndType()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Cancel("Барбер заболел").IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCancelledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Sent);
+
+        var call = Assert.Single(context.Sender.Calls);
+        Assert.Equal("Ваша запись отменена: салон «Барбершоп»", call.Message.Title);
+        Assert.Equal(PushMessage.BOOKING_CANCELLED_TYPE, call.Message.Type);
+
+        // Причина отмены не попадает ни в заголовок, ни в тело.
+        Assert.DoesNotContain("Барбер заболел", call.Message.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Барбер заболел", call.Message.Title, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCancellationBookingIsGone_MarksSkippedAsDeleted()
+    {
+        var context = CreateContext();
+        var notification = CreateNotification(
+            Guid.CreateVersion7(),
+            Now.AddMinutes(20),
+            PushNotificationKind.BookingCancelledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was deleted", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCancellationBookingIsNotCancelled_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCancelledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is not cancelled", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenCancellationVisitAlreadyStarted_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(-1);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Cancel("Барбер заболел").IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingCancelledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("window closed", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_ForReschedule_SendsTheRescheduledTextWithTheNewStart()
+    {
+        var context = CreateContext();
+        var originalStart = Now.AddMinutes(20);
+        var newStart = Now.AddHours(2);
+        var booking = CreateConfirmedBooking(originalStart);
+        Assert.True(booking.Reschedule(newStart, newStart.AddMinutes(45)).IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            newStart,
+            PushNotificationKind.BookingRescheduledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Sent);
+
+        var call = Assert.Single(context.Sender.Calls);
+        Assert.Equal("Ваша запись перенесена: салон «Барбершоп»", call.Message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 19:00", call.Message.Body);
+        Assert.Equal(PushMessage.BOOKING_RESCHEDULED_TYPE, call.Message.Type);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenRescheduleWasSupersededByANewerOne_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Reschedule(Now.AddHours(2), Now.AddHours(3)).IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingRescheduledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking was rescheduled", notification.LastError);
+        Assert.Empty(context.Sender.Calls);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenRescheduledVisitIsTerminal_MarksSkippedAsNotActive()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        Assert.True(booking.Cancel("Барбер заболел").IsSuccess);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingRescheduledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("booking is not active", notification.LastError);
+    }
+
+    [Fact]
+    public async Task Deliver_WhenRescheduleVisitAlreadyStarted_MarksSkipped()
+    {
+        var context = CreateContext();
+        var startAt = Now.AddMinutes(-1);
+        var booking = CreateConfirmedBooking(startAt);
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(
+            booking.Id,
+            startAt,
+            PushNotificationKind.BookingRescheduledByBarber);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("window closed", notification.LastError);
+    }
+
+    [Theory]
+    [InlineData(PushNotificationKind.BookingConfirmed, "confirmation event")]
+    [InlineData(PushNotificationKind.BookingCancelledByBarber, "cancellation event")]
+    [InlineData(PushNotificationKind.BookingRescheduledByBarber, "reschedule event")]
+    public async Task Deliver_WhenStatusEventIsNotConfigured_LogsItsKindName(
+        PushNotificationKind kind,
+        string label)
+    {
+        var context = CreateContext(pushConfigured: false, devMode: true);
+        var startAt = Now.AddMinutes(20);
+        var booking = CreateConfirmedBooking(startAt);
+        if (kind == PushNotificationKind.BookingCancelledByBarber)
+        {
+            Assert.True(booking.Cancel("Барбер заболел").IsSuccess);
+        }
+
+        context.Bookings.Add(booking);
+        var notification = CreateNotification(booking.Id, startAt, kind);
+        context.Notifications.Seed(notification);
+        context.Tokens.Seed(CreateToken("device-1"));
+
+        var result = await context.Handler.Handle(
+            new DeliverPendingPushNotificationsCommand(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal("push is not configured", notification.LastError);
+        Assert.Contains(
+            context.Logger.Messages,
+            message => message.Contains(label, StringComparison.Ordinal));
+        Assert.All(
+            context.Logger.Messages,
+            message => Assert.DoesNotContain(
+                "creation event",
+                message,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
     private static Booking CreateConfirmedBooking(DateTimeOffset startAt)
     {
         var booking = Booking.Create(

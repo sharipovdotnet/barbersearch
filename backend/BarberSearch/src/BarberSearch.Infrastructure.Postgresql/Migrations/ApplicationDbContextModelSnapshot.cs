@@ -1273,7 +1273,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_push_notifications_user_id");
 
-                    b.HasIndex("BookingId", "Kind")
+                    b.HasIndex("BookingId", "Kind", "StartAt")
                         .IsUnique()
                         .HasDatabaseName("ux_push_notifications_booking_id");
 
@@ -1283,7 +1283,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_push_notifications_delivery_attempts", "delivery_attempts BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3)");
+                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3, 4, 5, 6)");
                         });
                 });
 

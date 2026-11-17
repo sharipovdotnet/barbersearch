@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BookingStatus;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -10,22 +11,33 @@ namespace BarberSearch.Application.Bookings.ConfirmBooking;
 /// <summary>
 /// Обработчик команды <see cref="ConfirmBookingCommand"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// После успешного сохранения клиенту ставится push-событие «запись подтверждена»
+/// (<see cref="IBookingStatusPushNotifier"/>): подтверждает барбер или администратор, а не
+/// сам клиент. Сбой постановки в очередь логируется предупреждением с идентификатором брони
+/// и не меняет результат команды — бронь важнее уведомления.
+/// </para>
+/// </remarks>
 public class ConfirmBookingHandler : ICommandHandler<ConfirmBookingCommand>
 {
     private readonly IBookingRepository _repository;
     private readonly IBarberProfileRepository _barberProfiles;
     private readonly ICurrentUser _currentUser;
+    private readonly IBookingStatusPushNotifier _pushNotifier;
     private readonly ILogger<ConfirmBookingHandler> _logger;
 
     public ConfirmBookingHandler(
         IBookingRepository repository,
         IBarberProfileRepository barberProfiles,
         ICurrentUser currentUser,
+        IBookingStatusPushNotifier pushNotifier,
         ILogger<ConfirmBookingHandler> logger)
     {
         _repository = repository;
         _barberProfiles = barberProfiles;
         _currentUser = currentUser;
+        _pushNotifier = pushNotifier;
         _logger = logger;
     }
 
@@ -66,6 +78,13 @@ public class ConfirmBookingHandler : ICommandHandler<ConfirmBookingCommand>
         }
 
         _logger.LogInformation("Booking {BookingId} has been confirmed.", booking.Id);
+
+        await BookingStatusPush.NotifyAsync(
+            _pushNotifier,
+            _logger,
+            booking,
+            BookingStatusChange.Confirmed,
+            cancellationToken);
 
         return UnitResult.Success<Failure>();
     }

@@ -10,10 +10,12 @@ namespace BarberSearch.Application.Push;
 /// <remarks>
 /// <para>
 /// Дедупликация — обязанность хранилища: уникальный индекс <c>ux_push_notifications_booking_id</c>
-/// по паре <c>(booking_id, kind)</c> и <c>INSERT … ON CONFLICT DO NOTHING</c> делают повторный
-/// тик и второй экземпляр приложения безопасными, а напоминание и событие создания одной брони
-/// сосуществуют. <see cref="TryAddAsync"/> сообщает, вставлена ли строка, — по этому признаку
-/// обработчик считает созданные уведомления.
+/// по тройке <c>(booking_id, kind, start_at)</c> и <c>INSERT … ON CONFLICT DO NOTHING</c> делают
+/// повторный тик и второй экземпляр приложения безопасными, а напоминание, событие создания и
+/// события статуса одной брони сосуществуют. <c>start_at</c> в ключе отличает повторный перенос
+/// на новое время от дубля: каждый новый целевой момент — отдельное событие.
+/// <see cref="TryAddAsync"/> сообщает, вставлена ли строка, — по этому признаку обработчик
+/// считает созданные уведомления.
 /// </para>
 /// <para>
 /// Пачка доставки <b>забирается</b> атомарно (<c>FOR UPDATE SKIP LOCKED</c> и аренда в
@@ -24,7 +26,8 @@ namespace BarberSearch.Application.Push;
 public interface IPushNotificationRepository
 {
     /// <summary>
-    /// Пытается вставить уведомление, не нарушая дедупликацию по <c>(booking_id, kind)</c>.
+    /// Пытается вставить уведомление, не нарушая дедупликацию по
+    /// <c>(booking_id, kind, start_at)</c>.
     /// </summary>
     /// <param name="notification">Новое уведомление в состоянии <c>Pending</c>.</param>
     /// <param name="cancellationToken">Токен отмены.</param>

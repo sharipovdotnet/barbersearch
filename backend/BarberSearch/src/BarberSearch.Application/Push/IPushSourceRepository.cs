@@ -35,13 +35,13 @@ public interface IPushSourceRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Снимок салона, мастера, услуги и пояса для события создания брони.
+    /// Снимок салона, мастера, услуги и пояса для события о брони (создание или смена статуса).
     /// </summary>
     /// <remarks>
     /// Внутренние join'ы <c>barber_profiles → barber_services → hair_services → salons</c>:
     /// если хотя бы одного звена нет, возвращается <c>null</c>, а не исключение — бронь
-    /// должна создаться, даже когда каталог успел измениться. Запрос выполняется в той же
-    /// транзакции, что и вставка брони (AGENT.md §20).
+    /// должна сохраниться, даже когда каталог успел измениться. Запрос выполняется в том же
+    /// scope запроса, что и сохранение брони (AGENT.md §20).
     /// </remarks>
     /// <param name="barberProfileId">Профиль мастера из брони.</param>
     /// <param name="barberServiceId">Услуга мастера из брони (<c>barber_services.id</c>).</param>

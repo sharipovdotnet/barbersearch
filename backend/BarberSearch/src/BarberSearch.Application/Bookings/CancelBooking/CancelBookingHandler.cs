@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
@@ -11,22 +12,34 @@ namespace BarberSearch.Application.Bookings.CancelBooking;
 /// <summary>
 /// Обработчик команды <see cref="CancelBookingCommand"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Клиенту push нужен только тогда, когда запись отменил кто-то другой: барбер профиля или
+/// администратор. Отмена самим клиентом (<c>isClientOwner</c>) уведомления не создаёт — он
+/// только что совершил действие и знает о нём; мобильного приложения для барбера нет, поэтому
+/// уведомлять в этом сценарии некого. Сбой постановки в очередь логируется предупреждением
+/// и не меняет результат команды.
+/// </para>
+/// </remarks>
 public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
 {
     private readonly IBookingRepository _repository;
     private readonly IBarberProfileRepository _barberProfiles;
     private readonly ICurrentUser _currentUser;
+    private readonly IBookingStatusPushNotifier _pushNotifier;
     private readonly ILogger<CancelBookingHandler> _logger;
 
     public CancelBookingHandler(
         IBookingRepository repository,
         IBarberProfileRepository barberProfiles,
         ICurrentUser currentUser,
+        IBookingStatusPushNotifier pushNotifier,
         ILogger<CancelBookingHandler> logger)
     {
         _repository = repository;
         _barberProfiles = barberProfiles;
         _currentUser = currentUser;
+        _pushNotifier = pushNotifier;
         _logger = logger;
     }
 
@@ -98,6 +111,19 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
             "Booking {BookingId} has been cancelled by barber: {IsBarberCancellation}.",
             booking.Id,
             isBarberCancellation);
+
+        // Клиент-владелец уведомления не получает: он сам только что отменил запись.
+        // Барбер и администратор — получают; у гостевой брони получателя нет, и уведомитель
+        // вернёт успешный no-op.
+        if (!isClientOwner)
+        {
+            await BookingStatusPush.NotifyAsync(
+                _pushNotifier,
+                _logger,
+                booking,
+                BookingStatusChange.CancelledByBarber,
+                cancellationToken);
+        }
 
         return UnitResult.Success<Failure>();
     }

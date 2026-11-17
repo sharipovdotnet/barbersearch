@@ -1,9 +1,11 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.Salons;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
+using BarberSearch.Domain.Bookings;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -38,6 +40,14 @@ namespace BarberSearch.Application.Bookings.RescheduleBooking;
 /// чтение салона внутри контекста — осознанная плата за отсутствие нового метода в чужом
 /// репозитории, а не повод кэшировать строку.
 /// </para>
+/// <para>
+/// После успешного коммита клиенту ставится push-событие «запись перенесена» с <b>новым</b>
+/// временем — но только когда переносит барбер или администратор. Перенос самим клиентом
+/// уведомления не создаёт (он знает о своём действии), а перенос на то же время вообще не
+/// доходит до записи и push не создаёт. Событие ставится <b>вне</b> транзакции переноса:
+/// ошибка вставки в push-очередь не должна отравлять транзакцию, а сбой постановки
+/// логируется предупреждением и не меняет результат команды.
+/// </para>
 /// </remarks>
 public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBookingCommand>
 {
@@ -46,6 +56,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
     private readonly ISalonRepository _salons;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
+    private readonly IBookingStatusPushNotifier _pushNotifier;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RescheduleBookingHandler> _logger;
 
@@ -55,6 +66,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         ISalonRepository salons,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
+        IBookingStatusPushNotifier pushNotifier,
         TimeProvider timeProvider,
         ILogger<RescheduleBookingHandler> logger)
     {
@@ -63,6 +75,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         ArgumentNullException.ThrowIfNull(salons);
         ArgumentNullException.ThrowIfNull(unitOfWork);
         ArgumentNullException.ThrowIfNull(currentUser);
+        ArgumentNullException.ThrowIfNull(pushNotifier);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -71,6 +84,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         _salons = salons;
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
+        _pushNotifier = pushNotifier;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -103,12 +117,32 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         var barberProfileId = targetResult.Value;
         var currentUserId = userIdResult.Value;
 
-        return await _unitOfWork.ExecuteAsync(
+        var rescheduled = await _unitOfWork.ExecuteAsync(
             token => RescheduleAsync(command, currentUserId, barberProfileId, token),
             cancellationToken);
+        if (rescheduled.IsFailure)
+        {
+            return rescheduled.Error;
+        }
+
+        // Push ставится после коммита, а не внутри транзакции: ошибка вставки в очередь
+        // в PostgreSQL делает транзакцию недействительной, и «проглоченный» сбой push
+        // откатил бы уже сохранённый перенос на коммите. Здесь же сбой уведомления
+        // остаётся сбоем уведомления — бронь важнее.
+        if (rescheduled.Value.NotifyCustomer)
+        {
+            await BookingStatusPush.NotifyAsync(
+                _pushNotifier,
+                _logger,
+                rescheduled.Value.Booking,
+                BookingStatusChange.RescheduledByBarber,
+                cancellationToken);
+        }
+
+        return UnitResult.Success<Failure>();
     }
 
-    private async Task<UnitResult<Failure>> RescheduleAsync(
+    private async Task<Result<RescheduleOutcome, Failure>> RescheduleAsync(
         RescheduleBookingCommand command,
         Guid currentUserId,
         Guid barberProfileId,
@@ -196,7 +230,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
                 "Booking {BookingId} reschedule to the same start time was a no-op.",
                 booking.Id);
 
-            return UnitResult.Success<Failure>();
+            return new RescheduleOutcome(booking, NotifyCustomer: false);
         }
 
         // Пояс салона нужен до контекста дня: только он даёт локальную дату нового времени.
@@ -348,6 +382,19 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
             booking.Id,
             booking.StartAt);
 
-        return UnitResult.Success<Failure>();
+        // Перенос самого клиента push не создаёт: он только что совершил действие.
+        // Барбер и администратор — создают; у гостевой брони получателя нет, и уведомитель
+        // вернёт успешный no-op. Снимок берётся из сохранённой брони, поэтому start_at
+        // строки — новое время визита.
+        return new RescheduleOutcome(booking, NotifyCustomer: !isClientOwner);
     }
+
+    /// <summary>
+    /// Итог успешного переноса: сохранённая бронь и нужен ли клиенту push.
+    /// </summary>
+    /// <param name="Booking">Бронь с новым временем; для no-op — с прежним.</param>
+    /// <param name="NotifyCustomer">
+    /// <c>true</c>, только когда время действительно изменил барбер или администратор.
+    /// </param>
+    private sealed record RescheduleOutcome(Booking Booking, bool NotifyCustomer);
 }

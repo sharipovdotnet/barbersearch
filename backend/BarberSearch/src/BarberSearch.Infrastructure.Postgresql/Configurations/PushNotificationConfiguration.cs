@@ -16,10 +16,15 @@ namespace BarberSearch.Infrastructure.Postgresql.Configurations;
 /// переименование услуги и удаление салона; на неё не ссылаются другие таблицы.
 /// </para>
 /// <para>
-/// Уникальный индекс <c>ux_push_notifications_booking_id</c> по паре <c>(booking_id, kind)</c>:
-/// на один визит — не больше одного уведомления каждого вида, поэтому событие создания и
-/// напоминание сосуществуют, а повторный тик и второй экземпляр приложения дублей не создают
-/// (<c>INSERT … ON CONFLICT DO NOTHING</c>).
+/// Уникальный индекс <c>ux_push_notifications_booking_id</c> по тройке
+/// <c>(booking_id, kind, start_at)</c>: на один визит и его время — не больше одного
+/// уведомления каждого вида, поэтому событие создания, напоминание и события статуса
+/// сосуществуют, а повторный тик и второй экземпляр приложения дублей не создают
+/// (<c>INSERT … ON CONFLICT DO NOTHING</c>). <c>start_at</c> в ключе нужен повторным
+/// переносам: каждый новый целевой момент — отдельное событие, а два переноса на одно и то
+/// же время схлопываются в один. Побочный эффект намеренный: после переноса визит может
+/// получить напоминание на новое время, а старое напоминание пропускается как
+/// <c>booking was rescheduled</c> (AGENT.md §20.11).
 /// </para>
 /// <para>
 /// <c>ix_push_notifications_dispatch</c> повторяет фильтр выборки доставки:
@@ -93,9 +98,10 @@ public class PushNotificationConfiguration : IEntityTypeConfiguration<PushNotifi
             .HasConstraintName("fk_push_notifications_users_user_id")
             .OnDelete(DeleteBehavior.Cascade);
 
-        // На один визит — одно уведомление каждого вида: событие создания и напоминание
-        // сосуществуют, повторный тик безопасен.
-        builder.HasIndex(x => new { x.BookingId, x.Kind })
+        // На один визит и его время — одно уведомление каждого вида: событие создания,
+        // напоминание и события статуса сосуществуют, повторный тик безопасен, а повторный
+        // перенос на новое время создаёт новую строку.
+        builder.HasIndex(x => new { x.BookingId, x.Kind, x.StartAt })
             .IsUnique()
             .HasDatabaseName("ux_push_notifications_booking_id");
 

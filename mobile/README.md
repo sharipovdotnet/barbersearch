@@ -242,11 +242,15 @@ applies `rating`, `text`, `isPublished` and `updatedAt` from the `PUT` response 
 the new status locally: a rating-only change keeps a published review published, a text change
 returns it to moderation, and only the server decides.
 
-## Push reminders
+## Push notifications
 
-The channel carries two kinds of Android notification. The hour-before reminder
+The channel carries five kinds of Android notification. The hour-before reminder
 (`booking.reminder`) announces a **confirmed** booking; the booking-creation event
-(`booking.created`) covers both "you booked" and "the barber booked you". Both texts are composed
+(`booking.created`) covers both "you booked" and "the barber booked you"; and three barber-driven
+status events announce a confirmation (`booking.confirmed`), a cancellation
+(`booking.cancelled`) and a reschedule (`booking.rescheduled`). Only the barber or an admin
+triggers the status events — a customer's own cancel or reschedule sends nothing, because the
+customer already knows. All texts are composed
 by the server (`backend/AGENT.md` §20) and arrive ready — the app never formats push text, because
 FCM shows a `notification` payload even when the process is dead, and the server owns the salon's
 zone and the «сегодня»/«завтра» word. A typical reminder:
@@ -261,11 +265,16 @@ back to UTC, and missing snapshots simply drop out of the body (an empty salon g
 title «Через час — визит к мастеру»). There is no customer name, phone or note in the message —
 only the salon, master, service and time. The data payload carries the event `type` and, when the
 server has it, the `bookingId`: the reminder sends
-`{"type":"booking.reminder","bookingId":"<guid>"}` and the creation event
-`{"type":"booking.created","bookingId":"<guid>"}`; the client never requires the id. Both arrive on
-the Android channel `reminders` / «Напоминания», both reuse the «Присылать напоминания» toggle, and
-both open the «Записи» tab on a tap. The creation event is composed on the worker's next tick, so it
-can trail the booking by up to one tick, and a guest booking (no account) gets no push.
+`{"type":"booking.reminder","bookingId":"<guid>"}`, the creation event
+`{"type":"booking.created","bookingId":"<guid>"}`, and the status events use
+`booking.confirmed`, `booking.cancelled` and `booking.rescheduled` with the same shape; the client
+never requires the id. All five arrive on the Android channel `reminders` / «Напоминания», all
+reuse the «Присылать напоминания» toggle (switching it off unregisters the device, so none of them
+can be delivered), and all open the «Записи» tab on a tap. The creation and status events are
+composed on the worker's next tick, so an event can trail the action by up to one tick, and a guest
+booking (no account) gets no push. The cancellation text deliberately carries no reason: the push
+message stays free of customer data, and the reason would need a new snapshot and its own privacy
+review.
 
 ### `push.json`
 
@@ -519,7 +528,8 @@ marker clearing), the push API client (both calls are `204` without a body, `Pro
 errors), payload parsing and the «Записи» route, and the «Профиль» switch with its
 denied/unavailable texts and the no-hint rule for a transient failure — 47 new cases, **624 tests**
 in total. The booking-creation event adds two payload-routing cases (a `booking.created` tap opens
-«Записи», with or without `bookingId`), which brings the suite to **839 tests**. The Android build
+«Записи», with or without `bookingId`), and the barber confirmation, cancellation and reschedule
+events add three more, which brings the suite to **842 tests**. The Android build
 stays at 0 warnings; the iOS C# compile is clean after an iOS
 `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
 `Platforms/**/*.cs` section (the `AppDelegate`/`AndroidPushPermission` names) plus the pointwise

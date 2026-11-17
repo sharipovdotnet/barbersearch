@@ -6,29 +6,38 @@ using BarberSearch.Domain.Push;
 namespace BarberSearch.Application.Push;
 
 /// <summary>
-/// Русские тексты push-уведомлений клиенту: напоминание и события создания брони.
+/// Русские тексты push-уведомлений клиенту: напоминание, события создания брони и события
+/// её статуса.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Тексты — часть наблюдаемого поведения и приходят байт в байт: напоминание —
 /// <c>Через час: салон «Барбершоп»</c> / <c>Мастер Иван · Стрижка · сегодня в 14:30</c>,
 /// события создания — <c>Вы записались: салон «Барбершоп»</c> или
-/// <c>Вас записали: салон «Барбершоп»</c>. Поэтому они живут в одном месте, а не собираются
-/// по месту отправки, и проверяются тестами на точное совпадение.
+/// <c>Вас записали: салон «Барбершоп»</c>, события статуса — <c>Ваша запись подтверждена:
+/// салон «Барбершоп»</c>, <c>Ваша запись отменена: салон «Барбершоп»</c> и
+/// <c>Ваша запись перенесена: салон «Барбершоп»</c>. Поэтому они живут в одном месте, а не
+/// собираются по месту отправки, и проверяются тестами на точное совпадение.
 /// </para>
 /// <para>
 /// Слово «сегодня»/«завтра» считается по локальной дате <b>салона</b>, а не сервера:
 /// напоминание за час до полуночи пересекает сутки, и UTC-дата дала бы неверное слово.
-/// Если до визита больше суток (событие создания приходит сразу, а запись — на любой день
-/// горизонта 30 дней), слово заменяется датой в родительном падеже: <c>24 ноября</c>.
-/// Неизвестный пояс не роняет отправку — время показывается в UTC, как и в напоминании
-/// барберу.
+/// Если до визита больше суток (событие создания и событие статуса приходят сразу, а запись —
+/// на любой день горизонта 30 дней), слово заменяется датой в родительном падеже:
+/// <c>24 ноября</c>. Неизвестный пояс не роняет отправку — время показывается в UTC, как и
+/// в напоминании барберу.
 /// </para>
 /// <para>
-/// Отсутствующий снимок просто выпадает из перечисления: заголовок без салона деградирует
-/// до «к мастеру», тело без мастера или услуги остаётся читаемым и не содержит «null».
-/// Персональных данных клиента здесь нет и быть не может: методы получают только снимок
-/// визита (152-ФЗ, решение D3).
+/// Отсутствующий снимок просто выпадает из перечисления: заголовок без салона деградирует до
+/// «Ваша запись подтверждена» (и двух других фраз), тело без мастера или услуги остаётся
+/// читаемым и не содержит «null». Персональных данных клиента здесь нет и быть не может:
+/// методы получают только снимок визита (152-ФЗ, решение D3).
+/// </para>
+/// <para>
+/// Причина отмены в текст не попадает сознательно: строка payload'а не несёт персональных
+/// данных, а свободный комментарий барбера мог бы содержать что угодно — для него нет ни
+/// колонки снимка, ни проверенного формата. Клиент видит причину в карточке записи (AGENT.md
+/// §20.11).
 /// </para>
 /// </remarks>
 public static class PushMessages
@@ -47,6 +56,22 @@ public static class PushMessages
     /// Заголовок события «барбер записал клиента», когда салон неизвестен.
     /// </summary>
     public const string BARBER_CREATED_DEFAULT_TITLE = "Вас записали к мастеру";
+
+    /// <summary>
+    /// Заголовок события «запись подтверждена» без снимка салона. С салоном к этой же фразе
+    /// добавляется <c>: салон «…»</c>, поэтому отдельной «полной» константы нет.
+    /// </summary>
+    public const string CONFIRMED_DEFAULT_TITLE = "Ваша запись подтверждена";
+
+    /// <summary>
+    /// Заголовок события «запись отменена» без снимка салона.
+    /// </summary>
+    public const string CANCELLED_DEFAULT_TITLE = "Ваша запись отменена";
+
+    /// <summary>
+    /// Заголовок события «запись перенесена» без снимка салона.
+    /// </summary>
+    public const string RESCHEDULED_DEFAULT_TITLE = "Ваша запись перенесена";
 
     /// <summary>
     /// Слово для визита в те же локальные сутки салона.
@@ -96,7 +121,8 @@ public static class PushMessages
     }
 
     /// <summary>
-    /// Собирает сообщение по виду уведомления: напоминание или событие создания брони.
+    /// Собирает сообщение по виду уведомления: напоминание, событие создания или событие
+    /// статуса брони.
     /// </summary>
     /// <param name="notification">Снимок визита с видом уведомления.</param>
     /// <param name="now">Текущий момент в UTC.</param>
@@ -111,6 +137,13 @@ public static class PushMessages
                 Created(notification, now, createdByBarber: false),
             PushNotificationKind.BookingCreatedByBarber =>
                 Created(notification, now, createdByBarber: true),
+
+            // Все три события статуса — про клиента, а не про автора действия: заголовок
+            // и тип различаются, тело собирается одинаково (AGENT.md §20.11).
+            PushNotificationKind.BookingConfirmed
+                or PushNotificationKind.BookingCancelledByBarber
+                or PushNotificationKind.BookingRescheduledByBarber =>
+                Status(notification, now),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(notification),
                 notification.Kind,
@@ -147,6 +180,30 @@ public static class PushMessages
     }
 
     /// <summary>
+    /// Собирает заголовок события статуса брони; без снимка салона остаётся та же фраза
+    /// без суффикса.
+    /// </summary>
+    /// <param name="kind">Вид события статуса.</param>
+    /// <param name="salonName">Снимок салона или <c>null</c>.</param>
+    public static string ComposeStatusTitle(PushNotificationKind kind, string? salonName)
+    {
+        var title = kind switch
+        {
+            PushNotificationKind.BookingConfirmed => CONFIRMED_DEFAULT_TITLE,
+            PushNotificationKind.BookingCancelledByBarber => CANCELLED_DEFAULT_TITLE,
+            PushNotificationKind.BookingRescheduledByBarber => RESCHEDULED_DEFAULT_TITLE,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(kind),
+                kind,
+                "The kind is not a booking status event.")
+        };
+
+        return string.IsNullOrWhiteSpace(salonName)
+            ? title
+            : title + ": салон «" + salonName.Trim() + "»";
+    }
+
+    /// <summary>
     /// Собирает событие создания брони: текст зависит только от того, кто создал запись.
     /// </summary>
     private static PushMessage Created(
@@ -158,10 +215,40 @@ public static class PushMessages
 
         return new PushMessage(
             ComposeCreatedTitle(notification.SalonName, createdByBarber),
-            ComposeCreatedBody(notification, now, timeZone),
+            ComposeVisitBody(notification, now, timeZone),
             notification.BookingId,
             PushMessage.BOOKING_CREATED_TYPE);
     }
+
+    /// <summary>
+    /// Собирает событие статуса брони: заголовок и тип зависят от вида, тело — общее.
+    /// </summary>
+    private static PushMessage Status(PushNotification notification, DateTimeOffset now)
+    {
+        var timeZone = ResolveTimeZone(notification.SalonTimeZoneId);
+
+        return new PushMessage(
+            ComposeStatusTitle(notification.Kind, notification.SalonName),
+            ComposeVisitBody(notification, now, timeZone),
+            notification.BookingId,
+            StatusType(notification.Kind));
+    }
+
+    /// <summary>
+    /// Тип события статуса для <c>data.type</c>: по нему мобильное приложение выбирает
+    /// обработчик перехода (все три открывают «Записи»).
+    /// </summary>
+    private static string StatusType(PushNotificationKind kind)
+        => kind switch
+        {
+            PushNotificationKind.BookingConfirmed => PushMessage.BOOKING_CONFIRMED_TYPE,
+            PushNotificationKind.BookingCancelledByBarber => PushMessage.BOOKING_CANCELLED_TYPE,
+            PushNotificationKind.BookingRescheduledByBarber => PushMessage.BOOKING_RESCHEDULED_TYPE,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(kind),
+                kind,
+                "The kind is not a booking status event.")
+        };
 
     /// <summary>
     /// Собирает тело напоминания: мастер, услуга и день со временем; отсутствующие части выпадают.
@@ -192,10 +279,10 @@ public static class PushMessages
     }
 
     /// <summary>
-    /// Собирает тело события создания: мастер, услуга и день со временем; отсутствующие части
-    /// выпадают точно так же, как у напоминания.
+    /// Собирает тело события о визите (создание и статус): мастер, услуга и день со временем;
+    /// отсутствующие части выпадают точно так же, как у напоминания.
     /// </summary>
-    private static string ComposeCreatedBody(
+    private static string ComposeVisitBody(
         PushNotification notification,
         DateTimeOffset now,
         TimeZoneInfo timeZone)
@@ -249,10 +336,10 @@ public static class PushMessages
     }
 
     /// <summary>
-    /// Выбирает день события создания: сегодня, завтра или дату в родительном падеже.
+    /// Выбирает день события о визите: сегодня, завтра или дату в родительном падеже.
     /// </summary>
     /// <remarks>
-    /// Событие приходит сразу после записи, а сама запись может быть на любой день горизонта
+    /// Событие приходит сразу после действия, а сам визит может быть на любой день горизонта
     /// (30 дней), поэтому в отличие от напоминания «не сегодня — значит завтра» здесь неверно.
     /// Год не печатается: горизонт не пересекает его больше чем на месяц.
     /// </remarks>

@@ -29,10 +29,10 @@ namespace BarberSearch.Application.Push.CreateDuePushNotifications;
 /// тик в 60 секунд успевает, а «проснулись поздно» — нет.
 /// </para>
 /// <para>
-/// Дедупликацию закрывает уникальный индекс по паре <c>(booking_id, kind)</c> и
+/// Дедупликацию закрывает уникальный индекс по тройке <c>(booking_id, kind, start_at)</c> и
 /// <c>INSERT … ON CONFLICT DO NOTHING</c>: повторный тик и второй экземпляр безопасны,
-/// а <c>TryAddAsync</c> сообщает, была ли строка вставлена. Событие создания брони имеет
-/// другой <c>kind</c> и напоминанию не мешает.
+/// а <c>TryAddAsync</c> сообщает, была ли строка вставлена. Событие создания брони и события
+/// статуса имеют другой <c>kind</c> и напоминанию не мешают.
 /// </para>
 /// </remarks>
 public sealed class CreateDuePushNotificationsHandler

@@ -147,10 +147,13 @@ public class PushNotificationTests
     public void PushNotificationKind_Values_AreStableForTheDatabaseConstraint()
     {
         // Числа попадают в check ck_push_notifications_kind и в уникальный индекс
-        // (booking_id, kind): менять их без миграции нельзя.
+        // (booking_id, kind, start_at): менять их без миграции нельзя.
         Assert.Equal(1, (int)PushNotificationKind.Reminder);
         Assert.Equal(2, (int)PushNotificationKind.BookingCreatedByCustomer);
         Assert.Equal(3, (int)PushNotificationKind.BookingCreatedByBarber);
+        Assert.Equal(4, (int)PushNotificationKind.BookingConfirmed);
+        Assert.Equal(5, (int)PushNotificationKind.BookingCancelledByBarber);
+        Assert.Equal(6, (int)PushNotificationKind.BookingRescheduledByBarber);
     }
 
     [Fact]
