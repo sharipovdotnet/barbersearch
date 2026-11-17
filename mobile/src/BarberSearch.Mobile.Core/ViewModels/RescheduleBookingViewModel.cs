@@ -25,6 +25,15 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// Ошибки разбираются по кодам (как <c>describeRescheduleFailure</c> в вебе): занятое время и
 /// устаревший слот требуют перечитать сетку, а «слишком далеко» — нет.
 /// </para>
+/// <para>
+/// Пока экран виден, повторяемый сбой сетки лечится сам: сеть, <c>5xx</c> и таймаут клиента
+/// повторяются с нарастающей паузой (<see cref="Api.AutoRetryLoop"/>), а под причиной ошибки
+/// видна строка «Пробуем снова…». Повтор несёт снимок упавшего запроса — салонную дату, на
+/// которую он ушёл, — а не текущий выбор в календаре. «Повторить» остаётся и значит
+/// «повторить сейчас»: останавливает цикл приватно, читает выбранную дату сразу и запускает
+/// цикл заново, только если новый сбой снова повторяемый. Отправка переноса — запись, её
+/// автоповтор не касается.
+/// </para>
 /// </remarks>
 public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisposable
 {
@@ -44,6 +53,7 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
 
     private readonly IBookingsApi _bookingsApi;
     private readonly TimeProvider _timeProvider;
+    private readonly AutoRetryLoop _autoRetry;
 
     private BookingListItem? _item;
     private TimeZoneInfo? _timeZone;
@@ -53,17 +63,52 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     private bool _disposed;
 
     /// <summary>
+    /// Вид последнего сбоя сетки: по нему <see cref="StartAutoRetry"/> решает, повторять ли
+    /// чтение сам.
+    /// </summary>
+    /// <remarks>
+    /// Запоминается для каждого неуспеха, а не только для повторяемого: иначе «транспорт,
+    /// потом 404» оставил бы в памяти старый <see cref="ApiFailureKind.Transport"/>, и кнопка
+    /// запустила бы цикл на отказе, который не изменится.
+    /// </remarks>
+    private ApiFailureKind _slotsFailureKind;
+
+    /// <summary>
+    /// Салонная дата упавшего чтения: повтор несёт именно её, а не текущий выбор календаря.
+    /// </summary>
+    /// <remarks>
+    /// Пока видна ошибка, человек может сменить дату — но это уже другое чтение, и цикл после
+    /// него запускается заново только по своему сбою. Тихая попытка обязана уйти с той датой,
+    /// на которую упал запрос, иначе она подменила бы запрос правкой, которую никто не просил.
+    /// </remarks>
+    private DateOnly? _retrySlotsDate;
+
+    /// <summary>
+    /// Экран сейчас виден: без этого сигнала цикл повторов не запускается.
+    /// </summary>
+    private bool _isPageVisible;
+
+    /// <summary>
     /// Создаёт экран переноса.
     /// </summary>
     /// <param name="bookingsApi">Слоты переноса и сама операция переноса.</param>
     /// <param name="timeProvider">Часы: границы дат считаются от «сегодня» салона.</param>
-    public RescheduleBookingViewModel(IBookingsApi bookingsApi, TimeProvider timeProvider)
+    /// <param name="autoRetry">
+    /// Цикл автоповтора сетки слотов; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Параметр необязательный и стоит последним, чтобы существующие вызовы не менялись.
+    /// </param>
+    public RescheduleBookingViewModel(
+        IBookingsApi bookingsApi,
+        TimeProvider timeProvider,
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(bookingsApi);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _bookingsApi = bookingsApi;
         _timeProvider = timeProvider;
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
     }
 
     /// <summary>
@@ -160,6 +205,16 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     private bool _isDayLoaded;
 
     /// <summary>
+    /// Цикл сам повторяет чтение сетки: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
+
+    /// <summary>
     /// Выбранный слот; <c>null</c>, пока пользователь не выбрал время.
     /// </summary>
     [ObservableProperty]
@@ -252,6 +307,54 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
+    /// Сообщает, что экран виден, и запускает автоповтор, если показывать есть что.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при появлении и каждом возврате из фона. Метод идемпотентен: при
+    /// работающем цикле повторный вызов ничего не делает, а без повторяемого сбоя лишь
+    /// запоминает, что экран виден. «Видна» — сигнал, а не команда: решение принимает вид
+    /// последнего сбоя.
+    /// </para>
+    /// <para>
+    /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
+    /// синхронно меняет привязанное <see cref="IsAutoRetrying"/>, поэтому метод зовут только
+    /// из жизненного цикла страницы.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что экран скрыт, и останавливает автоповтор.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен: остановка уже стоящего цикла ничего не делает. Пауза, запрос в полёте и
+    /// завершение цикла отменяются, а <see cref="IsAutoRetrying"/> сразу становится
+    /// <c>false</c> — экран не показывает работающий повтор поверх ушедшей страницы.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
     /// Читает сетку слотов на выбранную дату.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены страницы.</param>
@@ -263,9 +366,17 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     /// Переходит на другую дату: сбрасывает выбор и перезапрашивает сетку.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Прошлый запрос отменяется: два ответа на разные даты не должны смешаться. Ответ,
     /// пришедший после смены даты, отбрасывается по номеру поколения — отмена транспорта
     /// не гарантирует, что сервер не успел ответить.
+    /// </para>
+    /// <para>
+    /// Смена даты — действие человека: цикл автоповтора останавливается приватно (страница
+    /// остаётся видимой), сетка читается сразу, а цикл запускается заново только если новый
+    /// сбой снова повторяемый. Иначе тихий повтор ушёл бы со старой датой поверх выбора,
+    /// который человек только что сделал.
+    /// </para>
     /// </remarks>
     /// <param name="date">Выбранная дата.</param>
     /// <param name="cancellationToken">Токен отмены страницы.</param>
@@ -276,6 +387,8 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
         {
             return;
         }
+
+        StopAutoRetryLoop();
 
         var clamped = Clamp(date);
 
@@ -296,23 +409,59 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
         IsLoadingSlots = true;
         SlotsError = null;
 
+        // Новая дата начинает чтение с чистого листа: снимок прошлой неудачи к ней не относится.
+        _retrySlotsDate = null;
+
         NotifySlotsState();
 
+        await LoadSlotsCoreAsync(DateOnly.FromDateTime(clamped), silent: false, cancellationToken);
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Читает сетку на заданную салонную дату — вручную или тихой попыткой цикла.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ручной режим показывает индикатор и стирает прежнюю ошибку: человек сам попросил
+    /// свежую сетку. Тихий режим — попытка цикла: причина ошибки остаётся на экране до ответа,
+    /// иначе каждая пауза между попытками мигала бы пустым экраном и кнопкой, которую некуда
+    /// нажать. Успех очищает ошибку и снимок, неудача оставляет всё как было и возвращает вид
+    /// сбоя.
+    /// </para>
+    /// <para>
+    /// Снимок — дата этого запроса, а не <see cref="SelectedDate"/>: повтор несёт тот запрос,
+    /// который упал. Вид сбоя запоминается для каждого неуспеха, а не только для повторяемого
+    /// (ловушка 4): иначе «транспорт, потом 404» оставил бы в памяти старый
+    /// <see cref="ApiFailureKind.Transport"/> и кнопка запустила бы замкнутый цикл.
+    /// </para>
+    /// </remarks>
+    /// <param name="day">Салонная дата запроса.</param>
+    /// <param name="silent">Тихая попытка цикла: не показывать индикатор и не чистить ошибку.</param>
+    /// <param name="cancellationToken">Токен отмены страницы или цикла.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadSlotsCoreAsync(
+        DateOnly day,
+        bool silent,
+        CancellationToken cancellationToken)
+    {
         _slotsCancellation?.Cancel();
         _slotsCancellation?.Dispose();
         _slotsCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         var token = _slotsCancellation.Token;
         var generation = ++_generation;
-        var day = DateOnly.FromDateTime(clamped);
+        var kind = ApiFailureKind.None;
 
         try
         {
-            var response = await _bookingsApi.GetRescheduleSlotsAsync(_item.Id, day, token);
+            var response = await _bookingsApi.GetRescheduleSlotsAsync(_item!.Id, day, token);
 
             if (generation != _generation)
             {
-                return;
+                // Пока читали, дату сменили: ответ на старую дату сетку не подменяет.
+                return ApiFailureKind.None;
             }
 
             IsWorkingDay = response.IsWorkingDay;
@@ -332,34 +481,121 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
 
                 Slots.Add(option);
             }
+
+            SlotsError = null;
+            _retrySlotsDate = null;
+            _slotsFailureKind = ApiFailureKind.None;
         }
-        catch (OperationCanceledException)
-        {
-            // Смена даты или закрытие экрана: сетку уже читает следующий запрос.
-        }
-        catch (BarberSearchApiException)
-        {
-            if (generation == _generation)
-            {
-                SlotsError = SlotsLoadErrorText;
-            }
-        }
-        catch (HttpRequestException)
+        catch (Exception exception)
         {
             if (generation == _generation)
             {
-                SlotsError = SlotsLoadErrorText;
+                kind = ApiFailureClassifier.Classify(exception, token);
+
+                if (kind != ApiFailureKind.None)
+                {
+                    // Таймаут транспорта классификатор уже свёл к «нет связи», поэтому он больше
+                    // не проглатывается как отмена и не молчит.
+                    SlotsError = DescribeSlotsFailure(exception, kind);
+                    _slotsFailureKind = kind;
+                    _retrySlotsDate = kind.IsRetryable() ? day : null;
+                }
             }
         }
         finally
         {
             if (generation == _generation)
             {
-                IsLoadingSlots = false;
+                if (!silent)
+                {
+                    IsLoadingSlots = false;
+                }
+
                 NotifySlotsState();
             }
         }
+
+        return kind;
     }
+
+    /// <summary>
+    /// Одна попытка цикла: повторить сетку с датой упавшего запроса.
+    /// </summary>
+    /// <remarks>
+    /// Условия перепроверяются на момент попытки: пока цикл ждал паузу, ошибку могли снять
+    /// или человек мог сменить дату. Тогда повторять нечего, и цикл останавливается — так
+    /// терминальный сбой после повторяемого не оживляет цикл.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private Task<ApiFailureKind> RetrySlotsAttemptAsync(CancellationToken cancellationToken)
+    {
+        if (_retrySlotsDate is not { } day
+            || SlotsError is null
+            || !_slotsFailureKind.IsRetryable()
+            || IsLoadingSlots)
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadSlotsCoreAsync(day, silent: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Запускает цикл, если экран виден, сбой повторяемый и есть снимок даты.
+    /// </summary>
+    /// <remarks>
+    /// Второй цикл поверх первого удвоил бы запросы, поэтому <see cref="AutoRetryLoop.Start"/>
+    /// при работающем цикле ничего не делает. «Видна» — сигнал страницы, а не следствие
+    /// нажатия: повтор запускается и из завершения загрузки, но только пока экран виден.
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible
+            || IsLoadingSlots
+            || SlotsError is null
+            || !_slotsFailureKind.IsRetryable()
+            || _retrySlotsDate is null)
+        {
+            return;
+        }
+
+        _autoRetry.Start(RetrySlotsAttemptAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл, не трогая признак «экран виден».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке и смене даты: они останавливают фон, но экран остаётся видимым, и после
+    /// ответа цикл имеет право запуститься снова. Публичный <see cref="StopAutoRetry"/>
+    /// дополнительно помечает страницу скрытой — для них это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
+
+    /// <summary>
+    /// Переводит сбой сетки в текст, не показывая английский <c>detail</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>429</c> сохраняет свой текст — это просьба сбавить темп, а не «нет связи»; повтор
+    /// при этом остаётся повторяемым, как решил классификатор.
+    /// </remarks>
+    private static string DescribeSlotsFailure(Exception exception, ApiFailureKind kind) =>
+        kind == ApiFailureKind.Transport
+            ? NetworkErrorText
+            : exception is BarberSearchApiException
+            {
+                StatusCode: HttpStatusCode.TooManyRequests,
+            }
+                ? TooManyRequestsText
+                : SlotsLoadErrorText;
+
 
     /// <summary>
     /// Выбирает слот; повторное нажатие на выбранный слот ничего не меняет.
@@ -384,6 +620,12 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     /// <summary>
     /// Повторяет чтение сетки после ошибки.
     /// </summary>
+    /// <remarks>
+    /// «Повторить» значит «повторить сейчас»: <see cref="ChangeDateAsync"/> приватно
+    /// останавливает цикл, читает выбранную дату без паузы и запускает цикл заново только при
+    /// новом повторяемом сбое. Публичный <see cref="StopAutoRetry"/> здесь не годится — он
+    /// ещё и пометил бы страницу скрытой, и повтор не смог бы включиться снова.
+    /// </remarks>
     [RelayCommand]
     private Task RetrySlotsAsync() => LoadSlotsAsync();
 
@@ -441,8 +683,12 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Освобождает отмену сетки слотов.
+    /// Освобождает отмену сетки слотов и останавливает автоповтор.
     /// </summary>
+    /// <remarks>
+    /// Цикл останавливается здесь ещё раз, а не только на странице: экран уходит из стека,
+    /// и тихая попытка не должна пережить свой ViewModel.
+    /// </remarks>
     public void Dispose()
     {
         if (_disposed)
@@ -451,6 +697,8 @@ public sealed partial class RescheduleBookingViewModel : ObservableObject, IDisp
         }
 
         _disposed = true;
+
+        _autoRetry.Stop();
 
         _slotsCancellation?.Cancel();
         _slotsCancellation?.Dispose();

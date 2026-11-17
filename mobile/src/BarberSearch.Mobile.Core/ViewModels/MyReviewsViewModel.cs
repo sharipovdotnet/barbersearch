@@ -30,6 +30,13 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// сразу. <c>404</c> на удаление — не ошибка: отзыв уже удалён, в том числе с другого
 /// устройства, и для списка это тот же результат.
 /// </para>
+/// <para>
+/// Ошибки чтения, пока страница видна, повторяются сами: у первой страницы и у догрузки
+/// свои циклы, потому что это два разных чтения с разными снимками. Снимок догрузки — её
+/// курсор на момент сбоя: тихая попытка несёт именно его, а не текущий курсор списка. Под
+/// причиной при этом видна строка «Пробуем снова…», а «Повторить» остаётся и значит
+/// «повторить сейчас». Удаление отзыва — запись: оно не повторяется никогда.
+/// </para>
 /// </remarks>
 public sealed partial class MyReviewsViewModel : ObservableObject
 {
@@ -64,21 +71,72 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     private readonly IReviewsApi _reviewsApi;
     private readonly TokenSession _session;
 
+    private readonly AutoRetryLoop _autoRetry;
+    private readonly AutoRetryLoop _loadMoreAutoRetry;
+
     private string? _nextCursor;
     private int _generation;
+
+    /// <summary>
+    /// Вид последнего сбоя первой страницы: по нему решает цикл автоповтора.
+    /// </summary>
+    /// <remarks>
+    /// Запоминается для каждого неуспеха, а не только для повторяемого: иначе «транспорт,
+    /// потом 404» оставил бы в памяти старый <see cref="ApiFailureKind.Transport"/>, и кнопка
+    /// снова запустила бы цикл на отказе, который не изменится.
+    /// </remarks>
+    private ApiFailureKind _firstPageFailureKind;
+
+    /// <summary>
+    /// Вид последнего сбоя догрузки: по нему решает второй цикл.
+    /// </summary>
+    /// <remarks>
+    /// Хранится отдельно от вида сбоя первой страницы: у двух чтений разные сбои, и отказ
+    /// догрузки не должен ни отменять повтор первой страницы, ни оживлять свой цикл.
+    /// </remarks>
+    private ApiFailureKind _loadMoreFailureKind;
+
+    /// <summary>
+    /// Курсор упавшей догрузки: повтор несёт его, а не текущий курсор списка.
+    /// </summary>
+    private string? _loadMoreRetryCursor;
+
+    /// <summary>
+    /// Страница сейчас видна: циклы автоповтора работают только пока это так.
+    /// </summary>
+    private bool _isPageVisible;
 
     /// <summary>
     /// Создаёт экран отзывов.
     /// </summary>
     /// <param name="reviewsApi">Список, правка и удаление отзывов.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
-    public MyReviewsViewModel(IReviewsApi reviewsApi, TokenSession session)
+    /// <param name="autoRetry">
+    /// Цикл автоповтора первой страницы; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Параметр необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
+    /// </param>
+    /// <param name="loadMoreAutoRetry">
+    /// Цикл автоповтора догрузки, отдельный от цикла первой страницы; <c>null</c> — собственный
+    /// цикл с обычным расписанием. Параметр необязательный и стоит последним, чтобы
+    /// существующие позиционные вызовы (DI и тесты) не менялись.
+    /// </param>
+    public MyReviewsViewModel(
+        IReviewsApi reviewsApi,
+        TokenSession session,
+        AutoRetryLoop? autoRetry = null,
+        AutoRetryLoop? loadMoreAutoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(reviewsApi);
         ArgumentNullException.ThrowIfNull(session);
 
         _reviewsApi = reviewsApi;
         _session = session;
+
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
+
+        _loadMoreAutoRetry = loadMoreAutoRetry ?? new AutoRetryLoop();
+        _loadMoreAutoRetry.StateChanged += OnLoadMoreAutoRetryStateChanged;
     }
 
     /// <summary>
@@ -126,6 +184,26 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _isLoadingMore;
+
+    /// <summary>
+    /// Цикл сам повторяет первую страницу: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
+
+    /// <summary>
+    /// Цикл сам повторяет догрузку: в футере видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="IsAutoRetrying"/>: это второй цикл, и его строка в футере не
+    /// должна загораться от повтора первой страницы.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isLoadMoreAutoRetrying;
 
     /// <summary>
     /// Ошибка первой страницы; <c>null</c>, когда её нет.
@@ -231,6 +309,64 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Сообщает, что страница видна, и запускает автоповтор ошибок первой страницы и догрузки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при каждом появлении и возврате из фона. Идемпотентен: без ошибки,
+    /// при окончательном отказе или уже работающем цикле ничего не делает.
+    /// </para>
+    /// <para>
+    /// Оба цикла поднимаются одним сигналом видимости: у догрузки нет своего жизненного
+    /// цикла, а второй подписки на окно быть не должно. Запуск и остановка обязаны идти из
+    /// UI-потока: <see cref="AutoRetryLoop.StateChanged"/> синхронно меняет привязанные
+    /// <see cref="IsAutoRetrying"/> и <see cref="IsLoadMoreAutoRetrying"/>.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+        TryStartLoadMoreAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что страница скрыта, и останавливает оба автоповтора.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а строки «Пробуем снова…»
+    /// сразу гаснут: скрытая страница не показывает работающий повтор и не ходит в сеть.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+        StopLoadMoreAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
+    /// Завершается, когда цикл повтора догрузки останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task LoadMoreAutoRetryCompletion => _loadMoreAutoRetry.Completion;
+
+    /// <summary>
+    /// Цикл повтора догрузки: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop LoadMoreAutoRetry => _loadMoreAutoRetry;
+
+    /// <summary>
     /// Сбрасывает экран после завершения сессии.
     /// </summary>
     /// <remarks>
@@ -239,8 +375,16 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// </remarks>
     public void ApplySignedOutState()
     {
+        // Выход — это и есть «повторять больше нечего»: циклы могли ждать паузу, пока сессию
+        // гасили, и без остановки сходили бы в сеть без токена.
+        StopAutoRetryLoop();
+        StopLoadMoreAutoRetryLoop();
+
         _generation++;
         _nextCursor = null;
+        _firstPageFailureKind = ApiFailureKind.None;
+        _loadMoreFailureKind = ApiFailureKind.None;
+        _loadMoreRetryCursor = null;
 
         IsAuthenticated = false;
         IsFirstLoading = false;
@@ -377,69 +521,33 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// <summary>
     /// Догружает следующую страницу.
     /// </summary>
+    /// <remarks>
+    /// Обычная догрузка: показывает «Идёт догрузка…» и стирает старую ошибку, потому что её
+    /// запустил человек прокруткой. Само чтение живёт в <see cref="LoadMorePageAsync"/>: тем же
+    /// путём ходят тихая попытка цикла и кнопка «Повторить».
+    /// </remarks>
     [RelayCommand]
     private async Task LoadMoreAsync()
     {
-        if (!CanLoadMore || !IsAuthenticated || IsLoadingMore || IsFirstLoading)
+        var cursor = _nextCursor;
+
+        if (!IsAuthenticated || IsFirstLoading || IsLoadingMore || cursor is null)
         {
             return;
         }
 
-        IsLoadingMore = true;
-        LoadMoreError = null;
-
-        var generation = _generation;
-
-        try
-        {
-            var page = await _reviewsApi.GetMyReviewsAsync(_nextCursor, PageSize, CancellationToken.None);
-
-            if (generation != _generation)
-            {
-                return;
-            }
-
-            AppendItems(page.Items);
-            _nextCursor = page.NextCursor;
-        }
-        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            await EndSessionAsync();
-        }
-        catch (BarberSearchApiException exception)
-        {
-            if (generation == _generation)
-            {
-                LoadMoreError = exception.StatusCode == HttpStatusCode.TooManyRequests
-                    ? TooManyRequestsText
-                    : LoadMoreErrorText;
-            }
-        }
-        catch (HttpRequestException)
-        {
-            if (generation == _generation)
-            {
-                LoadMoreError = NetworkErrorText;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            if (generation == _generation)
-            {
-                LoadMoreError = NetworkErrorText;
-            }
-        }
-        finally
-        {
-            IsLoadingMore = false;
-
-            NotifyViewState();
-        }
+        await LoadMorePageAsync(cursor, LoadMoreMode.Normal, CancellationToken.None);
     }
 
     /// <summary>
     /// Повторяет первую загрузку после ошибки.
     /// </summary>
+    /// <remarks>
+    /// «Повторить» значит «повторить сейчас»: цикл останавливается приватно (публичный
+    /// <see cref="StopAutoRetry"/> ещё и пометил бы страницу скрытой), страница читается без
+    /// паузы, а цикл запускается заново только если новый сбой снова повторяемый — это делает
+    /// <see cref="SetPageFailure"/>. Успех цикл не запускает: повторять больше нечего.
+    /// </remarks>
     [RelayCommand]
     private async Task RetryAsync()
     {
@@ -448,22 +556,37 @@ public sealed partial class MyReviewsViewModel : ObservableObject
             return;
         }
 
+        StopAutoRetryLoop();
+
         ErrorMessage = null;
         NotifyViewState();
 
         await LoadFirstPageAsync(FirstPageMode.Initial, CancellationToken.None);
+
+        TryStartAutoRetry();
     }
 
     /// <summary>
     /// Повторяет догрузку после ошибки, не трогая загруженные строки.
     /// </summary>
+    /// <remarks>
+    /// Цикл догрузки останавливается, страница читается сразу, а цикл возвращается к жизни
+    /// только при новом повторяемом сбое — это делает <see cref="SetLoadMoreFailure"/>.
+    /// Нажатие не «оживляет» скрытую страницу: запуск цикла проверяет <c>_isPageVisible</c>.
+    /// </remarks>
     [RelayCommand]
     private async Task RetryLoadMoreAsync()
     {
-        LoadMoreError = null;
-        NotifyViewState();
+        StopLoadMoreAutoRetryLoop();
 
-        await LoadMoreAsync();
+        var cursor = _nextCursor;
+
+        if (!IsAuthenticated || IsFirstLoading || cursor is null)
+        {
+            return;
+        }
+
+        await LoadMorePageAsync(cursor, LoadMoreMode.Normal, CancellationToken.None);
     }
 
     /// <summary>
@@ -491,16 +614,33 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// Читает первую страницу и заменяет список.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Поколение сдвигается на старте: ответ, пришедший после обновления или завершения
     /// сессии, отбрасывается. Ошибка тихого обновления не стирает уже загруженные строки.
+    /// </para>
+    /// <para>
+    /// Режим <see cref="FirstPageMode.Retry"/> — попытка цикла автоповтора: причина ошибки
+    /// остаётся на экране до ответа, иначе каждый повтор мигал бы пустым экраном и кнопкой,
+    /// которую некуда нажать. Запрос первой страницы не имеет параметров, поэтому снимка у
+    /// него нет: повторяемость определяется видом сбоя.
+    /// </para>
     /// </remarks>
-    private async Task LoadFirstPageAsync(FirstPageMode mode, CancellationToken cancellationToken)
+    /// <param name="mode">Показать индикатор, обновить молча или повторить в фоне.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadFirstPageAsync(
+        FirstPageMode mode,
+        CancellationToken cancellationToken)
     {
         _generation++;
         var generation = _generation;
 
-        ErrorMessage = null;
-        LoadMoreError = null;
+        if (mode != FirstPageMode.Retry)
+        {
+            ErrorMessage = null;
+            LoadMoreError = null;
+            _firstPageFailureKind = ApiFailureKind.None;
+        }
 
         if (mode == FirstPageMode.Initial)
         {
@@ -509,13 +649,15 @@ public sealed partial class MyReviewsViewModel : ObservableObject
 
         NotifyViewState();
 
+        var kind = ApiFailureKind.None;
+
         try
         {
             var page = await _reviewsApi.GetMyReviewsAsync(cursor: null, PageSize, cancellationToken);
 
             if (generation != _generation)
             {
-                return;
+                return ApiFailureKind.None;
             }
 
             Items.Clear();
@@ -527,30 +669,34 @@ public sealed partial class MyReviewsViewModel : ObservableObject
 
             _nextCursor = page.NextCursor;
             IsFirstLoading = false;
+            ErrorMessage = null;
+            LoadMoreError = null;
+            _firstPageFailureKind = ApiFailureKind.None;
+            _loadMoreFailureKind = ApiFailureKind.None;
+            _loadMoreRetryCursor = null;
 
             NotifyViewState();
         }
-        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        catch (Exception exception)
         {
-            await EndSessionAsync();
-        }
-        catch (BarberSearchApiException exception)
-        {
-            SetPageFailure(generation, exception.StatusCode == HttpStatusCode.TooManyRequests
-                ? TooManyRequestsText
-                : LoadErrorText);
-        }
-        catch (HttpRequestException)
-        {
-            SetPageFailure(generation, NetworkErrorText);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            SetPageFailure(generation, NetworkErrorText);
-        }
-        catch (OperationCanceledException)
-        {
-            // Отмена страницей — не ошибка.
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind != ApiFailureKind.None)
+            {
+                if (exception is BarberSearchApiException
+                    {
+                        StatusCode: HttpStatusCode.Unauthorized,
+                    })
+                {
+                    // 401 окончателен по классификации и вдобавок гасит сессию: возврат на
+                    // вкладку «Профиль» важнее любого текста в списке.
+                    await EndSessionAsync();
+                }
+                else
+                {
+                    SetPageFailure(generation, DescribeFirstPageFailure(exception, kind), kind);
+                }
+            }
         }
         finally
         {
@@ -560,12 +706,35 @@ public sealed partial class MyReviewsViewModel : ObservableObject
                 NotifyViewState();
             }
         }
+
+        return kind;
+    }
+
+    /// <summary>
+    /// Одна попытка цикла: перечитать первую страницу, не гася ошибку.
+    /// </summary>
+    /// <remarks>
+    /// Условия перепроверяются на момент попытки: пока цикл ждал паузу, список могли
+    /// перечитать вручную. Тогда повторять нечего, и цикл останавливается.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private Task<ApiFailureKind> RetryFirstPageAsync(CancellationToken cancellationToken)
+    {
+        if (ErrorMessage is null || !_firstPageFailureKind.IsRetryable())
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadFirstPageAsync(FirstPageMode.Retry, cancellationToken);
     }
 
     /// <summary>
     /// Показывает ошибку страницы, но не стирает уже загруженные строки.
     /// </summary>
-    private void SetPageFailure(int generation, string message)
+    /// <param name="generation">Поколение ответов, к которому относится сбой.</param>
+    /// <param name="message">Текст для человека.</param>
+    /// <param name="kind">Вид сбоя: по нему решает цикл автоповтора.</param>
+    private void SetPageFailure(int generation, string message, ApiFailureKind kind)
     {
         if (generation != _generation)
         {
@@ -573,6 +742,7 @@ public sealed partial class MyReviewsViewModel : ObservableObject
         }
 
         IsFirstLoading = false;
+        _firstPageFailureKind = kind;
 
         if (Items.Count == 0)
         {
@@ -580,7 +750,260 @@ public sealed partial class MyReviewsViewModel : ObservableObject
         }
 
         NotifyViewState();
+
+        // Сбой пришёл, пока страница видна: цикл может повторить чтение сам. Если он уже
+        // работает, Start ничего не сделает — второй цикл удвоил бы запросы.
+        TryStartAutoRetry();
     }
+
+    /// <summary>
+    /// Запускает цикл первой страницы, если страница видна, сбой повторяемый и ничего не грузится.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный метод нужен потому, что «видна» — сигнал страницы, а не следствие нажатия:
+    /// повтор после сбоя запускается и из завершения загрузки, но только пока страница видна.
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible || !IsAuthenticated || ShowLoading)
+        {
+            return;
+        }
+
+        if (ErrorMessage is null || !_firstPageFailureKind.IsRetryable())
+        {
+            return;
+        }
+
+        _autoRetry.Start(RetryFirstPageAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл первой страницы, не трогая признак «страница видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке «Повторить»: она останавливает фон, но страница остаётся видимой, и после
+    /// ответа цикл имеет право запуститься снова. Публичный <see cref="StopAutoRetry"/>
+    /// дополнительно помечает страницу скрытой — для кнопки это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
+
+    /// <summary>
+    /// Читает следующую страницу — обычной догрузкой или тихой попыткой цикла.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Курсор приходит аргументом, а не берётся из текущего <c>_nextCursor</c>: тихая попытка
+    /// обязана повторить упавший запрос, даже если список успели обновить. Успех очищает
+    /// ошибку; неудача оставляет строки, причину и курсор как были.
+    /// </para>
+    /// <para>
+    /// Оба режима поднимают <see cref="IsLoadingMore"/>: это по-прежнему одно чтение одной
+    /// страницы. Поэтому догрузка, которую запустит прокрутка во время тихой попытки, просто
+    /// не начнётся — второе чтение того же курсора добавило бы те же строки дважды. Попытка,
+    /// которая должна начаться поверх уже идущей обычной догрузки, уступает ей и не делает
+    /// запроса вовсе (см. <see cref="RetryLoadMoreAttemptAsync"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="cursor">Курсор упавшей страницы: повтор несёт именно его.</param>
+    /// <param name="mode">Обычная догрузка или тихая попытка цикла.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему второй цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadMorePageAsync(
+        string cursor,
+        LoadMoreMode mode,
+        CancellationToken cancellationToken)
+    {
+        IsLoadingMore = true;
+
+        if (mode == LoadMoreMode.Normal)
+        {
+            LoadMoreError = null;
+            _loadMoreFailureKind = ApiFailureKind.None;
+        }
+
+        NotifyViewState();
+
+        var generation = _generation;
+        var kind = ApiFailureKind.None;
+
+        try
+        {
+            var page = await _reviewsApi.GetMyReviewsAsync(cursor, PageSize, cancellationToken);
+
+            if (generation != _generation || _nextCursor != cursor)
+            {
+                // Пока читали, список перечитали первой страницей или страницу уже догрузила
+                // обычная догрузка: ответ устарел. Курсор, снятый на старте, и есть защита от
+                // второго добавления той же страницы.
+                return ApiFailureKind.None;
+            }
+
+            AppendItems(page.Items);
+            _nextCursor = page.NextCursor;
+            LoadMoreError = null;
+            _loadMoreFailureKind = ApiFailureKind.None;
+            _loadMoreRetryCursor = null;
+
+            NotifyViewState();
+        }
+        catch (Exception exception)
+        {
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+
+            if (kind != ApiFailureKind.None)
+            {
+                if (exception is BarberSearchApiException
+                    {
+                        StatusCode: HttpStatusCode.Unauthorized,
+                    })
+                {
+                    await EndSessionAsync();
+                }
+                else if (generation == _generation && _nextCursor == cursor)
+                {
+                    SetLoadMoreFailure(cursor, DescribeLoadMoreFailure(exception, kind), kind);
+                }
+            }
+        }
+        finally
+        {
+            // Флаг снимается всегда, а не только при совпавшем поколении: первая страница,
+            // перечитанная поверх догрузки, поколение сдвигает, но флаг не трогает — иначе
+            // он остался бы поднятым навсегда и догрузка больше не запустилась бы.
+            // Тихая попытка поднимала тот же флаг, поэтому снимает его тоже она.
+            IsLoadingMore = false;
+            NotifyViewState();
+        }
+
+        return kind;
+    }
+
+    /// <summary>
+    /// Одна попытка цикла: повторить упавшую догрузку тем же курсором.
+    /// </summary>
+    /// <remarks>
+    /// Условия перепроверяются на момент попытки: пока цикл ждал паузу, ошибку могли снять
+    /// или страницу могли уже догрузить. Тогда повторять нечего, и цикл останавливается —
+    /// так терминальный сбой после повторяемого не оживляет цикл.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private Task<ApiFailureKind> RetryLoadMoreAttemptAsync(CancellationToken cancellationToken)
+    {
+        if (_loadMoreRetryCursor is not { } cursor
+            || LoadMoreError is null
+            || !_loadMoreFailureKind.IsRetryable()
+            || _nextCursor != cursor
+            || IsLoadingMore)
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadMorePageAsync(cursor, LoadMoreMode.Retry, cancellationToken);
+    }
+
+    /// <summary>
+    /// Показывает ошибку догрузки и запоминает снимок упавшего запроса.
+    /// </summary>
+    /// <remarks>
+    /// Вид сбоя запоминается для каждого неуспеха, а не только для повторяемого: иначе
+    /// «транспорт, потом 404» оставил бы в памяти старый <see cref="ApiFailureKind.Transport"/>,
+    /// и «Повторить» снова запустила бы цикл на отказе, который не изменится.
+    /// </remarks>
+    /// <param name="cursor">Курсор упавшей страницы.</param>
+    /// <param name="message">Текст для человека.</param>
+    /// <param name="kind">Вид сбоя: по нему решает цикл автоповтора.</param>
+    private void SetLoadMoreFailure(string cursor, string message, ApiFailureKind kind)
+    {
+        IsLoadingMore = false;
+        LoadMoreError = message;
+        _loadMoreFailureKind = kind;
+        _loadMoreRetryCursor = cursor;
+
+        NotifyViewState();
+
+        // Сбой пришёл, пока страница видна: цикл может повторить догрузку сам. Если он уже
+        // работает, Start ничего не сделает — второй цикл удвоил бы запросы.
+        TryStartLoadMoreAutoRetry();
+    }
+
+    /// <summary>
+    /// Запускает цикл догрузки, если страница видна, сбой повторяемый и есть снимок курсора.
+    /// </summary>
+    /// <remarks>
+    /// Снимок — курсор на момент сбоя, а не текущий: обновление списка между попытками не
+    /// должно подменить повторяемый запрос. Уступать обычной догрузке цикл умеет сам —
+    /// <see cref="RetryLoadMoreAttemptAsync"/> перепроверяет условия.
+    /// </remarks>
+    private void TryStartLoadMoreAutoRetry()
+    {
+        if (!_isPageVisible || !IsAuthenticated)
+        {
+            return;
+        }
+
+        if (_loadMoreRetryCursor is null
+            || LoadMoreError is null
+            || !_loadMoreFailureKind.IsRetryable()
+            || IsFirstLoading)
+        {
+            return;
+        }
+
+        _loadMoreAutoRetry.Start(RetryLoadMoreAttemptAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл догрузки, не трогая признак «страница видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке «Повторить» в футере: она останавливает фон, но страница остаётся
+    /// видимой, и после ответа цикл имеет право запуститься снова. Публичный
+    /// <see cref="StopAutoRetry"/> дополнительно пометил бы страницу скрытой.
+    /// </remarks>
+    private void StopLoadMoreAutoRetryLoop() => _loadMoreAutoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» в футере вслед за состоянием цикла догрузки.
+    /// </summary>
+    private void OnLoadMoreAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsLoadMoreAutoRetrying = _loadMoreAutoRetry.IsRunning;
+
+    /// <summary>
+    /// Переводит сбой чтения первой страницы в текст, не показывая английский <c>detail</c>.
+    /// </summary>
+    private static string DescribeFirstPageFailure(Exception exception, ApiFailureKind kind) =>
+        kind == ApiFailureKind.Transport
+            ? NetworkErrorText
+            : exception is BarberSearchApiException apiException
+                ? DescribeFailure(apiException, LoadErrorText)
+                : LoadErrorText;
+
+    /// <summary>
+    /// Переводит сбой догрузки в текст, не показывая английский <c>detail</c>.
+    /// </summary>
+    /// <remarks>
+    /// Таймаут транспорта классификатор уже считает «нет связи»: раньше он приходил
+    /// отменой и получал общий текст догрузки, а человек не видел, что ответа не было.
+    /// </remarks>
+    private static string DescribeLoadMoreFailure(Exception exception, ApiFailureKind kind) =>
+        kind == ApiFailureKind.Transport
+            ? NetworkErrorText
+            : exception is BarberSearchApiException apiException
+                ? DescribeFailure(apiException, LoadMoreErrorText)
+                : LoadMoreErrorText;
+
+    /// <summary>
+    /// Переводит сбой API в текст, не показывая английский <c>detail</c>.
+    /// </summary>
+    private static string DescribeFailure(BarberSearchApiException exception, string fallback) =>
+        exception.StatusCode == HttpStatusCode.TooManyRequests ? TooManyRequestsText : fallback;
 
     /// <summary>
     /// Догружает следующую страницу, если удаление опустошило список.
@@ -612,10 +1035,21 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     /// <summary>
     /// Дополняет список следующей страницей.
     /// </summary>
+    /// <remarks>
+    /// Отзыв, который уже есть в списке, не добавляется второй раз. Повтор упавшей догрузки
+    /// идёт тем же курсором, и сервер может вернуть ту же строку: без этой проверки повтор
+    /// добавил бы дубль и сломал порядок. Обычной догрузке проверка ничего не меняет — в норме
+    /// страницы не пересекаются.
+    /// </remarks>
     private void AppendItems(IReadOnlyList<MyReviewResponse> reviews)
     {
         foreach (var review in reviews)
         {
+            if (Items.Any(item => item.Id == review.Id))
+            {
+                continue;
+            }
+
             Items.Add(new MyReviewListItem(review));
         }
 
@@ -646,11 +1080,41 @@ public sealed partial class MyReviewsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Режим загрузки первой страницы: показать индикатор или обновить молча.
+    /// Режим загрузки первой страницы: показать индикатор, обновить молча или повторить в фоне.
     /// </summary>
     private enum FirstPageMode
     {
         Initial,
+
         Silent,
+
+        /// <summary>
+        /// Попытка цикла автоповтора: как <see cref="Silent"/>, но ошибка не стирается до ответа.
+        /// </summary>
+        /// <remarks>
+        /// Иначе карточка с причиной и «Повторить» исчезала бы на каждой паузе, и человек видел
+        /// бы мигание пустого экрана вместо того, что уже знает.
+        /// </remarks>
+        Retry,
+    }
+
+    /// <summary>
+    /// Режим догрузки: обычная по прокрутке или тихая попытка цикла.
+    /// </summary>
+    /// <remarks>
+    /// Третьего режима нет: кнопка «Повторить» в футере останавливает цикл и читает страницу
+    /// обычным режимом — для неё это и есть «повторить сейчас», с индикатором и свежим ответом.
+    /// </remarks>
+    private enum LoadMoreMode
+    {
+        /// <summary>
+        /// Обычная догрузка: индикатор, старая ошибка стирается, потому что её сменил жест.
+        /// </summary>
+        Normal,
+
+        /// <summary>
+        /// Тихая попытка цикла: причина и строки остаются, ответ решает исход.
+        /// </summary>
+        Retry,
     }
 }

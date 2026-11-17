@@ -26,6 +26,11 @@ public partial class ProfilePage : ContentPage
     private readonly TokenSession _session;
 
     /// <summary>
+    /// Область «страница видна»: из неё растёт автоповтор, пока вкладка на виду.
+    /// </summary>
+    private IDisposable? _visibility;
+
+    /// <summary>
     /// Создаёт экран и подписывается на завершение сессии и переходы в разделы.
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
@@ -59,8 +64,10 @@ public partial class ProfilePage : ContentPage
     /// <remarks>
     /// Именно при появлении, а не в конструкторе: после выхода или сбоя сети повторный
     /// переход на вкладку — это и есть «попробовать ещё раз», отдельной кнопки не нужно.
-    /// <c>InitializeAsync</c> сам гасит отмену и ошибки, поэтому <c>async void</c> здесь
-    /// безопасен и является единственной допустимой формой переопределения.
+    /// Область видимости создаётся до первой загрузки: сбой, пришедший из неё, уже может
+    /// запустить автоповтор. <c>InitializeAsync</c> сам гасит отмену и ошибки, поэтому
+    /// <c>async void</c> здесь безопасен и является единственной допустимой формой
+    /// переопределения.
     /// </remarks>
     protected override async void OnAppearing()
     {
@@ -69,14 +76,27 @@ public partial class ProfilePage : ContentPage
         _session.SessionEnded -= OnSessionEnded;
         _session.SessionEnded += OnSessionEnded;
 
+        _visibility?.Dispose();
+        _visibility = PageVisibility.Watch(
+            this,
+            _viewModel.StartAutoRetry,
+            _viewModel.StopAutoRetry);
+
         await _viewModel.InitializeAsync();
     }
 
     /// <summary>
-    /// Снимает подписку на singleton-сессию, пока страница не на экране.
+    /// Снимает подписку на singleton-сессию и останавливает автоповтор, пока страница не на экране.
     /// </summary>
+    /// <remarks>
+    /// <see cref="IDisposable.Dispose"/> сам сообщает «скрыта» и снимает подписку на окно,
+    /// поэтому отдельного вызова <c>StopAutoRetry</c> здесь нет.
+    /// </remarks>
     protected override void OnDisappearing()
     {
+        _visibility?.Dispose();
+        _visibility = null;
+
         _session.SessionEnded -= OnSessionEnded;
 
         base.OnDisappearing();
@@ -100,8 +120,15 @@ public partial class ProfilePage : ContentPage
     /// <summary>
     /// Открывает экран личных данных.
     /// </summary>
+    /// <remarks>
+    /// Цикл автоповтора останавливается до перехода: push-навигация Shell может не вызвать
+    /// <see cref="OnDisappearing"/>, и тогда повтор продолжал бы ходить в сеть под уже
+    /// открытым дочерним экраном — без человека, который его видит.
+    /// </remarks>
     private async void OnEditProfileRequested(object? sender, EventArgs e)
     {
+        _viewModel.StopAutoRetry();
+
         await Shell.Current.GoToAsync(AccountProfilePage.Route);
     }
 
@@ -110,6 +137,9 @@ public partial class ProfilePage : ContentPage
     /// </summary>
     private async void OnReviewsRequested(object? sender, EventArgs e)
     {
+        // Та же причина, что и у «Личных данных»: push может не вызвать OnDisappearing.
+        _viewModel.StopAutoRetry();
+
         await Shell.Current.GoToAsync(MyReviewsPage.Route);
     }
 
@@ -118,6 +148,9 @@ public partial class ProfilePage : ContentPage
     /// </summary>
     private async void OnSecurityRequested(object? sender, EventArgs e)
     {
+        // Та же причина, что и у «Личных данных»: push может не вызвать OnDisappearing.
+        _viewModel.StopAutoRetry();
+
         await Shell.Current.GoToAsync(SecurityPage.Route);
     }
 
@@ -126,6 +159,9 @@ public partial class ProfilePage : ContentPage
     /// </summary>
     private async void OnRegisterRequested(object? sender, EventArgs e)
     {
+        // Та же причина, что и у «Личных данных»: push может не вызвать OnDisappearing.
+        _viewModel.StopAutoRetry();
+
         await Shell.Current.GoToAsync(RegisterPage.Route);
     }
 
@@ -138,6 +174,9 @@ public partial class ProfilePage : ContentPage
     /// </remarks>
     private async void OnForgotPasswordRequested(object? sender, EventArgs e)
     {
+        // Та же причина, что и у «Личных данных»: push может не вызвать OnDisappearing.
+        _viewModel.StopAutoRetry();
+
         await Shell.Current.GoToAsync(ForgotPasswordPage.Route);
     }
 

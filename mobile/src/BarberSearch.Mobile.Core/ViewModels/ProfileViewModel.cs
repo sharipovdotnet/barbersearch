@@ -86,17 +86,43 @@ public sealed partial class ProfileViewModel : ObservableObject
     private MyProfileResponse? _profile;
 
     /// <summary>
+    /// Цикл автоповтора чтения профиля: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    private readonly AutoRetryLoop _autoRetry;
+
+    /// <summary>
+    /// Вид последнего сбоя чтения профиля: по нему цикл решает, повторять ли чтение.
+    /// </summary>
+    /// <remarks>
+    /// Запоминается для каждого неуспеха, а не только для повторяемого: иначе «транспорт,
+    /// потом 404» оставил бы в памяти старый <see cref="ApiFailureKind.Transport"/>, и
+    /// «Повторить» снова запустила бы цикл на отказе, который не изменится.
+    /// </remarks>
+    private ApiFailureKind _profileFailureKind;
+
+    /// <summary>
+    /// Вкладка сейчас видна: цикл автоповтора работает только пока это так.
+    /// </summary>
+    private bool _isPageVisible;
+
+    /// <summary>
     /// Создаёт экран профиля.
     /// </summary>
     /// <param name="authApi">Вход и выход.</param>
     /// <param name="accountApi">Профиль текущего пользователя.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
     /// <param name="push">Регистратор push: переключатель напоминаний.</param>
+    /// <param name="autoRetry">
+    /// Цикл автоповтора чтения профиля; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Параметр необязательный и стоит последним, чтобы существующие позиционные вызовы
+    /// (DI и тесты) не менялись.
+    /// </param>
     public ProfileViewModel(
         IAuthApi authApi,
         IAccountApi accountApi,
         TokenSession session,
-        IPushRegistrar push)
+        IPushRegistrar push,
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(authApi);
         ArgumentNullException.ThrowIfNull(accountApi);
@@ -107,6 +133,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         _accountApi = accountApi;
         _session = session;
         _push = push;
+
+        _autoRetry = autoRetry ?? new AutoRetryLoop();
+        _autoRetry.StateChanged += OnAutoRetryStateChanged;
     }
 
     /// <summary>
@@ -201,6 +230,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LogoutButtonText))]
     private bool _isSigningOut;
+
+    /// <summary>
+    /// Цикл сам повторяет чтение профиля: под причиной ошибки видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Состояние цикла, а не экрана: свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAutoRetrying;
 
     /// <summary>
     /// Введённый email.
@@ -428,6 +467,52 @@ public sealed partial class ProfileViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Сообщает, что вкладка видна, и запускает автоповтор неудачного чтения профиля.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зовётся страницей при каждом появлении и каждом возврате из фона. Идемпотентен: без
+    /// ошибки, при окончательном отказе или уже работающем цикле ничего не делает.
+    /// </para>
+    /// <para>
+    /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
+    /// синхронно меняет привязанный <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
+    /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
+    /// </para>
+    /// </remarks>
+    public void StartAutoRetry()
+    {
+        _isPageVisible = true;
+
+        TryStartAutoRetry();
+    }
+
+    /// <summary>
+    /// Сообщает, что вкладка скрыта, и останавливает автоповтор чтения профиля.
+    /// </summary>
+    /// <remarks>
+    /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а <see cref="IsAutoRetrying"/>
+    /// сразу становится <c>false</c>: скрытая вкладка не показывает работающий повтор и не
+    /// ходит в сеть.
+    /// </remarks>
+    public void StopAutoRetry()
+    {
+        _isPageVisible = false;
+
+        StopAutoRetryLoop();
+    }
+
+    /// <summary>
+    /// Завершается, когда цикл автоповтора останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task AutoRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
     /// Возвращает экран к форме входа после завершения сессии.
     /// </summary>
     /// <remarks>
@@ -438,6 +523,10 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </remarks>
     public void ApplySignedOutState()
     {
+        // Выход — это и есть «повторять больше нечего»: цикл мог ждать паузу, пока сессию
+        // гасили, и без остановки сходил бы в сеть без токена.
+        StopAutoRetryLoop();
+
         IsAuthenticated = false;
         _profile = null;
         ProfileEmail = null;
@@ -601,8 +690,13 @@ public sealed partial class ProfileViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Повторяет чтение профиля после ошибки.
+    /// Повторяет чтение профиля после ошибки — сразу, по кнопке.
     /// </summary>
+    /// <remarks>
+    /// Кнопка «Повторить» значит «повторить сейчас»: сначала цикл автоповтора останавливается,
+    /// затем профиль читается без паузы. Если сбой снова повторяемый, цикл запускается заново;
+    /// успех цикл не запускает — повторять больше нечего.
+    /// </remarks>
     [RelayCommand]
     private async Task RetryProfileAsync()
     {
@@ -611,9 +705,13 @@ public sealed partial class ProfileViewModel : ObservableObject
             return;
         }
 
+        StopAutoRetryLoop();
+
         ProfileError = null;
 
         await LoadProfileAsync(silent: false, CancellationToken.None);
+
+        TryStartAutoRetry();
     }
 
     /// <summary>
@@ -697,16 +795,26 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// показывает состояние ошибки с «Повторить».
     /// </para>
     /// <para>
+    /// Причина ошибки не стирается в начале чтения, а индикатор первой загрузки не
+    /// переключается: тихая попытка цикла не имеет права гасить блок с причиной и
+    /// «Повторить», иначе на каждой паузе экран мигал бы пустым местом.
+    /// </para>
+    /// <para>
     /// <c>401</c> — единственный ответ, который гасит сессию: пара мертва, и показывать
     /// аккаунт дальше нельзя. Сеть, <c>429</c> и <c>5xx</c> сессию не трогают.
     /// </para>
     /// </remarks>
-    private async Task LoadProfileAsync(bool silent, CancellationToken cancellationToken)
+    /// <param name="silent">Не показывать индикатор первой загрузки: данные уже на экране.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadProfileAsync(bool silent, CancellationToken cancellationToken)
     {
         if (!silent)
         {
             IsProfileLoading = true;
         }
+
+        var kind = ApiFailureKind.None;
 
         try
         {
@@ -714,10 +822,13 @@ public sealed partial class ProfileViewModel : ObservableObject
 
             ApplyProfile(profile);
             ProfileError = null;
+            _profileFailureKind = ApiFailureKind.None;
         }
         catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
             // Обработчик уже пробовал продлить пару: второй <c>401</c> значит, что токен мёртв.
+            kind = ApiFailureKind.Terminal;
+
             await _session.ClearAsync(CancellationToken.None);
 
             ApplySignedOutState();
@@ -725,27 +836,107 @@ public sealed partial class ProfileViewModel : ObservableObject
         }
         catch (BarberSearchApiException exception)
         {
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
             ProfileError = DescribeFailure(exception, ProfileLoadFailedText);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException exception)
         {
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
             ProfileError = NetworkText;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // Таймаут транспорта приходит отменой: для человека это отсутствие связи.
+            kind = ApiFailureKind.Transport;
             ProfileError = NetworkText;
         }
         catch (InvalidOperationException)
         {
             // Пустой ответ сервера: для экрана это та же недоступность профиля.
+            kind = ApiFailureKind.Terminal;
             ProfileError = ProfileLoadFailedText;
         }
         finally
         {
-            IsProfileLoading = false;
+            // Тихая попытка не трогает флаг первой загрузки: он ей не принадлежит.
+            if (!silent)
+            {
+                IsProfileLoading = false;
+            }
         }
+
+        if (kind == ApiFailureKind.None)
+        {
+            // Настоящая отмена уже прервала метод, поэтому сюда приходит только успех:
+            // повторять больше нечего.
+            return kind;
+        }
+
+        // Вид сбоя запоминается для каждого неуспеха, а не только для повторяемого.
+        _profileFailureKind = kind;
+
+        // Сбой пришёл, пока вкладка видна: цикл может повторить чтение сам. Если он уже
+        // работает, Start ничего не сделает — второй цикл удвоил бы запросы.
+        TryStartAutoRetry();
+
+        return kind;
     }
+
+    /// <summary>
+    /// Одна попытка цикла: перечитать профиль, не гася причину ошибки и карточки.
+    /// </summary>
+    /// <remarks>
+    /// Условия перепроверяются на момент попытки: пока цикл ждал паузу, ошибку могли снять
+    /// или сессию могли погасить. Тогда повторять нечего, и цикл останавливается.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private Task<ApiFailureKind> RetryProfileAttemptAsync(CancellationToken cancellationToken)
+    {
+        if (ProfileError is null || !_profileFailureKind.IsRetryable())
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadProfileAsync(silent: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Запускает цикл, если вкладка видна, а ошибка чтения профиля повторяемая.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный метод нужен потому, что «видна» — сигнал страницы, а не следствие нажатия:
+    /// повтор после сбоя запускается и из завершения загрузки, но только пока вкладка видна.
+    /// </remarks>
+    private void TryStartAutoRetry()
+    {
+        if (!_isPageVisible || !IsAuthenticated || IsProfileLoading)
+        {
+            return;
+        }
+
+        if (ProfileError is null || !_profileFailureKind.IsRetryable())
+        {
+            return;
+        }
+
+        _autoRetry.Start(RetryProfileAttemptAsync);
+    }
+
+    /// <summary>
+    /// Останавливает цикл, не трогая признак «вкладка видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке «Повторить» и навигации в дочерние экраны: они останавливают фон, но
+    /// вкладка остаётся видимой, и после ответа цикл имеет право запуститься снова. Публичный
+    /// <see cref="StopAutoRetry"/> дополнительно помечает вкладку скрытой — для них это неверно.
+    /// </remarks>
+    private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.
+    /// </summary>
+    private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
     /// Раскладывает профиль по свойствам хаба.

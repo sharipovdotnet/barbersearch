@@ -67,6 +67,12 @@
                     LineBreakMode="WordWrap"
                     Text="{Binding ErrorMessage}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="Center"
+                    IsVisible="{Binding IsAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <Button
                     Command="{Binding RetryCommand}"
                     HorizontalOptions="Center"
@@ -244,6 +250,12 @@
                                     LineBreakMode="WordWrap"
                                     Text="{loc:Translate Key='Не удалось загрузить следующие отзывы.'}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    HorizontalOptions="Start"
+                                    IsVisible="{Binding IsLoadMoreAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                 <Button
                                     Command="{Binding RetryLoadMoreCommand}"
                                     HorizontalOptions="Start"

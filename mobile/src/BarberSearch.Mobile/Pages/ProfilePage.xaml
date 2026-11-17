@@ -180,6 +180,12 @@
                 LineBreakMode="WordWrap"
                 Text="{Binding ProfileError}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetrying}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             <Button
                 Command="{Binding RetryProfileCommand}"
                 FontSize="16"
@@ -268,6 +274,11 @@
                         LineBreakMode="WordWrap"
                         Text="{Binding ProfileError}"
                         TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding IsAutoRetrying}"
+                        Text="{loc:Translate Key='Пробуем снова…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                     <Button
                         Command="{Binding RetryProfileCommand}"
                         FontSize="16"

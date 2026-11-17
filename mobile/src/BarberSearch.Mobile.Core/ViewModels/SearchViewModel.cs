@@ -45,6 +45,14 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// Тихий повтор повторяет ровно тот запрос, который упал, а не свежий из формы: пока видна
 /// ошибка, правка полей остаётся в форме, и в сеть она уйдёт только по «Найти».
 /// </para>
+/// <para>
+/// Справочники фильтров — отдельное чтение со своей ошибкой, поэтому у них свой, второй цикл,
+/// поднимаемый тем же сигналом видимости. Сбои не связаны: падение справочников не запускает
+/// повтор выдачи, а сбой выдачи не трогает справочники. Повтор несёт снимок того, какие из
+/// двух запросов упали: частичный успех сохраняется, и заново запрашивается только упавшая
+/// часть. <c>429</c> в справочниках окончателен — лимитер не лечится повтором, и его текст
+/// «Слишком много запросов…» остаётся на экране.
+/// </para>
 /// </remarks>
 public sealed partial class SearchViewModel : ObservableObject
 {
@@ -98,6 +106,7 @@ public sealed partial class SearchViewModel : ObservableObject
     private LocationStatus? _locationStatus;
 
     private readonly AutoRetryLoop _autoRetry;
+    private readonly AutoRetryLoop _catalogsAutoRetry;
 
     /// <summary>
     /// Фильтры последней неудачной попытки: цикл повторов обязан повторить именно этот запрос.
@@ -125,6 +134,31 @@ public sealed partial class SearchViewModel : ObservableObject
     private ApiFailureKind _lastFailureKind;
 
     /// <summary>
+    /// Какие запросы справочников упали и должны быть повторены.
+    /// </summary>
+    /// <remarks>
+    /// Снимок для второго цикла: загрузка запрашивает оба справочника, а повтор — только
+    /// упавший. Частичный успех сохраняется: удавшаяся часть остаётся на экране и из снимка
+    /// уходит, иначе каждый повтор заново дёргал бы оба запроса и терял уже полученные данные.
+    /// </remarks>
+    private bool _catalogsNeedsSpecializations = true;
+
+    /// <summary>
+    /// Упавший справочник услуг — вторая половина того же снимка.
+    /// </summary>
+    private bool _catalogsNeedsHairServices = true;
+
+    /// <summary>
+    /// Вид последнего сбоя справочников: по нему второй цикл решает, повторять ли запрос.
+    /// </summary>
+    /// <remarks>
+    /// Запоминается для каждого неуспеха, а не только для повторяемого: иначе «транспорт,
+    /// потом 404» оставил бы в памяти старый <see cref="ApiFailureKind.Transport"/>, и кнопка
+    /// запустила бы цикл на отказе, который не изменится.
+    /// </remarks>
+    private ApiFailureKind _catalogsFailureKind;
+
+    /// <summary>
     /// Страница сейчас видна: без этого сигнала цикл повторов не запускается.
     /// </summary>
     private bool _isPageVisible;
@@ -146,12 +180,18 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Цикл автоповтора выдачи; <c>null</c> — собственный цикл с обычным расписанием. Параметр
     /// необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
     /// </param>
+    /// <param name="catalogsAutoRetry">
+    /// Второй цикл — для справочников фильтров; <c>null</c> — собственный цикл с обычным
+    /// расписанием. Он стоит последним и необязателен по той же причине, что и первый: выдача
+    /// и справочники повторяются независимо, и общий цикл связал бы их сбои.
+    /// </param>
     public SearchViewModel(
         IBarberSearchApi api,
         ILocationService locationService,
         TimeProvider timeProvider,
         CitySuggestions citySuggestions,
-        AutoRetryLoop? autoRetry = null)
+        AutoRetryLoop? autoRetry = null,
+        AutoRetryLoop? catalogsAutoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(locationService);
@@ -165,6 +205,9 @@ public sealed partial class SearchViewModel : ObservableObject
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
+
+        _catalogsAutoRetry = catalogsAutoRetry ?? new AutoRetryLoop();
+        _catalogsAutoRetry.StateChanged += OnCatalogsAutoRetryStateChanged;
 
         FillLanguages();
         RefreshDateOptions();
@@ -296,6 +339,17 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _isCatalogsLoading = true;
+
+    /// <summary>
+    /// Второй цикл повторяет справочники: под их ошибкой видна строка «Пробуем снова…».
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="IsAutoRetrying"/>: это второй цикл, и его строка живёт в блоке
+    /// справочников, а не в блоке выдачи. Свойство переключается подпиской на
+    /// <see cref="AutoRetryLoop.StateChanged"/> и ничего не решает само.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isCatalogsAutoRetrying;
 
     /// <summary>
     /// Текст ошибки загрузки справочников; <c>null</c>, когда ошибки нет.
@@ -443,7 +497,9 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <remarks>
     /// Вызывается при каждом появлении вкладки. Даты пересобираются, если сменился день —
     /// приложение могло висеть в фоне, — а справочники только при первом показе: их ошибка
-    /// лечится кнопкой «Повторить», а не повторным заходом на вкладку.
+    /// лечится кнопкой «Повторить» и вторым циклом автоповтора, а не повторным заходом на
+    /// вкладку. После неудачной загрузки цикл справочников поднимается здесь же: страница
+    /// сообщила «видна» до неё, и сбой обязан включить повтор сразу.
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -457,7 +513,9 @@ public sealed partial class SearchViewModel : ObservableObject
 
         _isInitialized = true;
 
-        await LoadCatalogsAsync(cancellationToken);
+        await LoadCatalogsAsync(silent: false, cancellationToken);
+
+        TryStartCatalogsAutoRetry();
     }
 
     /// <summary>
@@ -481,6 +539,7 @@ public sealed partial class SearchViewModel : ObservableObject
         _isPageVisible = true;
 
         TryStartAutoRetry();
+        TryStartCatalogsAutoRetry();
     }
 
     /// <summary>
@@ -490,12 +549,14 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Идемпотентен: остановка уже стоящего цикла ничего не делает. Пауза, запрос в полёте и
     /// завершение цикла отменяются, а <see cref="IsAutoRetrying"/> сразу становится
     /// <c>false</c> — экран не показывает работающий повтор поверх ушедшей страницы.
+    /// Останавливаются оба цикла: сигнал видимости у них общий, а чтения независимы.
     /// </remarks>
     public void StopAutoRetry()
     {
         _isPageVisible = false;
 
         StopAutoRetryLoop();
+        StopCatalogsAutoRetryLoop();
     }
 
     /// <summary>
@@ -507,6 +568,16 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Цикл автоповтора: тестам нужен счётчик попыток, приложению — нет.
     /// </summary>
     internal AutoRetryLoop AutoRetry => _autoRetry;
+
+    /// <summary>
+    /// Завершается, когда останавливается второй цикл — повтора справочников.
+    /// </summary>
+    internal Task CatalogsAutoRetryCompletion => _catalogsAutoRetry.Completion;
+
+    /// <summary>
+    /// Второй цикл: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop CatalogsAutoRetry => _catalogsAutoRetry;
 
     /// <summary>
     /// Подставляет выбранную подсказку в фильтр города.
@@ -784,8 +855,12 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Повторяет загрузку справочников после ошибки.
     /// </summary>
     /// <remarks>
-    /// Отдельная команда, а не повторный <see cref="InitializeAsync"/>: пока идёт повтор,
-    /// селекты показывают «Загрузка…», а не старую ошибку.
+    /// «Повторить» значит «повторить сейчас»: цикл справочников останавливается приватно
+    /// (публичный <see cref="StopAutoRetry"/> ещё и пометил бы страницу скрытой), оба
+    /// справочника или только упавший читаются без паузы, а цикл запускается заново только
+    /// если новый сбой снова повторяемый. Отдельная команда, а не повторный
+    /// <see cref="InitializeAsync"/>: пока идёт повтор, селекты показывают «Загрузка…», а не
+    /// старую ошибку.
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     [RelayCommand]
@@ -793,79 +868,264 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         _isInitialized = true;
 
-        await LoadCatalogsAsync(cancellationToken);
+        StopCatalogsAutoRetryLoop();
+
+        await LoadCatalogsAsync(silent: false, cancellationToken);
+
+        TryStartCatalogsAutoRetry();
     }
 
     /// <summary>
-    /// Грузит справочники специализаций и услуг одним параллельным запросом.
+    /// Грузит справочники — оба или только ту часть, которая упала в прошлый раз.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Ошибка справочника не блокирует поиск: город, дата и язык работают и без него, поэтому
-    /// экран показывает текст ошибки с «Повторить», а не отказ всей формы. Сбои сведены
-    /// классификатором; <c>429</c> в справочниках сохраняет свой текст — это просьба сбавить
-    /// темп, а не «нет связи».
+    /// экран показывает текст ошибки с «Повторить», а не отказ всей формы. Каждая часть
+    /// сводится классификатором отдельно: частичный успех сохраняется, и повтор запрашивает
+    /// только упавшую часть, а не оба справочника заново.
+    /// </para>
+    /// <para>
+    /// Тихий режим — попытка второго цикла: причина ошибки и уже загруженные справочники
+    /// остаются на экране до ответа, иначе каждая пауза между попытками мигала бы формой.
+    /// Успех очищает ошибку и снимок, неудача оставляет всё как было и возвращает вид сбоя.
+    /// </para>
+    /// <para>
+    /// <c>429</c> в справочниках окончателен: лимитер просит сбавить темп, и повтор лишь
+    /// повторил бы отказ, поэтому для этого чтения он не повторяется, а его текст остаётся.
+    /// </para>
     /// </remarks>
+    /// <param name="silent">Тихая попытка цикла: не очищать ошибку и загруженное до ответа.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns>Вид сбоя; справочники не участвуют в автоповторе выдачи.</returns>
-    private async Task<ApiFailureKind> LoadCatalogsAsync(CancellationToken cancellationToken)
+    /// <returns>Вид сбоя: по нему второй цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadCatalogsAsync(
+        bool silent,
+        CancellationToken cancellationToken)
     {
-        IsCatalogsLoading = true;
-        CatalogsErrorText = null;
-        ShowCatalogPlaceholders();
+        var needsSpecializations = _catalogsNeedsSpecializations;
+        var needsHairServices = _catalogsNeedsHairServices;
 
-        var kind = ApiFailureKind.None;
-
-        try
+        if (!needsSpecializations && !needsHairServices)
         {
-            var specializationsTask = _api.GetSpecializationsAsync(cancellationToken);
-            var hairServicesTask = _api.GetHairServicesAsync(cancellationToken);
-
-            await Task.WhenAll(specializationsTask, hairServicesTask);
-
-            ApplyCatalogs(await specializationsTask, await hairServicesTask);
+            return ApiFailureKind.None;
         }
-        catch (Exception exception)
-        {
-            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
 
-            if (kind == ApiFailureKind.None)
+        if (!silent)
+        {
+            IsCatalogsLoading = true;
+            CatalogsErrorText = null;
+
+            if (needsSpecializations && needsHairServices)
+            {
+                ShowCatalogPlaceholders();
+            }
+            else if (needsSpecializations)
+            {
+                ShowSpecializationPlaceholder();
+            }
+            else
+            {
+                ShowHairServicePlaceholder();
+            }
+        }
+
+        // Оба запроса уходят параллельно, как и раньше; ждём их по очереди, чтобы сбой одной
+        // части не отменял уже полученный ответ другой.
+        var specializationsTask = needsSpecializations
+            ? _api.GetSpecializationsAsync(cancellationToken)
+            : null;
+        var hairServicesTask = needsHairServices
+            ? _api.GetHairServicesAsync(cancellationToken)
+            : null;
+
+        IReadOnlyList<SpecializationResponse>? specializations = null;
+        IReadOnlyList<HairServiceResponse>? hairServices = null;
+        var specializationsFailure = ApiFailureKind.None;
+        var hairServicesFailure = ApiFailureKind.None;
+        var rateLimited = false;
+
+        if (specializationsTask is not null)
+        {
+            try
+            {
+                specializations = await specializationsTask;
+            }
+            catch (Exception exception)
+            {
+                specializationsFailure = ClassifyCatalogsFailure(exception, cancellationToken);
+                rateLimited |= IsRateLimited(exception);
+            }
+        }
+
+        if (hairServicesTask is not null)
+        {
+            try
+            {
+                hairServices = await hairServicesTask;
+            }
+            catch (Exception exception)
+            {
+                hairServicesFailure = ClassifyCatalogsFailure(exception, cancellationToken);
+                rateLimited |= IsRateLimited(exception);
+            }
+        }
+
+        if (specializations is not null)
+        {
+            ApplySpecializations(specializations);
+            _catalogsNeedsSpecializations = false;
+        }
+
+        if (hairServices is not null)
+        {
+            ApplyHairServices(hairServices);
+            _catalogsNeedsHairServices = false;
+        }
+
+        var kind = WorstCatalogsFailure(specializationsFailure, hairServicesFailure);
+
+        if (kind != ApiFailureKind.None)
+        {
+            CatalogsErrorText = rateLimited
+                ? RateLimitText
+                : kind == ApiFailureKind.Transport
+                    ? NetworkText
+                    : CatalogsLoadFailedText;
+            _catalogsFailureKind = kind;
+        }
+        else if (!_catalogsNeedsSpecializations && !_catalogsNeedsHairServices)
+        {
+            CatalogsErrorText = null;
+            _catalogsFailureKind = ApiFailureKind.None;
+        }
+
+        if (!silent)
+        {
+            IsCatalogsLoading = false;
+
+            // У упавшей части вместо «Загрузка…» возвращается «Любая …»: селект не должен
+            // обещать загрузку, которой уже не будет. Удавшаяся часть свои значения сохранила.
+            if (_catalogsNeedsSpecializations)
+            {
+                ShowSpecializationPlaceholder();
+            }
+
+            if (_catalogsNeedsHairServices)
+            {
+                ShowHairServicePlaceholder();
+            }
+
+            if (kind == ApiFailureKind.None
+                && (_catalogsNeedsSpecializations || _catalogsNeedsHairServices))
             {
                 // Экран закрыли до ответа: следующий показ начнёт загрузку заново.
                 _isInitialized = false;
             }
-            else
-            {
-                CatalogsErrorText = kind == ApiFailureKind.Transport
-                    ? NetworkText
-                    : exception is BarberSearchApiException
-                    {
-                        StatusCode: HttpStatusCode.TooManyRequests,
-                    }
-                        ? RateLimitText
-                        : CatalogsLoadFailedText;
-            }
         }
-        finally
-        {
-            IsCatalogsLoading = false;
 
-            if (HasCatalogsError)
-            {
-                ShowCatalogPlaceholders();
-            }
-
-            NotifyCatalogOptionsChanged();
-        }
+        NotifyCatalogOptionsChanged();
 
         return kind;
     }
 
     /// <summary>
-    /// Раскладывает загруженные справочники по коллекциям, ставя «любой» пункт первым.
+    /// Запускает второй цикл, если страница видна, сбой повторяемый и есть что повторять.
     /// </summary>
-    private void ApplyCatalogs(
-        IReadOnlyList<SpecializationResponse> specializations,
-        IReadOnlyList<HairServiceResponse> hairServices)
+    /// <remarks>
+    /// <para>
+    /// Снимок — какие из двух справочников упали: удавшаяся часть не запрашивается заново.
+    /// «Видна» — сигнал страницы, а не следствие нажатия: повтор запускается и из завершения
+    /// загрузки, но только пока страница видна.
+    /// </para>
+    /// <para>
+    /// <c>429</c> сюда не попадает: <see cref="ClassifyCatalogsFailure"/> сделал его
+    /// окончательным, поэтому <see cref="_catalogsFailureKind"/> не повторяемый и цикл не
+    /// стартует, а текст «Слишком много запросов…» остаётся на экране.
+    /// </para>
+    /// </remarks>
+    private void TryStartCatalogsAutoRetry()
+    {
+        if (!_isPageVisible
+            || IsCatalogsLoading
+            || !HasCatalogsError
+            || !_catalogsFailureKind.IsRetryable()
+            || (!_catalogsNeedsSpecializations && !_catalogsNeedsHairServices))
+        {
+            return;
+        }
+
+        _catalogsAutoRetry.Start(cancellationToken =>
+            LoadCatalogsAsync(silent: true, cancellationToken));
+    }
+
+    /// <summary>
+    /// Останавливает второй цикл, не трогая признак «страница видна».
+    /// </summary>
+    /// <remarks>
+    /// Нужен кнопке «Повторить» в блоке справочников: она останавливает фон, но страница
+    /// остаётся видимой, и после ответа цикл имеет право запуститься снова. Публичный
+    /// <see cref="StopAutoRetry"/> дополнительно пометил бы страницу скрытой.
+    /// </remarks>
+    private void StopCatalogsAutoRetryLoop() => _catalogsAutoRetry.Stop();
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» справочников вслед за состоянием второго цикла.
+    /// </summary>
+    private void OnCatalogsAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsCatalogsAutoRetrying = _catalogsAutoRetry.IsRunning;
+
+    /// <summary>
+    /// Сводит сбой одного справочника к виду, по которому решает второй цикл.
+    /// </summary>
+    /// <remarks>
+    /// <c>429</c> — единственное отклонение от классификатора: лимитер просит сбавить темп, а
+    /// не сообщает о временном сбое, и повтор лишь повторил бы отказ. Для справочников он
+    /// поэтому окончателен, а его текст («Слишком много запросов…») остаётся на экране.
+    /// </remarks>
+    private static ApiFailureKind ClassifyCatalogsFailure(
+        Exception exception,
+        CancellationToken cancellationToken) =>
+        IsRateLimited(exception)
+            ? ApiFailureKind.Terminal
+            : ApiFailureClassifier.Classify(exception, cancellationToken);
+
+    /// <summary>
+    /// Ответил ли сервер просьбой сбавить темп.
+    /// </summary>
+    private static bool IsRateLimited(Exception exception) =>
+        exception is BarberSearchApiException { StatusCode: HttpStatusCode.TooManyRequests };
+
+    /// <summary>
+    /// Вид сбоя попытки по двум справочникам: худший из двух.
+    /// </summary>
+    /// <remarks>
+    /// Окончательный отказ важнее остальных: повторять его бессмысленно, и цикл должен
+    /// остановиться, даже если вторая часть упала повторяемо. Иначе «транспорт» одной части
+    /// прятал бы 404 другой, и цикл крутился бы на отказе, который не изменится.
+    /// </remarks>
+    private static ApiFailureKind WorstCatalogsFailure(
+        ApiFailureKind specializations,
+        ApiFailureKind hairServices)
+    {
+        if (specializations == ApiFailureKind.Terminal || hairServices == ApiFailureKind.Terminal)
+        {
+            return ApiFailureKind.Terminal;
+        }
+
+        if (specializations == ApiFailureKind.Transport || hairServices == ApiFailureKind.Transport)
+        {
+            return ApiFailureKind.Transport;
+        }
+
+        return specializations == ApiFailureKind.None && hairServices == ApiFailureKind.None
+            ? ApiFailureKind.None
+            : ApiFailureKind.RetryableServer;
+    }
+
+    /// <summary>
+    /// Раскладывает загруженные специализации, ставя «любой» пункт первым.
+    /// </summary>
+    private void ApplySpecializations(IReadOnlyList<SpecializationResponse> specializations)
     {
         Specializations.Clear();
         Specializations.Add(SearchCatalogOption.Any(AnySpecializationText));
@@ -876,7 +1136,13 @@ public sealed partial class SearchViewModel : ObservableObject
         }
 
         SelectedSpecialization = Specializations[0];
+    }
 
+    /// <summary>
+    /// Раскладывает загруженные услуги, ставя «любой» пункт первым.
+    /// </summary>
+    private void ApplyHairServices(IReadOnlyList<HairServiceResponse> hairServices)
+    {
         HairServices.Clear();
         HairServices.Add(SearchCatalogOption.Any(AnyServiceText));
 
@@ -889,15 +1155,30 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Показывает в селектах «Загрузка…» или «Любая …», пока данных справочника нет.
+    /// Показывает в обоих селектах «Загрузка…» или «Любая …», пока данных справочников нет.
     /// </summary>
     private void ShowCatalogPlaceholders()
+    {
+        ShowSpecializationPlaceholder();
+        ShowHairServicePlaceholder();
+    }
+
+    /// <summary>
+    /// Показывает заглушку селекта специализаций.
+    /// </summary>
+    private void ShowSpecializationPlaceholder()
     {
         Specializations.Clear();
         Specializations.Add(SearchCatalogOption.Any(
             IsCatalogsLoading ? LoadingText : AnySpecializationText));
         SelectedSpecialization = Specializations[0];
+    }
 
+    /// <summary>
+    /// Показывает заглушку селекта услуг.
+    /// </summary>
+    private void ShowHairServicePlaceholder()
+    {
         HairServices.Clear();
         HairServices.Add(SearchCatalogOption.Any(
             IsCatalogsLoading ? LoadingText : AnyServiceText));

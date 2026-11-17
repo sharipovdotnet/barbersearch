@@ -34,6 +34,11 @@ public partial class SecurityPage : ContentPage
     private bool _isNavigating;
 
     /// <summary>
+    /// Область «страница видна»: из неё растёт автоповтор, пока страница на виду.
+    /// </summary>
+    private IDisposable? _visibility;
+
+    /// <summary>
     /// Создаёт экран безопасности.
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
@@ -54,12 +59,22 @@ public partial class SecurityPage : ContentPage
     /// <summary>
     /// Читает профиль, запускает таймер кулдауна и подписывается на завершение сессии.
     /// </summary>
+    /// <remarks>
+    /// Область видимости создаётся до первой загрузки: сбой, пришедший из неё, уже может
+    /// запустить автоповтор.
+    /// </remarks>
     protected override async void OnAppearing()
     {
         base.OnAppearing();
 
         _session.SessionEnded -= OnSessionEnded;
         _session.SessionEnded += OnSessionEnded;
+
+        _visibility?.Dispose();
+        _visibility = PageVisibility.Watch(
+            this,
+            _viewModel.StartAutoRetry,
+            _viewModel.StopAutoRetry);
 
         _cooldownTimer ??= CreateCooldownTimer();
         _cooldownTimer.Start();
@@ -73,10 +88,17 @@ public partial class SecurityPage : ContentPage
     }
 
     /// <summary>
-    /// Останавливает таймер и снимает подписку, пока страница не на экране.
+    /// Останавливает таймер и автоповтор и снимает подписку, пока страница не на экране.
     /// </summary>
+    /// <remarks>
+    /// <see cref="IDisposable.Dispose"/> сам сообщает «скрыта» и снимает подписку на окно,
+    /// поэтому отдельного вызова <c>StopAutoRetry</c> здесь нет.
+    /// </remarks>
     protected override void OnDisappearing()
     {
+        _visibility?.Dispose();
+        _visibility = null;
+
         _cooldownTimer?.Stop();
 
         _session.SessionEnded -= OnSessionEnded;

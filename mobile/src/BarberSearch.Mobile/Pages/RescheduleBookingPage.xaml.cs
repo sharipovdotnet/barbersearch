@@ -33,6 +33,11 @@ public partial class RescheduleBookingPage : ContentPage, IQueryAttributable
     private bool _isAppeared;
 
     /// <summary>
+    /// Область «экран виден»: из неё растёт автоповтор сетки, пока страница на виду.
+    /// </summary>
+    private IDisposable? _visibility;
+
+    /// <summary>
     /// Создаёт экран переноса.
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
@@ -93,9 +98,18 @@ public partial class RescheduleBookingPage : ContentPage, IQueryAttributable
     /// Читает сетку слотов при каждом появлении экрана.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Сеть трогается только когда параметры уже применены: иначе <c>Initialize</c> не был
     /// вызван и запрашивать нечего. <c>async void</c> — единственная допустимая форма
     /// переопределения, а все ошибки разбирает сам ViewModel.
+    /// </para>
+    /// <para>
+    /// Автоповтор включается здесь же и до первого чтения: сбой, пришедший из него, уже может
+    /// запустить цикл. Параметры маршрута читаются в этом же <see cref="OnAppearing"/>, и
+    /// второго появления у экрана не будет — поэтому область видимости создаётся до загрузки,
+    /// а не после неё, и снимается в <see cref="OnDisappearing"/>: <c>PageVisibility</c> сам
+    /// сообщает «скрыта» и на уходе приложения в фон (<c>Window.Stopped</c>), и на возврате.
+    /// </para>
     /// </remarks>
     protected override async void OnAppearing()
     {
@@ -103,10 +117,31 @@ public partial class RescheduleBookingPage : ContentPage, IQueryAttributable
 
         _isAppeared = true;
 
+        _visibility?.Dispose();
+        _visibility = PageVisibility.Watch(
+            this,
+            _viewModel.StartAutoRetry,
+            _viewModel.StopAutoRetry);
+
         if (_queryApplied)
         {
             await _viewModel.LoadSlotsAsync();
         }
+    }
+
+    /// <summary>
+    /// Останавливает автоповтор, пока экран не виден.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IDisposable.Dispose"/> сам сообщает «скрыта» и снимает подписку на окно,
+    /// поэтому отдельного вызова <c>StopAutoRetry</c> здесь нет.
+    /// </remarks>
+    protected override void OnDisappearing()
+    {
+        _visibility?.Dispose();
+        _visibility = null;
+
+        base.OnDisappearing();
     }
 
     /// <summary>

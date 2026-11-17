@@ -1197,6 +1197,120 @@ public sealed class BarberCardViewModelTests
         await harness.ViewModel.AutoRetryCompletion;
     }
 
+    [Fact]
+    public async Task StartAutoRetry_ReviewsFailure_StartsReviewsLoop()
+    {
+        using var harness = new Harness(reviewsAutoRetry: HangingRetry());
+
+        harness.Api.Reviews = (_, _, _) =>
+            Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Страница ещё не сообщала о видимости: сбой отзывов есть, но цикл секции не запущен.
+        Assert.True(harness.ViewModel.Reviews.HasFirstError);
+        Assert.False(harness.ViewModel.Reviews.IsAutoRetrying);
+
+        // Тот же сигнал видимости армит и цикл отзывов: своей подписки у секции нет.
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.Reviews.IsAutoRetrying);
+        Assert.Equal(0, harness.ViewModel.Reviews.ReviewsAutoRetry.Attempts);
+
+        harness.ViewModel.StopAutoRetry();
+
+        Assert.False(harness.ViewModel.Reviews.IsAutoRetrying);
+
+        await harness.ViewModel.Reviews.ReviewsAutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task AutoRetry_ProfileRecoversButReviewsFail_KeepsRetrying()
+    {
+        using var harness = new Harness(autoRetry: FastRetry(), reviewsAutoRetry: FastRetry());
+        var profile = harness.Api.Profile;
+        var profileCalls = 0;
+        var reviewCalls = 0;
+
+        harness.Api.Profile = id => ++profileCalls == 1
+            ? Task.FromException<BarberProfileResponse>(new HttpRequestException("refused"))
+            : profile(id);
+
+        harness.Api.Reviews = (_, _, _) =>
+        {
+            reviewCalls++;
+
+            return reviewCalls <= 2
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(new PagedResponse<ReviewResponse>(
+                    [Review(text: "Отлично", createdAt: ReviewInstant)],
+                    NextCursor: null));
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Equal(NetworkText, harness.ViewModel.LoadErrorText);
+
+        harness.ViewModel.StartAutoRetry();
+
+        await harness.ViewModel.AutoRetryCompletion;
+        await harness.ViewModel.Reviews.ReviewsAutoRetryCompletion;
+
+        // Профиль поднялся на первой попытке цикла, а отзывы упали уже внутри неё: успех
+        // профиля не имеет права погасить сбой отзывов, и цикл секции продолжает, пока не
+        // получит страницу.
+        Assert.False(harness.ViewModel.Reviews.HasFirstError);
+        Assert.Single(harness.ViewModel.Reviews.Items);
+        Assert.Equal(2, harness.ViewModel.Reviews.ReviewsAutoRetry.Attempts);
+        Assert.False(harness.ViewModel.Reviews.IsAutoRetrying);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.True(harness.ViewModel.IsContentVisible);
+        Assert.Null(harness.ViewModel.LoadErrorText);
+    }
+
+    [Fact]
+    public async Task AutoRetry_NextPageFailure_AfterServiceChange_RetriesSameCursor()
+    {
+        var gate = new TaskCompletionSource();
+
+        using var harness = new Harness(autoRetry: FastRetry(), reviewsAutoRetry: GateThenFastRetry(gate.Task));
+        var reviewCalls = 0;
+
+        harness.Api.Reviews = (_, cursor, _) =>
+        {
+            if (cursor is null)
+            {
+                return Task.FromResult(new PagedResponse<ReviewResponse>(ReviewPages(10), "c1"));
+            }
+
+            reviewCalls++;
+
+            return reviewCalls == 1
+                ? Task.FromException<PagedResponse<ReviewResponse>>(new HttpRequestException("refused"))
+                : Task.FromResult(new PagedResponse<ReviewResponse>(ReviewPages(2), NextCursor: null));
+        };
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+        await harness.ViewModel.Reviews.NextPageCommand.ExecuteAsync(null);
+
+        Assert.True(harness.ViewModel.Reviews.HasPageError);
+
+        harness.ViewModel.StartAutoRetry();
+
+        // Пока цикл ждёт паузу, человек меняет услугу: это состояние карточки, а не запроса
+        // отзывов. Повтор обязан прочитать ту же упавшую страницу тем же курсором.
+        await harness.ViewModel.SelectServiceAsync(harness.ViewModel.ServiceOptions[1]);
+
+        gate.SetResult();
+        await harness.ViewModel.Reviews.ReviewsAutoRetryCompletion;
+
+        Assert.Equal("c1", harness.Api.ReviewCalls[^1].Cursor);
+        Assert.Equal(2, harness.ViewModel.Reviews.Items.Count);
+        Assert.Equal("11–12 из 12", harness.ViewModel.Reviews.PageRangeText);
+        Assert.False(harness.ViewModel.Reviews.HasPageError);
+        Assert.False(harness.ViewModel.Reviews.IsAutoRetrying);
+    }
+
     /// <summary>
     /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
     /// </summary>
@@ -1248,6 +1362,15 @@ public sealed class BarberCardViewModelTests
     private static AutoRetryLoop HangingRetry() =>
         new(
             (_, cancellationToken) => WaitForCancellationAsync(cancellationToken),
+            [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
+
+    /// <summary>
+    /// Цикл, у которого первая пауза ждёт внешнего сигнала, а следующие проходят сразу: тест
+    /// успевает изменить состояние экрана до попытки и всё равно не ждёт реального времени.
+    /// </summary>
+    private static AutoRetryLoop GateThenFastRetry(Task firstGate) =>
+        new(
+            (_, _) => firstGate,
             [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]);
 
     /// <summary>
@@ -1351,6 +1474,12 @@ public sealed class BarberCardViewModelTests
             IsPublished: true,
             createdAt,
             createdAt);
+
+    /// <summary>
+    /// Страница из заданного числа отзывов: проверяется пагинатор секции.
+    /// </summary>
+    private static List<ReviewResponse> ReviewPages(int count) =>
+        [.. Enumerable.Range(0, count).Select(_ => Review(text: "Текст", createdAt: ReviewInstant))];
 
     private static BarberProfileServiceResponse Service(
         Guid barberServiceId,
@@ -1605,7 +1734,10 @@ public sealed class BarberCardViewModelTests
     /// </summary>
     private sealed class Harness : IDisposable
     {
-        public Harness(bool authenticated = true, AutoRetryLoop? autoRetry = null)
+        public Harness(
+            bool authenticated = true,
+            AutoRetryLoop? autoRetry = null,
+            AutoRetryLoop? reviewsAutoRetry = null)
         {
             if (authenticated)
             {
@@ -1619,7 +1751,8 @@ public sealed class BarberCardViewModelTests
                 Bookings,
                 Session,
                 new FixedTimeProvider(Now),
-                autoRetry);
+                autoRetry,
+                reviewsAutoRetry);
         }
 
         public FakeBarberApi Api { get; } = new();

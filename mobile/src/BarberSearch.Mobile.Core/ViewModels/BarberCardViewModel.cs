@@ -44,6 +44,12 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// по нажатию. «Повторить» у профиля и у слотов значит «повторить сейчас»: останавливает цикл,
 /// читает без паузы и запускает его снова, только если сбой опять повторяемый.
 /// </para>
+/// <para>
+/// Отзывы — отдельное чтение со своим снимком и своим циклом: у первой страницы и у следующей
+/// страницы разные запросы, поэтому ошибившаяся страница повторяется секцией, а не карточкой.
+/// Цикл отзывов армит и снимает та же пара <see cref="StartAutoRetry"/>/<see cref="StopAutoRetry"/>:
+/// сигнал видимости у карточки один, и другого жизненного цикла у секции нет.
+/// </para>
 /// </remarks>
 public sealed partial class BarberCardViewModel : ObservableObject
 {
@@ -141,13 +147,19 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Цикл автоповтора профиля и слотов; <c>null</c> — собственный цикл с обычным расписанием.
     /// Параметр необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
     /// </param>
+    /// <param name="reviewsAutoRetry">
+    /// Цикл автоповтора отзывов, отдельный от профиля и слотов: у секции свой снимок упавшей
+    /// страницы, и её сбой не должен повторять сетку. <c>null</c> — обычное расписание.
+    /// Параметр последний и необязательный, чтобы существующие позиционные вызовы не менялись.
+    /// </param>
     public BarberCardViewModel(
         IBarberSearchApi api,
         BarberSearchApiOptions apiOptions,
         IBookingsApi bookingsApi,
         TokenSession session,
         TimeProvider timeProvider,
-        AutoRetryLoop? autoRetry = null)
+        AutoRetryLoop? autoRetry = null,
+        AutoRetryLoop? reviewsAutoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(apiOptions);
@@ -164,7 +176,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
 
-        Reviews = new BarberReviewsSection(api);
+        Reviews = new BarberReviewsSection(api, reviewsAutoRetry);
     }
 
     /// <summary>
@@ -684,6 +696,11 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// ничего не делает.
     /// </para>
     /// <para>
+    /// Тот же сигнал армит цикл отзывов: второй подписки на видимость у секции нет, и её сбой
+    /// повторяется, только пока карточка на экране. Секция начинает повтор лишь при своём
+    /// повторяемом снимке — решение остаётся за ней.
+    /// </para>
+    /// <para>
     /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
     /// синхронно меняет привязанное <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
     /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
@@ -694,6 +711,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
         _isPageVisible = true;
 
         TryStartAutoRetry();
+        Reviews.StartAutoRetry();
     }
 
     /// <summary>
@@ -702,12 +720,14 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <remarks>
     /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а <see cref="IsAutoRetrying"/>
     /// сразу становится <c>false</c>: ушедшая страница не показывает повтор и не ходит в сеть.
+    /// Цикл отзывов гаснет вместе с карточкой — у секции своего жизненного цикла нет.
     /// </remarks>
     public void StopAutoRetry()
     {
         _isPageVisible = false;
 
         StopAutoRetryLoop();
+        Reviews.StopAutoRetry();
     }
 
     /// <summary>
@@ -1057,6 +1077,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
         var kind = ApiFailureKind.None;
         var slotsKind = ApiFailureKind.None;
+        var reviewsKind = ApiFailureKind.None;
 
         try
         {
@@ -1083,7 +1104,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
                 cancellationToken);
 
             slotsKind = await LoadSlotsAsync(cancellationToken, silent);
-            await reviewsTask;
+            reviewsKind = await reviewsTask;
         }
         catch (Exception exception)
         {
@@ -1116,9 +1137,10 @@ public sealed partial class BarberCardViewModel : ObservableObject
             IsLoading = false;
         }
 
-        // Сетка могла упасть уже после успешного профиля: повторять нужно именно её, иначе
-        // сбой слота, случившийся внутри повторной загрузки профиля, остановил бы цикл.
-        var failureKind = kind != ApiFailureKind.None ? kind : slotsKind;
+        // Сбой отзывов — такая же часть этой попытки: успех профиля и сетки не имеет права его
+        // погасить, иначе цикл отзывов не узнал бы, что повторять ещё есть что. Сетка могла
+        // упасть уже после успешного профиля, и тогда повторять нужно именно её.
+        var failureKind = Heaviest(Heaviest(kind, slotsKind), reviewsKind);
 
         if (failureKind.IsRetryable())
         {
@@ -1410,6 +1432,30 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// дополнительно помечает страницу скрытой — для кнопок это неверно.
     /// </remarks>
     private void StopAutoRetryLoop() => _autoRetry.Stop();
+
+    /// <summary>
+    /// Самый тяжёлый вид сбоя из сделанных в одной попытке.
+    /// </summary>
+    /// <remarks>
+    /// Успех одной части не должен гасить сбой другой: пока на экране есть повторяемая ошибка,
+    /// цикл обязан продолжать. Поэтому повторяемый сбой тяжелее окончательного (тот лишь
+    /// останавливает свой цикл), а «нет ответа» тяжелее ответа сервера — именно оно чаще всего
+    /// лечится следующей попыткой. Отсутствие сбоя не перевешивает ничего.
+    /// </remarks>
+    private static ApiFailureKind Heaviest(ApiFailureKind left, ApiFailureKind right) =>
+        Rank(left) >= Rank(right) ? left : right;
+
+    /// <summary>
+    /// Вес вида сбоя для выбора самого тяжёлого: отмена — ничто, окончательный отказ — меньше
+    /// повторяемого ответа сервера, а отсутствие ответа — самое тяжёлое.
+    /// </summary>
+    private static int Rank(ApiFailureKind kind) => kind switch
+    {
+        ApiFailureKind.Transport => 3,
+        ApiFailureKind.RetryableServer => 2,
+        ApiFailureKind.Terminal => 1,
+        _ => 0,
+    };
 
     /// <summary>
     /// Переключает строку «Пробуем снова…» вслед за состоянием цикла.

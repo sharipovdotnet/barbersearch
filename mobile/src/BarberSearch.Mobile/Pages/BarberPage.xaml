@@ -475,6 +475,11 @@
                                 LineBreakMode="WordWrap"
                                 Text="{Binding Reviews.FirstErrorText}"
                                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding Reviews.IsAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Button
                                 Command="{Binding Reviews.RetryFirstPageCommand}"
                                 HorizontalOptions="Start"
@@ -533,6 +538,11 @@
                                 LineBreakMode="WordWrap"
                                 Text="{Binding Reviews.PageErrorText}"
                                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding Reviews.IsAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <Button
                                     Command="{Binding Reviews.PreviousPageCommand}"
