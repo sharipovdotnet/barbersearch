@@ -46,7 +46,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | .NET solution | `BarberSearch\BarberSearch.sln` |
 | **Git repository root** | `D:\Projects\barbersearch` — **one level ABOVE the workspace** |
 | Remote | `https://github.com/sharipovdotnet/barbersearch.git` |
-| Working branch | `features/issue-6` (default: `main`) |
+| Default branch | `main` — the only trunk; every branch is cut from the freshly fetched `origin/main`, and no "working branch" is pinned here (§13) |
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 625 xunit tests) |
 | Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 1044 xunit tests, fakes instead of a database) |
 | Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 414 xunit tests, no database) |
@@ -1613,6 +1613,15 @@ Suggested order:
 
 ## 13. Working rules for this repo
 
+- **Branch before the first edit — mandatory.** If a task requires changing **at least one tracked
+  file** (anything `git ls-files` lists: code, tests, `AGENT.md`/docs, migrations, CI config),
+  create a new branch **from the freshly fetched `origin/main` first**, and only then change the
+  files: `git fetch origin && git switch -c features/issue-N origin/main`. The order is not
+  optional and not "commit later onto a new branch": a local `main` that was not fetched first is
+  not a base, and a branch left over from another task is not one either. Read-only work — reading
+  files, `dotnet build`, `dotnet test`, `git status|diff|log|show` — changes nothing and needs no
+  new branch. Finished work leaves the working tree as a commit on that branch and a pull request
+  against `main`, never as an uncommitted change on `main`.
 - Before touching the domain, re-check §7 (invariants) and §10 (conventions).
 - Do not break `Shared` public signatures without need: the whole domain depends on them.
 - Cover new domain logic with tests in `tests/BarberSearch.Domain.UnitTests`.
