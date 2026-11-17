@@ -106,6 +106,56 @@ public class PushBookingCreatedNotifierTests
     }
 
     [Fact]
+    public async Task Notify_CustomerCreatedFromApp_DoesNotEnqueue()
+    {
+        var context = CreateContext(isMobileApp: true);
+
+        var result = await context.Notifier.NotifyAsync(
+            CreateBooking(),
+            createdByBarber: false,
+            CancellationToken.None);
+
+        // Экран приложения уже подтвердил запись: push о своём действии не нужен.
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, context.Source.GetSnapshotCalls);
+        Assert.Equal(0, context.Notifications.AddCalls);
+        Assert.Empty(context.Notifications.Items);
+    }
+
+    [Fact]
+    public async Task Notify_CustomerCreatedFromWeb_EnqueuesCreatedByCustomer()
+    {
+        var context = CreateContext(isMobileApp: false);
+
+        var result = await context.Notifier.NotifyAsync(
+            CreateBooking(),
+            createdByBarber: false,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.BookingCreatedByCustomer, notification.Kind);
+    }
+
+    [Fact]
+    public async Task Notify_BarberCreatedFromApp_StillEnqueues()
+    {
+        // Заголовок приложения не гейтит ручную запись барбера: клиент о ней не знал.
+        var context = CreateContext(isMobileApp: true);
+
+        var result = await context.Notifier.NotifyAsync(
+            CreateBooking(),
+            createdByBarber: true,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+
+        var notification = Assert.Single(context.Notifications.Items);
+        Assert.Equal(PushNotificationKind.BookingCreatedByBarber, notification.Kind);
+    }
+
+    [Fact]
     public async Task Notify_Twice_EnqueuesOneRowForTheSameKind()
     {
         var context = CreateContext();
@@ -226,20 +276,23 @@ public class PushBookingCreatedNotifierTests
             guestFirstName: "Гость",
             guestPhone: "+70000000000").Value;
 
-    private static Context CreateContext(bool enabled = true)
+    private static Context CreateContext(bool enabled = true, bool isMobileApp = false)
     {
         var source = new FakePushSourceRepository();
         var notifications = new FakePushNotificationRepository();
+        var clientSurface = new FakeClientSurface { IsMobileApp = isMobileApp };
         var notifier = new BookingCreatedPushNotifier(
             source,
             notifications,
-            new PushOptions { Enabled = enabled });
+            new PushOptions { Enabled = enabled },
+            clientSurface);
 
-        return new Context(notifier, source, notifications);
+        return new Context(notifier, source, notifications, clientSurface);
     }
 
     private sealed record Context(
         BookingCreatedPushNotifier Notifier,
         FakePushSourceRepository Source,
-        FakePushNotificationRepository Notifications);
+        FakePushNotificationRepository Notifications,
+        FakeClientSurface ClientSurface);
 }

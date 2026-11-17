@@ -14,10 +14,28 @@ namespace BarberSearch.Mobile.Core.Api.Bookings;
 /// <remarks>
 /// Тело собирается из контракта бэкенда, а не из локальной копии полей: расхождение с API
 /// должно ломать сборку, а не отправку. Время уходит тем же инстантом, что вернул сервер, —
-/// пересчёта в пояс устройства здесь нет. Успешные <c>204</c> тело не читают.
+/// пересчёта в пояс устройства здесь нет. Успешные <c>204</c> тело не читают. Три запроса,
+/// меняющие запись, несут заголовок <c>X-Client-Surface: app</c>: по нему сервер отличает
+/// действие в приложении от действия на веб-поверхности и не шлёт push о собственном действии
+/// клиента.
 /// </remarks>
 public sealed class BookingsApi : IBookingsApi
 {
+    /// <summary>
+    /// Имя заголовка, которым приложение помечает изменение записи.
+    /// </summary>
+    /// <remarks>
+    /// Константа живёт рядом с единственными запросами, которые её отправляют. Заголовок
+    /// ставится на сам <see cref="HttpRequestMessage"/>, а не на общий <see cref="HttpClient"/>:
+    /// иначе он ушёл бы и в чтение, и в чужие запросы, а тест не увидел бы его на запросе.
+    /// </remarks>
+    public const string ClientSurfaceHeaderName = "X-Client-Surface";
+
+    /// <summary>
+    /// Значение заголовка для запроса, сделанного в мобильном приложении.
+    /// </summary>
+    public const string ClientSurfaceAppValue = "app";
+
     private readonly HttpClient _httpClient;
 
     /// <summary>
@@ -38,8 +56,15 @@ public sealed class BookingsApi : IBookingsApi
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/bookings")
+        {
+            Content = JsonContent.Create(request, options: ApiJson.Options),
+        };
+
+        httpRequest.Headers.Add(ClientSurfaceHeaderName, ClientSurfaceAppValue);
+
         using var response = await _httpClient
-            .PostAsJsonAsync("api/bookings", request, ApiJson.Options, cancellationToken)
+            .SendAsync(httpRequest, cancellationToken)
             .ConfigureAwait(false);
 
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
@@ -84,8 +109,14 @@ public sealed class BookingsApi : IBookingsApi
     /// <inheritdoc />
     public async Task CancelBookingAsync(Guid bookingId, CancellationToken cancellationToken = default)
     {
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildBookingPath(bookingId, "cancellation"));
+
+        httpRequest.Headers.Add(ClientSurfaceHeaderName, ClientSurfaceAppValue);
+
         using var response = await _httpClient
-            .PostAsync(BuildBookingPath(bookingId, "cancellation"), content: null, cancellationToken)
+            .SendAsync(httpRequest, cancellationToken)
             .ConfigureAwait(false);
 
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
@@ -121,12 +152,19 @@ public sealed class BookingsApi : IBookingsApi
         DateTimeOffset startAt,
         CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient
-            .PostAsJsonAsync(
-                BuildBookingPath(bookingId, "reschedule"),
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildBookingPath(bookingId, "reschedule"))
+        {
+            Content = JsonContent.Create(
                 new RescheduleBookingRequest(startAt),
-                ApiJson.Options,
-                cancellationToken)
+                options: ApiJson.Options),
+        };
+
+        httpRequest.Headers.Add(ClientSurfaceHeaderName, ClientSurfaceAppValue);
+
+        using var response = await _httpClient
+            .SendAsync(httpRequest, cancellationToken)
             .ConfigureAwait(false);
 
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);

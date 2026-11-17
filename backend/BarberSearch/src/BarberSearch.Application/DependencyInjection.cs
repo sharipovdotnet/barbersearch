@@ -1,4 +1,5 @@
 using BarberSearch.Application.Abstractions;
+using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Push.BookingCreated;
 using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.Reviews;
@@ -46,6 +47,11 @@ public static class DependencyInjection
         // вторая регистрация BookingCreatedPushNotifier: у них разные контракты, и общий
         // у них только BookingPushEnqueuer.
         services.AddScoped<IBookingStatusPushNotifier, BookingStatusPushNotifier>();
+
+        // Письмо об отмене/переносе из приложения — scoped: пишет через ApplicationDbContext
+        // запроса и читает снимок каталога тем же scope. Push и письмо — два канала одного
+        // решения «молчим или информируем», поэтому у них одинаковое время жизни.
+        services.AddScoped<IBookingChangeEmailNotifier, BookingChangeEmailNotifier>();
 
         services.Scan(scan => scan.FromAssemblies([assembly])
             .AddClasses(classes => classes

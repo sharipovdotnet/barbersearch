@@ -17,8 +17,8 @@ using Xunit;
 namespace BarberSearch.IntegrationTests;
 
 /// <summary>
-/// События статуса записи на реальной PostgreSQL через API: подтверждение барбером, отмена и
-/// перенос барбером, отсутствие push при действии самого клиента и для гостевой брони.
+/// События статуса записи на реальной PostgreSQL через API: подтверждение, отмена и перенос
+/// барбером, клиентские отмена и перенос с веба (виды 7 и 8) и гостевая бронь без получателя.
 /// </summary>
 /// <remarks>
 /// Проверяется весь путь «переход статуса → строка очереди в том же запросе → доставка на
@@ -215,7 +215,7 @@ public sealed class PushBookingStatusTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task CustomerCancel_EnqueuesNothing()
+    public async Task CustomerCancel_WithoutSurfaceHeader_EnqueuesTheCustomerCancellationEvent()
     {
         var sender = new CapturingPushSender();
 
@@ -246,16 +246,27 @@ public sealed class PushBookingStatusTests
             Assert.Equal(HttpStatusCode.NoContent, cancelled.StatusCode);
         }
 
-        Assert.Empty(await push.GetAllNotificationsAsync());
+        // Без заголовка X-Client-Surface запрос считается «другой поверхностью»: клиент
+        // отменил запись с веба и получает push, а не письмо.
+        var row = Assert.Single(
+            await push.GetNotificationsAsync(customer.Id),
+            notification => notification.Kind == PushNotificationKind.BookingCancelledByCustomer);
+        Assert.Equal(booking.Id, row.BookingId);
+        Assert.Equal(customer.Id, row.UserId);
 
         var result = await app.RunPushTickAsync();
 
-        Assert.Equal(PushTickResult.Empty, result);
-        Assert.Empty(sender.Messages);
+        Assert.Equal(1, result.Sent);
+
+        var captured = Assert.Single(sender.Messages);
+        Assert.Equal(
+            "Вы отменили запись: салон «Salon Push Status Self Cancel Barber»",
+            captured.Message.Title);
+        Assert.Equal(PushMessage.BOOKING_CANCELLED_BY_CUSTOMER_TYPE, captured.Message.Type);
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task CustomerReschedule_EnqueuesNothing()
+    public async Task CustomerReschedule_WithoutSurfaceHeader_EnqueuesTheCustomerRescheduleEvent()
     {
         var sender = new CapturingPushSender();
 
@@ -270,6 +281,7 @@ public sealed class PushBookingStatusTests
 
         var customer = await app.CreateUserAsync(CustomerEmail("self-reschedule"));
         var date = TodayInSalon().AddDays(1);
+        var targetStart = Local(date, 12);
 
         var booking = await data.CreateBookingAsync(
             barber,
@@ -284,17 +296,28 @@ public sealed class PushBookingStatusTests
 
         using (var rescheduled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/reschedule",
-            new RescheduleBookingRequest(Local(date, 12))))
+            new RescheduleBookingRequest(targetStart)))
         {
             Assert.Equal(HttpStatusCode.NoContent, rescheduled.StatusCode);
         }
 
-        Assert.Empty(await push.GetAllNotificationsAsync());
+        // Клиентский перенос с веба — такой же повод для push, как барберский: вид и тип
+        // другие, а снимок — новое время визита.
+        var row = Assert.Single(
+            await push.GetNotificationsAsync(customer.Id),
+            notification => notification.Kind == PushNotificationKind.BookingRescheduledByCustomer);
+        Assert.Equal(booking.Id, row.BookingId);
+        Assert.Equal(targetStart, row.StartAt);
 
         var result = await app.RunPushTickAsync();
 
-        Assert.Equal(PushTickResult.Empty, result);
-        Assert.Empty(sender.Messages);
+        Assert.Equal(1, result.Sent);
+
+        var captured = Assert.Single(sender.Messages);
+        Assert.Equal(
+            "Вы перенесли запись: салон «Salon Push Status Self Reschedule Barber»",
+            captured.Message.Title);
+        Assert.Equal(PushMessage.BOOKING_RESCHEDULED_BY_CUSTOMER_TYPE, captured.Message.Type);
     }
 
     [Fact(Timeout = 180_000)]

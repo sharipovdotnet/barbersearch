@@ -48,6 +48,10 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
+        // Поверхность запроса: решение «пушить или молчать» принимает Application, а сам
+        // заголовок читается здесь. Scoped, как и ICurrentUser: оба живут в рамках запроса.
+        services.AddScoped<IClientSurface, HttpContextClientSurface>();
+
         return services.AddPostgresInfrastructure(connectionString)
             .AddRepositories()
             .AddApplication();

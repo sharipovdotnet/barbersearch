@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Application.Salons;
@@ -41,12 +42,13 @@ namespace BarberSearch.Application.Bookings.RescheduleBooking;
 /// репозитории, а не повод кэшировать строку.
 /// </para>
 /// <para>
-/// После успешного коммита клиенту ставится push-событие «запись перенесена» с <b>новым</b>
-/// временем — но только когда переносит барбер или администратор. Перенос самим клиентом
-/// уведомления не создаёт (он знает о своём действии), а перенос на то же время вообще не
-/// доходит до записи и push не создаёт. Событие ставится <b>вне</b> транзакции переноса:
-/// ошибка вставки в push-очередь не должна отравлять транзакцию, а сбой постановки
-/// логируется предупреждением и не меняет результат команды.
+/// После успешного коммита уведомитель вызывается <b>всегда</b>, когда время изменилось:
+/// вид выбирается по <c>isClientOwner</c>, а молчание — по поверхности. Перенос самим
+/// клиентом в приложении push не создаёт, но ставит письмо на подтверждённый адрес; перенос
+/// с веба и перенос барбером или администратором уведомляют push'ем. Перенос на то же время
+/// вообще не доходит до записи и не уведомляет (<c>D15</c>). Событие ставится <b>вне</b>
+/// транзакции переноса: ошибка вставки в push-очередь не должна отравлять транзакцию, а сбой
+/// постановки логируется предупреждением и не меняет результат команды.
 /// </para>
 /// </remarks>
 public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBookingCommand>
@@ -57,6 +59,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly IBookingStatusPushNotifier _pushNotifier;
+    private readonly IBookingChangeEmailNotifier _emailNotifier;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RescheduleBookingHandler> _logger;
 
@@ -67,6 +70,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         IBookingStatusPushNotifier pushNotifier,
+        IBookingChangeEmailNotifier emailNotifier,
         TimeProvider timeProvider,
         ILogger<RescheduleBookingHandler> logger)
     {
@@ -76,6 +80,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         ArgumentNullException.ThrowIfNull(unitOfWork);
         ArgumentNullException.ThrowIfNull(currentUser);
         ArgumentNullException.ThrowIfNull(pushNotifier);
+        ArgumentNullException.ThrowIfNull(emailNotifier);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -85,6 +90,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _pushNotifier = pushNotifier;
+        _emailNotifier = emailNotifier;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -125,17 +131,30 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
             return rescheduled.Error;
         }
 
-        // Push ставится после коммита, а не внутри транзакции: ошибка вставки в очередь
+        // Push и письмо ставятся после коммита, а не внутри транзакции: ошибка вставки в очередь
         // в PostgreSQL делает транзакцию недействительной, и «проглоченный» сбой push
         // откатил бы уже сохранённый перенос на коммите. Здесь же сбой уведомления
         // остаётся сбоем уведомления — бронь важнее.
-        if (rescheduled.Value.NotifyCustomer)
+        var outcome = rescheduled.Value;
+
+        // D15: перенос на то же время — успех без записи и без уведомлений.
+        if (outcome.TimeChanged)
         {
+            var change = outcome.IsClientOwner
+                ? BookingStatusChange.RescheduledByCustomer
+                : BookingStatusChange.RescheduledByBarber;
+
             await BookingStatusPush.NotifyAsync(
                 _pushNotifier,
                 _logger,
-                rescheduled.Value.Booking,
-                BookingStatusChange.RescheduledByBarber,
+                outcome.Booking,
+                change,
+                cancellationToken);
+
+            // Письмо уходит только за перенос из приложения; решение — в уведомителе.
+            await _emailNotifier.NotifyRescheduledAsync(
+                outcome.Booking,
+                outcome.IsClientOwner,
                 cancellationToken);
         }
 
@@ -230,7 +249,7 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
                 "Booking {BookingId} reschedule to the same start time was a no-op.",
                 booking.Id);
 
-            return new RescheduleOutcome(booking, NotifyCustomer: false);
+            return new RescheduleOutcome(booking, isClientOwner, TimeChanged: false);
         }
 
         // Пояс салона нужен до контекста дня: только он даёт локальную дату нового времени.
@@ -382,19 +401,19 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
             booking.Id,
             booking.StartAt);
 
-        // Перенос самого клиента push не создаёт: он только что совершил действие.
-        // Барбер и администратор — создают; у гостевой брони получателя нет, и уведомитель
-        // вернёт успешный no-op. Снимок берётся из сохранённой брони, поэтому start_at
-        // строки — новое время визита.
-        return new RescheduleOutcome(booking, NotifyCustomer: !isClientOwner);
+        // Снимок берётся из сохранённой брони, поэтому start_at строки — новое время визита.
+        // Автор и поверхность решают, что именно уйдёт: push, письмо или ничего. Гейт
+        // поверхности стоит в уведомителях, а не здесь (AGENT.md §20.11).
+        return new RescheduleOutcome(booking, isClientOwner, TimeChanged: true);
     }
 
     /// <summary>
-    /// Итог успешного переноса: сохранённая бронь и нужен ли клиенту push.
+    /// Итог успешного переноса: сохранённая бронь, автор и признак «время изменилось».
     /// </summary>
     /// <param name="Booking">Бронь с новым временем; для no-op — с прежним.</param>
-    /// <param name="NotifyCustomer">
-    /// <c>true</c>, только когда время действительно изменил барбер или администратор.
+    /// <param name="IsClientOwner">Перенос сделал клиент-владелец, а не сотрудник салона.</param>
+    /// <param name="TimeChanged">
+    /// <c>false</c> для no-op <c>D15</c>: времени не изменилось, уведомлять не о чем.
     /// </param>
-    private sealed record RescheduleOutcome(Booking Booking, bool NotifyCustomer);
+    private sealed record RescheduleOutcome(Booking Booking, bool IsClientOwner, bool TimeChanged);
 }

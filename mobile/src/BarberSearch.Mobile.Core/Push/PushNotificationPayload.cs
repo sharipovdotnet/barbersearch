@@ -8,16 +8,25 @@ namespace BarberSearch.Mobile.Core.Push;
 /// Сервер кладёт в data-payload только тип сообщения и, когда он есть, идентификатор записи
 /// (<c>{"type":"booking.reminder","bookingId":"&lt;guid&gt;"}</c> либо
 /// <c>{"type":"booking.created"}</c>). Текст — заголовок и тело — уже показан системой либо
-/// локальным уведомлением; для перехода он не нужен. Канал несёт пять событий: напоминание за час
-/// до визита (<see cref="ReminderType"/>); создание записи (<see cref="BookingCreatedType"/>) —
-/// и когда клиент записался сам, и когда клиента записал мастер; и изменения записи мастером —
-/// подтверждение (<see cref="BookingConfirmedType"/>), отмена (<see cref="BookingCancelledType"/>)
-/// и перенос (<see cref="BookingRescheduledType"/>). Три события изменения приходят только от
-/// действия мастера: собственные действия клиента push не порождают.
+/// локальным уведомлением; для перехода он не нужен. Канал несёт семь событий: напоминание за
+/// час до визита (<see cref="ReminderType"/>); создание записи
+/// (<see cref="BookingCreatedType"/>) — и когда клиент записался сам, и когда клиента записал
+/// мастер; изменения записи мастером — подтверждение (<see cref="BookingConfirmedType"/>),
+/// отмена (<see cref="BookingCancelledType"/>) и перенос (<see cref="BookingRescheduledType"/>);
+/// и те же отмена и перенос, но сделанные клиентом (<see cref="BookingCancelledByCustomerType"/>,
+/// <see cref="BookingRescheduledByCustomerType"/>).
+/// </para>
+/// <para>
+/// Собственное действие клиента push порождает только тогда, когда оно сделано вне приложения,
+/// на веб-поверхности: запрос из приложения несёт заголовок <c>X-Client-Surface: app</c>, и
+/// сервер по нему уведомление не создаёт — экран уже показал результат, а письмо об изменении
+/// уходит отдельно. Запрос без заголовка (веб, кабинет барбера, неизвестный клиент) уведомляет,
+/// поэтому типы <c>booking.cancelledByCustomer</c> и <c>booking.rescheduledByCustomer</c>
+/// встречаются реже остальных, но разбираются наравне с ними.
 /// </para>
 /// <para>
 /// Отдельной deep link-страницы записи нет: <c>GET api/bookings/{id}</c> в API отсутствует,
-/// а список «Записи» и так содержит нужную запись, поэтому все пять событий открывают вкладку,
+/// а список «Записи» и так содержит нужную запись, поэтому все семь событий открывают вкладку,
 /// а не карточку. Разбор чистый: ни MAUI, ни Shell, поэтому проверяется в тестах без
 /// эмулятора.
 /// </para>
@@ -54,6 +63,16 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
     public const string BookingRescheduledType = "booking.rescheduled";
 
     /// <summary>
+    /// Тип события об отмене записи клиентом вне приложения.
+    /// </summary>
+    public const string BookingCancelledByCustomerType = "booking.cancelledByCustomer";
+
+    /// <summary>
+    /// Тип события о переносе записи клиентом вне приложения.
+    /// </summary>
+    public const string BookingRescheduledByCustomerType = "booking.rescheduledByCustomer";
+
+    /// <summary>
     /// Маршрут вкладки «Записи».
     /// </summary>
     /// <remarks>
@@ -81,8 +100,9 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
     /// </remarks>
     public string? Route => Type switch
     {
-        ReminderType or BookingCreatedType or BookingConfirmedType or BookingCancelledType
-            or BookingRescheduledType => BookingsRoute,
+        ReminderType or BookingCreatedType or BookingConfirmedType
+            or BookingCancelledType or BookingRescheduledType
+            or BookingCancelledByCustomerType or BookingRescheduledByCustomerType => BookingsRoute,
         _ => null,
     };
 
@@ -123,5 +143,6 @@ public sealed record PushNotificationPayload(string Type, Guid? BookingId)
 
     private static bool IsKnownType(string type) =>
         type is ReminderType or BookingCreatedType or BookingConfirmedType
-            or BookingCancelledType or BookingRescheduledType;
+            or BookingCancelledType or BookingRescheduledType
+            or BookingCancelledByCustomerType or BookingRescheduledByCustomerType;
 }

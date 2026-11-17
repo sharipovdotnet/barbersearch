@@ -30,9 +30,11 @@ using BookingStatus = BarberSearch.Domain.Bookings.BookingStatus;
 /// События статуса проверяются по своему правилу. Подтверждение доставляется только пока
 /// бронь <c>Confirmed</c> (иначе — та же причина <c>booking is not confirmed</c>). Отмена —
 /// только пока бронь <c>Cancelled</c> (<c>booking is not cancelled</c>: запись «ожила» после
-/// отмены, и устаревшее сообщение об отмене было бы ложью). Перенос — только пока визит
+/// отмены, и устаревшее сообщение об отмене было бы ложью). Это правило общее для отмены
+/// барбером и клиентом: вид разный, повод один. Перенос — только пока визит
 /// активен, то есть не <c>Cancelled</c>/<c>Completed</c>/<c>NoShow</c>
-/// (<c>booking is not active</c>). Общие для всех события статуса проверки: исчезнувшая
+/// (<c>booking is not active</c>); правило тоже общее для двух видов переноса. Общие для
+/// всех события статуса проверки: исчезнувшая
 /// бронь — <c>booking was deleted</c>, несовпадение <c>StartAt</c> со снимком —
 /// <c>booking was rescheduled</c> (новый перенос отменяет старый), наступившее начало —
 /// <c>window closed</c>.
@@ -436,6 +438,7 @@ public sealed class DeliverPendingPushNotificationsHandler
                 break;
 
             case PushNotificationKind.BookingCancelledByBarber:
+            case PushNotificationKind.BookingCancelledByCustomer:
                 if (bookingResult.IsFailure)
                 {
                     return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
@@ -449,6 +452,7 @@ public sealed class DeliverPendingPushNotificationsHandler
                 break;
 
             case PushNotificationKind.BookingRescheduledByBarber:
+            case PushNotificationKind.BookingRescheduledByCustomer:
                 if (bookingResult.IsFailure)
                 {
                     return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
@@ -497,8 +501,10 @@ public sealed class DeliverPendingPushNotificationsHandler
             PushNotificationKind.BookingCreatedByCustomer
                 or PushNotificationKind.BookingCreatedByBarber => "creation event",
             PushNotificationKind.BookingConfirmed => "confirmation event",
-            PushNotificationKind.BookingCancelledByBarber => "cancellation event",
-            PushNotificationKind.BookingRescheduledByBarber => "reschedule event",
+            PushNotificationKind.BookingCancelledByBarber
+                or PushNotificationKind.BookingCancelledByCustomer => "cancellation event",
+            PushNotificationKind.BookingRescheduledByBarber
+                or PushNotificationKind.BookingRescheduledByCustomer => "reschedule event",
             _ => "unknown event"
         };
 

@@ -505,6 +505,80 @@ public class PushMessageTests
         Assert.Equal("Мастер Иван · Стрижка · сегодня в 14:30", message.Body);
     }
 
+    [Fact]
+    public void CustomerCancelled_WithAllSnapshots_ReturnsTheExactRussianText()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCancelledByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы отменили запись: салон «Барбершоп»", message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:30", message.Body);
+        Assert.Equal(PushMessage.BOOKING_CANCELLED_BY_CUSTOMER_TYPE, message.Type);
+    }
+
+    [Fact]
+    public void CustomerCancelled_WithoutSalon_UsesTheDegradedTitle()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            null,
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingCancelledByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы отменили запись", message.Title);
+        Assert.Equal(PushMessage.BOOKING_CANCELLED_BY_CUSTOMER_TYPE, message.Type);
+    }
+
+    [Fact]
+    public void CustomerRescheduled_WithAllSnapshots_ReturnsTheExactRussianText()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingRescheduledByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы перенесли запись: салон «Барбершоп»", message.Title);
+        Assert.Equal("Мастер Иван · Стрижка · сегодня в 17:30", message.Body);
+        Assert.Equal(PushMessage.BOOKING_RESCHEDULED_BY_CUSTOMER_TYPE, message.Type);
+    }
+
+    [Fact]
+    public void CustomerRescheduled_WithoutSalon_UsesTheDegradedTitle()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        var notification = Create(
+            now.AddMinutes(30),
+            "   ",
+            "Иван",
+            "Стрижка",
+            SalonTimeZone,
+            PushNotificationKind.BookingRescheduledByCustomer);
+
+        var message = PushMessages.For(notification, now);
+
+        Assert.Equal("Вы перенесли запись", message.Title);
+        Assert.Equal(PushMessage.BOOKING_RESCHEDULED_BY_CUSTOMER_TYPE, message.Type);
+    }
+
     private static PushNotification Create(
         DateTimeOffset startAt,
         string? salonName,

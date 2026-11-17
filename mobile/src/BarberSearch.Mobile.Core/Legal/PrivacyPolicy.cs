@@ -23,7 +23,7 @@ public static class PrivacyPolicy
     /// <summary>
     /// Редакция Политики, которую подписывает форма регистрации (ISO-дата).
     /// </summary>
-    public const string Version = "2026-11-11";
+    public const string Version = "2026-11-18";
 
     /// <summary>
     /// Путь страницы Политики на публичном сайте.
