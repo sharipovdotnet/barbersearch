@@ -346,7 +346,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.PhoneNumber,
+                PhoneNumber = user.PhoneNumber == null ? null : user.PhoneNumber.Value,
 
                 // Скрытый администратором или неодобренный аватар маскируется в SQL: барбер
                 // видит инициалы, а строка записи остаётся. Маска — только для показа,
@@ -577,7 +577,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 user.FirstName,
                 user.LastName,
                 user.Email,
-                user.PhoneNumber,
+                PhoneNumber = user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                 user.AvatarUrl
             });
 

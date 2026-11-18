@@ -1767,10 +1767,6 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
 
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("text")
-                        .HasColumnName("phone_number");
-
                     b.Property<int>("Role")
                         .HasColumnType("integer")
                         .HasColumnName("role");
@@ -2317,6 +2313,25 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasForeignKey("BarberProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_users_barber_profiles_barber_profile_id");
+
+                    b.OwnsOne("BarberSearch.Domain.Users.ValueObjects.PhoneNumber", "PhoneNumber", b1 =>
+                        {
+                            b1.Property<Guid>("UserId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Value")
+                                .HasColumnType("text")
+                                .HasColumnName("phone_number");
+
+                            b1.HasKey("UserId");
+
+                            b1.ToTable("users");
+
+                            b1.WithOwner()
+                                .HasForeignKey("UserId");
+                        });
+
+                    b.Navigation("PhoneNumber");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.WorkingSchedules.ScheduleOverride", b =>

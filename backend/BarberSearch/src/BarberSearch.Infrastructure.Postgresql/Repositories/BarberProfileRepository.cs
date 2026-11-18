@@ -1360,7 +1360,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                    profile.UserId,
                    profile.DisplayName.Value,
                    user.Email,
-                   user.PhoneNumber,
+                   user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                    user.AvatarUrl,
                    profile.Grade,
                    profile.Bio,

@@ -45,12 +45,12 @@ public class UserOwnershipTests
             NullLogger<UpdateUserProfileHandler>.Instance);
 
         var result = await handler.Handle(
-            new UpdateUserProfileCommand(user.Id, "Updated", "Name", "+70000000000", null),
+            new UpdateUserProfileCommand(user.Id, "Updated", "Name", "+79990000000", null),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Updated", user.FirstName);
-        Assert.Equal("+70000000000", user.PhoneNumber);
+        Assert.Equal("+79990000000", user.PhoneNumber?.Value);
     }
 
     [Fact]

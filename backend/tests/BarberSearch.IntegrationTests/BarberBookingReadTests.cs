@@ -102,7 +102,7 @@ public sealed class BarberBookingReadTests
         var first = upcomingPage.Items[0];
         Assert.Equal(BookingStatus.Pending, first.Status);
         Assert.Equal("Иван Петров", first.Customer.DisplayName);
-        Assert.Equal("+7 999 123-45-67", first.Customer.PhoneNumber);
+        Assert.Equal("+79991234567", first.Customer.PhoneNumber);
         Assert.Equal("Haircut My Bookings Barber", first.Service.Name);
         Assert.Equal("Salon My Bookings Barber", first.Salon.Name);
         Assert.Equal("Teststrasse 1", first.Salon.Address);

@@ -429,7 +429,7 @@ public sealed class AdminBookingReadTests
         Assert.Equal("Иван", row.Customer.FirstName);
         Assert.Equal("Петров", row.Customer.LastName);
         Assert.Equal(customer.Email, row.Customer.Email);
-        Assert.Equal("+7 999 123-45-67", row.Customer.PhoneNumber);
+        Assert.Equal("+79991234567", row.Customer.PhoneNumber);
 
         Assert.Equal(barber.Profile.Id, row.Barber.ProfileId);
         Assert.Equal("Detail Barber", row.Barber.DisplayName);

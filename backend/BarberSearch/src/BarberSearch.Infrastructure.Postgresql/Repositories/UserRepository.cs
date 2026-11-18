@@ -253,6 +253,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
         }
 
         var pattern = BuildSearchPattern(search);
+        var phonePattern = BuildPhoneSearchPattern(search);
 
         var rows = await Context.Users
             .AsNoTracking()
@@ -260,7 +261,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             .Where(user =>
                 EF.Functions.ILike(user.Email, pattern, "\\")
                 || (user.PhoneNumber != null
-                    && EF.Functions.ILike(user.PhoneNumber, pattern, "\\")))
+                    && EF.Functions.ILike(user.PhoneNumber.Value, phonePattern, "\\")))
             .OrderBy(user => user.FirstName)
             .ThenBy(user => user.LastName)
             .ThenBy(user => user.Id)
@@ -270,7 +271,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                 user.FirstName,
                 user.LastName,
                 user.Email,
-                user.PhoneNumber))
+                user.PhoneNumber == null ? null : user.PhoneNumber.Value))
             .ToListAsync(cancellationToken);
 
         return rows;
@@ -462,7 +463,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                 user.Email,
                 user.FirstName,
                 user.LastName,
-                user.PhoneNumber,
+                user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                 user.AvatarUrl,
                 user.Role,
                 user.BarberProfileId,
@@ -618,7 +619,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                    user.Email,
                    user.FirstName,
                    user.LastName,
-                   user.PhoneNumber,
+                   user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                    user.AvatarUrl,
                    user.Role,
                    user.IsActive,
@@ -685,6 +686,17 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             .Replace("%", "\\%", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal)
         + "%";
+
+    /// <summary>
+    /// Шаблон <c>ILIKE</c> для поиска по телефону: номер хранится канонически, поэтому
+    /// разделители из запроса отбрасываются — «000-00-00» находит «+79990000000».
+    /// </summary>
+    private static string BuildPhoneSearchPattern(string search)
+    {
+        var digits = new string(search.Where(char.IsAsciiDigit).ToArray());
+
+        return BuildSearchPattern(digits.Length >= 3 ? digits : search);
+    }
 
     public async Task<Result<bool, Failure>> EmailExistsAsync(
         string email,
