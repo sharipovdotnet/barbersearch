@@ -139,6 +139,96 @@ public class UserTests
         Assert.True(result.IsFailure);
     }
 
+    [Theory]
+    [InlineData("+7 999 123-45-67")]
+    [InlineData("8 (999) 123-45-67")]
+    [InlineData("7-999-123-45-67")]
+    [InlineData("9991234567")]
+    [InlineData(" +7(999)1234567 ")]
+    public void UpdateProfile_WithSupportedPhone_StoresCanonicalValue(string phoneNumber)
+    {
+        var user = CreateValidUser();
+
+        var result = user.UpdateProfile("Ivan", "Petrov", phoneNumber, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("+79991234567", user.PhoneNumber?.Value);
+    }
+
+    [Theory]
+    [InlineData("+49 170 1234567")]
+    [InlineData("+375 29 123-45-67")]
+    [InlineData("+7 495 123-45-67")]
+    public void UpdateProfile_WithForeignOrLandlinePhone_KeepsPreviousValue(string phoneNumber)
+    {
+        var user = CreateValidUser();
+        Assert.True(user.UpdateProfile("Ivan", "Petrov", "+79001234567", null).IsSuccess);
+
+        var result = user.UpdateProfile("Changed", "Petrov", phoneNumber, null);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("user.updateProfile.phoneNumber", Assert.Single(result.Error.Errors).Code);
+        Assert.Equal("+79001234567", user.PhoneNumber?.Value);
+        Assert.Equal("Ivan", user.FirstName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UpdateProfile_WithBlankPhone_ClearsPhone(string? phoneNumber)
+    {
+        var user = CreateValidUser();
+        Assert.True(user.UpdateProfile("Ivan", "Petrov", "+79001234567", null).IsSuccess);
+
+        var result = user.UpdateProfile("Ivan", "Petrov", phoneNumber, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(user.PhoneNumber);
+    }
+
+    [Fact]
+    public void UpdateProfile_ChangingPhone_ResetsPhoneVerification()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.UpdateProfile("Ivan", "Petrov", "+79001234567", null).IsSuccess);
+        Assert.True(user.MarkPhoneAsVerified().IsSuccess);
+
+        var result = user.UpdateProfile("Ivan", "Petrov", "+79007654321", null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("+79007654321", user.PhoneNumber?.Value);
+        Assert.False(user.IsPhoneVerified);
+    }
+
+    [Fact]
+    public void UpdateProfile_SamePhoneInAnotherSpelling_KeepsPhoneVerification()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.UpdateProfile("Ivan", "Petrov", "+79001234567", null).IsSuccess);
+        Assert.True(user.MarkPhoneAsVerified().IsSuccess);
+
+        var result = user.UpdateProfile("Ivan", "Petrov", "8 (900) 123-45-67", null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("+79001234567", user.PhoneNumber?.Value);
+        Assert.True(user.IsPhoneVerified);
+    }
+
+    [Fact]
+    public void UpdateProfile_ClearingVerifiedPhone_ResetsPhoneVerification()
+    {
+        var user = CreateValidUser();
+        Assert.True(user.UpdateProfile("Ivan", "Petrov", "+79001234567", null).IsSuccess);
+        Assert.True(user.MarkPhoneAsVerified().IsSuccess);
+
+        var result = user.UpdateProfile("Ivan", "Petrov", null, null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(user.PhoneNumber);
+        Assert.False(user.IsPhoneVerified);
+    }
+
     [Fact]
     public void UpdateProfile_RejectsInvalidAvatarUrlAndKeepsOldValue()
     {

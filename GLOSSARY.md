@@ -9,6 +9,12 @@ barber, picks a salon and a service, and books a time slot.
 An account that can sign in. Every User has exactly one role.
 _Avoid_: Account, member, person
 
+**Phone Number**:
+The optional mobile phone of a User. Only Russian mobile numbers qualify: a landline, a foreign
+number or a Salon's contact telephone is not a Phone Number. Two spellings of the same number are
+the same Phone Number, and it can be verified independently of the email.
+_Avoid_: Contact phone, mobile, cell
+
 **Customer**:
 A User who books services. The default role.
 _Avoid_: Client, buyer

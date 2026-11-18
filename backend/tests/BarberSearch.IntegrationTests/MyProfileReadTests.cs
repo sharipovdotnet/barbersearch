@@ -51,7 +51,7 @@ public sealed class MyProfileReadTests
             var updated = tracked.UpdateProfile(
                 "Мария",
                 "Кузнецова",
-                "+49 170 1234567",
+                "+7 999 123-45-67",
                 avatarUrl: null);
             Assert.False(updated.IsFailure);
 
@@ -69,7 +69,7 @@ public sealed class MyProfileReadTests
         Assert.Equal(user.Email, body.Email);
         Assert.Equal("Мария", body.FirstName);
         Assert.Equal("Кузнецова", body.LastName);
-        Assert.Equal("+49 170 1234567", body.PhoneNumber);
+        Assert.Equal("+79991234567", body.PhoneNumber);
         Assert.Null(body.AvatarUrl);
         Assert.False(body.IsAvatarBlocked);
         Assert.Equal(PhotoModerationStatus.Approved, body.AvatarModerationStatus);

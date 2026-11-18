@@ -396,7 +396,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
             user.Email,
             user.FirstName,
             user.LastName,
-            user.PhoneNumber,
+            user.PhoneNumber?.Value,
             user.AvatarUrl,
             user.Role,
             user.IsActive,
@@ -522,7 +522,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
                 user.Email,
                 user.FirstName,
                 user.LastName,
-                user.PhoneNumber,
+                user.PhoneNumber?.Value,
                 user.AvatarUrl,
                 user.Role,
                 user.BarberProfileId,
@@ -551,13 +551,19 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         CancellationToken cancellationToken = default)
     {
         var needle = search.Trim();
+        var phoneNeedle = new string(needle.Where(char.IsAsciiDigit).ToArray());
+
+        if (phoneNeedle.Length < 3)
+        {
+            phoneNeedle = needle;
+        }
 
         var rows = _users.Values
             .Where(user => user.IsActive)
             .Where(user =>
                 user.Email.Contains(needle, StringComparison.OrdinalIgnoreCase)
-                || (user.PhoneNumber?.Contains(
-                        needle,
+                || (user.PhoneNumber?.Value.Contains(
+                        phoneNeedle,
                         StringComparison.OrdinalIgnoreCase) ?? false))
             .OrderBy(user => user.FirstName)
             .ThenBy(user => user.LastName)
@@ -568,7 +574,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
                 user.FirstName,
                 user.LastName,
                 user.Email,
-                user.PhoneNumber))
+                user.PhoneNumber?.Value))
             .ToList();
 
         return Task.FromResult<Result<IReadOnlyList<BarberClientResponse>, Failure>>(rows);

@@ -75,7 +75,16 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.PasswordHash).HasColumnName("password_hash").IsRequired();
         builder.Property(x => x.FirstName).HasColumnName("first_name").IsRequired();
         builder.Property(x => x.LastName).HasColumnName("last_name").IsRequired();
-        builder.Property(x => x.PhoneNumber).HasColumnName("phone_number");
+        // Телефон — owned-тип PhoneNumber в этой же таблице: отдельной сущности у номера
+        // нет. Навигация необязательна: аккаунт без телефона хранит phone_number IS NULL.
+        // Колонка остаётся nullable text: в базе могли сохраниться свободные записи,
+        // сделанные до появления валидации, и миграция не должна их ронять.
+        builder.OwnsOne(x => x.PhoneNumber, phone =>
+        {
+            phone.Property(number => number.Value)
+                .HasColumnName("phone_number")
+                .IsRequired(false);
+        });
         builder.Property(x => x.AvatarUrl)
             .HasColumnName("avatar_url")
             .HasMaxLength(Constants.MAX_URL_LENGTH);

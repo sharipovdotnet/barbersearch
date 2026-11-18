@@ -1,6 +1,7 @@
 using System.Net;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.FavoriteBarbers;
+using BarberSearch.Domain.Users.ValueObjects;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -52,7 +53,17 @@ public class User : AggregateRoot
     public string FirstName { get; private set; } = null!;
     public string LastName { get; private set; } = null!;
 
-    public string? PhoneNumber { get; private set; }
+    /// <summary>
+    /// Телефон пользователя в каноническом виде <c>+7XXXXXXXXXX</c>; <c>null</c> — номер не задан.
+    /// </summary>
+    /// <remarks>
+    /// Хранится объект-значение <see cref="BarberSearch.Domain.Users.ValueObjects.PhoneNumber"/>:
+    /// в базе и в памяти лежит только канонический вид, поэтому сравнение номеров и поиск
+    /// по ним не зависят от того, как номер ввели. Привычные записи (<c>8 (999) 123-45-67</c>,
+    /// <c>+7 999 123-45-67</c>, <c>9991234567</c>) нормализует сам объект-значение.
+    /// </remarks>
+    public PhoneNumber? PhoneNumber { get; private set; }
+
     public string? AvatarUrl { get; private set; }
 
     /// <summary>
@@ -225,6 +236,31 @@ public class User : AggregateRoot
     public static string NormalizeEmail(string? email)
         => EmailAddress.Normalize(email);
 
+    /// <summary>
+    /// Обновляет имя, фамилию, телефон и аватар пользователя одной операцией.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Телефон нормализуется в объект-значение
+    /// <see cref="BarberSearch.Domain.Users.ValueObjects.PhoneNumber"/>: в агрегате всегда
+    /// лежит канонический вид <c>+7XXXXXXXXXX</c>. <c>null</c> и пустая строка снимают номер,
+    /// а недопустимое значение возвращает <c>400 user.updateProfile.phoneNumber</c> и не
+    /// меняет ни одного поля.
+    /// </para>
+    /// <para>
+    /// Смена канонического значения снимает <see cref="IsPhoneVerified"/>: новый номер ещё
+    /// не подтверждён. Повторная запись того же номера в другой записи флаг сохраняет.
+    /// </para>
+    /// <para>
+    /// Ошибки собираются по всем полям сразу; изменения применяются только когда ошибок нет.
+    /// </para>
+    /// </remarks>
+    /// <param name="firstName">Новое имя.</param>
+    /// <param name="lastName">Новая фамилия.</param>
+    /// <param name="phoneNumber">
+    /// Номер в любой поддерживаемой записи либо <c>null</c>/пустая строка, чтобы снять его.
+    /// </param>
+    /// <param name="avatarUrl">Новый URL аватара либо <c>null</c>/пустая строка.</param>
     public UnitResult<Failure> UpdateProfile(
         string firstName,
         string lastName,
@@ -249,6 +285,16 @@ public class User : AggregateRoot
                 nameof(lastName)));
         }
 
+        var phoneNumberError = PhoneNumber.Validate(
+            phoneNumber,
+            "user.updateProfile.phoneNumber",
+            nameof(phoneNumber),
+            out var parsedPhoneNumber);
+        if (phoneNumberError is not null)
+        {
+            errors.Add(phoneNumberError);
+        }
+
         var avatarUrlError = ValidateAvatarUrl(
             avatarUrl,
             "user.updateProfile.avatarUrl",
@@ -265,7 +311,15 @@ public class User : AggregateRoot
 
         FirstName = firstName;
         LastName = lastName;
-        PhoneNumber = phoneNumber;
+
+        // Смена номера — это новый неподтверждённый телефон: старый флаг проверки
+        // к нему не относится. Повторная запись того же канонического значения
+        // (кабинет присылает текущий телефон обратно) флаг сохраняет.
+        if (PhoneNumber != parsedPhoneNumber)
+        {
+            PhoneNumber = parsedPhoneNumber;
+            IsPhoneVerified = false;
+        }
 
         // Та же логика смены аватара, что у SetAvatar: сохранение имени с текущим URL
         // не трогает ни статус проверки, ни блокировку, а новый кадр уходит в Pending.
@@ -636,9 +690,12 @@ public class User : AggregateRoot
     /// <summary>
     /// Помечает телефон подтверждённым.
     /// </summary>
+    /// <remarks>
+    /// Требует заданный <see cref="PhoneNumber"/>: подтверждать нечего, если номер не сохранён.
+    /// </remarks>
     public UnitResult<Failure> MarkPhoneAsVerified()
     {
-        if (string.IsNullOrWhiteSpace(PhoneNumber))
+        if (PhoneNumber is null)
         {
             return new Failure(Error.Validation(
                 "user.markPhoneAsVerified.phoneNumber",
