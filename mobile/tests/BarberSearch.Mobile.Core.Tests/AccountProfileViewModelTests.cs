@@ -202,6 +202,64 @@ public sealed class AccountProfileViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_ServerPhoneError_MapsToPhoneField()
+    {
+        var harness = new Harness();
+        await harness.ViewModel.InitializeAsync();
+        harness.ViewModel.PhoneNumber = "+7 900 000-00-0";
+        harness.AccountApi.Update = () => Task.FromException(
+            ApiError(HttpStatusCode.BadRequest, "user.updateProfile.phoneNumber"));
+
+        await harness.ViewModel.SaveCommand.ExecuteAsync(null);
+
+        // Причина под полем: человек должен понять, что номер не российский мобильный,
+        // а не гадать по общему «Не удалось сохранить профиль.».
+        Assert.True(harness.ViewModel.HasPhoneNumberError);
+        Assert.Equal(
+            "Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.",
+            harness.ViewModel.PhoneNumberError);
+        Assert.False(harness.ViewModel.HasFormError);
+        Assert.Null(harness.ViewModel.Announcement);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ServerErrorsForSeveralFields_ShowsEveryFieldError()
+    {
+        var harness = new Harness();
+        await harness.ViewModel.InitializeAsync();
+        harness.ViewModel.LastName = "Другая";
+        harness.ViewModel.PhoneNumber = "+7 495 123-45-67";
+        harness.AccountApi.Update = () => Task.FromException(
+            new BarberSearchApiException(
+                HttpStatusCode.BadRequest,
+                "Request failed.",
+                ["user.updateProfile.lastName", "user.updateProfile.phoneNumber"],
+                new Dictionary<string, string[]>()));
+
+        await harness.ViewModel.SaveCommand.ExecuteAsync(null);
+
+        // Сервер присылает все ошибки сразу — исправлять обе причины, а не по одной за нажатие.
+        Assert.Equal("Введите фамилию.", harness.ViewModel.LastNameError);
+        Assert.True(harness.ViewModel.HasPhoneNumberError);
+        Assert.False(harness.ViewModel.HasFormError);
+    }
+
+    [Fact]
+    public async Task PhoneEdit_AfterServerError_ClearsPhoneFieldError()
+    {
+        var harness = new Harness();
+        await harness.ViewModel.InitializeAsync();
+        harness.ViewModel.PhoneNumber = "+7 900 000-00-0";
+        harness.AccountApi.Update = () => Task.FromException(
+            ApiError(HttpStatusCode.BadRequest, "user.updateProfile.phoneNumber"));
+        await harness.ViewModel.SaveCommand.ExecuteAsync(null);
+
+        harness.ViewModel.PhoneNumber = "+7 900 000-00-01";
+
+        Assert.False(harness.ViewModel.HasPhoneNumberError);
+    }
+
+    [Fact]
     public async Task SaveAsync_Success_UpdatesBaselineAndShowsAnnouncement()
     {
         var harness = new Harness();

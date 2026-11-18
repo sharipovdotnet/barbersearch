@@ -219,6 +219,12 @@
                             Text="{Binding PhoneNumber}" />
                         <Label
                             FontSize="12"
+                            IsVisible="{Binding HasPhoneNumberError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PhoneNumberError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                        <Label
+                            FontSize="12"
                             LineBreakMode="WordWrap"
                             Text="{loc:Translate Key='Необязательно. По этому номеру с вами может связаться салон.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
