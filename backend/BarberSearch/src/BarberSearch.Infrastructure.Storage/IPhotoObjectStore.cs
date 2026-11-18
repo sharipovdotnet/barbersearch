@@ -1,4 +1,4 @@
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Шов между логикой хранилища и SDK object storage: операции над ключом, без S3-специфики.

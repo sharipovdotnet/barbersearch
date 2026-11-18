@@ -1,7 +1,7 @@
 # AGENT.md — BarberSearch (backend)
 
 > Context file for AI agents and developers. Read this first before any change.
-> Code state: **14 projects**. The slice history (R-01…R-54 and later stages) lives in the
+> Code state: **15 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
 > Tests: **629 domain + 1140 application + 456 infrastructure + 353 integration (2578 total)**;
@@ -64,7 +64,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 
 | Component | Version / value |
 |---|---|
-| Target framework | `net10.0` (ten src projects + four test projects) |
+| Target framework | `net10.0` (eleven src projects + four test projects) |
 | Language | C# 14, `Nullable=enable`, `ImplicitUsings=enable` |
 | CSharpFunctionalExtensions | `3.7.0` (`Shared` only; Domain gets it transitively) |
 | Microsoft.AspNetCore.OpenApi | `10.0.11` |
@@ -87,7 +87,7 @@ Package versions are inline in `.csproj`. `global.json`, `Directory.Build.props`
 ```
 backend/                                  ← workspace root
 └── BarberSearch/                         ← solution folder
-    ├── BarberSearch.sln                  ← 14 projects (ten src + four test)
+    ├── BarberSearch.sln                  ← 15 projects (eleven src + four test)
     ├── .gitignore                        ← stock dotnet template
     └── src/
         ├── Shared/                       ← Shared.csproj
@@ -170,7 +170,20 @@ backend/                                  ← workspace root
         │   ├── AddressSuggestionsExtensions.cs      ← AddAddressSuggestions: options, named client, adapter, cache
         │   └── BarberSearch.Infrastructure.Geocoding.csproj → Application, Contracts, Shared
         │
-        └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure
+        ├── BarberSearch.Infrastructure.Storage/        ← хранилище фото: локальный диск или S3 + WebP-варианты
+        │   ├── PhotoStorageOptions.cs    ← секция Storage: провайдер (PhotoStorageProvider) и S3StorageOptions
+        │   ├── LocalPhotoStorage.cs      ← IPhotoStorage на диске: атомарная запись, путь внутри корня
+        │   ├── S3PhotoStorage.cs         ← IPhotoStorage поверх ключей и IPhotoObjectStore (portfolio + avatars)
+        │   ├── S3ObjectStore.cs          ← IPhotoObjectStore: AWSSDK.S3, MinIO через ServiceURL + ForcePathStyle
+        │   ├── S3StorageInitializer.cs   ← hosted service: проверка/создание бакета на старте
+        │   ├── PhotoMediaKeys.cs, PhotoContentTypes.cs    ← раскладка ключей и MIME для обоих провайдеров
+        │   ├── PhotoThumbnailer.cs, PhotoThumbnail.cs     ← IPhotoThumbnailer: WebP sm/md/lg на SkiaSharp
+        │   ├── IPhotoObjectStore.cs, IPhotoThumbnailer.cs ← швы хранилища и генератора (internal)
+        │   ├── PhotoObject.cs            ← прочитанный объект: поток, Content-Type, длина
+        │   ├── PhotoStorageServiceCollectionExtensions.cs ← AddPhotoStorage(configuration, IHostEnvironment)
+        │   └── BarberSearch.Infrastructure.Storage.csproj → Application, Domain, Shared
+        │
+        └── BarberSearch.Web/             ← BarberSearch.Web.csproj → Domain, Contracts, Application, Infrastructure, Storage
             ├── Program.cs                ← composition root: AddProgramDependencies + ProblemDetails + OpenAPI/Swagger UI
             ├── DependencyInjection.cs    ← AddProgramDependencies(IConfiguration) + IPasswordHasher<User>
             ├── Auth/                     ← схемы cookie + JWT, claims, JwtTokenIssuer, политики, antiforgery
@@ -184,12 +197,6 @@ backend/                                  ← workspace root
             ├── Deployment/               ← StartupSettings, DataProtection, ForwardedHeaders, CORS,
             │                               rate limit, health checks + Serilog wiring (§18):
             │                               SerilogExtensions, LoggingLevels, FileLoggingSettings
-            ├── Storage/                  ← host-адаптер хранилища файлов: PhotoStorageOptions/Provider,
-            │                               LocalPhotoStorage и S3PhotoStorage (IPhotoStorage: portfolio + avatars),
-            │                               PhotoMediaKeys/PhotoContentTypes (общая раскладка и MIME),
-            │                               IPhotoObjectStore/S3ObjectStore + S3StorageInitializer (бакет),
-            │                               PhotoThumbnailer/PhotoThumbnail (IPhotoThumbnailer: WebP-варианты);
-            │                               варианты лежат рядом с исходником; нового проекта решения нет — см. ниже
             ├── appsettings.json          ← empty ConnectionStrings:Postgres (user secrets/env, R-46) +
             │                               Storage:Provider/RootPath (issue-84; avatars — issue-85; S3 — issue-92) +
             │                               Logging:LogLevel / Logging:File (§18) +
@@ -204,12 +211,20 @@ backend/tests/BarberSearch.Infrastructure.UnitTests/ ← xunit project (in the .
 backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the .sln; real PostgreSQL)
 ```
 
-> **`Storage/` — host-адаптер, нового проекта нет (2026-11-11, issue-84; аватары — issue-85;
-> S3/MinIO — issue-92).** Интерфейс `IPhotoStorage` объявлен в
-> `BarberSearch.Application/PortfolioPhotos`, а настройки и оба адаптера живут в
-> `BarberSearch.Web/Storage`: файловая система и object storage — забота хоста, как Data Protection
-> и файловый лог, поэтому Application не знает про ASP.NET и диск, а новый проект решения
-> не заводится — `dotnet sln add` в этом репозитории запрещён (§5.1). Провайдер выбирает
+> **`BarberSearch.Infrastructure.Storage` — host-адаптер хранилища, отдельный проект с
+> 2026-11-18 (2026-11-11, issue-84; аватары — issue-85; S3/MinIO — issue-92).** Интерфейс
+> `IPhotoStorage` объявлен в `BarberSearch.Application/PortfolioPhotos`, а настройки и оба
+> адаптера живут в проекте `BarberSearch.Infrastructure.Storage` (файлы — прямо в корне проекта,
+> без вложенной папки `Storage/`): файловая система и object storage — забота хоста, как Data
+> Protection и файловый лог, поэтому Application не знает про ASP.NET и диск. Это обычный
+> SDK-проект `net10.0` (`Nullable`, `ImplicitUsings`), добавленный в `BarberSearch.sln`
+> **вручную**, потому что `dotnet sln add` здесь запрещён (§5.1). Web ссылается на него, а
+> `Program.cs` вызывает тот же вызов
+> `builder.Services.AddPhotoStorage(builder.Configuration, builder.Environment)`;
+> регистрация принимает `Microsoft.Extensions.Hosting.IHostEnvironment` (нужен только
+> `ContentRootPath`), а не `IWebHostEnvironment`: проект не ссылается на ASP.NET Core, и
+> `builder.Environment` этому параметру удовлетворяет. Пакеты `AWSSDK.S3` и `SkiaSharp`
+> переехали сюда, Web получает их транзитивно. Провайдер выбирает
 > `Storage:Provider` (`Local` по умолчанию или `S3`); раскладка общая — `PhotoMediaKeys`:
 > `portfolio/{profileId:N}/{mediaId:N}.{ext}` и `avatars/{userId:N}/{mediaId:N}.{ext}`, варианты
 > `{mediaId:N}-{sm|md|lg}.webp` рядом. Поэтому публичные URL, `?size=`, ETag и коды ошибок от
@@ -237,13 +252,13 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 > С 2026-11-12 (issue-90, §17.15) **рядом с исходником** лежат производные WebP-варианты
 > `{mediaId:N}-{sm|md|lg}.webp` — в том же каталоге `portfolio/{profileId:N}/…` или
 > `avatars/{userId:N}/…`. Генератор — `PhotoThumbnailer` (`IPhotoThumbnailer`, `PhotoThumbnail`)
-> в `Web/Storage`; разбор `?size=`, `ETag`/`304` и политика кэша — `MediaDelivery` в
-> `Web/Common`; представление, ширины, имена вариантов и `thumbnailUrl` — `PhotoVariant`,
-> `PhotoVariantWidths` и `PhotoThumbnails` в `Application/PortfolioPhotos`. `DeleteAsync`
-> удаляет исходник и все `{mediaId:N}-*.webp` рядом с ним.
+> в `BarberSearch.Infrastructure.Storage`; разбор `?size=`, `ETag`/`304` и политика кэша —
+> `MediaDelivery` в `Web/Common`; представление, ширины, имена вариантов и `thumbnailUrl` —
+> `PhotoVariant`, `PhotoVariantWidths` и `PhotoThumbnails` в `Application/PortfolioPhotos`.
+> `DeleteAsync` удаляет исходник и все `{mediaId:N}-*.webp` рядом с ним.
 
-**Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure` ·
-`Infrastructure` → `Application`
+**Project dependency graph:** `Web` → `Domain`, `Contracts`, `Application`, `Infrastructure`,
+`Storage` · `Infrastructure` → `Application`
 → `Contracts`, `Domain` → `Shared` · `Contracts` → `Domain` (только ради enum'ов `Language` /
 `PaymentMethod` в контрактах) · `BarberSearch.Infrastructure.Email` → `Application` только
 (почтовый транспорт не знает домена и EF) · `BarberSearch.Infrastructure.Telegram` →
@@ -254,6 +269,9 @@ backend/tests/BarberSearch.IntegrationTests/          ← xunit project (in the 
 geo-adapter family: DaData address suggestions behind `IAddressSuggestionsProvider` today,
 geocoding/reverse geocoding later; it knows neither the domain nor EF, and reaches the vendor
 through the named `geocoding` `HttpClient`) ·
+`BarberSearch.Infrastructure.Storage` → `Application`, `Domain`, `Shared` (локальный диск и S3
+за `IPhotoStorage`, WebP-варианты через SkiaSharp; проект не знает ASP.NET Core, поэтому
+регистрация принимает `IHostEnvironment`, а Web получает `AWSSDK.S3`/`SkiaSharp` транзитивно) ·
 `Shared` → CSharpFunctionalExtensions.
 
 > Repository **abstractions live in `BarberSearch.Application`**, each in the folder of its entity
@@ -384,7 +402,7 @@ its environment variables.
 
 ### 5.1 The solution file
 
-`BarberSearch.sln` lists all fourteen projects. Verify with:
+`BarberSearch.sln` lists all fifteen projects. Verify with:
 
 ```powershell
 dotnet sln BarberSearch/BarberSearch.sln list
@@ -393,7 +411,8 @@ dotnet sln BarberSearch/BarberSearch.sln list
 Expected: `BarberSearch.Web`, `BarberSearch.Domain`, `BarberSearch.Application`,
 `BarberSearch.Contracts`, `BarberSearch.Infrastructure.Postgresql`,
 `BarberSearch.Infrastructure.Email`, `BarberSearch.Infrastructure.Telegram`,
-`BarberSearch.Infrastructure.Push`, `BarberSearch.Infrastructure.Geocoding`, `Shared`,
+`BarberSearch.Infrastructure.Push`, `BarberSearch.Infrastructure.Geocoding`,
+`BarberSearch.Infrastructure.Storage`, `Shared`,
 `..\tests\BarberSearch.Domain.UnitTests\BarberSearch.Domain.UnitTests.csproj`,
 `..\tests\BarberSearch.Application.UnitTests\BarberSearch.Application.UnitTests.csproj`,
 `..\tests\BarberSearch.Infrastructure.UnitTests\BarberSearch.Infrastructure.UnitTests.csproj`,
@@ -435,11 +454,17 @@ GUID проекта — `{035E0FBD-BDE8-475C-8403-47ED56F1E3F1}`. Проект *
 проект не вложен ни в одну папку решения, путь —
 `src\BarberSearch.Infrastructure.Geocoding\…csproj`.
 
-Since 2026-10-25 (R-54) all fourteen `Project(…)` entries use the SDK-style project type GUID
+**`BarberSearch.Infrastructure.Storage` добавлен 2026-11-18 вручную** тем же способом:
+`Project(…)` + `EndProject` после `BarberSearch.Infrastructure.Geocoding`, четыре строки
+`ProjectConfigurationPlatforms` для `Debug|Any CPU` и `Release|Any CPU`, GUID проекта —
+`{BC814312-7442-4F4B-83B5-C12D4BA32575}`; проект не вложен ни в одну папку решения, путь —
+`src\BarberSearch.Infrastructure.Storage\…csproj`.
+
+Since 2026-10-25 (R-54) all fifteen `Project(…)` entries use the SDK-style project type GUID
 `{9A19103F-16F7-4668-BE54-9A1E7A4F7556}`; the legacy C# project-type GUID is gone. The solution
 folder `tests` keeps `{2150E333-…}`. Nothing else in the file was touched: project GUIDs, paths,
 configurations and the order of the lines are unchanged. `dotnet sln list` still prints the same
-fourteen projects, and Debug and Release build with 0 errors / 0 warnings.
+fifteen projects, and Debug and Release build with 0 errors / 0 warnings.
 
 > ⚠️ **Do not add projects with `dotnet sln add` in this repo.** It rewrites the whole file: it
 > adds `x64`/`x86` solution configurations for every project and nests the new project into the
@@ -459,7 +484,7 @@ tree without trouble. Retry that one command with the `danger-full-access` sandb
 run it from a normal developer shell — then both commands succeed:
 
 ```powershell
-dotnet build BarberSearch/BarberSearch.sln     # 14 projects, 0 errors, 0 warnings
+dotnet build BarberSearch/BarberSearch.sln     # 15 projects, 0 errors, 0 warnings
 ```
 
 If the session is ever confined again, the symptom is
@@ -500,12 +525,13 @@ package fails. Cached packages (`~\.nuget\packages`) restore fine. `npm`/`npx` n
 redirected: `$env:npm_config_cache = '<workspace>\.npm-cache'`.
 
 **The first native dependency (2026-11-12, issue-90).** `SkiaSharp` **4.156.0** and
-`SkiaSharp.NativeAssets.Linux.NoDependencies` **4.156.0** in `BarberSearch.Web.csproj`
-(§17.15) are the first native packages of the backend, so `restore` for them needs network
-access: cached packages restore fine, a clean restore fails in the confined shell. The Linux
-native asset package is mandatory for `ubuntu-latest` in `.github/workflows/backend-ci.yml`
-and for the API container: without it `libSkiaSharp` is missing at runtime, and the failure
-appears on the first generated variant, not on the build.
+`SkiaSharp.NativeAssets.Linux.NoDependencies` **4.156.0** in
+`BarberSearch.Infrastructure.Storage.csproj` (§17.15) are the first native packages of the
+backend, so `restore` for them needs network access: cached packages restore fine, a clean
+restore fails in the confined shell. The Linux native asset package is mandatory for
+`ubuntu-latest` in `.github/workflows/backend-ci.yml` and for the API container: without it
+`libSkiaSharp` is missing at runtime, and the failure appears on the first generated variant,
+not on the build.
 
 ### 5.3 Running the tests in this harness (fallback: reflection runner)
 
@@ -590,6 +616,7 @@ BarberSearch.Web            → API controllers, DI, ProblemDetails, auth      [
 BarberSearch.Infrastructure → EF Core + Npgsql, DbContext, configs, repositories   [PARTLY]
 BarberSearch.Infrastructure.Push → FCM HTTP v1 transport, OAuth token, no FCM SDK   [DONE]
 BarberSearch.Infrastructure.Geocoding → DaData address suggestions, cache decorator, no vendor SDK   [DONE]
+BarberSearch.Infrastructure.Storage → photo storage: local disk or S3, WebP thumbnails   [DONE]
 BarberSearch.Application    → commands/queries, handlers, Abstractions, DI         [DONE]
                               repository abstractions (in the entity folders)      [DONE]
                               DTOs (Request) — вынесены в Contracts, validators     [PARTLY]
@@ -1006,7 +1033,7 @@ The rules below were pushed to the application layer because the aggregate canno
 
 | Слой | Статус |
 |---|---|
-| Solution | ✅ 14 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
+| Solution | ✅ 15 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 30 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
 | Tests | ✅ 629 domain + 1099 application + 456 infrastructure + 347 integration (2531 total); unit-проекты зелёные локально (2026-11-17), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 170 обработчиков (124 command + 46 query), 22 абстракции репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
@@ -4722,11 +4749,12 @@ JPEG ≤ 1600 px, аватар 32 px — квадрат 512×512, а суточ�
 перепроверяемый; правил видимости, владения и «отказ всегда `404`» он не меняет.
 
 **Библиотека.** `SkiaSharp` **4.156.0** + `SkiaSharp.NativeAssets.Linux.NoDependencies`
-**4.156.0** в `BarberSearch.Web.csproj` — первая нативная зависимость backend (MIT;
-`restore` требует сети, §5.2; Linux-ассеты обязательны для `ubuntu-latest` в
+**4.156.0** в `BarberSearch.Infrastructure.Storage.csproj` — первая нативная зависимость backend
+(MIT; `restore` требует сети, §5.2; Linux-ассеты обязательны для `ubuntu-latest` в
 `backend-ci.yml` и для контейнера API). Владелец отклонил ImageSharp (Six Labors Split
-License) и Magick.NET (тяжёлый). `SkiaSharp` живёт только в Web-адаптере
-`Web/Storage/PhotoThumbnailer.cs`; Application и домен о нём не знают.
+License) и Magick.NET (тяжёлый). `SkiaSharp` живёт только в проекте хранилища —
+`BarberSearch.Infrastructure.Storage/PhotoThumbnailer.cs`; Application и домен о нём не знают,
+а Web получает пакет транзитивно.
 
 **Ширины и качество.** Единственный источник правды — `Application/PortfolioPhotos/PhotoVariantWidths.cs`:
 портфолио `sm/md/lg` = **256/512/1024 px** по ширине, аватар — **96/192/384 px**; всегда WebP

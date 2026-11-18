@@ -1,4 +1,4 @@
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Провайдер хранилища файлов изображений: локальный диск или S3-совместимый сервис.

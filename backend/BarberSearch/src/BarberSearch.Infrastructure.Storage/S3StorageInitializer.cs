@@ -2,8 +2,10 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Util;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Проверяет (и при <c>EnsureBucket=true</c> создаёт) бакет на старте хоста.

@@ -1,6 +1,6 @@
 using BarberSearch.Application.PortfolioPhotos;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Готовый производный вариант: представление, байты WebP и фактические стороны.

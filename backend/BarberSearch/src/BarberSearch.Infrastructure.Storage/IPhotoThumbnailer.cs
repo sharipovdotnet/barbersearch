@@ -2,7 +2,7 @@ using BarberSearch.Application.PortfolioPhotos;
 using CSharpFunctionalExtensions;
 using Shared;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Генератор производных вариантов изображения: WebP шириной <c>sm/md/lg</c>.

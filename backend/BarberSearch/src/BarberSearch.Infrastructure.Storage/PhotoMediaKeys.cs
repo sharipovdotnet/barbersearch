@@ -1,6 +1,6 @@
 using BarberSearch.Application.PortfolioPhotos;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Раскладка файлов в хранилище: единственное место, где известны префиксы и имена ключей.

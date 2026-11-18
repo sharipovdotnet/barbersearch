@@ -2,13 +2,17 @@ using Amazon.Runtime;
 using Amazon.S3;
 using BarberSearch.Application.PortfolioPhotos;
 
-namespace BarberSearch.Web.Storage;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Регистрация хранилища изображений: фотографий портфолио и аватаров.
 /// </summary>
 /// <remarks>
-/// Хранилище — host-адаптер слоя Web, поэтому регистрируется здесь, а не в Application.
+/// Хранилище — адаптер инфраструктурного слоя, поэтому регистрируется здесь, а не в Application.
 /// Настройки разрешаются в момент регистрации: ошибка конфигурации должна ронять старт, а не
 /// первую загрузку. Провайдер выбирается <c>Storage:Provider</c>: <c>Local</c> (по умолчанию)
 /// пишет в каталог, <c>S3</c> — в бакет; оба реализуют один <see cref="IPhotoStorage"/>.
@@ -36,7 +40,7 @@ public static class PhotoStorageServiceCollectionExtensions
     public static IServiceCollection AddPhotoStorage(
         this IServiceCollection services,
         IConfiguration configuration,
-        IWebHostEnvironment environment)
+        IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(services);
 

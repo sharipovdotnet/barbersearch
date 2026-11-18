@@ -1,4 +1,4 @@
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// MIME-тип файла изображения по расширению: общий для обоих провайдеров.

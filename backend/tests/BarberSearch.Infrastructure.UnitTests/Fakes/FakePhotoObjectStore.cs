@@ -1,4 +1,4 @@
-using BarberSearch.Web.Storage;
+using BarberSearch.Infrastructure.Storage;
 
 namespace BarberSearch.Infrastructure.UnitTests.Fakes;
 

@@ -25,6 +25,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Domain\BarberSearch.Domain.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj" />
+        <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Storage\BarberSearch.Infrastructure.Storage.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Email\BarberSearch.Infrastructure.Email.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Geocoding\BarberSearch.Infrastructure.Geocoding.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Push\BarberSearch.Infrastructure.Push.csproj" />

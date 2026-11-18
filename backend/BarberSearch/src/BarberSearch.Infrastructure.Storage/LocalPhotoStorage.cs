@@ -2,9 +2,10 @@ using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
+using Microsoft.Extensions.Logging;
 using Shared;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Локальное файловое хранилище изображений пользователей: фотографий портфолио
