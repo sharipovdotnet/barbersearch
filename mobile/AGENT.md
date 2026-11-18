@@ -140,6 +140,16 @@ in Core owns both base addresses.
   does need an immediate second sign-in in the app, unlike the web: the server revokes every refresh
   token and rotates `SecurityStamp`, so the mobile pair is dead the moment `204` arrives, and the
   app re-authenticates with the new password instead of keeping a dead session.
+- **An account moment shows its year only when it is not the current one.** «Аккаунт создан» and
+  «Последний вход» are the only dates in the app with neither a horizon nor a month group above
+  them, and an account lives for years: «ср, 12 марта в 10:15» read in 2027 would look like this
+  year's date. `AccountText.Moment` therefore formats «вс, 15 ноября в 18:30» inside the current
+  year and «вс, 15 ноября 2026 в 18:30» outside it, comparing the year in the device zone the
+  moment is shown in — east of UTC the first of January has already come while UTC still shows the
+  old year. Nothing else changes: a booking row keeps the yearless «сб, 15 нояб.» because its
+  month group title carries the year, the slot picker and visit moments live within ±90 days, and
+  a review and the policy edition keep an explicit year. The clock is injected as `TimeProvider`,
+  as on «Записи», so the rule is tested without waiting for a new year.
 - **Registration is a page over the profile stack, and it signs in by itself.** Until this slice a
   customer could only be created on the web, which made a phone-only sign-up a dead end. The screen
   repeats `frontend/src/components/register-form.tsx` — the same fields in the same order, the same

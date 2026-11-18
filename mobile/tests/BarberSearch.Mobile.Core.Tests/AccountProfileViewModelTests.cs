@@ -26,6 +26,11 @@ public sealed class AccountProfileViewModelTests
     private const string UserEmail = "mobile-test@barbersearch.test";
     private const string NetworkText = "Нет связи с сервером. Проверьте подключение и повторите попытку.";
 
+    /// <summary>
+    /// «Сейчас» экрана: год служебных моментов проверяется без ожидания реальных часов.
+    /// </summary>
+    private static readonly DateTimeOffset Now = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public async Task InitializeAsync_WithSession_FillsFormFromProfile()
     {
@@ -41,12 +46,26 @@ public sealed class AccountProfileViewModelTests
         Assert.Equal(UserEmail, harness.ViewModel.Email);
         Assert.Equal("Клиент", harness.ViewModel.RoleText);
         Assert.NotEmpty(harness.ViewModel.CreatedAtText);
+        Assert.DoesNotContain("2026", harness.ViewModel.CreatedAtText);
         Assert.Equal("Ещё не было", harness.ViewModel.LastLoginText);
 
         // Форма не изменена — «Сохранить» неактивна, как в вебе.
         Assert.False(harness.ViewModel.IsDirty);
         Assert.False(harness.ViewModel.CanSave);
         Assert.False(harness.ViewModel.CanCancel);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ProfileFromOtherYear_ShowsYearInCreatedAt()
+    {
+        var harness = new Harness();
+        harness.AccountApi.Profile = () => Task.FromResult(
+            ProfileOf(createdAt: new DateTimeOffset(2025, 3, 12, 9, 0, 0, TimeSpan.Zero)));
+
+        await harness.ViewModel.InitializeAsync();
+
+        // Год не текущий — без него дата создания старого аккаунта читалась бы как дата этого года.
+        Assert.Contains("2025", harness.ViewModel.CreatedAtText);
     }
 
     [Fact]
@@ -766,7 +785,9 @@ public sealed class AccountProfileViewModelTests
         return harness.ViewModel.SendEmailChangeCommand.ExecuteAsync(null);
     }
 
-    private static MyProfileResponse ProfileOf(string firstName = "Ева") =>
+    private static MyProfileResponse ProfileOf(
+        string firstName = "Ева",
+        DateTimeOffset? createdAt = null) =>
         new(
             Guid.CreateVersion7(),
             UserEmail,
@@ -778,7 +799,7 @@ public sealed class AccountProfileViewModelTests
             null,
             true,
             false,
-            new DateTimeOffset(2026, 1, 10, 9, 0, 0, TimeSpan.Zero),
+            createdAt ?? new DateTimeOffset(2026, 1, 10, 9, 0, 0, TimeSpan.Zero),
             null,
             false,
             PhotoModerationStatus.Approved,
@@ -874,7 +895,8 @@ public sealed class AccountProfileViewModelTests
         public Harness(
             bool withTokens = true,
             bool successfulEmailChange = false,
-            AutoRetryLoop? autoRetry = null)
+            AutoRetryLoop? autoRetry = null,
+            DateTimeOffset? now = null)
         {
             Store = new FakeTokenStore
             {
@@ -887,16 +909,30 @@ public sealed class AccountProfileViewModelTests
                 AccountApi.EmailChange = () => Task.CompletedTask;
             }
 
-            ViewModel = new AccountProfileViewModel(AccountApi, Session, autoRetry);
+            Time = new FixedTimeProvider(now ?? Now);
+            ViewModel = new AccountProfileViewModel(AccountApi, Session, Time, autoRetry);
         }
 
         public FakeTokenStore Store { get; }
 
         public TokenSession Session { get; }
 
+        public FixedTimeProvider Time { get; }
+
         public FakeAccountApi AccountApi { get; } = new();
 
         public AccountProfileViewModel ViewModel { get; }
+    }
+
+    /// <summary>
+    /// «Сейчас» экрана с возможностью сдвинуть время: год служебных моментов проверяется
+    /// без ожидания реальных часов.
+    /// </summary>
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     /// <summary>

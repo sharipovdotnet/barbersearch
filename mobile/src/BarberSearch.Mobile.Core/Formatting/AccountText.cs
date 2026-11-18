@@ -111,26 +111,37 @@ public static class AccountText
     }
 
     /// <summary>
-    /// Служебный момент аккаунта в поясе устройства: «сб, 15 ноября в 18:30».
+    /// Служебный момент аккаунта в поясе устройства: «сб, 15 ноября в 18:30», а для момента
+    /// не текущего года — «сб, 15 ноября 2026 в 18:30».
     /// </summary>
     /// <remarks>
     /// Формат повторяет <c>formatDateTime</c> веба: день недели, число, месяц и время.
-    /// Года нет намеренно — он есть у отзыва, а «когда создан аккаунт» и «когда входил
-    /// последний раз» живут в пределах года работы с продуктом. Культура задана явно:
-    /// настройки телефона в другой локали дали бы «15 Nov».
+    /// Год появляется только тогда, когда он не текущий: «когда создан аккаунт» и «когда
+    /// входил последний раз» живут годами, и «ср, 12 марта в 10:15» через год читалось бы как
+    /// дата этого года, а в пределах текущего года год — лишний шум. Год сравнивается в поясе
+    /// устройства, где момент и показывается: восточнее UTC полночь 1 января уже наступила,
+    /// и у момента «31 декабря 23:30 UTC» год должен быть тот, что видит человек. Культура
+    /// задана явно: настройки телефона в другой локали дали бы «15 Nov».
     /// </remarks>
     /// <param name="instant">Момент из ответа API.</param>
     /// <param name="timeZone">Пояс устройства, в котором показывать момент.</param>
-    /// <returns>Дата и время.</returns>
-    public static string Moment(DateTimeOffset instant, TimeZoneInfo timeZone)
+    /// <param name="now">
+    /// Текущий момент: из него берётся «текущий год», чтобы результат не зависел от даты
+    /// запуска и проверялся тестом.
+    /// </param>
+    /// <returns>Дата и время; год — только если он не текущий.</returns>
+    public static string Moment(DateTimeOffset instant, TimeZoneInfo timeZone, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(timeZone);
 
         var local = TimeZoneInfo.ConvertTime(instant, timeZone);
+        var currentYear = TimeZoneInfo.ConvertTime(now, timeZone).Year;
+
+        var pattern = local.Year == currentYear ? "ddd, d MMMM" : "ddd, d MMMM yyyy";
 
         return Loc.T(
             "{0} в {1}",
-            local.ToString("ddd, d MMMM", Loc.Culture),
+            local.ToString(pattern, Loc.Culture),
             local.ToString("HH:mm", CultureInfo.InvariantCulture));
     }
 
@@ -139,9 +150,10 @@ public static class AccountText
     /// </summary>
     /// <param name="instant">Момент из ответа API или <c>null</c>.</param>
     /// <param name="timeZone">Пояс устройства.</param>
+    /// <param name="now">Текущий момент — для правила «год только не текущий».</param>
     /// <returns>Дата и время либо подпись отсутствия.</returns>
-    public static string MomentOrNever(DateTimeOffset? instant, TimeZoneInfo timeZone) =>
-        instant is null ? Never : Moment(instant.Value, timeZone);
+    public static string MomentOrNever(DateTimeOffset? instant, TimeZoneInfo timeZone, DateTimeOffset now) =>
+        instant is null ? Never : Moment(instant.Value, timeZone, now);
 
     /// <summary>
     /// Берёт первую букву слова в верхнем регистре.
