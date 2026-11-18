@@ -1,4 +1,4 @@
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Настройки S3-совместимого хранилища из подсекции <c>Storage:S3</c>.

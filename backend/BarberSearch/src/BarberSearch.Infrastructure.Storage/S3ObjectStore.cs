@@ -2,8 +2,9 @@ using System.Net;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Microsoft.Extensions.Logging;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// <see cref="IPhotoObjectStore"/> поверх AWS SDK: один приватный бакет, ключи без префикса.

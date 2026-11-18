@@ -9,7 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.S3" Version="4.1.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
@@ -22,20 +21,13 @@
         <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
         <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
-        <!--
-            SkiaSharp — первая нативная зависимость backend: миниатюры и WebP-варианты
-            (backend/AGENT.md §17). NativeAssets.Linux.NoDependencies обязателен для
-            ubuntu-latest в backend-ci и для контейнера API: без него libSkiaSharp
-            не найдётся и генерация упадёт в рантайме, а не на сборке.
-        -->
-        <PackageReference Include="SkiaSharp" Version="4.156.0" />
-        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.156.0" />
     </ItemGroup>
 
     <ItemGroup>
         <!--
-            Генератор WebP-вариантов и локальное хранилище — internal: их контракт нужен
-            только тестам, а не остальному приложению.
+            Внутренние типы Web (настройки старта, auth, доставка медиа) — контракт нужен
+            тестам, а не остальному приложению. Хранилище живёт в отдельном проекте
+            BarberSearch.Infrastructure.Storage и объявляет свой InternalsVisibleTo само.
         -->
         <InternalsVisibleTo Include="BarberSearch.Infrastructure.UnitTests" />
     </ItemGroup>
@@ -49,6 +41,7 @@
         <ProjectReference Include="..\BarberSearch.Infrastructure.Push\BarberSearch.Infrastructure.Push.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Telegram\BarberSearch.Infrastructure.Telegram.csproj" />
         <ProjectReference Include="..\BarberSearch.Infrastructure.Geocoding\BarberSearch.Infrastructure.Geocoding.csproj" />
+        <ProjectReference Include="..\BarberSearch.Infrastructure.Storage\BarberSearch.Infrastructure.Storage.csproj" />
     </ItemGroup>
 
 </Project>

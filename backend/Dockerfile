@@ -19,6 +19,11 @@ COPY global.json Directory.Build.props .editorconfig ./
 COPY BarberSearch/src/BarberSearch.Web/BarberSearch.Web.csproj BarberSearch/src/BarberSearch.Web/
 COPY BarberSearch/src/BarberSearch.Application/BarberSearch.Application.csproj BarberSearch/src/BarberSearch.Application/
 COPY BarberSearch/src/BarberSearch.Infrastructure.Postgresql/BarberSearch.Infrastructure.Postgresql.csproj BarberSearch/src/BarberSearch.Infrastructure.Postgresql/
+COPY BarberSearch/src/BarberSearch.Infrastructure.Email/BarberSearch.Infrastructure.Email.csproj BarberSearch/src/BarberSearch.Infrastructure.Email/
+COPY BarberSearch/src/BarberSearch.Infrastructure.Telegram/BarberSearch.Infrastructure.Telegram.csproj BarberSearch/src/BarberSearch.Infrastructure.Telegram/
+COPY BarberSearch/src/BarberSearch.Infrastructure.Push/BarberSearch.Infrastructure.Push.csproj BarberSearch/src/BarberSearch.Infrastructure.Push/
+COPY BarberSearch/src/BarberSearch.Infrastructure.Geocoding/BarberSearch.Infrastructure.Geocoding.csproj BarberSearch/src/BarberSearch.Infrastructure.Geocoding/
+COPY BarberSearch/src/BarberSearch.Infrastructure.Storage/BarberSearch.Infrastructure.Storage.csproj BarberSearch/src/BarberSearch.Infrastructure.Storage/
 COPY BarberSearch/src/BarberSearch.Domain/BarberSearch.Domain.csproj BarberSearch/src/BarberSearch.Domain/
 COPY BarberSearch/src/BarberSearch.Contracts/BarberSearch.Contracts.csproj BarberSearch/src/BarberSearch.Contracts/
 COPY BarberSearch/src/Shared/Shared.csproj BarberSearch/src/Shared/

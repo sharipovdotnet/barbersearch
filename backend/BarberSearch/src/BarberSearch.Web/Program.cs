@@ -12,7 +12,7 @@ using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.OpenApi;
 using BarberSearch.Web.Push;
-using BarberSearch.Web.Storage;
+using BarberSearch.Infrastructure.Storage;
 using Serilog;
 
 // Bootstrap-логгер пишет в консоль, пока хост не собран: упавшая проверка конфигурации ниже

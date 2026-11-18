@@ -1,5 +1,5 @@
-using BarberSearch.Web.Storage;
-using Microsoft.AspNetCore.Hosting;
+using BarberSearch.Infrastructure.Storage;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Xunit;
@@ -178,7 +178,7 @@ public class PhotoStorageOptionsTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private TestWebHostEnvironment CreateEnvironment() => new() { ContentRootPath = _contentRoot };
+    private TestHostEnvironment CreateEnvironment() => new() { ContentRootPath = _contentRoot };
 
     private static IConfiguration BuildS3Configuration(string provider)
         => BuildConfiguration(
@@ -203,15 +203,12 @@ public class PhotoStorageOptionsTests : IDisposable
     /// <summary>
     /// Минимальное окружение хоста: настройкам нужен только content root.
     /// </summary>
-    private sealed class TestWebHostEnvironment : IWebHostEnvironment
+    private sealed class TestHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = "Development";
 
         public string ApplicationName { get; set; } = "BarberSearch.Web";
 
-        public string WebRootPath { get; set; } = string.Empty;
-
-        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
 
         public string ContentRootPath { get; set; } = string.Empty;
 

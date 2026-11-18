@@ -30,6 +30,7 @@
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Contracts\BarberSearch.Contracts.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Domain\BarberSearch.Domain.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Postgresql\BarberSearch.Infrastructure.Postgresql.csproj" />
+        <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Infrastructure.Storage\BarberSearch.Infrastructure.Storage.csproj" />
         <ProjectReference Include="..\..\BarberSearch\src\BarberSearch.Web\BarberSearch.Web.csproj" />
     </ItemGroup>
 

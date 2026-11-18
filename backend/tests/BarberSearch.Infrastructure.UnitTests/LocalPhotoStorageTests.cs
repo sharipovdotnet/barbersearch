@@ -1,7 +1,7 @@
 using BarberSearch.Application.PortfolioPhotos;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Users;
-using BarberSearch.Web.Storage;
+using BarberSearch.Infrastructure.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 using SkiaSharp;

@@ -1,9 +1,10 @@
 using BarberSearch.Application.PortfolioPhotos;
 using CSharpFunctionalExtensions;
+using Microsoft.Extensions.Logging;
 using Shared;
 using SkiaSharp;
 
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Генератор WebP-вариантов на SkiaSharp: один проход по трём известным ширинам.

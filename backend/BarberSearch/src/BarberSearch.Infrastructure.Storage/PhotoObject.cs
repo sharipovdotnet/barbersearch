@@ -1,4 +1,4 @@
-namespace BarberSearch.Web.Storage;
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Объект, прочитанный из хранилища: байты и сохранённый MIME-тип.

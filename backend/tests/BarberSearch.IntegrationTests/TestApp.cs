@@ -17,7 +17,7 @@ using BarberSearch.Web.Auth;
 using BarberSearch.Web.Emails;
 using BarberSearch.Web.Notifications;
 using BarberSearch.Web.Push;
-using BarberSearch.Web.Storage;
+using BarberSearch.Infrastructure.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;

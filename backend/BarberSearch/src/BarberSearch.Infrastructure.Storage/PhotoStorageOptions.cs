@@ -1,4 +1,7 @@
-namespace BarberSearch.Web.Storage;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+
+namespace BarberSearch.Infrastructure.Storage;
 
 /// <summary>
 /// Настройки хранилища изображений из секции <c>Storage</c>: фотографий портфолио и аватаров
@@ -84,7 +87,7 @@ public sealed record PhotoStorageOptions
     /// </exception>
     public static PhotoStorageOptions FromConfiguration(
         IConfiguration configuration,
-        IWebHostEnvironment environment)
+        IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
