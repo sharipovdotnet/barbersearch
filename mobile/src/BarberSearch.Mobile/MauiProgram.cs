@@ -174,6 +174,10 @@ public static class MauiProgram
         // без эмулятора и без разрешений ОС.
         builder.Services.AddSingleton<ILocationService, MauiLocationService>();
 
+        // Город по координатам — тот же слой устройства, что и геопозиция: синглтон без
+        // состояния, за интерфейсом Core, чтобы экран проверялся без геокодера платформы.
+        builder.Services.AddSingleton<ICityLocator, MauiCityLocator>();
+
         // Подсказки города — часть экрана «Поиск»: одна секция на один ViewModel, поэтому
         // transient рядом с ним, а не синглтон.
         builder.Services.AddTransient<CitySuggestions>();

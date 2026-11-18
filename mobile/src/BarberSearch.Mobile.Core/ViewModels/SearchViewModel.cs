@@ -66,6 +66,16 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </remarks>
     private const int DateHorizonDays = 30;
 
+    /// <summary>
+    /// Город, который фильтр получает, когда геопозицию определить не удалось.
+    /// </summary>
+    /// <remarks>
+    /// «Москва» — город по умолчанию продукта, а не перевод: сервер сравнивает
+    /// <c>Salon.City</c> точно, поэтому название должно совпадать с данными салонов даже
+    /// в английском интерфейсе и не проходит через <c>Loc.T</c>.
+    /// </remarks>
+    public const string DefaultCity = "Москва";
+
     private static string AnyLanguageText => Loc.T("Любой язык");
     private static string AnySpecializationText => Loc.T("Любая специализация");
     private static string AnyServiceText => Loc.T("Любая услуга");
@@ -91,6 +101,7 @@ public sealed partial class SearchViewModel : ObservableObject
 
     private readonly IBarberSearchApi _api;
     private readonly ILocationService _locationService;
+    private readonly ICityLocator _cityLocator;
     private readonly TimeProvider _timeProvider;
 
     private bool _isInitialized;
@@ -104,6 +115,32 @@ public sealed partial class SearchViewModel : ObservableObject
     private bool _locationAttempted;
     private GeoPosition? _position;
     private LocationStatus? _locationStatus;
+
+    /// <summary>
+    /// Чтение геопозиции в полёте: его делят автоподстановка города и «Найти».
+    /// </summary>
+    /// <remarks>
+    /// Без общего чтения два потребителя, стартовавшие одновременно, спросили бы разрешение
+    /// и GPS дважды: Android не любит одновременные запросы разрешения, а человек увидел бы
+    /// второй диалог поверх первого.
+    /// </remarks>
+    private Task<LocationResult>? _locationRead;
+
+    /// <summary>
+    /// Автоподстановка города уже запускалась: экран читает геопозицию один раз за жизнь.
+    /// </summary>
+    private bool _cityFillStarted;
+
+    /// <summary>
+    /// Город, который экран подставил сам: его можно заменить новым ответом геокодера,
+    /// а введённый человеком — нельзя.
+    /// </summary>
+    private string? _automaticCity;
+
+    /// <summary>
+    /// Программная подстановка города не должна открывать подсказки под полем.
+    /// </summary>
+    private bool _suppressCitySuggestions;
 
     private readonly AutoRetryLoop _autoRetry;
     private readonly AutoRetryLoop _catalogsAutoRetry;
@@ -176,6 +213,10 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <param name="citySuggestions">
     /// Подсказки города под полем; живут рядом с экраном, потому что повторяют его судьбу.
     /// </param>
+    /// <param name="cityLocator">
+    /// Название города по координатам: им заполняется поле «Город» при первом показе
+    /// вкладки; <c>null</c> от него означает «город по умолчанию».
+    /// </param>
     /// <param name="autoRetry">
     /// Цикл автоповтора выдачи; <c>null</c> — собственный цикл с обычным расписанием. Параметр
     /// необязательный, чтобы существующие позиционные вызовы (DI и тесты) не менялись.
@@ -190,6 +231,7 @@ public sealed partial class SearchViewModel : ObservableObject
         ILocationService locationService,
         TimeProvider timeProvider,
         CitySuggestions citySuggestions,
+        ICityLocator cityLocator,
         AutoRetryLoop? autoRetry = null,
         AutoRetryLoop? catalogsAutoRetry = null)
     {
@@ -197,10 +239,12 @@ public sealed partial class SearchViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(locationService);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(citySuggestions);
+        ArgumentNullException.ThrowIfNull(cityLocator);
 
         _api = api;
         _locationService = locationService;
         _timeProvider = timeProvider;
+        _cityLocator = cityLocator;
         CitySuggestions = citySuggestions;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
@@ -307,6 +351,16 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _isLocating;
+
+    /// <summary>
+    /// Идёт автоподстановка города: под полем «Город» видно, почему он ещё не заполнен.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный признак, а не <see cref="IsLocating"/>: тот объясняет задержку «Найти»,
+    /// а этот — пустое поле при первом показе вкладки.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isCityLocating;
 
     /// <summary>
     /// Подсказка о том, что геопозиции нет; <c>null</c>, когда сортировка по расстоянию работает
@@ -513,10 +567,22 @@ public sealed partial class SearchViewModel : ObservableObject
 
         _isInitialized = true;
 
+        // Город подставляется параллельно справочникам: диалог разрешения не должен
+        // задерживать загрузку фильтров, а поле заполнится, как только придёт ответ.
+        CityFillCompletion = FillCityFromLocationAsync(cancellationToken);
+
         await LoadCatalogsAsync(silent: false, cancellationToken);
 
         TryStartCatalogsAutoRetry();
     }
+
+    /// <summary>
+    /// Завершается, когда автоподстановка города закончилась: тесты ждут его вместо пауз.
+    /// </summary>
+    /// <remarks>
+    /// Приложение его не читает: поле заполняется само, а поиск не обязан ждать геокодер.
+    /// </remarks>
+    internal Task CityFillCompletion { get; private set; } = Task.CompletedTask;
 
     /// <summary>
     /// Сообщает, что страница видна, и запускает автоповтор, если показывать есть что.
@@ -629,6 +695,11 @@ public sealed partial class SearchViewModel : ObservableObject
         // Новый ручной поиск забывает снимок прошлой неудачи: повторять можно только то, что
         // уйдёт в этом запросе, а не смесь новой формы со старым сбоем.
         _retryFilters = null;
+
+        // Город приходит из той же геопозиции, что и координаты: «Найти», нажатое во время
+        // обратного геокодирования, иначе ушло бы без города, который появится в поле
+        // через секунду, и выдача не совпала бы с фильтром на экране.
+        await CityFillCompletion;
 
         await LoadResultsAsync(BuildFilters(), silent: false, cancellationToken);
 
@@ -783,7 +854,8 @@ public sealed partial class SearchViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Сбрасывает запомненный отказ: человек мог разрешить доступ в настройках телефона, и без
-    /// сброса экран до перезапуска приложения продолжал бы показывать всех подряд.
+    /// сброса экран до перезапуска приложения продолжал бы показывать всех подряд. Заодно
+    /// заново определяется город: после разрешения «Москва» по умолчанию уступает настоящему.
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     [RelayCommand]
@@ -793,6 +865,8 @@ public sealed partial class SearchViewModel : ObservableObject
         _position = null;
         _locationStatus = null;
         LocationHint = null;
+
+        await ResolveCityAsync(cancellationToken);
 
         await SearchAsync(cancellationToken);
     }
@@ -812,31 +886,157 @@ public sealed partial class SearchViewModel : ObservableObject
         BarberSearchFilters filters,
         CancellationToken cancellationToken)
     {
-        if (!_locationAttempted)
+        IsLocating = true;
+
+        try
         {
-            IsLocating = true;
+            var position = await LocateOnceAsync(cancellationToken);
 
-            try
-            {
-                var result = await _locationService.GetPositionAsync(cancellationToken);
+            return position is { } located
+                ? filters with
+                {
+                    Latitude = located.Latitude,
+                    Longitude = located.Longitude,
+                }
+                : filters;
+        }
+        finally
+        {
+            IsLocating = false;
+        }
+    }
 
-                _position = result.Position;
-                _locationStatus = result.Status;
-                _locationAttempted = true;
-            }
-            finally
-            {
-                IsLocating = false;
-            }
+    /// <summary>
+    /// Читает геопозицию один раз на экран и возвращает координаты, если они есть.
+    /// </summary>
+    /// <remarks>
+    /// Общий шаг сортировки «сначала ближайшие» и автоподстановки города: диалог разрешения
+    /// и чтение GPS выполняются один раз, а второй потребитель берёт уже готовый результат.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Координаты либо <c>null</c>.</returns>
+    private async Task<GeoPosition?> LocateOnceAsync(CancellationToken cancellationToken)
+    {
+        if (_locationAttempted)
+        {
+            return _position;
         }
 
-        return _position is { } position
-            ? filters with
-            {
-                Latitude = position.Latitude,
-                Longitude = position.Longitude,
-            }
-            : filters;
+        // Чтение в полёте одно на экран: второй потребитель ждёт то же самое, а не открывает
+        // второе разрешение. После завершения поле очищается, чтобы отменённая попытка не
+        // стала вечным отказом для следующей.
+        var read = _locationRead ??= _locationService.GetPositionAsync(cancellationToken);
+
+        try
+        {
+            var result = await read;
+
+            _position = result.Position;
+            _locationStatus = result.Status;
+            _locationAttempted = true;
+        }
+        finally
+        {
+            _locationRead = null;
+        }
+
+        return _position;
+    }
+
+    /// <summary>
+    /// Запускает автоподстановку города один раз за жизнь экрана.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private async Task FillCityFromLocationAsync(CancellationToken cancellationToken)
+    {
+        if (_cityFillStarted)
+        {
+            return;
+        }
+
+        _cityFillStarted = true;
+
+        await ResolveCityAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Определяет город по геопозиции, а при любом отказе подставляет город по умолчанию.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отказ разрешения, отсутствие GPS, таймаут геокодера и пустой ответ платформы — всё
+    /// это один исход для человека: поле получает «Москву». Поэтому причины не различаются,
+    /// в отличие от подсказки о сортировке, где отказ и недоступность объясняются по-разному.
+    /// </para>
+    /// <para>
+    /// Подстановка не трогает город, который человек уже ввёл или выбрал из подсказок:
+    /// она заменяет только пустое поле и собственный прошлый результат.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private async Task ResolveCityAsync(CancellationToken cancellationToken)
+    {
+        IsCityLocating = true;
+
+        try
+        {
+            var position = await LocateOnceAsync(cancellationToken);
+            var city = position is { } located
+                ? CityName.Normalize(await _cityLocator.GetCityAsync(located, cancellationToken))
+                : null;
+
+            ApplyAutomaticCity(city ?? DefaultCity);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Экран ушёл до ответа: подставлять город в ушедшую форму не нужно.
+        }
+        catch (Exception)
+        {
+            // Геокодер — подсказка поля, а не ответ API: любой сбой даёт город по умолчанию.
+            ApplyAutomaticCity(DefaultCity);
+        }
+        finally
+        {
+            IsCityLocating = false;
+        }
+    }
+
+    /// <summary>
+    /// Подставляет автоматический город, не перетирая введённый человеком.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Собственный прошлый результат запоминается в <c>_automaticCity</c>: повтор чтения
+    /// геопозиции после «Повторить» имеет право заменить «Москву» по умолчанию настоящим
+    /// городом, но не набранный вручную текст.
+    /// </para>
+    /// <para>
+    /// Подсказки на программную подстановку не запрашиваются: <c>OnCityChanged</c> увидел бы
+    /// новый текст как ввод и открыл бы список прямо при запуске вкладки.
+    /// </para>
+    /// </remarks>
+    /// <param name="city">Город от геокодера или город по умолчанию.</param>
+    private void ApplyAutomaticCity(string city)
+    {
+        if (!string.IsNullOrWhiteSpace(City)
+            && !string.Equals(City, _automaticCity, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _suppressCitySuggestions = true;
+
+        try
+        {
+            City = city;
+        }
+        finally
+        {
+            _suppressCitySuggestions = false;
+        }
+
+        _automaticCity = city;
     }
 
     /// <summary>
@@ -1289,5 +1489,13 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Задача намеренно не ожидается: ввод не должен ждать ни паузы, ни сети. Ошибки внутри
     /// секции пойманы, поэтому бросить здесь нечего.
     /// </remarks>
-    partial void OnCityChanged(string value) => _ = CitySuggestions.QueryAsync(value);
+    partial void OnCityChanged(string value)
+    {
+        if (_suppressCitySuggestions)
+        {
+            return;
+        }
+
+        _ = CitySuggestions.QueryAsync(value);
+    }
 }

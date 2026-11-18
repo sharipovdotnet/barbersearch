@@ -198,27 +198,47 @@ in Core owns both base addresses.
   empty value and the filter is optional; and the additional-service field has no `<datalist>`
   suggestions, because there is no native equivalent and the filter itself is free text. Both are
   recorded here instead of being left as silent omissions.
-- **The search reads the device position, and the server puts the nearest first.** On the first
-  «Найти» the screen asks for the location permission, reads the position with
-  `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs battery
-  and time), and sends the pair as optional `latitude`/`longitude` query parameters of the same
-  `GET api/barbers` request — no second endpoint and no client-side re-sorting: the keyset page must
-  stay ordered as it is returned. The server ranks by the distance to the barber's nearest active
-  salon and returns `distanceKm`, so each row shows «850 м» / «1,2 км» next to the rating and the
-  list says «Сначала ближайшие мастера»; without coordinates the order stays the web's rating one.
-  The distance is a local flat approximation on the server, not a geodesic: at city distances the
-  order is the same and the cost is one `sqrt` per row, which is recorded in `backend/AGENT.md`.
-  Three mobile decisions follow from the phone. The permission is requested on the first search, not
-  at launch, because the person has just asked for a barber nearby. A refusal or a missing GPS fix
-  never blocks the search: the request goes out without coordinates, and the results section shows
-  the reason with «Повторить», which resets the remembered attempt — a person may have allowed
-  access in the phone settings. And the position is read once per screen (a successful fix lives as
-  long as the page, a failed one is not retried by every «Найти»), because nobody moves across town
-  between two searches and an Android permission dialog must not reappear on each tap. Android asks
-  for `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` (from 12 the person chooses the
-  precision); iOS carries `NSLocationWhenInUseUsageDescription` with the Russian text, because the
-  system dialog follows the device language while the interface defaults to Russian. The web has no
+- **The search reads the device position, and the server puts the nearest first.** When the
+  «Поиск» tab first appears, the screen asks for the location permission and reads the position
+  with `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs
+  battery and time), and sends the pair as optional `latitude`/`longitude` query parameters of the
+  same `GET api/barbers` request — no second endpoint and no client-side re-sorting: the keyset page
+  must stay ordered as it is returned. The server ranks by the distance to the barber's nearest
+  active salon and returns `distanceKm`, so each row shows «850 м» / «1,2 км» next to the rating
+  and the list says «Сначала ближайшие мастера»; without coordinates the order stays the web's
+  rating one. The distance is a local flat approximation on the server, not a geodesic: at city
+  distances the order is the same and the cost is one `sqrt` per row, which is recorded in
+  `backend/AGENT.md`. The city filter and the distance order share one read (see the next bullet),
+  so the permission is requested on the tab's first appearance, not on the first «Найти»: the city
+  has to be visible before the person searches. A refusal or a missing GPS fix never blocks the
+  search: the request goes out without coordinates, and the results section shows the reason with
+  «Повторить», which resets the remembered attempt — a person may have allowed access in the phone
+  settings. And the position is read once per screen (a successful fix lives as long as the page,
+  a failed one is not retried by every «Найти»), because nobody moves across town between two
+  searches and an Android permission dialog must not reappear on each tap. Android asks for
+  `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` (from 12 the person chooses the precision);
+  iOS carries `NSLocationWhenInUseUsageDescription` with the Russian text, because the system
+  dialog follows the device language while the interface defaults to Russian. The web has no
   geolocation at all, so this is a mobile-only feature with its own wording rather than a port.
+- **The city filter fills itself from the position, and «Москва» is the fallback.** The same first
+  read that orders the results by distance also reverse-geocodes the position
+  (`Geocoding.Default.GetPlacemarksAsync`, capped at five seconds) and puts `Placemark.Locality`
+  into the city field, normalized by `CityName.Normalize`: «г. Москва» becomes «Москва», because
+  the server compares `Salon.City` exactly. Any failure — a denied permission, no GPS fix, a
+  missing placemark, a geocoder timeout or error — writes «Москва», the product's default city;
+  the causes are deliberately not distinguished here, unlike the sorting hint. The automatic value
+  is remembered, so «Повторить» on the location hint replaces «Москва» with the real city once
+  access is granted, while a city typed or picked from the suggestions is never overwritten. A
+  programmatic fill suppresses the suggestion list, which would otherwise open by itself on
+  launch. This is a deliberate deviation from the earlier decision to ask for the permission on
+  the first «Найти»: the Search tab is the app's first tab, so the system dialog now appears at
+  launch, and the field shows «Определяем геопозицию…» while the city is resolved. The city name
+  comes back in the device language: the platform geocoder has no locale of its own while the
+  product's salon cities are Russian, so a phone set to English can produce a name the exact-match
+  filter does not know — recorded as a known limit rather than hidden. Tests add 26 cases (874
+  total): the auto-fill on success and with a prefixed locality, the default city for a denied,
+  unavailable, empty or failed geocoder, the user's own city kept, no suggestion request, the
+  shared position read, «Повторить» replacing the default, and `CityName.Normalize` itself.
 - **The city filter suggests cities while typing, and that suggestion endpoint became public.** The
   field asks `GET api/addresses/cities` after a 250 ms pause (the web's debounce), from two
   characters and for at most eight suggestions, and a chosen row replaces the text with the bare city
