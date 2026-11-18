@@ -216,7 +216,7 @@ public sealed class SalonOwnershipTests
         await app.AuthenticateAsync(owner.Email);
         await AssertForbiddenAsync(app, ownerless.Id);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var ownerlessLocation = await app.Client.PutAsJsonAsync(
                    $"api/salons/{ownerless.Id}/location",
@@ -459,7 +459,7 @@ public sealed class SalonOwnershipTests
             $"salon-owner-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         return admin;
     }

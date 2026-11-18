@@ -65,7 +65,7 @@ public sealed class PushBookingStatusTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var confirmed = await app.Client.PostAsync(
             $"api/bookings/{booking.Id}/confirmation",
@@ -122,7 +122,7 @@ public sealed class PushBookingStatusTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/cancellation",
@@ -183,7 +183,7 @@ public sealed class PushBookingStatusTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var rescheduled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/reschedule",
@@ -237,7 +237,7 @@ public sealed class PushBookingStatusTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/cancellation",
@@ -292,7 +292,7 @@ public sealed class PushBookingStatusTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var rescheduled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/reschedule",
@@ -339,7 +339,7 @@ public sealed class PushBookingStatusTests
             DateTimeOffset.UtcNow.AddDays(2),
             BookingStatus.Pending);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var confirmed = await app.Client.PostAsync(
             $"api/bookings/{booking.Id}/confirmation",

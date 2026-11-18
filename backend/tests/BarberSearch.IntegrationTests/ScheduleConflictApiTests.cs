@@ -55,7 +55,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Conflict Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var booking = await data.CreateBookingAsync(
@@ -111,7 +111,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Force Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var booking = await data.CreateBookingAsync(
@@ -147,7 +147,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Invalid Force Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         await data.CreateBookingAsync(
@@ -174,7 +174,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Day Off Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var booking = await data.CreateBookingAsync(
@@ -210,7 +210,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Time Off Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var booking = await data.CreateBookingAsync(
@@ -261,7 +261,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Delete Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         await data.CreateBookingAsync(
@@ -311,7 +311,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Week Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var wednesdayBooking = await data.CreateBookingAsync(
@@ -356,7 +356,7 @@ public sealed class ScheduleConflictApiTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Horizon Barber");
         var customer = await app.CreateUserAsync(CustomerEmail());
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         var day61 = Today.AddDays(61);
@@ -401,7 +401,7 @@ public sealed class ScheduleConflictApiTests
         await using var app = await StartAppAsync();
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Guest Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await ReplaceWeekAsync(app, barber, new TimeOnly(10, 0), new TimeOnly(18, 0));
 
         await data.CreateGuestBookingAsync(

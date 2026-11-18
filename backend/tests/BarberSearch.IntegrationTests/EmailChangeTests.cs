@@ -174,7 +174,7 @@ public sealed class EmailChangeTests
             .AsNoTracking()
             .SingleAsync(candidate => candidate.Id == user.Id);
 
-        Assert.Equal(newEmail, stored.Email);
+        Assert.Equal(newEmail, stored.Email.Value);
         Assert.True(stored.IsEmailVerified);
         Assert.NotEqual(user.SecurityStamp, stored.SecurityStamp);
 
@@ -298,7 +298,7 @@ public sealed class EmailChangeTests
             .AsNoTracking()
             .SingleAsync(candidate => candidate.Id == requester.Id);
 
-        Assert.Equal(requesterEmail, stored.Email);
+        Assert.Equal(requesterEmail, stored.Email.Value);
         Assert.False(stored.IsEmailVerified);
         Assert.Null((await checkDb.EmailChangeTokens.AsNoTracking().SingleAsync()).ConsumedAt);
     }

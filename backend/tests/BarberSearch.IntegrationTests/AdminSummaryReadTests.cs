@@ -61,7 +61,7 @@ public sealed class AdminSummaryReadTests
 
         var customer = await app.CreateUserAsync(
             $"admin-summary-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var forbidden = await app.Client.GetAsync(ENDPOINT))
         {
@@ -71,7 +71,7 @@ public sealed class AdminSummaryReadTests
         var barber = await app.CreateUserAsync(
             $"admin-summary-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using (var forbidden = await app.Client.GetAsync(ENDPOINT))
         {
@@ -81,7 +81,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -121,7 +121,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-counts-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var before = await GetSummaryAsync(app);
 
@@ -180,7 +180,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-counters-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var before = await GetSummaryAsync(app);
 
@@ -271,7 +271,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-oldest-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         // Два отзыва у разных барберов: у одного барбера фиксированное время визита,
         // и две брони нарушили бы exclusion-ограничение.
@@ -302,7 +302,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-publish-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var before = await GetSummaryAsync(app);
         var previousOldest = before.Reviews.Oldest;
@@ -339,7 +339,7 @@ public sealed class AdminSummaryReadTests
         var admin = await app.CreateUserAsync(
             $"admin-summary-pii-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var summaryResponse = await app.Client.GetAsync(ENDPOINT);
         Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);

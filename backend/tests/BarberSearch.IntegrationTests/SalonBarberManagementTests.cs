@@ -220,7 +220,7 @@ public sealed class SalonBarberManagementTests
         var admin = await app.CreateUserAsync(
             $"salon-barber-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var adminList = await app.Client.GetAsync($"api/salons/{salonId}/barbers"))
         {

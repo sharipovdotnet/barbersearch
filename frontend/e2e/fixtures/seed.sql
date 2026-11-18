@@ -161,17 +161,20 @@ SELECT
     0
 FROM (
     VALUES
+        -- Телефоны — валидные российские мобильные (+7 9XX …): PhoneNumber отклоняет
+        -- служебные записи вида «+7 000…», и такой пользователь не смог бы сохранить
+        -- профиль (PUT api/users/{id}/profile валидирует телефон из формы).
         ('9e000000-0000-4000-8000-000000000001', 'e2e-admin@barbersearch.test',
-         'Арина', 'Админова', '+70000000001', true, true, 3, true,
+         'Арина', 'Админова', '+79000000001', true, true, 3, true,
          '2026-09-01 10:00+00'),
         ('9e000000-0000-4000-8000-000000000002', 'e2e-barber@barbersearch.test',
-         'Тимур', 'Барберов', '+70000000002', true, true, 2, true,
+         'Тимур', 'Барберов', '+79000000002', true, true, 2, true,
          '2026-09-01 10:01+00'),
         ('9e000000-0000-4000-8000-000000000003', 'e2e-customer@barbersearch.test',
-         'Ева', 'Клиентова', '+70000000003', true, true, 1, true,
+         'Ева', 'Клиентова', '+79000000003', true, true, 1, true,
          '2026-09-01 10:02+00'),
         ('9e000000-0000-4000-8000-000000000004', 'e2e-mutations@barbersearch.test',
-         'Марк', 'Правкин', '+70000000004', true, true, 1, true,
+         'Марк', 'Правкин', '+79000000004', true, true, 1, true,
          '2026-09-01 10:03+00'),
         -- Владелец единственного профиля БЕЗ подтверждения (секция 4.1). Профиль
         -- не попадает в публичную выдачу, поэтому остальные спеки он не двигает.
@@ -182,7 +185,7 @@ FROM (
         -- Customer: если прошлый прогон дошёл до одобрения, аккаунт стал Barber, и
         -- спек снова не смог бы подать заявку. Заявки этого аккаунта удалены в секции 1.
         ('9e000000-0000-4000-8000-000000000006', 'e2e-applicant@barbersearch.test',
-         'Анна', 'Заявителева', '+70000000006', true, true, 1, true,
+         'Анна', 'Заявителева', '+79000000006', true, true, 1, true,
          '2026-09-01 10:06+00')
 ) AS fixture(id, email, first_name, last_name, phone_number, email_verified, is_active,
              role, _unused, created_at)
@@ -235,7 +238,7 @@ INSERT INTO users
 VALUES
     ('9e000000-0000-4000-8000-000000000005', 'e2e-new-barber@barbersearch.test',
      'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
-     'Илья', 'Новиков', '+70000000005', NULL,
+     'Илья', 'Новиков', '+79000000005', NULL,
      true, false, 2, true, NULL,
      NULL,
      timestamptz '2026-09-01 10:05+00', timestamptz '2026-09-01 10:05+00',
@@ -1173,7 +1176,7 @@ INSERT INTO users
 VALUES
     ('9e000000-0000-4000-8000-000000000009', 'e2e-bookings@barbersearch.test',
      'AQAAAAIAAYagAAAAEPI2KBIkNonT1XQgxFg9pgsJsMX97SCCS0mO/jLxqGuhFjZwh4sumyi/WPkW6vG6Ew==',
-     'Ирина', 'Волкова', '+70000000009', NULL,
+     'Ирина', 'Волкова', '+79000000009', NULL,
      true, false, 1, true, NULL, NULL,
      timestamptz '2026-09-01 10:04+00', timestamptz '2026-09-01 10:04+00',
      'e2e-stamp-bookings', 0)

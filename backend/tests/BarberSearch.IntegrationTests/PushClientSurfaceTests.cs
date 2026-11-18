@@ -61,7 +61,7 @@ public sealed class PushClientSurfaceTests
             DateTimeOffset.UtcNow.AddDays(2),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         app.Client.DefaultRequestHeaders.Add(SurfaceHeader, "app");
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
@@ -103,7 +103,7 @@ public sealed class PushClientSurfaceTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
             $"api/bookings/{booking.Id}/cancellation",
@@ -147,7 +147,7 @@ public sealed class PushClientSurfaceTests
             DateTimeOffset.UtcNow.AddDays(2),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         app.Client.DefaultRequestHeaders.Add(SurfaceHeader, "AppX");
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
@@ -307,7 +307,7 @@ public sealed class PushClientSurfaceTests
             DateTimeOffset.UtcNow.AddDays(2),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         app.Client.DefaultRequestHeaders.Add(SurfaceHeader, "app");
 
         using (var cancelled = await app.Client.PostAsJsonAsync(
@@ -322,7 +322,7 @@ public sealed class PushClientSurfaceTests
         Assert.Empty(await push.GetAllNotificationsAsync());
 
         var first = Assert.Single(await GetOutboxAsync(app));
-        Assert.Equal(customer.Email, first.ToEmail);
+        Assert.Equal(customer.Email.Value, first.ToEmail);
         Assert.Equal(
             "Запись отменена — Салон «Salon Push Surface Email Barber»",
             first.Subject);

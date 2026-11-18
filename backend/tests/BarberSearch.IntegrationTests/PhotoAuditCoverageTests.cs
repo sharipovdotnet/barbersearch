@@ -45,7 +45,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Upload Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(
             app.Client,
@@ -85,7 +85,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Description Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(
             app.Client,
@@ -121,7 +121,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Reorder Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var firstId = await PhotoApi.UploadPortfolioPhotoAsync(
             app.Client,
@@ -159,7 +159,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Publication Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -201,7 +201,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Block Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -259,7 +259,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Approval Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -294,7 +294,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Rejection Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -338,7 +338,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Repeat Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -369,7 +369,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Delete Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(
             app.Client,
@@ -413,7 +413,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Filter Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await PhotoApi.UploadPortfolioPhotoAsync(
             app.Client,
@@ -453,7 +453,7 @@ public sealed class PhotoAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Avatar Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var uploaded = await PhotoApi.UploadAvatarAsync(app.Client);
 
@@ -526,7 +526,7 @@ public sealed class PhotoAuditCoverageTests
             $"audit-avatar-reject-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
 
-        await app.AuthenticateAsync(owner.Email);
+        await app.AuthenticateAsync(owner.Email.Value);
         await PhotoApi.UploadAvatarAsync(app.Client);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -562,7 +562,7 @@ public sealed class PhotoAuditCoverageTests
         var owner = await data.CreateBookableBarberAsync("Audit Owner Barber");
         var stranger = await data.CreateBookableBarberAsync("Audit Stranger Barber");
 
-        await app.AuthenticateAsync(stranger.User.Email);
+        await app.AuthenticateAsync(stranger.User.Email.Value);
 
         using (var response = await PhotoApi.SendPortfolioUploadAsync(
                    app.Client,

@@ -88,7 +88,7 @@ public class UserTests
         var result = User.Create("  User@Mail.RU  ", "hash", "Ivan", "Petrov");
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("user@mail.ru", result.Value.Email);
+        Assert.Equal("user@mail.ru", result.Value.Email.Value);
     }
 
     [Fact]
@@ -996,7 +996,7 @@ public class UserTests
         var result = user.ChangeEmail("  New.Address@Example.COM  ");
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("new.address@example.com", user.Email);
+        Assert.Equal("new.address@example.com", user.Email.Value);
     }
 
     [Fact]
@@ -1065,7 +1065,7 @@ public class UserTests
         var result = user.ChangeEmail("barber@example.com");
 
         Assert.True(result.IsFailure);
-        Assert.Equal("barber@example.com", user.Email);
+        Assert.Equal("barber@example.com", user.Email.Value);
         Assert.False(user.IsEmailVerified);
         Assert.Equal(beforeStamp, user.SecurityStamp);
         Assert.Equal(beforeUpdatedAt, user.UpdatedAt);
@@ -1101,7 +1101,7 @@ public class UserTests
         var result = user.ChangeEmail("not-an-email");
 
         Assert.True(result.IsFailure);
-        Assert.Equal("barber@example.com", user.Email);
+        Assert.Equal("barber@example.com", user.Email.Value);
         Assert.False(user.IsEmailVerified);
         Assert.Equal(beforeStamp, user.SecurityStamp);
         Assert.Equal(beforeUpdatedAt, user.UpdatedAt);
@@ -1117,6 +1117,6 @@ public class UserTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("user.changeEmail.newEmail", result.Error.Errors[0].Code);
-        Assert.Equal("barber@example.com", user.Email);
+        Assert.Equal("barber@example.com", user.Email.Value);
     }
 }

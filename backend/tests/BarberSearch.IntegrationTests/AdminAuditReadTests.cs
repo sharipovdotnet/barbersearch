@@ -42,7 +42,7 @@ public sealed class AdminAuditReadTests
 
         var customer = await app.CreateUserAsync(
             $"audit-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var customerResponse = await app.Client.GetAsync(ENDPOINT);
         Assert.Equal(HttpStatusCode.Forbidden, customerResponse.StatusCode);
@@ -50,7 +50,7 @@ public sealed class AdminAuditReadTests
         var barber = await app.CreateUserAsync(
             $"audit-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using var barberResponse = await app.Client.GetAsync(ENDPOINT);
         Assert.Equal(HttpStatusCode.Forbidden, barberResponse.StatusCode);
@@ -58,7 +58,7 @@ public sealed class AdminAuditReadTests
         var admin = await app.CreateUserAsync(
             $"audit-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var adminResponse = await app.Client.GetAsync(ENDPOINT);
         Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
@@ -109,7 +109,7 @@ public sealed class AdminAuditReadTests
             .Select(seed => seed.Id)
             .ToList();
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -157,7 +157,7 @@ public sealed class AdminAuditReadTests
         var reviewId = await data.SeedAuditAsync(
             at.AddMinutes(3), admin.Id, "review.updated", "review", Guid.NewGuid(), IS_ACTIVE_CHANGE);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var users = await app.Client.GetAsync($"{ENDPOINT}?entityType=user"))
         {
@@ -193,7 +193,7 @@ public sealed class AdminAuditReadTests
         var admin = await app.CreateUserAsync(
             $"audit-type-bad-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var value in new[] { "wrong", "up", "0" })
         {
@@ -221,7 +221,7 @@ public sealed class AdminAuditReadTests
         var otherRow = await data.SeedAuditAsync(
             at.AddMinutes(2), other.Id, "user.updated", "user", Guid.NewGuid(), IS_ACTIVE_CHANGE);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var search in new[] { "e2e-", "E2E-" })
         {
@@ -231,7 +231,7 @@ public sealed class AdminAuditReadTests
 
             var row = Assert.Single(page.Items);
             Assert.Equal(actorRow, row.Id);
-            Assert.Equal(actor.Email, row.Actor?.Email);
+            Assert.Equal(actor.Email.Value, row.Actor?.Email);
         }
 
         // «%» и «_» — литералы, а не шаблон ILIKE: в адресах их нет, значит совпадений нет.
@@ -260,7 +260,7 @@ public sealed class AdminAuditReadTests
         var rowId = await data.SeedAuditAsync(
             at, deletedActorId, "user.updated", "user", Guid.NewGuid(), IS_ACTIVE_CHANGE);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var all = await app.Client.GetAsync(ENDPOINT))
         {
@@ -295,7 +295,7 @@ public sealed class AdminAuditReadTests
             Guid.NewGuid(),
             IS_ACTIVE_CHANGE);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
         var page = await ReadPageAsync(response);
@@ -327,7 +327,7 @@ public sealed class AdminAuditReadTests
             new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero),
             admin.Id, "user.updated", "user", Guid.NewGuid(), IS_ACTIVE_CHANGE);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var response = await app.Client.GetAsync(
                    $"{ENDPOINT}?from=2026-09-10&to=2026-09-10"))
@@ -379,7 +379,7 @@ public sealed class AdminAuditReadTests
             {"changes":{"passwordHash":{"from":"[redacted]","to":"[redacted]"}}}
             """);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
         var page = await ReadPageAsync(response);
@@ -421,7 +421,7 @@ public sealed class AdminAuditReadTests
             {"values":{"email":"created-audit@barbersearch.test","role":"Customer","isActive":true}}
             """);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
         var page = await ReadPageAsync(response);
@@ -456,7 +456,7 @@ public sealed class AdminAuditReadTests
         var arrayRowId = await data.SeedAuditAsync(
             at.AddMinutes(2), admin.Id, "user.updated", "user", Guid.NewGuid(), "[]");
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
         var page = await ReadPageAsync(response);
@@ -477,7 +477,7 @@ public sealed class AdminAuditReadTests
         var admin = await app.CreateUserAsync(
             $"audit-size-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var value in new[] { 0, 101 })
         {
@@ -494,7 +494,7 @@ public sealed class AdminAuditReadTests
             $"audit-cursor-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
         await app.CreateUserAsync($"audit-cursor-extra-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var garbage = await app.Client.GetAsync($"{ENDPOINT}?cursor=garbage"))
         {

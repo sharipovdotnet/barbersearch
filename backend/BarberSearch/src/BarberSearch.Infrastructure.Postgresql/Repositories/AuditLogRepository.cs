@@ -129,7 +129,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
             from actorUser in actors.DefaultIfEmpty()
             where actorPattern == null
                 || (actorUser != null
-                    && EF.Functions.ILike(actorUser.Email, actorPattern!, "\\"))
+                    && EF.Functions.ILike((string)actorUser.Email, actorPattern!, "\\"))
             select new
             {
                 audit.Id,
@@ -138,7 +138,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
                 audit.EntityType,
                 audit.EntityId,
                 audit.ActorUserId,
-                ActorEmail = actorUser != null ? actorUser.Email : null,
+                ActorEmail = actorUser != null ? (string)actorUser.Email : null,
                 audit.Payload
             };
 

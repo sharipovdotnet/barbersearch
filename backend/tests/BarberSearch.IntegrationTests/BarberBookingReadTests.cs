@@ -48,12 +48,12 @@ public sealed class BarberBookingReadTests
         using var anonymous = await app.Client.GetAsync("api/barber/bookings");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var asCustomer = await app.Client.GetAsync("api/barber/bookings");
         Assert.Equal(HttpStatusCode.Forbidden, asCustomer.StatusCode);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var asAdmin = await app.Client.GetAsync("api/barber/bookings");
         Assert.Equal(HttpStatusCode.Forbidden, asAdmin.StatusCode);
@@ -86,7 +86,7 @@ public sealed class BarberBookingReadTests
         var foreign = await SeedBookingAsync(
             app, otherBarber, customer.Id, now.AddDays(3), BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var upcoming = await app.Client.GetAsync("api/barber/bookings");
         Assert.Equal(HttpStatusCode.OK, upcoming.StatusCode);
@@ -111,7 +111,7 @@ public sealed class BarberBookingReadTests
         Assert.Equal(45m, first.Price);
 
         // PII ограничена именем и телефоном: email и идентификаторы связей не выходят наружу.
-        Assert.DoesNotContain(customer.Email, upcomingBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(customer.Email.Value, upcomingBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("userId", upcomingBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("barberProfileId", upcomingBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("idempotencyKey", upcomingBody, StringComparison.OrdinalIgnoreCase);
@@ -140,7 +140,7 @@ public sealed class BarberBookingReadTests
         var second = await SeedBookingAsync(
             app, barber, customer.Id, now.AddDays(2).AddHours(2), BookingStatus.Pending);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var pageSizeOne = await app.Client.GetAsync("api/barber/bookings?pageSize=1");
         Assert.Equal(HttpStatusCode.OK, pageSizeOne.StatusCode);
@@ -187,7 +187,7 @@ public sealed class BarberBookingReadTests
             $"barber-books-unlinked-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
 
-        await app.AuthenticateAsync(unlinked.Email);
+        await app.AuthenticateAsync(unlinked.Email.Value);
 
         using var response = await app.Client.GetAsync("api/barber/bookings");
 

@@ -41,7 +41,7 @@ public sealed class AdminReviewReadTests
 
         var reviewId = await SeedReviewAsync(app, barber, customer.Id);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var pending = await app.Client.GetAsync("api/admin/reviews?status=pending");
         Assert.Equal(HttpStatusCode.OK, pending.StatusCode);
@@ -93,7 +93,7 @@ public sealed class AdminReviewReadTests
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
         var customer = await app.CreateUserAsync("admin-read-forbidden@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var forbidden = await app.Client.GetAsync("api/admin/reviews");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);

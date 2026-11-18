@@ -145,7 +145,7 @@ public sealed class BookingChangeEmailNotifier : IBookingChangeEmailNotifier
         var user = userResult.Value;
 
         // Неподтверждённый адрес мог быть введён с опечаткой: чужие детали визита не уходят.
-        if (!user.IsEmailVerified || string.IsNullOrWhiteSpace(user.Email))
+        if (!user.IsEmailVerified || string.IsNullOrWhiteSpace(user.Email.Value))
         {
             return;
         }
@@ -166,7 +166,7 @@ public sealed class BookingChangeEmailNotifier : IBookingChangeEmailNotifier
         var snapshot = snapshotResult.Value ?? new PushBookingSnapshot(null, null, null, null);
         var now = _timeProvider.GetUtcNow();
 
-        var message = BookingChangeMessage.Create(user.Email, snapshot, booking.StartAt, kind, now);
+        var message = BookingChangeMessage.Create(user.Email.Value, snapshot, booking.StartAt, kind, now);
 
         var row = EmailOutboxMessage.Create(
             DeduplicationKey(booking, kind),

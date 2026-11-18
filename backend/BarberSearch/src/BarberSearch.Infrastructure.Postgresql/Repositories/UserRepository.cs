@@ -9,6 +9,7 @@ using BarberSearch.Contracts.Users.Admin;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.Users.ValueObjects;
 using BarberSearch.Infrastructure.Postgresql.Audit;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -157,7 +158,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
 
         var user = await Context.Users
             .Include(x => x.FavoriteBarbers)
-            .FirstOrDefaultAsync(x => x.Email == normalized, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Email == Email.FromStorage(normalized), cancellationToken);
 
         if (user is null)
         {
@@ -259,7 +260,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             .AsNoTracking()
             .Where(user => user.IsActive)
             .Where(user =>
-                EF.Functions.ILike(user.Email, pattern, "\\")
+                EF.Functions.ILike((string)user.Email, pattern, "\\")
                 || (user.PhoneNumber != null
                     && EF.Functions.ILike(user.PhoneNumber.Value, phonePattern, "\\")))
             .OrderBy(user => user.FirstName)
@@ -270,7 +271,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.Email,
+                (string)user.Email,
                 user.PhoneNumber == null ? null : user.PhoneNumber.Value))
             .ToListAsync(cancellationToken);
 
@@ -362,7 +363,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             query = query.Where(user =>
                 EF.Functions.ILike(user.FirstName, pattern, "\\")
                 || EF.Functions.ILike(user.LastName, pattern, "\\")
-                || EF.Functions.ILike(user.Email, pattern, "\\"));
+                || EF.Functions.ILike((string)user.Email, pattern, "\\"));
         }
 
         if (cursor is { } position)
@@ -385,7 +386,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             user.Id,
             user.FirstName,
             user.LastName,
-            user.Email,
+            (string)user.Email,
             user.AvatarUrl!,
             user.AvatarModerationStatus,
             user.AvatarSubmittedAt!.Value));
@@ -460,7 +461,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             .Where(user => user.Id == id)
             .Select(user => new MyProfileResponse(
                 user.Id,
-                user.Email,
+                (string)user.Email,
                 user.FirstName,
                 user.LastName,
                 user.PhoneNumber == null ? null : user.PhoneNumber.Value,
@@ -561,7 +562,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
             query = query.Where(user =>
                 EF.Functions.ILike(user.FirstName, pattern, "\\")
                 || EF.Functions.ILike(user.LastName, pattern, "\\")
-                || EF.Functions.ILike(user.Email, pattern, "\\"));
+                || EF.Functions.ILike((string)user.Email, pattern, "\\"));
         }
 
         if (cursor is { } position)
@@ -580,7 +581,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
 
         return paged.Select(user => new AdminUserResponse(
             user.Id,
-            user.Email,
+            (string)user.Email,
             user.FirstName,
             user.LastName,
             user.Role,
@@ -616,7 +617,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
                where user.Id == id
                select new AdminUserDetailRow(
                    user.Id,
-                   user.Email,
+                   (string)user.Email,
                    user.FirstName,
                    user.LastName,
                    user.PhoneNumber == null ? null : user.PhoneNumber.Value,
@@ -714,7 +715,7 @@ public sealed class UserRepository : RepositoryBase<User>, IUserRepository
 
         var exists = await Context.Users
             .AsNoTracking()
-            .AnyAsync(x => x.Email == normalized, cancellationToken);
+            .AnyAsync(x => x.Email == Email.FromStorage(normalized), cancellationToken);
 
         return exists;
     }

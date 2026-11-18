@@ -11,6 +11,7 @@ using BarberSearch.Domain.Reviews;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.Users.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -499,6 +500,9 @@ public sealed class AuditTrail
         return value switch
         {
             string text => Truncate(text),
+            // Адрес — объект-значение Email: в payload журнала попадает каноническая строка,
+            // а не JSON-объект { "value": … } и не результат ToString() по умолчанию.
+            Email email => Truncate(email.Value),
             bool or int or long or decimal or double or float => value,
             Guid guid => guid.ToString(),
             Enum enumeration => enumeration.ToString(),

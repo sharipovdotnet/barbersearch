@@ -127,7 +127,7 @@ public sealed class ConfirmEmailChangeHandler
         // Идемпотентность: повторный клик по ссылке после успешной смены — успех.
         // Проверка стоит раньше срока токена: старая ссылка на применённый адрес не должна
         // внезапно отвечать 400.
-        if (string.Equals(user.Email, token.NewEmail, StringComparison.Ordinal))
+        if (string.Equals(user.Email.Value, token.NewEmail, StringComparison.Ordinal))
         {
             return UnitResult.Success<Failure>();
         }
@@ -232,7 +232,7 @@ public sealed class ConfirmEmailChangeHandler
 
         var currentResult = await _users.GetByIdAsync(token.UserId, cancellationToken);
         if (currentResult.IsSuccess &&
-            string.Equals(currentResult.Value.Email, token.NewEmail, StringComparison.Ordinal))
+            string.Equals(currentResult.Value.Email.Value, token.NewEmail, StringComparison.Ordinal))
         {
             _logger.LogInformation(
                 "Concurrent email change for user {UserId} already succeeded.",

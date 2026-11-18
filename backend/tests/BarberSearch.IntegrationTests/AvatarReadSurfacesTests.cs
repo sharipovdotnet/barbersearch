@@ -69,7 +69,7 @@ public sealed class AvatarReadSurfacesTests
         Assert.Equal(barber.Profile.Id, beforeItem.Id);
         Assert.Null(beforeItem.AvatarUrl);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         // Новый кадр ждёт проверки — публичный поиск его не показывает.
@@ -86,7 +86,7 @@ public sealed class AvatarReadSurfacesTests
         Assert.Equal(barber.Profile.Id, withAvatar.Id);
         Assert.Equal(avatarUrl, withAvatar.AvatarUrl);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var delete = await app.Client.DeleteAsync("api/users/me/avatar"))
         {
@@ -108,7 +108,7 @@ public sealed class AvatarReadSurfacesTests
         await LinkBarberProfileAsync(app, barber);
 
         var customer = await app.CreateUserAsync(NewEmail("avatar-booking-customer"));
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         // Список записей барбера показывает только публичный кадр: новый аватар ждёт проверки.
@@ -130,7 +130,7 @@ public sealed class AvatarReadSurfacesTests
             guestFirstName: "Гость Без Фото",
             guestPhone: "+70000000001");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var response = await app.Client.GetAsync("api/barber/bookings");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -160,11 +160,11 @@ public sealed class AvatarReadSurfacesTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Avatar Admin Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var barberAvatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         var customer = await app.CreateUserAsync(NewEmail("avatar-admin-customer"));
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var customerAvatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         using (var customerProfile = await app.Client.PutAsJsonAsync(
@@ -194,7 +194,7 @@ public sealed class AvatarReadSurfacesTests
             guestPhone: "+70000000002");
 
         var admin = await app.CreateUserAsync(NewEmail("avatar-admin"), UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var listResponse = await app.Client.GetAsync("api/admin/bookings");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
@@ -206,7 +206,7 @@ public sealed class AvatarReadSurfacesTests
         var listRegistered = Assert.Single(page.Items, item => item.Id == registered.Id);
         Assert.Equal(customerAvatarUrl, listRegistered.Customer.AvatarUrl);
         Assert.Equal(barberAvatarUrl, listRegistered.Barber.AvatarUrl);
-        Assert.Equal(customer.Email, listRegistered.Customer.Email);
+        Assert.Equal(customer.Email.Value, listRegistered.Customer.Email);
         Assert.Equal("+79990000001", listRegistered.Customer.PhoneNumber);
 
         var listGuest = Assert.Single(page.Items, item => item.Id == guest.Id);
@@ -241,7 +241,7 @@ public sealed class AvatarReadSurfacesTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Regression Avatar Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         // Сохранение карточки барбера не имеет аватара в теле и не должно его потерять.
@@ -299,7 +299,7 @@ public sealed class AvatarReadSurfacesTests
 
         using var anonymous = app.CreateClient();
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -322,7 +322,7 @@ public sealed class AvatarReadSurfacesTests
         Assert.Null(maskedCard.AvatarUrl);
 
         // Админские поверхности показывают сырой URL и флаг блокировки.
-        var userRow = await GetAdminUserRowAsync(admin.Client, barber.User.Email);
+        var userRow = await GetAdminUserRowAsync(admin.Client, barber.User.Email.Value);
         Assert.Equal(avatarUrl, userRow.AvatarUrl);
         Assert.True(userRow.IsAvatarBlocked);
         Assert.Equal(PhotoModerationStatus.Approved, userRow.AvatarModerationStatus);
@@ -378,7 +378,7 @@ public sealed class AvatarReadSurfacesTests
 
         var customer = await app.CreateUserAsync(NewEmail("masked-booking-customer"));
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         var booking = await data.CreateBookingAsync(
@@ -390,7 +390,7 @@ public sealed class AvatarReadSurfacesTests
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
         await AvatarModerationApi.ApproveAsync(admin, customer.Id);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         // Одобренный кадр до блокировки виден барберу — положительный контроль маски.
         using (var visibleResponse = await app.Client.GetAsync("api/barber/bookings"))

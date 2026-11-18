@@ -9,10 +9,15 @@ barber, picks a salon and a service, and books a time slot.
 An account that can sign in. Every User has exactly one role.
 _Avoid_: Account, member, person
 
+**Email**:
+The canonical address of a User, unique across all Users and used to identify the account — the
+confirmation and password-reset letters go to it. Two spellings of the same address are one Email.
+_Avoid_: E-mail, mail, login
+
 **Phone Number**:
 The optional mobile phone of a User. Only Russian mobile numbers qualify: a landline, a foreign
 number or a Salon's contact telephone is not a Phone Number. Two spellings of the same number are
-the same Phone Number, and it can be verified independently of the email.
+the same Phone Number, and it can be verified independently of the Email.
 _Avoid_: Contact phone, mobile, cell
 
 **Customer**:

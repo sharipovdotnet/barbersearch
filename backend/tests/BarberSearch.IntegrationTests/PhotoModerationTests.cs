@@ -66,7 +66,7 @@ public sealed class PhotoModerationTests
             "Pending Avatar Barber",
             city: "Photo Moderation Avatar City");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client);
 
         using var anonymous = app.CreateClient();
@@ -89,13 +89,13 @@ public sealed class PhotoModerationTests
         // Очередь «Аватары»: поиск по email владельца, только Pending, сырой URL.
         var queue = await GetQueueAsync<AdminAvatarPhotoResponse>(
             admin.Client,
-            $"api/admin/photos/avatars?search={Uri.EscapeDataString(barber.User.Email)}&pageSize=100");
+            $"api/admin/photos/avatars?search={Uri.EscapeDataString(barber.User.Email.Value)}&pageSize=100");
         var row = Assert.Single(queue.Items);
 
         Assert.Equal(barber.User.Id, row.UserId);
         Assert.Equal(avatarUrl, row.AvatarUrl);
         Assert.Equal(PhotoModerationStatus.Pending, row.ModerationStatus);
-        Assert.Equal(barber.User.Email, row.Email, ignoreCase: true);
+        Assert.Equal(barber.User.Email.Value, row.Email, ignoreCase: true);
         Assert.NotEqual(default, row.SubmittedAt);
 
         // Непубличный кадр: анониму 404, владельцу и администратору — 200 без публичного кэша.
@@ -127,7 +127,7 @@ public sealed class PhotoModerationTests
         // Одобренный кадр уходит из очереди.
         var emptyQueue = await GetQueueAsync<AdminAvatarPhotoResponse>(
             admin.Client,
-            $"api/admin/photos/avatars?search={Uri.EscapeDataString(barber.User.Email)}&pageSize=100");
+            $"api/admin/photos/avatars?search={Uri.EscapeDataString(barber.User.Email.Value)}&pageSize=100");
         Assert.Empty(emptyQueue.Items);
 
         // И появляется на публичных поверхностях; владелец видит Approved.
@@ -159,7 +159,7 @@ public sealed class PhotoModerationTests
                 $"photo-fifo-{index}-{Guid.NewGuid():N}@barbersearch.test",
                 UserRole.Barber);
 
-            await app.AuthenticateAsync(user.Email);
+            await app.AuthenticateAsync(user.Email.Value);
             await UploadAvatarAsync(app.Client);
 
             users.Add(user);
@@ -191,7 +191,7 @@ public sealed class PhotoModerationTests
         // Поиск по email сужает очередь до владельца одного кадра.
         var byEmail = await GetQueueAsync<AdminAvatarPhotoResponse>(
             admin.Client,
-            $"api/admin/photos/avatars?search={Uri.EscapeDataString(users[1].Email)}&pageSize=100");
+            $"api/admin/photos/avatars?search={Uri.EscapeDataString(users[1].Email.Value)}&pageSize=100");
         Assert.Equal(users[1].Id, Assert.Single(byEmail.Items).UserId);
 
         // Коды ошибок параметров — часть контракта, одинаковые для обеих вкладок.
@@ -238,7 +238,7 @@ public sealed class PhotoModerationTests
         await using var app = await TestApp.StartAsync(_database);
 
         var owner = await app.CreateUserAsync(NewEmail("photo-reject-owner"));
-        await app.AuthenticateAsync(owner.Email);
+        await app.AuthenticateAsync(owner.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -316,7 +316,7 @@ public sealed class PhotoModerationTests
         // Валидация причины: пустая/из пробелов — 400 с invalidField = "reason",
         // 501 символ — 400 reasonTooLong, ровно 500 — успех.
         var validation = await app.CreateUserAsync(NewEmail("photo-reject-validation"));
-        await app.AuthenticateAsync(validation.Email);
+        await app.AuthenticateAsync(validation.Email.Value);
         await UploadAvatarAsync(app.Client);
 
         using (var emptyReason = await SendAvatarRejectionAsync(admin, validation.Id, string.Empty))
@@ -368,7 +368,7 @@ public sealed class PhotoModerationTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Pending Portfolio Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var photoId = await UploadPortfolioPhotoAsync(
             app.Client,
             barber.Profile.Id,
@@ -415,7 +415,7 @@ public sealed class PhotoModerationTests
         Assert.Equal("Pending haircut", row.Description);
         Assert.True(row.IsPublished);
         Assert.Equal(PhotoModerationStatus.Pending, row.ModerationStatus);
-        Assert.Equal(barber.User.Email, row.OwnerEmail, ignoreCase: true);
+        Assert.Equal(barber.User.Email.Value, row.OwnerEmail, ignoreCase: true);
         Assert.NotEqual(default, row.SubmittedAt);
 
         await ApprovePortfolioAsync(admin, barber.Profile.Id, photoId);
@@ -446,7 +446,7 @@ public sealed class PhotoModerationTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Rejected Portfolio Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var approvedCandidate = await UploadPortfolioPhotoAsync(
             app.Client,
             barber.Profile.Id,
@@ -575,7 +575,7 @@ public sealed class PhotoModerationTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Authz Photo Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await UploadAvatarAsync(app.Client);
         var photoId = await UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -617,7 +617,7 @@ public sealed class PhotoModerationTests
         // Клиент и барбер — не администраторы: 403 и на чтения, и на все четыре решения.
         var customer = await app.CreateUserAsync(NewEmail("photo-authz-customer"));
 
-        await using var customerSession = await app.SignInWithCookieAsync(customer.Email);
+        await using var customerSession = await app.SignInWithCookieAsync(customer.Email.Value);
 
         foreach (var (method, path, body) in requests)
         {
@@ -656,7 +656,7 @@ public sealed class PhotoModerationTests
         await using var app = await TestApp.StartAsync(_database);
 
         var approvedOwner = await app.CreateUserAsync(NewEmail("photo-block-approved"));
-        await app.AuthenticateAsync(approvedOwner.Email);
+        await app.AuthenticateAsync(approvedOwner.Email.Value);
         var approvedUrl = await UploadAvatarAsync(app.Client);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -704,7 +704,7 @@ public sealed class PhotoModerationTests
         // Отклонённый кадр блокируется доменом, но не становится одобренным:
         // Blocked — отдельный флаг, Rejected — решение о кадре.
         var rejectedOwner = await app.CreateUserAsync(NewEmail("photo-block-rejected"));
-        await app.AuthenticateAsync(rejectedOwner.Email);
+        await app.AuthenticateAsync(rejectedOwner.Email.Value);
         var rejectedUrl = await UploadAvatarAsync(app.Client);
 
         using (var rejection = await SendAvatarRejectionAsync(admin, rejectedOwner.Id, "Низкое качество"))
@@ -750,7 +750,7 @@ public sealed class PhotoModerationTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Block Portfolio Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var approvedPhoto = await UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -860,7 +860,7 @@ public sealed class PhotoModerationTests
         var barber = await data.CreateBookableBarberAsync("Media Photo Barber");
 
         // Аватар: непубличный кадр — владельцу и администратору, анониму 404.
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var firstUrl = await UploadAvatarAsync(app.Client);
 
         await using var admin = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -977,7 +977,7 @@ public sealed class PhotoModerationTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Photo Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         await UploadAvatarAsync(app.Client);
         var photoId = await UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -1028,12 +1028,12 @@ public sealed class PhotoModerationTests
                 $"photo-summary-avatar-{index}-{Guid.NewGuid():N}@barbersearch.test",
                 UserRole.Barber);
 
-            await app.AuthenticateAsync(user.Email);
+            await app.AuthenticateAsync(user.Email.Value);
             await UploadAvatarAsync(app.Client);
         }
 
         var barber = await data.CreateBookableBarberAsync("Summary Photo Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var firstPhoto = await UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
         await UploadPortfolioPhotoAsync(app.Client, barber.Profile.Id);
 
@@ -1088,7 +1088,7 @@ public sealed class PhotoModerationTests
 
         var customer = await app.CreateUserAsync(NewEmail("photo-booking-customer"));
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client);
 
         var booking = await data.CreateBookingAsync(
@@ -1097,7 +1097,7 @@ public sealed class PhotoModerationTests
             DateTimeOffset.UtcNow.AddDays(3),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var pendingResponse = await app.Client.GetAsync("api/barber/bookings"))
         {

@@ -76,7 +76,7 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
                 salon.ModerationStatus,
                 salon.RejectionReason,
                 salon.ReviewedAt,
-                owner == null ? null : owner.Email,
+                owner == null ? null : (string)owner.Email,
                 Context.BarberSalons.Count(link =>
                     link.SalonId == salon.Id
                     && Context.BarberProfiles.Any(profile =>

@@ -219,7 +219,7 @@ public sealed class AdminAuditCoverageTests
             customer.Id,
             new DateTimeOffset(2026, 9, 12, 10, 0, 0, TimeSpan.Zero));
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var response = await app.Client.PutAsJsonAsync(
                    $"api/bookings/{booking.Id}/barber-note",
@@ -252,7 +252,7 @@ public sealed class AdminAuditCoverageTests
         var customer = await app.CreateUserAsync(
             $"audit-coverage-create-customer-{Guid.NewGuid():N}@barbersearch.test");
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         var before = await data.CountAuditRowsAsync("booking");
 
@@ -425,7 +425,7 @@ public sealed class AdminAuditCoverageTests
         var customer = await app.CreateUserAsync(
             $"audit-coverage-payload-customer-{Guid.NewGuid():N}@barbersearch.test");
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         var idempotencyKey = $"audit-payload-key-{Guid.NewGuid():N}";
         var customerNote = "customer-note-must-not-appear";
@@ -491,7 +491,7 @@ public sealed class AdminAuditCoverageTests
 
         var customer = await app.CreateUserAsync(
             $"audit-coverage-access-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var forbidden = await app.Client.GetAsync(ENDPOINT))
         {
@@ -501,7 +501,7 @@ public sealed class AdminAuditCoverageTests
         var barber = await app.CreateUserAsync(
             $"audit-coverage-access-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using (var forbiddenBarber = await app.Client.GetAsync(ENDPOINT))
         {
@@ -522,7 +522,7 @@ public sealed class AdminAuditCoverageTests
         var user = await app.CreateUserAsync(
             $"audit-coverage-avatar-{Guid.NewGuid():N}@barbersearch.test");
 
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
         await UploadAvatarAsync(app.Client);
 
         // Загрузка аватара — действие с контентом: строка называет файл и переход
@@ -657,7 +657,7 @@ public sealed class AdminAuditCoverageTests
             $"audit-coverage-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         return admin;
     }

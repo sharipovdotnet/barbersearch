@@ -22,7 +22,7 @@ public sealed record AuthenticatedUser(
     public static AuthenticatedUser From(User user)
         => new(
             user.Id,
-            user.Email,
+            user.Email.Value,
             user.Role,
             user.BarberProfileId,
             user.IsEmailVerified,

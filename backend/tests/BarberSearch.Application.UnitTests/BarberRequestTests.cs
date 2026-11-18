@@ -202,7 +202,7 @@ public class BarberRequestTests
         Assert.Equal(BarberRequestStatus.Approved, result.Value.Status);
         Assert.Equal(admin.Id, result.Value.ReviewedByUserId);
         Assert.Equal(Now.AddHours(1), result.Value.ReviewedAt);
-        Assert.Equal(applicant.Email, result.Value.Applicant.Email);
+        Assert.Equal(applicant.Email.Value, result.Value.Applicant.Email);
 
         Assert.Equal(BarberRequestStatus.Approved, request.Status);
         Assert.Equal(admin.Id, request.ReviewedByUserId);

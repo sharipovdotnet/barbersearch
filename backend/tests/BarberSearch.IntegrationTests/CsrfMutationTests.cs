@@ -148,7 +148,7 @@ public sealed class CsrfMutationTests
             $"csrf-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await using var session = await app.SignInWithCookieAsync(admin.Email);
+        await using var session = await app.SignInWithCookieAsync(admin.Email.Value);
 
         using var response = await session.Client.PostAsync(
             $"api/reviews/{reviewId}/publication",
@@ -171,7 +171,7 @@ public sealed class CsrfMutationTests
             $"csrf-hide-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await using var session = await app.SignInWithCookieAsync(admin.Email);
+        await using var session = await app.SignInWithCookieAsync(admin.Email.Value);
 
         using var response = await session.Client.DeleteAsync(
             $"api/reviews/{reviewId}/publication");
@@ -192,7 +192,7 @@ public sealed class CsrfMutationTests
             $"csrf-activation-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await using var session = await app.SignInWithCookieAsync(admin.Email);
+        await using var session = await app.SignInWithCookieAsync(admin.Email.Value);
 
         using var response = await session.Client.PostAsync(
             $"api/users/{target.Id}/activation",

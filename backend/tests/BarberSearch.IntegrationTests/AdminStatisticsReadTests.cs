@@ -57,7 +57,7 @@ public sealed class AdminStatisticsReadTests
 
         var customer = await app.CreateUserAsync(
             $"stats-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var forbidden = await app.Client.GetAsync($"{ENDPOINT}?from=2020-01-01&to=2020-01-07"))
         {
@@ -67,7 +67,7 @@ public sealed class AdminStatisticsReadTests
         var admin = await app.CreateUserAsync(
             $"stats-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync($"{ENDPOINT}?from=2020-01-01&to=2020-01-07");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -91,7 +91,7 @@ public sealed class AdminStatisticsReadTests
         var admin = await app.CreateUserAsync(
             $"stats-period-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync($"{ENDPOINT}{query}");
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -221,7 +221,7 @@ public sealed class AdminStatisticsReadTests
         var admin = await app.CreateUserAsync(
             $"stats-numbers-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var comparedResponse = await app.Client.GetAsync(
             $"{ENDPOINT}?from=2020-01-01&to=2020-01-07&compare=true");
@@ -324,9 +324,9 @@ public sealed class AdminStatisticsReadTests
 
         // PII в теле: адресов клиентов нет.
         var rawBody = await comparedResponse.Content.ReadAsStringAsync();
-        Assert.DoesNotContain(first.Email, rawBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(second.Email, rawBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(third.Email, rawBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(first.Email.Value, rawBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(second.Email.Value, rawBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(third.Email.Value, rawBody, StringComparison.OrdinalIgnoreCase);
 
         // Без compare предыдущий период не отдаётся.
         using var plainResponse = await app.Client.GetAsync(
@@ -346,7 +346,7 @@ public sealed class AdminStatisticsReadTests
         var admin = await app.CreateUserAsync(
             $"stats-empty-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync(
             $"{ENDPOINT}?from=1990-01-01&to=1990-01-02");

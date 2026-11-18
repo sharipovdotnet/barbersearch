@@ -2,6 +2,7 @@ using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.Users.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -64,14 +65,23 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
         // citext хранит канонический адрес (домен приводит регистр), а сравнение и
-        // уникальный индекс делает регистронезависимыми сама БД. HasMaxLength фиксирует
-        // контракт в модели, но DDL для citext длину не задаёт (у типа нет модификатора),
+        // уникальный индекс делает регистронезависимыми сама БД. Адрес — объект-значение
+        // Email, но колонка остаётся строковой: конвертер хранит Email.Value. Owned-тип
+        // здесь не подходит по двум причинам. Первая: EF теряет снимок owned-значения,
+        // когда домен заменяет инстанс (та же дыра, что у BarberProfile.DisplayName, D4),
+        // а адрес обязан попадать в журнал аудита — и при создании, и в diff смены.
+        // Вторая: owned-навигация в запросах требует постоянного .Value, а строковая
+        // колонка сохраняет прежние сравнения по citext. HasMaxLength фиксирует контракт
+        // в модели, но DDL для citext длину не задаёт (у типа нет модификатора),
         // поэтому фактически длину ограничивает check-ограничение.
         builder.Property(x => x.Email)
             .HasColumnName("email")
             .HasColumnType("citext")
             .HasMaxLength(Constants.MAX_EMAIL_LENGTH)
-            .IsRequired();
+            .IsRequired()
+            .HasConversion(
+                email => email.Value,
+                value => Email.FromStorage(value));
         builder.Property(x => x.PasswordHash).HasColumnName("password_hash").IsRequired();
         builder.Property(x => x.FirstName).HasColumnName("first_name").IsRequired();
         builder.Property(x => x.LastName).HasColumnName("last_name").IsRequired();

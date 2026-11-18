@@ -50,7 +50,7 @@ public sealed class BarberProfileServiceTests
         var barber = await data.CreateBookableBarberAsync("Hidden Service Barber");
         await LinkBarberProfileAsync(app, barber);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         // Бронь создаётся до скрытия услуги: у сидового барбера записей нет.
         var startAt = DateTimeOffset.UtcNow.AddDays(3);
@@ -116,7 +116,7 @@ public sealed class BarberProfileServiceTests
         var admin = await app.CreateUserAsync(
             $"hidden-service-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var adminBookings = await app.Client.GetAsync("api/admin/bookings"))
         {
@@ -140,7 +140,7 @@ public sealed class BarberProfileServiceTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Reactivated Service Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var hide = await app.Client.DeleteAsync(
                    $"api/barber-profiles/{barber.Profile.Id}/services/{barber.HairService.Id}"))
@@ -206,7 +206,7 @@ public sealed class BarberProfileServiceTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Duplicate Service Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var duplicate = await app.Client.PostAsJsonAsync(
             $"api/barber-profiles/{barber.Profile.Id}/services",

@@ -1,5 +1,6 @@
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.Users.ValueObjects;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -91,11 +92,11 @@ public class EmailChangeToken : AggregateRoot
     {
         var errors = DomainErrors.Collect();
 
-        var normalizedEmail = EmailAddress.Normalize(newEmail);
-        var emailError = EmailAddress.Validate(
-            normalizedEmail,
+        var emailError = Email.Validate(
+            newEmail,
             "emailChangeToken.create.newEmail",
-            nameof(newEmail));
+            nameof(newEmail),
+            out var parsedEmail);
         if (emailError is not null)
         {
             errors.Add(emailError);
@@ -158,7 +159,7 @@ public class EmailChangeToken : AggregateRoot
         return new EmailChangeToken
         {
             UserId = userId,
-            NewEmail = normalizedEmail,
+            NewEmail = parsedEmail!.Value,
             TokenHash = tokenHash,
             IssuedAt = issuedAt,
             ExpiresAt = expiresAt

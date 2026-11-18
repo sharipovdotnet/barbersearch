@@ -29,7 +29,7 @@ public class LoginLockoutTests
         context.Clock.UtcNow = LoginStart;
 
         var result = await context.Handler.Handle(
-            new LoginUserCommand(context.User.Email, "wrong-password"),
+            new LoginUserCommand(context.User.Email.Value, "wrong-password"),
             CancellationToken.None);
 
         AssertFailure(result, "auth.login.invalidCredentials");
@@ -49,7 +49,7 @@ public class LoginLockoutTests
             context.Clock.UtcNow = LoginStart.AddMinutes(attempt);
 
             var result = await context.Handler.Handle(
-                new LoginUserCommand(context.User.Email, "wrong-password"),
+                new LoginUserCommand(context.User.Email.Value, "wrong-password"),
                 CancellationToken.None);
 
             AssertFailure(result, "auth.login.invalidCredentials");
@@ -76,7 +76,7 @@ public class LoginLockoutTests
         var lockoutEndBefore = context.User.LockoutEnd;
 
         var result = await context.Handler.Handle(
-            new LoginUserCommand(context.User.Email, CorrectPassword),
+            new LoginUserCommand(context.User.Email.Value, CorrectPassword),
             CancellationToken.None);
 
         AssertFailure(result, "auth.login.lockedOut");
@@ -100,7 +100,7 @@ public class LoginLockoutTests
         var lockoutEndBefore = context.User.LockoutEnd;
 
         var result = await context.Handler.Handle(
-            new LoginUserCommand(context.User.Email, "wrong-password"),
+            new LoginUserCommand(context.User.Email.Value, "wrong-password"),
             CancellationToken.None);
 
         AssertFailure(result, "auth.login.invalidCredentials");
@@ -121,14 +121,14 @@ public class LoginLockoutTests
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             await context.Handler.Handle(
-                new LoginUserCommand(context.User.Email, "wrong-password"),
+                new LoginUserCommand(context.User.Email.Value, "wrong-password"),
                 CancellationToken.None);
         }
 
         Assert.Equal(3, context.User.FailedLoginAttempts);
 
         var result = await context.Handler.Handle(
-            new LoginUserCommand(context.User.Email, CorrectPassword),
+            new LoginUserCommand(context.User.Email.Value, CorrectPassword),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -149,7 +149,7 @@ public class LoginLockoutTests
             context.Clock.UtcNow = LoginStart.AddMinutes(attempt);
 
             var result = await context.Handler.Handle(
-                new LoginUserCommand(context.User.Email, "wrong-password"),
+                new LoginUserCommand(context.User.Email.Value, "wrong-password"),
                 CancellationToken.None);
 
             AssertFailure(result, "auth.login.invalidCredentials");

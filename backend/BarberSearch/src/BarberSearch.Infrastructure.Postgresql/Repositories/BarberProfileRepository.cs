@@ -248,7 +248,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     profile.Id,
                     profile.UserId,
                     profile.DisplayName.Value,
-                    user.Email,
+                    (string)user.Email,
                     profile.IsActive,
                     profile.IsVerified))
             .ToListAsync(cancellationToken);
@@ -280,13 +280,13 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                       && !Context.BarberSalons.Any(link =>
                           link.SalonId == salonId && link.BarberProfileId == profile.Id)
                       && (EF.Functions.ILike(profile.DisplayName.Value, pattern, "\\")
-                          || EF.Functions.ILike(user.Email, pattern, "\\"))
+                          || EF.Functions.ILike((string)user.Email, pattern, "\\"))
                 orderby profile.DisplayName.Value, profile.Id
                 select new SalonBarberResponse(
                     profile.Id,
                     profile.UserId,
                     profile.DisplayName.Value,
-                    user.Email,
+                    (string)user.Email,
                     profile.IsActive,
                     profile.IsVerified))
             .Take(limit)
@@ -1214,7 +1214,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
             query = query.Where(row =>
                 EF.Functions.ILike(row.profile.DisplayName.Value, pattern, "\\")
-                || EF.Functions.ILike(row.user.Email, pattern, "\\"));
+                || EF.Functions.ILike((string)row.user.Email, pattern, "\\"));
         }
 
         if (cursor is { } position)
@@ -1235,7 +1235,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             row.photo.Id,
             row.photo.BarberProfileId,
             row.profile.DisplayName.Value,
-            row.user.Email,
+            (string)row.user.Email,
             row.photo.Url,
             row.photo.Description,
             row.photo.IsPublished,
@@ -1359,7 +1359,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                    profile.Id,
                    profile.UserId,
                    profile.DisplayName.Value,
-                   user.Email,
+                   (string)user.Email,
                    user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                    user.AvatarUrl,
                    profile.Grade,
@@ -1449,7 +1449,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Select(user => new
             {
                 user.Id,
-                user.Email,
+                Email = (string)user.Email,
                 user.AvatarUrl,
                 user.IsAvatarBlocked,
                 user.AvatarModerationStatus
@@ -1479,7 +1479,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
 
             joined = joined.Where(row =>
                 EF.Functions.ILike(row.profile.DisplayName.Value, pattern, "\\")
-                || EF.Functions.ILike(row.user.Email, pattern, "\\"));
+                || EF.Functions.ILike((string)row.user.Email, pattern, "\\"));
         }
 
         // Очередь проверки — FIFO: профиль, который ждёт дольше, стоит выше. Остальные
@@ -1512,7 +1512,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return paged.Select(row => new AdminBarberResponse(
             row.profile.Id,
             row.profile.DisplayName.Value,
-            row.user.Email,
+            (string)row.user.Email,
             row.profile.Grade,
             row.profile.Rating,
             row.profile.ReviewsCount,

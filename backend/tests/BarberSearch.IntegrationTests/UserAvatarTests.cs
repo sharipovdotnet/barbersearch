@@ -50,7 +50,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-upload"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var content = PngBytes();
         var avatarUrl = await UploadAvatarAsync(app.Client, content);
@@ -131,7 +131,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-invalid"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         using (var empty = await SendAvatarAsync(app.Client, []))
         {
@@ -193,7 +193,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-csrf"));
 
-        await using var session = await app.SignInWithCookieAsync(user.Email);
+        await using var session = await app.SignInWithCookieAsync(user.Email.Value);
 
         // Multipart-мутация без пары cookie + заголовок отклоняется общим фильтром.
         using (var form = new MultipartFormDataContent())
@@ -236,7 +236,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-replace"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var firstUrl = await UploadAvatarAsync(app.Client, PngBytes());
         var secondUrl = await UploadAvatarAsync(app.Client, PngBytes(width: 600, height: 800));
@@ -288,7 +288,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-delete"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
         var fileName = avatarUrl[(avatarUrl.LastIndexOf('/') + 1)..];
@@ -326,7 +326,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Avatar Public Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
@@ -361,7 +361,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-profile-update"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
@@ -418,7 +418,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var owner = await app.CreateUserAsync(NewEmail("avatar-repository"));
         var withoutAvatar = await app.CreateUserAsync(NewEmail("avatar-repository-empty"));
-        await app.AuthenticateAsync(owner.Email);
+        await app.AuthenticateAsync(owner.Email.Value);
 
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
@@ -449,7 +449,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-blocked-media"));
 
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -467,7 +467,7 @@ public sealed class UserAvatarTests
             Assert.Equal(HttpStatusCode.NotFound, anonymousMedia.StatusCode);
         }
 
-        await using (var ownerSession = await app.SignInWithCookieAsync(user.Email))
+        await using (var ownerSession = await app.SignInWithCookieAsync(user.Email.Value))
         using (var ownerMedia = await ownerSession.Client.GetAsync(avatarUrl))
         {
             Assert.Equal(HttpStatusCode.NotFound, ownerMedia.StatusCode);
@@ -503,7 +503,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-blocked-profile"));
 
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
         var avatarUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -552,7 +552,7 @@ public sealed class UserAvatarTests
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-reupload"));
 
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
         var firstUrl = await UploadAvatarAsync(app.Client, PngBytes());
 
         await using var adminSession = await AvatarModerationApi.StartAdminSessionAsync(app);
@@ -624,7 +624,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-variant"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         // Настоящий JPEG: минимальный PNG декодер не примет, и вариант не появится.
         var avatarUrl = await UploadAvatarAsync(
@@ -739,7 +739,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-variant-visibility"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var avatarUrl = await UploadAvatarAsync(
             app.Client,
@@ -810,7 +810,7 @@ public sealed class UserAvatarTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var user = await app.CreateUserAsync(NewEmail("avatar-variant-replace"));
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         var firstUrl = await UploadAvatarAsync(
             app.Client,

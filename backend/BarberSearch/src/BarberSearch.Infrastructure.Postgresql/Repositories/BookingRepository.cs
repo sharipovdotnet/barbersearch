@@ -576,7 +576,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.Email,
+                Email = (string)user.Email,
                 PhoneNumber = user.PhoneNumber == null ? null : user.PhoneNumber.Value,
                 user.AvatarUrl
             });
@@ -649,7 +649,7 @@ public sealed class BookingRepository : RepositoryBase<Booking>, IBookingReposit
                          CustomerId = customer == null ? null : (Guid?)customer.Id,
                          CustomerFirstName = customer == null ? null : customer.FirstName,
                          CustomerLastName = customer == null ? null : customer.LastName,
-                         CustomerEmail = customer == null ? null : customer.Email,
+                         CustomerEmail = customer == null ? null : (string)customer.Email,
                          CustomerPhoneNumber = customer == null ? null : customer.PhoneNumber,
                          CustomerAvatarUrl = customer == null ? null : customer.AvatarUrl,
                          barberProfile,
