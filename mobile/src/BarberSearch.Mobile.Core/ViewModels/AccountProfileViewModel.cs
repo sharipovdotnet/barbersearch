@@ -40,6 +40,14 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     private static string SavedText => Loc.T("Изменения сохранены.");
     private static string NameRequiredText => Loc.T("Введите имя.");
     private static string LastNameRequiredText => Loc.T("Введите фамилию.");
+
+    /// <summary>
+    /// Причина отказа телефона: сервер принимает только российский мобильный, и человек
+    /// должен увидеть формат, а не «не удалось сохранить».
+    /// </summary>
+    private static string PhoneInvalidText =>
+        Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.");
+
     private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
     private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");
     private static string SessionExpiredText => Loc.T("Сессия истекла — войдите снова.");
@@ -59,6 +67,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
 
     private const string UpdateFirstNameCode = "user.updateProfile.firstName";
     private const string UpdateLastNameCode = "user.updateProfile.lastName";
+    private const string UpdatePhoneCode = "user.updateProfile.phoneNumber";
     private const string ChangeEmailNewEmailCode = "user.changeEmail.newEmail";
     private const string ChangeEmailSameEmailCode = "user.changeEmail.sameEmail";
     private const string ChangeEmailInvalidPasswordCode = "auth.emailChange.invalidCurrentPassword";
@@ -233,6 +242,17 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     private string? _lastNameError;
 
     /// <summary>
+    /// Ошибка поля «Телефон»: сервер отверг номер, потому что он не российский мобильный.
+    /// </summary>
+    /// <remarks>
+    /// Показывается под полем, как ошибки имени и фамилии: общий текст «Не удалось
+    /// сохранить профиль.» не объясняет, что именно исправить.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPhoneNumberError))]
+    private string? _phoneNumberError;
+
+    /// <summary>
     /// Общая ошибка формы личных данных.
     /// </summary>
     [ObservableProperty]
@@ -393,6 +413,11 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// Есть ошибка поля «Фамилия».
     /// </summary>
     public bool HasLastNameError => !string.IsNullOrEmpty(LastNameError);
+
+    /// <summary>
+    /// Есть ошибка поля «Телефон».
+    /// </summary>
+    public bool HasPhoneNumberError => !string.IsNullOrEmpty(PhoneNumberError);
 
     /// <summary>
     /// Есть общая ошибка формы личных данных.
@@ -627,6 +652,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
 
         FirstNameError = null;
         LastNameError = null;
+        PhoneNumberError = null;
         FormError = null;
         Announcement = null;
 
@@ -1046,23 +1072,37 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// <summary>
     /// Раскладывает отказ сохранения по полям и текстам.
     /// </summary>
+    /// <remarks>
+    /// Сервер собирает ошибки всех полей за один ответ, поэтому раскладываются все сразу:
+    /// человек исправляет причину, а не проходит по одной ошибке за нажатие. Общий текст
+    /// остаётся только для отказа, который не относится к известному полю.
+    /// </remarks>
     private void ApplySaveFailure(BarberSearchApiException exception)
     {
+        var hasFieldError = false;
+
         if (exception.ErrorCodes.Contains(UpdateFirstNameCode, StringComparer.Ordinal))
         {
             FirstNameError = NameRequiredText;
-
-            return;
+            hasFieldError = true;
         }
 
         if (exception.ErrorCodes.Contains(UpdateLastNameCode, StringComparer.Ordinal))
         {
             LastNameError = LastNameRequiredText;
-
-            return;
+            hasFieldError = true;
         }
 
-        FormError = Describe(exception, SaveFailedText);
+        if (exception.ErrorCodes.Contains(UpdatePhoneCode, StringComparer.Ordinal))
+        {
+            PhoneNumberError = PhoneInvalidText;
+            hasFieldError = true;
+        }
+
+        if (!hasFieldError)
+        {
+            FormError = Describe(exception, SaveFailedText);
+        }
     }
 
     /// <summary>
@@ -1150,6 +1190,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     {
         FirstNameError = null;
         LastNameError = null;
+        PhoneNumberError = null;
         FormError = null;
     }
 
@@ -1193,12 +1234,13 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Правка телефона сбрасывает прошлое сообщение об успехе.
+    /// Правка телефона сбрасывает ошибку под полем и прошлое сообщение об успехе.
     /// </summary>
     partial void OnPhoneNumberChanged(string value)
     {
         _ = value;
 
+        PhoneNumberError = null;
         OnFormInputChanged();
     }
 

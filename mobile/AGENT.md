@@ -440,6 +440,19 @@ in Core owns both base addresses.
   its headline stays 16 and its reason 14, the app-wide pair, so the same «Не удалось загрузить …»
   reads the same size on «Записи» and «Профиль».
 
+- **A rejected field is explained under that field, not by the form's generic failure.** The
+  personal-details form already mapped `user.updateProfile.firstName` and `.lastName` to their
+  fields, but an invalid phone fell through to «Не удалось сохранить профиль.» — a sentence that
+  names neither the field nor the rule. The phone stays optional and the server remains the only
+  authority on its format (`PhoneNumber` in the domain owns the Russian-mobile rule and its tests),
+  yet `400 user.updateProfile.phoneNumber` now puts «Похоже, в номере опечатка. Нужен российский
+  мобильный номер, например +7 900 000-00-00.» under the phone input, with no form-level text;
+  editing the field clears it, as it does for the two names. One `400` can carry several field
+  codes, so every matching field is filled from the same answer instead of the first one only
+  (the form used to return after the first name code). The web counterpart still shows the generic
+  line, because its form maps only the two name codes; this is a deliberate deviation from §8,
+  recorded here rather than left silent.
+
 - **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
   On a phone a manual retry asks the person to notice the failure, guess when the network came back
   and tap again for every attempt — nobody does that. The «Записи» tab had already chosen the
