@@ -77,6 +77,11 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     private readonly TokenSession _session;
 
     /// <summary>
+    /// Часы: правило «год только у момента не текущего года» проверяется без ожидания.
+    /// </summary>
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
     /// Цикл автоповтора чтения профиля: под причиной ошибки видна строка «Пробуем снова…».
     /// </summary>
     private readonly AutoRetryLoop _autoRetry;
@@ -108,6 +113,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// </summary>
     /// <param name="accountApi">Профиль и заявка на смену email.</param>
     /// <param name="session">Сессия — источник правды о входе.</param>
+    /// <param name="timeProvider">Часы: служебные моменты сравниваются с «текущим годом».</param>
     /// <param name="autoRetry">
     /// Цикл автоповтора чтения профиля; <c>null</c> — собственный цикл с обычным расписанием.
     /// Параметр необязательный и стоит последним, чтобы существующие позиционные вызовы
@@ -116,13 +122,16 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     public AccountProfileViewModel(
         IAccountApi accountApi,
         TokenSession session,
+        TimeProvider timeProvider,
         AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(accountApi);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         _accountApi = accountApi;
         _session = session;
+        _timeProvider = timeProvider;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
@@ -564,8 +573,11 @@ public sealed partial class AccountProfileViewModel : ObservableObject
         Email = profile.Email;
         IsEmailVerified = profile.IsEmailVerified;
         RoleText = AccountText.RoleText(profile.Role);
-        CreatedAtText = AccountText.Moment(profile.CreatedAt, TimeZoneInfo.Local);
-        LastLoginText = AccountText.MomentOrNever(profile.LastLoginAt, TimeZoneInfo.Local);
+        CreatedAtText = AccountText.Moment(profile.CreatedAt, TimeZoneInfo.Local, _timeProvider.GetUtcNow());
+        LastLoginText = AccountText.MomentOrNever(
+            profile.LastLoginAt,
+            TimeZoneInfo.Local,
+            _timeProvider.GetUtcNow());
 
         // Несохранённые правки не затираются тихим обновлением: форма принадлежит человеку,
         // а не последнему ответу сервера.

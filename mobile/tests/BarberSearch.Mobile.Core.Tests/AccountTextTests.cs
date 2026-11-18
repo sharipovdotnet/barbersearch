@@ -36,6 +36,11 @@ public sealed class AccountTextTests
     private static readonly DateTimeOffset Instant = new(2026, 11, 15, 15, 30, 0, TimeSpan.Zero);
 
     /// <summary>
+    /// «Сейчас» того же года, что и <see cref="Instant"/>: год в строке не появляется.
+    /// </summary>
+    private static readonly DateTimeOffset Now = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
     /// Момент в поясе +03:00: воскресенье, 15 ноября, 18:30.
     /// </summary>
     private const string ExpectedMoment = "вс, 15 ноября в 18:30";
@@ -98,17 +103,41 @@ public sealed class AccountTextTests
         Assert.Equal("?", AccountText.Initials(Profile(firstName: string.Empty, lastName: " ", email: " ")));
 
     [Fact]
-    public void Moment_PlusThreeZone_ShowsWeekdayDayAndTime() =>
-        Assert.Equal(ExpectedMoment, AccountText.Moment(Instant, PlusThreeHours));
+    public void Moment_CurrentYear_ShowsWeekdayDayAndTimeWithoutYear() =>
+        Assert.Equal(ExpectedMoment, AccountText.Moment(Instant, PlusThreeHours, Now));
+
+    [Fact]
+    public void Moment_OtherYear_ShowsYear() =>
+        // Аккаунт живёт годами: «12 марта в 10:15» без года через год читалось бы как дата
+        // этого года, поэтому у момента прошлого года год обязателен.
+        Assert.Equal(
+            "вс, 15 ноября 2026 в 18:30",
+            AccountText.Moment(
+                Instant,
+                PlusThreeHours,
+                new DateTimeOffset(2027, 3, 1, 12, 0, 0, TimeSpan.Zero)));
+
+    [Fact]
+    public void Moment_YearBoundaryInZone_ComparesYearInDisplayZone()
+    {
+        // 31 декабря 22:00 UTC — это уже 1 января 2027 в поясе +03:00. Год сравнивается в том
+        // же поясе, где момент показывается: иначе новогодний момент остался бы без года.
+        Assert.Equal(
+            "пт, 1 января 2027 в 01:00",
+            AccountText.Moment(
+                new DateTimeOffset(2026, 12, 31, 22, 0, 0, TimeSpan.Zero),
+                PlusThreeHours,
+                new DateTimeOffset(2026, 12, 31, 12, 0, 0, TimeSpan.Zero)));
+    }
 
     [Fact]
     public void MomentOrNever_NoLastLogin_ShowsNever() =>
         // null означает «входов ещё не было»: подставлять текущую дату или 1970 год нельзя.
-        Assert.Equal(AccountText.Never, AccountText.MomentOrNever(null, PlusThreeHours));
+        Assert.Equal(AccountText.Never, AccountText.MomentOrNever(null, PlusThreeHours, Now));
 
     [Fact]
     public void MomentOrNever_LastLogin_FormatsMoment() =>
-        Assert.Equal(ExpectedMoment, AccountText.MomentOrNever(Instant, PlusThreeHours));
+        Assert.Equal(ExpectedMoment, AccountText.MomentOrNever(Instant, PlusThreeHours, Now));
 
     /// <summary>
     /// Профиль из базы; по умолчанию — клиент с именем, фамилией и аватаром.

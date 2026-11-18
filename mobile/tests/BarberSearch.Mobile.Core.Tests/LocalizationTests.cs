@@ -138,7 +138,8 @@ public sealed class LocalizationTests
             "Sun, 15 November at 18:30",
             AccountText.Moment(
                 new DateTimeOffset(2026, 11, 15, 18, 30, 0, TimeSpan.Zero),
-                TimeZoneInfo.Utc));
+                TimeZoneInfo.Utc,
+                new DateTimeOffset(2026, 11, 18, 12, 0, 0, TimeSpan.Zero)));
     }
 
     [Fact]
