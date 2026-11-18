@@ -127,10 +127,11 @@ the four root tabs, and the signed-out «Профиль» opens its sign-in bloc
 puts its `Search` icon in that circle; the phone keeps the scissors on purpose, so the empty screen
 carries the product's face instead of repeating the «Найти» button above it.
 
-The date filter is a picker, not a calendar: MAUI's `DatePicker` cannot be empty, and the filter is
-optional. Its first item is «Любая дата», then today and the next 30 days in the device's calendar
-(the web uses the browser date). The bounded list and the dropped `<datalist>` hints of the
-additional-service field are recorded in `AGENT.md` §5.
+The date filter is a native `DatePicker`: a tap on the field opens the platform calendar, as the
+web's `<input type="date">` opens the browser one. `Date = null` is «Любая дата», so the optional
+filter stays empty; the calendar is bounded by today and the next 30 days, and a «×» button in the
+field clears it. The bound and the dropped `<datalist>` hints of the additional-service field are
+recorded in `AGENT.md` §5.
 
 ## Booking
 

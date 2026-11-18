@@ -103,7 +103,7 @@ public sealed class SearchViewModelTests
 
         viewModel.City = "  Тюмень  ";
         viewModel.AdditionalService = "  борода  ";
-        viewModel.SelectedDate = viewModel.Dates[3];
+        viewModel.SelectedDate = Today.AddDays(2).ToDateTime(TimeOnly.MinValue);
         viewModel.SelectedLanguage = viewModel.Languages[1];
         viewModel.SelectedSpecialization = viewModel.Specializations[1];
         viewModel.SelectedHairService = viewModel.HairServices[1];
@@ -340,18 +340,68 @@ public sealed class SearchViewModelTests
     }
 
     [Fact]
-    public void Constructor_BuildsDatesFromTodayWithAnyFirst()
+    public void Constructor_StartsWithAnyDateAndBookingHorizon()
     {
         var viewModel = Create(FakeApi.Returning(Page()));
 
-        Assert.Equal(32, viewModel.Dates.Count);
-        Assert.Equal("Любая дата", viewModel.Dates[0].DisplayText);
-        Assert.Null(viewModel.Dates[0].Date);
-        Assert.Equal("Сегодня, 15 ноября", viewModel.Dates[1].DisplayText);
-        Assert.Equal(Today, viewModel.Dates[1].Date);
-        Assert.Equal("Завтра, 16 ноября", viewModel.Dates[2].DisplayText);
-        Assert.Equal("вт, 17 ноября", viewModel.Dates[3].DisplayText);
-        Assert.Same(viewModel.Dates[0], viewModel.SelectedDate);
+        Assert.Null(viewModel.SelectedDate);
+        Assert.True(viewModel.IsAnyDate);
+        Assert.False(viewModel.HasSelectedDate);
+        Assert.Equal(Today.ToDateTime(TimeOnly.MinValue), viewModel.MinimumDate);
+        Assert.Equal(Today.AddDays(30).ToDateTime(TimeOnly.MinValue), viewModel.MaximumDate);
+    }
+
+    [Fact]
+    public void ClearDate_ReturnsToAnyDate()
+    {
+        var viewModel = Create(FakeApi.Returning(Page()));
+
+        viewModel.SelectedDate = Today.AddDays(3).ToDateTime(TimeOnly.MinValue);
+        viewModel.ClearDateCommand.Execute(null);
+
+        Assert.Null(viewModel.SelectedDate);
+        Assert.True(viewModel.IsAnyDate);
+        Assert.False(viewModel.HasSelectedDate);
+    }
+
+    [Fact]
+    public async Task SearchAsync_AfterClearDate_SendsNoDate()
+    {
+        var api = FakeApi.Returning(Page());
+        var viewModel = Create(api);
+
+        viewModel.SelectedDate = Today.AddDays(3).ToDateTime(TimeOnly.MinValue);
+        viewModel.ClearDateCommand.Execute(null);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Null(Assert.Single(api.SearchCalls).Date);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DateOutsideHorizon_ResetsToAnyDate()
+    {
+        var viewModel = Create(FakeApi.Returning(Page()));
+
+        viewModel.SelectedDate = Today.AddDays(31).ToDateTime(TimeOnly.MinValue);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Null(viewModel.SelectedDate);
+        Assert.True(viewModel.IsAnyDate);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DateInsideHorizon_KeepsSelectedDate()
+    {
+        var viewModel = Create(FakeApi.Returning(Page()));
+        var date = Today.AddDays(10).ToDateTime(TimeOnly.MinValue);
+
+        viewModel.SelectedDate = date;
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(date, viewModel.SelectedDate);
     }
 
     [Fact]
@@ -399,7 +449,7 @@ public sealed class SearchViewModelTests
     {
         var viewModel = Create(FakeApi.Returning(Page()));
 
-        viewModel.SelectedDate = viewModel.Dates[2];
+        viewModel.SelectedDate = Today.AddDays(1).ToDateTime(TimeOnly.MinValue);
 
         await viewModel.SearchCommand.ExecuteAsync(null);
 
@@ -1491,7 +1541,7 @@ public sealed class SearchViewModelTests
     }
 
     /// <summary>
-    /// Создаёт ViewModel с фиксированным «сегодня»: список дат не зависит от машины теста.
+    /// Создаёт ViewModel с фиксированным «сегодня»: границы календаря не зависят от машины теста.
     /// </summary>
     /// <remarks>
     /// Без явной геопозиции подменённый сервис отвечает «недоступна»: старые проверки поиска

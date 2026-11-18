@@ -124,10 +124,38 @@
                                 FontSize="12"
                                 Text="{loc:Translate Key='Дата'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Picker
-                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchDateOption}"
-                                ItemsSource="{Binding Dates}"
-                                SelectedItem="{Binding SelectedDate}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Grid Grid.Column="0">
+                                    <!--
+                                        Пустое поле показывает подпись «Любая дата», а сам DatePicker лежит поверх
+                                        неё с прозрачным фоном: нажатие попадает в календарь, а пока дата не выбрана,
+                                        нативное поле пустое и подпись видна сквозь него.
+                                    -->
+                                    <Label
+                                        FontSize="14"
+                                        IsVisible="{Binding IsAnyDate}"
+                                        Text="{loc:Translate Key='Любая дата'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                        VerticalOptions="Center" />
+                                    <DatePicker
+                                        Date="{Binding SelectedDate, Mode=TwoWay}"
+                                        Format="d"
+                                        MaximumDate="{Binding MaximumDate}"
+                                        MinimumDate="{Binding MinimumDate}" />
+                                </Grid>
+                                <Button
+                                    Grid.Column="1"
+                                    BackgroundColor="Transparent"
+                                    Command="{Binding ClearDateCommand}"
+                                    FontSize="18"
+                                    IsVisible="{Binding HasSelectedDate}"
+                                    Padding="0"
+                                    SemanticProperties.Description="{loc:Translate Key='Очистить дату'}"
+                                    Text="×"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center"
+                                    WidthRequest="44" />
+                            </Grid>
                         </VerticalStackLayout>
 
                         <VerticalStackLayout Grid.Column="1" Spacing="2">

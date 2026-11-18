@@ -57,12 +57,12 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 public sealed partial class SearchViewModel : ObservableObject
 {
     /// <summary>
-    /// Горизонт фильтра по дате в днях.
+    /// Горизонт записи приложения в днях: верхняя граница календаря.
     /// </summary>
     /// <remarks>
-    /// Веб отдаёт нативный календарь без верхней границы, а <c>Picker</c> на телефоне — список
-    /// значений. Список ограничен горизонтом записи приложения (30 дней): он покрывает все дни
-    /// недели и не листается бесконечно. Отклонение записано в <c>AGENT.md</c> §5.
+    /// Веб не ограничивает дату сверху, а календарь на телефоне останавливается на горизонте:
+    /// дальше него у салонов нет слотов, и день, на который записаться некуда, только сбивал бы
+    /// с толку. Отклонение записано в <c>AGENT.md</c> §5.
     /// </remarks>
     private const int DateHorizonDays = 30;
 
@@ -79,7 +79,6 @@ public sealed partial class SearchViewModel : ObservableObject
     private static string AnyLanguageText => Loc.T("Любой язык");
     private static string AnySpecializationText => Loc.T("Любая специализация");
     private static string AnyServiceText => Loc.T("Любая услуга");
-    private static string AnyDateText => Loc.T("Любая дата");
     private static string LoadingText => Loc.T("Загрузка…");
     private static string CatalogsLoadFailedText => Loc.T("Не удалось загрузить фильтры.");
     private static string SearchFailedText => Loc.T("Не удалось загрузить мастеров.");
@@ -107,7 +106,7 @@ public sealed partial class SearchViewModel : ObservableObject
     private bool _isInitialized;
     private bool _hasSearched;
     private BarberSearchFilters? _appliedFilters;
-    private DateOnly _dateOptionsToday;
+    private DateOnly _dateBoundsToday;
 
     // Геопозиция читается один раз на экран: после отказа система не дёргается на каждый
     // «Найти», иначе Android показывал бы диалог разрешения повторно. «Повторить» в подсказке
@@ -208,7 +207,7 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Геопозиция для сортировки «сначала ближайшие»; отказ и недоступность не блокируют поиск.
     /// </param>
     /// <param name="timeProvider">
-    /// Текущий день устройства: от него отсчитывается список дат, поэтому тест задаёт его сам.
+    /// Текущий день устройства: от него отсчитываются границы календаря, поэтому тест задаёт его сам.
     /// </param>
     /// <param name="citySuggestions">
     /// Подсказки города под полем; живут рядом с экраном, потому что повторяют его судьбу.
@@ -254,7 +253,7 @@ public sealed partial class SearchViewModel : ObservableObject
         _catalogsAutoRetry.StateChanged += OnCatalogsAutoRetryStateChanged;
 
         FillLanguages();
-        RefreshDateOptions();
+        RefreshDateBounds();
         ShowCatalogPlaceholders();
     }
 
@@ -299,11 +298,6 @@ public sealed partial class SearchViewModel : ObservableObject
     public ObservableCollection<SearchLanguageOption> Languages { get; } = [];
 
     /// <summary>
-    /// Даты фильтра: «Любая дата» первой, дальше сегодня и горизонт записи.
-    /// </summary>
-    public ObservableCollection<SearchDateOption> Dates { get; } = [];
-
-    /// <summary>
     /// Город поиска; пусто — сервер не фильтрует.
     /// </summary>
     [ObservableProperty]
@@ -334,10 +328,51 @@ public sealed partial class SearchViewModel : ObservableObject
     private SearchCatalogOption? _selectedHairService;
 
     /// <summary>
-    /// Выбранная дата; пункт «Любая дата» отправляет <c>null</c>.
+    /// Выбранная дата в календаре; <c>null</c> — «Любая дата», фильтр не задан.
     /// </summary>
+    /// <remarks>
+    /// Нативный <c>DatePicker</c> в MAUI 10 принимает пустое значение, поэтому отдельного
+    /// пункта «Любая дата» больше не нужно: пустое поле и есть отсутствие фильтра.
+    /// </remarks>
     [ObservableProperty]
-    private SearchDateOption? _selectedDate;
+    [NotifyPropertyChangedFor(nameof(HasSelectedDate))]
+    [NotifyPropertyChangedFor(nameof(IsAnyDate))]
+    private DateTime? _selectedDate;
+
+    /// <summary>
+    /// Выбрана ли дата: от этого зависит видимость кнопки «×».
+    /// </summary>
+    public bool HasSelectedDate => SelectedDate is not null;
+
+    /// <summary>
+    /// Пора ли показать «Любая дата»: нативный <c>DatePicker</c> не рисует подпись для пустого
+    /// значения, поэтому её показывает отдельный <c>Label</c> на месте поля.
+    /// </summary>
+    public bool IsAnyDate => SelectedDate is null;
+
+    /// <summary>
+    /// Нижняя граница календаря — сегодняшний день устройства.
+    /// </summary>
+    /// <remarks>
+    /// Прошедшие дни недоступны: записаться на них нельзя, и хотя веб ввод не ограничивает,
+    /// листать назад на телефоне незачем.
+    /// </remarks>
+    public DateTime MinimumDate { get; private set; }
+
+    /// <summary>
+    /// Верхняя граница календаря — горизонт записи приложения: сегодня + 30 дней.
+    /// </summary>
+    /// <remarks>
+    /// Веб не ограничивает дату сверху, но дальше горизонта у салонов нет слотов, поэтому
+    /// календарь останавливается здесь, а не предлагает день, на который записаться некуда.
+    /// </remarks>
+    public DateTime MaximumDate { get; private set; }
+
+    /// <summary>
+    /// Возвращает фильтр к «Любая дата»: «×» в поле снимает выбранный день.
+    /// </summary>
+    [RelayCommand]
+    private void ClearDate() => SelectedDate = null;
 
     /// <summary>
     /// Идёт запрос выдачи: кнопка блокируется, в результатах виден индикатор.
@@ -546,19 +581,19 @@ public sealed partial class SearchViewModel : ObservableObject
     public string ResultsCountText => BarberText.ShownBarbers(Barbers.Count);
 
     /// <summary>
-    /// Готовит экран к показу: пересобирает даты и один раз грузит справочники.
+    /// Готовит экран к показу: пересчитывает границы календаря и один раз грузит справочники.
     /// </summary>
     /// <remarks>
-    /// Вызывается при каждом появлении вкладки. Даты пересобираются, если сменился день —
-    /// приложение могло висеть в фоне, — а справочники только при первом показе: их ошибка
-    /// лечится кнопкой «Повторить» и вторым циклом автоповтора, а не повторным заходом на
-    /// вкладку. После неудачной загрузки цикл справочников поднимается здесь же: страница
-    /// сообщила «видна» до неё, и сбой обязан включить повтор сразу.
+    /// Вызывается при каждом появлении вкладки. Границы календаря пересчитываются, если
+    /// сменился день — приложение могло висеть в фоне, — а справочники только при первом
+    /// показе: их ошибка лечится кнопкой «Повторить» и вторым циклом автоповтора, а не
+    /// повторным заходом на вкладку. После неудачной загрузки цикл справочников поднимается
+    /// здесь же: страница сообщила «видна» до неё, и сбой обязан включить повтор сразу.
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        RefreshDateOptions();
+        RefreshDateBounds();
 
         if (_isInitialized)
         {
@@ -1401,37 +1436,40 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Пересобирает список дат, если сменился день устройства.
+    /// Пересчитывает границы календаря, если сменился день устройства.
     /// </summary>
     /// <remarks>
     /// Выбранная дата остаётся выбранной, пока попадает в горизонт; иначе — «Любая дата».
+    /// Смена дня сдвигает обе границы, поэтому приложение, провисевшее в фоне, не предложит
+    /// вчерашний день и не отрежет новый.
     /// </remarks>
-    private void RefreshDateOptions()
+    private void RefreshDateBounds()
     {
         var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
 
-        if (today == _dateOptionsToday && Dates.Count > 0)
+        // Сначала снимаем фильтр, выпавший из горизонта: иначе смена MinimumDate
+        // заставит DatePicker самому подставить новую границу и фильтр включится снова.
+        // Проверка стоит до выхода по тому же дню: InitializeAsync зовут при каждом показе
+        // вкладки, и дата, выставленная в обход календаря, не должна пережить этот показ.
+        if (SelectedDate is { } selected
+            && (DateOnly.FromDateTime(selected) < today
+                || DateOnly.FromDateTime(selected) > today.AddDays(DateHorizonDays)))
+        {
+            SelectedDate = null;
+        }
+
+        if (today == _dateBoundsToday)
         {
             return;
         }
 
-        var selected = SelectedDate?.Date;
-        var lastDate = today.AddDays(DateHorizonDays);
+        _dateBoundsToday = today;
 
-        Dates.Clear();
-        Dates.Add(SearchDateOption.Any(AnyDateText));
+        MinimumDate = today.ToDateTime(TimeOnly.MinValue);
+        MaximumDate = today.AddDays(DateHorizonDays).ToDateTime(TimeOnly.MinValue);
 
-        for (var offset = 0; offset <= DateHorizonDays; offset++)
-        {
-            var date = today.AddDays(offset);
-
-            Dates.Add(SearchDateOption.For(date, today));
-        }
-
-        _dateOptionsToday = today;
-        SelectedDate = selected is { } onlyDate && onlyDate >= today && onlyDate <= lastDate
-            ? Dates.First(option => option.Date == onlyDate)
-            : Dates[0];
+        OnPropertyChanged(nameof(MinimumDate));
+        OnPropertyChanged(nameof(MaximumDate));
     }
 
     /// <summary>
@@ -1440,7 +1478,7 @@ public sealed partial class SearchViewModel : ObservableObject
     private BarberSearchFilters BuildFilters() => new()
     {
         City = City.Trim(),
-        Date = SelectedDate?.Date,
+        Date = SelectedDate is { } date ? DateOnly.FromDateTime(date) : null,
         SpecializationId = SelectedSpecialization?.Id,
         HairServiceId = SelectedHairService?.Id,
         Language = SelectedLanguage?.Value,

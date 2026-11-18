@@ -210,14 +210,19 @@ in Core owns both base addresses.
   or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub
   keeps initials because the account slice allows no avatar management at all; a read-only avatar
   there would promise an editing flow that does not exist.
-- **Search filters are the web's six, with two touch adaptations.** City, date, language,
+- **Search filters are the web's six, with one touch adaptation.** City, date, language,
   specialization, hair service and the additional-service substring travel in one request, only on
   «Найти», and the catalogs for the two selects come from `GET api/specializations` and
-  `GET api/hair-services`. Two things are not the web's: the date is a `Picker` of «Любая дата» plus
-  the booking horizon (today + 30 days, device calendar), because MAUI's `DatePicker` cannot hold an
-  empty value and the filter is optional; and the additional-service field has no `<datalist>`
-  suggestions, because there is no native equivalent and the filter itself is free text. Both are
-  recorded here instead of being left as silent omissions.
+  `GET api/hair-services`. The date is a native `DatePicker` whose tap opens the platform calendar,
+  like the web's `<input type="date">`; `Date = null` is «Любая дата», because MAUI 10's
+  `DatePicker` accepts a nullable date and renders an empty field — so the old 32-item `Picker`
+  workaround for the optional filter is gone. The calendar is bounded below by the device's today
+  and above by the 30-day booking horizon (today + 30 days): the web does not bound the date input,
+  but a farther day has no bookable slots. A «×» button in the field clears the filter back to
+  «Любая дата», and the selected date's text is drawn by the native picker, so it follows the
+  device language like the calendar itself. The additional-service field still has no `<datalist>`
+  suggestions, because there is no native equivalent and the filter itself is free text; that is
+  now the only touch adaptation and is recorded here instead of being left as a silent omission.
 - **The search reads the device position, and the server puts the nearest first.** When the
   «Поиск» tab first appears, the screen asks for the location permission and reads the position
   with `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs
