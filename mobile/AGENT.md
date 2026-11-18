@@ -195,6 +195,16 @@ in Core owns both base addresses.
   through `TabBarForegroundColor` and `TabBarUnselectedColor` — selected and unselected states
   follow `Primary` / `MutedForeground` in both themes, and no new colour, font or package enters
   the app.
+- **A long press on a tab names the section in full; the tab label stays short.** Android draws the
+  Material tooltip from the menu item's title, so the hint repeated the visible label («Поиск»).
+  Four full names do not fit a phone tab bar, so the labels stay «Поиск», «Карта», «Записи»,
+  «Профиль» while the tooltip says «Поиск мастера», «Карта с мастерами», «Мои записи», «Мой
+  профиль» (English: «Find a barber», «Barbers on the map», «My bookings», «My profile»).
+  `Navigation/TabHints.cs` owns the route → hint mapping, and
+  `Platforms/Android/TabHintShellRenderer.cs` — a `ShellRenderer` that returns its own
+  `ShellItemRenderer` — writes the hint to the menu items and item views of the bar. The renderer
+  is registered for `AppShell` on Android only; iOS has no long-press tooltip on a tab bar and
+  keeps the labels as they are.
 - **The card shows the avatar, the account hub still does not.** The public card reads the already
   public `avatarUrl` from `GET api/barbers/{id}` and only renders it — nothing is uploaded, removed
   or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub

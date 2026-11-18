@@ -16,6 +16,7 @@ using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Devices;
 using BarberSearch.Mobile.Localization;
+using BarberSearch.Mobile.Navigation;
 using BarberSearch.Mobile.Pages;
 using BarberSearch.Mobile.Push;
 using BarberSearch.Mobile.Theming;
@@ -76,6 +77,13 @@ public static class MauiProgram
                 fonts.AddFont("Geist-Medium.ttf", "GeistMedium");
                 fonts.AddFont("Geist-SemiBold.ttf", "GeistSemiBold");
             });
+
+#if ANDROID
+        // Долгое нажатие на подпись вкладки показывает tooltip: он должен называть раздел
+        // целиком, а не повторять короткую подпись, которая помещается в полосе.
+        builder.ConfigureMauiHandlers(handlers =>
+            handlers.AddHandler<AppShell, TabHintShellRenderer>());
+#endif
 
         // Адрес бэкенда и сайта — по устройству и сборке: эмулятор видит машину по 10.0.2.2,
         // реальный телефон — по localhost через `adb reverse`, а -p:DevApiHost задаёт хост явно.
