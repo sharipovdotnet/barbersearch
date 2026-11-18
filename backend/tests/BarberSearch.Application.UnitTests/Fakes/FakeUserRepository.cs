@@ -272,7 +272,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         }
 
         var normalized = User.NormalizeEmail(email);
-        var user = _users.Values.FirstOrDefault(x => x.Email == normalized);
+        var user = _users.Values.FirstOrDefault(x => x.Email.Value == normalized);
 
         if (user is null)
         {
@@ -393,7 +393,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
 
         var detail = new AdminUserDetailResponse(
             user.Id,
-            user.Email,
+            user.Email.Value,
             user.FirstName,
             user.LastName,
             user.PhoneNumber?.Value,
@@ -519,7 +519,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         return Task.FromResult<Result<MyProfileResponse, Failure>>(
             new MyProfileResponse(
                 user.Id,
-                user.Email,
+                user.Email.Value,
                 user.FirstName,
                 user.LastName,
                 user.PhoneNumber?.Value,
@@ -561,7 +561,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         var rows = _users.Values
             .Where(user => user.IsActive)
             .Where(user =>
-                user.Email.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                user.Email.Value.Contains(needle, StringComparison.OrdinalIgnoreCase)
                 || (user.PhoneNumber?.Value.Contains(
                         phoneNeedle,
                         StringComparison.OrdinalIgnoreCase) ?? false))
@@ -573,7 +573,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.Email,
+                user.Email.Value,
                 user.PhoneNumber?.Value))
             .ToList();
 
@@ -599,7 +599,7 @@ public sealed class FakeUserRepository : IUserRepository, IFakeTransactionPartic
         var normalized = User.NormalizeEmail(email);
 
         return Task.FromResult<Result<bool, Failure>>(
-            _users.Values.Any(x => x.Email == normalized));
+            _users.Values.Any(x => x.Email.Value == normalized));
     }
 
     public Task<Result<bool, Failure>> ExistsAsync(

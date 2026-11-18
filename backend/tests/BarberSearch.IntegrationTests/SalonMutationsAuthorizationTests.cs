@@ -41,7 +41,7 @@ public sealed class SalonMutationsAuthorizationTests
 
         var customer = await app.CreateUserAsync(
             $"salon-mutations-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         await AssertAllAsync(
             () => SendMutationsAsync(app.Client, salon.Id),
@@ -50,7 +50,7 @@ public sealed class SalonMutationsAuthorizationTests
         var barber = await app.CreateUserAsync(
             $"salon-mutations-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         await AssertAllAsync(
             () => SendMutationsAsync(app.Client, salon.Id),
@@ -60,7 +60,7 @@ public sealed class SalonMutationsAuthorizationTests
         var admin = await app.CreateUserAsync(
             $"salon-mutations-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var created = await TestApp.PostJsonAsync(
                    app.Client,

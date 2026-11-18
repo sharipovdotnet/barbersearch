@@ -60,7 +60,7 @@ public sealed class AdminBookingReadTests
 
         var customer = await app.CreateUserAsync(
             $"admin-bookings-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var list = await app.Client.GetAsync(ENDPOINT))
         {
@@ -75,7 +75,7 @@ public sealed class AdminBookingReadTests
         var barber = await app.CreateUserAsync(
             $"admin-bookings-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using (var list = await app.Client.GetAsync(ENDPOINT))
         {
@@ -90,7 +90,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var list = await app.Client.GetAsync(ENDPOINT))
         {
@@ -125,7 +125,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-list-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var page = await GetPageAsync(app, ENDPOINT);
 
@@ -175,7 +175,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-paging-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var collected = new List<Guid>();
         string? cursor = null;
@@ -225,7 +225,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-status-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var pendingPage = await GetPageAsync(app, BuildUrl(status: "Pending"));
         Assert.Equal(new[] { pending.Id }, pendingPage.Items.Select(item => item.Id));
@@ -256,7 +256,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-status-bad-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var value in new[] { "wrong", "upcoming", "0" })
         {
@@ -284,7 +284,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-search-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var search in new[] { "e2e-", "E2E-" })
         {
@@ -314,7 +314,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-wildcard-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var unfiltered = await GetPageAsync(app, ENDPOINT);
         Assert.Contains(unfiltered.Items, item => item.Id == booking.Id);
@@ -343,7 +343,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-id-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var page = await GetPageAsync(app, BuildUrl(search: expected.Id.ToString("D")));
 
@@ -359,7 +359,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-unknown-id-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var page = await GetPageAsync(app, BuildUrl(search: Guid.CreateVersion7().ToString("D")));
 
@@ -374,7 +374,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-search-limit-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var boundary = await app.Client.GetAsync(BuildUrl(search: new string('a', 100))))
         {
@@ -409,7 +409,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-detail-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync($"{ENDPOINT}/{booking.Id}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -428,7 +428,7 @@ public sealed class AdminBookingReadTests
         Assert.Equal(customer.Id, row.Customer.Id);
         Assert.Equal("Иван", row.Customer.FirstName);
         Assert.Equal("Петров", row.Customer.LastName);
-        Assert.Equal(customer.Email, row.Customer.Email);
+        Assert.Equal(customer.Email.Value, row.Customer.Email);
         Assert.Equal("+79991234567", row.Customer.PhoneNumber);
 
         Assert.Equal(barber.Profile.Id, row.Barber.ProfileId);
@@ -450,7 +450,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-missing-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var response = await app.Client.GetAsync($"{ENDPOINT}/{Guid.CreateVersion7()}");
 
@@ -468,7 +468,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-page-size-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var pageSize in new[] { 0, 101 })
         {
@@ -496,7 +496,7 @@ public sealed class AdminBookingReadTests
         await data.SeedAuditAsync(
             occurredAt.AddMinutes(1), admin.Id, "user.updated", "user", Guid.NewGuid(), """{"changes":{}}""");
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         string? foreignCursor;
 
@@ -541,9 +541,9 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-notes-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
-        var page = await GetPageAsync(app, BuildUrl(search: customer.Email));
+        var page = await GetPageAsync(app, BuildUrl(search: customer.Email.Value));
 
         var withNotesRow = Assert.Single(page.Items, item => item.Id == withNotes.Id);
         Assert.Equal("Позвоните за час", withNotesRow.CustomerNote);
@@ -573,7 +573,7 @@ public sealed class AdminBookingReadTests
         var admin = await app.CreateUserAsync(
             $"admin-bookings-actions-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var cancelled = await app.Client.PostAsync(
                    $"{BOOKINGS_ENDPOINT}/{pending.Id}/cancellation",
@@ -601,7 +601,7 @@ public sealed class AdminBookingReadTests
             Assert.Equal("NoShow", row.Status);
         }
 
-        var page = await GetPageAsync(app, BuildUrl(search: customer.Email));
+        var page = await GetPageAsync(app, BuildUrl(search: customer.Email.Value));
 
         Assert.Equal(
             "Cancelled",

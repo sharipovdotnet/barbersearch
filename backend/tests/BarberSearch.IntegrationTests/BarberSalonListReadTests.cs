@@ -133,7 +133,7 @@ public sealed class BarberSalonListReadTests
         var admin = await app.CreateUserAsync(
             $"salon-list-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var asAdmin = await app.Client.GetAsync(
                    $"api/barber-profiles/{seeded.Profile.Id}/salons"))

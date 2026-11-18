@@ -227,7 +227,7 @@ public sealed class AdminCatalogueWriteTests
 
         var customer = await app.CreateUserAsync(
             $"catalogue-write-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         var responses = new List<HttpResponseMessage>
         {
@@ -367,7 +367,7 @@ public sealed class AdminCatalogueWriteTests
             $"catalogue-write-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
     }
 
     private static async Task<JsonElement> ReadRowAsync(

@@ -62,7 +62,7 @@ public sealed class BarberProfileAuditCoverageTests
         // в RepositoryBase.SaveChangesAsync, а не в ApplicationDbContext.
         await SeedBioAsync(app, barber.Profile.Id, "О себе до правки");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var response = await PutJsonAsync(
                    app.Client,
@@ -131,7 +131,7 @@ public sealed class BarberProfileAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Price Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var url = $"api/barber-profiles/{barber.Profile.Id}/services/{barber.HairService.Id}";
 
@@ -189,7 +189,7 @@ public sealed class BarberProfileAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Price Endpoint Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var url = $"api/barber-profiles/{barber.Profile.Id}/services/{barber.Service.Id}/price";
 
@@ -244,7 +244,7 @@ public sealed class BarberProfileAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Deactivation Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var response = await app.Client.DeleteAsync(
                    $"api/barber-profiles/{barber.Profile.Id}/services/{barber.HairService.Id}"))
@@ -292,7 +292,7 @@ public sealed class BarberProfileAuditCoverageTests
         var barber = await data.CreateBookableBarberAsync("Audit Add Service Barber");
         var hairService = await data.CreateHairServiceAsync("Audit Added Service");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var url = $"api/barber-profiles/{barber.Profile.Id}/services";
 
@@ -358,7 +358,7 @@ public sealed class BarberProfileAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Filter Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var response = await PutJsonAsync(
                    app.Client,
@@ -372,7 +372,7 @@ public sealed class BarberProfileAuditCoverageTests
             $"audit-profile-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var barberServiceRows = await ReadPageAsync(
             app.Client,
@@ -419,7 +419,7 @@ public sealed class BarberProfileAuditCoverageTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Audit Access Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var response = await app.Client.GetAsync(ENDPOINT);
 

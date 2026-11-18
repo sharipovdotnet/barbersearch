@@ -53,7 +53,7 @@ public sealed class BookingPriceApiTests
             startAt,
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var response = await ChangePriceAsync(app.Client, booking.Id, 2000m))
         {
@@ -61,7 +61,7 @@ public sealed class BookingPriceApiTests
         }
 
         // Клиент видит новую сумму в «Предстоящих»: статус, время, услуга и салон не изменились.
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var page = await GetUpcomingAsync(app.Client);
         var row = Assert.Single(page.Items, item => item.Id == booking.Id);
 
@@ -74,7 +74,7 @@ public sealed class BookingPriceApiTests
         Assert.Equal(barber.Profile.Id, row.BarberProfileId);
 
         // Кабинет барбера отдаёт ту же сумму.
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
         var barberPage = await GetBarberBookingsAsync(app.Client);
         var barberRow = Assert.Single(barberPage.Items, item => item.Id == booking.Id);
 
@@ -132,7 +132,7 @@ public sealed class BookingPriceApiTests
             price: 1500m);
 
         // Клиент брони — не владелец профиля: ручка общая для двух кабинетов.
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         using (var response = await ChangePriceAsync(app.Client, booking.Id, 2500m))
         {
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -143,7 +143,7 @@ public sealed class BookingPriceApiTests
         }
 
         // Посторонний барбер видит ту же стену.
-        await app.AuthenticateAsync(stranger.User.Email);
+        await app.AuthenticateAsync(stranger.User.Email.Value);
         using (var response = await ChangePriceAsync(app.Client, booking.Id, 2500m))
         {
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -168,7 +168,7 @@ public sealed class BookingPriceApiTests
         }
 
         // Ни одна из отказных попыток сумму не изменила.
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         var page = await GetUpcomingAsync(app.Client);
         Assert.Equal(1500m, Assert.Single(page.Items, item => item.Id == booking.Id).Price);
     }
@@ -425,7 +425,7 @@ public sealed class BookingPriceApiTests
             $"price-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         return admin;
     }

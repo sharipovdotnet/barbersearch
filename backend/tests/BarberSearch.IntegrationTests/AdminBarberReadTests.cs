@@ -55,7 +55,7 @@ public sealed class AdminBarberReadTests
         var pending = await SeedPendingBarberAsync(app, "Pending Barber", admin.Id);
         var verified = await data.CreateBookableBarberAsync("Verified Barber");
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var queue = await app.Client.GetAsync("api/admin/barbers?status=pending");
         Assert.Equal(HttpStatusCode.OK, queue.StatusCode);
@@ -66,7 +66,7 @@ public sealed class AdminBarberReadTests
         var item = Assert.Single(page.Items);
         Assert.Equal(pending.Profile.Id, item.Id);
         Assert.Equal("Pending Barber", item.DisplayName);
-        Assert.Equal(pending.User.Email, item.Email);
+        Assert.Equal(pending.User.Email.Value, item.Email);
         Assert.False(item.IsVerified);
         Assert.True(item.IsActive);
         Assert.Null(item.Rating);
@@ -89,7 +89,7 @@ public sealed class AdminBarberReadTests
         var body = await detail.Content.ReadFromJsonAsync<AdminBarberDetailResponse>(JsonOptions);
         Assert.NotNull(body);
         Assert.Equal(pending.Profile.Id, body.Id);
-        Assert.Equal(pending.User.Email, body.Email);
+        Assert.Equal(pending.User.Email.Value, body.Email);
         Assert.False(body.IsVerified);
         Assert.Equal("Проверяю себя на длинных фейдах.", body.Bio);
         Assert.Equal(8, body.YearsOfExperience);
@@ -115,7 +115,7 @@ public sealed class AdminBarberReadTests
 
         var customer = await app.CreateUserAsync(
             $"admin-barbers-forbidden-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var forbidden = await app.Client.GetAsync("api/admin/barbers");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);

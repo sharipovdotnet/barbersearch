@@ -48,7 +48,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var page = await GetPageAsync(app, "api/bookings?scope=upcoming");
 
@@ -63,7 +63,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var page = await GetPageAsync(app, "api/bookings?scope=past");
 
@@ -94,7 +94,7 @@ public sealed class CustomerBookingsScopeTests
 
         await data.CreateReviewForBookingAsync(seed.CompletedPast.Id, seed.Customer.Id);
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var page = await GetPageAsync(app, "api/bookings?scope=past");
         var reviewed = Assert.Single(page.Items, item => item.HasReview);
@@ -111,7 +111,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var page = await GetPageAsync(app, "api/bookings");
 
@@ -136,7 +136,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var defaultPage = await GetPageAsync(app, "api/bookings");
         var allPage = await GetPageAsync(app, "api/bookings?scope=all");
@@ -154,7 +154,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var collected = await CollectAllAsync(
             app, "api/bookings?scope=upcoming&pageSize=2", pageSize: 2);
@@ -171,7 +171,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var collected = await CollectAllAsync(
             app, "api/bookings?scope=past&pageSize=2", pageSize: 2);
@@ -196,7 +196,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         var page = await GetPageAsync(app, "api/bookings?scope=%20Upcoming%20");
 
@@ -211,7 +211,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         foreach (var scope in new[] { "wrong", "up", "0" })
         {
@@ -231,7 +231,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         foreach (var scope in new[] { "all", "upcoming", "past" })
         {
@@ -251,7 +251,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Admin.Email);
+        await app.AuthenticateAsync(seed.Admin.Email.Value);
 
         var page = await GetPageAsync(
             app,
@@ -268,7 +268,7 @@ public sealed class CustomerBookingsScopeTests
         await using var app = await TestApp.StartAsync(_database);
         var seed = await SeedAsync(app, new TestData(app));
 
-        await app.AuthenticateAsync(seed.Customer.Email);
+        await app.AuthenticateAsync(seed.Customer.Email.Value);
 
         foreach (var scope in new[] { "all", "upcoming", "past" })
         {

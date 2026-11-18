@@ -65,7 +65,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Upload Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var anonymous = app.CreateClient();
         var content = PngBytes();
@@ -152,7 +152,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Invalid Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var profileId = barber.Profile.Id;
 
@@ -248,7 +248,7 @@ public sealed class PortfolioPhotoUploadTests
             barber.Profile.Id,
             Constants.MAX_PHOTOS_COUNT,
             reviewer.Id);
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var response = await SendUploadAsync(
             app.Client,
@@ -279,7 +279,7 @@ public sealed class PortfolioPhotoUploadTests
             $"portfolio-customer-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Customer);
 
-        await app.AuthenticateAsync(foreign.User.Email);
+        await app.AuthenticateAsync(foreign.User.Email.Value);
 
         using (var response = await SendUploadAsync(app.Client, owner.Profile.Id, PngBytes()))
         {
@@ -287,7 +287,7 @@ public sealed class PortfolioPhotoUploadTests
             Assert.Contains("auth.forbidden", await response.Content.ReadAsStringAsync());
         }
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var response = await SendUploadAsync(app.Client, owner.Profile.Id, PngBytes()))
         {
@@ -317,7 +317,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Delete Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(app.Client, barber.Profile.Id, PngBytes());
 
@@ -380,7 +380,7 @@ public sealed class PortfolioPhotoUploadTests
             $"portfolio-publish-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(app.Client, barber.Profile.Id, PngBytes());
 
@@ -426,7 +426,7 @@ public sealed class PortfolioPhotoUploadTests
         Assert.False(hidden.IsBlocked);
         Assert.Equal(PhotoModerationStatus.Approved, hidden.ModerationStatus);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var adminMedia = await app.Client.GetAsync(url))
         {
@@ -435,7 +435,7 @@ public sealed class PortfolioPhotoUploadTests
         }
 
         // Возврат в карточку: владельческое действие, не блокировка.
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var publish = await app.Client.PostAsync(
                    $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/publication",
@@ -469,7 +469,7 @@ public sealed class PortfolioPhotoUploadTests
             $"portfolio-block-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(app.Client, barber.Profile.Id, PngBytes());
 
@@ -492,7 +492,7 @@ public sealed class PortfolioPhotoUploadTests
             Assert.Equal(HttpStatusCode.Forbidden, ownerBlock.StatusCode);
         }
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var block = await app.Client.PostAsync(blockUrl, content: null))
         {
@@ -515,14 +515,14 @@ public sealed class PortfolioPhotoUploadTests
         var publicCard = await GetCardAsync(anonymous, $"api/barbers/{barber.Profile.Id}");
         Assert.Empty(publicCard.Photos);
 
-        await app.AuthenticateAsync(foreign.User.Email);
+        await app.AuthenticateAsync(foreign.User.Email.Value);
 
         using (var foreignMedia = await app.Client.GetAsync(url))
         {
             Assert.Equal(HttpStatusCode.NotFound, foreignMedia.StatusCode);
         }
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var ownerMedia = await app.Client.GetAsync(url))
         {
@@ -536,7 +536,7 @@ public sealed class PortfolioPhotoUploadTests
             Assert.Equal(HttpStatusCode.Forbidden, ownerUnblock.StatusCode);
         }
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var adminMedia = await app.Client.GetAsync(url))
         {
@@ -581,7 +581,7 @@ public sealed class PortfolioPhotoUploadTests
             UserRole.Admin);
 
         await SeedPhotosAsync(app, barber.Profile.Id, 3, reviewer.Id);
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var anonymous = app.CreateClient();
 
@@ -641,7 +641,7 @@ public sealed class PortfolioPhotoUploadTests
             Require(photos[2].Block());
         });
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var detail = await app.Client.GetAsync($"api/admin/barbers/{barber.Profile.Id}"))
         {
@@ -719,7 +719,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Variant Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         // Настоящий JPEG: из минимального PNG декодер вариантов ничего не сделает.
         var content = MediaTestImage.Jpeg(1200, 900);
@@ -847,7 +847,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Size Guard Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(
             app.Client,
@@ -895,7 +895,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Pending Variant Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var content = MediaTestImage.Jpeg(1000, 800);
         await UploadAsync(
@@ -938,7 +938,7 @@ public sealed class PortfolioPhotoUploadTests
         var admin = await app.CreateUserAsync(
             $"portfolio-variant-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var adminVariant = await app.Client.GetAsync(variantUrl);
         Assert.Equal(HttpStatusCode.OK, adminVariant.StatusCode);
@@ -957,7 +957,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Hidden Variant Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(
             app.Client,
@@ -999,7 +999,7 @@ public sealed class PortfolioPhotoUploadTests
         var admin = await app.CreateUserAsync(
             $"portfolio-hidden-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var hiddenAdmin = await app.Client.GetAsync(variantUrl))
         {
@@ -1008,7 +1008,7 @@ public sealed class PortfolioPhotoUploadTests
         }
 
         // Возврат в публикацию: снова публичный кэш и всем доступный WebP.
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var publish = await app.Client.PostAsync(
                    $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/publication",
@@ -1025,7 +1025,7 @@ public sealed class PortfolioPhotoUploadTests
         }
 
         // Блокировка администратором: владелец по-прежнему видит превью, аноним — нет.
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var block = await app.Client.PostAsync(
                    $"api/barber-profiles/{barber.Profile.Id}/photos/{photoId}/block",
@@ -1046,7 +1046,7 @@ public sealed class PortfolioPhotoUploadTests
             AssertPrivateNoStore(blockedAdmin);
         }
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var blockedOwner = await app.Client.GetAsync(variantUrl);
         Assert.Equal(HttpStatusCode.OK, blockedOwner.StatusCode);
@@ -1063,7 +1063,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Lazy Variant Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var content = MediaTestImage.Jpeg(1200, 900);
         var photoId = await UploadAsync(
@@ -1131,7 +1131,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Narrow Source Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         // 400 px: md (512) и lg (1024) невозможны, sm (256) возможен.
         var content = MediaTestImage.Jpeg(400, 300);
@@ -1182,7 +1182,7 @@ public sealed class PortfolioPhotoUploadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Portfolio Delete Variants Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var photoId = await UploadAsync(
             app.Client,
@@ -1333,7 +1333,7 @@ public sealed class PortfolioPhotoUploadTests
             $"portfolio-approval-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await using var session = await app.SignInWithCookieAsync(admin.Email);
+        await using var session = await app.SignInWithCookieAsync(admin.Email.Value);
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post,

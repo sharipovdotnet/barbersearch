@@ -43,7 +43,7 @@ public sealed class BarberScheduleTests
         await using var app = await TestApp.StartAsync(_database);
         var barber = await SeedUnverifiedBarberAsync(app, "Unverified Schedule Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var before = await app.Client.GetAsync(
             $"api/barber-profiles/{barber.Profile.Id}/schedule");
@@ -102,7 +102,7 @@ public sealed class BarberScheduleTests
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Override Schedule Barber");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var date = DateOnly.FromDateTime(DateTime.UtcNow.Date).AddDays(14);
         var weeklyDay = date.DayOfWeek;
@@ -169,7 +169,7 @@ public sealed class BarberScheduleTests
 
         var customer = await app.CreateUserAsync(
             $"schedule-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var forbidden = await app.Client.GetAsync(
             $"api/barber-profiles/{barber.Profile.Id}/schedule");

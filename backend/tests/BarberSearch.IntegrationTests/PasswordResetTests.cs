@@ -611,7 +611,7 @@ public sealed class PasswordResetTests
 
         // Админский фильтр «Без подтверждения email» больше не показывает пользователя.
         var admin = await app.CreateUserAsync(NewEmail("reset-admin"), UserRole.Admin);
-        var adminTokens = await app.LoginAsync(admin.Email);
+        var adminTokens = await app.LoginAsync(admin.Email.Value);
         SetBearer(app.Client, adminTokens.AccessToken);
 
         using var unverified = await app.Client.GetAsync(

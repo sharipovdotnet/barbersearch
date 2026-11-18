@@ -47,7 +47,7 @@ public sealed class BarberProfileOwnReadTests
         await using var app = await TestApp.StartAsync(_database);
         var seeded = await SeedUnverifiedBarberAsync(app, "Unverified Profile Barber");
 
-        await app.AuthenticateAsync(seeded.User.Email);
+        await app.AuthenticateAsync(seeded.User.Email.Value);
 
         using var response = await app.Client.GetAsync(
             $"api/barber-profiles/{seeded.Profile.Id}");
@@ -82,7 +82,7 @@ public sealed class BarberProfileOwnReadTests
             $"profile-stranger-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
 
-        await app.AuthenticateAsync(stranger.Email);
+        await app.AuthenticateAsync(stranger.Email.Value);
 
         using var response = await app.Client.GetAsync(
             $"api/barber-profiles/{seeded.Profile.Id}");
@@ -114,7 +114,7 @@ public sealed class BarberProfileOwnReadTests
         var user = await app.CreateUserAsync(
             $"profile-create-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         using var create = await app.Client.PostAsJsonAsync(
             "api/barber-profiles",

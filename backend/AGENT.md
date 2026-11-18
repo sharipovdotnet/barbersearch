@@ -102,6 +102,7 @@ backend/                                  ← workspace root
         │   │   ├── PhotoModerationStatus.cs ← Pending/Approved/Rejected для фото и аватара
         │   │   └── DomainErrors.cs       ← Collect() / Ok() / Fail() helpers
         │   ├── Users/{User.cs, UserRole.cs}                      (AR)
+        │   │   └── ValueObjects/{Email,PhoneNumber}.cs
         │   ├── BarberRequests/{BarberRequest.cs, BarberRequestStatus.cs}  (AR)
         │   ├── BarberProfiles/                                   (AR)
         │   │   ├── BarberProfile.cs
@@ -699,7 +700,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberProfile.Services` | unique `HairServiceId`; `Price >= 0`; duration `1..1440` |
 | `BarberProfile.BarberSpecializations` | unique `SpecializationId` |
 | `BarberProfile.Verify()` | an inactive profile cannot be verified |
-| `User` | email normalized to trimmed lower case, valid `MailAddress` with a dotted domain, 3..254 chars (`Constants.MIN/MAX_EMAIL_LENGTH`); non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `IsAvatarBlocked` (`false` по умолчанию) — `BlockAvatar` требует `AvatarUrl`, `SetAvatar`/`UpdateProfile` снимают флаг только при реальной смене URL; `AvatarModerationStatus` (`Pending=1`, `Approved=2`, `Rejected=3`; по умолчанию `Approved`) — реальная смена `AvatarUrl` переводит кадр в `Pending` и пишет `AvatarSubmittedAt`, `null` возвращает `Approved` и чистит метки, повторная запись того же URL не меняет ни статус, ни флаг, ни метки; `ApproveAvatar`/`RejectAvatar` двигают только `Pending` (`409 user.avatarModeration.noAvatar` без URL, `.invalidStatus` на повторное решение), причина отказа тримится и обязательна 1..500 (`user.avatarModeration.reasonRequired` / `.reasonTooLong`), решение пишет `AvatarReviewedAt`/`AvatarReviewedByUserId`; публичный кадр — `Approved && !IsAvatarBlocked`; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
+| `User` | `User.Email` — объект-значение `Email` (`Users/ValueObjects/Email.cs`), а не `string`: канонический вид (trim + нижний регистр), разбор по RFC через `MailAddress.TryCreate` с точкой в домене, 3..254 символа (`Constants.MIN/MAX_EMAIL_LENGTH`); коды прежние — `user.email`, `user.changeEmail.newEmail`; non-empty password hash / names; known role; `AvatarUrl` (optional) — `null`, либо **собственный** media-URL `/api/media/avatars/{userId:D}/{mediaId:N}.{jpg\|png\|webp}` (`UserAvatarMediaUrl`), либо абсолютный `http`/`https` URI с хостом и без `userinfo`, ≤ 2048; `UrlValidator` не ослаблен; `IsAvatarBlocked` (`false` по умолчанию) — `BlockAvatar` требует `AvatarUrl`, `SetAvatar`/`UpdateProfile` снимают флаг только при реальной смене URL; `AvatarModerationStatus` (`Pending=1`, `Approved=2`, `Rejected=3`; по умолчанию `Approved`) — реальная смена `AvatarUrl` переводит кадр в `Pending` и пишет `AvatarSubmittedAt`, `null` возвращает `Approved` и чистит метки, повторная запись того же URL не меняет ни статус, ни флаг, ни метки; `ApproveAvatar`/`RejectAvatar` двигают только `Pending` (`409 user.avatarModeration.noAvatar` без URL, `.invalidStatus` на повторное решение), причина отказа тримится и обязательна 1..500 (`user.avatarModeration.reasonRequired` / `.reasonTooLong`), решение пишет `AvatarReviewedAt`/`AvatarReviewedByUserId`; публичный кадр — `Approved && !IsAvatarBlocked`; `FailedLoginAttempts` `0..MAX_FAILED_LOGIN_ATTEMPTS + 10`, `LockoutEnd` выставляется только `RegisterFailedLogin` по backoff и снимается `ResetFailedLogin` (R-21) |
 | `User.FavoriteBarbers` | unique `BarberProfileId` |
 | `User.MarkPhoneAsVerified()` | requires a phone number to be set |
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
@@ -1010,7 +1011,7 @@ The rules below were pushed to the application layer because the aggregate canno
 | Tests | ✅ 629 domain + 1099 application + 456 infrastructure + 347 integration (2531 total); unit-проекты зелёные локально (2026-11-17), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 170 обработчиков (124 command + 46 query), 22 абстракции репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 53 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
-| Infrastructure | ✅ 27 конфигураций, 22 репозитория, `IUnitOfWork`, 27 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита; `push_device_tokens` и `push_notifications` — обе с FK на `users` `ON DELETE CASCADE`, без аудита (§20) |
+| Infrastructure | ✅ 27 конфигураций, 22 репозитория, `IUnitOfWork`, 27 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `Email` (скалярное свойство с конвертером `Email.Value ↔ string`, а не owned-тип: иначе EF теряет снимок старого адреса при замене инстанса, D4) и `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита; `push_device_tokens` и `push_notifications` — обе с FK на `users` `ON DELETE CASCADE`, без аудита (§20) |
 | Web | ✅ 34 контроллера / 165 endpoint (151 доменных + 14 auth); `ApiController` + `FailureProblemDetails`; cookie + JWT, security stamp, политики, rate limiting (§17); сжатие и таймаут 30 с (R-14); `RefreshTokenCleanupService` (R-50), `EmailVerificationTokenCleanupService`, `PasswordResetTokenCleanupService`, `ReminderDispatchService` (воркер напоминаний барберу), `EmailDispatchService` (воркер outbox, §19) и `PushDispatchService` (воркер push, §20); Serilog — единственный провайдер логирования, консоль + файл `logs/barbersearch-.log` (§18) |
 | Swagger / health | ✅ `AddOpenApi` + `UseSwaggerUI`; `/health/live`, `/health/ready` |
 | Ops | ✅ `Dockerfile`, `docker-compose.yml`, CI (`.github/workflows/backend-ci.yml`), `Directory.Build.props`, `global.json`, `.editorconfig`; выкат не выполнялся (`DEPLOY.md`) |
@@ -1261,6 +1262,18 @@ max-age=0, must-revalidate` и сильный `ETag` (issue-90, §17.15), все
 `Down` снимает FK, индексы, check'и и колонки; `avatar_url`, файлы и строки портфолио не
 трогаются. Проверено накатом, откатом и повторным накатом на локальной `barbersearch`;
 `has-pending-model-changes` — чисто (§17.14).
+
+**`AddUserEmailValueObject` (2026-11-18, email как объект-значение).** Схема не меняется: адрес
+по-прежнему живёт в `users.email` (`citext`, NOT NULL), `ux_users_email` и `ck_users_email` прежние,
+поэтому миграция пустая — она обновляет только снапшот модели. В модели `User.Email` — скалярное
+свойство с конвертером `Email.Value ↔ string` (при чтении `Email.FromStorage`); owned-тип отвергнут
+сознательно: EF теряет снимок owned-значения при замене инстанса (D4), а email обязан попадать в
+журнал аудита — в `values` строки `user.created` и в `changes` строки `user.updated`. Правила
+(`MailAddress.TryCreate`, точка в домене, 3..254) переехали из удалённого `Domain/Users/EmailAddress.cs`
+в `Domain/Users/ValueObjects/Email.cs` (`Normalize`, `IsValid`, `Validate`, `Create`, `FromStorage`);
+коды ошибок и поведение регистрации/смены адреса не изменились. `EmailChangeToken.NewEmail` остаётся
+строкой (`new_email`). В запросах `ILIKE` по адресу — через `(string)user.Email`, равенство — через
+`Email.FromStorage` (сравнение по `citext`, R-03).
 
 **Границы слоёв:** `Domain` не знает EF Core, ASP.NET и JSON; `Application` — команды, запросы
 и абстракции репозиториев; `Infrastructure` — EF-конфигурации, миграции и реализации;
@@ -2074,13 +2087,23 @@ of `ix_bookings_status_start_at_id`** (`status, start_at DESC, id` from
 dropping either index — or the per-barber scan — is a separate decision with its own measurement.
 Evidence: `frontend/verification/variant-c-explain.txt`.
 
-**Email canonical form (2026-10-21, R-03).** `users.email` is `citext`: the unique index
-`ux_users_email` therefore compares without case. `User.Create` normalizes the address with
-`User.NormalizeEmail` (`Trim().ToLowerInvariant()`), validates it through
-`MailAddress.TryCreate` (plus a dotted domain and 3..254 chars) and stores only the canonical
-value; `CreateUserHandler` checks occupancy with that same value. `ck_users_email` enforces the
-length in the database. `NormalizeUserEmail` rewrites historical rows to
-`lower(btrim(email))` and aborts with a readable message if two rows would collide.
+**Email canonical form (2026-10-21, R-03; value object since 2026-11-18).** `users.email` is
+`citext`: the unique index `ux_users_email` therefore compares without case. `User.Email` is the
+`Email` value object (`Domain/Users/ValueObjects/Email.cs`) mapped as a **scalar** property with
+the value converter `Email.Value ↔ string` — deliberately not an owned type: EF loses the owned
+snapshot when the aggregate replaces the instance (D4), and the address must reach the audit
+journal. `Email.Normalize` (`Trim().ToLowerInvariant()`) and `Email.IsValid`
+(`MailAddress.TryCreate` plus a dotted domain and 3..254 chars) are the only syntax rules;
+`User.NormalizeEmail` keeps delegating to the value object and `User.Create`/`ChangeEmail` collect
+the address through `Email.Validate`, so the canonical value is the only thing stored;
+`CreateUserHandler` checks occupancy with `Email.Value`. `ck_users_email` enforces the length in
+the database. `NormalizeUserEmail` rewrites historical rows to `lower(btrim(email))` and aborts
+with a readable message if two rows would collide. Queries keep `citext` semantics: `ILIKE` needs
+the explicit `(string)user.Email` cast (SQL `email::text ILIKE`), while equality compares
+`x.Email == Email.FromStorage(normalized)` so the converter keeps the comparison on `citext`;
+there is no implicit `Email → string` conversion on purpose. The empty migration
+`AddUserEmailValueObject` only refreshes the model snapshot — schema, index and check constraint
+are unchanged.
 
 **URL and text length limits (2026-10-23, R-24).** `AddUrlLengthLimits` turns five `text` columns
 into `character varying`: `portfolio_photos.url` and `thumbnail_url`, `salons.website_url`,
@@ -2377,7 +2400,10 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   diff массива нечитаем, а payload раздувается.
   `user`
   дополнительно аудирует `avatarUrl` и `avatarModerationStatus` (загрузка/замена/удаление
-  аватара и решения администратора) вместе с прежним `isAvatarBlocked`. `portfolio_photo` —
+  аватара и решения администратора) вместе с прежним `isAvatarBlocked`. Адрес пользователя,
+  наоборот, аудируется: `Email` — скалярное свойство с конвертером, снимок старого значения при
+  замене инстанса не теряется, поэтому адрес попадает и в `values` строки `user.created`, и в
+  `changes` строки `user.updated` (в payload — канонической строкой). `portfolio_photo` —
   создание, подпись, порядок, публикация, блокировка и решения администратора:
   `barberProfileId`, `url`, `description`, `sortOrder`, `isPublished`, `isBlocked` и
   `moderationStatus`; создание пишется (`AuditsCreation` — `true`, потому что кадров максимум
@@ -4451,11 +4477,22 @@ SHA-256 в нижнем регистре (`EmailChangeTokenGenerator` делег
 нему считается кулдаун. Сроки — `EmailChangeLifetime`: TTL **24 часа**, кулдаун повторной
 заявки **60 секунд**, ретенция уборки **30 дней**.
 
-**Одна проверка синтаксиса.** `Domain/Users/EmailAddress.cs` — единственное место с правилами
-(`MailAddress.TryCreate`, точка в домене, 3..254): `Normalize`, `IsValid`, `Validate(email, code,
-field)`. `User.NormalizeEmail`, `User.Create`/`UpdateProfile` (`user.email`) и новый
-`User.ChangeEmail` (`user.changeEmail.newEmail`) используют его, поэтому поведение и коды
-регистрации/профиля не изменились.
+**Одна проверка синтаксиса.** `Domain/Users/ValueObjects/Email.cs` — единственное место с
+правилами (`MailAddress.TryCreate`, точка в домене, 3..254): `Normalize`, `IsValid`,
+`Validate(value, code, invalidField, out Email?)`, `Create(value, code, invalidField)` и
+`FromStorage` (материализация из колонки без повторной проверки). Коды ошибок в правила не
+зашиты — их передаёт вызывающий сценарий; сами коды и поведение прежние. `User.Email` теперь
+объект-значение `Email`, а не строка; в БД он лежит скалярным свойством с конвертером
+`Email.Value ↔ string`, а не owned-типом: EF теряет снимок owned-значения при замене инстанса
+(D4), а адрес обязан попадать в журнал аудита. `User.NormalizeEmail` остаётся публичной точкой
+входа и делегирует в `Email.Normalize`; `User.Create` (`user.email`) и `User.ChangeEmail`
+(`user.changeEmail.newEmail`) собирают адрес через `Email.Validate`. `EmailChangeToken.NewEmail`
+остаётся строкой (`varchar(254)`, колонка `new_email`) и валидируется через `Email.Validate` с
+кодом `emailChangeToken.create.newEmail`; `RequestEmailChangeHandler` использует
+`Email.Validate`/`Email.Normalize`. В запросах `ILIKE` по адресу идёт через `(string)user.Email`
+(явное приведение, SQL `email::text ILIKE`), а равенство — через
+`x.Email == Email.FromStorage(normalized)`, чтобы сравнение шло по `citext` (R-03); неявного
+приведения `Email → string` нет намеренно (§15.2).
 
 **Поток `POST api/auth/email-change`.** Cookie-мутация вошедшего пользователя: antiforgery
 включён (`X-CSRF-TOKEN`), пользователь из `ICurrentUser.RequireUserId()`. Порядок проверок
@@ -4486,7 +4523,7 @@ field)`. `User.NormalizeEmail`, `User.Create`/`UpdateProfile` (`user.email`) и 
 **Поток `POST api/auth/email-change/confirm`.** Анонимный, `[SkipCookieAntiforgery]`, политика
 `auth`. Порядок: 1) формат токена (≤ 128, `[A-Za-z0-9_-]`) → иначе `400 auth.emailChange.invalid`;
 2) `GetByHashAsync` → нет → тот же код, прочие ошибки репозитория не маскируются; 3) пользователь
-по `token.UserId` → нет → тот же код; 4) **идемпотентность**: `user.Email == token.NewEmail` →
+по `token.UserId` → нет → тот же код; 4) **идемпотентность**: `user.Email.Value == token.NewEmail` →
 `204` (проверка раньше срока токена — повторный клик не отвечает 400); 5) токен
 просрочен/использован/отозван → `400`; 6) адрес занят → `409 user.changeEmail.emailTaken`;
 7) одна транзакция: `user.ChangeEmail(token.NewEmail)` (нормализация, `IsEmailVerified = true`,
@@ -4517,7 +4554,10 @@ email и сброса пароля: в `FailureProblemDetails` нет `ErrorType
 
 **Аудит.** `User.Email` и `User.SecurityStamp` уже в allowlist `AuditTrail`, поэтому смена пишется
 сама как `user.updated` с `actorUserId = null` («Система»: confirm анонимный) и diff'ом `email` +
-`securityStamp`. Отдельных записей срез не добавляет; адрес (PII) виден в админском журнале — это
+`securityStamp`. В `values` строки `user.created` адрес тоже попадает, канонической строкой:
+`AuditTrail.Normalize` знает тип `Email` и пишет `Email.Value`, а снимок старого значения при
+замене инстанса не теряется, потому что `Email` — скалярное свойство с конвертером, а не
+owned-тип (D4). Отдельных записей срез не добавляет; адрес (PII) виден в админском журнале — это
 следствие существующего allowlist, новых решений о приватности не требуется.
 
 **Уборка.** `EmailChangeTokenCleanupService` (`Web/Auth`, по образцу

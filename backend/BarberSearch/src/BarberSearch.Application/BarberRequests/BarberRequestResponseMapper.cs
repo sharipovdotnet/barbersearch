@@ -57,7 +57,7 @@ public static class BarberRequestResponseMapper
             applicant.Id,
             applicant.FirstName,
             applicant.LastName,
-            applicant.Email);
+            applicant.Email.Value);
     }
 
     /// <summary>

@@ -80,7 +80,7 @@ public class ChangePasswordHandler : ICommandHandler<ChangePasswordCommand>
         // в команде. Хеширование всё ещё впереди.
         var personalData = _passwordPolicy.Validate(
             command.NewPassword,
-            user.Email,
+            user.Email.Value,
             user.FirstName,
             user.LastName,
             "newPassword");

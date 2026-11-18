@@ -34,7 +34,7 @@ public class UserCreationTests
 
         Assert.True(result.IsSuccess);
         var user = Assert.Single(repository.Users);
-        Assert.Equal("user@example.com", user.Email);
+        Assert.Equal("user@example.com", user.Email.Value);
     }
 
     [Fact]

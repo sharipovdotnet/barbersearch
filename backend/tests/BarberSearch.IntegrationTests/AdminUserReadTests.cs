@@ -58,7 +58,7 @@ public sealed class AdminUserReadTests
             await db.SaveChangesAsync();
         }
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var list = await app.Client.GetAsync($"api/admin/users?search={barber.User.Email}");
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
@@ -68,7 +68,7 @@ public sealed class AdminUserReadTests
 
         var item = Assert.Single(page.Items);
         Assert.Equal(barber.User.Id, item.Id);
-        Assert.Equal(barber.User.Email, item.Email);
+        Assert.Equal(barber.User.Email.Value, item.Email);
         Assert.Equal(UserRole.Barber, item.Role);
         Assert.True(item.IsActive);
         Assert.Equal(barber.Profile.Id, item.BarberProfileId);
@@ -108,7 +108,7 @@ public sealed class AdminUserReadTests
 
         var customer = await app.CreateUserAsync(
             $"admin-users-forbidden-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var forbidden = await app.Client.GetAsync("api/admin/users");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
@@ -122,7 +122,7 @@ public sealed class AdminUserReadTests
             $"admin-self-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var role = await app.Client.PutAsJsonAsync(
             $"api/users/{admin.Id}/role",
@@ -150,7 +150,7 @@ public sealed class AdminUserReadTests
             $"admin-target-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(actor.Email);
+        await app.AuthenticateAsync(actor.Email.Value);
 
         using var demoted = await app.Client.PutAsJsonAsync(
             $"api/users/{target.Id}/role",

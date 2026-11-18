@@ -190,7 +190,7 @@ public sealed class RegistrationConsentTests
 
         var stored = Assert.IsType<ConsentRow>(await ReadConsentAsync(app, created.Id));
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var card = await app.Client.GetAsync($"api/admin/users/{created.Id}");
         Assert.Equal(HttpStatusCode.OK, card.StatusCode);
@@ -218,7 +218,7 @@ public sealed class RegistrationConsentTests
         var admin = await app.CreateUserAsync(NewEmail("admin-legacy"), UserRole.Admin);
         var legacy = await app.CreateUserAsync(NewEmail("legacy-consent"));
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var card = await app.Client.GetAsync($"api/admin/users/{legacy.Id}");
         Assert.Equal(HttpStatusCode.OK, card.StatusCode);
@@ -248,13 +248,13 @@ public sealed class RegistrationConsentTests
         Assert.Equal(HttpStatusCode.Forbidden, customer.StatusCode);
 
         var barber = await app.CreateUserAsync(NewEmail("consent-barber"), UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using var barberCard = await app.Client.GetAsync($"api/admin/users/{barber.Id}");
         Assert.Equal(HttpStatusCode.Forbidden, barberCard.StatusCode);
 
         var admin = await app.CreateUserAsync(NewEmail("consent-admin"), UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var adminCard = await app.Client.GetAsync($"api/admin/users/{barber.Id}");
         Assert.Equal(HttpStatusCode.OK, adminCard.StatusCode);

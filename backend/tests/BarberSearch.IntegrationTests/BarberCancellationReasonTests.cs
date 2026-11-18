@@ -50,7 +50,7 @@ public sealed class BarberCancellationReasonTests
             customer.Id,
             DateTimeOffset.UtcNow.AddDays(10));
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var noReason = await app.Client.PostAsync(
                    $"api/bookings/{booking.Id}/cancellation",
@@ -100,7 +100,7 @@ public sealed class BarberCancellationReasonTests
             Assert.Equal("Барбер заболел", item.CancellationReason);
         }
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var history = await app.Client.GetAsync("api/bookings?scope=past"))
         {

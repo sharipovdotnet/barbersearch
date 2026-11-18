@@ -6,6 +6,7 @@ using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.EmailChanges;
 using BarberSearch.Domain.EmailOutbox;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.Users.ValueObjects;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -105,19 +106,20 @@ public sealed class RequestEmailChangeHandler
 
         var user = userResult.Value;
 
-        var normalized = EmailAddress.Normalize(command.NewEmail);
-
-        var emailError = EmailAddress.Validate(
-            normalized,
+        var emailError = Email.Validate(
+            command.NewEmail,
             ApiErrorCodes.User.ChangeEmailNewEmail,
-            "newEmail");
+            "newEmail",
+            out var parsedEmail);
         if (emailError is not null)
         {
             return new Failure(emailError);
         }
 
+        var normalized = parsedEmail!.Value;
+
         // Сравнение с каноническим адресом: «user@x» и «User@x» — один и тот же адрес.
-        if (string.Equals(user.Email, normalized, StringComparison.Ordinal))
+        if (string.Equals(user.Email.Value, normalized, StringComparison.Ordinal))
         {
             return new Failure(Error.Validation(
                 ApiErrorCodes.User.ChangeEmailSameEmail,
@@ -209,7 +211,7 @@ public sealed class RequestEmailChangeHandler
             (int)EmailChangeLifetime.TOKEN_LIFETIME.TotalHours);
 
         var notice = EmailChangeNoticeMessage.Create(
-            user.Email,
+            user.Email.Value,
             user.FirstName,
             normalized);
 

@@ -48,7 +48,7 @@ public sealed class BarberNotificationApiTests
         using var anonymous = await app.Client.GetAsync("api/barber/notifications");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var asCustomer = await app.Client.GetAsync("api/barber/notifications");
         Assert.Equal(HttpStatusCode.Forbidden, asCustomer.StatusCode);
@@ -63,7 +63,7 @@ public sealed class BarberNotificationApiTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
         var barber = await data.CreateBookableBarberAsync("Notification Settings Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var created = await app.Client.GetAsync("api/barber/notification-settings");
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
@@ -112,7 +112,7 @@ public sealed class BarberNotificationApiTests
 
         var barber = await data.CreateBookableBarberAsync("Notification Inbox Barber");
         var otherBarber = await data.CreateBookableBarberAsync("Foreign Notification Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var empty = await app.Client.GetAsync("api/barber/notifications");
         Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
@@ -233,7 +233,7 @@ public sealed class BarberNotificationApiTests
         var data = new TestData(app);
         var notifications = new NotificationTestData(app);
         var barber = await data.CreateBookableBarberAsync("Telegram Link Barber");
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using var link = await app.Client.PostAsync("api/barber/notifications/telegram/link", null);
         Assert.Equal(HttpStatusCode.OK, link.StatusCode);
@@ -314,7 +314,7 @@ public sealed class BarberNotificationApiTests
         var first = await data.CreateBookableBarberAsync("First Telegram Barber");
         var second = await data.CreateBookableBarberAsync("Second Telegram Barber");
 
-        await app.AuthenticateAsync(first.User.Email);
+        await app.AuthenticateAsync(first.User.Email.Value);
         using var firstLink = await app.Client.PostAsync(
             "api/barber/notifications/telegram/link",
             null);
@@ -331,7 +331,7 @@ public sealed class BarberNotificationApiTests
             Assert.Equal(HttpStatusCode.OK, firstWebhook.StatusCode);
         }
 
-        await app.AuthenticateAsync(second.User.Email);
+        await app.AuthenticateAsync(second.User.Email.Value);
         using var secondLink = await app.Client.PostAsync(
             "api/barber/notifications/telegram/link",
             null);

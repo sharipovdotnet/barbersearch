@@ -104,7 +104,7 @@ public class CreateUserHandler : ICommandHandler<Guid, CreateUserCommand>
 
         // Проверка занятости идёт по каноническому адресу из агрегата: User.Create уже
         // срезал пробелы и привёл регистр, поэтому проверка и вставка видят одно значение.
-        var emailExists = await _repository.EmailExistsAsync(user.Value.Email, cancellationToken);
+        var emailExists = await _repository.EmailExistsAsync(user.Value.Email.Value, cancellationToken);
         if (emailExists.IsFailure)
         {
             return emailExists.Error;

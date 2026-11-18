@@ -55,7 +55,7 @@ public sealed class BarberRequestTests
         await using var app = await TestApp.StartAsync(_database);
         var customer = await app.CreateUserAsync(
             $"request-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
@@ -177,7 +177,7 @@ public sealed class BarberRequestTests
         var barber = await app.CreateUserAsync(
             $"request-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         using var forbiddenCreate = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
@@ -197,7 +197,7 @@ public sealed class BarberRequestTests
 
         var customer = await app.CreateUserAsync(
             $"request-admin-forbidden-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var forbiddenList = await app.Client.GetAsync("api/admin/barber-requests");
         Assert.Equal(HttpStatusCode.Forbidden, forbiddenList.StatusCode);
@@ -230,7 +230,7 @@ public sealed class BarberRequestTests
             reviewerId: admin.Id);
         var newer = await SeedAsync(app, newerApplicant.Id, BaseTime.AddMinutes(2));
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var pending = await app.Client.GetAsync("api/admin/barber-requests");
         Assert.Equal(HttpStatusCode.OK, pending.StatusCode);
@@ -242,7 +242,7 @@ public sealed class BarberRequestTests
         Assert.Equal(older, pendingPage.Items[0].Id);
         Assert.Equal(newer, pendingPage.Items[1].Id);
         Assert.Equal("Integration Test", pendingPage.Items[0].Applicant.FullName);
-        Assert.Equal(olderApplicant.Email, pendingPage.Items[0].Applicant.Email);
+        Assert.Equal(olderApplicant.Email.Value, pendingPage.Items[0].Applicant.Email);
         Assert.DoesNotContain(approved, pendingPage.Items.Select(item => item.Id));
 
         using var all = await app.Client.GetAsync("api/admin/barber-requests?status=all");
@@ -294,9 +294,9 @@ public sealed class BarberRequestTests
             $"request-approve-{Guid.NewGuid():N}@barbersearch.test");
 
         // Живой refresh-токен заявителя: одобрение обязано его отозвать.
-        var applicantTokens = await app.LoginAsync(customer.Email);
+        var applicantTokens = await app.LoginAsync(customer.Email.Value);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
             NewRequest());
@@ -309,7 +309,7 @@ public sealed class BarberRequestTests
         var admin = await app.CreateUserAsync(
             $"request-approve-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var approved = await app.Client.PostAsync(
             $"api/admin/barber-requests/{request.Id}/approval",
@@ -324,7 +324,7 @@ public sealed class BarberRequestTests
         Assert.NotNull(approvedBody.ReviewedAt);
         Assert.Null(approvedBody.RejectionReason);
         Assert.Equal(customer.Id, approvedBody.Applicant.Id);
-        Assert.Equal(customer.Email, approvedBody.Applicant.Email);
+        Assert.Equal(customer.Email.Value, approvedBody.Applicant.Email);
 
         await using (var scope = app.Services.CreateAsyncScope())
         {
@@ -379,9 +379,9 @@ public sealed class BarberRequestTests
         await using var app = await TestApp.StartAsync(_database);
         var customer = await app.CreateUserAsync(
             $"request-reject-{Guid.NewGuid():N}@barbersearch.test");
-        await app.LoginAsync(customer.Email);
+        await app.LoginAsync(customer.Email.Value);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
             NewRequest());
@@ -394,7 +394,7 @@ public sealed class BarberRequestTests
         var admin = await app.CreateUserAsync(
             $"request-reject-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var rejected = await app.Client.PostAsJsonAsync(
             $"api/admin/barber-requests/{request.Id}/rejection",
@@ -439,7 +439,7 @@ public sealed class BarberRequestTests
 
         var other = await app.CreateUserAsync(
             $"request-reject-other-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(other.Email);
+        await app.AuthenticateAsync(other.Email.Value);
         using var otherCreated = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
             NewRequest());
@@ -449,7 +449,7 @@ public sealed class BarberRequestTests
             JsonOptions);
         Assert.NotNull(otherRequest);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var emptyReason = await app.Client.PostAsJsonAsync(
             $"api/admin/barber-requests/{otherRequest.Id}/rejection",
@@ -482,7 +482,7 @@ public sealed class BarberRequestTests
         await using var app = await TestApp.StartAsync(_database);
         var customer = await app.CreateUserAsync(
             $"request-resubmit-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
@@ -496,7 +496,7 @@ public sealed class BarberRequestTests
         var admin = await app.CreateUserAsync(
             $"request-resubmit-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var rejected = await app.Client.PostAsJsonAsync(
             $"api/admin/barber-requests/{first.Id}/rejection",
@@ -505,7 +505,7 @@ public sealed class BarberRequestTests
 
         // После отказа частичный уникальный индекс больше не держит пользователя:
         // новая Pending-заявка проходит предпроверку и вставляется.
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using var again = await app.Client.PostAsJsonAsync(
             "api/barber-requests",
@@ -545,7 +545,7 @@ public sealed class BarberRequestTests
             $"request-detail-applicant-{Guid.NewGuid():N}@barbersearch.test");
 
         var requestId = await SeedAsync(app, applicant.Id, BaseTime);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var detail = await app.Client.GetAsync(
             $"api/admin/barber-requests/{requestId}");
@@ -556,7 +556,7 @@ public sealed class BarberRequestTests
         Assert.NotNull(detailBody);
         Assert.Equal(requestId, detailBody.Id);
         Assert.Equal(BarberRequestStatus.Pending, detailBody.Status);
-        Assert.Equal(applicant.Email, detailBody.Applicant.Email);
+        Assert.Equal(applicant.Email.Value, detailBody.Applicant.Email);
 
         using var missing = await app.Client.GetAsync(
             $"api/admin/barber-requests/{Guid.NewGuid()}");
@@ -573,7 +573,7 @@ public sealed class BarberRequestTests
         var customer = await app.CreateUserAsync(
             $"request-csrf-{Guid.NewGuid():N}@barbersearch.test");
 
-        await using var session = await app.SignInWithCookieAsync(customer.Email);
+        await using var session = await app.SignInWithCookieAsync(customer.Email.Value);
         using var response = await session.Client.PostAsJsonAsync(
             "api/barber-requests",
             NewRequest());

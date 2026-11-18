@@ -64,7 +64,7 @@ public sealed class BookingRescheduleApiTests
             originalStart,
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var response = await RescheduleAsync(app.Client, booking.Id, targetStart))
         {
@@ -114,7 +114,7 @@ public sealed class BookingRescheduleApiTests
             targetStart,
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var response = await RescheduleAsync(app.Client, booking.Id, targetStart))
         {
@@ -158,7 +158,7 @@ public sealed class BookingRescheduleApiTests
             Local(timeOffDate, 13),
             Local(timeOffDate, 14));
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         await AssertSlotConflictAsync(app, booking.Id, Local(bookingDate, 9));
         await AssertSlotConflictAsync(app, booking.Id, Local(dayOffDate, 12));
@@ -191,7 +191,7 @@ public sealed class BookingRescheduleApiTests
             DateTimeOffset.UtcNow.AddDays(-1),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var past = await RescheduleAsync(app.Client, booking.Id, DateTimeOffset.UtcNow.AddHours(-1)))
         {
@@ -249,7 +249,7 @@ public sealed class BookingRescheduleApiTests
             Local(date, 11),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         var responses = await Task.WhenAll(
             RescheduleAsync(app.Client, booking.Id, firstTarget),
@@ -307,14 +307,14 @@ public sealed class BookingRescheduleApiTests
 
         var booking = await data.CreateGuestBookingAsync(barber, Local(date, 11));
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var forbidden = await RescheduleAsync(app.Client, booking.Id, targetStart))
         {
             Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         }
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         using (var moved = await RescheduleAsync(app.Client, booking.Id, targetStart))
         {
@@ -345,7 +345,7 @@ public sealed class BookingRescheduleApiTests
             Local(date, 11),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using (var response = await RescheduleAsync(app.Client, booking.Id, targetStart))
         {
@@ -369,7 +369,7 @@ public sealed class BookingRescheduleApiTests
         var originalStart = Local(date, 11);
         var targetStart = Local(date, 12);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         Guid bookingId;
 
@@ -451,7 +451,7 @@ public sealed class BookingRescheduleApiTests
             BookingStatus.Confirmed,
             durationMinutes: 45);
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         var beforePriceChange = await ReadRescheduleSlotsAsync(app.Client, booking.Id, date);
         Assert.Equal(45, beforePriceChange.DurationMinutes);
@@ -488,7 +488,7 @@ public sealed class BookingRescheduleApiTests
             Local(date, 11),
             BookingStatus.Confirmed);
 
-        await app.AuthenticateAsync(foreigner.Email);
+        await app.AuthenticateAsync(foreigner.Email.Value);
 
         using (var forbidden = await GetRescheduleSlotsAsync(app.Client, booking.Id, date))
         {
@@ -504,7 +504,7 @@ public sealed class BookingRescheduleApiTests
                 StringComparison.Ordinal);
         }
 
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         using (var withoutDate = await app.Client.GetAsync(
                    $"api/bookings/{booking.Id}/reschedule-slots"))

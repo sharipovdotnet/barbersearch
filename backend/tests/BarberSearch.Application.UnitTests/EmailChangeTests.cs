@@ -608,7 +608,7 @@ public class EmailChangeTests
         Assert.True(result.IsSuccess);
 
         var user = context.StoredUser;
-        Assert.Equal(Context.NewAddress, user.Email);
+        Assert.Equal(Context.NewAddress, user.Email.Value);
         Assert.True(user.IsEmailVerified);
         Assert.NotEqual(beforeStamp, user.SecurityStamp);
 
@@ -644,7 +644,7 @@ public class EmailChangeTests
             CancellationToken.None);
 
         Assert.True(repeated.IsSuccess);
-        Assert.Equal(Context.NewAddress, context.StoredUser.Email);
+        Assert.Equal(Context.NewAddress, context.StoredUser.Email.Value);
         Assert.Equal(tokenUpdates, context.Tokens.UpdateCallCount);
         Assert.Equal(userUpdates, context.Users.UpdateCallCount);
         Assert.Equal(revokeCalls, context.RefreshTokens.RevokeAllCallCount);
@@ -719,7 +719,7 @@ public class EmailChangeTests
         Assert.Equal(
             ApiErrorCodes.Auth.EmailChangeInvalid,
             Assert.Single(result.Error.Errors).Code);
-        Assert.Equal(Context.OldAddress, context.StoredUser.Email);
+        Assert.Equal(Context.OldAddress, context.StoredUser.Email.Value);
         Assert.Null(context.StoredTokens.Single().ConsumedAt);
     }
 
@@ -739,7 +739,7 @@ public class EmailChangeTests
         Assert.Equal(
             ApiErrorCodes.Auth.EmailChangeInvalid,
             Assert.Single(result.Error.Errors).Code);
-        Assert.Equal(Context.OldAddress, context.StoredUser.Email);
+        Assert.Equal(Context.OldAddress, context.StoredUser.Email.Value);
     }
 
     [Fact]
@@ -776,7 +776,7 @@ public class EmailChangeTests
         Assert.Equal(ErrorType.CONFLICT, error.Type);
         Assert.Equal(ApiErrorCodes.User.ChangeEmailEmailTaken, error.Code);
 
-        Assert.Equal(Context.OldAddress, context.StoredUser.Email);
+        Assert.Equal(Context.OldAddress, context.StoredUser.Email.Value);
         Assert.Null(context.StoredTokens.Single().ConsumedAt);
         Assert.Equal(0, context.RefreshTokens.RevokeAllCallCount);
     }
@@ -829,7 +829,7 @@ public class EmailChangeTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(Context.NewAddress, context.StoredUser.Email);
+        Assert.Equal(Context.NewAddress, context.StoredUser.Email.Value);
     }
 
     [Fact]
@@ -867,7 +867,7 @@ public class EmailChangeTests
         // Осознанное поведение, как у подтверждения email: владение адресом не зависит
         // от состояния аккаунта, а деактивированный пользователь всё равно не войдёт.
         Assert.True(result.IsSuccess);
-        Assert.Equal(Context.NewAddress, context.StoredUser.Email);
+        Assert.Equal(Context.NewAddress, context.StoredUser.Email.Value);
         Assert.False(context.StoredUser.IsActive);
     }
 
@@ -885,7 +885,7 @@ public class EmailChangeTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(1, context.UnitOfWork.RollbackCount);
-        Assert.Equal(Context.OldAddress, context.StoredUser.Email);
+        Assert.Equal(Context.OldAddress, context.StoredUser.Email.Value);
         Assert.False(context.StoredUser.IsEmailVerified);
         Assert.Equal(0, context.RefreshTokens.RevokeAllCallCount);
     }
@@ -906,7 +906,7 @@ public class EmailChangeTests
         Assert.Equal(1, context.UnitOfWork.RollbackCount);
 
         // Частичного результата «адрес сменён, старые сессии живы» быть не должно.
-        Assert.Equal(Context.OldAddress, context.StoredUser.Email);
+        Assert.Equal(Context.OldAddress, context.StoredUser.Email.Value);
         Assert.False(context.StoredUser.IsEmailVerified);
         Assert.Null(context.StoredTokens.Single().ConsumedAt);
     }

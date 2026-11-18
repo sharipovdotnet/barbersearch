@@ -269,7 +269,7 @@ public class BookingOwnershipTests
         Assert.Equal(BookingStatus.Cancelled, booking.Status);
 
         var row = Assert.Single(outbox.Rows);
-        Assert.Equal(customer.Email, row.ToEmail);
+        Assert.Equal(customer.Email.Value, row.ToEmail);
         Assert.Equal("Запись отменена — Салон «Барбершоп»", row.Subject);
         Assert.Equal($"booking:{booking.Id:D}:cancelled", row.DeduplicationKey);
         Assert.Equal(1, users.GetByIdCallCount);

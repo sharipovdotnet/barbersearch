@@ -48,7 +48,7 @@ public sealed class MyReviewTests
         using var anonymous = await app.Client.GetAsync("api/reviews/mine");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        await app.AuthenticateAsync(author.Email);
+        await app.AuthenticateAsync(author.Email.Value);
 
         using var mine = await app.Client.GetAsync("api/reviews/mine");
         Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
@@ -89,14 +89,14 @@ public sealed class MyReviewTests
         var reviewId = await SeedReviewAsync(app, barber, author.Id, 4, "To be deleted");
         var foreignId = await SeedReviewAsync(app, barber, stranger.Id, 2, "Keep me");
 
-        await app.AuthenticateAsync(stranger.Email);
+        await app.AuthenticateAsync(stranger.Email.Value);
 
         using var forbidden = await app.Client.DeleteAsync($"api/reviews/{reviewId}");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         Assert.Contains("auth.forbidden", await forbidden.Content.ReadAsStringAsync());
         Assert.True(await ReviewExistsAsync(app, reviewId));
 
-        await app.AuthenticateAsync(author.Email);
+        await app.AuthenticateAsync(author.Email.Value);
 
         using var deleted = await app.Client.DeleteAsync($"api/reviews/{reviewId}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
@@ -125,7 +125,7 @@ public sealed class MyReviewTests
 
         var reviewId = await SeedReviewAsync(app, barber, author.Id, 4, "Counted in the rating");
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         using var published = await app.Client.PostAsync(
             $"api/reviews/{reviewId}/publication",
@@ -136,7 +136,7 @@ public sealed class MyReviewTests
         Assert.Equal(4.00m, rating);
         Assert.Equal(1, count);
 
-        await app.AuthenticateAsync(author.Email);
+        await app.AuthenticateAsync(author.Email.Value);
 
         using var deleted = await app.Client.DeleteAsync($"api/reviews/{reviewId}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
@@ -152,7 +152,7 @@ public sealed class MyReviewTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var author = await app.CreateUserAsync("mine-errors@barbersearch.test");
-        await app.AuthenticateAsync(author.Email);
+        await app.AuthenticateAsync(author.Email.Value);
 
         using var pageSize = await app.Client.GetAsync("api/reviews/mine?pageSize=101");
         Assert.Equal(HttpStatusCode.BadRequest, pageSize.StatusCode);

@@ -58,7 +58,7 @@ public sealed class MyProfileReadTests
             await db.SaveChangesAsync();
         }
 
-        await app.AuthenticateAsync(user.Email);
+        await app.AuthenticateAsync(user.Email.Value);
 
         using var response = await app.Client.GetAsync("api/users/me");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -66,7 +66,7 @@ public sealed class MyProfileReadTests
         var body = await response.Content.ReadFromJsonAsync<MyProfileResponse>(JsonOptions);
         Assert.NotNull(body);
         Assert.Equal(user.Id, body.Id);
-        Assert.Equal(user.Email, body.Email);
+        Assert.Equal(user.Email.Value, body.Email);
         Assert.Equal("Мария", body.FirstName);
         Assert.Equal("Кузнецова", body.LastName);
         Assert.Equal("+79991234567", body.PhoneNumber);

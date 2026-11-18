@@ -47,7 +47,16 @@ public class User : AggregateRoot
 
     private readonly List<FavoriteBarber> _favoriteBarbers = [];
 
-    public string Email { get; private set; } = null!;
+    /// <summary>
+    /// Адрес электронной почты в каноническом виде.
+    /// </summary>
+    /// <remarks>
+    /// Хранится объект-значение <see cref="BarberSearch.Domain.Users.ValueObjects.Email"/>:
+    /// нормализация и проверка синтаксиса живут в нём, а не в агрегате. В базе каноническое
+    /// значение лежит в колонке <c>users.email</c> типа <c>citext</c>, поэтому уникальный
+    /// индекс и вход сравнивают адрес без учёта регистра.
+    /// </remarks>
+    public Email Email { get; private set; } = null!;
     public string PasswordHash { get; private set; } = null!;
 
     public string FirstName { get; private set; } = null!;
@@ -200,9 +209,8 @@ public class User : AggregateRoot
         UserConsent? consent = null)
     {
         var errors = DomainErrors.Collect();
-        var normalizedEmail = NormalizeEmail(email);
 
-        Validate(normalizedEmail, passwordHash, firstName, lastName, role, errors);
+        Validate(email, passwordHash, firstName, lastName, role, errors, out var parsedEmail);
 
         if (errors.Count != 0)
         {
@@ -211,7 +219,7 @@ public class User : AggregateRoot
 
         return new User
         {
-            Email = normalizedEmail,
+            Email = parsedEmail!,
             PasswordHash = passwordHash,
             FirstName = firstName,
             LastName = lastName,
@@ -231,10 +239,12 @@ public class User : AggregateRoot
     /// Канонический вид — часть контракта хранения: по нему строится уникальный индекс,
     /// и в нём адрес сравнивается при входе. Без нормализации <c>User@x</c> и <c>user@x</c>
     /// становились двумя пользователями, а аккаунт с пробелом по краям нельзя было открыть
-    /// для входа (R-03).
+    /// для входа (R-03). Правило живёт в объекте-значении
+    /// <see cref="BarberSearch.Domain.Users.ValueObjects.Email"/>; метод оставлен точкой входа
+    /// для Application, которой нужен канонический адрес до создания агрегата.
     /// </remarks>
     public static string NormalizeEmail(string? email)
-        => EmailAddress.Normalize(email);
+        => Email.Normalize(email);
 
     /// <summary>
     /// Обновляет имя, фамилию, телефон и аватар пользователя одной операцией.
@@ -642,21 +652,20 @@ public class User : AggregateRoot
     /// ответ «адрес совпадает». При ошибке адрес, флаг и stamp не меняются.
     /// </para>
     /// </remarks>
-    /// <param name="email">Новый адрес; нормализуется внутри.</param>
+    /// <param name="email">Новый адрес; нормализуется и проверяется объектом-значением.</param>
     public UnitResult<Failure> ChangeEmail(string email)
     {
-        var normalized = EmailAddress.Normalize(email);
-
-        var emailError = EmailAddress.Validate(
-            normalized,
+        var emailError = Email.Validate(
+            email,
             "user.changeEmail.newEmail",
-            "newEmail");
+            "newEmail",
+            out var parsedEmail);
         if (emailError is not null)
         {
             return new Failure(emailError);
         }
 
-        if (string.Equals(Email, normalized, StringComparison.Ordinal))
+        if (Email == parsedEmail)
         {
             return new Failure(Error.Validation(
                 "user.changeEmail.sameEmail",
@@ -664,7 +673,7 @@ public class User : AggregateRoot
                 "newEmail"));
         }
 
-        Email = normalized;
+        Email = parsedEmail!;
         IsEmailVerified = true;
 
         // Ротация stamp — единственный механизм, который гасит уже выданные cookie и
@@ -966,9 +975,10 @@ public class User : AggregateRoot
         string? firstName,
         string? lastName,
         UserRole role,
-        List<Error> errors)
+        List<Error> errors,
+        out Email? parsedEmail)
     {
-        var emailError = EmailAddress.Validate(email, "user.email", nameof(email));
+        var emailError = Email.Validate(email, "user.email", nameof(email), out parsedEmail);
         if (emailError is not null)
         {
             errors.Add(emailError);

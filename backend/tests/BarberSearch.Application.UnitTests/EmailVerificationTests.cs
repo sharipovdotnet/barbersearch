@@ -72,7 +72,7 @@ public class EmailVerificationTests
         Assert.True(result.IsSuccess);
 
         var message = Assert.Single(context.Outbox.Messages);
-        Assert.Equal(context.User.Email, message.To);
+        Assert.Equal(context.User.Email.Value, message.To);
         Assert.Equal(EmailVerificationMessage.SUBJECT, message.Subject);
 
         var match = Regex.Match(
@@ -97,7 +97,7 @@ public class EmailVerificationTests
 
         // Пароль, id пользователя и адрес в теле письма не появляются.
         Assert.DoesNotContain(context.User.Id.ToString(), message.HtmlBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(context.User.Email, message.HtmlBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(context.User.Email.Value, message.HtmlBody, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -200,7 +200,7 @@ public class EmailVerificationTests
         Assert.Equal(0, context.Sender.SendCallCount);
 
         var queued = Assert.Single(context.Outbox.Rows);
-        Assert.Equal(context.User.Email, queued.ToEmail);
+        Assert.Equal(context.User.Email.Value, queued.ToEmail);
         Assert.Equal(EmailVerificationMessage.SUBJECT, queued.Subject);
         Assert.Equal(0, queued.Attempts);
         Assert.Null(queued.SentAt);

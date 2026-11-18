@@ -104,7 +104,7 @@ public sealed class PushBookingCreatedTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customer.Id, "integration-device-token");
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var startAt = DateTimeOffset.UtcNow.AddDays(2);
         using var created = await app.Client.PostAsJsonAsync(
@@ -155,7 +155,7 @@ public sealed class PushBookingCreatedTests
         var barber = await data.CreateBookableBarberAsync("Push Guest Barber");
         await LinkBarberProfileAsync(app, barber);
 
-        await app.AuthenticateAsync(barber.User.Email);
+        await app.AuthenticateAsync(barber.User.Email.Value);
 
         var startAt = DateTimeOffset.UtcNow.AddDays(2);
         using var created = await app.Client.PostAsJsonAsync(

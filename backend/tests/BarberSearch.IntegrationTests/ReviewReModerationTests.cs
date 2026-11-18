@@ -48,7 +48,7 @@ public sealed class ReviewReModerationTests
             rating: 4,
             published: true);
 
-        await using (var session = await app.SignInWithCookieAsync(customer.Email))
+        await using (var session = await app.SignInWithCookieAsync(customer.Email.Value))
         {
             using var response = await UpdateAsync(
                 session,
@@ -61,7 +61,7 @@ public sealed class ReviewReModerationTests
             Assert.False(body.IsPublished);
         }
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         var pending = await ReadPageAsync(app, PENDING_ENDPOINT);
         var queued = Assert.Single(pending.Items, item => item.Id == reviewId);
@@ -90,7 +90,7 @@ public sealed class ReviewReModerationTests
             rating: 4,
             published: true);
 
-        await using var session = await app.SignInWithCookieAsync(customer.Email);
+        await using var session = await app.SignInWithCookieAsync(customer.Email.Value);
 
         // Текст тот же, что в сиде, меняется только оценка: повторная модерация не нужна.
         using var response = await UpdateAsync(

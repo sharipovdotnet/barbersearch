@@ -102,7 +102,7 @@ internal static class AvatarModerationApi
             $"avatar-moderation-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        var session = await app.SignInWithCookieAsync(admin.Email);
+        var session = await app.SignInWithCookieAsync(admin.Email.Value);
 
         return new AdminAvatarSession(admin, session);
     }

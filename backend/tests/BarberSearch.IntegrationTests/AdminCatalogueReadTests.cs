@@ -49,7 +49,7 @@ public sealed class AdminCatalogueReadTests
 
         var customer = await app.CreateUserAsync(
             $"catalogue-customer-{Guid.NewGuid():N}@barbersearch.test");
-        await app.AuthenticateAsync(customer.Email);
+        await app.AuthenticateAsync(customer.Email.Value);
 
         foreach (var url in READ_URLS)
         {
@@ -61,7 +61,7 @@ public sealed class AdminCatalogueReadTests
         var barber = await app.CreateUserAsync(
             $"catalogue-barber-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Barber);
-        await app.AuthenticateAsync(barber.Email);
+        await app.AuthenticateAsync(barber.Email.Value);
 
         foreach (var url in READ_URLS)
         {
@@ -73,7 +73,7 @@ public sealed class AdminCatalogueReadTests
         var admin = await app.CreateUserAsync(
             $"catalogue-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
 
         foreach (var url in READ_URLS)
         {
@@ -421,7 +421,7 @@ public sealed class AdminCatalogueReadTests
             $"catalogue-read-admin-{Guid.NewGuid():N}@barbersearch.test",
             UserRole.Admin);
 
-        await app.AuthenticateAsync(admin.Email);
+        await app.AuthenticateAsync(admin.Email.Value);
     }
 
     private static async Task<IReadOnlyList<JsonElement>> ReadRowsAsync(

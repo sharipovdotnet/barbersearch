@@ -206,7 +206,7 @@ public sealed class BarberRequestRepository
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.Email
+                Email = (string)user.Email
             });
 
         var joined = from request in requests

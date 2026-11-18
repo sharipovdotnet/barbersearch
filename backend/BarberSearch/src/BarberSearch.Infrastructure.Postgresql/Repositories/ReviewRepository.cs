@@ -497,7 +497,7 @@ public sealed class ReviewRepository : RepositoryBase<Review>, IReviewRepository
                 user.Id,
                 user.FirstName,
                 user.LastName,
-                user.Email
+                Email = (string)user.Email
             });
 
         var barbers = context.BarberProfiles

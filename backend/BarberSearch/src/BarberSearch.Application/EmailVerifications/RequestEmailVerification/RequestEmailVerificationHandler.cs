@@ -149,7 +149,7 @@ public sealed class RequestEmailVerificationHandler
         var link = $"{publicUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}";
 
         var content = EmailVerificationMessage.Create(
-            user.Email,
+            user.Email.Value,
             user.FirstName,
             link,
             (int)EmailVerificationLifetime.TOKEN_LIFETIME.TotalHours);

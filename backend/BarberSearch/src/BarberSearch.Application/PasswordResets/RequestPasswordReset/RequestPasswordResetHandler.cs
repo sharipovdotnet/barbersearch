@@ -171,7 +171,7 @@ public sealed class RequestPasswordResetHandler
         var link = $"{publicUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
 
         var content = PasswordResetMessage.Create(
-            user.Email,
+            user.Email.Value,
             user.FirstName,
             link,
             (int)PasswordResetLifetime.TOKEN_LIFETIME.TotalMinutes);
