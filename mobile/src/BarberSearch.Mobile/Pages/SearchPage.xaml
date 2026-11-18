@@ -70,6 +70,17 @@
                             Text="{Binding City}" />
 
                         <!--
+                            Пока город определяется по геопозиции, поле ещё пусто: подпись
+                            объясняет и пустоту, и диалог разрешения, который система
+                            показывает поверх экрана при первом открытии вкладки.
+                        -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding IsCityLocating}"
+                            Text="{loc:Translate Key='Определяем геопозицию…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!--
                             Подсказки города — строки прямо под полем: у MAUI нет нативного
                             комбобокса, а выпадающее окно пришлось бы рисовать вручную поверх
                             формы. Строка 44 pt: палец попадает с первого раза, как у карточек.

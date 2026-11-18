@@ -83,10 +83,18 @@ under the field. A tap fills the bare city name — the server compares city str
 screen before «Найти»; a failed suggestion call (feature off, rate limit, no network) is silent and
 leaves the field a plain input, and an empty answer shows «Ничего не найдено.».
 
-The same request carries an optional `latitude`/`longitude` pair. On the first «Найти» the screen
-asks for the location permission and reads the device position (medium accuracy, 10-second timeout,
-a fresh last-known fix is reused for five minutes); a refusal or a missing fix does not block the
-search — the request just goes without coordinates and the screen says why, with «Повторить». With
+The field also fills itself from the device position. On the tab's first appearance the screen
+reverse-geocodes the position (`Geocoding.Default`, a five-second cap) and puts the placemark's
+locality into the field, normalizing «г. Москва» to «Москва» for the exact-match filter. A denied
+permission, a missing fix, no placemark or a geocoder error all write «Москва», the product's
+default city; a city typed by hand or picked from the suggestions is never overwritten, and
+«Повторить» on the location hint re-geocodes and replaces the default once access is granted.
+
+The same request carries an optional `latitude`/`longitude` pair. When the tab first appears the
+screen asks for the location permission and reads the device position (medium accuracy, 10-second
+timeout, a fresh last-known fix is reused for five minutes); «Найти» reuses that read. A refusal or
+a missing fix does not block the search — the request just goes without coordinates and the screen
+says why, with «Повторить». With
 the pair the server orders the page by the distance to the barber's nearest active salon, sets the
 `distanceKm` of every row and the card shows «850 м» / «1,2 км». Without it the order stays the
 web's rating one. The position is read once per screen and is never stored or sent anywhere except

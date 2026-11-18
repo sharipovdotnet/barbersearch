@@ -554,6 +554,230 @@ public sealed class SearchViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAsync_LocationAvailable_FillsCityFromGeocoder()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(56.8389, 60.6057)));
+        var cityLocator = new FakeCityLocator { City = "Екатеринбург" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        Assert.Equal("Екатеринбург", viewModel.City);
+        // Геокодер получил ту самую точку, которую прочитал сервис геопозиции.
+        Assert.Equal(new GeoPosition(56.8389, 60.6057), Assert.Single(cityLocator.Positions));
+        Assert.False(viewModel.IsCityLocating);
+        Assert.Equal(1, location.Calls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_GeocoderReturnsPrefixedCity_StripsPrefix()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var cityLocator = new FakeCityLocator { City = "г. Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        // В поле идёт голое имя: сервер сравнивает город точно, «г. Казань» не нашло бы салон.
+        Assert.Equal("Казань", viewModel.City);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_LocationDenied_FillsDefaultCity()
+    {
+        var api = FakeApi.Returning(Page());
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, new FakeLocationService(LocationResult.Denied()), cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        Assert.Equal("Москва", viewModel.City);
+        // Без координат геокодеру нечего определять: его не зовут вовсе.
+        Assert.Empty(cityLocator.Positions);
+        Assert.False(viewModel.IsCityLocating);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_LocationUnavailable_FillsDefaultCity()
+    {
+        var api = FakeApi.Returning(Page());
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, new FakeLocationService(LocationResult.Unavailable()), cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Empty(cityLocator.Positions);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_GeocoderReturnsNull_FillsDefaultCity()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.75, 37.62)));
+        var viewModel = Create(api, location, new FakeCityLocator());
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Equal("Москва", SearchViewModel.DefaultCity);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_GeocoderThrows_FillsDefaultCity()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.75, 37.62)));
+        var cityLocator = new FakeCityLocator
+        {
+            Failure = new HttpRequestException("geocoder is down"),
+        };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        // Сбой геокодера — это подсказка поля, а не ошибка экрана.
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.False(viewModel.IsCityLocating);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_CityEnteredByUser_KeepsUserCity()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        viewModel.City = "Тюмень";
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        // Автоподстановка не перетирает город, который человек набрал сам.
+        Assert.Equal("Тюмень", viewModel.City);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AutomaticCity_DoesNotRequestSuggestions()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        // Программная подстановка — не ввод: список подсказок при запуске вкладки не открывается.
+        Assert.Equal("Казань", viewModel.City);
+        Assert.Empty(api.CitySuggestionQueries);
+        Assert.False(viewModel.CitySuggestions.IsVisible);
+    }
+
+    [Fact]
+    public async Task SearchAsync_AfterCityAutoFill_SendsCityAndCoordinatesWithoutSecondRead()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса", 0.4)));
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var filters = Assert.Single(api.SearchCalls);
+
+        // Автоподстановка переиспользует уже прочитанную точку: второго разрешения и GPS нет.
+        Assert.Equal("Казань", filters.City);
+        Assert.Equal(55.79, filters.Latitude);
+        Assert.Equal(49.12, filters.Longitude);
+        Assert.Equal(1, location.Calls);
+        Assert.Equal(1, cityLocator.Calls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_SecondCall_DoesNotLocateCityAgain()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        // Экран читает геопозицию один раз за жизнь, а не при каждом появлении вкладки.
+        Assert.Equal(1, location.Calls);
+        Assert.Equal(1, cityLocator.Calls);
+        Assert.Equal("Казань", viewModel.City);
+    }
+
+    [Fact]
+    public async Task RetryLocationCommand_AfterDeniedFirstAttempt_ReplacesDefaultCity()
+    {
+        var api = FakeApi.Returning(Page(Barber("Алиса", 0.4)));
+        var location = new FakeLocationService(LocationResult.Denied());
+        var cityLocator = new FakeCityLocator { City = "Казань" };
+        var viewModel = Create(api, location, cityLocator);
+
+        await viewModel.InitializeAsync();
+        await viewModel.CityFillCompletion;
+
+        Assert.Equal("Москва", viewModel.City);
+        Assert.Equal(1, location.Calls);
+
+        // Человек разрешил доступ в настройках и нажал «Повторить»: «Москва» уступает городу.
+        location.Result = LocationResult.Ok(new GeoPosition(55.79, 49.12));
+
+        await viewModel.RetryLocationCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, location.Calls);
+        Assert.Equal("Казань", viewModel.City);
+        Assert.Equal("Казань", api.SearchCalls[^1].City);
+        Assert.Equal(55.79, api.SearchCalls[^1].Latitude);
+        Assert.Equal(49.12, api.SearchCalls[^1].Longitude);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_GeocoderPending_ReportsCityLocatingUntilCompletion()
+    {
+        var api = FakeApi.Returning(Page());
+        var location = new FakeLocationService(LocationResult.Ok(new GeoPosition(55.79, 49.12)));
+        var gate = new TaskCompletionSource();
+        var cityLocator = new FakeCityLocator { City = "Казань", Gate = gate };
+        var viewModel = Create(api, location, cityLocator);
+
+        var initialization = viewModel.InitializeAsync();
+
+        // Геокодер ещё думает: поле пустое, а экран объясняет задержку.
+        Assert.True(viewModel.IsCityLocating);
+        Assert.Equal(string.Empty, viewModel.City);
+
+        gate.SetResult();
+
+        await initialization;
+        await viewModel.CityFillCompletion;
+
+        Assert.False(viewModel.IsCityLocating);
+        Assert.Equal("Казань", viewModel.City);
+    }
+
+    [Fact]
     public async Task StartAutoRetry_TransportFailure_RetriesUntilSuccess()
     {
         var api = FakeApi.Returning(Page(Barber("Алиса")));
@@ -1271,12 +1495,15 @@ public sealed class SearchViewModelTests
     /// </summary>
     /// <remarks>
     /// Без явной геопозиции подменённый сервис отвечает «недоступна»: старые проверки поиска
-    /// не должны незаметно зависеть от координат. Второй цикл передаётся отдельным параметром:
-    /// у справочников своя жизнь, и общий цикл связал бы их сбои с выдачей.
+    /// не должны незаметно зависеть от координат. Подменённый геокодер по умолчанию города
+    /// не знает, поэтому автоподстановка даёт «Москву» — город по умолчанию, и старые проверки
+    /// не зависят и от него. Второй цикл передаётся отдельным параметром: у справочников своя
+    /// жизнь, и общий цикл связал бы их сбои с выдачей.
     /// </remarks>
     private static SearchViewModel Create(
         FakeApi api,
         ILocationService? locationService = null,
+        ICityLocator? cityLocator = null,
         AutoRetryLoop? autoRetry = null,
         AutoRetryLoop? catalogsAutoRetry = null) =>
         new(
@@ -1285,6 +1512,7 @@ public sealed class SearchViewModelTests
             new FixedTimeProvider(Today),
             // Подсказки без паузы: тест набирает город и сразу видит результат, не ожидая 250 мс.
             new CitySuggestions(api, static (_, _) => Task.CompletedTask),
+            cityLocator ?? new FakeCityLocator(),
             autoRetry,
             catalogsAutoRetry);
 
@@ -1436,6 +1664,59 @@ public sealed class SearchViewModelTests
             Calls++;
 
             return Task.FromResult(Result);
+        }
+    }
+
+    /// <summary>
+    /// Подменённый геокодер: запоминает полученные точки и число вызовов, отдаёт заданный город,
+    /// падает заданным исключением или висит на внешнем сигнале.
+    /// </summary>
+    private sealed class FakeCityLocator : ICityLocator
+    {
+        /// <summary>
+        /// Город, который «знает» геокодер; <c>null</c> — город определить не удалось.
+        /// </summary>
+        public string? City { get; set; }
+
+        /// <summary>
+        /// Сбой геокодера вместо ответа: экран обязан подставить город по умолчанию.
+        /// </summary>
+        public Exception? Failure { get; set; }
+
+        /// <summary>
+        /// Сигнал, до которого геокодер «думает»: так проверяется состояние экрана во время
+        /// подстановки, не ожидая реального времени.
+        /// </summary>
+        public TaskCompletionSource? Gate { get; set; }
+
+        /// <summary>
+        /// Точки, которые получил геокодер, в порядке вызовов.
+        /// </summary>
+        public List<GeoPosition> Positions { get; } = [];
+
+        /// <summary>
+        /// Сколько раз экран спрашивал название города.
+        /// </summary>
+        public int Calls { get; private set; }
+
+        public async Task<string?> GetCityAsync(
+            GeoPosition position,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Positions.Add(position);
+
+            if (Gate is { } gate)
+            {
+                await gate.Task;
+            }
+
+            if (Failure is { } failure)
+            {
+                throw failure;
+            }
+
+            return City;
         }
     }
 
