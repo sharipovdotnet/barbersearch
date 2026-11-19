@@ -191,6 +191,11 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IAdminRequestsApi, AdminRequestsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Превью модерации: раздача media отдаёт неодобренный кадр только администратору,
+        // поэтому байты читает приложение, а не загрузчик картинок платформы без заголовков.
+        builder.Services.AddHttpClient<IAdminMediaApi, AdminMediaApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
