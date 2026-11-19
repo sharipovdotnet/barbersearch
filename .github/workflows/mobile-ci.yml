@@ -63,9 +63,16 @@ jobs:
       - name: Install MAUI Android workload
         run: dotnet workload install maui-android
 
-      # Restore всего решения: тестам нужны те же пакеты, что и приложению.
-      - name: Restore
-        run: dotnet restore BarberSearch.Mobile.sln
+      # Restore тестов и Android-цели по отдельности: решение содержит net10.0-ios,
+      # и restore всего решения на Windows требует iOS-workload, которого здесь нет.
+      # Приложение восстанавливается без зависимостей — их уже восстановили тесты.
+      - name: Restore tests
+        run: dotnet restore tests/BarberSearch.Mobile.Core.Tests
+
+      - name: Restore Android app
+        run: >
+          dotnet restore src/BarberSearch.Mobile/BarberSearch.Mobile.csproj
+          -p:TargetFramework=net10.0-android --no-dependencies
 
       # Ядро проверяется без эмулятора: тесты не поднимают MAUI.
       - name: Tests

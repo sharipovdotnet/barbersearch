@@ -130,8 +130,10 @@ in Core owns both base addresses.
   in its own access gate and renders the avatar card, the email card, the profile form and the
   account details on one page. Mobile keeps one tab: the sign-in form without a session (with a
   «Нет аккаунта? Зарегистрироваться» link under it), then a
-  person card (initials, name, email, role, «Email не подтверждён») with «Личные данные», «Мои
-  отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over the profile stack.
+  person card (initials, name, email, role), the «Email не подтверждён» link under it and
+  «Личные данные», «Мои отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over
+  the profile stack. The link is the hub's only verification line: «Адрес не подтверждён.» belongs
+  to the email card in «Личные данные», and repeating it beside the link made one fact read as two.
   Avatars are out of this slice — nothing is uploaded, deleted or shown — but `avatarUrl` is still
   round-tripped on every profile save, because `PUT api/users/{id}/profile` replaces the whole file
   and `null` would erase a photo uploaded on the web. Email verification and the address change
