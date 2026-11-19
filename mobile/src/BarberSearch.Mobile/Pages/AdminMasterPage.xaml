@@ -46,7 +46,7 @@
                                         <Image
                                             Aspect="AspectFill"
                                             IsVisible="{Binding HasAvatar}"
-                                            Source="{Binding AvatarImageUrl}" />
+                                            Source="{Binding AvatarImageBytes, Converter={StaticResource ImageBytes}}" />
                                         <Label
                                             FontFamily="GeistSemiBold"
                                             FontSize="24"
@@ -271,8 +271,15 @@
                                                     <Image
                                                         Aspect="AspectFill"
                                                         SemanticProperties.Description="{Binding AltText}"
-                                                        Source="{Binding ImageUrl}" />
+                                                        Source="{Binding ImageBytes, Converter={StaticResource ImageBytes}}" />
                                                 </Border>
+                                                <Label
+                                                    Margin="6,4,6,0"
+                                                    FontSize="12"
+                                                    IsVisible="{Binding ImageFailed}"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{loc:Translate Key='Не удалось показать превью'}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                                 <Label
                                                     Margin="6,4,6,0"
                                                     FontSize="12"

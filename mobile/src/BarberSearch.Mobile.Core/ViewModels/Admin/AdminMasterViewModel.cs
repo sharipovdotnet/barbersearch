@@ -43,6 +43,11 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     /// </summary>
     private const string VerifyInactiveCode = "barberProfile.verify.inactive";
 
+    /// <summary>
+    /// Сколько превью читается одновременно: три картинки на экран — потолок.
+    /// </summary>
+    private const int MaxParallelPreviewDownloads = 3;
+
     private static string LoadFailedText => Loc.T("Не удалось загрузить профиль мастера.");
     private static string VerifyFailedText => Loc.T("Не удалось подтвердить профиль. Попробуйте ещё раз.");
     private static string UnverifyFailedText => Loc.T("Не удалось снять подтверждение. Попробуйте ещё раз.");
@@ -52,6 +57,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     private readonly TokenSession _session;
     private readonly TimeProvider _timeProvider;
     private readonly AutoRetryLoop _autoRetry;
+    private readonly IAdminMediaApi? _mediaApi;
 
     private AdminBarberDetailResponse? _detail;
     private Guid _masterId;
@@ -59,6 +65,11 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     private int _generation;
     private ApiFailureKind _failureKind;
     private bool _isPageVisible;
+
+    /// <summary>
+    /// Текущая фоновая загрузка превью: тесты ждут её, чтобы увидеть результат.
+    /// </summary>
+    private Task _previewLoads = Task.CompletedTask;
 
     /// <summary>
     /// Создаёт карточку мастера.
@@ -70,12 +81,17 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     /// <param name="autoRetry">
     /// Цикл автоповтора чтения; <c>null</c> — собственный цикл с обычным расписанием.
     /// </param>
+    /// <param name="mediaApi">
+    /// Чтение превью с Bearer; <c>null</c> — карточка остаётся без картинок, поля и решения
+    /// работают как раньше.
+    /// </param>
     public AdminMasterViewModel(
         IAdminMastersApi mastersApi,
         BarberSearchApiOptions apiOptions,
         TokenSession session,
         TimeProvider timeProvider,
-        AutoRetryLoop? autoRetry = null)
+        AutoRetryLoop? autoRetry = null,
+        IAdminMediaApi? mediaApi = null)
     {
         ArgumentNullException.ThrowIfNull(mastersApi);
         ArgumentNullException.ThrowIfNull(apiOptions);
@@ -86,6 +102,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         _apiOptions = apiOptions;
         _session = session;
         _timeProvider = timeProvider;
+        _mediaApi = mediaApi;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
@@ -214,6 +231,17 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private string? _avatarImageUrl;
+
+    /// <summary>
+    /// Байты аватара, прочитанные приложением с Bearer; <c>null</c> — превью ещё нет.
+    /// </summary>
+    /// <remarks>
+    /// Адрес остаётся в <see cref="AvatarImageUrl"/>: его читает загрузчик. Голый адрес
+    /// платформа открывает без заголовков, а раздача отдаёт неодобренный кадр только
+    /// администратору — поэтому байты приносит <see cref="IAdminMediaApi"/>.
+    /// </remarks>
+    [ObservableProperty]
+    private byte[]? _avatarImageBytes;
 
     /// <summary>
     /// Состояние аватара словами: «Фото скрыто», «Отклонено» или «На проверке».
@@ -379,6 +407,15 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     internal Task AutoRetryCompletion => _autoRetry.Completion;
 
     /// <summary>
+    /// Завершается, когда фоновая загрузка превью текущей карточки закончилась.
+    /// </summary>
+    /// <remarks>
+    /// Тестам нужен этот хвост: превью — фоновые задачи, и без ожидания проверка
+    /// гонялась бы с загрузкой. Сбой одного кадра задачу не роняет — картинка декоративна.
+    /// </remarks>
+    internal Task PreviewCompletion => _previewLoads;
+
+    /// <summary>
     /// Читает карточку по идентификатору из маршрута.
     /// </summary>
     /// <param name="masterId">Идентификатор профиля; <c>null</c> — ссылка без id.</param>
@@ -404,6 +441,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
             LoadErrorText = null;
             IsForbidden = false;
             IsSignInRequired = false;
+            AvatarImageBytes = null;
 
             NotifyDetailState();
         }
@@ -451,6 +489,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         IsUnverifyPanelOpen = false;
         ActionErrorText = null;
         AvatarImageUrl = null;
+        AvatarImageBytes = null;
         AvatarStateText = null;
         AvatarRejectionText = null;
 
@@ -646,6 +685,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
             }
 
             ApplyDetail(detail);
+            StartPreviewLoads(generation);
 
             _loadedId = _masterId;
             _failureKind = ApiFailureKind.None;
@@ -719,6 +759,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         var rejectionReason = detail.AvatarRejectionReason;
 
         _detail = detail;
+        AvatarImageBytes = null;
 
         DisplayName = detail.DisplayName;
         Email = detail.Email;
@@ -822,6 +863,161 @@ public sealed partial class AdminMasterViewModel : ObservableObject
                 detail.DisplayName,
                 index + 1));
         }
+    }
+
+    /// <summary>
+    /// Запускает фоновое чтение аватара и превью портфолио.
+    /// </summary>
+    /// <remarks>
+    /// Байты читает приложение: раздача <c>api/media/*</c> отдаёт неодобренный кадр только
+    /// администратору, а загрузчик картинок платформы ходит без заголовков. Без клиента
+    /// (<see cref="_mediaApi"/> равен <c>null</c>) карточка просто остаётся без картинок.
+    /// </remarks>
+    /// <param name="generation">Номер чтения карточки: ответ прошлого профиля не применяется.</param>
+    private void StartPreviewLoads(int generation)
+    {
+        if (_mediaApi is null)
+        {
+            return;
+        }
+
+        var avatarUrl = AvatarImageUrl;
+        var photos = Photos.ToArray();
+
+        _previewLoads = LoadPreviewsAsync(avatarUrl, photos, generation);
+    }
+
+    /// <summary>
+    /// Ждёт все загрузки превью одной карточки.
+    /// </summary>
+    /// <remarks>
+    /// Ограничитель создаётся на один набор картинок и освобождается вместе с ним: три
+    /// одновременных загрузки — потолок для аватара и плиток одного ответа. Поздний ответ
+    /// другого чтения отсекается по поколению, поэтому и второй ограничитель не нужен.
+    /// </remarks>
+    /// <param name="avatarUrl">Адрес аватара; <c>null</c> — кадра нет.</param>
+    /// <param name="photos">Плитки портфолио текущего ответа.</param>
+    /// <param name="generation">Номер чтения карточки.</param>
+    /// <returns>Задача, которая завершается вместе с последней картинкой.</returns>
+    private async Task LoadPreviewsAsync(
+        string? avatarUrl,
+        AdminMasterPhotoItem[] photos,
+        int generation)
+    {
+        using var downloads = new SemaphoreSlim(
+            MaxParallelPreviewDownloads,
+            MaxParallelPreviewDownloads);
+
+        var loads = new List<Task>(photos.Length + 1);
+
+        if (avatarUrl is not null)
+        {
+            loads.Add(LoadAvatarBytesAsync(downloads, avatarUrl, generation));
+        }
+
+        foreach (var photo in photos)
+        {
+            loads.Add(LoadPhotoBytesAsync(downloads, photo, generation));
+        }
+
+        await Task.WhenAll(loads);
+    }
+
+    /// <summary>
+    /// Читает байты аватара одной попыткой.
+    /// </summary>
+    /// <remarks>
+    /// Сбой ничего не меняет: у аватара нет строки об ошибке — в карточке личности она бы
+    /// переполнила блок, — и на месте кадра остаётся круглая подложка. Ответ прошлого
+    /// чтения отбрасывается по <see cref="_generation"/>.
+    /// </remarks>
+    /// <param name="downloads">Ограничитель одновременных загрузок.</param>
+    /// <param name="url">Абсолютный адрес аватара.</param>
+    /// <param name="generation">Номер чтения карточки.</param>
+    /// <returns>Задача загрузки.</returns>
+    private async Task LoadAvatarBytesAsync(
+        SemaphoreSlim downloads,
+        string url,
+        int generation)
+    {
+        byte[] bytes;
+
+        try
+        {
+            await downloads.WaitAsync();
+
+            try
+            {
+                bytes = await _mediaApi!.GetBytesAsync(url, CancellationToken.None);
+            }
+            finally
+            {
+                downloads.Release();
+            }
+        }
+        catch (Exception)
+        {
+            // Одна попытка на кадр: превью — украшение, а не данные.
+            return;
+        }
+
+        if (generation != _generation)
+        {
+            return;
+        }
+
+        AvatarImageBytes = bytes;
+    }
+
+    /// <summary>
+    /// Читает байты одного кадра портфолио одной попыткой.
+    /// </summary>
+    /// <remarks>
+    /// Сбой помечает плитку <see cref="AdminMasterPhotoItem.ImageFailed"/>: на экране
+    /// появляется строка «Не удалось показать превью», остальная карточка не меняется.
+    /// Ответ прошлого чтения отбрасывается по <see cref="_generation"/>.
+    /// </remarks>
+    /// <param name="downloads">Ограничитель одновременных загрузок.</param>
+    /// <param name="photo">Плитка, которой нужны байты.</param>
+    /// <param name="generation">Номер чтения карточки.</param>
+    /// <returns>Задача загрузки.</returns>
+    private async Task LoadPhotoBytesAsync(
+        SemaphoreSlim downloads,
+        AdminMasterPhotoItem photo,
+        int generation)
+    {
+        byte[] bytes;
+
+        try
+        {
+            await downloads.WaitAsync();
+
+            try
+            {
+                bytes = await _mediaApi!.GetBytesAsync(photo.ImageUrl, CancellationToken.None);
+            }
+            finally
+            {
+                downloads.Release();
+            }
+        }
+        catch (Exception)
+        {
+            if (generation == _generation)
+            {
+                photo.ImageFailed = true;
+            }
+
+            return;
+        }
+
+        if (generation != _generation)
+        {
+            return;
+        }
+
+        photo.ImageBytes = bytes;
+        photo.ImageFailed = false;
     }
 
     /// <summary>
@@ -948,6 +1144,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         _generation++;
         _detail = null;
         _loadedId = null;
+        AvatarImageBytes = null;
 
         IsLoading = false;
         IsNotFound = true;
@@ -971,6 +1168,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         _generation++;
         _detail = null;
         _loadedId = null;
+        AvatarImageBytes = null;
 
         IsLoading = false;
         IsNotFound = false;
@@ -1120,7 +1318,7 @@ public sealed class AdminReadinessItem
 /// показывает все кадры, включая скрытые и отклонённые, чтобы администратор видел, что
 /// именно скрыто, и назвала причину отказа.
 /// </remarks>
-public sealed class AdminMasterPhotoItem
+public sealed partial class AdminMasterPhotoItem : ObservableObject
 {
     private AdminMasterPhotoItem(
         Guid id,
@@ -1157,6 +1355,22 @@ public sealed class AdminMasterPhotoItem
     /// Абсолютный адрес миниатюры.
     /// </summary>
     public string ImageUrl { get; }
+
+    /// <summary>
+    /// Байты миниатюры, прочитанные приложением с Bearer; <c>null</c> — превью ещё нет.
+    /// </summary>
+    /// <remarks>
+    /// Адрес остаётся в <see cref="ImageUrl"/>: его читает загрузчик. Голый адрес платформа
+    /// открывает без заголовков, а неодобренный кадр раздача отдаёт только администратору.
+    /// </remarks>
+    [ObservableProperty]
+    private byte[]? _imageBytes;
+
+    /// <summary>
+    /// Превью не удалось прочитать: у плитки видна строка «Не удалось показать превью».
+    /// </summary>
+    [ObservableProperty]
+    private bool _imageFailed;
 
     /// <summary>
     /// Состояние кадра словами: опубликован, скрыт владельцем, отклонён или скрыт админом.

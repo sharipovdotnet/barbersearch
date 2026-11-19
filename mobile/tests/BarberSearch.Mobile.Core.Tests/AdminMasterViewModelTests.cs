@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.Admin;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
@@ -23,6 +24,7 @@ public sealed class AdminMasterViewModelTests
 {
     private static readonly Guid MasterId = Guid.Parse("9e100000-0000-4000-8000-0000000000e1");
     private static readonly Guid UserId = Guid.Parse("9e100000-0000-4000-8000-0000000000e2");
+    private static readonly Guid OtherMasterId = Guid.Parse("9e100000-0000-4000-8000-0000000000e3");
 
     private static readonly DateTimeOffset Now = new(2026, 11, 20, 9, 0, 0, TimeSpan.Zero);
 
@@ -229,6 +231,117 @@ public sealed class AdminMasterViewModelTests
         Assert.Equal("Причина: Не по теме", photos[2].RejectionText);
 
         Assert.Equal("Скрыто владельцем", photos[3].StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Detail_LoadsAvatarBytesAndKeepsUrl()
+    {
+        var harness = new Harness();
+        var avatarBytes = new byte[] { 0x01, 0x02, 0x03 };
+        var tileBytes = new byte[] { 0x09 };
+
+        harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf());
+        harness.MediaApi.GetBytes = url => Task.FromResult(
+            url.Contains("avatars", StringComparison.Ordinal) ? avatarBytes : tileBytes);
+
+        await harness.ViewModel.InitializeAsync(MasterId);
+        await harness.ViewModel.PreviewCompletion;
+
+        // Адрес остаётся для загрузчика, а картинка приходит из прочитанных с Bearer байтов.
+        Assert.Equal(
+            "http://localhost:5243/api/media/avatars/ivan.webp?size=md",
+            harness.ViewModel.AvatarImageUrl);
+        Assert.Equal(avatarBytes, harness.ViewModel.AvatarImageBytes);
+        Assert.Contains(
+            "http://localhost:5243/api/media/avatars/ivan.webp?size=md",
+            harness.MediaApi.Urls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PortfolioPreview_LoadsTileBytes()
+    {
+        var harness = new Harness();
+        var tileBytes = new byte[] { 0x0A, 0x0B };
+
+        harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf(photos: [PhotoOf()]));
+        harness.MediaApi.GetBytes = url => Task.FromResult(
+            url.Contains("portfolio", StringComparison.Ordinal) ? tileBytes : new byte[] { 0x01 });
+
+        await harness.ViewModel.InitializeAsync(MasterId);
+        await harness.ViewModel.PreviewCompletion;
+
+        var photo = Assert.Single(harness.ViewModel.Photos);
+
+        Assert.Equal(tileBytes, photo.ImageBytes);
+        Assert.False(photo.ImageFailed);
+        Assert.Contains(
+            "http://localhost:5243/api/media/portfolio/work.webp?size=md",
+            harness.MediaApi.Urls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PortfolioPreviewFails_MarksTileAndKeepsDetail()
+    {
+        var harness = new Harness();
+        var avatarBytes = new byte[] { 0x01, 0x02 };
+
+        harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf(photos: [PhotoOf()]));
+        harness.MediaApi.GetBytes = url => url.Contains("portfolio", StringComparison.Ordinal)
+            ? Task.FromException<byte[]>(ApiError(HttpStatusCode.NotFound, "portfolioMedia.notFound"))
+            : Task.FromResult(avatarBytes);
+
+        await harness.ViewModel.InitializeAsync(MasterId);
+        await harness.ViewModel.PreviewCompletion;
+
+        var viewModel = harness.ViewModel;
+        var photo = Assert.Single(viewModel.Photos);
+
+        Assert.True(photo.ImageFailed);
+        Assert.Null(photo.ImageBytes);
+        Assert.Equal("Стрижка", photo.Caption);
+
+        // Сбой превью — не сбой карточки: профиль, аватар и решение остаются на месте.
+        Assert.Equal(avatarBytes, viewModel.AvatarImageBytes);
+        Assert.True(viewModel.ShowContent);
+        Assert.Equal("Иван Мастер", viewModel.DisplayName);
+        Assert.False(viewModel.ShowError);
+
+        // Одна попытка на кадр: фонового повтора у превью нет.
+        Assert.Single(
+            harness.MediaApi.Urls,
+            url => url.Contains("portfolio", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_StalePreviewFromPreviousProfile_IsDropped()
+    {
+        var harness = new Harness();
+        var staleBytes = new byte[] { 0x01, 0x01 };
+        var freshBytes = new byte[] { 0x02, 0x02 };
+        var staleFetch = new TaskCompletionSource<byte[]>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        harness.MastersApi.GetMaster = id => Task.FromResult(
+            id == MasterId
+                ? DetailOf(avatarUrl: "/api/media/avatars/old.webp")
+                : DetailOf(id: OtherMasterId, avatarUrl: "/api/media/avatars/new.webp"));
+        harness.MediaApi.GetBytes = url => url.Contains("old", StringComparison.Ordinal)
+            ? staleFetch.Task
+            : Task.FromResult(freshBytes);
+
+        await harness.ViewModel.InitializeAsync(MasterId);
+        var staleBatch = harness.ViewModel.PreviewCompletion;
+
+        await harness.ViewModel.InitializeAsync(OtherMasterId);
+        await harness.ViewModel.PreviewCompletion;
+
+        Assert.Equal(freshBytes, harness.ViewModel.AvatarImageBytes);
+
+        staleFetch.SetResult(staleBytes);
+        await staleBatch;
+
+        // Ответ прежнего профиля не перезаписывает аватар текущего.
+        Assert.Equal(freshBytes, harness.ViewModel.AvatarImageBytes);
     }
 
     [Fact]
@@ -449,14 +562,16 @@ public sealed class AdminMasterViewModelTests
         bool avatarBlocked = false,
         PhotoModerationStatus avatarStatus = PhotoModerationStatus.Approved,
         string? avatarReason = null,
-        IReadOnlyList<BarberProfilePhotoResponse>? photos = null) =>
+        IReadOnlyList<BarberProfilePhotoResponse>? photos = null,
+        Guid? id = null,
+        string? avatarUrl = "/api/media/avatars/ivan.webp") =>
         new(
-            MasterId,
+            id ?? MasterId,
             UserId,
             "Иван Мастер",
             "ivan@example.com",
             phoneNumber,
-            "/api/media/avatars/ivan.webp",
+            avatarUrl,
             Grade.MiddleBarber,
             bio,
             9,
@@ -520,7 +635,8 @@ public sealed class AdminMasterViewModelTests
                 ApiOptions,
                 Session,
                 new FixedTimeProvider(),
-                autoRetry);
+                autoRetry,
+                MediaApi);
         }
 
         public BarberSearchApiOptions ApiOptions { get; } =
@@ -531,6 +647,8 @@ public sealed class AdminMasterViewModelTests
         public TokenSession Session { get; }
 
         public FakeAdminMastersApi MastersApi { get; } = new();
+
+        public FakeAdminMediaApi MediaApi { get; } = new();
 
         public AdminMasterViewModel ViewModel { get; }
     }
@@ -589,6 +707,28 @@ public sealed class AdminMasterViewModelTests
             UnverifyCalls++;
 
             return Unverify(barberProfileId);
+        }
+    }
+
+    /// <summary>
+    /// Подменённый клиент превью: отдаёт байты по адресу и запоминает запросы.
+    /// </summary>
+    /// <remarks>
+    /// Адреса складываются в потокобезопасную очередь: загрузки идут в три потока, и обычный
+    /// список потерял бы часть записей.
+    /// </remarks>
+    private sealed class FakeAdminMediaApi : IAdminMediaApi
+    {
+        public ConcurrentQueue<string> Urls { get; } = new();
+
+        public Func<string, Task<byte[]>> GetBytes { get; set; } =
+            _ => Task.FromResult(new byte[] { 0x01 });
+
+        public Task<byte[]> GetBytesAsync(string url, CancellationToken cancellationToken = default)
+        {
+            Urls.Enqueue(url);
+
+            return GetBytes(url);
         }
     }
 
