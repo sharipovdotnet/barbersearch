@@ -14,9 +14,9 @@
 
         Порядок повторяет веб: статус, оценка, текст, мастер, клиент, визит и моменты.
         Решение живёт в нижней полосе, в зоне большого пальца: «Скрыть» слева вторичной
-        кнопкой, «Опубликовать» справа основной. «Скрыть» сначала открывает панель причины
-        над полосой — замену модального диалога веба; сервер причину не принимает, поэтому
-        подтверждение в панели доступно сразу.
+        кнопкой, «Опубликовать» справа основной. «Скрыть» сначала открывает панель
+        подтверждения над полосой — замену модального диалога веба; панель называет
+        последствие и не просит причину, которую сервер всё равно не принимает.
 
         После успешного решения страница закрывается: очередь перечитывается при появлении,
         и разрешённая строка исчезает сама.
@@ -309,13 +309,13 @@
                     Text="{Binding ActionError}"
                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-                <!-- Панель причины: необязательный шаг подтверждения вместо диалога веба. -->
+                <!-- Панель подтверждения: второй шаг вместо модального диалога веба. -->
                 <Border
                     Padding="12"
-                    IsVisible="{Binding IsReasonPanelOpen}"
+                    IsVisible="{Binding IsHideConfirmationOpen}"
                     Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                     StrokeShape="RoundRectangle 10">
-                    <VerticalStackLayout Spacing="8">
+                    <VerticalStackLayout Spacing="12">
                         <Label
                             FontFamily="GeistSemiBold"
                             FontSize="16"
@@ -325,48 +325,32 @@
                             LineBreakMode="WordWrap"
                             Text="{loc:Translate Key='Отзыв исчезнет с карточки мастера, рейтинг пересчитается. Вернуть отзыв можно в любой момент — он появится в очереди модерации.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Label
-                            FontFamily="GeistMedium"
-                            FontSize="14"
-                            Text="{loc:Translate Key='Причина скрытия (необязательно)'}" />
-                        <Border
-                            Padding="8"
-                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                            StrokeShape="RoundRectangle 10">
-                            <Editor
-                                AutoSize="TextChanges"
-                                MinimumHeightRequest="88"
-                                Placeholder="{loc:Translate Key='Почему скрываем отзыв'}"
-                                Text="{Binding HideReason}" />
-                        </Border>
+
+                        <!-- Кнопки панели: отмена слева, подтверждение справа. -->
+                        <FlexLayout Direction="Row">
+                            <Button
+                                Margin="0,0,8,0"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Clicked="OnCancelHideClicked"
+                                FlexLayout.Grow="1"
+                                IsEnabled="{Binding CanAct}"
+                                Text="{loc:Translate Key='Отмена'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                            <Button
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Clicked="OnConfirmHideClicked"
+                                FlexLayout.Grow="1"
+                                IsEnabled="{Binding CanAct}"
+                                Text="{Binding HideButtonText}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                        </FlexLayout>
                     </VerticalStackLayout>
                 </Border>
-
-                <!-- Кнопки панели: отмена слева, подтверждение справа. -->
-                <FlexLayout
-                    Direction="Row"
-                    IsVisible="{Binding IsReasonPanelOpen}">
-                    <Button
-                        Margin="0,0,8,0"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Clicked="OnCancelHideClicked"
-                        FlexLayout.Grow="1"
-                        IsEnabled="{Binding CanAct}"
-                        Text="{loc:Translate Key='Отмена'}"
-                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-                    <Button
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Clicked="OnConfirmHideClicked"
-                        FlexLayout.Grow="1"
-                        IsEnabled="{Binding CanAct}"
-                        Text="{Binding HideButtonText}"
-                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                </FlexLayout>
 
                 <!-- Полоса решений: «Скрыть» слева, «Опубликовать» справа. -->
                 <FlexLayout
                     Direction="Row"
-                    IsVisible="{Binding IsNotReasonPanelOpen}">
+                    IsVisible="{Binding IsHideConfirmationClosed}">
                     <Button
                         Margin="0,0,8,0"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"

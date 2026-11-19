@@ -238,17 +238,17 @@ public sealed class AdminReviewViewModelTests
         var harness = new Harness();
         await harness.ViewModel.InitializeAsync(ReviewId);
 
-        harness.ViewModel.OpenHidePanelCommand.Execute(null);
+        harness.ViewModel.OpenHideConfirmationCommand.Execute(null);
 
-        Assert.True(harness.ViewModel.IsReasonPanelOpen);
-        Assert.False(harness.ViewModel.IsNotReasonPanelOpen);
+        Assert.True(harness.ViewModel.IsHideConfirmationOpen);
+        Assert.False(harness.ViewModel.IsHideConfirmationClosed);
 
         var error = await harness.ViewModel.HideAsync();
 
         Assert.Null(error);
         Assert.Equal(1, harness.Api.HideCalls);
         Assert.Equal(ReviewId, harness.Api.LastHiddenId);
-        Assert.False(harness.ViewModel.IsReasonPanelOpen);
+        Assert.False(harness.ViewModel.IsHideConfirmationOpen);
     }
 
     [Fact]
@@ -266,21 +266,20 @@ public sealed class AdminReviewViewModelTests
     }
 
     [Fact]
-    public async Task OpenHidePanel_ThenCancel_ClearsReasonAndKeepsCard()
+    public async Task OpenHideConfirmation_ThenCancel_ClosesPanelWithoutHide()
     {
         var harness = new Harness();
         await harness.ViewModel.InitializeAsync(ReviewId);
 
-        harness.ViewModel.HideReason = "Спам";
-        harness.ViewModel.OpenHidePanelCommand.Execute(null);
+        harness.ViewModel.OpenHideConfirmationCommand.Execute(null);
 
-        // Причина — необязательный шаг подтверждения: панель открывается с чистым полем.
-        Assert.Empty(harness.ViewModel.HideReason);
-        Assert.True(harness.ViewModel.IsReasonPanelOpen);
+        // Панель — второй шаг решения: она только показывает последствие и ждёт ответа.
+        Assert.True(harness.ViewModel.IsHideConfirmationOpen);
 
-        harness.ViewModel.CancelHidePanelCommand.Execute(null);
+        harness.ViewModel.CancelHideConfirmationCommand.Execute(null);
 
-        Assert.False(harness.ViewModel.IsReasonPanelOpen);
+        Assert.False(harness.ViewModel.IsHideConfirmationOpen);
+        Assert.True(harness.ViewModel.IsHideConfirmationClosed);
         Assert.Equal(0, harness.Api.HideCalls);
     }
 
