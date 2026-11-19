@@ -346,7 +346,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     private string _roleText = string.Empty;
 
     /// <summary>
-    /// Статус подтверждения email: «Email подтверждён.» или «Email не подтверждён.».
+    /// Статус подтверждения email: «Адрес подтверждён.» или «Адрес не подтверждён.».
     /// </summary>
     [ObservableProperty]
     private string _emailStatusText = string.Empty;
@@ -1221,8 +1221,8 @@ public sealed partial class ProfileViewModel : ObservableObject
         RoleText = AccountText.RoleText(profile.Role);
         IsEmailVerified = profile.IsEmailVerified;
         EmailStatusText = profile.IsEmailVerified
-            ? Loc.T("Email подтверждён.")
-            : Loc.T("Email не подтверждён.");
+            ? Loc.T("Адрес подтверждён.")
+            : Loc.T("Адрес не подтверждён.");
 
         // Строка «Стать мастером» — только клиенту: мастеру и администратору сервер ответил бы
         // 403, и предлагать действие, которое запрещено, нельзя.

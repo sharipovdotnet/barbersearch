@@ -215,8 +215,6 @@
   "Слишком много попыток. Подождите минуту и повторите.": "Too many attempts. Wait a minute and try again.",
   "Адрес подтверждён.": "The address is verified.",
   "Адрес не подтверждён.": "The address is not verified.",
-  "Email подтверждён.": "Email verified.",
-  "Email не подтверждён.": "Email not verified.",
   "Повторить через {0} с": "Try again in {0} s",
   "Изменить email": "Change email",
   "Отправляем письмо…": "Sending the email…",

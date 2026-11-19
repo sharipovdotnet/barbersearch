@@ -78,7 +78,7 @@ public sealed class ProfileViewModelTests
         Assert.Equal("Ева Клиентова", viewModel.DisplayName);
         Assert.Equal("ЕК", viewModel.Initials);
         Assert.Equal("Клиент", viewModel.RoleText);
-        Assert.Equal("Email подтверждён.", viewModel.EmailStatusText);
+        Assert.Equal("Адрес подтверждён.", viewModel.EmailStatusText);
     }
 
     [Fact]
@@ -466,7 +466,7 @@ public sealed class ProfileViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.False(viewModel.IsEmailVerified);
-        Assert.Equal("Email не подтверждён.", viewModel.EmailStatusText);
+        Assert.Equal("Адрес не подтверждён.", viewModel.EmailStatusText);
     }
 
     [Fact]

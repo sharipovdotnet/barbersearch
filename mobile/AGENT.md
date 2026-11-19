@@ -130,7 +130,7 @@ in Core owns both base addresses.
   in its own access gate and renders the avatar card, the email card, the profile form and the
   account details on one page. Mobile keeps one tab: the sign-in form without a session (with a
   «Нет аккаунта? Зарегистрироваться» link under it), then a
-  person card (initials, name, email, role, «Email не подтверждён.») with «Личные данные», «Мои
+  person card (initials, name, email, role, «Адрес не подтверждён.») with «Личные данные», «Мои
   отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over the profile stack.
   The card carries the hub's only verification line and there is no separate warning link: two texts
   about the same address read as two different facts.
@@ -548,10 +548,10 @@ in Core owns both base addresses.
   circle 36, the title and a chevron, the whole row tappable) rather than a filled `Primary` button:
   a filled button in that place would compete with «Выйти» and «Личные данные», which are the hub's
   real actions, while becoming a master is an application that grants nothing yet. The row is drawn
-  only when the profile
-  is loaded and the role is `UserRole.Customer` (`CanRequestBarberRole`). A barber and an
-  administrator already hold the role, `POST api/barber-requests` would answer them `403`, and an
-  interface that offers an action the server forbids teaches the person to expect a refusal.
+  only when the profile is loaded and the role is `UserRole.Customer` (`CanRequestBarberRole`). A
+  barber and an administrator already hold the role, `POST api/barber-requests` would answer them
+  `403`, and an interface that offers an action the server forbids teaches the person to expect a
+  refusal.
   `BarberRequestTitle` is the request's state rather than a permanent action label: while there is
   no request it says «Стать мастером», then «Заявка на рассмотрении», «Заявка отклонена» or
   «Заявка одобрена». A row that kept saying «Стать мастером» would leave a person who already
