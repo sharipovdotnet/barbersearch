@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AdminMasterPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Admin;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AdminMasterViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Мастер'}">
+
+    <!--
+        Карточка мастера: сначала запись (контакты, контекст, готовность, портфолио),
+        потом решение. Действия — в нижней панели, в зоне большого пальца: подтверждение
+        справа, снятие подтверждения слева второстепенной кнопкой.
+
+        Снятие подтверждения — шаг с причиной: панель над нижней панелью, подтверждение
+        гаснет, пока причина пуста. Это замена модальному диалогу веба.
+
+        Салоны, специализации и услуги сюда не выводятся: в AdminBarberDetailResponse их
+        нет — только счётчики готовности. Поэтому чек-лист показывает числа, а не списки.
+    -->
+    <Grid RowDefinitions="*,Auto">
+
+        <Grid Grid.Row="0">
+
+            <ScrollView IsVisible="{Binding ShowContent}" Padding="16">
+                <VerticalStackLayout Spacing="12">
+
+                    <!-- Личность: аватар, имя, email, грейд и состояние профиля. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="10">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <Border
+                                    WidthRequest="72"
+                                    HeightRequest="72"
+                                    Padding="0"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                    StrokeShape="RoundRectangle 36"
+                                    StrokeThickness="0"
+                                    VerticalOptions="Start">
+                                    <Grid>
+                                        <Image
+                                            Aspect="AspectFill"
+                                            IsVisible="{Binding HasAvatar}"
+                                            Source="{Binding AvatarImageUrl}" />
+                                        <Label
+                                            FontFamily="GeistSemiBold"
+                                            FontSize="24"
+                                            HorizontalOptions="Center"
+                                            IsVisible="{Binding ShowInitials}"
+                                            Text="{Binding Initials}"
+                                            VerticalOptions="Center" />
+                                    </Grid>
+                                </Border>
+
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label
+                                        FontFamily="GeistSemiBold"
+                                        FontSize="20"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding DisplayName}" />
+                                    <Label
+                                        FontSize="13"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding Email}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label
+                                        FontSize="12"
+                                        Text="{Binding GradeText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Border
+                                        Padding="8,2"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                        HorizontalOptions="Start"
+                                        Stroke="Transparent"
+                                        StrokeShape="RoundRectangle 6">
+                                        <Label FontSize="12" Text="{Binding StatusText}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasAvatarState}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding AvatarStateText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasAvatarRejection}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding AvatarRejectionText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <Label LineBreakMode="WordWrap" Text="{Binding BioText}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Контекст: стаж, рейтинг, телефон и служебные моменты профиля. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="12">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Профиль'}" />
+
+                            <Grid
+                                ColumnDefinitions="*,*"
+                                ColumnSpacing="12"
+                                RowDefinitions="Auto,Auto,Auto"
+                                RowSpacing="12">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Стаж'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label LineBreakMode="WordWrap" Text="{Binding ExperienceText}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Рейтинг'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label LineBreakMode="WordWrap" Text="{Binding RatingText}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="1" Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Телефон'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label LineBreakMode="WordWrap" Text="{Binding PhoneText}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="1" Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Профиль создан'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label LineBreakMode="WordWrap" Text="{Binding CreatedAtText}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="2" Grid.ColumnSpan="2" Spacing="2">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Обновлён'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label LineBreakMode="WordWrap" Text="{Binding UpdatedAtText}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Готовность: шесть пунктов, подсказка, а не блокировка. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="16"
+                                    Text="{loc:Translate Key='Готовность профиля'}" />
+                                <Label
+                                    Grid.Column="1"
+                                    FontSize="12"
+                                    Text="{Binding ReadinessDoneText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center" />
+                            </Grid>
+
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Подсказка, а не блокировка: подтвердить профиль можно и с минусами.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding ReadinessItems}" Spacing="6">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AdminReadinessItem">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                            <Label
+                                                FontSize="14"
+                                                Text="{Binding Marker}"
+                                                VerticalOptions="Center">
+                                                <Label.Triggers>
+                                                    <DataTrigger
+                                                        Binding="{Binding IsDone}"
+                                                        TargetType="Label"
+                                                        Value="True">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger
+                                                        Binding="{Binding IsDone}"
+                                                        TargetType="Label"
+                                                        Value="False">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                    </DataTrigger>
+                                                </Label.Triggers>
+                                            </Label>
+                                            <Label
+                                                Grid.Column="1"
+                                                FontSize="14"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Label}" />
+                                            <Label
+                                                Grid.Column="2"
+                                                FontSize="12"
+                                                HorizontalTextAlignment="End"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Value}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                VerticalOptions="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Портфолио: все кадры, включая скрытые и отклонённые; решения не здесь. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="8">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Фотографии'}" />
+
+                            <Label
+                                FontSize="14"
+                                IsVisible="{Binding HasNoPhotos}"
+                                Text="{loc:Translate Key='Фотографий нет.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <FlexLayout
+                                AlignContent="Start"
+                                BindableLayout.ItemsSource="{Binding Photos}"
+                                Direction="Row"
+                                Wrap="Wrap">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AdminMasterPhotoItem">
+                                        <Border
+                                            Margin="0,0,8,8"
+                                            Padding="0"
+                                            FlexLayout.Basis="48%"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 8">
+                                            <VerticalStackLayout Spacing="0">
+                                                <Border
+                                                    HeightRequest="120"
+                                                    Padding="0"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                                    StrokeShape="RoundRectangle 8"
+                                                    StrokeThickness="0">
+                                                    <Image
+                                                        Aspect="AspectFill"
+                                                        SemanticProperties.Description="{Binding AltText}"
+                                                        Source="{Binding ImageUrl}" />
+                                                </Border>
+                                                <Label
+                                                    Margin="6,4,6,0"
+                                                    FontSize="12"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{Binding Caption}" />
+                                                <Label
+                                                    Margin="6,2,6,0"
+                                                    FontSize="12"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{Binding StatusText}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                <Label
+                                                    Margin="6,2,6,6"
+                                                    FontSize="12"
+                                                    IsVisible="{Binding HasRejection}"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{Binding RejectionText}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </FlexLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Что означает текущее подтверждение и почему оно может быть недоступно. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="6">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Подтверждение'}" />
+                            <Label LineBreakMode="WordWrap" Text="{Binding VerificationStateText}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding HasVerifyBlockedReason}"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding VerifyBlockedReason}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <!-- Первая загрузка карточки. -->
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsLoading}"
+                IsVisible="{Binding IsLoading}"
+                VerticalOptions="Center" />
+
+            <!-- Профиль не найден: ссылка устарела. -->
+            <VerticalStackLayout
+                IsVisible="{Binding IsNotFound}"
+                Padding="24"
+                Spacing="8"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="18"
+                    HorizontalTextAlignment="Center"
+                    Text="{loc:Translate Key='Профиль не найден'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Возможно, ссылка устарела. Вернитесь к списку — он покажет актуальные профили.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Button
+                    Clicked="OnBackToListClicked"
+                    HorizontalOptions="Center"
+                    Text="{loc:Translate Key='К списку'}" />
+            </VerticalStackLayout>
+
+            <!-- Сбой чтения: причина и повтор. -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowError}"
+                Padding="24"
+                Spacing="12"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Не удалось загрузить профиль'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LoadErrorText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="Center"
+                    IsVisible="{Binding IsAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Button
+                    Command="{Binding RetryCommand}"
+                    HorizontalOptions="Center"
+                    Text="{loc:Translate Key='Повторить'}" />
+            </VerticalStackLayout>
+
+            <!-- Роль не администратор: повторять нечего. -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowForbidden}"
+                Padding="24"
+                Spacing="8"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Сессия кончилась: возврат к форме входа на вкладке «Профиль». -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowSignInRequired}"
+                Padding="24"
+                Spacing="12"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Сеанс истёк. Войдите заново.'}" />
+                <Button
+                    Clicked="OnSignInClicked"
+                    HorizontalOptions="Center"
+                    Text="{loc:Translate Key='Войти'}" />
+            </VerticalStackLayout>
+
+        </Grid>
+
+        <!-- Нижняя панель: решение в зоне большого пальца; ошибка действия — над кнопками. -->
+        <VerticalStackLayout
+            Grid.Row="1"
+            IsVisible="{Binding ShowActions}"
+            Padding="16,12"
+            Spacing="8">
+
+            <Label
+                FontSize="13"
+                IsVisible="{Binding HasActionError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding ActionErrorText}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+            <!-- Причина снятия подтверждения: шаг, а не модальный диалог. -->
+            <Border
+                Padding="12"
+                IsVisible="{Binding IsUnverifyPanelOpen}"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="8">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        Text="{loc:Translate Key='Снять подтверждение?'}" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Профиль исчезнет из поиска и станет недоступен для записи, пока вы не подтвердите его снова.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <Editor
+                        AutoSize="TextChanges"
+                        MaxLength="500"
+                        MinimumHeightRequest="80"
+                        Placeholder="{loc:Translate Key='Причина снятия подтверждения'}"
+                        Text="{Binding UnverifyReason}" />
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Clicked="OnUnverifyCancelClicked"
+                            Text="{loc:Translate Key='Отмена'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource DestructiveSolid}, Dark={StaticResource DestructiveSolidDark}}"
+                            Clicked="OnUnverifyConfirmClicked"
+                            IsEnabled="{Binding CanConfirmUnverify}"
+                            Text="{loc:Translate Key='Снять подтверждение'}"
+                            TextColor="{AppThemeBinding Light={StaticResource DestructiveSolidForeground}, Dark={StaticResource DestructiveSolidForegroundDark}}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Clicked="OnUnverifyClicked"
+                    IsEnabled="{Binding CanUnverify}"
+                    Text="{loc:Translate Key='Снять подтверждение'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                <Button
+                    Grid.Column="1"
+                    Clicked="OnVerifyClicked"
+                    IsEnabled="{Binding CanVerify}"
+                    Text="{loc:Translate Key='Подтвердить'}" />
+            </Grid>
+
+            <Label
+                FontSize="12"
+                IsVisible="{Binding HasVerifyBlockedReason}"
+                LineBreakMode="WordWrap"
+                Text="{Binding VerifyBlockedReason}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

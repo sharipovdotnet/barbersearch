@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AdminMastersPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Admin;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AdminMastersViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Мастера'}">
+
+    <!--
+        Очередь мастеров: профили без подтверждения и два соседних фильтра.
+
+        Это мобильный список веба (barber-list.tsx): строка несёт то, что API отдаёт
+        в AdminBarberResponse — аватар, имя, email, грейд, рейтинг и состояние профиля.
+        Салона, стажа и чек-листа в строке нет: они живут в карточке, а не в списке.
+
+        Первая строка — «На проверке»: именно её число считает бейдж хаба. «Все» и
+        «Скрытые» — те же значения ?status=, которые понимает сервер.
+    -->
+    <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="12">
+
+        <!--
+            Фильтры: сегменты, как переключатель языка в «Профиле». Выбранный сегмент
+            получает SegmentButtonSelected; синхронизацию стилей делает code-behind,
+            потому что Style — не привязка.
+        -->
+        <Border
+            Grid.Row="0"
+            Padding="2"
+            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+            StrokeShape="RoundRectangle 8">
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="2">
+                <Button
+                    x:Name="PendingFilterButton"
+                    Clicked="OnPendingFilterClicked"
+                    Style="{StaticResource SegmentButton}"
+                    Text="{loc:Translate Key='На проверке'}" />
+                <Button
+                    x:Name="AllFilterButton"
+                    Grid.Column="1"
+                    Clicked="OnAllFilterClicked"
+                    Style="{StaticResource SegmentButton}"
+                    Text="{loc:Translate Key='Все'}" />
+                <Button
+                    x:Name="HiddenFilterButton"
+                    Grid.Column="2"
+                    Clicked="OnHiddenFilterClicked"
+                    Style="{StaticResource SegmentButton}"
+                    Text="{loc:Translate Key='Скрытые'}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+
+            <!-- Первая загрузка: индикатор вместо списка. -->
+            <VerticalStackLayout
+                IsVisible="{Binding IsFirstLoading}"
+                Spacing="8"
+                VerticalOptions="Center">
+                <ActivityIndicator
+                    HorizontalOptions="Center"
+                    IsRunning="{Binding IsFirstLoading}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    Text="{loc:Translate Key='Загружаем мастеров…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Сбой первой страницы: причина и повтор. -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowError}"
+                Spacing="12"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Не удалось загрузить мастеров'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ErrorMessage}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="Center"
+                    IsVisible="{Binding IsAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Button
+                    Command="{Binding RetryCommand}"
+                    HorizontalOptions="Center"
+                    Text="{loc:Translate Key='Повторить'}" />
+            </VerticalStackLayout>
+
+            <!-- Роль не администратор: повторять нечего. -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowForbidden}"
+                Spacing="8"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Сессия кончилась: возврат к форме входа на вкладке «Профиль». -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowSignInRequired}"
+                Spacing="12"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Сеанс истёк. Войдите заново.'}" />
+                <Button
+                    Clicked="OnSignInClicked"
+                    HorizontalOptions="Center"
+                    Text="{loc:Translate Key='Войти'}" />
+            </VerticalStackLayout>
+
+            <!-- Список очереди: свайп вниз обновляет, прокрутка догружает. -->
+            <RefreshView
+                Command="{Binding RefreshCommand}"
+                IsRefreshing="{Binding IsRefreshing}"
+                IsVisible="{Binding ShowContent}">
+                <CollectionView
+                    ItemsSource="{Binding Items}"
+                    RemainingItemsThreshold="3"
+                    RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+
+                    <CollectionView.Header>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontSize="12"
+                            HorizontalTextAlignment="End"
+                            IsVisible="{Binding HasUpdatedAt}"
+                            Text="{Binding UpdatedAtText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </CollectionView.Header>
+
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AdminMasterItem">
+                            <Border
+                                Margin="0,0,0,8"
+                                Padding="12"
+                                MinimumHeightRequest="64"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnMasterTapped" />
+                                </Border.GestureRecognizers>
+
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+
+                                    <!-- Аватар: фото владельца либо инициалы. -->
+                                    <Border
+                                        WidthRequest="40"
+                                        HeightRequest="40"
+                                        Padding="0"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                        StrokeShape="RoundRectangle 20"
+                                        StrokeThickness="0"
+                                        VerticalOptions="Start">
+                                        <Grid>
+                                            <Image
+                                                Aspect="AspectFill"
+                                                IsVisible="{Binding HasAvatar}"
+                                                Source="{Binding AvatarImageUrl}" />
+                                            <Label
+                                                FontFamily="GeistSemiBold"
+                                                FontSize="15"
+                                                HorizontalOptions="Center"
+                                                IsVisible="{Binding ShowInitials}"
+                                                Text="{Binding Initials}"
+                                                VerticalOptions="Center" />
+                                        </Grid>
+                                    </Border>
+
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            FontSize="16"
+                                            LineBreakMode="TailTruncation"
+                                            Text="{Binding DisplayName}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="TailTruncation"
+                                            Text="{Binding Email}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                        <FlexLayout
+                                            AlignItems="Center"
+                                            Direction="Row"
+                                            Wrap="Wrap">
+                                            <Label
+                                                Margin="0,0,8,0"
+                                                FontSize="12"
+                                                Text="{Binding GradeText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding RatingText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </FlexLayout>
+
+                                        <FlexLayout
+                                            Margin="0,2,0,0"
+                                            AlignItems="Center"
+                                            Direction="Row"
+                                            Wrap="Wrap">
+                                            <Border
+                                                Margin="0,0,8,0"
+                                                Padding="8,2"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                                Stroke="Transparent"
+                                                StrokeShape="RoundRectangle 6">
+                                                <Label FontSize="12" Text="{Binding StatusText}" />
+                                            </Border>
+                                            <Border
+                                                Padding="8,2"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                                IsVisible="{Binding HasAvatarBadge}"
+                                                Stroke="Transparent"
+                                                StrokeShape="RoundRectangle 6">
+                                                <Label FontSize="12" Text="{Binding AvatarBadgeText}" />
+                                            </Border>
+                                        </FlexLayout>
+                                    </VerticalStackLayout>
+
+                                    <Label
+                                        Grid.Column="2"
+                                        FontSize="20"
+                                        Text="›"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                        VerticalTextAlignment="Center" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+
+                    <!-- Пустое состояние: слова веба под выбранный фильтр. -->
+                    <CollectionView.EmptyView>
+                        <ContentView>
+                            <VerticalStackLayout
+                                Margin="0,24,0,0"
+                                IsVisible="{Binding ShowEmptyState}"
+                                Spacing="8">
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="16"
+                                    HorizontalTextAlignment="Center"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding EmptyStateTitle}" />
+                                <Label
+                                    HorizontalTextAlignment="Center"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding EmptyStateDescription}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Button
+                                    Command="{Binding RefreshCommand}"
+                                    HorizontalOptions="Center"
+                                    Text="{loc:Translate Key='Обновить'}" />
+                            </VerticalStackLayout>
+                        </ContentView>
+                    </CollectionView.EmptyView>
+
+                    <!-- Футер: догрузка и её ошибка; загруженные строки остаются. -->
+                    <CollectionView.Footer>
+                        <VerticalStackLayout Padding="0,8,0,16" Spacing="8">
+                            <HorizontalStackLayout
+                                HorizontalOptions="Center"
+                                IsVisible="{Binding IsLoadingMore}"
+                                Spacing="8">
+                                <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
+                                <Label
+                                    Text="{loc:Translate Key='Идёт догрузка…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                            <VerticalStackLayout IsVisible="{Binding ShowLoadMoreError}" Spacing="8">
+                                <Label
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding LoadMoreError}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    HorizontalOptions="Start"
+                                    IsVisible="{Binding IsLoadMoreAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Button
+                                    Command="{Binding RetryLoadMoreCommand}"
+                                    HorizontalOptions="Start"
+                                    Text="{loc:Translate Key='Повторить'}" />
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </CollectionView.Footer>
+
+                </CollectionView>
+            </RefreshView>
+
+        </Grid>
+
+    </Grid>
+
+</ContentPage>
