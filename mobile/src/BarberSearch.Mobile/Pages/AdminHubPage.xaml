@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AdminHubPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Admin;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AdminHubViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Администрирование'}">
+
+    <!--
+        Хаб администрирования: четыре очереди модерации списком.
+
+        Это замена рейлу веба и экрану «Сводка» сразу — на телефоне два экрана с одними
+        и теми же числами были бы лишним переходом. Строка несёт название раздела, число
+        ждущих бейджем и состояние очереди словами: подсказки рейла на телефоне не
+        открываются наведением, поэтому они видны всегда.
+
+        Действий здесь нет: хаб только читает. Очередь пуста — строка остаётся, чтобы
+        раздел можно было открыть и посмотреть уже решённое.
+    -->
+    <Grid Padding="16" RowDefinitions="*">
+
+        <!-- Первая загрузка: индикатор вместо списка. -->
+        <VerticalStackLayout
+            IsVisible="{Binding IsFirstLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsFirstLoading}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="{loc:Translate Key='Загружаем сводку…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Сбой чтения: причина и повтор. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Не удалось загрузить сводку'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetrying}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Повторить'}" />
+        </VerticalStackLayout>
+
+        <!-- Роль не администратор: повторять нечего, данные не запрашиваются. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowForbidden}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Сессия кончилась: возврат на «Профиль», где стоит форма входа. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowSignInRequired}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Сеанс истёк. Войдите заново.'}" />
+            <Button
+                Clicked="OnSignInClicked"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Войти'}" />
+        </VerticalStackLayout>
+
+        <!-- Список разделов: свайп вниз перечитывает сводку. -->
+        <RefreshView
+            Command="{Binding RefreshCommand}"
+            IsRefreshing="{Binding IsRefreshing}"
+            IsVisible="{Binding ShowContent}">
+            <ScrollView>
+                <VerticalStackLayout Spacing="8">
+
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Sections}" Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AdminSectionItem">
+                                <Border
+                                    Padding="14"
+                                    MinimumHeightRequest="64"
+                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                    StrokeShape="RoundRectangle 10">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer CommandParameter="{Binding}" Tapped="OnSectionTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                        <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                                            <Label
+                                                FontFamily="GeistMedium"
+                                                FontSize="16"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding Title}" />
+                                            <Label
+                                                FontSize="13"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Subtitle}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Label
+                                                FontSize="12"
+                                                IsVisible="{Binding HasDetail}"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Detail}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </VerticalStackLayout>
+
+                                        <!--
+                                            Бейдж — сосед строки, а не часть названия: цифра
+                                            в кружке не участвует в подписи раздела, поэтому
+                                            не читается скринридером отдельным числом.
+                                        -->
+                                        <Border
+                                            Grid.Column="1"
+                                            Padding="7,2"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource DestructiveSolid}, Dark={StaticResource DestructiveSolidDark}}"
+                                            IsVisible="{Binding HasBadge}"
+                                            SemanticProperties.Description="{Binding Subtitle}"
+                                            Stroke="Transparent"
+                                            StrokeShape="RoundRectangle 9"
+                                            VerticalOptions="Center">
+                                            <Label
+                                                FontFamily="GeistSemiBold"
+                                                FontSize="12"
+                                                Text="{Binding BadgeText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource DestructiveSolidForeground}, Dark={StaticResource DestructiveSolidForegroundDark}}"
+                                                VerticalTextAlignment="Center" />
+                                        </Border>
+
+                                        <Label
+                                            Grid.Column="2"
+                                            FontSize="20"
+                                            Text="›"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                            VerticalTextAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <!-- Время снимка: числа не «живые», их кто-то читал. -->
+                    <Label
+                        Margin="0,4,0,0"
+                        FontSize="12"
+                        HorizontalTextAlignment="Center"
+                        IsVisible="{Binding HasUpdatedAt}"
+                        Text="{Binding UpdatedAtText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                </VerticalStackLayout>
+            </ScrollView>
+        </RefreshView>
+
+    </Grid>
+
+</ContentPage>

@@ -80,5 +80,12 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			EditReviewPage.Route,
 			new PageRouteFactory<EditReviewPage>(services));
+
+		// Админка открывается строкой из «Профиля» и живёт поверх его стека: возврат оставляет
+		// вкладку на месте. Хаб — корень раздела, разделы открываются с него и возвращаются
+		// на него же, поэтому перечитанная сводка и есть обновление после действия.
+		Routing.RegisterRoute(
+			AdminHubPage.Route,
+			new PageRouteFactory<AdminHubPage>(services));
 	}
 }

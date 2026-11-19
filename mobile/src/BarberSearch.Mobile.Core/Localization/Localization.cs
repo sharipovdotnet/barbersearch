@@ -143,6 +143,8 @@ public sealed class Localization : ILocalization
                 "Показаны {0} мастера",
                 "Показаны {0} мастеров",
                 null),
+            [PluralKey.Profiles] = new("{0} профиль", "{0} профиля", "{0} профилей", null),
+            [PluralKey.Requests] = new("{0} заявка", "{0} заявки", "{0} заявок", null),
         };
 
     private static readonly Dictionary<PluralKey, PluralForms> EnglishPlurals =
@@ -158,6 +160,8 @@ public sealed class Localization : ILocalization
                 null,
                 null,
                 "Showing {0} barbers"),
+            [PluralKey.Profiles] = new("{0} profile", null, null, "{0} profiles"),
+            [PluralKey.Requests] = new("{0} request", null, null, "{0} requests"),
         };
 
     private readonly ILocaleStore _store;

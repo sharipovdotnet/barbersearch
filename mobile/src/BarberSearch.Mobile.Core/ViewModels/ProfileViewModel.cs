@@ -6,6 +6,7 @@ using BarberSearch.Domain.BarberRequests;
 using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
+using BarberSearch.Mobile.Core.Api.Admin;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Auth;
@@ -79,6 +80,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     private readonly IAuthApi _authApi;
     private readonly IAccountApi _accountApi;
     private readonly IBarberRequestsApi? _barberRequestsApi;
+    private readonly IAdminSummaryApi? _adminSummaryApi;
     private readonly TokenSession _session;
     private readonly IPushRegistrar _push;
 
@@ -167,6 +169,11 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// Цикл автоповтора чтения заявки; <c>null</c> — собственный цикл с обычным расписанием.
     /// Стоит последним: порядок уже существующих аргументов не меняется.
     /// </param>
+    /// <param name="adminSummaryApi">
+    /// Сводка очередей модерации для бейджа строки «Администрирование»; <c>null</c> — бейджа
+    /// нет. Параметр добавлен необязательным в конец по той же причине, что и заявка:
+    /// существующие вызовы собираются как раньше, а DI подставит зарегистрированный клиент.
+    /// </param>
     public ProfileViewModel(
         IAuthApi authApi,
         IAccountApi accountApi,
@@ -174,7 +181,8 @@ public sealed partial class ProfileViewModel : ObservableObject
         IPushRegistrar push,
         AutoRetryLoop? autoRetry = null,
         IBarberRequestsApi? barberRequestsApi = null,
-        AutoRetryLoop? barberRequestRetry = null)
+        AutoRetryLoop? barberRequestRetry = null,
+        IAdminSummaryApi? adminSummaryApi = null)
     {
         ArgumentNullException.ThrowIfNull(authApi);
         ArgumentNullException.ThrowIfNull(accountApi);
@@ -184,6 +192,7 @@ public sealed partial class ProfileViewModel : ObservableObject
         _authApi = authApi;
         _accountApi = accountApi;
         _barberRequestsApi = barberRequestsApi;
+        _adminSummaryApi = adminSummaryApi;
         _session = session;
         _push = push;
 
@@ -230,6 +239,60 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// «Профиля», поэтому возврат оставляет хаб на месте — так же, как у «Личных данных».
     /// </remarks>
     public event EventHandler? BarberRequestRequested;
+
+    /// <summary>
+    /// Нажата строка «Администрирование»: страница открывает хаб очередей модерации.
+    /// </summary>
+    /// <remarks>
+    /// Событие, а не навигация: Core не знает о Shell. Хаб живёт поверх стека «Профиля»,
+    /// поэтому возврат оставляет вкладку и загруженный профиль на месте.
+    /// </remarks>
+    public event EventHandler? AdminRequested;
+
+    /// <summary>
+    /// Роль из профиля — администратор: строка администрирования видна.
+    /// </summary>
+    /// <remarks>
+    /// Проверка роли на клиенте — только удобство: действия всё равно закрыты политикой
+    /// <c>AdminOnly</c> на сервере, а сам хаб покажет отказ, если роль успели снять.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isAdmin;
+
+    /// <summary>
+    /// Сколько всего ждёт решения администратора.
+    /// </summary>
+    /// <remarks>
+    /// Сумма очередей из сводки — только для бейджа строки. Числа считает сервер
+    /// (<c>GET api/admin/summary</c>), клиент их не пересчитывает: разбивка по разделам
+    /// видна в самом хабе, а здесь нужно одно число «сколько накопилось».
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAdminPending))]
+    [NotifyPropertyChangedFor(nameof(AdminPendingText))]
+    [NotifyPropertyChangedFor(nameof(AdminDescription))]
+    private int _adminPendingCount;
+
+    /// <summary>
+    /// Есть ли что показывать бейджем: при нуле бейджа нет.
+    /// </summary>
+    public bool HasAdminPending => AdminPendingCount > 0;
+
+    /// <summary>
+    /// Подпись бейджа: до 99 цифрами, дальше «99+».
+    /// </summary>
+    public string AdminPendingText => AdminText.BadgeCount(AdminPendingCount);
+
+    /// <summary>
+    /// Имя строки для скринридера: число ждущих входит в него словами.
+    /// </summary>
+    /// <remarks>
+    /// Цифра в кружке — сосед названия, а не его часть, поэтому без этой строки скринридер
+    /// прочитал бы только «Администрирование» и не сказал бы, что там что-то ждёт.
+    /// </remarks>
+    public string AdminDescription => HasAdminPending
+        ? Loc.T("Администрирование, ждёт решения: {0}", AdminPendingCount)
+        : Loc.T("Администрирование");
 
     /// <summary>
     /// Идёт проверка сессии при открытии экрана.
@@ -650,6 +713,10 @@ public sealed partial class ProfileViewModel : ObservableObject
         BarberRequestTitle = Loc.T("Стать мастером");
         _barberRequestFailureKind = null;
 
+        // Строка администрирования — тоже: чужую очередь модерации показывать нельзя.
+        IsAdmin = false;
+        AdminPendingCount = 0;
+
         Email = string.Empty;
         Password = string.Empty;
 
@@ -878,6 +945,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     private void OpenBarberRequest() => BarberRequestRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Просит страницу открыть администрирование.
+    /// </summary>
+    /// <remarks>
+    /// Команда только поднимает событие: навигация и остановка повторов — работа страницы,
+    /// а Core про Shell не знает.
+    /// </remarks>
+    [RelayCommand]
+    private void OpenAdmin() => AdminRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Включает или выключает напоминания по переключателю «Присылать напоминания».
     /// </summary>
     /// <remarks>
@@ -947,6 +1024,10 @@ public sealed partial class ProfileViewModel : ObservableObject
             ApplyProfile(profile);
             ProfileError = null;
             _profileFailureKind = ApiFailureKind.None;
+
+            // Счётчик очередей читается вторым запросом и только администратору: сводка
+            // закрыта ролью, а остальным бейдж не нужен. Его сбой не портит профиль.
+            await RefreshAdminPendingAsync(cancellationToken);
         }
         catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
@@ -1209,6 +1290,48 @@ public sealed partial class ProfileViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Читает сводку очередей для бейджа строки «Администрирование».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Запрос второй и необязательный: у роли не администратора сводка закрыта, поэтому
+    /// без роли он не делается вовсе. Сбой не попадает ни в <see cref="ProfileError"/>,
+    /// ни в цикл автоповтора: бейдж — подсказка, а не данные экрана, и без сети строка
+    /// просто остаётся без числа.
+    /// </para>
+    /// <para>
+    /// Сумма считается здесь, а не на сервере: сводке нужен один ответ на все разделы,
+    /// а хабу — разбивка, поэтому сервер отдаёт очереди по отдельности.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private async Task RefreshAdminPendingAsync(CancellationToken cancellationToken)
+    {
+        if (_adminSummaryApi is null || !IsAdmin)
+        {
+            AdminPendingCount = 0;
+
+            return;
+        }
+
+        try
+        {
+            var summary = await _adminSummaryApi.GetSummaryAsync(cancellationToken);
+
+            AdminPendingCount = summary.Reviews.PendingCount
+                + summary.Photos.PendingAvatarsCount
+                + summary.Photos.PendingPortfolioCount
+                + summary.Barbers.UnverifiedCount
+                + summary.BarberRequests.PendingCount;
+        }
+        catch (Exception)
+        {
+            // Молча: сводка — украшение строки, у неё нет ни своего состояния, ни «Повторить».
+            AdminPendingCount = 0;
+        }
+    }
+
+    /// <summary>
     /// Раскладывает профиль по свойствам хаба.
     /// </summary>
     private void ApplyProfile(MyProfileResponse profile)
@@ -1227,6 +1350,15 @@ public sealed partial class ProfileViewModel : ObservableObject
         // Строка «Стать мастером» — только клиенту: мастеру и администратору сервер ответил бы
         // 403, и предлагать действие, которое запрещено, нельзя.
         CanRequestBarberRole = profile.Role == UserRole.Customer;
+
+        // Строка администрирования — только администратору: раздел закрыт политикой AdminOnly,
+        // а строка, ведущая на «нет доступа», обещает то, чего нет.
+        IsAdmin = profile.Role == UserRole.Admin;
+
+        if (!IsAdmin)
+        {
+            AdminPendingCount = 0;
+        }
 
         // Показ хаба зависит от наличия профиля и email: одно уведомление на оба.
         OnPropertyChanged(nameof(IsProfileVisible));

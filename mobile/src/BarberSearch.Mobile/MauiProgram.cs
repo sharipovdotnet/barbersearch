@@ -2,6 +2,7 @@ using System.Reflection;
 using BarberSearch.Mobile.Auth;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
+using BarberSearch.Mobile.Core.Api.Admin;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Api.Bookings;
@@ -15,6 +16,7 @@ using BarberSearch.Mobile.Core.Location;
 using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
+using BarberSearch.Mobile.Core.ViewModels.Admin;
 using BarberSearch.Mobile.Devices;
 using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Navigation;
@@ -173,6 +175,11 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IPushApi, PushApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Админская сводка — чтение с Bearer: роль администратора сервер берёт из токена,
+        // и без неё ответ 403. Клиент один на все разделы администрирования.
+        builder.Services.AddHttpClient<IAdminSummaryApi, AdminSummaryApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
@@ -218,6 +225,10 @@ public static class MauiProgram
         builder.Services.AddTransient<MyReviewsViewModel>();
         builder.Services.AddTransient<EditReviewViewModel>();
 
+        // Хаб администрирования — один визит: сводка перечитывается при каждом появлении,
+        // а состояние прошлого захода хранить нечего.
+        builder.Services.AddTransient<AdminHubViewModel>();
+
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
         builder.Services.AddTransient<PortfolioPhotoPage>();
@@ -230,6 +241,7 @@ public static class MauiProgram
         builder.Services.AddTransient<EditReviewPage>();
         builder.Services.AddTransient<RegisterPage>();
         builder.Services.AddTransient<ForgotPasswordPage>();
+        builder.Services.AddTransient<AdminHubPage>();
 
         // Вкладки тоже transient: смена языка пересобирает Shell, и каждая страница должна
         // получить ViewModel с новым языком. Состояние вкладки сохраняется между визитами,
