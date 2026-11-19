@@ -237,6 +237,49 @@ public sealed class AdminMastersApiTests
             () => api.GetMastersAsync(AdminMasterFilter.Pending, cursor: null, pageSize: 20));
     }
 
+    [Fact]
+    public async Task GetBytesAsync_AbsoluteUrl_ReadsFileFromThatUrl()
+    {
+        const string payload = "avatar-bytes";
+        var handler = new StubHandler(HttpStatusCode.OK, payload, "image/webp");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AdminMediaApi(httpClient);
+
+        var bytes = await api.GetBytesAsync(
+            "http://localhost:5243/api/media/avatars/ivan.webp?size=md");
+
+        Assert.Equal(HttpMethod.Get, handler.LastMethod);
+
+        // Адрес берётся целиком: вариант размера уже часть адреса, а не запрос клиента.
+        Assert.Equal(
+            "http://localhost:5243/api/media/avatars/ivan.webp?size=md",
+            handler.LastRequestUri!.AbsoluteUri);
+        Assert.Equal(payload, Encoding.UTF8.GetString(bytes));
+    }
+
+    [Fact]
+    public async Task GetBytesAsync_PortfolioNotFound_ThrowsWithStatusAndCode()
+    {
+        const string problemJson = """
+            {
+              "title": "Not Found",
+              "status": 404,
+              "detail": "The portfolio photo file was not found.",
+              "errorCodes": ["portfolioMedia.notFound"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.NotFound, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AdminMediaApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetBytesAsync("http://localhost:5243/api/media/portfolio/work.webp?size=md"));
+
+        Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
+        Assert.Contains("portfolioMedia.notFound", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
     private static string MastersJson(string nextCursor) => $$"""
         {
           "items": [
