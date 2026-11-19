@@ -619,10 +619,13 @@ in Core owns both base addresses.
   everything in modal dialogs (`*-dialog.tsx`) opened from a toolbar; a phone has no toolbar reach
   and a modal hides the record it is asking about. So the record fills the screen, and the decision
   lives in a fixed bottom bar: the primary action on the right, the destructive one on the left in
-  secondary styling — the destructive action is never the easy thumb target. «Отклонить» / «Скрыть»
-  opens an inline panel above the bar with a reason field and its own confirm, and that confirm stays
-  disabled until the reason satisfies the server's own rule. Two taps for a destructive action is the
-  point, not friction to remove. After a successful decision the page pops back to the queue, whose
+  secondary styling — the destructive action is never the easy thumb target. «Отклонить» / «Скрыть» /
+  «Снять подтверждение» opens an inline panel above the bar with its own confirm, and that confirm
+  stays disabled until a reason satisfies the server's own rule *where the server stores one* (photo
+  and request rejections). Hiding a review and removing a verification take no reason at all, so
+  their panel shows the consequence in words instead of a field: a field whose text goes nowhere
+  promises a reader who will never read it. Two taps for a destructive action is the point, not
+  friction to remove. After a successful decision the page pops back to the queue, whose
   `OnAppearing` refresh drops the resolved row — the section never keeps its own "changed" event.
 - **The phone ports the moderation queues, not the whole section.** Reviews, photo pre-moderation
   (avatars and portfolio), profiles awaiting verification and requests to become a professional are
