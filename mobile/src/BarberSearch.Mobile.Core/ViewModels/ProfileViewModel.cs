@@ -346,7 +346,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     private string _roleText = string.Empty;
 
     /// <summary>
-    /// Статус подтверждения email: «Адрес подтверждён.» или «Адрес не подтверждён.».
+    /// Статус подтверждения email: «Email подтверждён.» или «Email не подтверждён.».
     /// </summary>
     [ObservableProperty]
     private string _emailStatusText = string.Empty;
@@ -355,7 +355,6 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// Подтверждён ли адрес; <c>false</c> до загрузки профиля.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowEmailWarning))]
     private bool _isEmailVerified;
 
     /// <summary>
@@ -482,11 +481,6 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// Ошибка чтения профиля при уже показанном хабе: строка и «Повторить» под карточкой.
     /// </summary>
     public bool HasProfileError => ProfileError is not null;
-
-    /// <summary>
-    /// Показывать предупреждение «Email не подтверждён».
-    /// </summary>
-    public bool ShowEmailWarning => _profile is not null && !IsEmailVerified;
 
     /// <summary>
     /// Можно ли править поля и нажимать «Войти».
@@ -1227,14 +1221,12 @@ public sealed partial class ProfileViewModel : ObservableObject
         RoleText = AccountText.RoleText(profile.Role);
         IsEmailVerified = profile.IsEmailVerified;
         EmailStatusText = profile.IsEmailVerified
-            ? Loc.T("Адрес подтверждён.")
-            : Loc.T("Адрес не подтверждён.");
+            ? Loc.T("Email подтверждён.")
+            : Loc.T("Email не подтверждён.");
 
         // Строка «Стать мастером» — только клиенту: мастеру и администратору сервер ответил бы
         // 403, и предлагать действие, которое запрещено, нельзя.
         CanRequestBarberRole = profile.Role == UserRole.Customer;
-
-        OnPropertyChanged(nameof(ShowEmailWarning));
 
         // Показ хаба зависит от наличия профиля и email: одно уведомление на оба.
         OnPropertyChanged(nameof(IsProfileVisible));

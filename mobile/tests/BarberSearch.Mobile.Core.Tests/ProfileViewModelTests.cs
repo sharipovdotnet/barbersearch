@@ -78,8 +78,7 @@ public sealed class ProfileViewModelTests
         Assert.Equal("Ева Клиентова", viewModel.DisplayName);
         Assert.Equal("ЕК", viewModel.Initials);
         Assert.Equal("Клиент", viewModel.RoleText);
-        Assert.Equal("Адрес подтверждён.", viewModel.EmailStatusText);
-        Assert.False(viewModel.ShowEmailWarning);
+        Assert.Equal("Email подтверждён.", viewModel.EmailStatusText);
     }
 
     [Fact]
@@ -454,7 +453,7 @@ public sealed class ProfileViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_UnverifiedEmail_ShowsWarning()
+    public async Task InitializeAsync_UnverifiedEmail_ShowsEmailStatus()
     {
         var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
         using var session = new TokenSession(store);
@@ -466,9 +465,8 @@ public sealed class ProfileViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.True(viewModel.ShowEmailWarning);
         Assert.False(viewModel.IsEmailVerified);
-        Assert.Equal("Адрес не подтверждён.", viewModel.EmailStatusText);
+        Assert.Equal("Email не подтверждён.", viewModel.EmailStatusText);
     }
 
     [Fact]

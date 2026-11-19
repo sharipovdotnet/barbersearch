@@ -254,14 +254,13 @@ returns it to moderation, and only the server decides.
 
 ## «Стать мастером» (the barber request)
 
-A customer applies for the master role from the «Профиль» hub: the row under the person card — after
-the «Email не подтверждён» link when it is shown, before the silent-refresh error — opens the
-`barber-request` page over the profile stack with the tab bar hidden. Only a customer sees it
-(`Role == UserRole.Customer`): a barber and an administrator are not offered an action the server
-would answer `403` to. The row's title is the application's state — «Стать мастером», «Заявка на
-рассмотрении», «Заявка отклонена», «Заявка одобрена» — so the hub says whether an application
-already exists; the details are on the page, which is the source of truth, and `AGENT.md` §5 records
-why the row is a `Border` card-row instead of a `Primary` button.
+A customer applies for the master role from the «Профиль» hub: the row under the person card, before
+the silent-refresh error, opens the `barber-request` page over the profile stack with the tab bar
+hidden. Only a customer sees it (`Role == UserRole.Customer`): a barber and an administrator are not
+offered an action the server would answer `403` to. The row's title is the application's state —
+«Стать мастером», «Заявка на рассмотрении», «Заявка отклонена», «Заявка одобрена» — so the hub says
+whether an application already exists; the details are on the page, which is the source of truth, and
+`AGENT.md` §5 records why the row is a `Border` card-row instead of a `Primary` button.
 
 The page has five states: loading while `GET api/barber-requests/mine` is in flight, the form when
 there is no request, the status when there is one, a read error with «Не удалось проверить заявку»,

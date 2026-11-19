@@ -196,7 +196,7 @@
         <ScrollView IsVisible="{Binding IsProfileVisible}">
             <VerticalStackLayout Spacing="12">
 
-                <!-- Карточка личности: инициалы вместо аватара, имя, email, роль, статус. -->
+                <!-- Карточка личности: инициалы вместо аватара, имя, email, роль и статус. -->
                 <Border
                     Padding="16"
                     Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
@@ -232,6 +232,10 @@
                                 FontSize="14"
                                 Text="{Binding RoleText}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <!--
+                                Единственная строка статуса: отдельная ссылка «Email не подтверждён»
+                                под карточкой дублировала её другими словами.
+                            -->
                             <Label FontSize="14" Text="{Binding EmailStatusText}">
                                 <Label.Triggers>
                                     <DataTrigger
@@ -255,17 +259,6 @@
                         </VerticalStackLayout>
                     </Grid>
                 </Border>
-
-                <!-- Предупреждение о неподтверждённом адресе: нажатие ведёт в «Безопасность». -->
-                <Button
-                    BackgroundColor="Transparent"
-                    Command="{Binding SecurityCommand}"
-                    FontSize="16"
-                    HorizontalOptions="Start"
-                    IsVisible="{Binding ShowEmailWarning}"
-                    Padding="0"
-                    Text="{loc:Translate Key='Email не подтверждён'}"
-                    TextColor="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
 
                 <!--
                     «Стать мастером» — карточка-строка, а не кнопка: залитая Primary-кнопка
