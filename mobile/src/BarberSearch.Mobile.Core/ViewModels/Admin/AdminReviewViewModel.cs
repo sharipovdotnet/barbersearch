@@ -27,9 +27,10 @@ namespace BarberSearch.Mobile.Core.ViewModels.Admin;
 /// администратора это тот же результат, что успех.
 /// </para>
 /// <para>
-/// Скрытие открывает панель причины прямо над нижней полосой — замену модального диалога веба.
-/// Сервер причину не принимает (<c>HideReviewCommand</c> её не имеет), поэтому подтверждение
-/// доступно сразу, а поле остаётся необязательным шагом подтверждения.
+/// Скрытие открывает панель подтверждения прямо над нижней полосой — замену модального
+/// диалога веба. Панель говорит, что произойдёт с отзывом и рейтингом, и не просит причину:
+/// серверная команда скрытия её не принимает (<c>HideReviewCommand</c>), а поле, текст
+/// которого никуда не уходит, обещало бы больше, чем делает.
 /// </para>
 /// <para>
 /// Состояния: первая загрузка, сбой с повтором, отказ в доступе, конец сессии и «отзыв уже
@@ -135,17 +136,11 @@ public sealed partial class AdminReviewViewModel : ObservableObject
     private string? _actionError;
 
     /// <summary>
-    /// Панель причины скрытия открыта.
+    /// Панель подтверждения скрытия открыта.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNotReasonPanelOpen))]
-    private bool _isReasonPanelOpen;
-
-    /// <summary>
-    /// Причина скрытия: необязательное поле подтверждения.
-    /// </summary>
-    [ObservableProperty]
-    private string _hideReason = string.Empty;
+    [NotifyPropertyChangedFor(nameof(IsHideConfirmationClosed))]
+    private bool _isHideConfirmationOpen;
 
     /// <summary>
     /// Оценка от 1 до 5.
@@ -302,9 +297,9 @@ public sealed partial class AdminReviewViewModel : ObservableObject
     public string HideButtonText => IsHiding ? Loc.T("Скрываем…") : Loc.T("Скрыть");
 
     /// <summary>
-    /// Панель причины закрыта: видна полоса решений.
+    /// Панель подтверждения закрыта: видна полоса решений.
     /// </summary>
-    public bool IsNotReasonPanelOpen => !IsReasonPanelOpen;
+    public bool IsHideConfirmationClosed => !IsHideConfirmationOpen;
 
     /// <summary>
     /// Текст отзыва отсутствует: показывается подпись оценки без комментария.
@@ -381,7 +376,7 @@ public sealed partial class AdminReviewViewModel : ObservableObject
         IsNotFound = false;
         IsPublishing = false;
         IsHiding = false;
-        IsReasonPanelOpen = false;
+        IsHideConfirmationOpen = false;
         ErrorMessage = null;
         ActionError = null;
 
@@ -411,25 +406,24 @@ public sealed partial class AdminReviewViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Открывает панель причины скрытия.
+    /// Открывает панель подтверждения скрытия.
     /// </summary>
     /// <remarks>
-    /// Причина серверу не уходит, поэтому панель не блокирует подтверждение: она заменяет
-    /// модальное подтверждение веба и оставляет причину человеку, а не базе.
+    /// Панель — второй шаг решения, а не форма: она повторяет последствие, которое уже
+    /// написал веб, и оставляет человеку «Отмена» и «Скрыть».
     /// </remarks>
     [RelayCommand]
-    private void OpenHidePanel()
+    private void OpenHideConfirmation()
     {
-        HideReason = string.Empty;
         ActionError = null;
-        IsReasonPanelOpen = true;
+        IsHideConfirmationOpen = true;
     }
 
     /// <summary>
-    /// Закрывает панель причины без записи.
+    /// Закрывает панель подтверждения без записи.
     /// </summary>
     [RelayCommand]
-    private void CancelHidePanel() => IsReasonPanelOpen = false;
+    private void CancelHideConfirmation() => IsHideConfirmationOpen = false;
 
     /// <summary>
     /// Публикует отзыв.
@@ -500,7 +494,8 @@ public sealed partial class AdminReviewViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Возвращает текст ошибки либо <c>null</c>, когда решение применилось или отзыв уже
-    /// разобрали. Причина не отправляется: серверная команда скрытия её не принимает.
+    /// разобрали. Причины у решения нет: серверная команда скрытия принимает только
+    /// идентификатор, а панель лишь подтверждает последствие.
     /// </remarks>
     /// <returns>Причина ошибки для показа либо <c>null</c>.</returns>
     public async Task<string?> HideAsync()
@@ -517,7 +512,7 @@ public sealed partial class AdminReviewViewModel : ObservableObject
         {
             await _reviewsApi.HideReviewAsync(_reviewId);
 
-            IsReasonPanelOpen = false;
+            IsHideConfirmationOpen = false;
 
             return null;
         }
@@ -531,7 +526,7 @@ public sealed partial class AdminReviewViewModel : ObservableObject
         catch (BarberSearchApiException exception)
             when (exception.StatusCode == HttpStatusCode.NotFound)
         {
-            IsReasonPanelOpen = false;
+            IsHideConfirmationOpen = false;
 
             return null;
         }
@@ -822,7 +817,7 @@ public sealed partial class AdminReviewViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowNotFound));
         OnPropertyChanged(nameof(ShowPublish));
         OnPropertyChanged(nameof(CanAct));
-        OnPropertyChanged(nameof(IsNotReasonPanelOpen));
+        OnPropertyChanged(nameof(IsHideConfirmationClosed));
         OnPropertyChanged(nameof(IsReviewTextEmpty));
         OnPropertyChanged(nameof(HasBarberFlags));
         OnPropertyChanged(nameof(HasUpdatedAt));

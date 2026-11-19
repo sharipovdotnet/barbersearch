@@ -141,20 +141,20 @@ public partial class AdminReviewPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
-    /// Открывает панель причины скрытия.
+    /// Открывает панель подтверждения скрытия.
     /// </summary>
     /// <param name="sender">Кнопка «Скрыть».</param>
     /// <param name="e">Аргументы события.</param>
     private void OnHideClicked(object? sender, EventArgs e) =>
-        _viewModel.OpenHidePanelCommand.Execute(null);
+        _viewModel.OpenHideConfirmationCommand.Execute(null);
 
     /// <summary>
-    /// Закрывает панель причины без записи.
+    /// Закрывает панель подтверждения без записи.
     /// </summary>
     /// <param name="sender">Кнопка «Отмена».</param>
     /// <param name="e">Аргументы события.</param>
     private void OnCancelHideClicked(object? sender, EventArgs e) =>
-        _viewModel.CancelHidePanelCommand.Execute(null);
+        _viewModel.CancelHideConfirmationCommand.Execute(null);
 
     /// <summary>
     /// Скрывает отзыв после подтверждения в панели и уходит к очереди при успехе.
