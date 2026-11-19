@@ -174,7 +174,15 @@ public sealed partial class AdminHubViewModel : ObservableObject
     /// <summary>
     /// Сбой чтения виден: причина и «Повторить».
     /// </summary>
-    public bool ShowError => ErrorMessage is not null && !ShowForbidden && !IsSignInRequired;
+    /// <remarks>
+    /// Причина не гаснет ни при тихом повторе, ни при возврате на страницу: сбой снимает только
+    /// успех. Иначе на каждой паузе цикла экран мигал бы — блок ошибки исчезал бы вместе с
+    /// причиной, вместо него показывался бы список разделов с пустыми строками, а между
+    /// попытками ошибка возвращалась бы. Первая загрузка закрывает ошибку своим индикатором:
+    /// два блока об одном и том же одновременно не показываются.
+    /// </remarks>
+    public bool ShowError =>
+        ErrorMessage is not null && !IsFirstLoading && !ShowForbidden && !IsSignInRequired;
 
     /// <summary>
     /// Отказ в доступе виден.
@@ -271,12 +279,6 @@ public sealed partial class AdminHubViewModel : ObservableObject
 
         var generation = _generation;
         var kind = ApiFailureKind.None;
-
-        if (mode != LoadMode.Refresh)
-        {
-            ErrorMessage = null;
-            _failureKind = ApiFailureKind.None;
-        }
 
         if (mode == LoadMode.Initial)
         {

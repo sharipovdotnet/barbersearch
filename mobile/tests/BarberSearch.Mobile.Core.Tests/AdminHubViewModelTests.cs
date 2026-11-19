@@ -286,6 +286,39 @@ public sealed class AdminHubViewModelTests
     }
 
     [Fact]
+    public async Task AutoRetryAttempt_WhileInFlight_KeepsTheErrorVisible()
+    {
+        var harness = new Harness(autoRetry: FastRetry());
+        var calls = 0;
+
+        harness.SummaryApi.Get = cancellationToken =>
+        {
+            calls++;
+
+            // Попытка цикла висит: видно, что происходит на экране во время ожидания.
+            return calls == 1
+                ? Task.FromException<AdminSummaryResponse>(new HttpRequestException("refused"))
+                : WaitForCancellationAsync(cancellationToken);
+        };
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.InitializeAsync();
+
+        viewModel.StartAutoRetry();
+
+        // Тихий повтор не гасит причину: иначе на каждой паузе экран мигал бы пустым списком
+        // разделов с нулями вместо ошибки с «Повторить».
+        Assert.Equal(NetworkErrorText, viewModel.ErrorMessage);
+        Assert.True(viewModel.ShowError);
+        Assert.False(viewModel.ShowContent);
+        Assert.True(viewModel.IsAutoRetrying);
+
+        viewModel.StopAutoRetry();
+        await viewModel.AutoRetryCompletion;
+    }
+
+    [Fact]
     public async Task RetryAsync_AfterTransportFailure_ClearsErrorAndRestoresSections()
     {
         var harness = new Harness();
