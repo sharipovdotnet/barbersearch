@@ -540,6 +540,55 @@ in Core owns both base addresses.
   other, the cold start whose `/me` read fails before the list is ever asked for, and the «Пробуем
   снова…» line that follows the loop state.
 
+- **«Стать мастером» is a quiet row in the account hub, and only a customer sees it.** The row sits
+  under the person card — after the «Email не подтверждён» link when that link is visible, and before
+  the block that reports a failed silent profile refresh — and it is a `Border` card-row (1 pt
+  `Border`, radius 10, `MinimumHeightRequest` 56, the scissors in a `Muted` circle 36, the title and a
+  chevron, the whole row tappable) rather than a filled `Primary` button: a filled button in that
+  place would compete with «Выйти» and «Личные данные», which are the hub's real actions, while
+  becoming a master is an application that grants nothing yet. The row is drawn only when the profile
+  is loaded and the role is `UserRole.Customer` (`CanRequestBarberRole`). A barber and an
+  administrator already hold the role, `POST api/barber-requests` would answer them `403`, and an
+  interface that offers an action the server forbids teaches the person to expect a refusal.
+  `BarberRequestTitle` is the request's state rather than a permanent action label: while there is
+  no request it says «Стать мастером», then «Заявка на рассмотрении», «Заявка отклонена» or
+  «Заявка одобрена». A row that kept saying «Стать мастером» would leave a person who already
+  applied with no sign that the application exists, and this row is the only entry into the request
+  page — the page carries the details, so the row has to carry the status. A rejected request keeps
+  the row as the way back into the form, and an approved one ends in «Выйти и войти снова» instead
+  of a silent reload: approval changes the role, the server rotates `SecurityStamp` and revokes every
+  refresh token, so the pair the app holds is dead the moment the administrator decides, and only a
+  new sign-in shows the new role.
+  The state itself comes from `GET api/barber-requests/mine`, read quietly after the profile and only
+  for a customer, on a second `AutoRetryLoop` of the hub's own — the same rule as «Записи»: the two
+  loops never arm each other, and a failed `mine` is no reason to re-read the profile.
+  `request: null` is the ordinary "no request yet", not an error and not a state to hide. A failure
+  of this read neither hides the row nor blocks the hub: the title falls back to «Стать мастером»,
+  the loop repeats while the tab is visible, and a tap still opens the page. The row is a hint, not
+  the record — the page reads the same `mine` with its own loop and shows the actual request — and
+  hiding it on a failed read would remove the only way into that page and into an application that
+  already exists. Signing out clears the request state together with the profile, so the next
+  account never inherits the previous title, and the push into «Стать мастером» stops the hub's
+  loops first, like every other push into a child screen.
+  The page is native — `BarberRequestPage` on the `barber-request` route, pushed over the «Профиль»
+  stack with the tab bar hidden — not the web's `/become-a-barber` opened in a browser. The app
+  carries a Bearer pair while the site's page lives on a cookie session: in a browser the person
+  would arrive signed out and would apply against an account the app is not showing, whereas the
+  native page posts `POST api/barber-requests` with the token `AuthenticatedHttpHandler` has already
+  attached, and needs no `X-CSRF-TOKEN`, because the antiforgery filter lets a bearer request
+  through. The word on the screen is «мастер», English “professional” (the `GLOSSARY.md` entry
+  «Мастер / Professional» at the git root), while the code and the domain keep `Barber`:
+  `BarberRequest`, `BarberRequestResponse` and `api/barber-requests` are the role's name, not an
+  interface string, while «барбер», «парикмахер» and «колорист» are specialisations: the role covers
+  more than one trade, and the screens of this slice say «мастер» and never «барбер». Three
+  neighbours are deliberately outside this slice: renaming
+  the web page `/become-a-barber`, the barber cabinet, and translating the existing catalog from
+  «Мастер» to “professional”. That last one is the recorded deviation rather than an oversight: 33
+  lines of `Core/Localization/messages/en.json` still say “barber” (the first is «Мастер» →
+  “Barber”), because that wording is spread over search, the card, bookings and reviews, and a
+  handful of new strings must not rewrite the product's vocabulary in passing. Every string this
+  slice adds is already “professional”.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:

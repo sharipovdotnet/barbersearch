@@ -267,6 +267,49 @@
                     Text="{loc:Translate Key='Email не подтверждён'}"
                     TextColor="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
 
+                <!--
+                    «Стать мастером» — карточка-строка, а не кнопка: залитая Primary-кнопка
+                    спорила бы с «Выйти» и «Личными данными», хотя заявка пока ничего не
+                    выдаёт. Вся строка — цель нажатия не меньше 56 pt; заголовок показывает
+                    состояние заявки, а подробности живут на странице. Строка видна только
+                    клиенту: мастеру и администратору POST ответил бы 403.
+                -->
+                <Border
+                    Padding="12"
+                    IsVisible="{Binding CanRequestBarberRole}"
+                    MinimumHeightRequest="56"
+                    SemanticProperties.Description="{Binding BarberRequestTitle}"
+                    StrokeShape="RoundRectangle 10">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenBarberRequestCommand}" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <Border
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="36"
+                            HorizontalOptions="Center"
+                            Stroke="Transparent"
+                            StrokeShape="RoundRectangle 18"
+                            VerticalOptions="Center"
+                            WidthRequest="36">
+                            <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                        </Border>
+                        <Label
+                            Grid.Column="1"
+                            FontFamily="GeistMedium"
+                            FontSize="16"
+                            LineBreakMode="TailTruncation"
+                            Text="{Binding BarberRequestTitle}"
+                            VerticalTextAlignment="Center" />
+                        <Label
+                            Grid.Column="2"
+                            FontSize="20"
+                            Text="›"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalTextAlignment="Center" />
+                    </Grid>
+                </Border>
+
                 <!-- Ошибка тихого обновления: данные на экране остаются, есть чем повторить. -->
                 <VerticalStackLayout IsVisible="{Binding HasProfileError}" Spacing="8">
                     <Label
