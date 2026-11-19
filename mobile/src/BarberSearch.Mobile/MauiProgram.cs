@@ -180,6 +180,17 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IAdminSummaryApi, AdminSummaryApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Очереди модерации — свои клиенты по разделам: у каждого свой набор чтений и решений,
+        // а Bearer, роль и 403 у них общие. Сводка остаётся одна: числа считает сервер.
+        builder.Services.AddHttpClient<IAdminReviewsApi, AdminReviewsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IAdminPhotosApi, AdminPhotosApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IAdminMastersApi, AdminMastersApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IAdminRequestsApi, AdminRequestsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
@@ -229,6 +240,16 @@ public static class MauiProgram
         // а состояние прошлого захода хранить нечего.
         builder.Services.AddTransient<AdminHubViewModel>();
 
+        // Разделы администрирования живут один визит: список и курсор не должны переживать
+        // выход с экрана, а после решения очередь перечитывается при возврате.
+        builder.Services.AddTransient<AdminReviewsViewModel>();
+        builder.Services.AddTransient<AdminReviewViewModel>();
+        builder.Services.AddTransient<AdminPhotosViewModel>();
+        builder.Services.AddTransient<AdminMastersViewModel>();
+        builder.Services.AddTransient<AdminMasterViewModel>();
+        builder.Services.AddTransient<AdminRequestsViewModel>();
+        builder.Services.AddTransient<AdminRequestViewModel>();
+
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
         builder.Services.AddTransient<PortfolioPhotoPage>();
@@ -242,6 +263,13 @@ public static class MauiProgram
         builder.Services.AddTransient<RegisterPage>();
         builder.Services.AddTransient<ForgotPasswordPage>();
         builder.Services.AddTransient<AdminHubPage>();
+        builder.Services.AddTransient<AdminReviewsPage>();
+        builder.Services.AddTransient<AdminReviewPage>();
+        builder.Services.AddTransient<AdminPhotosPage>();
+        builder.Services.AddTransient<AdminMastersPage>();
+        builder.Services.AddTransient<AdminMasterPage>();
+        builder.Services.AddTransient<AdminRequestsPage>();
+        builder.Services.AddTransient<AdminRequestPage>();
 
         // Вкладки тоже transient: смена языка пересобирает Shell, и каждая страница должна
         // получить ViewModel с новым языком. Состояние вкладки сохраняется между визитами,

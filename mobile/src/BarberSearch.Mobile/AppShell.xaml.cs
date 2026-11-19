@@ -87,5 +87,29 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			AdminHubPage.Route,
 			new PageRouteFactory<AdminHubPage>(services));
+
+		// Разделы открываются строками хаба и возвращаются на него же: хаб перечитывает
+		// сводку при появлении, поэтому счётчик очереди обновляется сам после решения.
+		Routing.RegisterRoute(
+			AdminReviewsPage.Route,
+			new PageRouteFactory<AdminReviewsPage>(services));
+		Routing.RegisterRoute(
+			AdminReviewPage.Route,
+			new PageRouteFactory<AdminReviewPage>(services));
+		Routing.RegisterRoute(
+			AdminPhotosPage.Route,
+			new PageRouteFactory<AdminPhotosPage>(services));
+		Routing.RegisterRoute(
+			AdminMastersPage.Route,
+			new PageRouteFactory<AdminMastersPage>(services));
+		Routing.RegisterRoute(
+			AdminMasterPage.Route,
+			new PageRouteFactory<AdminMasterPage>(services));
+		Routing.RegisterRoute(
+			AdminRequestsPage.Route,
+			new PageRouteFactory<AdminRequestsPage>(services));
+		Routing.RegisterRoute(
+			AdminRequestPage.Route,
+			new PageRouteFactory<AdminRequestPage>(services));
 	}
 }
