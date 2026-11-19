@@ -1,5 +1,6 @@
 using BarberSearch.Mobile.Core.Navigation;
 using BarberSearch.Mobile.Core.ViewModels.Admin;
+using BarberSearch.Mobile.Theming;
 
 namespace BarberSearch.Mobile.Pages;
 
@@ -41,6 +42,8 @@ public partial class AdminPhotosPage : ContentPage
         _viewModel = viewModel;
 
         BindingContext = viewModel;
+
+        ApplySegmentStyles();
     }
 
     /// <summary>
@@ -52,7 +55,51 @@ public partial class AdminPhotosPage : ContentPage
 
         _visibility = PageVisibility.Watch(this, _viewModel.StartAutoRetry, _viewModel.StopAutoRetry);
 
+        ApplySegmentStyles();
+
         await _viewModel.InitializeAsync();
+
+        // Вторая раскраска — после чтения: очередь могла переключиться сама, а стиль
+        // сегмента не привязка и за ViewModel не следит.
+        ApplySegmentStyles();
+    }
+
+    /// <summary>
+    /// Переключает очередь на аватары.
+    /// </summary>
+    /// <param name="sender">Сегмент «Аватары».</param>
+    /// <param name="e">Аргументы события.</param>
+    private async void OnAvatarsClicked(object? sender, EventArgs e)
+    {
+        await _viewModel.ShowAvatarsCommand.ExecuteAsync(null);
+
+        ApplySegmentStyles();
+    }
+
+    /// <summary>
+    /// Переключает очередь на портфолио.
+    /// </summary>
+    /// <param name="sender">Сегмент «Портфолио».</param>
+    /// <param name="e">Аргументы события.</param>
+    private async void OnPortfolioClicked(object? sender, EventArgs e)
+    {
+        await _viewModel.ShowPortfolioCommand.ExecuteAsync(null);
+
+        ApplySegmentStyles();
+    }
+
+    /// <summary>
+    /// Красит сегменты под текущую очередь.
+    /// </summary>
+    /// <remarks>
+    /// Подсветка идёт стилем, а не <c>DataTrigger</c>: локальное значение из сеттера триггера
+    /// переживает возврат условия, и снятый сегмент остаётся серым. Стили берут цвета токенов
+    /// через <c>AppThemeBinding</c>, поэтому смена темы перекрашивает подсветку сама.
+    /// </remarks>
+    private void ApplySegmentStyles()
+    {
+        SegmentedButtonStyle.Apply(AvatarsButton, _viewModel.IsAvatarsSelected);
+        SegmentedButtonStyle.Apply(PortfolioButton, _viewModel.IsPortfolioSelected);
     }
 
     /// <summary>

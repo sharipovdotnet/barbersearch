@@ -192,49 +192,33 @@
             RowDefinitions="Auto,*"
             RowSpacing="12">
 
-            <!-- Сегменты: аватары по умолчанию, как вкладка веба. -->
+            <!--
+                Сегменты: аватары по умолчанию, как вкладка веба.
+
+                Выбранный сегмент подсвечивается стилем из code-behind
+                (`SegmentedButtonStyle.Apply`), а не `DataTrigger` с `Setter` на
+                `BackgroundColor`: локальное значение из сеттера переживает возврат условия,
+                и сегмент остаётся серым после переключения обратно. Стили `SegmentButton` /
+                `SegmentButtonSelected` красят через `AppThemeBinding`, поэтому сегмент
+                перекрашивается и при смене темы.
+            -->
             <Border
                 Padding="2"
+                SemanticProperties.Description="{loc:Translate Key='Какие фото показать'}"
                 Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                 StrokeShape="RoundRectangle 8">
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
                     <Button
-                        Command="{Binding ShowAvatarsCommand}"
+                        x:Name="AvatarsButton"
+                        Clicked="OnAvatarsClicked"
                         Style="{StaticResource SegmentButton}"
-                        Text="{loc:Translate Key='Аватары'}">
-                        <Button.Triggers>
-                            <DataTrigger
-                                Binding="{Binding IsAvatarsSelected}"
-                                TargetType="Button"
-                                Value="True">
-                                <Setter
-                                    Property="BackgroundColor"
-                                    Value="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}" />
-                                <Setter
-                                    Property="TextColor"
-                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        Text="{loc:Translate Key='Аватары'}" />
                     <Button
+                        x:Name="PortfolioButton"
                         Grid.Column="1"
-                        Command="{Binding ShowPortfolioCommand}"
+                        Clicked="OnPortfolioClicked"
                         Style="{StaticResource SegmentButton}"
-                        Text="{loc:Translate Key='Портфолио'}">
-                        <Button.Triggers>
-                            <DataTrigger
-                                Binding="{Binding IsPortfolioSelected}"
-                                TargetType="Button"
-                                Value="True">
-                                <Setter
-                                    Property="BackgroundColor"
-                                    Value="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}" />
-                                <Setter
-                                    Property="TextColor"
-                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        Text="{loc:Translate Key='Портфолио'}" />
                 </Grid>
             </Border>
 
