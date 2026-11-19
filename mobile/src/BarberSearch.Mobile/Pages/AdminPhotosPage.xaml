@@ -33,11 +33,30 @@
                         HeightRequest="180"
                         StrokeThickness="0"
                         StrokeShape="RoundRectangle 8">
-                        <Image
-                            Aspect="Fill"
-                            HeightRequest="180"
-                            SemanticProperties.Description="{Binding AltText}"
-                            Source="{Binding ImageUrl}" />
+                        <Grid>
+                            <!--
+                                Кадр приходит байтами: раздача media отдаёт неодобренное фото
+                                только с Bearer, а загрузчик картинок платформы ходит без
+                                заголовков и получает 404. Подложка Border остаётся фоном,
+                                пока байтов нет, а подпись над ней появляется, если превью
+                                не пришло.
+                            -->
+                            <Image
+                                Aspect="Fill"
+                                HeightRequest="180"
+                                SemanticProperties.Description="{Binding AltText}"
+                                Source="{Binding ImageBytes, Converter={StaticResource ImageBytes}}" />
+                            <Label
+                                Margin="8"
+                                FontSize="12"
+                                HorizontalOptions="Center"
+                                HorizontalTextAlignment="Center"
+                                IsVisible="{Binding ImageFailed}"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Не удалось показать превью'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                VerticalOptions="End" />
+                        </Grid>
                     </Border>
 
                     <Label

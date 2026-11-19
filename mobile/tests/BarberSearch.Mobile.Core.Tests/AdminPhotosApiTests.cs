@@ -8,13 +8,18 @@ using BarberSearch.Mobile.Core.Api.Admin;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки клиента очередей фото: два чтения, четыре решения и разбор ошибок.
+/// Проверки клиентов очередей фото: два чтения, четыре решения, превью и разбор ошибок.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Курсор непрозрачен: клиент не разбирает его, но обязан вернуть без потерь, поэтому
 /// адрес проверяется после декодирования. Решения отвечают <c>204</c> без тела — клиент
 /// не должен читать у него JSON, иначе успешное действие выглядело бы сбоем.
+/// </para>
+/// <para>
+/// Превью читаются отдельным клиентом по абсолютному адресу из ответа API: вариант размера
+/// уже в адресе, а <c>404</c> на неодобренный кадр обязан стать исключением, по которому
+/// карточка скажет «не удалось показать», а не уронит экран.
 /// </para>
 /// <para>
 /// Сеть подменяется <see cref="HttpMessageHandler"/>: тест проходит через настоящий
@@ -246,6 +251,47 @@ public sealed class AdminPhotosApiTests
         Assert.Contains("admin.photos.cursor", exception.ErrorCodes, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public async Task GetBytesAsync_AbsoluteUrl_SendsGetAndReturnsBytes()
+    {
+        byte[] expected = [0xFF, 0xD8, 0xFF, 0xE0];
+        var handler = new StubHandler(HttpStatusCode.OK, bytes: expected);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AdminMediaApi(httpClient);
+
+        const string url = "http://localhost:5243/api/media/avatars/artem.jpg?size=md";
+
+        var bytes = await api.GetBytesAsync(url);
+
+        // Адрес уходит абсолютным и целиком: query с размером — часть адреса, её выбирает вызывающий.
+        Assert.Equal(HttpMethod.Get, handler.LastMethod);
+        Assert.Equal(url, handler.LastRequestUri!.AbsoluteUri);
+        Assert.Equal(expected, bytes);
+    }
+
+    [Fact]
+    public async Task GetBytesAsync_NotFound_ThrowsBarberSearchApiException()
+    {
+        const string problemJson = """
+            {
+              "title": "Not Found",
+              "status": 404,
+              "detail": "The photo is not available.",
+              "errorCodes": ["media.notFound"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.NotFound, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AdminMediaApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.GetBytesAsync("http://localhost:5243/api/media/avatars/pending.jpg?size=md"));
+
+        Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
+        Assert.Contains("media.notFound", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
     private static string AvatarPageJson(string nextCursor) => $$"""
         {
           "items": [
@@ -285,10 +331,15 @@ public sealed class AdminPhotosApiTests
     /// <summary>
     /// Подменённый обработчик: отдаёт заданный ответ и запоминает метод, адрес и тело.
     /// </summary>
+    /// <remarks>
+    /// Тело бывает строкой JSON или готовыми байтами картинки: превью проверяется именно
+    /// байтами, а не разобранной строкой.
+    /// </remarks>
     private sealed class StubHandler(
         HttpStatusCode statusCode,
         string? body = null,
-        string contentType = "application/json") : HttpMessageHandler
+        string contentType = "application/json",
+        byte[]? bytes = null) : HttpMessageHandler
     {
         public HttpMethod? LastMethod { get; private set; }
 
@@ -306,9 +357,15 @@ public sealed class AdminPhotosApiTests
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
 
+            HttpContent? content = bytes is not null
+                ? new ByteArrayContent(bytes)
+                : body is null
+                    ? null
+                    : new StringContent(body, Encoding.UTF8, contentType);
+
             return new HttpResponseMessage(statusCode)
             {
-                Content = body is null ? null : new StringContent(body, Encoding.UTF8, contentType),
+                Content = content,
             };
         }
     }
