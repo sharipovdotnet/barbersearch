@@ -19,8 +19,9 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// соседнюю, а решение убирает строку только из своей.
 /// </para>
 /// <para>
-/// Сеть подменяется <see cref="IAdminPhotosApi"/>: тест не поднимает бэкенд, но проходит
-/// через настоящие ViewModel, курсоры и автоповтор с расписанием без ожидания.
+/// Сеть подменяется <see cref="FakePhotosApi"/>: тест не поднимает бэкенд, но проходит
+/// через настоящие ViewModel, курсоры и автоповтор с расписанием без ожидания. Превью
+/// читает <see cref="FakeMediaApi"/> — та же очередь, но другой клиент, как в приложении.
 /// </para>
 /// </remarks>
 public sealed class AdminPhotosViewModelTests
@@ -31,6 +32,8 @@ public sealed class AdminPhotosViewModelTests
 
     private static readonly DateTimeOffset SubmittedAt =
         new(2026, 11, 20, 10, 0, 0, TimeSpan.Zero);
+
+    private static readonly byte[] PreviewBytes = [0xFF, 0xD8, 0xFF, 0xE0];
 
     private const string NetworkErrorText =
         "Нет связи с сервером. Проверьте подключение и повторите попытку.";
@@ -62,7 +65,7 @@ public sealed class AdminPhotosViewModelTests
         Assert.Equal("На проверке", first.StatusText);
         Assert.StartsWith("ждёт с", first.SubmittedText);
         Assert.Equal(
-            "http://localhost:5243/api/media/avatars/artem.jpg?size=lg",
+            "http://localhost:5243/api/media/avatars/artem.jpg?size=md",
             first.ImageUrl);
         Assert.Contains("Одобрить: Артём Соколов", first.ApproveHint, StringComparison.Ordinal);
 
@@ -70,6 +73,98 @@ public sealed class AdminPhotosViewModelTests
         Assert.Null(Assert.Single(harness.Api.AvatarCursors));
         Assert.Equal(AdminPhotoModerationList.PageSize, harness.Api.AvatarPageSizes[0]);
         Assert.Equal(0, harness.Api.PortfolioCalls);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithMediaApi_LoadsPreviewBytes()
+    {
+        var harness = new Harness();
+
+        harness.Api.GetAvatars = (_, _) => Task.FromResult(AvatarPage([AvatarOf()], null));
+
+        await harness.ViewModel.InitializeAsync();
+        await harness.ViewModel.Avatars.PreviewsCompletion;
+
+        // Превью идёт по абсолютному адресу с размером md: lg для карточки — лишние байты.
+        Assert.Equal(
+            ["http://localhost:5243/api/media/avatars/artem.jpg?size=md"],
+            harness.Media.Requests);
+
+        var item = Assert.Single(harness.ViewModel.Avatars.Items);
+
+        Assert.Equal(PreviewBytes, item.ImageBytes);
+        Assert.False(item.ImageFailed);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PreviewFailure_MarksCardAndKeepsQueueUsable()
+    {
+        var harness = new Harness();
+
+        harness.Api.GetAvatars = (_, _) => Task.FromResult(AvatarPage([AvatarOf()], null));
+        harness.Media.GetBytes = _ => Task.FromException<byte[]>(
+            ApiError(HttpStatusCode.NotFound, "media.notFound"));
+
+        await harness.ViewModel.InitializeAsync();
+        await harness.ViewModel.Avatars.PreviewsCompletion;
+
+        var item = Assert.Single(harness.ViewModel.Avatars.Items);
+
+        // Превью — украшение: сбой помечает кадр, но не трогает строку и её решения.
+        Assert.True(item.ImageFailed);
+        Assert.Null(item.ImageBytes);
+        Assert.False(item.HasError);
+        Assert.True(item.ApproveCommand.CanExecute(null));
+        Assert.Single(harness.ViewModel.Avatars.Items);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_StalePreviewAnswer_IsDropped()
+    {
+        var harness = new Harness();
+        var pending = new TaskCompletionSource<byte[]>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        harness.Api.GetAvatars = (_, _) => Task.FromResult(AvatarPage([AvatarOf()], null));
+        harness.Media.GetBytes = _ => pending.Task;
+
+        await harness.ViewModel.InitializeAsync();
+
+        var stale = Assert.Single(harness.ViewModel.Avatars.Items);
+
+        harness.Api.GetAvatars = (_, _) => Task.FromResult(
+            AvatarPage([AvatarOf(id: Guid.CreateVersion7(), lastName: "Петров")], null));
+
+        await harness.ViewModel.Avatars.RefreshCommand.ExecuteAsync(null);
+
+        var fresh = Assert.Single(harness.ViewModel.Avatars.Items);
+
+        pending.SetResult(PreviewBytes);
+
+        await harness.ViewModel.Avatars.PreviewsCompletion;
+
+        // Ответ старого списка не должен попасть даже в убравшуюся строку: его отбросил
+        // счётчик поколений, а не совпадение состава Items.
+        Assert.Null(stale.ImageBytes);
+        Assert.False(stale.ImageFailed);
+        Assert.Equal(PreviewBytes, fresh.ImageBytes);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithoutMediaApi_FetchesNoPreviews()
+    {
+        var harness = new Harness(withMediaApi: false);
+
+        harness.Api.GetAvatars = (_, _) => Task.FromResult(AvatarPage([AvatarOf()], null));
+
+        await harness.ViewModel.InitializeAsync();
+        await harness.ViewModel.Avatars.PreviewsCompletion;
+
+        var item = Assert.Single(harness.ViewModel.Avatars.Items);
+
+        Assert.Empty(harness.Media.Requests);
+        Assert.Null(item.ImageBytes);
+        Assert.False(item.ImageFailed);
     }
 
     [Fact]
@@ -642,12 +737,13 @@ public sealed class AdminPhotosViewModelTests
         new(statusCode, "Request failed.", [errorCode], new Dictionary<string, string[]>());
 
     /// <summary>
-    /// Собранный экран: сессия с парой, фальшивый клиент фото и открытый ViewModel.
+    /// Собранный экран: сессия с парой, фальшивый клиент фото, клиент превью и ViewModel.
     /// </summary>
     private sealed class Harness
     {
         public Harness(
             bool withTokens = true,
+            bool withMediaApi = true,
             AutoRetryLoop? avatarsAutoRetry = null,
             AutoRetryLoop? avatarsLoadMoreAutoRetry = null)
         {
@@ -660,6 +756,8 @@ public sealed class AdminPhotosViewModelTests
             Api.GetAvatars = (_, _) => Task.FromResult(AvatarPage([], null));
             Api.GetPortfolio = (_, _) => Task.FromResult(PortfolioPage([], null));
 
+            Media = new FakeMediaApi();
+
             ApiOptions = new BarberSearchApiOptions(new Uri("http://localhost:5243/"));
 
             ViewModel = new AdminPhotosViewModel(
@@ -667,7 +765,8 @@ public sealed class AdminPhotosViewModelTests
                 ApiOptions,
                 Session,
                 avatarsAutoRetry,
-                avatarsLoadMoreAutoRetry);
+                avatarsLoadMoreAutoRetry,
+                mediaApi: withMediaApi ? Media : null);
         }
 
         public FakeTokenStore Store { get; }
@@ -677,6 +776,8 @@ public sealed class AdminPhotosViewModelTests
         public BarberSearchApiOptions ApiOptions { get; }
 
         public FakePhotosApi Api { get; } = new();
+
+        public FakeMediaApi Media { get; }
 
         public AdminPhotosViewModel ViewModel { get; }
     }
@@ -780,6 +881,32 @@ public sealed class AdminPhotosViewModelTests
             RejectedPortfolioPhotos.Add((barberProfileId, photoId, reason));
 
             return RejectPortfolioPhoto(barberProfileId, photoId, reason);
+        }
+    }
+
+    /// <summary>
+    /// Подменённый клиент превью: запоминает адреса и отдаёт заданные байты или сбой.
+    /// </summary>
+    private sealed class FakeMediaApi : IAdminMediaApi
+    {
+        /// <summary>
+        /// Запрошенные адреса: по ним видно и вариант размера, и отказ при отсутствии клиента.
+        /// </summary>
+        public List<string> Requests { get; } = [];
+
+        /// <summary>
+        /// Ответ на запрос: байты по умолчанию, исключение или незавершённая задача.
+        /// </summary>
+        public Func<string, Task<byte[]>> GetBytes { get; set; } =
+            _ => Task.FromResult(PreviewBytes);
+
+        public Task<byte[]> GetBytesAsync(
+            string url,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(url);
+
+            return GetBytes(url);
         }
     }
 

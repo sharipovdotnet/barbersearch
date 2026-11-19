@@ -70,6 +70,10 @@ public sealed partial class AdminPhotosViewModel : ObservableObject
     /// <param name="portfolioLoadMoreAutoRetry">
     /// Цикл автоповтора догрузки портфолио; <c>null</c> — обычное расписание.
     /// </param>
+    /// <param name="mediaApi">
+    /// Чтение превью тем же авторизованным клиентом, что и списки; <c>null</c> — очередь
+    /// работает без превью (подложка вместо кадра), как в проверках без сети.
+    /// </param>
     public AdminPhotosViewModel(
         IAdminPhotosApi photosApi,
         BarberSearchApiOptions apiOptions,
@@ -77,7 +81,8 @@ public sealed partial class AdminPhotosViewModel : ObservableObject
         AutoRetryLoop? avatarsAutoRetry = null,
         AutoRetryLoop? avatarsLoadMoreAutoRetry = null,
         AutoRetryLoop? portfolioAutoRetry = null,
-        AutoRetryLoop? portfolioLoadMoreAutoRetry = null)
+        AutoRetryLoop? portfolioLoadMoreAutoRetry = null,
+        IAdminMediaApi? mediaApi = null)
     {
         ArgumentNullException.ThrowIfNull(photosApi);
         ArgumentNullException.ThrowIfNull(apiOptions);
@@ -89,7 +94,8 @@ public sealed partial class AdminPhotosViewModel : ObservableObject
             apiOptions,
             session,
             avatarsAutoRetry,
-            avatarsLoadMoreAutoRetry);
+            avatarsLoadMoreAutoRetry,
+            mediaApi);
 
         Portfolio = new AdminPhotoModerationList(
             AdminPhotosSegment.Portfolio,
@@ -97,7 +103,8 @@ public sealed partial class AdminPhotosViewModel : ObservableObject
             apiOptions,
             session,
             portfolioAutoRetry,
-            portfolioLoadMoreAutoRetry);
+            portfolioLoadMoreAutoRetry,
+            mediaApi);
 
         Avatars.SessionEnded += OnQueueSessionEnded;
         Portfolio.SessionEnded += OnQueueSessionEnded;
@@ -280,10 +287,29 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
     private static string ApprovedAnnouncement => Loc.T("Фото одобрено.");
     private static string RejectedAnnouncement => Loc.T("Фото отклонено.");
 
+    /// <summary>
+    /// Сколько превью читать одновременно: превью — украшение, и три соединения на
+    /// мобильной сети хватает, чтобы карточки наполнялись без гонки за каналом.
+    /// </summary>
+    private const int PreviewConcurrency = 3;
+
+    /// <summary>
+    /// Предел одновременных чтений превью — на всё приложение, а не на очередь.
+    /// </summary>
+    /// <remarks>
+    /// Обе очереди и оба сегмента делят три разрешения: мобильный канал один, и десяток
+    /// параллельных картинок не ускорил бы показ, а отнял бы его у списка. Поле статическое
+    /// и живёт столько же, сколько процесс: очередь создаётся на визит экрана, а предел
+    /// должен переживать её, иначе догрузка второй страницы удваивала бы параллельность.
+    /// </remarks>
+    private static readonly SemaphoreSlim PreviewGate =
+        new(PreviewConcurrency, PreviewConcurrency);
+
     private readonly AdminPhotosSegment _segment;
     private readonly IAdminPhotosApi _api;
     private readonly BarberSearchApiOptions _apiOptions;
     private readonly TokenSession _session;
+    private readonly IAdminMediaApi? _mediaApi;
     private readonly AutoRetryLoop _autoRetry;
     private readonly AutoRetryLoop _loadMoreAutoRetry;
 
@@ -293,6 +319,7 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
     private ApiFailureKind _loadMoreFailureKind;
     private string? _loadMoreRetryCursor;
     private bool _isPageVisible;
+    private Task _previews = Task.CompletedTask;
 
     /// <summary>
     /// Создаёт очередь.
@@ -303,13 +330,17 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
     /// <param name="session">Сессия: конец сессии при <c>401</c>.</param>
     /// <param name="autoRetry">Цикл автоповтора первой страницы; <c>null</c> — обычное расписание.</param>
     /// <param name="loadMoreAutoRetry">Цикл автоповтора догрузки; <c>null</c> — обычное расписание.</param>
+    /// <param name="mediaApi">
+    /// Чтение превью с Bearer; <c>null</c> — очередь не грузит превью вовсе.
+    /// </param>
     public AdminPhotoModerationList(
         AdminPhotosSegment segment,
         IAdminPhotosApi api,
         BarberSearchApiOptions apiOptions,
         TokenSession session,
         AutoRetryLoop? autoRetry = null,
-        AutoRetryLoop? loadMoreAutoRetry = null)
+        AutoRetryLoop? loadMoreAutoRetry = null,
+        IAdminMediaApi? mediaApi = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(apiOptions);
@@ -319,6 +350,7 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
         _api = api;
         _apiOptions = apiOptions;
         _session = session;
+        _mediaApi = mediaApi;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
@@ -483,6 +515,15 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
     /// Завершение цикла догрузки.
     /// </summary>
     internal Task LoadMoreAutoRetryCompletion => _loadMoreAutoRetry.Completion;
+
+    /// <summary>
+    /// Завершение чтения превью: тесты ждут его вместо пауз.
+    /// </summary>
+    /// <remarks>
+    /// Задача накопительная: к ней присоединяется каждая следующая пачка превью, поэтому
+    /// ожидание после обновления списка покрывает и ответы прошлого состава.
+    /// </remarks>
+    internal Task PreviewsCompletion => _previews;
 
     /// <summary>
     /// Читает очередь при появлении страницы: первый раз с индикатором, дальше тихо.
@@ -928,6 +969,7 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
             _loadMoreRetryCursor = null;
 
             NotifyViewState();
+            StartPreviews(page.Items, generation);
         }
         catch (Exception exception)
         {
@@ -1236,6 +1278,8 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
     /// <param name="items">Строки страницы.</param>
     private void AppendItems(IReadOnlyList<AdminPhotoItem> items)
     {
+        var added = new List<AdminPhotoItem>(items.Count);
+
         foreach (var item in items)
         {
             if (Items.Any(existing => existing.Id == item.Id))
@@ -1244,9 +1288,117 @@ public sealed partial class AdminPhotoModerationList : ObservableObject
             }
 
             Items.Add(item);
+            added.Add(item);
         }
 
         NotifyViewState();
+        StartPreviews(added, _generation);
+    }
+
+    /// <summary>
+    /// Запускает чтение превью для новых строк и не ждёт его: превью — украшение.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Байты читает <see cref="IAdminMediaApi"/>, а не загрузчик картинок платформы: тот
+    /// ходит без заголовков и получает <c>404</c> на неодобренный кадр. Ошибка превью
+    /// заменяет кадр подложкой и не трогает ни список, ни решения.
+    /// </para>
+    /// <para>
+    /// Одновременно читаются не больше <see cref="PreviewConcurrency"/> кадров, а ответ
+    /// применяется, только если список с тех пор не заменили: счётчик поколений тот же,
+    /// что у чтения страниц.
+    /// </para>
+    /// </remarks>
+    /// <param name="items">Строки, которым нужны превью.</param>
+    /// <param name="generation">Поколение списка, к которому относятся строки.</param>
+    private void StartPreviews(IReadOnlyList<AdminPhotoItem> items, int generation)
+    {
+        if (_mediaApi is null || items.Count == 0)
+        {
+            return;
+        }
+
+        var loads = new Task[items.Count];
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            loads[index] = LoadPreviewAsync(items[index], generation);
+        }
+
+        _previews = Task.WhenAll(_previews, Task.WhenAll(loads));
+    }
+
+    /// <summary>
+    /// Читает превью одной строки — одна попытка, без повтора.
+    /// </summary>
+    /// <remarks>
+    /// Исключения гасятся здесь: превью не должно становиться исключением ни в очереди, ни
+    /// в задаче, которую никто не ждёт. Устаревший ответ отбрасывается молча — и до запроса,
+    /// и после него, чтобы заменивший список не получил чужие байты.
+    /// </remarks>
+    /// <param name="item">Строка, которой нужно превью.</param>
+    /// <param name="generation">Поколение списка, к которому относится строка.</param>
+    /// <returns>Задача чтения.</returns>
+    private async Task LoadPreviewAsync(AdminPhotoItem item, int generation)
+    {
+        if (_mediaApi is not { } mediaApi)
+        {
+            return;
+        }
+
+        await PreviewGate.WaitAsync();
+
+        try
+        {
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            var bytes = await mediaApi.GetBytesAsync(item.ImageUrl, CancellationToken.None);
+
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            item.ImageBytes = bytes;
+            item.ImageFailed = false;
+        }
+        catch (BarberSearchApiException)
+        {
+            MarkPreviewFailed(item, generation);
+        }
+        catch (HttpRequestException)
+        {
+            MarkPreviewFailed(item, generation);
+        }
+        catch (OperationCanceledException)
+        {
+            // Таймаут транспорта приходит отменой: для человека это тот же сбой превью.
+            MarkPreviewFailed(item, generation);
+        }
+        finally
+        {
+            PreviewGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Помечает кадр «превью не показать», если его список всё ещё на экране.
+    /// </summary>
+    /// <param name="item">Строка, чьё превью не пришло.</param>
+    /// <param name="generation">Поколение списка, к которому относится строка.</param>
+    private void MarkPreviewFailed(AdminPhotoItem item, int generation)
+    {
+        if (generation != _generation)
+        {
+            return;
+        }
+
+        item.ImageBytes = null;
+        item.ImageFailed = true;
     }
 
     /// <summary>

@@ -185,6 +185,27 @@ public sealed partial class AdminPhotoItem : ObservableObject
     private string? _errorMessage;
 
     /// <summary>
+    /// Байты превью, уже прочитанные приложением; <c>null</c> — превью ещё нет.
+    /// </summary>
+    /// <remarks>
+    /// Адрес в <see cref="ImageUrl"/> закрыт ролью: загрузчик картинок платформы ходит без
+    /// заголовков и получает <c>404</c> на неодобренный кадр. Поэтому байты приносит
+    /// <c>IAdminMediaApi</c> тем же авторизованным клиентом, что и списки, а картинка
+    /// собирается из памяти. Кэша нет: байты живут на строке и уходят вместе с ней.
+    /// </remarks>
+    [ObservableProperty]
+    private byte[]? _imageBytes;
+
+    /// <summary>
+    /// Превью не удалось показать: вместо кадра остаётся подложка, карточка рабочая.
+    /// </summary>
+    /// <remarks>
+    /// Попытка одна: превью — украшение, а не данные, и повторять его в фоне незачем.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _imageFailed;
+
+    /// <summary>
     /// Решение ещё не принято: кнопки карточки доступны.
     /// </summary>
     public bool CanDecide => !IsActing;
@@ -253,7 +274,7 @@ public sealed partial class AdminPhotoItem : ObservableObject
             name.Length == 0 ? photo.Email : name,
             photo.Email,
             description: null,
-            MediaUrl.Resolve(baseAddress, MediaUrl.Resize(photo.AvatarUrl, "lg")),
+            MediaUrl.Resolve(baseAddress, MediaUrl.Resize(photo.AvatarUrl, "md")),
             photo.ModerationStatus,
             photo.SubmittedAt);
     }
@@ -281,7 +302,7 @@ public sealed partial class AdminPhotoItem : ObservableObject
             photo.BarberDisplayName,
             photo.OwnerEmail,
             photo.Description,
-            MediaUrl.Resolve(baseAddress, MediaUrl.Resize(photo.Url, "lg")),
+            MediaUrl.Resolve(baseAddress, MediaUrl.Resize(photo.Url, "md")),
             photo.ModerationStatus,
             photo.SubmittedAt);
     }
