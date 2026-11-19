@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AdminRequestsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Admin;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AdminRequestsViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Заявки'}">
+
+    <!--
+        Очередь «Стать мастером»: список и есть главная поверхность телефона.
+
+        Веб держит список и карточку рядом; на телефоне карточка — отдельная страница,
+        поэтому здесь остаются фильтр и строки. Фильтр повторяет значения API: очередь
+        неразобранных и все заявки. Очередь первая — её и считает бейдж хаба.
+
+        Состояния взаимоисключающие и живут в одной ячейке сетки: загрузка, сбой с повтором,
+        отказ в доступе, истёкшая сессия и список с пустым состоянием.
+    -->
+    <Grid Padding="16">
+
+        <!-- Первая загрузка. -->
+        <VerticalStackLayout
+            IsVisible="{Binding IsFirstLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsFirstLoading}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="{loc:Translate Key='Загружаем заявки…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Сбой первой страницы: причина и повтор. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Не удалось загрузить заявки'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ErrorMessage}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetrying}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Повторить'}" />
+        </VerticalStackLayout>
+
+        <!-- Роль не администратор: повторять нечего, данные не запрашиваются. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowForbidden}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Сессия кончилась: возврат на «Профиль», где стоит форма входа. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowSignInRequired}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Сеанс истёк. Войдите заново.'}" />
+            <Button
+                Clicked="OnSignInClicked"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Войти'}" />
+        </VerticalStackLayout>
+
+        <!-- Список: фильтр, строки и пустое состояние. -->
+        <Grid
+            IsVisible="{Binding ShowContent}"
+            RowDefinitions="Auto,*"
+            RowSpacing="12">
+
+            <VerticalStackLayout Grid.Row="0" Spacing="8">
+
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Клиенты просят роль мастера: проверьте заявку и примите решение. Одобрение сразу меняет роль, отказ требует причину.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!--
+                    Фильтр — сегменты, как пара языков в «Профиле»: значения API (pending/all)
+                    переключаются одним касанием, а выбранный сегмент красится стилем темы.
+                -->
+                <Border
+                    HorizontalOptions="Start"
+                    Padding="2"
+                    SemanticProperties.Description="{loc:Translate Key='Какие заявки показать'}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 8">
+                    <HorizontalStackLayout Spacing="2">
+                        <Button
+                            x:Name="QueueFilterButton"
+                            Clicked="OnQueueFilterClicked"
+                            Style="{StaticResource SegmentButton}"
+                            Text="{loc:Translate Key='В очереди'}" />
+                        <Button
+                            x:Name="AllFilterButton"
+                            Clicked="OnAllFilterClicked"
+                            Style="{StaticResource SegmentButton}"
+                            Text="{loc:Translate Key='Все'}" />
+                    </HorizontalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+
+            <RefreshView
+                Grid.Row="1"
+                Command="{Binding RefreshCommand}"
+                IsRefreshing="{Binding IsRefreshing}"
+                IsVisible="{Binding ShowList}">
+                <CollectionView
+                    ItemsSource="{Binding Items}"
+                    RemainingItemsThreshold="3"
+                    RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AdminRequestItem">
+                            <Border
+                                Margin="0,0,0,8"
+                                Padding="12"
+                                MinimumHeightRequest="64"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer CommandParameter="{Binding}" Tapped="OnRequestTapped" />
+                                </Border.GestureRecognizers>
+                                <VerticalStackLayout Spacing="6">
+
+                                    <!-- Имя заявителя и статус: строку открывает вся карточка. -->
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <VerticalStackLayout Spacing="2">
+                                            <Label
+                                                FontFamily="GeistMedium"
+                                                FontSize="16"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding DisplayName}" />
+                                            <Label
+                                                FontSize="12"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding ApplicantName}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </VerticalStackLayout>
+
+                                        <!--
+                                            Статус — текст, а не только цвет: цвет подчёркивает слово,
+                                            но ничего не значит без него. У каждого состояния своя
+                                            подпись, поэтому бейдж читается и скринридером.
+                                        -->
+                                        <Border
+                                            Grid.Column="1"
+                                            Padding="8,2"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                            Stroke="Transparent"
+                                            StrokeShape="RoundRectangle 8"
+                                            VerticalOptions="Start">
+                                            <Label FontSize="12" Text="{Binding StatusText}" VerticalTextAlignment="Center">
+                                                <Label.Triggers>
+                                                    <DataTrigger
+                                                        Binding="{Binding IsApproved}"
+                                                        TargetType="Label"
+                                                        Value="True">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger
+                                                        Binding="{Binding IsRejected}"
+                                                        TargetType="Label"
+                                                        Value="True">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                                    </DataTrigger>
+                                                </Label.Triggers>
+                                            </Label>
+                                        </Border>
+                                    </Grid>
+
+                                    <!-- Город, стаж и дата подачи: наведения на телефоне нет, всё видно. -->
+                                    <Label
+                                        FontSize="12"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding MetaText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+
+                    <!-- Футер: догрузка, её ошибка и время снимка. -->
+                    <CollectionView.Footer>
+                        <VerticalStackLayout Padding="0,8,0,24" Spacing="8">
+                            <HorizontalStackLayout
+                                HorizontalOptions="Center"
+                                IsVisible="{Binding IsLoadingMore}"
+                                Spacing="8">
+                                <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
+                                <Label
+                                    Text="{loc:Translate Key='Идёт догрузка…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                            <VerticalStackLayout IsVisible="{Binding ShowLoadMoreError}" Spacing="8">
+                                <Label
+                                    LineBreakMode="WordWrap"
+                                    Text="{loc:Translate Key='Не удалось загрузить ещё заявки.'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    HorizontalOptions="Start"
+                                    IsVisible="{Binding IsLoadMoreAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Button
+                                    Command="{Binding RetryLoadMoreCommand}"
+                                    HorizontalOptions="Start"
+                                    Text="{loc:Translate Key='Повторить'}" />
+                            </VerticalStackLayout>
+                            <Label
+                                FontSize="12"
+                                HorizontalTextAlignment="Center"
+                                IsVisible="{Binding HasUpdatedAt}"
+                                Text="{Binding UpdatedAtText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </CollectionView.Footer>
+
+                </CollectionView>
+            </RefreshView>
+
+            <!-- Пустое состояние: у очереди и всех заявок разные причины. -->
+            <VerticalStackLayout
+                Grid.Row="1"
+                Margin="0,24,0,0"
+                IsVisible="{Binding ShowEmptyState}"
+                Spacing="8"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding EmptyStateTitle}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding EmptyStateDescription}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+        </Grid>
+
+    </Grid>
+
+</ContentPage>
