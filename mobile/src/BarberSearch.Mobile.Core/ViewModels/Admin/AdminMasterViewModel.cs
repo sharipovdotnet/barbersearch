@@ -26,7 +26,7 @@ namespace BarberSearch.Mobile.Core.ViewModels.Admin;
 /// </para>
 /// <para>
 /// Действия живут внизу экрана: подтверждение — основная кнопка, снятие подтверждения —
-/// второстепенная, открывающая встроенную панель причины. Записи не повторяются
+/// второстепенная, открывающая встроенную панель подтверждения. Записи не повторяются
 /// автоповтором; повторяемый сбой чтения, пока экран виден, лечится сам.
 /// </para>
 /// <para>
@@ -150,16 +150,10 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     private bool _isBusy;
 
     /// <summary>
-    /// Панель причины снятия подтверждения открыта.
+    /// Панель подтверждения снятия открыта.
     /// </summary>
     [ObservableProperty]
     private bool _isUnverifyPanelOpen;
-
-    /// <summary>
-    /// Причина снятия подтверждения, набранная администратором.
-    /// </summary>
-    [ObservableProperty]
-    private string _unverifyReason = string.Empty;
 
     /// <summary>
     /// Имя мастера.
@@ -347,10 +341,9 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     public bool CanUnverify => ShowContent && IsVerified && !IsBusy && !IsUnverifyPanelOpen;
 
     /// <summary>
-    /// Подтверждение причины снятия доступно: панель открыта и причина не пуста.
+    /// Подтверждение снятия доступно: панель открыта и запись не идёт.
     /// </summary>
-    public bool CanConfirmUnverify =>
-        IsUnverifyPanelOpen && !IsBusy && !string.IsNullOrWhiteSpace(UnverifyReason);
+    public bool CanConfirmUnverify => IsUnverifyPanelOpen && !IsBusy;
 
     /// <summary>
     /// Все пункты чек-листа готовности выполнены.
@@ -456,7 +449,6 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         IsSignInRequired = true;
         IsBusy = false;
         IsUnverifyPanelOpen = false;
-        UnverifyReason = string.Empty;
         ActionErrorText = null;
         AvatarImageUrl = null;
         AvatarStateText = null;
@@ -517,11 +509,11 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Снимает подтверждение после заполнения причины в панели.
+    /// Снимает подтверждение после подтверждения в панели.
     /// </summary>
     /// <remarks>
-    /// Причина собирается панелью и остаётся на экране до ответа: пустая причина не пускает
-    /// подтверждение. После успеха страница закрывается к очереди.
+    /// Панель показывает последствие и ждёт второго нажатия; после успеха страница
+    /// закрывается к очереди.
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Текст ошибки либо <c>null</c>, когда всё получилось.</returns>
@@ -544,7 +536,6 @@ public sealed partial class AdminMasterViewModel : ObservableObject
             ApplyVerification(verified: false);
 
             IsUnverifyPanelOpen = false;
-            UnverifyReason = string.Empty;
 
             return null;
         }
@@ -586,7 +577,7 @@ public sealed partial class AdminMasterViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Открывает панель причины снятия подтверждения.
+    /// Открывает панель подтверждения снятия.
     /// </summary>
     [RelayCommand]
     private void OpenUnverifyPanel()
@@ -597,19 +588,17 @@ public sealed partial class AdminMasterViewModel : ObservableObject
         }
 
         ActionErrorText = null;
-        UnverifyReason = string.Empty;
         IsUnverifyPanelOpen = true;
 
         NotifyDetailState();
     }
 
     /// <summary>
-    /// Закрывает панель причины, ничего не меняя.
+    /// Закрывает панель, ничего не меняя.
     /// </summary>
     [RelayCommand]
     private void CancelUnverify()
     {
-        UnverifyReason = string.Empty;
         IsUnverifyPanelOpen = false;
 
         NotifyDetailState();
@@ -1005,12 +994,6 @@ public sealed partial class AdminMasterViewModel : ObservableObject
 
         await _session.ClearAsync(CancellationToken.None);
     }
-
-    /// <summary>
-    /// Переключает доступность подтверждения при изменении причины снятия.
-    /// </summary>
-    /// <param name="value">Новый текст причины.</param>
-    partial void OnUnverifyReasonChanged(string value) => NotifyDetailState();
 
     /// <summary>
     /// Переключает доступность подтверждения при открытии и закрытии панели.

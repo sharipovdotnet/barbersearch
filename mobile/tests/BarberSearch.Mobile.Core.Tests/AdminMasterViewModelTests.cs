@@ -17,7 +17,7 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// <remarks>
 /// Карточка — отдельное чтение. Здесь проверяется, что ответ раскладывается по карточкам
 /// экрана, что подтверждение скрытого профиля недоступно по той же причине, что и у веба,
-/// и что снятие подтверждения требует непустой причины.
+/// и что снятие подтверждения требует второго нажатия в панели.
 /// </remarks>
 public sealed class AdminMasterViewModelTests
 {
@@ -341,7 +341,7 @@ public sealed class AdminMasterViewModelTests
     }
 
     [Fact]
-    public async Task OpenUnverifyPanel_RequiresNonEmptyReason()
+    public async Task OpenUnverifyPanel_EnablesConfirmationImmediately()
     {
         var harness = new Harness();
         harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf(isVerified: true));
@@ -350,29 +350,22 @@ public sealed class AdminMasterViewModelTests
         harness.ViewModel.OpenUnverifyPanelCommand.Execute(null);
 
         Assert.True(harness.ViewModel.IsUnverifyPanelOpen);
-        Assert.False(harness.ViewModel.CanConfirmUnverify);
-
-        harness.ViewModel.UnverifyReason = "   ";
-        Assert.False(harness.ViewModel.CanConfirmUnverify);
-
-        harness.ViewModel.UnverifyReason = "Подтвердили по ошибке";
         Assert.True(harness.ViewModel.CanConfirmUnverify);
 
         harness.ViewModel.CancelUnverifyCommand.Execute(null);
 
         Assert.False(harness.ViewModel.IsUnverifyPanelOpen);
-        Assert.Equal(string.Empty, harness.ViewModel.UnverifyReason);
+        Assert.False(harness.ViewModel.CanConfirmUnverify);
     }
 
     [Fact]
-    public async Task ConfirmUnverifyAsync_WithReason_UnverifiesAndClosesPanel()
+    public async Task ConfirmUnverifyAsync_PanelOpen_UnverifiesAndClosesPanel()
     {
         var harness = new Harness();
         harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf(isVerified: true));
         await harness.ViewModel.InitializeAsync(MasterId);
 
         harness.ViewModel.OpenUnverifyPanelCommand.Execute(null);
-        harness.ViewModel.UnverifyReason = "Подтвердили по ошибке";
 
         var error = await harness.ViewModel.ConfirmUnverifyAsync();
 
@@ -381,7 +374,6 @@ public sealed class AdminMasterViewModelTests
         Assert.False(harness.ViewModel.IsVerified);
         Assert.Equal("На проверке", harness.ViewModel.StatusText);
         Assert.False(harness.ViewModel.IsUnverifyPanelOpen);
-        Assert.Equal(string.Empty, harness.ViewModel.UnverifyReason);
         Assert.True(harness.ViewModel.CanVerify);
     }
 
@@ -393,7 +385,6 @@ public sealed class AdminMasterViewModelTests
         await harness.ViewModel.InitializeAsync(MasterId);
 
         harness.ViewModel.OpenUnverifyPanelCommand.Execute(null);
-        harness.ViewModel.UnverifyReason = "Подтвердили по ошибке";
 
         harness.MastersApi.Unverify = _ => Task.FromException(
             ApiError(HttpStatusCode.InternalServerError, "internal.database"));
@@ -407,13 +398,11 @@ public sealed class AdminMasterViewModelTests
     }
 
     [Fact]
-    public async Task ConfirmUnverifyAsync_EmptyReason_DoesNotCallApi()
+    public async Task ConfirmUnverifyAsync_PanelClosed_DoesNotCallApi()
     {
         var harness = new Harness();
         harness.MastersApi.GetMaster = _ => Task.FromResult(DetailOf(isVerified: true));
         await harness.ViewModel.InitializeAsync(MasterId);
-
-        harness.ViewModel.OpenUnverifyPanelCommand.Execute(null);
 
         var error = await harness.ViewModel.ConfirmUnverifyAsync();
 
