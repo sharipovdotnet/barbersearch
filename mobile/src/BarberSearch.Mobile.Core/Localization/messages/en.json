@@ -627,5 +627,6 @@
   "Фотографий нет.": "No photos.",
   "Этот отзыв уже разобрали": "This review has already been handled",
   "Email подтверждён": "Email verified",
-  "Пользователь больше не существует. Обновите список.": "The user no longer exists. Refresh the list."
+  "Пользователь больше не существует. Обновите список.": "The user no longer exists. Refresh the list.",
+  "Не удалось показать превью": "Couldn't show the preview"
 }

@@ -646,6 +646,18 @@ in Core owns both base addresses.
   phone `PrimaryForeground` cannot stand in, because in the dark theme it is `#171717` and the badge
   keeps the same `#CE0000` in both themes. No other colour, font or radius enters the app with this
   slice.
+- **A moderation preview is a request with credentials, not a URL.** `api/media/avatars` and
+  `api/media/portfolio` serve an unapproved photo only to its owner and to an administrator, and
+  answer `404` to everyone else; the browser sends cookies, so the web admin sees its queue. The
+  platform image loader that `Image.Source="http://…"` uses sends no `Authorization`, so the first
+  version of the photo queue rendered every card as a grey rectangle. The bytes are therefore read
+  by the app: `Core/Api/Admin/AdminMediaApi` fetches them on the same bearer client as the queues,
+  the row carries `ImageBytes`, and `Converters/ImageBytesConverter` builds the picture from memory.
+  Three consequences are deliberate. The loader makes one attempt per image and arms no retry loop —
+  a preview is decoration, not data. The card asks for `?size=md` instead of the largest variant,
+  because the bytes now travel through the app rather than a CDN. And a failed fetch shows «Не удалось
+  показать превью» instead of an empty box, since the grey placeholder alone cannot tell "still
+  loading" from "the server refused".
 
 ## 6. What the backend still lacks
 
