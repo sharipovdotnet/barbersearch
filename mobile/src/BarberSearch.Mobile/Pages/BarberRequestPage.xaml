@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberRequestPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberRequestViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Стать мастером'}">
+
+    <!--
+        Экран заявки на роль мастера повторяет веб (frontend/src/pages/become-a-barber-page.tsx,
+        barber-request-form.tsx, barber-request-status.tsx): загрузка, форма без заявки,
+        карточка статуса, ошибка чтения и истёкшая сессия — ровно одно состояние за раз.
+        Состояния лежат в одной ячейке сетки и показываются взаимоисключающе, как на
+        «Профиле»: так ни одно из них не толкает остальные.
+    -->
+    <Grid Padding="16">
+
+        <VerticalStackLayout
+            IsVisible="{Binding ShowLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding ShowLoading}" />
+        </VerticalStackLayout>
+
+        <!-- Форма: заявки ещё нет. Поля и подсказки — дословно из веб-формы. -->
+        <ScrollView IsVisible="{Binding ShowForm}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="8">
+
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Заявка на роль мастера'}" />
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Несколько полей о вас — администратор проверит заявку и откроет кабинет. Пока решение не принято, вы остаётесь клиентом.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <Label Text="{loc:Translate Key='Как вас представить'}" />
+                <Entry Text="{Binding DisplayName}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Имя увидят клиенты в поиске и на карточке мастера.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasDisplayNameError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding DisplayNameError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="{loc:Translate Key='Опыт, лет'}" />
+                <Entry
+                    Keyboard="Numeric"
+                    Text="{Binding ExperienceYears}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasExperienceYearsError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ExperienceYearsError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="{loc:Translate Key='Город'}" />
+                <Entry Text="{Binding City}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasCityError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding CityError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="{loc:Translate Key='О себе — необязательно'}" />
+                <Border
+                    Padding="8"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding About}" />
+                </Border>
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Опыт, специализации, любимые услуги. До 2000 символов.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasAboutError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding AboutError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Grid
+                    Margin="0,8,0,0"
+                    ColumnDefinitions="Auto,*"
+                    ColumnSpacing="8">
+                    <CheckBox
+                        IsChecked="{Binding HasSalon, Mode=TwoWay}"
+                        VerticalOptions="Start" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="2">
+                        <Label
+                            Text="{loc:Translate Key='Уже работаю в салоне'}"
+                            VerticalTextAlignment="Center" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Отметьте, если у вас есть место, где вы принимаете клиентов.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Grid>
+
+                <Label
+                    FontSize="14"
+                    IsVisible="{Binding HasSubmitError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SubmitError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding SubmitCommand}"
+                    HorizontalOptions="Start"
+                    IsVisible="{Binding CanRetrySubmit}"
+                    Text="{loc:Translate Key='Повторить'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                <Button
+                    Margin="0,8,0,0"
+                    Command="{Binding SubmitCommand}"
+                    Text="{Binding SubmitButtonText}">
+                    <Button.Triggers>
+                        <DataTrigger
+                            Binding="{Binding IsSubmitting}"
+                            TargetType="Button"
+                            Value="True">
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Статус: заявка есть или только что создана. -->
+        <ScrollView IsVisible="{Binding ShowStatus}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="16">
+                <Border
+                    Padding="16"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="12">
+
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding StatusHeading}" />
+
+                        <!-- Чип статуса: пилюля в существующем радиусе шкалы, без новых токенов. -->
+                        <Border
+                            Padding="10,2"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HorizontalOptions="Start"
+                            StrokeShape="RoundRectangle 10">
+                            <Label
+                                FontFamily="GeistMedium"
+                                FontSize="12"
+                                Text="{Binding StatusLabel}" />
+                        </Border>
+
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Имя'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding DisplayNameText}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Стаж'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label FontSize="14" Text="{Binding ExperienceText}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Город'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding CityText}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Работает в салоне'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding SalonText}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Подана'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label FontSize="14" Text="{Binding SubmittedAtText}" />
+                        </VerticalStackLayout>
+
+                        <!-- «Рассмотрена» существует только у заявки с решением. -->
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding ReviewedAtText}"
+                                    TargetType="VerticalStackLayout"
+                                    Value="">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </VerticalStackLayout.Triggers>
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Рассмотрена'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label FontSize="14" Text="{Binding ReviewedAtText}" />
+                        </VerticalStackLayout>
+
+                        <!-- «О себе» существует только у заполненного рассказа. -->
+                        <VerticalStackLayout Spacing="2">
+                            <VerticalStackLayout.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding AboutText}"
+                                    TargetType="VerticalStackLayout"
+                                    Value="">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </VerticalStackLayout.Triggers>
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='О себе'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding AboutText}" />
+                        </VerticalStackLayout>
+
+                        <!--
+                            Отказ: причина в тоне Destructive. Отдельного полупрозрачного
+                            токена в приложении нет, поэтому тон задают рамка и заголовок
+                            Destructive на существующей поверхности Muted — приём ближе
+                            всего к веб-классу bg-destructive/10.
+                        -->
+                        <VerticalStackLayout IsVisible="{Binding CanReapply}" Spacing="8">
+                            <Border
+                                Padding="12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                Stroke="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label
+                                        FontFamily="GeistMedium"
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Причина отказа'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                    <Label
+                                        FontSize="14"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding RejectionReasonText}" />
+                                </VerticalStackLayout>
+                            </Border>
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Подать заявку можно снова: активная заявка у вас одна, поэтому прошлая и не мешает.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Button
+                                Command="{Binding ReapplyCommand}"
+                                HorizontalOptions="Start"
+                                Text="{loc:Translate Key='Подать заявку снова'}" />
+                        </VerticalStackLayout>
+
+                        <!-- Одобрение: роль уже выдана, честный путь — новый вход. -->
+                        <VerticalStackLayout IsVisible="{Binding IsApproved}" Spacing="8">
+                            <Label
+                                FontSize="14"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Роль уже выдана. Выйдите и войдите снова — приложение получит новую роль. Профиль мастера создаётся в кабинете на сайте.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Button
+                                Command="{Binding SignOutAndLeaveCommand}"
+                                HorizontalOptions="Start"
+                                Text="{loc:Translate Key='Выйти и войти снова'}" />
+                        </VerticalStackLayout>
+
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Чтение не удалось: причина и «Повторить». -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Не удалось проверить заявку'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ReadError}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetrying}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryReadCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Повторить'}" />
+        </VerticalStackLayout>
+
+        <!-- Сессия истекла: пара погашена, хаб уже показывает форму входа. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowSessionExpired}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Сессия истекла — войдите снова.'}" />
+            <Button
+                Command="{Binding LeaveCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='К входу'}" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

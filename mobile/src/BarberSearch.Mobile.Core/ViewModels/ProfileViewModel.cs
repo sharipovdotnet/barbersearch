@@ -1,9 +1,13 @@
 using System.Net;
+using BarberSearch.Contracts.BarberRequests;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.BarberRequests;
+using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
@@ -38,6 +42,13 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// ошибок входа — дословно из веба, порядок проверок сохранён: лимит (<c>429</c>) раньше
 /// кодов, <c>401</c> — после них. Английский <c>detail</c> не показывается никогда.
 /// </para>
+/// <para>
+/// Строка «Стать мастером» — второе, независимое чтение хаба: после профиля и только для
+/// клиента читается своя заявка на роль мастера. У этого чтения нет ни индикатора, ни своей
+/// ошибки на экране: сбой не прячет строку и не блокирует хаб, а подробности человек увидит
+/// на странице заявки — она остаётся источником правды. У профиля и заявки свои циклы
+/// автоповтора, и ошибка одного не взводит повтор другого.
+/// </para>
 /// </remarks>
 public sealed partial class ProfileViewModel : ObservableObject
 {
@@ -67,6 +78,7 @@ public sealed partial class ProfileViewModel : ObservableObject
 
     private readonly IAuthApi _authApi;
     private readonly IAccountApi _accountApi;
+    private readonly IBarberRequestsApi? _barberRequestsApi;
     private readonly TokenSession _session;
     private readonly IPushRegistrar _push;
 
@@ -101,6 +113,35 @@ public sealed partial class ProfileViewModel : ObservableObject
     private ApiFailureKind _profileFailureKind;
 
     /// <summary>
+    /// Цикл автоповтора чтения заявки на роль мастера — второй, независимый от профильного.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зеркалит <see cref="_autoRetry"/>, но ничего не рисует: у строки хаба нет своей ошибки
+    /// на экране. Поэтому подписки на <see cref="AutoRetryLoop.StateChanged"/> у него нет —
+    /// строка «Пробуем снова…» принадлежит сбою профиля, и связывать состояния двух циклов
+    /// значило бы показывать чужой повтор.
+    /// </para>
+    /// <para>
+    /// Ошибки циклов независимы: сбой заявки не взводит чтение профиля и наоборот. Общий у
+    /// них только сигнал «вкладка видна» — его и раздают <c>StartAutoRetry</c> и
+    /// <c>StopAutoRetry</c>.
+    /// </para>
+    /// </remarks>
+    private readonly AutoRetryLoop _barberRequestRetry;
+
+    /// <summary>
+    /// Вид последнего сбоя чтения заявки; <c>null</c> — сбоя нет, повторять нечего.
+    /// </summary>
+    /// <remarks>
+    /// В отличие от <see cref="_profileFailureKind"/>, здесь <c>null</c> — не «нет ошибки»
+    /// ради единообразия, а единственный признак того, что цикл заявки можно взводить:
+    /// своего текста ошибки у строки нет. Сбрасывается успехом и выходом, поэтому повтор
+    /// не может родиться из сбоя прошлой сессии.
+    /// </remarks>
+    private ApiFailureKind? _barberRequestFailureKind;
+
+    /// <summary>
     /// Вкладка сейчас видна: цикл автоповтора работает только пока это так.
     /// </summary>
     private bool _isPageVisible;
@@ -114,15 +155,26 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <param name="push">Регистратор push: переключатель напоминаний.</param>
     /// <param name="autoRetry">
     /// Цикл автоповтора чтения профиля; <c>null</c> — собственный цикл с обычным расписанием.
-    /// Параметр необязательный и стоит последним, чтобы существующие позиционные вызовы
-    /// (DI и тесты) не менялись.
+    /// Параметр необязательный и стоит после обязательных, чтобы существующие позиционные
+    /// вызовы (DI и тесты) не менялись.
+    /// </param>
+    /// <param name="barberRequestsApi">
+    /// Заявка на роль мастера; <c>null</c> — второе чтение не делается. Параметр добавлен
+    /// необязательным после <paramref name="autoRetry"/>: существующие вызовы без заявки
+    /// собираются как раньше, а DI подставит зарегистрированный клиент.
+    /// </param>
+    /// <param name="barberRequestRetry">
+    /// Цикл автоповтора чтения заявки; <c>null</c> — собственный цикл с обычным расписанием.
+    /// Стоит последним: порядок уже существующих аргументов не меняется.
     /// </param>
     public ProfileViewModel(
         IAuthApi authApi,
         IAccountApi accountApi,
         TokenSession session,
         IPushRegistrar push,
-        AutoRetryLoop? autoRetry = null)
+        AutoRetryLoop? autoRetry = null,
+        IBarberRequestsApi? barberRequestsApi = null,
+        AutoRetryLoop? barberRequestRetry = null)
     {
         ArgumentNullException.ThrowIfNull(authApi);
         ArgumentNullException.ThrowIfNull(accountApi);
@@ -131,11 +183,14 @@ public sealed partial class ProfileViewModel : ObservableObject
 
         _authApi = authApi;
         _accountApi = accountApi;
+        _barberRequestsApi = barberRequestsApi;
         _session = session;
         _push = push;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
+
+        _barberRequestRetry = barberRequestRetry ?? new AutoRetryLoop();
     }
 
     /// <summary>
@@ -166,6 +221,15 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// новый пароль не принимает — так же, как подтверждение email и смену адреса.
     /// </remarks>
     public event EventHandler? ForgotPasswordRequested;
+
+    /// <summary>
+    /// Нажата строка «Стать мастером»: страница открывает экран заявки.
+    /// </summary>
+    /// <remarks>
+    /// Событие, а не навигация: Core не знает о Shell. Страница заявки живёт поверх стека
+    /// «Профиля», поэтому возврат оставляет хаб на месте — так же, как у «Личных данных».
+    /// </remarks>
+    public event EventHandler? BarberRequestRequested;
 
     /// <summary>
     /// Идёт проверка сессии при открытии экрана.
@@ -295,6 +359,29 @@ public sealed partial class ProfileViewModel : ObservableObject
     private bool _isEmailVerified;
 
     /// <summary>
+    /// Видна ли строка «Стать мастером»: профиль загружен и роль — клиент.
+    /// </summary>
+    /// <remarks>
+    /// Строка обещает действие, которое сервер разрешает только клиенту: мастеру и
+    /// администратору <c>POST api/barber-requests</c> ответил бы <c>403</c>. Поэтому чужая
+    /// роль не просто прячет строку — заявка для неё и не читается. Пересчитывается там,
+    /// где применяется профиль, и гаснет при выходе.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _canRequestBarberRole;
+
+    /// <summary>
+    /// Заголовок строки: состояние заявки, а без заявки — приглашение.
+    /// </summary>
+    /// <remarks>
+    /// Второй строки у карточки нет: статус читается одним взглядом, а подробности живут на
+    /// странице заявки. Заголовок — единственное, что меняет тихое чтение, и сбой чтения его
+    /// не трогает: «Стать мастером» остаётся входом в заявку, даже когда сеть упала.
+    /// </remarks>
+    [ObservableProperty]
+    private string _barberRequestTitle = Loc.T("Стать мастером");
+
+    /// <summary>
     /// Текст ошибки для пользователя; <c>null</c>, когда ошибки нет.
     /// </summary>
     [ObservableProperty]
@@ -422,7 +509,9 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <remarks>
     /// Без сохранённой пары сеть не трогается вовсе: на старте без входа не должно быть
     /// ни одного запроса. С парой экран читает профиль — первый раз с индикатором, повторно
-    /// молча, не стирая уже показанные данные.
+    /// молча, не стирая уже показанные данные. После профиля, и только клиенту, тихо
+    /// читается своя заявка: это второе, независимое чтение, и его сбой хаб не блокирует
+    /// и не прячет — строка остаётся «Стать мастером».
     /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -447,6 +536,14 @@ public sealed partial class ProfileViewModel : ObservableObject
             IsAuthenticated = true;
 
             await LoadProfileAsync(silent: _profile is not null || ProfileEmail is not null, cancellationToken);
+
+            // Хаб уже можно показывать: статус заявки — вспомогательная подпись, и держать
+            // из-за неё индикатор профиля значит задерживать экран ради второго чтения.
+            IsLoading = false;
+
+            // Заявка читается молча: сбой ничего не прячет и не блокирует, а подробности
+            // человек увидит на странице заявки.
+            await LoadBarberRequestAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -467,7 +564,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Сообщает, что вкладка видна, и запускает автоповтор неудачного чтения профиля.
+    /// Сообщает, что вкладка видна, и запускает автоповтор неудачных чтений профиля и заявки.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -475,9 +572,14 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// ошибки, при окончательном отказе или уже работающем цикле ничего не делает.
     /// </para>
     /// <para>
+    /// Циклов два, и они независимы: у профиля и у заявки свои сбои. Вместе они запускаются
+    /// только потому, что «вкладка видна» — общий для них сигнал; ошибка одного не взводит
+    /// повтор другого.
+    /// </para>
+    /// <para>
     /// Запуск и остановка обязаны идти из UI-потока: <see cref="AutoRetryLoop.StateChanged"/>
-    /// синхронно меняет привязанный <see cref="IsAutoRetrying"/>. Поэтому метод зовут только
-    /// из жизненного цикла страницы, а не из фонового <c>catch</c>.
+    /// профильного цикла синхронно меняет привязанный <see cref="IsAutoRetrying"/>. Поэтому
+    /// метод зовут только из жизненного цикла страницы, а не из фонового <c>catch</c>.
     /// </para>
     /// </remarks>
     public void StartAutoRetry()
@@ -485,21 +587,24 @@ public sealed partial class ProfileViewModel : ObservableObject
         _isPageVisible = true;
 
         TryStartAutoRetry();
+        TryStartBarberRequestAutoRetry();
     }
 
     /// <summary>
-    /// Сообщает, что вкладка скрыта, и останавливает автоповтор чтения профиля.
+    /// Сообщает, что вкладка скрыта, и останавливает оба цикла автоповтора.
     /// </summary>
     /// <remarks>
     /// Идемпотентен. Остановка отменяет паузу и запрос в полёте, а <see cref="IsAutoRetrying"/>
-    /// сразу становится <c>false</c>: скрытая вкладка не показывает работающий повтор и не
-    /// ходит в сеть.
+    /// профильного цикла сразу становится <c>false</c>: скрытая вкладка не показывает
+    /// работающий повтор и не ходит в сеть. Цикл заявки останавливается здесь же — иначе он
+    /// продолжил бы читать статус под открытым дочерним экраном, которого человек не просил.
     /// </remarks>
     public void StopAutoRetry()
     {
         _isPageVisible = false;
 
         StopAutoRetryLoop();
+        _barberRequestRetry.Stop();
     }
 
     /// <summary>
@@ -513,6 +618,11 @@ public sealed partial class ProfileViewModel : ObservableObject
     internal AutoRetryLoop AutoRetry => _autoRetry;
 
     /// <summary>
+    /// Цикл автоповтора заявки: тестам нужен счётчик попыток, приложению — нет.
+    /// </summary>
+    internal AutoRetryLoop BarberRequestAutoRetry => _barberRequestRetry;
+
+    /// <summary>
     /// Возвращает экран к форме входа после завершения сессии.
     /// </summary>
     /// <remarks>
@@ -524,8 +634,10 @@ public sealed partial class ProfileViewModel : ObservableObject
     public void ApplySignedOutState()
     {
         // Выход — это и есть «повторять больше нечего»: цикл мог ждать паузу, пока сессию
-        // гасили, и без остановки сходил бы в сеть без токена.
+        // гасили, и без остановки сходил бы в сеть без токена. Второй цикл — по той же
+        // причине: заявка читается с Bearer, которого после выхода уже нет.
         StopAutoRetryLoop();
+        _barberRequestRetry.Stop();
 
         IsAuthenticated = false;
         _profile = null;
@@ -536,6 +648,14 @@ public sealed partial class ProfileViewModel : ObservableObject
         EmailStatusText = string.Empty;
         IsEmailVerified = false;
         ProfileError = null;
+
+        // Строка заявки гаснет вместе с профилем: роль прошлого пользователя больше не
+        // известна, а показывать его статус следующему человеку нельзя. Вид сбоя обнулён,
+        // иначе повтор после нового входа взвёлся бы по чужой ошибке.
+        CanRequestBarberRole = false;
+        BarberRequestTitle = Loc.T("Стать мастером");
+        _barberRequestFailureKind = null;
+
         Email = string.Empty;
         Password = string.Empty;
 
@@ -754,6 +874,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     private void ForgotPassword() => ForgotPasswordRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Просит страницу открыть заявку на роль мастера.
+    /// </summary>
+    /// <remarks>
+    /// Строка хаба — единственный вход в заявку, поэтому команда только поднимает событие:
+    /// остановка повторов, навигация и сама страница — работа страницы, а не Core.
+    /// </remarks>
+    [RelayCommand]
+    private void OpenBarberRequest() => BarberRequestRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Включает или выключает напоминания по переключателю «Присылать напоминания».
     /// </summary>
     /// <remarks>
@@ -939,6 +1069,152 @@ public sealed partial class ProfileViewModel : ObservableObject
         IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
+    /// Тихо читает свою заявку на роль мастера и вносит её статус в заголовок строки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Чтение вспомогательное: у него нет ни индикатора, ни своей ошибки на экране. Поэтому
+    /// сбой ничего не прячет и не блокирует — заголовок остаётся прежним, а человек всё равно
+    /// открывает страницу заявки, где ошибка показана с «Повторить».
+    /// </para>
+    /// <para>
+    /// <c>401</c> сессию не гасит: пару проверяет чтение профиля, и второй <c>401</c> от
+    /// заявки не должен выкидывать человека из аккаунта раньше профильного цикла. Для той же
+    /// цели окончательный отказ, <c>401</c> в том числе, цикл заявки не взводит: повтор лишь
+    /// повторит отказ.
+    /// </para>
+    /// <para>
+    /// Мастеру и администратору заявка не читается вовсе: сервер ответил бы <c>403</c>, а
+    /// строка им не показывается. Без клиента API (старый вызов без него) — тоже молча.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Вид сбоя: по нему цикл решает, нужна ли ещё одна попытка.</returns>
+    private async Task<ApiFailureKind> LoadBarberRequestAsync(CancellationToken cancellationToken)
+    {
+        if (_barberRequestsApi is null || !CanRequestBarberRole)
+        {
+            return ApiFailureKind.None;
+        }
+
+        var kind = ApiFailureKind.None;
+
+        try
+        {
+            var response = await _barberRequestsApi.GetMineAsync(cancellationToken);
+
+            _barberRequestFailureKind = null;
+            ApplyBarberRequest(response.Request);
+        }
+        catch (BarberSearchApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // Сессию гасит профильное чтение: заявка — вспомогательная подпись, и решать
+            // судьбу входа по ней нельзя. Окончательный отказ цикла не взводит.
+            kind = ApiFailureKind.Terminal;
+        }
+        catch (BarberSearchApiException exception)
+        {
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+        }
+        catch (HttpRequestException exception)
+        {
+            kind = ApiFailureClassifier.Classify(exception, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Таймаут транспорта приходит отменой: для цикла это отсутствие связи.
+            kind = ApiFailureKind.Transport;
+        }
+        catch (InvalidOperationException)
+        {
+            // Пустое тело ответа — нарушение контракта; повтор его не исправит.
+            kind = ApiFailureKind.Terminal;
+        }
+
+        if (kind == ApiFailureKind.None)
+        {
+            return kind;
+        }
+
+        _barberRequestFailureKind = kind;
+
+        // Сбой пришёл, пока вкладка видна: цикл заявки повторит именно это чтение. Профильный
+        // цикл здесь не трогается — у него своя ошибка и своё состояние.
+        TryStartBarberRequestAutoRetry();
+
+        return kind;
+    }
+
+    /// <summary>
+    /// Одна попытка цикла заявки: перечитать свою заявку, не трогая профиль.
+    /// </summary>
+    /// <remarks>
+    /// Условия перепроверяются на момент попытки: пока цикл ждал паузу, человек мог выйти, а
+    /// роль могла перестать быть клиентской. Тогда повторять нечего, и цикл останавливается.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    private Task<ApiFailureKind> RetryBarberRequestAttemptAsync(CancellationToken cancellationToken)
+    {
+        if (_barberRequestFailureKind?.IsRetryable() != true || !CanRequestBarberRole)
+        {
+            return Task.FromResult(ApiFailureKind.None);
+        }
+
+        return LoadBarberRequestAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Запускает цикл заявки, если вкладка видна, роль клиентская, а сбой повторяемый.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный метод зеркалит <see cref="TryStartAutoRetry"/>: «видна» — сигнал страницы, а
+    /// не следствие нажатия, поэтому повтор запускается и из завершения чтения. Профильный
+    /// цикл это не взводит: состояние заявки живёт только здесь.
+    /// </remarks>
+    private void TryStartBarberRequestAutoRetry()
+    {
+        if (!_isPageVisible || !IsAuthenticated || _barberRequestsApi is null || !CanRequestBarberRole)
+        {
+            return;
+        }
+
+        if (_barberRequestFailureKind?.IsRetryable() != true)
+        {
+            return;
+        }
+
+        _barberRequestRetry.Start(RetryBarberRequestAttemptAsync);
+    }
+
+    /// <summary>
+    /// Переводит статус заявки в заголовок строки хаба.
+    /// </summary>
+    /// <remarks>
+    /// Тексты — из таблицы веба (<c>frontend/src/components/barber/barber-request-status.tsx</c>):
+    /// заявки нет — приглашение, дальше три решения администратора. Неизвестный статус
+    /// показывается как «заявки нет»: выдумывать подпись для значения, которого клиент не
+    /// знает, хуже, чем оставить вход в заявку.
+    /// </remarks>
+    /// <param name="request">Заявка из ответа либо <c>null</c>, если её нет.</param>
+    private void ApplyBarberRequest(BarberRequestResponse? request)
+    {
+        if (request is null)
+        {
+            BarberRequestTitle = Loc.T("Стать мастером");
+
+            return;
+        }
+
+        BarberRequestTitle = request.Status switch
+        {
+            BarberRequestStatus.Pending => Loc.T("Заявка на рассмотрении"),
+            BarberRequestStatus.Approved => Loc.T("Заявка одобрена"),
+            BarberRequestStatus.Rejected => Loc.T("Заявка отклонена"),
+            _ => Loc.T("Стать мастером"),
+        };
+    }
+
+    /// <summary>
     /// Раскладывает профиль по свойствам хаба.
     /// </summary>
     private void ApplyProfile(MyProfileResponse profile)
@@ -953,6 +1229,10 @@ public sealed partial class ProfileViewModel : ObservableObject
         EmailStatusText = profile.IsEmailVerified
             ? Loc.T("Адрес подтверждён.")
             : Loc.T("Адрес не подтверждён.");
+
+        // Строка «Стать мастером» — только клиенту: мастеру и администратору сервер ответил бы
+        // 403, и предлагать действие, которое запрещено, нельзя.
+        CanRequestBarberRole = profile.Role == UserRole.Customer;
 
         OnPropertyChanged(nameof(ShowEmailWarning));
 

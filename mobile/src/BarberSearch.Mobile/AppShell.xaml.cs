@@ -54,6 +54,12 @@ public partial class AppShell : Shell
 			AccountProfilePage.Route,
 			new PageRouteFactory<AccountProfilePage>(services));
 
+		// Заявка на роль мастера открывается строкой из хаба «Профиля» и живёт поверх его
+		// стека: возврат оставляет вкладку и загруженный профиль на месте.
+		Routing.RegisterRoute(
+			BarberRequestPage.Route,
+			new PageRouteFactory<BarberRequestPage>(services));
+
 		// Регистрация живёт там же, рядом с формой входа: возврат с неё оставляет вкладку
 		// «Профиль» на месте, а после успеха страница закрывается сама.
 		Routing.RegisterRoute(

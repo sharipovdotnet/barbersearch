@@ -189,11 +189,12 @@ deviation from the web, which polls «Предстоящие» once a minute, is
 
 The tab is the hub and the only sign-in screen: without a session it shows the sign-in form, with
 a session it shows initials instead of an avatar, the name, the email, its verification state, the
-role and the entry points to «Личные данные», «Мои отзывы», «Безопасность» and «Выйти». Those
-sections are ordinary Shell pages pushed over the profile stack (`account-profile`, `security`,
-`my-reviews`, `review-edit`), so the tab bar stays hidden there and the back gesture returns to the
-hub. The web has no hub — every account route is wrapped in its own access gate — and that
-adaptation is recorded in `AGENT.md` §5.
+role and the entry points to «Личные данные», «Мои отзывы», «Безопасность» and «Выйти», plus — for
+a customer — the «Стать мастером» row, whose title follows the state of the request (see below).
+Those sections are ordinary Shell pages pushed over the profile stack (`account-profile`, `security`,
+`my-reviews`, `review-edit`, `barber-request`), so the tab bar stays hidden there and the back
+gesture returns to the hub. The web has no hub — every account route is wrapped in its own access
+gate — and that adaptation is recorded in `AGENT.md` §5.
 
 The hub and the account pages read `GET api/users/me`, not `GET api/auth/me`: the latter returns a
 projection of the token claims and stays the session check and the `userId` source for «Записи»,
@@ -250,6 +251,54 @@ delete means the review is already gone and removes the row with «Этот от
 applies `rating`, `text`, `isPublished` and `updatedAt` from the `PUT` response and never derives
 the new status locally: a rating-only change keeps a published review published, a text change
 returns it to moderation, and only the server decides.
+
+## «Стать мастером» (the barber request)
+
+A customer applies for the master role from the «Профиль» hub: the row under the person card — after
+the «Email не подтверждён» link when it is shown, before the silent-refresh error — opens the
+`barber-request` page over the profile stack with the tab bar hidden. Only a customer sees it
+(`Role == UserRole.Customer`): a barber and an administrator are not offered an action the server
+would answer `403` to. The row's title is the application's state — «Стать мастером», «Заявка на
+рассмотрении», «Заявка отклонена», «Заявка одобрена» — so the hub says whether an application
+already exists; the details are on the page, which is the source of truth, and `AGENT.md` §5 records
+why the row is a `Border` card-row instead of a `Primary` button.
+
+The page has five states: loading while `GET api/barber-requests/mine` is in flight, the form when
+there is no request, the status when there is one, a read error with «Не удалось проверить заявку»,
+the reason and «Повторить», and an expired session — «Сессия истекла — войдите снова.» with
+«К входу», shown when the read answers `401` after `TokenSession` has already been cleared.
+`request: null` is the normal “no request yet”, not a `404`: the endpoint answers
+`200 MyBarberRequestResponse` to any role and `401` to an anonymous call. The write is
+`POST api/barber-requests` and answers `201` with the created request in `Pending`; `400` carries the
+field codes (`barberProfile.displayName`, `barberProfile.yearsOfExperience`, `barberRequest.city`,
+`barberRequest.about`) and each is shown under its field, while an unknown `400` stays a generic
+line; `403 barberRequest.create.forbidden` means the account is no longer a customer;
+`409 barberRequest.create.alreadyPending` means an active request already exists, and the page then
+re-reads `mine` and shows the actual status instead of an error; `429` asks to wait a minute. The
+`detail` of `ProblemDetails` is never rendered: it is English and diagnostic.
+
+Reads repeat themselves, the write does not. The page arms the same `AutoRetryLoop` +
+`PageVisibility` pair as every other read, so a failed `mine` retries while the screen is visible
+with «Пробуем снова…» under the reason; the `POST` is never repeated silently, because after a
+failure its outcome is unknown and a second application would only meet `409`. It keeps a
+«Повторить» button, the second tap is blocked while the request is in flight («Отправляем…»), and
+the fields are checked on the client before sending — the same limits and texts as
+`frontend/src/lib/barber-request-form.ts` — with an empty «О себе» sent as `null` rather than `""`.
+`201` shows the status at once with the heading «Заявка отправлена», without a second read.
+
+The status card repeats `frontend/src/components/barber/barber-request-status.tsx`: a heading and a
+chip («На рассмотрении», «Одобрена», «Отклонена»), then «Имя», «Стаж», «Город», «Работает в
+салоне», «Подана», «Рассмотрена» and «О себе». A rejected request adds «Причина отказа» and
+«Подать заявку снова», which opens the same form without pre-filling, as on the web. An approved
+one adds the text about the role and «Выйти и войти снова»: the button clears the session
+(`TokenSession.ClearAsync`) and returns to the hub, because approval changes the role, the server
+rotates `SecurityStamp` and revokes every refresh token, so the pair the app holds is already
+invalid and only a new sign-in shows the new role.
+
+The texts come from the web (`become-a-barber-page.tsx`, `barber-request-form.tsx`,
+`barber-request-status.tsx`, `lib/barber-request-form.ts`) with «барбер» → «мастер»; the English
+values follow the same rule — “professional”, never “barber” or “master” — and live in
+`src/BarberSearch.Mobile.Core/Localization/messages/en.json`, like every other string.
 
 ## Push notifications
 

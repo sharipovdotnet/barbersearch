@@ -2,12 +2,17 @@ using System.Net;
 using BarberSearch.Contracts.Auth.Login;
 using BarberSearch.Contracts.Auth.Me;
 using BarberSearch.Contracts.Auth.Register;
+using BarberSearch.Contracts.BarberRequests;
+using BarberSearch.Contracts.BarberRequests.CreateBarberRequest;
+using BarberSearch.Contracts.BarberRequests.GetMyBarberRequest;
 using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.BarberRequests;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Auth;
 using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.ViewModels;
@@ -1077,6 +1082,193 @@ public sealed class ProfileViewModelTests
         await harness.ViewModel.AutoRetryCompletion;
     }
 
+    [Fact]
+    public async Task InitializeAsync_CustomerProfile_ShowsBarberRequestRowAndReadsMine()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var barberRequests = new FakeBarberRequestsApi();
+        var viewModel = CreateViewModel(session, barberRequestsApi: barberRequests);
+
+        await viewModel.InitializeAsync();
+
+        // Строка обещает действие, которое сервер разрешает только клиенту, и статус
+        // читается сразу — тихо и отдельно от профиля.
+        Assert.True(viewModel.CanRequestBarberRole);
+        Assert.Equal("Стать мастером", viewModel.BarberRequestTitle);
+        Assert.Equal(1, barberRequests.MineCalls);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Barber)]
+    [InlineData(UserRole.Admin)]
+    public async Task InitializeAsync_NotCustomer_HidesBarberRequestRowAndSkipsRead(UserRole role)
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var accountApi = new FakeAccountApi
+        {
+            Profile = () => Task.FromResult(ProfileOf(role: role)),
+        };
+        var barberRequests = new FakeBarberRequestsApi();
+        var viewModel = CreateViewModel(session, accountApi: accountApi, barberRequestsApi: barberRequests);
+
+        await viewModel.InitializeAsync();
+
+        // Мастеру и администратору сервер ответил бы 403: предлагать им заявку нельзя,
+        // поэтому для них она даже не читается.
+        Assert.False(viewModel.CanRequestBarberRole);
+        Assert.Equal(0, barberRequests.MineCalls);
+        Assert.Equal("Стать мастером", viewModel.BarberRequestTitle);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_NoBarberRequest_ShowsInvitationTitle()
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var barberRequests = new FakeBarberRequestsApi();
+        var viewModel = CreateViewModel(session, barberRequestsApi: barberRequests);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Стать мастером", viewModel.BarberRequestTitle);
+    }
+
+    [Theory]
+    [InlineData(BarberRequestStatus.Pending, "Заявка на рассмотрении")]
+    [InlineData(BarberRequestStatus.Rejected, "Заявка отклонена")]
+    [InlineData(BarberRequestStatus.Approved, "Заявка одобрена")]
+    public async Task InitializeAsync_BarberRequestPresent_ShowsStatusTitle(
+        BarberRequestStatus status,
+        string expected)
+    {
+        var store = new FakeTokenStore { Tokens = new StoredTokens("access-1", "refresh-1") };
+        using var session = new TokenSession(store);
+        var barberRequests = new FakeBarberRequestsApi
+        {
+            Mine = () => Task.FromResult(new MyBarberRequestResponse(RequestOf(status))),
+        };
+        var viewModel = CreateViewModel(session, barberRequestsApi: barberRequests);
+
+        await viewModel.InitializeAsync();
+
+        // Второй строки у карточки нет: состояние заявки — это единственный её заголовок.
+        Assert.Equal(expected, viewModel.BarberRequestTitle);
+    }
+
+    [Fact]
+    public async Task StartAutoRetry_BarberRequestFailure_StartsOnlyBarberRequestLoop()
+    {
+        var barberRequests = new FakeBarberRequestsApi
+        {
+            Mine = () => Task.FromException<MyBarberRequestResponse>(
+                new HttpRequestException("refused")),
+        };
+        using var harness = new Harness(
+            HangingRetry(),
+            barberRequests,
+            HangingRetry());
+
+        harness.AccountApi.Profile = () => Task.FromResult(ProfileOf());
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.True(harness.ViewModel.CanRequestBarberRole);
+
+        // Сбой чтения заявки не прячет строку: она остаётся входом в заявку, когда сеть упала.
+        Assert.Equal("Стать мастером", harness.ViewModel.BarberRequestTitle);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.BarberRequestAutoRetry.IsRunning);
+        Assert.False(harness.ViewModel.AutoRetry.IsRunning);
+
+        // «Пробуем снова…» — строка профильного сбоя: чужой цикл не имеет права её включать.
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.BarberRequestAutoRetry.Completion;
+        await harness.ViewModel.AutoRetryCompletion;
+    }
+
+    [Fact]
+    public async Task StartAutoRetry_ProfileFailure_DoesNotStartBarberRequestLoop()
+    {
+        var barberRequests = new FakeBarberRequestsApi
+        {
+            Mine = () => Task.FromResult(new MyBarberRequestResponse(RequestOf(BarberRequestStatus.Pending))),
+        };
+        using var harness = new Harness(
+            HangingRetry(),
+            barberRequests,
+            HangingRetry());
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.Equal("Заявка на рассмотрении", harness.ViewModel.BarberRequestTitle);
+
+        // Вкладка вернулась, а профиль не прочитался: цикл профиля лечит только себя.
+        harness.AccountApi.Profile = () => Task.FromException<MyProfileResponse>(
+            new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        Assert.NotNull(harness.ViewModel.ProfileError);
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.AutoRetry.IsRunning);
+        Assert.False(harness.ViewModel.BarberRequestAutoRetry.IsRunning);
+
+        harness.ViewModel.StopAutoRetry();
+        await harness.ViewModel.AutoRetryCompletion;
+        await harness.ViewModel.BarberRequestAutoRetry.Completion;
+    }
+
+    [Fact]
+    public async Task LogoutCommand_WithBothLoopsRunning_StopsLoopsAndResetsBarberRequestTitle()
+    {
+        var barberRequests = new FakeBarberRequestsApi
+        {
+            Mine = () => Task.FromResult(new MyBarberRequestResponse(RequestOf(BarberRequestStatus.Pending))),
+        };
+        using var harness = new Harness(
+            HangingRetry(),
+            barberRequests,
+            HangingRetry());
+
+        await harness.ViewModel.InitializeAsync();
+
+        // Второе появление: профиль и заявка падают по сети, поэтому оба цикла живы.
+        harness.AccountApi.Profile = () => Task.FromException<MyProfileResponse>(
+            new HttpRequestException("refused"));
+        barberRequests.Mine = () => Task.FromException<MyBarberRequestResponse>(
+            new HttpRequestException("refused"));
+
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.StartAutoRetry();
+
+        Assert.True(harness.ViewModel.AutoRetry.IsRunning);
+        Assert.True(harness.ViewModel.BarberRequestAutoRetry.IsRunning);
+
+        await harness.ViewModel.LogoutCommand.ExecuteAsync(null);
+
+        // После выхода заявка читается с Bearer, которого уже нет: оба цикла гасятся,
+        // а заголовок больше не принадлежит прошлому пользователю.
+        Assert.False(harness.ViewModel.AutoRetry.IsRunning);
+        Assert.False(harness.ViewModel.BarberRequestAutoRetry.IsRunning);
+        Assert.False(harness.ViewModel.IsAutoRetrying);
+        Assert.False(harness.ViewModel.CanRequestBarberRole);
+        Assert.Equal("Стать мастером", harness.ViewModel.BarberRequestTitle);
+        Assert.False(harness.Session.IsAuthenticated);
+        Assert.Null(harness.Store.Tokens);
+
+        await harness.ViewModel.AutoRetryCompletion;
+        await harness.ViewModel.BarberRequestAutoRetry.Completion;
+    }
+
     /// <summary>
     /// Создаёт уже открытый экран без сессии — то, что видит пользователь перед вводом пароля.
     /// </summary>
@@ -1101,13 +1293,17 @@ public sealed class ProfileViewModelTests
         FakeAuthApi? authApi = null,
         FakeAccountApi? accountApi = null,
         IPushRegistrar? push = null,
-        AutoRetryLoop? autoRetry = null) =>
+        AutoRetryLoop? autoRetry = null,
+        IBarberRequestsApi? barberRequestsApi = null,
+        AutoRetryLoop? barberRequestRetry = null) =>
         new(
             authApi ?? new FakeAuthApi(),
             accountApi ?? new FakeAccountApi(),
             session,
             push ?? new FakePushRegistrar(),
-            autoRetry);
+            autoRetry,
+            barberRequestsApi,
+            barberRequestRetry);
 
     /// <summary>
     /// Цикл с мгновенной паузой: секунды расписания в тесте не тратятся.
@@ -1178,11 +1374,21 @@ public sealed class ProfileViewModelTests
     /// </summary>
     private sealed class Harness : IDisposable
     {
-        public Harness(AutoRetryLoop autoRetry)
+        public Harness(
+            AutoRetryLoop autoRetry,
+            FakeBarberRequestsApi? barberRequests = null,
+            AutoRetryLoop? barberRequestRetry = null)
         {
             Store.Tokens = new StoredTokens("access-1", "refresh-1");
             Session = new TokenSession(Store);
-            ViewModel = new ProfileViewModel(AuthApi, AccountApi, Session, Push, autoRetry);
+            ViewModel = new ProfileViewModel(
+                AuthApi,
+                AccountApi,
+                Session,
+                Push,
+                autoRetry,
+                barberRequests,
+                barberRequestRetry);
         }
 
         public FakeTokenStore Store { get; } = new();
@@ -1208,7 +1414,8 @@ public sealed class ProfileViewModelTests
         string firstName = "Ева",
         string lastName = "Клиентова",
         string? phoneNumber = "+70000000003",
-        bool isEmailVerified = true) =>
+        bool isEmailVerified = true,
+        UserRole role = UserRole.Customer) =>
         new(
             id ?? Guid.CreateVersion7(),
             UserEmail,
@@ -1216,7 +1423,7 @@ public sealed class ProfileViewModelTests
             lastName,
             phoneNumber,
             "https://cdn.example.test/avatar.jpg",
-            UserRole.Customer,
+            role,
             null,
             isEmailVerified,
             false,
@@ -1232,6 +1439,46 @@ public sealed class ProfileViewModelTests
             "Request failed.",
             [errorCode],
             new Dictionary<string, string[]>());
+
+    /// <summary>
+    /// Заявка на роль мастера для заголовка строки хаба.
+    /// </summary>
+    /// <param name="status">Статус заявки.</param>
+    private static BarberRequestResponse RequestOf(BarberRequestStatus status) =>
+        new(
+            Guid.CreateVersion7(),
+            status,
+            "Ева Мастерова",
+            5,
+            "Екатеринбург",
+            null,
+            false,
+            new DateTimeOffset(2026, 11, 1, 12, 30, 0, TimeSpan.Zero),
+            null,
+            null);
+
+    /// <summary>
+    /// Подменённый клиент заявки: хаб только читает её, создание живёт на странице заявки.
+    /// </summary>
+    private sealed class FakeBarberRequestsApi : IBarberRequestsApi
+    {
+        public int MineCalls { get; private set; }
+
+        public Func<Task<MyBarberRequestResponse>> Mine { get; set; } =
+            () => Task.FromResult(new MyBarberRequestResponse(null));
+
+        public Task<MyBarberRequestResponse> GetMineAsync(CancellationToken cancellationToken = default)
+        {
+            MineCalls++;
+
+            return Mine();
+        }
+
+        public Task<BarberRequestResponse> CreateAsync(
+            CreateBarberRequestRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Хаб профиля не создаёт заявку.");
+    }
 
     /// <summary>
     /// Подменённый клиент авторизации.

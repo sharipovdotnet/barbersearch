@@ -3,6 +3,7 @@ using BarberSearch.Mobile.Auth;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Api.Push;
 using BarberSearch.Mobile.Core.Api.Reviews;
@@ -163,6 +164,11 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IReviewsApi, ReviewsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Заявка на роль мастера — чтение и запись с Bearer: роль сервер берёт из токена,
+        // а antiforgery-фильтр пропускает такой запрос без X-CSRF-TOKEN.
+        builder.Services.AddHttpClient<IBarberRequestsApi, BarberRequestsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         // Регистрация push-устройства — тоже с Bearer: пользователя сервер берёт из токена.
         builder.Services.AddHttpClient<IPushApi, PushApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
@@ -191,6 +197,7 @@ public static class MauiProgram
         builder.Services.AddTransient<CitySuggestions>();
         builder.Services.AddTransient<SearchViewModel>();
         builder.Services.AddTransient<ProfileViewModel>();
+        builder.Services.AddTransient<BarberRequestViewModel>();
         builder.Services.AddTransient<RegisterViewModel>();
         builder.Services.AddTransient<ForgotPasswordViewModel>();
         builder.Services.AddTransient<BarberCardViewModel>();
@@ -217,6 +224,7 @@ public static class MauiProgram
         builder.Services.AddTransient<RescheduleBookingPage>();
         builder.Services.AddTransient<ReviewBookingPage>();
         builder.Services.AddTransient<AccountProfilePage>();
+        builder.Services.AddTransient<BarberRequestPage>();
         builder.Services.AddTransient<SecurityPage>();
         builder.Services.AddTransient<MyReviewsPage>();
         builder.Services.AddTransient<EditReviewPage>();

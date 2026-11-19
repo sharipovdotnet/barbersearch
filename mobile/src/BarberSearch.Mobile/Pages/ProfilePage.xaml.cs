@@ -56,6 +56,7 @@ public partial class ProfilePage : ContentPage
         _viewModel.SecurityRequested += OnSecurityRequested;
         _viewModel.RegisterRequested += OnRegisterRequested;
         _viewModel.ForgotPasswordRequested += OnForgotPasswordRequested;
+        _viewModel.BarberRequestRequested += OnBarberRequestRequested;
     }
 
     /// <summary>
@@ -178,6 +179,21 @@ public partial class ProfilePage : ContentPage
         _viewModel.StopAutoRetry();
 
         await Shell.Current.GoToAsync(ForgotPasswordPage.Route);
+    }
+
+    /// <summary>
+    /// Открывает экран заявки на роль мастера.
+    /// </summary>
+    /// <remarks>
+    /// Перед переходом останавливаются оба цикла хаба — профиля и заявки: push-навигация Shell
+    /// может не вызвать <see cref="OnDisappearing"/>, и тогда тихие чтения продолжали бы ходить
+    /// в сеть под открытой страницей заявки.
+    /// </remarks>
+    private async void OnBarberRequestRequested(object? sender, EventArgs e)
+    {
+        _viewModel.StopAutoRetry();
+
+        await Shell.Current.GoToAsync(BarberRequestPage.Route);
     }
 
     /// <summary>
