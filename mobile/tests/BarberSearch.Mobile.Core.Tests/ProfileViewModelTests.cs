@@ -78,6 +78,7 @@ public sealed class ProfileViewModelTests
         Assert.Equal("Ева Клиентова", viewModel.DisplayName);
         Assert.Equal("ЕК", viewModel.Initials);
         Assert.Equal("Клиент", viewModel.RoleText);
+        Assert.Equal("Адрес подтверждён.", viewModel.EmailStatusText);
         Assert.False(viewModel.ShowEmailWarning);
     }
 
@@ -249,6 +250,7 @@ public sealed class ProfileViewModelTests
         Assert.Empty(viewModel.DisplayName);
         Assert.Empty(viewModel.Initials);
         Assert.Empty(viewModel.RoleText);
+        Assert.Empty(viewModel.EmailStatusText);
         Assert.Null(viewModel.ProfileEmail);
         Assert.False(viewModel.IsEmailVerified);
         Assert.False(viewModel.IsProfileVisible);
@@ -466,6 +468,7 @@ public sealed class ProfileViewModelTests
 
         Assert.True(viewModel.ShowEmailWarning);
         Assert.False(viewModel.IsEmailVerified);
+        Assert.Equal("Адрес не подтверждён.", viewModel.EmailStatusText);
     }
 
     [Fact]
