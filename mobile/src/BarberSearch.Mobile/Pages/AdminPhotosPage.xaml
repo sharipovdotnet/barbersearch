@@ -1,0 +1,563 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.AdminPhotosPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Admin;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:AdminPhotosViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Фотографии'}">
+
+    <ContentPage.Resources>
+
+        <!--
+            Карточка кадра одна на обе очереди: превью, владелец, ожидание и решения.
+            Различаются только поля, которые приносит строка, поэтому шаблон общий.
+
+            Причина отказа раскрывается под карточкой, а не в отдельном окне: модальных
+            окон в MAUI нет, а причина обязательна и проверяется до запроса. Открыта
+            всегда одна панель — это держит очередь, а не разметка.
+        -->
+        <DataTemplate x:Key="PhotoCard" x:DataType="vm:AdminPhotoItem">
+            <Border
+                Margin="0,0,0,8"
+                Padding="12"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="8">
+
+                    <Border
+                        Padding="0"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                        HeightRequest="180"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 8">
+                        <Image
+                            Aspect="Fill"
+                            HeightRequest="180"
+                            SemanticProperties.Description="{Binding AltText}"
+                            Source="{Binding ImageUrl}" />
+                    </Border>
+
+                    <Label
+                        FontFamily="GeistMedium"
+                        FontSize="16"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding OwnerName}" />
+
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasEmail}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding Email}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <Label
+                        FontSize="14"
+                        IsVisible="{Binding HasDescription}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding Description}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <HorizontalStackLayout Spacing="8">
+                        <Border
+                            Padding="8,2"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 6"
+                            VerticalOptions="Center">
+                            <Label FontSize="12" Text="{Binding StatusText}" />
+                        </Border>
+                        <Label
+                            FontSize="12"
+                            Text="{Binding SubmittedText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasError}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ErrorMessage}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button
+                            Command="{Binding ApproveCommand}"
+                            MinimumHeightRequest="44"
+                            SemanticProperties.Description="{Binding ApproveHint}"
+                            Text="{Binding ApproveText}" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding OpenRejectCommand}"
+                            MinimumHeightRequest="44"
+                            SemanticProperties.Description="{Binding RejectHint}"
+                            Text="{Binding RejectText}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    </Grid>
+
+                    <Border
+                        Padding="12"
+                        IsVisible="{Binding IsRejectOpen}"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="8">
+                            <Label
+                                FontFamily="GeistMedium"
+                                Text="{loc:Translate Key='Отклонить фото?'}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding ActionTarget}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Фото останется непубличным. Владелец увидит причину и сможет загрузить другое.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Причина отказа'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Editor
+                                AutoSize="TextChanges"
+                                MaxLength="500"
+                                MinimumHeightRequest="80"
+                                Text="{Binding Reason}" />
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='До 500 символов. Причина не редактируется после отказа.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <Button
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                    Command="{Binding CancelRejectCommand}"
+                                    MinimumHeightRequest="44"
+                                    Text="{loc:Translate Key='Отмена'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                <Button
+                                    Grid.Column="1"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource DestructiveSolid}, Dark={StaticResource DestructiveSolidDark}}"
+                                    Command="{Binding ConfirmRejectCommand}"
+                                    MinimumHeightRequest="44"
+                                    Text="{Binding ConfirmRejectText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource DestructiveSolidForeground}, Dark={StaticResource DestructiveSolidForegroundDark}}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+
+                </VerticalStackLayout>
+            </Border>
+        </DataTemplate>
+
+    </ContentPage.Resources>
+
+    <!--
+        Очередь премодерации фото: два сегмента и две независимые очереди.
+
+        Именно две, а не одна с фильтром: у аватаров и портфолио разные адреса решений,
+        а администратор обычно проверяет что-то одно. У каждой очереди свой список,
+        курсор и прокрутка, поэтому переключение сегмента не перечитывает соседнюю.
+
+        Карточки нет: кадр занимает всю ширину карточки, имя владельца и ожидание
+        подписаны словами, решения стоят тут же.
+    -->
+    <Grid>
+
+        <Grid
+            Padding="16"
+            IsVisible="{Binding ShowPage}"
+            RowDefinitions="Auto,*"
+            RowSpacing="12">
+
+            <!-- Сегменты: аватары по умолчанию, как вкладка веба. -->
+            <Border
+                Padding="2"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 8">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                    <Button
+                        Command="{Binding ShowAvatarsCommand}"
+                        Style="{StaticResource SegmentButton}"
+                        Text="{loc:Translate Key='Аватары'}">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsAvatarsSelected}"
+                                TargetType="Button"
+                                Value="True">
+                                <Setter
+                                    Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}" />
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button
+                        Grid.Column="1"
+                        Command="{Binding ShowPortfolioCommand}"
+                        Style="{StaticResource SegmentButton}"
+                        Text="{loc:Translate Key='Портфолио'}">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsPortfolioSelected}"
+                                TargetType="Button"
+                                Value="True">
+                                <Setter
+                                    Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}" />
+                                <Setter
+                                    Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+
+                <!-- Очередь аватаров. -->
+                <Grid
+                    IsVisible="{Binding IsAvatarsSelected}"
+                    RowDefinitions="Auto,*"
+                    RowSpacing="12">
+
+                    <Border
+                        Padding="12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                        IsVisible="{Binding Avatars.HasAnnouncement}"
+                        Stroke="Transparent"
+                        StrokeShape="RoundRectangle 10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Avatars.Announcement}"
+                                VerticalOptions="Center" />
+                            <Button
+                                Grid.Column="1"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding Avatars.DismissAnnouncementCommand}"
+                                MinimumHeightRequest="44"
+                                MinimumWidthRequest="44"
+                                Text="{loc:Translate Key='Закрыть'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Avatars.ShowLoading}"
+                            Spacing="8"
+                            VerticalOptions="Center">
+                            <ActivityIndicator
+                                HorizontalOptions="Center"
+                                IsRunning="{Binding Avatars.ShowLoading}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                Text="{loc:Translate Key='Загружаем фотографии…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Avatars.ShowError}"
+                            Spacing="12"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Не удалось загрузить фотографии'}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Avatars.ErrorMessage}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                HorizontalTextAlignment="Center"
+                                IsVisible="{Binding Avatars.IsAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Button
+                                Command="{Binding Avatars.RetryCommand}"
+                                HorizontalOptions="Center"
+                                Text="{loc:Translate Key='Повторить'}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Avatars.ShowForbidden}"
+                            Spacing="8"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <RefreshView
+                            Command="{Binding Avatars.RefreshCommand}"
+                            IsRefreshing="{Binding Avatars.IsRefreshing}"
+                            IsVisible="{Binding Avatars.ShowContent}">
+                            <CollectionView
+                                ItemTemplate="{StaticResource PhotoCard}"
+                                ItemsSource="{Binding Avatars.Items}"
+                                RemainingItemsThreshold="3"
+                                RemainingItemsThresholdReachedCommand="{Binding Avatars.LoadMoreCommand}">
+
+                                <CollectionView.EmptyView>
+                                    <ContentView>
+                                        <VerticalStackLayout
+                                            Margin="0,24,0,0"
+                                            IsVisible="{Binding Avatars.ShowEmptyState}"
+                                            Spacing="8">
+                                            <Label
+                                                FontFamily="GeistSemiBold"
+                                                FontSize="16"
+                                                HorizontalTextAlignment="Center"
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Очередь пуста — все фото проверены.'}" />
+                                            <Label
+                                                HorizontalTextAlignment="Center"
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Новые аватары и работы появятся здесь, как только их загрузят.'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Button
+                                                Command="{Binding Avatars.RefreshCommand}"
+                                                HorizontalOptions="Center"
+                                                Text="{loc:Translate Key='Обновить'}" />
+                                        </VerticalStackLayout>
+                                    </ContentView>
+                                </CollectionView.EmptyView>
+
+                                <CollectionView.Footer>
+                                    <VerticalStackLayout Padding="0,8,0,24" Spacing="8">
+                                        <HorizontalStackLayout
+                                            HorizontalOptions="Center"
+                                            IsVisible="{Binding Avatars.IsLoadingMore}"
+                                            Spacing="8">
+                                            <ActivityIndicator IsRunning="{Binding Avatars.IsLoadingMore}" />
+                                            <Label
+                                                Text="{loc:Translate Key='Идёт догрузка…'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
+                                        <VerticalStackLayout IsVisible="{Binding Avatars.ShowLoadMoreError}" Spacing="8">
+                                            <Label
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Не удалось загрузить следующую страницу фотографий.'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                            <Label
+                                                FontSize="12"
+                                                IsVisible="{Binding Avatars.IsLoadMoreAutoRetrying}"
+                                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Button
+                                                Command="{Binding Avatars.RetryLoadMoreCommand}"
+                                                HorizontalOptions="Start"
+                                                Text="{loc:Translate Key='Повторить'}" />
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </CollectionView.Footer>
+
+                            </CollectionView>
+                        </RefreshView>
+
+                    </Grid>
+                </Grid>
+
+                <!-- Очередь портфолио: та же механика, другой адрес решений. -->
+                <Grid
+                    IsVisible="{Binding IsPortfolioSelected}"
+                    RowDefinitions="Auto,*"
+                    RowSpacing="12">
+
+                    <Border
+                        Padding="12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                        IsVisible="{Binding Portfolio.HasAnnouncement}"
+                        Stroke="Transparent"
+                        StrokeShape="RoundRectangle 10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Portfolio.Announcement}"
+                                VerticalOptions="Center" />
+                            <Button
+                                Grid.Column="1"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding Portfolio.DismissAnnouncementCommand}"
+                                MinimumHeightRequest="44"
+                                MinimumWidthRequest="44"
+                                Text="{loc:Translate Key='Закрыть'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Portfolio.ShowLoading}"
+                            Spacing="8"
+                            VerticalOptions="Center">
+                            <ActivityIndicator
+                                HorizontalOptions="Center"
+                                IsRunning="{Binding Portfolio.ShowLoading}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                Text="{loc:Translate Key='Загружаем фотографии…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Portfolio.ShowError}"
+                            Spacing="12"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Не удалось загрузить фотографии'}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding Portfolio.ErrorMessage}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontSize="12"
+                                HorizontalTextAlignment="Center"
+                                IsVisible="{Binding Portfolio.IsAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Button
+                                Command="{Binding Portfolio.RetryCommand}"
+                                HorizontalOptions="Center"
+                                Text="{loc:Translate Key='Повторить'}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding Portfolio.ShowForbidden}"
+                            Spacing="8"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Раздел доступен только администратору'}" />
+                            <Label
+                                HorizontalTextAlignment="Center"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='У вашей учётной записи нет прав администратора. Если доступ нужен, обратитесь к владельцу сервиса.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <RefreshView
+                            Command="{Binding Portfolio.RefreshCommand}"
+                            IsRefreshing="{Binding Portfolio.IsRefreshing}"
+                            IsVisible="{Binding Portfolio.ShowContent}">
+                            <CollectionView
+                                ItemTemplate="{StaticResource PhotoCard}"
+                                ItemsSource="{Binding Portfolio.Items}"
+                                RemainingItemsThreshold="3"
+                                RemainingItemsThresholdReachedCommand="{Binding Portfolio.LoadMoreCommand}">
+
+                                <CollectionView.EmptyView>
+                                    <ContentView>
+                                        <VerticalStackLayout
+                                            Margin="0,24,0,0"
+                                            IsVisible="{Binding Portfolio.ShowEmptyState}"
+                                            Spacing="8">
+                                            <Label
+                                                FontFamily="GeistSemiBold"
+                                                FontSize="16"
+                                                HorizontalTextAlignment="Center"
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Очередь пуста — все фото проверены.'}" />
+                                            <Label
+                                                HorizontalTextAlignment="Center"
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Новые аватары и работы появятся здесь, как только их загрузят.'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Button
+                                                Command="{Binding Portfolio.RefreshCommand}"
+                                                HorizontalOptions="Center"
+                                                Text="{loc:Translate Key='Обновить'}" />
+                                        </VerticalStackLayout>
+                                    </ContentView>
+                                </CollectionView.EmptyView>
+
+                                <CollectionView.Footer>
+                                    <VerticalStackLayout Padding="0,8,0,24" Spacing="8">
+                                        <HorizontalStackLayout
+                                            HorizontalOptions="Center"
+                                            IsVisible="{Binding Portfolio.IsLoadingMore}"
+                                            Spacing="8">
+                                            <ActivityIndicator IsRunning="{Binding Portfolio.IsLoadingMore}" />
+                                            <Label
+                                                Text="{loc:Translate Key='Идёт догрузка…'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
+                                        <VerticalStackLayout IsVisible="{Binding Portfolio.ShowLoadMoreError}" Spacing="8">
+                                            <Label
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Не удалось загрузить следующую страницу фотографий.'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                            <Label
+                                                FontSize="12"
+                                                IsVisible="{Binding Portfolio.IsLoadMoreAutoRetrying}"
+                                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <Button
+                                                Command="{Binding Portfolio.RetryLoadMoreCommand}"
+                                                HorizontalOptions="Start"
+                                                Text="{loc:Translate Key='Повторить'}" />
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </CollectionView.Footer>
+
+                            </CollectionView>
+                        </RefreshView>
+
+                    </Grid>
+                </Grid>
+
+            </Grid>
+        </Grid>
+
+        <!-- Сессия кончилась: возврат к «Профилю», где стоит форма входа. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowSignInRequired}"
+            Padding="24"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Сеанс истёк. Войдите заново.'}" />
+            <Button
+                Clicked="OnSignInClicked"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Войти'}" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>
