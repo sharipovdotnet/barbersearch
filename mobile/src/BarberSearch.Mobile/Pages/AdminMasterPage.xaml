@@ -14,8 +14,8 @@
         потом решение. Действия — в нижней панели, в зоне большого пальца: подтверждение
         справа, снятие подтверждения слева второстепенной кнопкой.
 
-        Снятие подтверждения — шаг с причиной: панель над нижней панелью, подтверждение
-        гаснет, пока причина пуста. Это замена модальному диалогу веба.
+        Снятие подтверждения — шаг подтверждения: панель над нижней панелью показывает
+        последствие и ждёт второго нажатия. Это замена модальному диалогу веба.
 
         Салоны, специализации и услуги сюда не выводятся: в AdminBarberDetailResponse их
         нет — только счётчики готовности. Поэтому чек-лист показывает числа, а не списки.
@@ -433,7 +433,7 @@
                 Text="{Binding ActionErrorText}"
                 TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-            <!-- Причина снятия подтверждения: шаг, а не модальный диалог. -->
+            <!-- Снятие подтверждения: панель подтверждения, а не модальный диалог. -->
             <Border
                 Padding="12"
                 IsVisible="{Binding IsUnverifyPanelOpen}"
@@ -449,13 +449,6 @@
                         LineBreakMode="WordWrap"
                         Text="{loc:Translate Key='Профиль исчезнет из поиска и станет недоступен для записи, пока вы не подтвердите его снова.'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-
-                    <Editor
-                        AutoSize="TextChanges"
-                        MaxLength="500"
-                        MinimumHeightRequest="80"
-                        Placeholder="{loc:Translate Key='Причина снятия подтверждения'}"
-                        Text="{Binding UnverifyReason}" />
 
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                         <Button
