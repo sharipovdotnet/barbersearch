@@ -1,7 +1,8 @@
 # BarberSearch
 
-Backend context for a barber discovery and online-booking service. A person searches for a
-barber, picks a salon and a service, and books a time slot.
+The product's domain, shared by the backend, the web client and the mobile app: a beauty
+discovery and online-booking service. A Customer searches for a professional, picks a salon and
+a service, and books a time slot.
 
 ## People and accounts
 
@@ -25,8 +26,10 @@ A User who books services. The default role.
 _Avoid_: Client, buyer
 
 **Barber**:
-A User who provides services in one or more salons.
-_Avoid_: Master, stylist, hairdresser
+A User who provides services in one or more salons — the platform's umbrella role for any hair
+professional: a barber, a hairdresser or a colourist. The role keeps this name in the code and in
+domain text; the Russian interface calls the person «мастер» (see Мастер / Professional).
+_Avoid_: Master (as the role name), stylist, hairdresser, colourist
 
 **Admin**:
 A User who manages the catalogue and grants sensitive attributes.
@@ -180,3 +183,21 @@ How many published Reviews the average Rating was computed from. Zero means ther
 **Favorite Barber**:
 The fact that one User marked one Barber Profile as a favourite.
 _Avoid_: Bookmark, saved barber
+
+## Words on the screen
+
+The interface speaks Russian and English; the Russian source string is the key of the English
+translation, and the English catalogue uses the same words. These are the words a Customer reads,
+not the names in the code.
+
+**Мастер / Professional**:
+The umbrella word for the person a Customer books — a barber, a hairdresser or a colourist. The
+Russian interface says «мастер» and its request entry «Стать мастером»; the English one says
+“professional”, never “barber” for the category and never “master”. The domain keeps `Barber` for
+the role and the entity.
+_Avoid_: Специалист, бьюти-мастер, стилист, профи (as the umbrella word)
+
+**Барбер, Парикмахер, Колорист**:
+Trades, not the category: each names what a Мастер does, and the interface shows the trade as a
+specialization of the person — on the card, in the filters and on the request page.
+_Avoid_: Using a trade in place of the umbrella word
