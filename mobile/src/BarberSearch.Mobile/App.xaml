@@ -9,6 +9,7 @@
             <conv:RatingTextConverter x:Key="RatingText" />
             <conv:DistanceTextConverter x:Key="DistanceText" />
             <conv:NotNullConverter x:Key="NotNull" />
+            <conv:ImageBytesConverter x:Key="ImageBytes" />
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />

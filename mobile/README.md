@@ -4,8 +4,9 @@
 
 The app is the **client** half of the product: search for a barber, the public card, the slot
 grid, booking, the customer's bookings, favourites and — on Android — push reminders about a
-confirmed visit. The barber cabinet and the admin section stay on the web — a barber does not fill
-in a weekly schedule from a phone.
+confirmed visit. An administrator also gets the moderation queues on the phone (see «Admin
+queues» below); the rest of the admin section and the professional cabinet stay on the web — a
+professional does not fill in a weekly schedule from a phone.
 
 ## Layout
 
@@ -298,6 +299,41 @@ The texts come from the web (`become-a-barber-page.tsx`, `barber-request-form.ts
 `barber-request-status.tsx`, `lib/barber-request-form.ts`) with «барбер» → «мастер»; the English
 values follow the same rule — “professional”, never “barber” or “master” — and live in
 `src/BarberSearch.Mobile.Core/Localization/messages/en.json`, like every other string.
+
+## Admin queues
+
+The phone carries the four admin queues where the job is a **decision on a record**, and nothing
+else of `/admin`: reviews awaiting publication, photo pre-moderation (avatars and portfolio),
+profiles awaiting verification, and requests to become a professional. Statistics, the catalogue,
+salons, users, bookings and the audit log stay on the web (`AGENT.md` §5 records why).
+
+The entry is a row in the «Профиль» hub, visible only when `GET api/users/me` answers
+`role: "Admin"`, with a red badge that sums the pending queues of `GET api/admin/summary`. The hub
+behind it is one list of four sections — the web's rail and its «Сводка» screen merged, because a
+phone shows the numbers once, not twice — and every row states its queue in words as well as in
+the badge. The hub re-reads the snapshot on every appearance and on pull-to-refresh; there is no
+timer, because a queue only changes when somebody decides, and coming back from a section is that
+moment.
+
+| Screen | Route | Reads | Decisions |
+|---|---|---|---|
+| Hub | `admin` | `GET api/admin/summary` | — |
+| Reviews | `admin-reviews` → `admin-review` | `GET api/admin/reviews?status=…`, `GET api/admin/reviews/{id}` | `POST` / `DELETE api/reviews/{id}/publication` |
+| Photos | `admin-photos` | `GET api/admin/photos/avatars`, `GET api/admin/photos/portfolio` | `POST api/admin/users/{id}/avatar/approval`, `…/rejection`; `POST api/barber-profiles/{id}/photos/{photoId}/approval`, `…/rejection` |
+| Professionals | `admin-masters` → `admin-master` | `GET api/admin/barbers?status=…`, `GET api/admin/barbers/{id}` | `POST` / `DELETE api/barber-profiles/{id}/verification` |
+| Requests | `admin-requests` → `admin-request` | `GET api/admin/barber-requests?status=…`, `GET api/admin/barber-requests/{id}` | `POST api/admin/barber-requests/{id}/approval`, `…/rejection` |
+
+The photo queues are read with the same opaque cursor as every other paged read of the app
+(`RemainingItemsThreshold`), and media URLs become absolute through `Core/Media/MediaUrl` — the
+media routes are anonymous, so `Image` can load them directly.
+
+A decision never sits on the row that needs a reason: opening «Отклонить» / «Скрыть» / «Снять
+подтверждение» expands a panel above the fixed bottom bar with the reason field, and the confirm
+stays disabled until the reason satisfies the server's own rule (500 characters for photo and
+request rejections; a hide and an unverify carry no reason at all, so their panels confirm
+immediately). After a successful decision the page returns to the queue, whose `OnAppearing`
+refresh drops the resolved row; the hub then refreshes in turn. The wording is the web's, with
+«барбер» → «мастер» and “professional” in English, as in the rest of the app.
 
 ## Push notifications
 

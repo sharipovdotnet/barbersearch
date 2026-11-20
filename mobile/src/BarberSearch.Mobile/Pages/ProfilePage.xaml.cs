@@ -57,6 +57,7 @@ public partial class ProfilePage : ContentPage
         _viewModel.RegisterRequested += OnRegisterRequested;
         _viewModel.ForgotPasswordRequested += OnForgotPasswordRequested;
         _viewModel.BarberRequestRequested += OnBarberRequestRequested;
+        _viewModel.AdminRequested += OnAdminRequested;
     }
 
     /// <summary>
@@ -194,6 +195,22 @@ public partial class ProfilePage : ContentPage
         _viewModel.StopAutoRetry();
 
         await Shell.Current.GoToAsync(BarberRequestPage.Route);
+    }
+
+    /// <summary>
+    /// Открывает хаб администрирования.
+    /// </summary>
+    /// <remarks>
+    /// Хаб — не вкладка, а страница поверх стека «Профиля»: администрирование нужно редко,
+    /// и пятая вкладка занимала бы место у всех остальных ролей. Возврат оставляет вкладку
+    /// с её сессией и профилем на месте.
+    /// </remarks>
+    private async void OnAdminRequested(object? sender, EventArgs e)
+    {
+        // Та же причина, что и у «Личных данных»: push может не вызвать OnDisappearing.
+        _viewModel.StopAutoRetry();
+
+        await Shell.Current.GoToAsync(AdminHubPage.Route);
     }
 
     /// <summary>

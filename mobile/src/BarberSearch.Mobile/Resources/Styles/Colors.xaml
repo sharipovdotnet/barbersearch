@@ -47,6 +47,14 @@
         В .dark не переопределяется.
     -->
     <Color x:Key="DestructiveSolid">#CE0000</Color>
+    <!--
+        Текст на сплошной заливке DestructiveSolid: белый в обеих темах, потому что сама
+        заливка в обеих темах одна. Пара взята у веба — бейдж рейла админки рисует белые
+        цифры на `bg-destructive-solid` (`text-white`, admin-rail.tsx), — но в вебе это
+        утилита, а не токен, поэтому имя появляется здесь и записано в AGENT.md §5:
+        `PrimaryForeground` в тёмной теме тёмный и на красном не читается.
+    -->
+    <Color x:Key="DestructiveSolidForeground">#FFFFFF</Color>
     <Color x:Key="Success">#0B7643</Color>
     <Color x:Key="Warning">#975800</Color>
     <Color x:Key="Border">#E5E5E5</Color>
@@ -70,6 +78,7 @@
     <Color x:Key="AccentForegroundDark">#FAFAFA</Color>
     <Color x:Key="DestructiveDark">#FF6467</Color>
     <Color x:Key="DestructiveSolidDark">#CE0000</Color>
+    <Color x:Key="DestructiveSolidForegroundDark">#FFFFFF</Color>
     <Color x:Key="SuccessDark">#54CC8E</Color>
     <Color x:Key="WarningDark">#EFB656</Color>
     <Color x:Key="BorderDark">#1AFFFFFF</Color>

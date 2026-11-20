@@ -360,6 +360,52 @@
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
                 </VerticalStackLayout>
 
+                <!--
+                    «Администрирование» — карточка-строка, видимая только роли Admin.
+                    Админка не вкладка: роль редкая, и пятая вкладка занимала бы место у всех
+                    остальных. Бейдж — сумма очередей из сводки: число на строке отвечает на
+                    вопрос «есть ли что-то срочное», не открывая хаб.
+                -->
+                <Border
+                    Padding="12"
+                    IsVisible="{Binding IsAdmin}"
+                    MinimumHeightRequest="56"
+                    SemanticProperties.Description="{Binding AdminDescription}"
+                    StrokeShape="RoundRectangle 10">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenAdminCommand}" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                        <Label
+                            FontFamily="GeistMedium"
+                            FontSize="16"
+                            LineBreakMode="TailTruncation"
+                            Text="{loc:Translate Key='Администрирование'}"
+                            VerticalTextAlignment="Center" />
+                        <Border
+                            Grid.Column="1"
+                            Padding="7,2"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource DestructiveSolid}, Dark={StaticResource DestructiveSolidDark}}"
+                            IsVisible="{Binding HasAdminPending}"
+                            Stroke="Transparent"
+                            StrokeShape="RoundRectangle 9"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="12"
+                                Text="{Binding AdminPendingText}"
+                                TextColor="{AppThemeBinding Light={StaticResource DestructiveSolidForeground}, Dark={StaticResource DestructiveSolidForegroundDark}}"
+                                VerticalTextAlignment="Center" />
+                        </Border>
+                        <Label
+                            Grid.Column="2"
+                            FontSize="20"
+                            Text="›"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalTextAlignment="Center" />
+                    </Grid>
+                </Border>
+
                 <Button
                     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
                     Command="{Binding EditProfileCommand}"

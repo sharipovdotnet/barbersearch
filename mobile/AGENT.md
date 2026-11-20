@@ -22,8 +22,13 @@ The BarberSearch client mobile app for iOS and Android on .NET MAUI (.NET 10).
 The user searches for a barber, opens the card and the free slots, books an appointment, sees
 their bookings, and — on Android — receives a push reminder an hour before a confirmed visit.
 
-The barber cabinet and the admin section live on the web (`frontend/`). They will not exist in the
-mobile app: a schedule and working hours are not filled in from a phone.
+An administrator opens the moderation queues and decides from the phone (§5): reviews, photos,
+profiles awaiting verification and requests to become a professional.
+
+The professional cabinet lives on the web (`frontend/`) and will not exist in the mobile app:
+a schedule and working hours are not filled in from a phone. The rest of the admin section —
+statistics, the catalogue, salons, users, bookings and the audit log — also stays on the web;
+§5 records what the phone got and why the remainder did not move.
 
 ## 2. Where things live
 
@@ -590,6 +595,69 @@ in Core owns both base addresses.
   “Barber”), because that wording is spread over search, the card, bookings and reviews, and a
   handful of new strings must not rewrite the product's vocabulary in passing. Every string this
   slice adds is already “professional”.
+
+- **The admin section is a role-gated drill-down, not a fifth tab.** The entry is a row in the
+  «Профиль» hub, visible only when the profile's `Role` is `Admin`, with a red badge that is the sum
+  of the pending queues from `GET api/admin/summary`. Admin is a rare role, and a fifth tab would
+  spend a fifth of every other person's tab bar on it; the account hub is also where the role is
+  already named, so it is where the person looks for it. The badge read is a second, silent request:
+  its failure is not a profile error and is never retried, because a hint is not data — the row
+  simply loses its number. The hub behind it (`Pages/AdminHubPage`, `AdminHubViewModel`) merges the
+  web's `admin-rail.tsx` and `summary-screen.tsx` into one list, because on the web those two render
+  the same numbers twice and a phone has no room for a rail plus a page about the rail. A row is a
+  section: title, the queue stated in words, and the count as a badge. Wording the web puts in a
+  hover tooltip (what the number means) is permanent text here — there is no hover, and the count
+  alone would say nothing. An empty queue keeps its row: the section is still worth opening to see
+  what was already decided. The badge caps at «99+», the web's `formatAdminBadgeCount` threshold.
+- **The hub refreshes on appearance and has no timer.** The lists on «Записи» tick every 30 seconds
+  because visits change under the person; a moderation queue only changes when somebody decides, and
+  the return from a section is exactly that moment. So `OnAppearing` re-reads and the pull-to-refresh
+  gesture repeats it, with no poller in between. One snapshot feeds every row, which is also why the
+  web's two-pollers-disagree class of bug cannot appear here: the numbers come from one response, not
+  from one response per section.
+- **A decision is taken at the bottom of the screen, and a refusal costs two taps.** The web settles
+  everything in modal dialogs (`*-dialog.tsx`) opened from a toolbar; a phone has no toolbar reach
+  and a modal hides the record it is asking about. So the record fills the screen, and the decision
+  lives in a fixed bottom bar: the primary action on the right, the destructive one on the left in
+  secondary styling — the destructive action is never the easy thumb target. «Отклонить» / «Скрыть» /
+  «Снять подтверждение» opens an inline panel above the bar with its own confirm, and that confirm
+  stays disabled until a reason satisfies the server's own rule *where the server stores one* (photo
+  and request rejections). Hiding a review and removing a verification take no reason at all, so
+  their panel shows the consequence in words instead of a field: a field whose text goes nowhere
+  promises a reader who will never read it. Two taps for a destructive action is the point, not
+  friction to remove. After a successful decision the page pops back to the queue, whose
+  `OnAppearing` refresh drops the resolved row — the section never keeps its own "changed" event.
+- **The phone ports the moderation queues, not the whole section.** Reviews, photo pre-moderation
+  (avatars and portfolio), profiles awaiting verification and requests to become a professional are
+  the four queues where an administrator's job is a decision on a record, and a decision fits a
+  phone. The rest stays web-only and is a recorded omission, not an oversight: statistics (the
+  section is charts and periods over history the API does not keep, read at a desk), the catalogue
+  (hair services and specializations are data entry), salons (a form with address suggestions and
+  working hours), and users, bookings and the audit log (reference data an administrator looks up
+  while doing something else, with no decision of its own). The hub therefore lists four sections and
+  no "coming soon" rows.
+- **The admin screens share one set of failure texts.** `Core/Api/Admin/AdminErrorText` holds the
+  wording for network, rate limit, `403`, `401` and the per-action fallback, while the client screens
+  each keep their own copy: an administrator moves between four queues in one session, and four
+  slightly different sentences for "no connection" would read as four different products.
+- **One counter needs a colour of its own.** `Colors.xaml` gains `DestructiveSolidForeground`, white
+  in both themes, for the digits on the solid badge. The web paints them with `text-white` on
+  `bg-destructive-solid` (`admin-rail.tsx`), which is a utility rather than a token there; on the
+  phone `PrimaryForeground` cannot stand in, because in the dark theme it is `#171717` and the badge
+  keeps the same `#CE0000` in both themes. No other colour, font or radius enters the app with this
+  slice.
+- **A moderation preview is a request with credentials, not a URL.** `api/media/avatars` and
+  `api/media/portfolio` serve an unapproved photo only to its owner and to an administrator, and
+  answer `404` to everyone else; the browser sends cookies, so the web admin sees its queue. The
+  platform image loader that `Image.Source="http://…"` uses sends no `Authorization`, so the first
+  version of the photo queue rendered every card as a grey rectangle. The bytes are therefore read
+  by the app: `Core/Api/Admin/AdminMediaApi` fetches them on the same bearer client as the queues,
+  the row carries `ImageBytes`, and `Converters/ImageBytesConverter` builds the picture from memory.
+  Three consequences are deliberate. The loader makes one attempt per image and arms no retry loop —
+  a preview is decoration, not data. The card asks for `?size=md` instead of the largest variant,
+  because the bytes now travel through the app rather than a CDN. And a failed fetch shows «Не удалось
+  показать превью» instead of an empty box, since the grey placeholder alone cannot tell "still
+  loading" from "the server refused".
 
 ## 6. What the backend still lacks
 
