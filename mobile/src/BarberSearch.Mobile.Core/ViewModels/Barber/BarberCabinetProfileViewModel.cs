@@ -145,12 +145,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private string? _updatedAtText;
 
     /// <summary>
-    /// Сообщение об успешной мутации: «Услуга скрыта.», «Специализация добавлена.».
-    /// </summary>
-    [ObservableProperty]
-    private string? _statusMessage;
-
-    /// <summary>
     /// Причина сбоя мутации; карточка при этом остаётся на экране.
     /// </summary>
     [ObservableProperty]
@@ -370,7 +364,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsRefreshing = false;
         ErrorMessage = null;
         ActionError = null;
-        StatusMessage = null;
         IsForbidden = false;
         IsNotFound = false;
         IsSignInRequired = false;
@@ -500,13 +493,10 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
         IsMutating = true;
         ActionError = null;
-        StatusMessage = null;
 
         try
         {
             await _profileApi.RemoveServiceAsync(profileId, item.HairServiceId, cancellationToken);
-
-            StatusMessage = Loc.T("Услуга скрыта.");
 
             await LoadAsync(silent: true, cancellationToken);
         }
@@ -537,7 +527,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
         IsMutating = true;
         ActionError = null;
-        StatusMessage = null;
 
         try
         {
@@ -548,8 +537,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
                     item.Price,
                     item.DurationMinutes),
                 cancellationToken);
-
-            StatusMessage = Loc.T("Услуга снова в прайсе.");
 
             await LoadAsync(silent: true, cancellationToken);
         }
@@ -580,7 +567,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
         IsMutating = true;
         ActionError = null;
-        StatusMessage = null;
 
         try
         {
@@ -588,8 +574,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
                 profileId,
                 item.SpecializationId,
                 cancellationToken);
-
-            StatusMessage = Loc.T("Специализация убрана.");
 
             await LoadAsync(silent: true, cancellationToken);
         }
@@ -664,7 +648,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsMutating = true;
         ActionError = null;
         SpecializationError = null;
-        StatusMessage = null;
 
         try
         {
@@ -673,7 +656,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
                 specializationId,
                 cancellationToken);
 
-            StatusMessage = Loc.T("Специализация добавлена.");
             IsSpecializationPickerOpen = false;
 
             await LoadAsync(silent: true, cancellationToken);

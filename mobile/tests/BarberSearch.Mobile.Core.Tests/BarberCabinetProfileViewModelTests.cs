@@ -135,7 +135,6 @@ public sealed class BarberCabinetProfileViewModelTests
 
         Assert.Equal(BarberCabinetFixtures.BarberProfileId, removal.ProfileId);
         Assert.Equal(BarberCabinetFixtures.HairServiceId, removal.HairServiceId);
-        Assert.Equal("Услуга скрыта.", viewModel.StatusMessage);
         Assert.Null(viewModel.ActionError);
         Assert.False(viewModel.IsMutating);
         Assert.Equal(2, harness.Profile.OwnCalls);
@@ -164,7 +163,6 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.Equal(BarberCabinetFixtures.HairServiceId, restore.Request.HairServiceId);
         Assert.Equal(1800m, restore.Request.Price);
         Assert.Equal(45, restore.Request.DurationMinutes);
-        Assert.Equal("Услуга снова в прайсе.", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -220,7 +218,6 @@ public sealed class BarberCabinetProfileViewModelTests
         var add = Assert.Single(harness.Profile.SpecializationAdds);
 
         Assert.Equal(BarberCabinetData.SecondSpecializationId, add.SpecializationId);
-        Assert.Equal("Специализация добавлена.", viewModel.StatusMessage);
         Assert.False(viewModel.IsSpecializationPickerOpen);
         Assert.False(viewModel.IsMutating);
     }
@@ -243,7 +240,6 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.Equal(
             "Эта специализация уже добавлена.",
             harness.ViewModel.SpecializationError);
-        Assert.Null(harness.ViewModel.StatusMessage);
     }
 
     [Fact]

@@ -23,37 +23,6 @@
     <ScrollView>
         <VerticalStackLayout Padding="0,0,0,24" Spacing="12">
 
-            <!-- Баннер о результате мутации: услуга скрыта, специализация добавлена. -->
-            <Border
-                Padding="12"
-                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                IsVisible="True"
-                Stroke="Transparent"
-                StrokeShape="RoundRectangle 10">
-                <Border.Triggers>
-                    <DataTrigger
-                        Binding="{Binding StatusMessage}"
-                        TargetType="Border"
-                        Value="{x:Null}">
-                        <Setter Property="IsVisible" Value="False" />
-                    </DataTrigger>
-                </Border.Triggers>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <Label
-                        LineBreakMode="WordWrap"
-                        Text="{Binding StatusMessage}"
-                        VerticalOptions="Center" />
-                    <Button
-                        Grid.Column="1"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Clicked="OnDismissStatusClicked"
-                        MinimumHeightRequest="44"
-                        MinimumWidthRequest="44"
-                        Text="{loc:Translate Key='Закрыть'}"
-                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-                </Grid>
-            </Border>
-
             <!-- Первое чтение карточки. -->
             <VerticalStackLayout
                 IsVisible="{Binding IsFirstLoading}"

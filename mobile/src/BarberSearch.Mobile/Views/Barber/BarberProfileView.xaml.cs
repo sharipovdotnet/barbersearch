@@ -94,12 +94,6 @@ public partial class BarberProfileView : ContentView
     public BarberCabinetProfileViewModel ViewModel => _viewModel;
 
     /// <summary>
-    /// Убирает баннер о результате: своего состояния у него нет, текст живёт в ViewModel.
-    /// </summary>
-    private void OnDismissStatusClicked(object? sender, EventArgs e) =>
-        _viewModel.StatusMessage = null;
-
-    /// <summary>
     /// Возврат на форму входа: у раздела нет собственной формы.
     /// </summary>
     private async void OnSignInClicked(object? sender, EventArgs e) =>
