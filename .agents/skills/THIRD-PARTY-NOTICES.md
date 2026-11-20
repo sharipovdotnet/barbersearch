@@ -11,6 +11,19 @@ redistributed here unmodified, apart from this directory's own documentation fil
 | `test-driven-development` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
 | `verification-before-completion` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
 | `systematic-debugging` | [obra/superpowers](https://github.com/obra/superpowers) | MIT | © 2025 Jesse Vincent |
+| `maui-rest-api` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-secure-storage` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-data-binding` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-collectionview` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-shell-navigation` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-dependency-injection` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-maps` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `maui-geolocation` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+| `ux-mobile` | [davidortinau/maui-skills](https://github.com/davidortinau/maui-skills) | MIT | © 2026 David Ortinau |
+
+The `maui-*` and `ux-mobile` bundles are vendored from `davidortinau/maui-skills` at commit
+`79bb4bfd8f671ed0dd97bdf92a36430928e8d984` (2026-07-06), `plugins/maui-skills/skills/` subtree,
+`SKILL.md` and `references/` only. The upstream MIT license text is reproduced below.
 
 `code-review` (coderabbitai/skills) was installed on 2026-10-12 and removed the same day — see
 "Removed after the audit" in `README.md`. No part of it remains in this directory.
@@ -38,6 +51,7 @@ The following copyright notices apply to the MIT-licensed skills listed above:
 Copyright (c) 2026 Supabase
 Copyright (c) 2026 Matt Pocock
 Copyright (c) 2025 Jesse Vincent
+Copyright (c) 2026 David Ortinau
 ```
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
