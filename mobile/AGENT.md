@@ -794,8 +794,15 @@ in Core owns both base addresses.
   mutation pops back, where the section re-reads the card like any other cabinet child screen.
   The web's permissions carry over: a blocked photo can only be deleted, its caption and order
   are unavailable, and «Скрыть»/«Вернуть» exists only for an approved frame, since publication of a
-  pending one is decided by moderation. Ten is the domain limit: the add button goes off and
-  one muted line explains why.
+  pending one is decided by moderation. The four actions stand in a 2 × 2 grid between the preview
+  card and the caption card, each half the card's width and at least 52 pt tall, instead of the web's
+  single row: four labels in one wrapped row shrank the buttons until «Скрыть» and «Удалить» were
+  clipped on a 360 pt phone, while a pair per row keeps the full label, a comfortable thumb target
+  and the destructive action last. A frame that is not approved has no publication toggle, and
+  «Удалить» then spans the whole row — an empty half would read as a forgotten control. Both caption
+  fields start at two lines (64 pt) rather than three: `AutoSize="TextChanges"` already grows the box
+  with the text, so the floor only decides the size of the empty one. Ten is the domain limit: the
+  add button goes off and one muted line explains why.
   The file is prepared on the phone, not on the server: `FilePicker` takes JPEG/PNG/WebP,
   `PlatformImage` downsizes the long side to 1600 px, JPEG quality steps down until the bytes
   fit 5 MiB (15 MiB source cap), and the app sends the prepared file as multipart `file` +
