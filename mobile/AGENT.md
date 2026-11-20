@@ -499,16 +499,20 @@ in Core owns both base addresses.
   the section, which has no lifecycle and no binding context of its own: the card arms it, and the
   failure it reports back is the heaviest of the attempt, so a profile that recovered in the same
   attempt cannot stop the retry of reviews that did not.
-  The button keeps its wording and its place: it stops the loop, loads at once and restarts the loop
-  only if the new failure is retryable again — it cannot arm a page that has already left. While the
-  loop runs, the error card keeps its title, its reason and its button and adds one muted line,
-  «Пробуем снова…» (the only new catalog key), so the screen says the app is working instead of
-  looking frozen. A silent attempt also has to keep what is already shown: «Записи» gets
-  `FirstPageMode.Retry`, which does not clear the message until the answer — the old silent mode
-  blanked the card into an empty screen for the length of every request — and neither the rows nor
-  the reason are erased by a failed attempt. This is a deliberate deviation from §8, where the web
-  only retries on a click, recorded here rather than left as an omission; the remaining «Повторить»
-  buttons keep their behaviour, because they are the write paths.
+  The button keeps its wording and its place where it remains: it stops the loop, loads at once and
+  restarts the loop only if the new failure is retryable again — it cannot arm a page that has
+  already left. While the loop runs, the card keeps its title, its reason and, where it still has
+  one, its button, and adds one muted line, «Пробуем снова…» (the only new catalog key), so the
+  screen says the app is working instead of looking frozen. The cabinet's read error cards carry no
+  such button: every cabinet read that shows an error card also arms the loop while its section is
+  visible, so a manual tap would only duplicate a retry already running, while the specialization
+  picker keeps it because its lazy catalogue has no loop. A silent attempt also has to keep what is
+  already shown: «Записи» gets `FirstPageMode.Retry`, which does not clear the message until the
+  answer — the old silent mode blanked the card into an empty screen for the length of every
+  request — and neither the rows nor the reason are erased by a failed attempt. This is a deliberate
+  deviation from §8, where the web only retries on a click, recorded here rather than left as an
+  omission; the remaining «Повторить» buttons keep their behaviour, because they are the write paths
+  or the reads that arm no loop.
   Two more rules keep a silent attempt honest. A retry repeats the request that failed rather than a
   fresh one built from the form or from the screen: the search remembers the filters of the failed
   attempt, coordinates included, because they are attached after the form is read — so a field edited

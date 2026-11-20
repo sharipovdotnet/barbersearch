@@ -184,7 +184,7 @@
             </ScrollView>
 
             <!--
-                Ошибка проверки /me: причина, строка автоповтора и «Повторить».
+                Ошибка проверки /me: причина и строка автоповтора.
                 Видимость снимается триггером, показывать причину нечего.
             -->
             <ScrollView VerticalOptions="Center">
@@ -224,10 +224,6 @@
                             IsVisible="{Binding IsAutoRetrying}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            Command="{Binding RetryCommand}"
-                            HorizontalOptions="Center"
-                            Text="{loc:Translate Key='Повторить'}" />
                     </VerticalStackLayout>
                 </Border>
             </ScrollView>

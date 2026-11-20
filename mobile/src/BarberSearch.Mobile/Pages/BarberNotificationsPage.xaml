@@ -68,7 +68,7 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 
-            <!-- Ошибка первой страницы: причина, строка автоповтора и «Повторить». -->
+            <!-- Ошибка первой страницы: причина и строка автоповтора. -->
             <VerticalStackLayout
                 IsVisible="{Binding ShowError}"
                 Spacing="12"
@@ -90,10 +90,6 @@
                     IsVisible="{Binding IsAutoRetrying}"
                     Text="{loc:Translate Key='Пробуем снова…'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                <Button
-                    Command="{Binding RetryCommand}"
-                    HorizontalOptions="Center"
-                    Text="{loc:Translate Key='Повторить'}" />
             </VerticalStackLayout>
 
             <!-- Список: ключевой набор, свайп вниз обновляет первую страницу. -->
@@ -182,12 +178,6 @@
                                     IsVisible="{Binding IsLoadMoreAutoRetrying}"
                                     Text="{loc:Translate Key='Пробуем снова…'}"
                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                <Button
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                                    Command="{Binding LoadMoreCommand}"
-                                    HorizontalOptions="Start"
-                                    Text="{loc:Translate Key='Повторить'}"
-                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                             </VerticalStackLayout>
 
                             <!-- Следующая страница: курсор не сдвигается на ошибке. -->

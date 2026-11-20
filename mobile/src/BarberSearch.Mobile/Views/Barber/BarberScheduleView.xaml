@@ -58,7 +58,7 @@
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 </VerticalStackLayout>
 
-                <!-- Читать оказалось нечего: причина, строка автоповтора и повтор. -->
+                <!-- Читать оказалось нечего: причина и строка автоповтора. -->
                 <Border
                     Padding="16"
                     IsVisible="{Binding ShowError}"
@@ -82,10 +82,6 @@
                             IsVisible="{Binding IsAutoRetrying}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            Command="{Binding RetryCommand}"
-                            HorizontalOptions="Center"
-                            Text="{loc:Translate Key='Повторить'}" />
                     </VerticalStackLayout>
                 </Border>
 

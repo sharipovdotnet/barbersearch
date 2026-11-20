@@ -49,7 +49,7 @@
                     VerticalOptions="Center" />
             </HorizontalStackLayout>
 
-            <!-- Чтение не удалось: причина, строка автоповтора и повтор. -->
+            <!-- Чтение не удалось: причина и строка автоповтора. -->
             <Border
                 Padding="16"
                 IsVisible="True"
@@ -98,10 +98,6 @@
                         IsVisible="{Binding IsAutoRetrying}"
                         Text="{loc:Translate Key='Пробуем снова…'}"
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                    <Button
-                        Command="{Binding RetryCommand}"
-                        HorizontalOptions="Center"
-                        Text="{loc:Translate Key='Повторить'}" />
                 </VerticalStackLayout>
             </Border>
 

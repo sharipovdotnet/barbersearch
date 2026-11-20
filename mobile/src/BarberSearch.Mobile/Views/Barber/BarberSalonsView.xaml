@@ -84,7 +84,7 @@
                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 </VerticalStackLayout>
 
-                <!-- Читать оказалось нечего: причина, строка автоповтора и повтор. -->
+                <!-- Читать оказалось нечего: причина и строка автоповтора. -->
                 <Border
                     Padding="16"
                     IsVisible="{Binding ShowError}"
@@ -108,10 +108,6 @@
                             IsVisible="{Binding IsAutoRetrying}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            Command="{Binding RetryCommand}"
-                            HorizontalOptions="Center"
-                            Text="{loc:Translate Key='Повторить'}" />
                     </VerticalStackLayout>
                 </Border>
 
@@ -415,7 +411,7 @@
                                 VerticalOptions="Center" />
                         </HorizontalStackLayout>
 
-                        <!-- Каталог не ответил: причина, автоповтор и повтор. -->
+                        <!-- Каталог не ответил: причина и автоповтор. -->
                         <VerticalStackLayout IsVisible="{Binding ShowCatalogError}" Spacing="8">
                             <Label
                                 LineBreakMode="WordWrap"
@@ -426,12 +422,6 @@
                                 IsVisible="{Binding IsCatalogAutoRetrying}"
                                 Text="{loc:Translate Key='Пробуем снова…'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Button
-                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                                Command="{Binding SearchCatalogCommand}"
-                                HorizontalOptions="Start"
-                                Text="{loc:Translate Key='Повторить'}"
-                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                         </VerticalStackLayout>
 
                         <!-- Ничего не нашлось: та же строка, что в вебе. -->

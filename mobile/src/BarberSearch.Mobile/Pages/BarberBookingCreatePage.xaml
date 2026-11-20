@@ -76,7 +76,7 @@
                         IsRunning="{Binding IsSearchingClients}"
                         IsVisible="{Binding IsSearchingClients}" />
 
-                    <!-- Ошибка поиска: причина, строка автоповтора и «Повторить». -->
+                    <!-- Ошибка поиска: причина и строка автоповтора. -->
                     <VerticalStackLayout IsVisible="{Binding ShowClientsError}" Spacing="8">
                         <Label
                             LineBreakMode="WordWrap"
@@ -87,10 +87,6 @@
                             IsVisible="{Binding IsAutoRetryingClients}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            Command="{Binding RetryClientsCommand}"
-                            HorizontalOptions="Start"
-                            Text="{loc:Translate Key='Повторить'}" />
                     </VerticalStackLayout>
 
                     <!-- Подсказка поиска: строка выбирается целиком, без диалога. -->
@@ -307,10 +303,6 @@
                             IsVisible="{Binding IsAutoRetryingSlots}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            Command="{Binding RetrySlotsCommand}"
-                            HorizontalOptions="Start"
-                            Text="{loc:Translate Key='Повторить'}" />
                     </VerticalStackLayout>
 
                     <Label
@@ -455,10 +447,6 @@
                 IsVisible="{Binding IsAutoRetryingOptions}"
                 Text="{loc:Translate Key='Пробуем снова…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-            <Button
-                Command="{Binding RetryOptionsCommand}"
-                HorizontalOptions="Center"
-                Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
     </Grid>

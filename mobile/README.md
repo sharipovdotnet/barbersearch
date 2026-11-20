@@ -393,8 +393,10 @@ Writes:
 
 - **Loading** — «Загружаем кабинет…» for the gate; each section has its own indicator on the first
   read, and a later refresh keeps the content on screen.
-- **Error and auto-retry** — the reason with «Повторить», plus «Пробуем снова…» while the loop
-  runs; a retry keeps the rows and the reason until the answer.
+- **Error and auto-retry** — the reason and «Пробуем снова…» while the loop runs; a cabinet card
+  has no «Повторить», because the loop is the retry, and a failed attempt keeps the rows and the
+  reason until the answer. The two lazy picker catalogues keep their own «Повторить», because they
+  arm no loop.
 - **Empty** — no bookings in the day or the scope, no attached salon, no exceptions, no time off,
   no notifications, no photos; each keeps the web's wording.
 - **Session expired** — the sign-in card with «Войти»; the cabinet stays on the stack, only the

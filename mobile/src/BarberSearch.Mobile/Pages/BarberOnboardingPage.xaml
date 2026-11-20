@@ -26,7 +26,7 @@
                 IsRunning="{Binding IsLoading}" />
         </VerticalStackLayout>
 
-        <!-- Чтение заявки не удалось: причина, строка автоповтора и «Повторить». -->
+        <!-- Чтение заявки не удалось: причина и строка автоповтора. -->
         <VerticalStackLayout
             IsVisible="{Binding ShowReadError}"
             Spacing="12"
@@ -48,10 +48,6 @@
                 IsVisible="{Binding IsAutoRetrying}"
                 Text="{loc:Translate Key='Пробуем снова…'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-            <Button
-                Command="{Binding RetryReadCommand}"
-                HorizontalOptions="Center"
-                Text="{loc:Translate Key='Повторить'}" />
         </VerticalStackLayout>
 
         <!-- Сессия закончилась: форму показывать нечему, нужен вход. -->
@@ -313,7 +309,7 @@
                             VerticalOptions="Center" />
                     </HorizontalStackLayout>
 
-                    <!-- Ошибка каталога: поиск повторяется кнопкой, а не сам. -->
+                    <!-- Ошибка каталога: причина и строка автоповтора. -->
                     <VerticalStackLayout Spacing="8">
                         <VerticalStackLayout.Triggers>
                             <DataTrigger
@@ -332,12 +328,6 @@
                             IsVisible="{Binding IsCatalogAutoRetrying}"
                             Text="{loc:Translate Key='Пробуем снова…'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <Button
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                            Command="{Binding SearchCatalogCommand}"
-                            HorizontalOptions="Start"
-                            Text="{loc:Translate Key='Повторить'}"
-                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                     </VerticalStackLayout>
 
                     <!-- Результаты каталога: нажатие на строку выбирает салон. -->

@@ -66,24 +66,13 @@
         </Grid>
 
         <!-- День показал строки, но один из списков не обновился: строки остаются. -->
-        <Grid
+        <Label
             Grid.Row="2"
-            ColumnDefinitions="*,Auto"
-            ColumnSpacing="8"
-            IsVisible="{Binding HasPartialError}">
-            <Label
-                FontSize="12"
-                LineBreakMode="WordWrap"
-                Text="{Binding PartialErrorText}"
-                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
-                VerticalTextAlignment="Center" />
-            <Button
-                Grid.Column="1"
-                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                Command="{Binding RetryCommand}"
-                Text="{loc:Translate Key='Повторить'}"
-                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-        </Grid>
+            FontSize="12"
+            IsVisible="{Binding HasPartialError}"
+            LineBreakMode="WordWrap"
+            Text="{Binding PartialErrorText}"
+            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
         <Grid Grid.Row="3">
 
@@ -101,7 +90,7 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 
-            <!-- Ошибка первого чтения: причина, строка автоповтора и «Повторить». -->
+            <!-- Ошибка первого чтения: причина и строка автоповтора. -->
             <VerticalStackLayout
                 IsVisible="{Binding ShowError}"
                 Spacing="12"
@@ -123,10 +112,6 @@
                     IsVisible="{Binding IsAutoRetrying}"
                     Text="{loc:Translate Key='Пробуем снова…'}"
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                <Button
-                    Command="{Binding RetryCommand}"
-                    HorizontalOptions="Center"
-                    Text="{loc:Translate Key='Повторить'}" />
             </VerticalStackLayout>
 
             <!-- Список: свайп вниз обновляет, шапка — лента дня, футер — страницы. -->
