@@ -1921,5 +1921,12 @@ public sealed class SearchViewModelTests
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Поиск не читает отзывы.");
+
+        public Task<IReadOnlyList<BarberSearch.Contracts.Salons.GetSalonDirectory.SalonDirectoryItemResponse>>
+            SearchSalonsAsync(
+                string? city,
+                string? search,
+                CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Поиск не читает каталог салонов.");
     }
 }

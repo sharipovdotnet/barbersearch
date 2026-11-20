@@ -25,10 +25,13 @@ their bookings, and — on Android — receives a push reminder an hour before a
 An administrator opens the moderation queues and decides from the phone (§5): reviews, photos,
 profiles awaiting verification and requests to become a professional.
 
-The professional cabinet lives on the web (`frontend/`) and will not exist in the mobile app:
-a schedule and working hours are not filled in from a phone. The rest of the admin section —
-statistics, the catalogue, salons, users, bookings and the audit log — also stays on the web;
-§5 records what the phone got and why the remainder did not move.
+The professional cabinet is on the phone for a barber: one screen with four sections — client
+bookings, the weekly schedule, the places of work and the public card — opened from «Профиль».
+The web keeps the professional surface that is not a phone job: importing old bookings,
+uploading and ordering photos, creating a salon and managing its barbers, and the notification
+and Telegram settings. The rest of the admin section — statistics, the catalogue, salons,
+users, bookings and the audit log — also stays on the web; §5 records what the phone got and
+why the remainder did not move.
 
 ## 2. Where things live
 
@@ -658,6 +661,175 @@ in Core owns both base addresses.
   because the bytes now travel through the app rather than a CDN. And a failed fetch shows «Не удалось
   показать превью» instead of an empty box, since the grey placeholder alone cannot tell "still
   loading" from "the server refused".
+
+- **The cabinet is a row in «Профиль», not a fifth tab.** A barber is a rare role, and a fifth
+  tab would spend a fifth of every other person's tab bar on it — the same trade the admin
+  section makes (see the admin drill-down bullet above). The entry is a `Border` card-row under
+  the person card: the scissors in a `Muted` circle 36, «Кабинет мастера», «Записи клиентов,
+  расписание и прайс», a chevron, `MinimumHeightRequest` 56, the whole row tappable. It is drawn
+  from `ProfileViewModel.IsBarber`, which is `Role == UserRole.Barber` of `GET api/users/me`, and
+  it stays for a barber without a profile: the cabinet itself explains that the profile is
+  missing and opens onboarding. The route is `barber-cabinet`, pushed over the «Профиль» stack
+  with `Shell.TabBarIsVisible="False"`, so the back gesture returns to the hub and the entry
+  keeps its place. A barber stays a customer in the other tabs; the cabinet adds a working
+  surface, it does not replace «Записи» or «Мои отзывы».
+
+- **One screen with four sections, not four pages.** `BarberCabinetPage` owns the header — title
+  22, subtitle, a 44×44 bell with the unread badge — one four-segment bar and the section area.
+  The sections are `ContentView`s with their own `BindingContext` (`BarberBookingsView`,
+  `BarberScheduleView`, `BarberSalonsView`, `BarberProfileView`), listed once in the page with
+  their segment title and a DI factory; the segments are built from that list, so a section is
+  one line and the four targets stay 44 pt with equal width. They implement one contract,
+  `IBarberCabinetSection` — `Initialize(profileId)` once, `ActivateAsync` when shown and after
+  every return from a child screen, `Deactivate` when hidden — because a `ContentView` has no
+  page lifecycle of its own. Instances are resolved from DI on the first ready gate, not in the
+  page constructor, and live until the page ends: switching is `IsVisible`, so the header, the
+  bell and the scroll position of the other sections are not rebuilt. Shell routes exist only
+  for the screens that open over the cabinet — the create-booking form, reschedule, note,
+  onboarding, notifications, the profile editor and the service editor — because those need
+  their own back-stack entry and route parameters; four section routes would each repeat the
+  header and the segments, and would put a "destination" where the person sees a tab.
+  `Deactivate` is called before every push: Shell does not raise `OnDisappearing` for a push,
+  and a retry loop would otherwise keep polling under the child page; a `Pop` re-reads `/me` and
+  reactivates the section, because the child screen may have changed what it shows.
+
+- **The gate is `GET api/auth/me`, and three cards answer for it.** No section request is made
+  before the gate: a customer would get `403` and an anonymous caller `401` instead of an
+  explanation. A role other than `Barber` shows «Это кабинет мастера»; a barber without a profile
+  id shows «Профиль ещё не создан» with «Создать профиль мастера»; no session or a `401` shows
+  «Войдите, чтобы увидеть записи клиентов» with «Войти», which goes to `//profile`. The cabinet
+  never pulls the navigation stack on an expired session: `TokenSession.ClearAsync` ends the
+  pair, the content is swapped for the card, and the cabinet stays where it is — a forced
+  `//profile` would throw away the screen the person opened and the entry row behind it. Only
+  the tap navigates, and a terminal `401` never arms the retry. The `/me` read is a read like any
+  other and joins the auto-retry rule below, with «Пробуем снова…» and «Повторить»; a silent
+  re-read after a `Pop` keeps the open cabinet on screen when it fails, because a refreshed role
+  is not worth blanking the work. The cabinet id is a claim of the access token, not a database
+  read: the cabinet learns it from a `/me` answer of a rotated pair, which is why onboarding
+  rotates the pair before the gate is asked again.
+
+- **Onboarding creates the profile and immediately rotates the token pair.** `POST
+  api/barber-profiles` answers `201` with the new id, but the access token in hand was issued
+  before the profile existed and its `barber_profile_id` claim is empty: without a refresh the
+  cabinet would keep saying «Профиль ещё не создан» until the next sign-in. The screen therefore
+  calls `IAuthApi.RefreshAsync` and `TokenSession.ApplyAsync` right after `201`, and only then
+  offers the first salon. `409 barberProfile.create.alreadyExists` counts as success — a second
+  device or a retry after a timeout won the race — but the id is unknown, so the salon step is
+  skipped and the cabinet is opened directly. A failed refresh is no reason to create the
+  profile again: the `POST` already happened, so the screen offers three session states —
+  «Профиль создан. Обновляем сессию…», «Профиль создан, но сессия не обновилась» with «Повторить»
+  or «Войти», and «Профиль создан, войдите снова» for a `401` — and never a second create. The
+  form is prefilled from an approved `GET api/barber-requests/mine` and locks what the request
+  already answered; the salon step is optional, and `409 barberProfile.addSalon.duplicate`
+  counts as attached. The cabinet is still on the stack under the onboarding, so «Перейти в
+  кабинет» is a `Pop`, and the gate's reload opens it with the new profile.
+
+- **«Записи» is a working screen, not a copy of the customer tab.** It keeps the web's two
+  server scopes (`upcoming`, `past`) and builds «Сегодня» on the client from their first pages —
+  deduplicated by id with the upcoming row winning, sorted by `startAt`, with the free windows of
+  at least 20 minutes between visits given a «свободно N мин» row and a «Занять» action that
+  opens the create form at that instant. The day also carries a summary — «2 визита · 4 800 ₽» —
+  and a «Следующий клиент» line and badge on the first future visit, because a barber's phone is
+  read between clients, not at a desk. The client's phone is a `tel:` link, the only place where a
+  client's number becomes a call; the row also carries the customer's comment, the barber's note
+  and the cancellation reason. The day's calendar date is the device's — the master looks at their
+  own phone — while visit times stay in the salon's zone: the calendar belongs to the person, the
+  visit to the salon. A 30-second page timer re-reads the active list silently while the section
+  is active, the page is visible and no cancel/no-show prompt is open; the ViewModel refuses a
+  refresh during an action and on a list where a second page was loaded, and a failed refresh
+  keeps the rows. The buttons follow the server's rules: confirm a pending row, complete or mark a
+  no-show after the start, cancel with a reason, reschedule an active visit that has not started,
+  write a note and change the price everywhere except a cancelled or no-show visit.
+
+- **The salons section adds «Сделать основным» and three platform shortcuts.** The list is the
+  profile's working set, not a shop window: every attachment comes back, including a salon
+  awaiting moderation or rejected, with its status and rejection reason, and «Не в каталоге» for
+  a place that is no longer listed; the server's order and primary flag are shown as returned.
+  A new place is found in the public `GET api/salons?city=&search=` directory with the web's
+  300 ms pause and two-character minimum, and the first attachment is made primary. «Сделать
+  основным» (`PUT …/salons/{salonId}/primary`) exists only on the phone: the web can choose the
+  primary salon only while attaching it, while a barber changing workplaces needs one tap. The
+  row also calls the salon, opens it on a map (`geo:`, falling back to a Google Maps link),
+  copies the address and jumps to that salon's schedule; the first three are platform intents, and
+  a failure there is silent — a shortcut is a hint, not data. Creating a salon and managing its
+  barbers stay on the web (below).
+
+- **The bell and the share sheet are the cabinet's other two mobile additions.** The header bell
+  is a 44×44 target with a badge capped at «99+» (`BarberProfileText.BadgeCount`). The count is
+  read silently after `/me` succeeds, by a 60-second timer while the cabinet is visible and
+  ready, on returning to the foreground and when a child screen pops back; a failure keeps the
+  old number and shows nothing, because the badge is decoration, not data. The inbox behind it is
+  a keyset page of `GET api/barber/notifications` with «Прочитать все», and a row marks itself
+  read and opens «Записи» — a per-booking deep link is impossible without
+  `GET api/bookings/{id}`, and the list already shows the visit. «Поделиться профилем» uses the
+  system share sheet with the public card URL (`{SiteBaseAddress}barbers/{id}`), and both the
+  share and «Открыть, как видят клиенты» are drawn only for a verified and active profile: the
+  public route answers `404` for anything else. The photo grid is read-only and says so —
+  «Фотографии добавляются и упорядочиваются на сайте.».
+
+- **Five places where the cabinet deliberately does not repeat the web.** Cancel and price are
+  native `DisplayPrompt`s instead of the web's dialogs: each asks for one value, the customer tab
+  already confirms its cancel with a platform dialog, and a modal of our own would add a second
+  keyboard and a second error surface for one field. The `409 barberSchedule.conflict` is an
+  overlay inside the schedule section, not a system alert: it must list the affected visits, and
+  a prompt cannot; it also belongs to one section of a shared screen, so covering the header and
+  the bell would read as a cabinet-level failure while the week behind it stays on screen. The
+  client search has no «Найти»: three characters and a 300 ms pause start the request, the
+  keyboard's own search key repeats it at once, and a stale answer is cancelled by the next
+  query — a button would cost a row and a tap on every lookup. The profile-edit form closes on
+  the back gesture with no «unsaved changes» prompt: it writes the whole card in one `PUT`, and a
+  half-typed name is easier to retype than to argue with; the schedule keeps its own dirty bar
+  and «Отменить изменения», because a lost week is a real loss. The service editor is add/edit
+  only: «Скрыть» and «Вернуть» stay on the price row where the state is visible, and a second
+  path to the same action would duplicate it.
+
+- **What the cabinet leaves on the web is the admin surface, not the daily work.** Booking
+  import (`/barber/import`) is a text/ICS parser and a bulk load; photo upload, reordering and
+  captions are a media admin with moderation; creating a salon and managing its barbers is a
+  form and an HR task; notification and Telegram settings are niche, and the «Профиль» tab
+  already carries the global «Присылать напоминания» switch, so a second settings screen would
+  duplicate one switch and own none of the push. The cabinet shows the read-only photo grid with
+  the web's hint instead of a disabled uploader. This is a recorded omission, not an oversight:
+  §8's «the web is the reference» still means structure and wording for the screens that exist,
+  not that every web action has a phone twin.
+
+- **The cabinet's reads join the auto-retry rule; none of its writes do.** The mechanism —
+  `ApiFailureClassifier`, `AutoRetryLoop`, `PageVisibility`, the 1/2/4/8/15/30-second schedule,
+  «Пробуем снова…» — is the one recorded above and is not repeated here. The cabinet adds these
+  reads to the retrying side: the gate's `/me`, both booking scopes, the schedule, the salon list
+  and its directory search, the own card, the first and the next page of the notifications inbox,
+  the create form's booking options, slot grid and client search, the reschedule slot grid, and
+  the onboarding request plus its salon directory. It adds these writes to the side that is never
+  repeated silently: confirm, complete, no-show, cancel, note and price on a booking, the
+  reschedule submit, the create-booking submit, the week, the date exceptions and the time offs,
+  attaching a salon and making it primary, the profile update, service add/update/hide/restore,
+  specialization add/remove, mark-read and read-all, and the onboarding's `POST`, token refresh
+  and salon attach — after any of these a silent repeat could book twice, hide a refusal or write
+  a second profile. Two reads stay outside the loop: the specialization picker's catalog and the
+  service editor's hair-service catalog are input aids inside an open picker, retried by their
+  own button (the editor's remarks record it; the city suggestions are the existing precedent),
+  and the bell's unread count is silent by design. Sections stop their loops in `Deactivate`
+  before a push; the child pages use `PageVisibility`.
+
+- **The cabinet is tested at the ViewModel layer, and that is where the coverage stops.** Tests
+  add 142 cases (1402 total): the gate (no session, `401`, a customer, a barber without a profile,
+  a ready barber with the badge, a silent count failure), «Записи» (the two scopes, the day merge
+  and its gaps, the action state machines for confirm, cancel, note and reschedule, the `409`
+  reload, the silent refresh and its refusals, a retry that keeps the rows), the schedule
+  (week load, dirty detection, fill-weekdays, one `PUT`, the `409` prompt and the forced resend of
+  the same request, the 20-row cap, exceptions, time offs, salon switch and discard), the salons
+  (order, moderation states, primary, the directory and its retry), the card (formatting, hidden
+  services and photos, hide/restore, the lazy catalog), create-booking (options, the slot defaults,
+  the client debounce, guest and registered bodies, the idempotency key, overlap reload, double
+  tap, the horizon), reschedule (the visit date, the failed-date retry, no working day, no slots),
+  the note (counter and trim), the profile edit (validation and the field codes), the service
+  editor (add/edit, domain codes), the inbox (cursor pages, the «99+» cap, mark one/all, silent
+  count) and onboarding (`409` as success, refresh failure, salon step). They deliberately do not
+  cover the page layer: the XAML and the section creation, `OnAppearing`/`OnDisappearing` and the
+  `Pop` reload, `Window.Stopped`/`Resumed`, the two `IDispatcherTimer`s, and the platform intents
+  (`tel:`, `geo:`/maps, the share sheet, the clipboard, `DisplayPrompt`/`DisplayAlert`). That is
+  where the risk sits — a regression in a timer or a prompt will not turn a test red, only a
+  phone will.
 
 ## 6. What the backend still lacks
 

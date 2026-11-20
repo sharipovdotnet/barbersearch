@@ -1649,6 +1649,13 @@ public sealed class BarberCardViewModelTests
             string query,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Карточка не читает подсказки города.");
+
+        public Task<IReadOnlyList<BarberSearch.Contracts.Salons.GetSalonDirectory.SalonDirectoryItemResponse>>
+            SearchSalonsAsync(
+                string? city,
+                string? search,
+                CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Карточка не читает каталог салонов.");
     }
 
     /// <summary>

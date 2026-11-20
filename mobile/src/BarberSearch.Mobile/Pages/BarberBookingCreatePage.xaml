@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberBookingCreatePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    xmlns:vmbarber="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vmbarber:BarberBookingCreateViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Записать клиента'}">
+
+    <!--
+        Форма «Записать клиента»: режим клиента, услуга, салон и время. Состояния
+        (чтение услуг, ошибка чтения, форма) лежат в одной ячейке сетки и показываются
+        взаимоисключающе — так ни одно из них не толкает остальные.
+    -->
+    <Grid Padding="16">
+
+        <ScrollView IsVisible="{Binding ShowForm}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="16">
+
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Запишите клиента, если он придёт без записи.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Кто записывается: найденный клиент или новый человек без аккаунта. -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+                    <Button
+                        x:Name="RegisteredButton"
+                        Clicked="OnRegisteredClicked"
+                        Style="{StaticResource SegmentButton}"
+                        Text="{loc:Translate Key='Зарегистрированный'}" />
+                    <Button
+                        x:Name="GuestButton"
+                        Grid.Column="1"
+                        Clicked="OnGuestClicked"
+                        Style="{StaticResource SegmentButton}"
+                        Text="{loc:Translate Key='Новый клиент'}" />
+                </Grid>
+
+                <!-- Зарегистрированный клиент: поиск по email или телефону. -->
+                <VerticalStackLayout IsVisible="{Binding IsRegisteredMode}" Spacing="8">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Клиент'}" />
+                        <Entry
+                            Placeholder="{loc:Translate Key='Email или телефон'}"
+                            ReturnCommand="{Binding RetryClientsCommand}"
+                            ReturnType="Search"
+                            Text="{Binding ClientQuery}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ClientSearchHint}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding ClientSearchHint}"
+                                    TargetType="Label"
+                                    Value="">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding HasSelectedClient}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding SelectedClientSummary}" />
+                    </VerticalStackLayout>
+
+                    <ActivityIndicator
+                        HorizontalOptions="Start"
+                        IsRunning="{Binding IsSearchingClients}"
+                        IsVisible="{Binding IsSearchingClients}" />
+
+                    <!-- Ошибка поиска: причина, строка автоповтора и «Повторить». -->
+                    <VerticalStackLayout IsVisible="{Binding ShowClientsError}" Spacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ClientsError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding IsAutoRetryingClients}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Button
+                            Command="{Binding RetryClientsCommand}"
+                            HorizontalOptions="Start"
+                            Text="{loc:Translate Key='Повторить'}" />
+                    </VerticalStackLayout>
+
+                    <!-- Подсказка поиска: строка выбирается целиком, без диалога. -->
+                    <VerticalStackLayout
+                        IsVisible="{Binding ShowClientResults}"
+                        BindableLayout.ItemsSource="{Binding Clients}"
+                        Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vmbarber:BarberClientRow">
+                                <Border
+                                    Margin="0,0,0,4"
+                                    Padding="12"
+                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                    StrokeShape="RoundRectangle 10">
+                                    <Border.Triggers>
+                                        <DataTrigger
+                                            Binding="{Binding IsSelected}"
+                                            TargetType="Border"
+                                            Value="True">
+                                            <Setter
+                                                Property="Stroke"
+                                                Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                        </DataTrigger>
+                                    </Border.Triggers>
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding SelectCommand}" CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label
+                                            FontFamily="GeistSemiBold"
+                                            FontSize="16"
+                                            LineBreakMode="TailTruncation"
+                                            Text="{Binding Name}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="CharacterWrap"
+                                            Text="{Binding Email}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            IsVisible="{Binding HasPhone}"
+                                            Text="{Binding PhoneNumber}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding ShowClientsEmpty}"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Ничего не найдено.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Новый клиент: контакты вводятся вручную, аккаунт не создаётся. -->
+                <VerticalStackLayout IsVisible="{Binding IsGuestMode}" Spacing="8">
+                    <HorizontalStackLayout Spacing="2">
+                        <Label Text="{loc:Translate Key='Имя'}" />
+                        <Label
+                            Text="*"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    </HorizontalStackLayout>
+                    <Entry
+                        MaxLength="100"
+                        Text="{Binding GuestFirstName}" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasGuestNameError}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding GuestNameError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                    <Label Text="{loc:Translate Key='Фамилия'}" />
+                    <Entry
+                        MaxLength="100"
+                        Text="{Binding GuestLastName}" />
+
+                    <HorizontalStackLayout Spacing="2">
+                        <Label Text="{loc:Translate Key='Телефон'}" />
+                        <Label
+                            Text="*"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    </HorizontalStackLayout>
+                    <Entry
+                        Keyboard="Telephone"
+                        MaxLength="32"
+                        Placeholder="+7 900 000-00-00"
+                        Text="{Binding GuestPhone}" />
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasGuestPhoneError}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding GuestPhoneError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Услуга: от её длительности строится сетка слотов. -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="{loc:Translate Key='Услуга'}" />
+                    <Picker
+                        x:Name="ServicePicker"
+                        IsVisible="{Binding HasServices}"
+                        ItemsSource="{Binding Services}"
+                        SelectedItem="{Binding SelectedService, Mode=TwoWay}"
+                        Title="{loc:Translate Key='Выберите услугу'}" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Услуги пока не добавлены.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasServices}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                </VerticalStackLayout>
+
+                <!-- Салон: выбор есть только когда салонов несколько. -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="{loc:Translate Key='Салон'}" />
+                    <Picker
+                        x:Name="SalonPicker"
+                        IsVisible="{Binding HasSeveralSalons}"
+                        ItemsSource="{Binding Salons}"
+                        SelectedItem="{Binding SelectedSalon, Mode=TwoWay}"
+                        Title="{loc:Translate Key='Выберите салон'}" />
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding OnlySalonName}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasSeveralSalons}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Салон не указан.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasSalons}"
+                                TargetType="Label"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding SalonTimeZoneText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Дата: окно записи посчитано в поясе салона. -->
+                <VerticalStackLayout Spacing="4">
+                    <Label
+                        FontSize="12"
+                        Text="{loc:Translate Key='Дата'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    <DatePicker
+                        Date="{Binding SelectedDate, Mode=TwoWay}"
+                        Format="D"
+                        MaximumDate="{Binding MaximumDate}"
+                        MinimumDate="{Binding MinimumDate}" />
+                </VerticalStackLayout>
+
+                <!-- Свободное время выбранной даты. -->
+                <VerticalStackLayout Spacing="8">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        Text="{loc:Translate Key='Свободное время'}" />
+
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding SlotsPlaceholder}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding SlotsPlaceholder}"
+                                TargetType="Label"
+                                Value="">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+
+                    <ActivityIndicator
+                        HorizontalOptions="Start"
+                        IsRunning="{Binding ShowSlotsLoading}"
+                        IsVisible="{Binding ShowSlotsLoading}" />
+
+                    <VerticalStackLayout IsVisible="{Binding ShowSlotsError}" Spacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding SlotsError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding IsAutoRetryingSlots}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Button
+                            Command="{Binding RetrySlotsCommand}"
+                            HorizontalOptions="Start"
+                            Text="{loc:Translate Key='Повторить'}" />
+                    </VerticalStackLayout>
+
+                    <Label
+                        IsVisible="{Binding ShowEmptySlots}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding EmptySlotsText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <FlexLayout
+                        IsVisible="{Binding ShowSlots}"
+                        BindableLayout.ItemsSource="{Binding Slots}"
+                        Wrap="Wrap">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BarberSlotOption">
+                                <Button
+                                    Margin="0,0,8,8"
+                                    Padding="12,8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                    Command="{Binding SelectCommand}"
+                                    CommandParameter="{Binding .}"
+                                    CornerRadius="8"
+                                    FontSize="14"
+                                    Text="{Binding TimeText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}">
+                                    <Button.Triggers>
+                                        <DataTrigger
+                                            Binding="{Binding IsSelected}"
+                                            TargetType="Button"
+                                            Value="True">
+                                            <Setter
+                                                Property="BackgroundColor"
+                                                Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                            <Setter
+                                                Property="TextColor"
+                                                Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                        </DataTrigger>
+                                    </Button.Triggers>
+                                </Button>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </FlexLayout>
+                </VerticalStackLayout>
+
+                <!-- Комментарий к визиту: предел объявлен сервером. -->
+                <VerticalStackLayout Spacing="4">
+                    <Label
+                        FontSize="12"
+                        Text="{loc:Translate Key='Комментарий (необязательно)'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    <Border
+                        Padding="8"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <Editor
+                            AutoSize="TextChanges"
+                            MaxLength="500"
+                            MinimumHeightRequest="88"
+                            Text="{Binding Note}" />
+                    </Border>
+                    <Label
+                        FontSize="12"
+                        HorizontalTextAlignment="End"
+                        Text="{Binding NoteCounterText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Выбранное время: последняя проверка перед отправкой. -->
+                <Border
+                    Padding="12"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 10">
+                    <Border.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SelectedSlotTitle}"
+                            TargetType="Border"
+                            Value="">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <VerticalStackLayout Spacing="2">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding SelectedSlotTitle}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding SelectedSlotSubtitle}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label
+                    IsVisible="{Binding HasSubmitError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SubmitError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Button
+                    Command="{Binding SubmitCommand}"
+                    IsEnabled="{Binding CanSubmit}"
+                    Text="{Binding SubmitText}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Чтение услуг и салонов: форма ещё не собрана. -->
+        <VerticalStackLayout
+            IsVisible="{Binding IsLoadingOptions}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsLoadingOptions}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                Text="{loc:Translate Key='Загружаем услуги и салоны…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Ошибка чтения услуг и салонов: без них форма не собирается. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowOptionsError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Не удалось загрузить услуги и салоны'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding OptionsError}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetryingOptions}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding RetryOptionsCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Повторить'}" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

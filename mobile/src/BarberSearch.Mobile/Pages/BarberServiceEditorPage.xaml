@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberServiceEditorPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberServiceEditorViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Услуга'}">
+
+    <!--
+        Редактор услуги: добавление из справочника или правка цены и длительности.
+        Скрытие и возврат услуги остаются в разделе «Профиль»: строка прайса уже несёт
+        кнопки «Скрыть»/«Вернуть», и второй путь к тому же действию здесь не нужен.
+    -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <!-- Режим правки: услуга фиксирована, меняются только цена и длительность. -->
+            <VerticalStackLayout IsVisible="{Binding IsEditMode}" Spacing="2">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ServiceName}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Меняются только цена и длительность. Название задаёт справочник.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Режим добавления: справочник читается лениво, при открытии формы. -->
+            <VerticalStackLayout IsVisible="{Binding IsAddMode}" Spacing="8">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    Text="{loc:Translate Key='Добавить услугу'}" />
+
+                <ActivityIndicator
+                    HorizontalOptions="Start"
+                    IsRunning="{Binding IsLoadingCatalog}"
+                    IsVisible="{Binding IsLoadingCatalog}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding IsLoadingCatalog}"
+                    Text="{loc:Translate Key='Загружаем каталог…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Ошибка справочника: чтение по кнопке, автоповтора у формы нет. -->
+                <VerticalStackLayout Spacing="8">
+                    <VerticalStackLayout.Triggers>
+                        <DataTrigger
+                            Binding="{Binding CatalogError}"
+                            TargetType="VerticalStackLayout"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </VerticalStackLayout.Triggers>
+                    <Label
+                        LineBreakMode="WordWrap"
+                        Text="{Binding CatalogError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                    <Button
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding RetryCatalogCommand}"
+                        HorizontalOptions="Start"
+                        Text="{loc:Translate Key='Повторить'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding IsCatalogEmpty}"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Все услуги справочника уже в прайсе.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Строки справочника: выбор строки — нажатие, без диалога. -->
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Catalog}" Spacing="4">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberServiceCatalogItem">
+                            <Border
+                                Margin="0,0,0,4"
+                                Padding="12"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCatalogServiceTapped" />
+                                </Border.GestureRecognizers>
+                                <VerticalStackLayout Spacing="2">
+                                    <Label
+                                        FontFamily="GeistMedium"
+                                        FontSize="16"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding Name}" />
+                                    <Label
+                                        FontSize="12"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding CategoryText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Label
+                                        FontSize="12"
+                                        Text="{Binding DurationText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Выбранная услуга: её длительность подставляется в поле. -->
+                <Border
+                    Padding="12"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 10">
+                    <Border.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SelectedCatalogService}"
+                            TargetType="Border"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <VerticalStackLayout Spacing="2">
+                        <Label
+                            FontSize="12"
+                            Text="{loc:Translate Key='Выбрано:'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding SelectedCatalogService.Name}" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
+            <!-- Цена: число с точкой или запятой, не больше двух знаков после. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Цена'}" />
+                <Entry
+                    Keyboard="Numeric"
+                    Placeholder="0"
+                    Text="{Binding PriceText}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding PriceError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding PriceError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Длительность: от 1 до 1440 минут. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Длительность, мин'}" />
+                <Entry
+                    Keyboard="Numeric"
+                    MaxLength="4"
+                    Text="{Binding DurationText}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding DurationError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding DurationError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <Label
+                LineBreakMode="WordWrap"
+                Text="{Binding FormError}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                <Label.Triggers>
+                    <DataTrigger
+                        Binding="{Binding FormError}"
+                        TargetType="Label"
+                        Value="{x:Null}">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <FlexLayout
+                AlignItems="Center"
+                Direction="Row"
+                Wrap="Wrap">
+                <Button
+                    Margin="0,0,8,8"
+                    Command="{Binding SaveCommand}"
+                    IsEnabled="{Binding CanSave}"
+                    Text="{loc:Translate Key='Сохранить'}" />
+                <ActivityIndicator
+                    Margin="0,0,8,8"
+                    IsRunning="{Binding IsSaving}"
+                    IsVisible="{Binding IsSaving}"
+                    VerticalOptions="Center" />
+            </FlexLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

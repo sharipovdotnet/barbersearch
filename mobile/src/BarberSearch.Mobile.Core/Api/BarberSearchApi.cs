@@ -7,6 +7,7 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
 
 namespace BarberSearch.Mobile.Core.Api;
@@ -162,6 +163,62 @@ public sealed class BarberSearchApi : IBarberSearchApi
             .ConfigureAwait(false);
 
         return page ?? throw new InvalidOperationException("The API returned an empty reviews response.");
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SalonDirectoryItemResponse>> SearchSalonsAsync(
+        string? city,
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient
+            .GetAsync(BuildSalonsPath(city, search), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BarberSearchApiException
+                .FromResponseAsync(response, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var salons = await response.Content
+            .ReadFromJsonAsync<List<SalonDirectoryItemResponse>>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Пустой каталог — законный ответ, а null означает потерянное тело: это разные
+        // состояния, и «салонов нет» нельзя показывать вместо сбоя.
+        return salons ?? throw new InvalidOperationException(
+            "The API returned an empty salon directory response.");
+    }
+
+    /// <summary>
+    /// Собирает адрес публичного каталога салонов.
+    /// </summary>
+    /// <remarks>
+    /// Фильтры тримятся: город и поиск сравниваются на сервере как строки, и пробел по краям
+    /// сделал бы условие никогда не совпадающим. Пустые значения не попадают в адрес вовсе,
+    /// чтобы отсутствие фильтра было видно и в логах, и в кэше.
+    /// </remarks>
+    private static string BuildSalonsPath(string? city, string? search)
+    {
+        var parameters = new List<string>(2);
+        var trimmedCity = city?.Trim();
+        var trimmedSearch = search?.Trim();
+
+        if (!string.IsNullOrEmpty(trimmedCity))
+        {
+            parameters.Add(string.Concat("city=", Uri.EscapeDataString(trimmedCity)));
+        }
+
+        if (!string.IsNullOrEmpty(trimmedSearch))
+        {
+            parameters.Add(string.Concat("search=", Uri.EscapeDataString(trimmedSearch)));
+        }
+
+        return parameters.Count == 0
+            ? "api/salons"
+            : string.Concat("api/salons?", string.Join('&', parameters));
     }
 
     /// <summary>
