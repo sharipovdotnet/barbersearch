@@ -805,6 +805,25 @@ in Core owns both base addresses.
   retry). No new package, colour or font enters the app. The account avatar remains out of
   scope: this slice is the portfolio, not the person card.
 
+- **The cabinet's portfolio is a two-column grid of square frames, and the phone keeps two
+  columns at every width.** The web's cards are `grid gap-3 sm:grid-cols-2` — one column at phone
+  width, two from 640 px — so a phone showing two columns is the deliberate deviation: ten
+  full-width cards turn the section into a long scroll, and the owner judges work by comparing
+  frames side by side. The card anatomy stays the web's `PhotoCard`: a border at radius 10 with
+  padding 8, a square `AspectFill` frame on `Muted` at radius 8, the caption (the web's `text-sm`,
+  14), and the moderation state as a badge. The tile width is computed by the section, not the
+  template — `(host width − 12) / 2`, rounded down, the remainder left to `SpaceBetween` — and
+  written to every tile, so two frames fill the row on any phone and after a rotation without a
+  third narrow column; tiles built before the first measure arrive at zero width and take the real
+  one from the host's `SizeChanged`, which is why the tile owns an observable `TileWidth` rather
+  than a fixed literal. The badge is a `Muted` pill with the web's meaning in the phone's tokens:
+  «На проверке» in `Warning`, «Отклонено» and «Скрыто администратором» in `Destructive`, the
+  published and hidden states quiet in `MutedForeground` — the same `StatusKind`-driven switching
+  as the booking status badges, because a destructive-filled pill would put white on
+  `DestructiveDark` in the dark theme. The caption is always printed (the web's «Без подписи» for
+  an empty one) and capped at two lines with a tail ellipsis: the domain allows 2000 characters,
+  and the web prints them all, which at a 150 pt frame would give one card per screen.
+
 - **Five places where the cabinet deliberately does not repeat the web.** Cancel and price are
   native `DisplayPrompt`s instead of the web's dialogs: each asks for one value, the customer tab
   already confirms its cancel with a platform dialog, and a modal of our own would add a second
