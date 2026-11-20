@@ -208,10 +208,10 @@ erasing what is already on screen. Without a session no request is made at all. 
 session and returns to the sign-in form; a network failure, `429` or `5xx` shows the error with
 «Повторить» and keeps the session — a connection problem does not sign anyone out.
 
-Avatars are out of this slice: nothing is uploaded, deleted or rendered, and the header uses
-initials. `avatarUrl` is still sent back unchanged on every profile save, `null` included: `PUT
-api/users/{id}/profile` replaces the whole field set, so dropping the field would erase a photo
-uploaded on the web. An empty phone is sent as `null`, and the form's save button stays disabled
+The hub itself has no avatar management: nothing is uploaded, deleted or rendered here, and the
+person card keeps initials. The barber cabinet's «Профиль» section owns that flow. `avatarUrl` is
+still sent back unchanged on every profile save, `null` included: `PUT api/users/{id}/profile`
+replaces the whole field set, so dropping the field would erase a photo uploaded on the web. An empty phone is sent as `null`, and the form's save button stays disabled
 until the fields differ from the last saved values.
 
 Changing the email is a request, not a rename. `POST api/auth/email-change` with the new address
@@ -330,7 +330,7 @@ recorded in `AGENT.md` §5.
 | «Записи» | «Сегодня» (the day feed built from both scopes, with the free windows and the next client), «Ближайшие» and «История». Confirm, complete, no-show, cancel with a reason, reschedule, note and price; «Записать клиента» opens the create form from «Сегодня» and «Ближайшие», not from «История»; a client's phone is a `tel:` link. The active list re-reads itself every 30 seconds while the section is on screen. A failed next page keeps the rows and shows the reason; «Дальше» retries it. |
 | «Расписание» | The weekly template per salon, Monday to Sunday (working day or day off, hours), «Заполнить будни», one `PUT` for the whole week, the `409` conflict panel with the affected visits and «Всё равно сохранить», date exceptions and time offs. |
 | «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, and call / map / copy address / open this salon's schedule. |
-| «Профиль» | The card (name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. |
+| «Профиль» | The card (avatar, name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. The avatar has «Загрузить фото» / «Изменить фото» / «Удалить» (with a native confirmation) and shows «На проверке» or «Отклонено» with the rejection reason until moderation decides; the file is the account photo, not a portfolio frame. |
 
 Reads retry themselves while the screen or section is visible; writes show their reason and are
 never repeated silently (`AGENT.md` §5 lists both sides and the one picker catalog that keeps only
@@ -354,7 +354,9 @@ and is retried by «Дальше».
 
 Reads:
 
-- `GET api/auth/me` — the gate; `GET api/users/me` — the hub role that draws the row.
+- `GET api/auth/me` — the gate; `GET api/users/me` — the hub role that draws the row and the
+  avatar's moderation state (`avatarUrl`, `isAvatarBlocked`, `avatarModerationStatus`, reason),
+  which the barber card masks to `null` for anything but an approved frame.
 - `GET api/barber/bookings?scope=upcoming|past&cursor=&pageSize=`;
   `GET api/bookings/{id}/reschedule-slots?date=`.
 - `GET api/barber/booking-options`, `GET api/barber/slots?date=&hairServiceId=&salonId=`,
@@ -383,6 +385,8 @@ Writes:
   `PUT api/barber-profiles/{id}/photos/{photoId}/description`,
   `PUT api/barber-profiles/{id}/photos/order` (the full id list),
   `POST|DELETE api/barber-profiles/{id}/photos/{photoId}/publication`.
+- `POST api/users/me/avatar` (multipart `file`, the prepared JPEG) and `DELETE api/users/me/avatar`
+  — the account avatar behind the profile section's preview and delete confirmation.
 - `POST api/barber/notifications/{id}/read`, `POST api/barber/notifications/read-all`.
 - `POST api/auth/refresh` — the pair is rotated right after the profile is created, because the
   access token has no `barber_profile_id` claim yet.

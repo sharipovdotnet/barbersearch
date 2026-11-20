@@ -7,11 +7,12 @@ using BarberSearch.Domain.Common;
 using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
+using BarberSearch.Mobile.Core.Media;
 
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки клиента аккаунта: текущий пользователь, профиль, пароль и смена email.
+/// Проверки клиента аккаунта: текущий пользователь, профиль, аватар, пароль и смена email.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,6 +24,10 @@ namespace BarberSearch.Mobile.Core.Tests;
 /// Тело запроса проверяется дважды: разбором JSON как документа (видно <c>null</c> вместо
 /// пустых строк) и десериализацией в контракт бэкенда (видно, что клиент не придумал своё поле).
 /// Ответ <c>204</c> собирается без содержимого: клиент не должен читать у него JSON.
+/// </para>
+/// <para>
+/// У загрузки аватара тело — <c>multipart/form-data</c>, а не JSON: проверяются имя части
+/// <c>file</c>, имя файла и байты в теле, иначе сервер получил бы пустую форму.
 /// </para>
 /// </remarks>
 public sealed class AccountApiTests
@@ -333,6 +338,102 @@ public sealed class AccountApiTests
             "auth.emailVerification.unavailable",
             exception.ErrorCodes,
             StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task UploadAvatarAsync_SendsMultipartFile_AndParsesResponse()
+    {
+        const string responseJson = """
+            {
+              "avatarUrl": "/api/media/avatars/0199d3b4-1f2c-7cc5-9c1a-2b3c4d5e6f70/x.jpg",
+              "moderationStatus": "Pending"
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.Created, responseJson);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AccountApi(httpClient);
+        byte[] bytes = Encoding.UTF8.GetBytes("avatar-jpeg-bytes");
+
+        var uploaded = await api.UploadAvatarAsync(
+            new PortfolioImage(bytes, "avatar.jpg", "image/jpeg"));
+
+        Assert.Equal(HttpMethod.Post, handler.LastMethod);
+        Assert.Equal("/api/users/me/avatar", handler.LastRequestUri!.AbsolutePath);
+
+        // Сервер ждёт единственную часть file: имя части, имя файла и байты лежат в теле.
+        Assert.Contains("name=file", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("filename=avatar.jpg", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains(Encoding.UTF8.GetString(bytes), handler.LastBody, StringComparison.Ordinal);
+
+        // Ответ 201 несёт адрес кадра и статус премодерации: без статуса экран не покажет
+        // бейдж «На проверке», поэтому поля читаются оба.
+        Assert.Equal(
+            "/api/media/avatars/0199d3b4-1f2c-7cc5-9c1a-2b3c4d5e6f70/x.jpg",
+            uploaded.AvatarUrl);
+        Assert.Equal(PhotoModerationStatus.Pending, uploaded.ModerationStatus);
+    }
+
+    [Fact]
+    public async Task DeleteAvatarAsync_SendsDelete()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AccountApi(httpClient);
+
+        await api.DeleteAvatarAsync();
+
+        // Идемпотентное удаление: пользователь берётся из токена, тело не отправляется.
+        Assert.Equal(HttpMethod.Delete, handler.LastMethod);
+        Assert.Equal("/api/users/me/avatar", handler.LastRequestUri!.AbsolutePath);
+        Assert.True(string.IsNullOrEmpty(handler.LastBody));
+    }
+
+    [Fact]
+    public async Task UploadAvatarAsync_Error_ThrowsWithCode()
+    {
+        const string problemJson = """
+            {
+              "title": "Bad Request",
+              "status": 400,
+              "detail": "The file is too large.",
+              "errorCodes": ["user.uploadAvatar.tooLarge"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.BadRequest, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new AccountApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.UploadAvatarAsync(new PortfolioImage([1], "avatar.jpg", "image/jpeg")));
+
+        // Код сохраняется: по нему AvatarErrors выбирает русский текст, а английский detail
+        // остаётся только в исключении.
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Contains("user.uploadAvatar.tooLarge", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("user.uploadAvatar.tooLarge")]
+    [InlineData("barberProfile.uploadPhoto.tooLarge")]
+    public void DescribeAvatar_TooLargeCode_ReturnsTooLargeText(string code)
+    {
+        var exception = BarberCabinetApiError.Create(HttpStatusCode.BadRequest, code);
+
+        Assert.Equal(
+            "Файл слишком большой. Максимум — 5 МБ.",
+            AvatarErrors.Describe(exception));
+    }
+
+    [Fact]
+    public void DescribeAvatar_UnknownException_ReturnsFallback()
+    {
+        // Английский текст исключения не показываем: только русский фолбэк.
+        Assert.Equal(
+            "Не удалось изменить аватар. Попробуйте ещё раз.",
+            AvatarErrors.Describe(
+                new InvalidOperationException("The API returned an empty avatar response.")));
     }
 
     /// <summary>

@@ -164,6 +164,11 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IAccountApi, AccountApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Аватар — тот же аккаунт с Bearer, но отдельная точка внедрения: кабинет зависит
+        // от интерфейса аватара, а не от всего клиента аккаунта.
+        builder.Services.AddHttpClient<IAccountAvatarApi, AccountApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         // Бронь — второе чтение/запись с Bearer; публичные карточка и слоты остаются анонимными.
         builder.Services.AddHttpClient<IBookingsApi, BookingsApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();

@@ -1,6 +1,7 @@
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Common;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Media;
@@ -10,11 +11,13 @@ namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
 /// Проверки раздела «Профиль» кабинета: карточка, баннер проверки, прайс, специализации,
-/// ленивый справочник и автоповтор чтения.
+/// ленивый справочник, автоповтор чтения и срез аватара.
 /// </summary>
 /// <remarks>
 /// Фотографии в этом срезе только читаются, поэтому проверяется их состояние, а не команды.
-/// Записи (скрытие услуги, специализация) не повторяются: после сбоя исход неизвестен.
+/// Записи (скрытие услуги, специализация, аватар) не повторяются: после сбоя исход неизвестен.
+/// Аватар читается из профиля аккаунта: карточка отдаёт только одобренный и не скрытый кадр,
+/// а «На проверке», отказ и блокировку даёт <c>GET api/users/me</c>.
 /// </remarks>
 public sealed class BarberCabinetProfileViewModelTests
 {
@@ -471,6 +474,255 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.Contains(nameof(BarberCabinetProfileViewModel.IsPhotoLimitReached), changed);
     }
 
+    [Fact]
+    public async Task ActivateAsync_ApprovedAccountAvatar_ShowsPhotoAndOffersChange()
+    {
+        var harness = new Harness();
+
+        harness.Avatar.MyProfile = _ => Task.FromResult(BarberCabinetData.AccountProfile(
+            "/media/avatar.jpg",
+            avatarStatus: PhotoModerationStatus.Approved));
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
+            avatarUrl: "/media/card-avatar.jpg"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Equal(1, harness.Avatar.ProfileCalls);
+        Assert.Equal("/media/avatar.jpg", viewModel.AvatarUrl);
+        Assert.True(viewModel.HasAvatar);
+        Assert.False(viewModel.ShowInitials);
+        Assert.False(viewModel.IsAvatarBlocked);
+        Assert.False(viewModel.HasAvatarStatus);
+        Assert.Null(viewModel.AvatarStatusText);
+        Assert.Equal(string.Empty, viewModel.AvatarStatusKind);
+        Assert.False(viewModel.HasAvatarRejection);
+        Assert.Null(viewModel.AvatarRejectionText);
+        Assert.True(viewModel.CanDeleteAvatar);
+        Assert.True(viewModel.CanChangeAvatar);
+        Assert.Equal("Изменить фото", viewModel.AvatarActionText);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_PendingAccountAvatar_ShowsRawUrlAndPendingBadge()
+    {
+        var harness = new Harness();
+
+        harness.Avatar.MyProfile = _ => Task.FromResult(BarberCabinetData.AccountProfile(
+            "/media/avatar-pending.jpg",
+            avatarStatus: PhotoModerationStatus.Pending));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Equal("/media/avatar-pending.jpg", viewModel.AvatarUrl);
+        Assert.True(viewModel.HasAvatar);
+        Assert.False(viewModel.ShowInitials);
+        Assert.True(viewModel.HasAvatarStatus);
+        Assert.Equal("На проверке", viewModel.AvatarStatusText);
+        Assert.Equal("pending", viewModel.AvatarStatusKind);
+        Assert.False(viewModel.HasAvatarRejection);
+        Assert.True(viewModel.CanDeleteAvatar);
+        Assert.Equal("Изменить фото", viewModel.AvatarActionText);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_RejectedAccountAvatar_ShowsReasonAndOffersAnotherPhoto()
+    {
+        var harness = new Harness();
+
+        harness.Avatar.MyProfile = _ => Task.FromResult(BarberCabinetData.AccountProfile(
+            "/media/avatar-rejected.jpg",
+            avatarStatus: PhotoModerationStatus.Rejected,
+            rejectionReason: "Слишком размыто"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Equal("Отклонено", viewModel.AvatarStatusText);
+        Assert.Equal("rejected", viewModel.AvatarStatusKind);
+        Assert.True(viewModel.HasAvatarStatus);
+        Assert.True(viewModel.HasAvatarRejection);
+
+        var rejectionText = Assert.IsType<string>(viewModel.AvatarRejectionText);
+
+        Assert.Contains("Слишком размыто", rejectionText, StringComparison.Ordinal);
+        Assert.Equal("Загрузить другое фото", viewModel.AvatarActionText);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_BlockedAvatar_HidesPhotoButKeepsDeleteAvailable()
+    {
+        var harness = new Harness();
+
+        harness.Avatar.MyProfile = _ => Task.FromResult(BarberCabinetData.AccountProfile(
+            "/media/avatar-blocked.jpg",
+            isAvatarBlocked: true));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Equal("/media/avatar-blocked.jpg", viewModel.AvatarUrl);
+        Assert.True(viewModel.IsAvatarBlocked);
+        Assert.False(viewModel.HasAvatar);
+        Assert.True(viewModel.ShowInitials);
+        Assert.True(viewModel.CanDeleteAvatar);
+        Assert.False(viewModel.HasAvatarStatus);
+        Assert.Equal("Загрузить другое фото", viewModel.AvatarActionText);
+        Assert.Equal("Фото скрыто администратором", viewModel.AvatarBlockedText);
+        Assert.Equal(
+            "Его не видно публично. Новое фото появится публично после проверки, а вернуть старое может только администратор.",
+            viewModel.AvatarBlockedHint);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_AccountProfileFailure_FallsBackToCardAvatar()
+    {
+        var harness = new Harness();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
+            avatarUrl: "/media/card-avatar.jpg"));
+
+        harness.Avatar.MyProfile = _ => Task.FromException<MyProfileResponse>(
+            new HttpRequestException("offline"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Equal("/media/card-avatar.jpg", viewModel.AvatarUrl);
+        Assert.True(viewModel.HasAvatar);
+        Assert.False(viewModel.ShowInitials);
+        Assert.True(viewModel.CanDeleteAvatar);
+        Assert.True(viewModel.IsReady);
+        Assert.Null(viewModel.ErrorMessage);
+        Assert.False(viewModel.IsAutoRetrying);
+    }
+
+    [Fact]
+    public async Task ChangeAvatarAsync_UploadsPickedPhotoAndShowsPendingState()
+    {
+        var harness = new Harness();
+        var image = new PortfolioImage(new byte[] { 1, 2, 3 }, "avatar.jpg", "image/jpeg");
+
+        await harness.ViewModel.ActivateAsync();
+
+        harness.Picker.Pick = _ => Task.FromResult<PortfolioImage?>(image);
+        harness.Avatar.Upload = (_, _) => Task.FromResult(new AvatarUploadResponse(
+            "/media/avatar-uploaded.jpg",
+            PhotoModerationStatus.Pending));
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.ChangeAvatarCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, harness.Picker.PickCalls);
+        Assert.Equal(1, harness.Avatar.UploadCalls);
+        Assert.Equal(image, Assert.Single(harness.Avatar.Uploads));
+        Assert.Equal("/media/avatar-uploaded.jpg", viewModel.AvatarUrl);
+        Assert.True(viewModel.HasAvatar);
+        Assert.True(viewModel.HasAvatarStatus);
+        Assert.Equal("На проверке", viewModel.AvatarStatusText);
+        Assert.Equal("pending", viewModel.AvatarStatusKind);
+        Assert.Equal("Изменить фото", viewModel.AvatarActionText);
+        Assert.Equal("Аватар загружен и ждёт проверки.", viewModel.AvatarAnnouncement);
+        Assert.Null(viewModel.AvatarError);
+        Assert.False(viewModel.IsAvatarUploading);
+        Assert.False(viewModel.IsAvatarBusy);
+    }
+
+    [Fact]
+    public async Task ChangeAvatarAsync_PickerClosed_DoesNotUploadAndShowsNoError()
+    {
+        var harness = new Harness();
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.ChangeAvatarCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, harness.Picker.PickCalls);
+        Assert.Equal(0, harness.Avatar.UploadCalls);
+        Assert.Null(viewModel.AvatarError);
+        Assert.Null(viewModel.AvatarAnnouncement);
+        Assert.False(viewModel.IsAvatarUploading);
+    }
+
+    [Fact]
+    public async Task ChangeAvatarAsync_UnsupportedPick_ShowsFileTextAndSkipsUpload()
+    {
+        var harness = new Harness();
+
+        await harness.ViewModel.ActivateAsync();
+
+        harness.Picker.Pick = _ => Task.FromException<PortfolioImage?>(
+            new PortfolioImageException(PortfolioImageError.UnsupportedType));
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.ChangeAvatarCommand.ExecuteAsync(null);
+
+        Assert.Equal("Поддерживаются только JPEG, PNG и WebP.", viewModel.AvatarError);
+        Assert.Equal(0, harness.Avatar.UploadCalls);
+        Assert.False(viewModel.IsAvatarUploading);
+    }
+
+    [Fact]
+    public async Task ChangeAvatarAsync_UploadFailure_KeepsStateAndShowsReason()
+    {
+        var harness = new Harness();
+        var image = new PortfolioImage(new byte[] { 1, 2, 3 }, "avatar.jpg", "image/jpeg");
+
+        await harness.ViewModel.ActivateAsync();
+
+        harness.Picker.Pick = _ => Task.FromResult<PortfolioImage?>(image);
+        harness.Avatar.Upload = (_, _) => Task.FromException<AvatarUploadResponse>(
+            new HttpRequestException("offline"));
+
+        var viewModel = harness.ViewModel;
+        var avatarBefore = viewModel.AvatarUrl;
+
+        await viewModel.ChangeAvatarCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, harness.Avatar.UploadCalls);
+        Assert.Equal(NetworkText, viewModel.AvatarError);
+        Assert.Equal(avatarBefore, viewModel.AvatarUrl);
+        Assert.False(viewModel.HasAvatar);
+        Assert.Null(viewModel.AvatarAnnouncement);
+        Assert.False(viewModel.IsAvatarUploading);
+    }
+
+    [Fact]
+    public async Task DeleteAvatarAsync_ClearsAvatarAndAnnouncesRemoval()
+    {
+        var harness = new Harness();
+
+        harness.Avatar.MyProfile = _ => Task.FromResult(BarberCabinetData.AccountProfile(
+            "/media/avatar.jpg"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.DeleteAvatarCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, harness.Avatar.DeleteCalls);
+        Assert.Null(viewModel.AvatarUrl);
+        Assert.False(viewModel.HasAvatar);
+        Assert.True(viewModel.ShowInitials);
+        Assert.False(viewModel.CanDeleteAvatar);
+        Assert.Equal("Загрузить фото", viewModel.AvatarActionText);
+        Assert.Equal("Аватар удалён.", viewModel.AvatarAnnouncement);
+        Assert.Null(viewModel.AvatarError);
+        Assert.False(viewModel.IsAvatarDeleting);
+    }
+
     private static IReadOnlyList<BarberProfilePhotoResponse> Photos(int count) =>
     [
         .. Enumerable.Range(0, count).Select(index => BarberCabinetData.Photo(
@@ -479,7 +731,8 @@ public sealed class BarberCabinetProfileViewModelTests
     ];
 
     /// <summary>
-    /// Собранный раздел: подменённые клиенты карточки и справочника, часы и два цикла повтора.
+    /// Собранный раздел: подменённые клиенты карточки, справочника и аватара, пикер, часы
+    /// и два цикла повтора.
     /// </summary>
     private sealed class Harness
     {
@@ -488,6 +741,8 @@ public sealed class BarberCabinetProfileViewModelTests
             ViewModel = new BarberCabinetProfileViewModel(
                 Profile,
                 Search,
+                Avatar,
+                Picker,
                 new FixedTimeProvider(BarberCabinetFixtures.Now),
                 retry,
                 catalogRetry);
@@ -498,6 +753,10 @@ public sealed class BarberCabinetProfileViewModelTests
         public FakeBarberProfileApi Profile { get; } = new();
 
         public FakeBarberSearchApi Search { get; } = new();
+
+        public FakeAccountAvatarApi Avatar { get; } = new();
+
+        public FakePortfolioPhotoPicker Picker { get; } = new();
 
         public BarberCabinetProfileViewModel ViewModel { get; }
     }

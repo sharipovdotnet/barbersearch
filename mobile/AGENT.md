@@ -141,9 +141,10 @@ in Core owns both base addresses.
   отзывы», «Безопасность» and «Выйти», and the sections as Shell pages over the profile stack.
   The card carries the hub's only verification line and there is no separate warning link: two texts
   about the same address read as two different facts.
-  Avatars are out of this slice — nothing is uploaded, deleted or shown — but `avatarUrl` is still
-  round-tripped on every profile save, because `PUT api/users/{id}/profile` replaces the whole file
-  and `null` would erase a photo uploaded on the web. Email verification and the address change
+  The hub itself still has no avatar management — nothing is uploaded, deleted or shown there, and
+  the person card keeps initials — but `avatarUrl` is still round-tripped on every profile save,
+  because `PUT api/users/{id}/profile` replaces the whole file and `null` would erase a photo
+  uploaded on the web. The barber cabinet's «Профиль» section owns the avatar slice (see §5). Email verification and the address change
   finish in the browser: the letter's link opens the web page, the app neither opens nor parses it,
   and the session simply ends after the confirmation rotates `SecurityStamp`. Changing the password
   does need an immediate second sign-in in the app, unlike the web: the server revokes every refresh
@@ -214,11 +215,18 @@ in Core owns both base addresses.
   `ShellItemRenderer` — writes the hint to the menu items and item views of the bar. The renderer
   is registered for `AppShell` on Android only; iOS has no long-press tooltip on a tab bar and
   keeps the labels as they are.
-- **The card shows the avatar, the account hub still does not.** The public card reads the already
-  public `avatarUrl` from `GET api/barbers/{id}` and only renders it — nothing is uploaded, removed
-  or moderated, and the initials from `BarberText.Initials` stay as the fallback. The account hub
-  keeps initials because the account slice allows no avatar management at all; a read-only avatar
-  there would promise an editing flow that does not exist.
+- **The card shows the avatar, the cabinet edits it, the account hub still does not.** The public
+  card reads the already public `avatarUrl` from `GET api/barbers/{id}` and only renders it, with
+  the initials from `BarberText.Initials` as the fallback. The cabinet's «Профиль» section adds the
+  missing editing flow: one `multipart/form-data` part `file` to `POST api/users/me/avatar` (the
+  phone's picker prepares a JPEG ≤ 5 MiB), `DELETE api/users/me/avatar` behind a native
+  confirmation, and a live preview. The barber card masks a pending or rejected avatar to `null` and
+  exposes no moderation state, so the section also reads `GET api/users/me`: its raw `avatarUrl`,
+  `isAvatarBlocked`, `avatarModerationStatus` and `avatarRejectionReason` drive the «На проверке» /
+  «Отклонено» badge, the reason and the «Загрузить другое фото» wording. A failed `/me` never turns
+  a successfully read card into an error — the approved card URL stays as the fallback. The account
+  hub keeps initials because the account slice still allows no avatar management at all; a read-only
+  avatar there would promise an editing flow that does not exist.
 - **Search filters are the web's six, with one touch adaptation.** City, date, language,
   specialization, hair service and the additional-service substring travel in one request, only on
   «Найти», and the catalogs for the two selects come from `GET api/specializations` and
@@ -809,8 +817,9 @@ in Core owns both base addresses.
   `description`. The picker sits behind `IPortfolioPhotoPicker` in Core, so the ViewModel and
   its tests need no MAUI and no emulator; `PortfolioPhotoErrors` maps the web's domain codes to
   the same Russian field and general lines, and the write rules stay the cabinet's (no silent
-  retry). No new package, colour or font enters the app. The account avatar remains out of
-  scope: this slice is the portfolio, not the person card.
+  retry). No new package, colour or font enters the app. The avatar reuses the same picker and
+  limits, but goes to `POST|DELETE api/users/me/avatar` and belongs to the profile section: it is
+  the person card's photo, not a portfolio frame.
 
 - **The cabinet's portfolio is a two-column grid of square frames, and the phone keeps two
   columns at every width.** The web's cards are `grid gap-3 sm:grid-cols-2` — one column at phone

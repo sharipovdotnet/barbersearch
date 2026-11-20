@@ -24,6 +24,7 @@ using BarberSearch.Contracts.Notifications.UpdateNotificationSettings;
 using BarberSearch.Contracts.Reviews.GetReviews;
 using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
+using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.BarberRequests;
 using BarberSearch.Domain.Bookings;
@@ -31,10 +32,13 @@ using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Notifications;
 using BarberSearch.Domain.Salons;
+using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Api.BarberRequests;
+using BarberSearch.Mobile.Core.Media;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -263,6 +267,7 @@ internal static class BarberCabinetData
     /// <param name="latePolicy">Правило опозданий.</param>
     /// <param name="isActive">Профиль активен.</param>
     /// <param name="isVerified">Профиль подтверждён.</param>
+    /// <param name="avatarUrl">Аватар карточки: только одобренный и не скрытый кадр.</param>
     /// <param name="services">Прайс.</param>
     /// <param name="specializations">Специализации.</param>
     /// <param name="additionalServices">Дополнительные услуги.</param>
@@ -282,6 +287,7 @@ internal static class BarberCabinetData
         string latePolicy = "Опаздывающих жду 10 минут.",
         bool isActive = true,
         bool isVerified = true,
+        string? avatarUrl = null,
         IReadOnlyList<BarberProfileServiceResponse>? services = null,
         IReadOnlyList<BarberProfileSpecializationResponse>? specializations = null,
         IReadOnlyList<string>? additionalServices = null,
@@ -291,7 +297,7 @@ internal static class BarberCabinetData
         new(
             BarberCabinetFixtures.BarberProfileId,
             BarberCabinetFixtures.CustomerId,
-            null,
+            avatarUrl,
             displayName,
             grade,
             bio,
@@ -312,6 +318,36 @@ internal static class BarberCabinetData
             specializations ?? [],
             additionalServices ?? [],
             photos ?? []);
+
+    /// <summary>
+    /// Профиль текущего пользователя с состоянием аватара.
+    /// </summary>
+    /// <param name="avatarUrl">Сырой URL аватара; <c>null</c> — фото не загружено.</param>
+    /// <param name="isAvatarBlocked">Фото скрыто администратором.</param>
+    /// <param name="avatarStatus">Допуск аватара к публикации.</param>
+    /// <param name="rejectionReason">Причина отказа администратора.</param>
+    /// <returns>Ответ <c>GET api/users/me</c>.</returns>
+    public static MyProfileResponse AccountProfile(
+        string? avatarUrl = null,
+        bool isAvatarBlocked = false,
+        PhotoModerationStatus avatarStatus = PhotoModerationStatus.Approved,
+        string? rejectionReason = null) =>
+        new(
+            BarberCabinetFixtures.CustomerId,
+            "master@example.com",
+            "Тимур",
+            "Мастеров",
+            "+7 900 000-00-00",
+            avatarUrl,
+            UserRole.Barber,
+            BarberCabinetFixtures.BarberProfileId,
+            true,
+            true,
+            new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 11, 14, 18, 0, 0, TimeSpan.Zero),
+            isAvatarBlocked,
+            avatarStatus,
+            rejectionReason);
 
     /// <summary>
     /// Услуга справочника.
@@ -1153,4 +1189,75 @@ internal sealed class FakeBarberInboxApi : IBarberNotificationsApi
 
     public Task UnlinkTelegramAsync(CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Инбокс не отвязывает Telegram.");
+}
+
+/// <summary>
+/// Подменённый клиент аватара аккаунта: чтение <c>/me</c>, загрузка и удаление.
+/// </summary>
+/// <remarks>
+/// По умолчанию у профиля нет аватара, а загрузка возвращает новый кадр на проверке:
+/// так существующие проверки раздела не зависят от аватара, а тесты среза задают ответы сами.
+/// </remarks>
+internal sealed class FakeAccountAvatarApi : IAccountAvatarApi
+{
+    public Func<CancellationToken, Task<MyProfileResponse>> MyProfile { get; set; } =
+        static _ => Task.FromResult(BarberCabinetData.AccountProfile());
+
+    public Func<PortfolioImage, CancellationToken, Task<AvatarUploadResponse>> Upload { get; set; } =
+        static (_, _) => Task.FromResult(new AvatarUploadResponse(
+            "/media/avatar.jpg",
+            PhotoModerationStatus.Pending));
+
+    public Func<CancellationToken, Task> Delete { get; set; } = static _ => Task.CompletedTask;
+
+    public int ProfileCalls { get; private set; }
+
+    public int UploadCalls { get; private set; }
+
+    public int DeleteCalls { get; private set; }
+
+    public List<PortfolioImage> Uploads { get; } = [];
+
+    public async Task<MyProfileResponse> GetMyProfileAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ProfileCalls++;
+
+        return await MyProfile(cancellationToken);
+    }
+
+    public async Task<AvatarUploadResponse> UploadAvatarAsync(
+        PortfolioImage image,
+        CancellationToken cancellationToken = default)
+    {
+        UploadCalls++;
+        Uploads.Add(image);
+
+        return await Upload(image, cancellationToken);
+    }
+
+    public async Task DeleteAvatarAsync(CancellationToken cancellationToken = default)
+    {
+        DeleteCalls++;
+
+        await Delete(cancellationToken);
+    }
+}
+
+/// <summary>
+/// Подменённый системный пикер: отдаёт заданный кадр либо <c>null</c>, если выбор отменён.
+/// </summary>
+internal sealed class FakePortfolioPhotoPicker : IPortfolioPhotoPicker
+{
+    public Func<CancellationToken, Task<PortfolioImage?>> Pick { get; set; } =
+        static _ => Task.FromResult<PortfolioImage?>(null);
+
+    public int PickCalls { get; private set; }
+
+    public async Task<PortfolioImage?> PickAsync(CancellationToken cancellationToken = default)
+    {
+        PickCalls++;
+
+        return await Pick(cancellationToken);
+    }
 }

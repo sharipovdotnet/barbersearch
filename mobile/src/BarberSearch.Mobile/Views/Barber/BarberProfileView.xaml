@@ -222,22 +222,43 @@
                     StrokeShape="RoundRectangle 10">
                     <VerticalStackLayout Spacing="12">
 
+                        <!--
+                            Личность: аватар 88×88, имя, грейд и состояние проверки фото.
+                            Инициалы лежат под картинкой и остаются, пока кадр не прочитан,
+                            отклонён или скрыт: пустого круга не бывает (см. RefreshAvatarImageAsync).
+                        -->
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                             <Border
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                                HeightRequest="56"
+                                HeightRequest="88"
+                                Padding="0"
                                 Stroke="Transparent"
-                                StrokeShape="RoundRectangle 28"
+                                StrokeShape="RoundRectangle 44"
+                                StrokeThickness="0"
                                 VerticalOptions="Start"
-                                WidthRequest="56">
-                                <Label
-                                    FontFamily="GeistSemiBold"
-                                    FontSize="18"
-                                    HorizontalTextAlignment="Center"
-                                    Text="{Binding Initials}"
-                                    VerticalTextAlignment="Center" />
+                                WidthRequest="88">
+                                <Grid>
+                                    <Label
+                                        FontFamily="GeistSemiBold"
+                                        FontSize="24"
+                                        HorizontalOptions="Center"
+                                        Text="{Binding Initials}"
+                                        VerticalOptions="Center" />
+                                    <Image
+                                        x:Name="AvatarImage"
+                                        Aspect="AspectFill"
+                                        IsVisible="False">
+                                        <Image.Clip>
+                                            <EllipseGeometry
+                                                Center="44,44"
+                                                RadiusX="44"
+                                                RadiusY="44" />
+                                        </Image.Clip>
+                                    </Image>
+                                </Grid>
                             </Border>
-                            <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+
+                            <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Start">
                                 <Label
                                     FontFamily="GeistSemiBold"
                                     FontSize="18"
@@ -247,8 +268,119 @@
                                     FontSize="12"
                                     Text="{Binding GradeText}"
                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                <!-- Состояние проверки фото: цвет повторяет бейджи кадров портфолио. -->
+                                <Border
+                                    Padding="8,2"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                    HorizontalOptions="Start"
+                                    IsVisible="{Binding HasAvatarStatus}"
+                                    Stroke="Transparent"
+                                    StrokeShape="RoundRectangle 6">
+                                    <Label
+                                        FontSize="12"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding AvatarStatusText}">
+                                        <Label.Triggers>
+                                            <DataTrigger
+                                                Binding="{Binding AvatarStatusKind}"
+                                                TargetType="Label"
+                                                Value="pending">
+                                                <Setter
+                                                    Property="TextColor"
+                                                    Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger
+                                                Binding="{Binding AvatarStatusKind}"
+                                                TargetType="Label"
+                                                Value="rejected">
+                                                <Setter
+                                                    Property="TextColor"
+                                                    Value="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                </Border>
+
+                                <!-- Фото скрыто администратором: кадр не показывается, причина на месте. -->
+                                <Label
+                                    FontFamily="GeistMedium"
+                                    FontSize="12"
+                                    IsVisible="{Binding IsAvatarBlocked}"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding AvatarBlockedText}" />
+                                <Label
+                                    FontSize="12"
+                                    IsVisible="{Binding IsAvatarBlocked}"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding AvatarBlockedHint}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                <!-- Причина отказа модератора: видна рядом с бейджем. -->
+                                <Label
+                                    FontSize="12"
+                                    IsVisible="{Binding HasAvatarRejection}"
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding AvatarRejectionText}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             </VerticalStackLayout>
                         </Grid>
+
+                        <!--
+                            Аватар: файл выбирает ViewModel, экран только показывает кадр и
+                            спрашивает подтверждение удаления. Подпись объясняет, кто видит фото.
+                        -->
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Фото профиля видят вы и администратор. У барбера оно показывается в открытой карточке.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <FlexLayout
+                            AlignItems="Center"
+                            Direction="Row"
+                            Wrap="Wrap">
+                            <Button
+                                Margin="0,0,8,8"
+                                Command="{Binding ChangeAvatarCommand}"
+                                IsEnabled="{Binding CanChangeAvatar}"
+                                Text="{Binding AvatarActionText}" />
+                            <Button
+                                Margin="0,0,8,8"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Clicked="OnDeleteAvatarClicked"
+                                IsEnabled="{Binding CanChangeAvatar}"
+                                IsVisible="{Binding CanDeleteAvatar}"
+                                Text="{loc:Translate Key='Удалить'}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <ActivityIndicator
+                                Margin="0,0,8,8"
+                                IsRunning="{Binding IsAvatarUploading}"
+                                IsVisible="{Binding IsAvatarUploading}"
+                                VerticalOptions="Center" />
+                        </FlexLayout>
+
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='JPEG, PNG или WebP до 5 МБ.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!-- Ошибка действия с аватаром: строка появляется только по факту отказа. -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding AvatarError, Converter={StaticResource NotNull}}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding AvatarError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                        <!-- Успех: загрузка принята или фото удалено. -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding AvatarAnnouncement, Converter={StaticResource NotNull}}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding AvatarAnnouncement}"
+                            TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
 
                         <!-- Рейтинг и отзывы: те же строки, что на публичной карточке. -->
                         <FlexLayout
