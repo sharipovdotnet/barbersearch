@@ -52,6 +52,7 @@ public partial class BarberProfileView : ContentView
     private Guid? _selectedSpecializationId;
     private bool _isNavigating;
     private double _photoTileWidth;
+    private int _avatarGeneration;
 
     /// <summary>
     /// Создаёт раздел, подписывается на события ViewModel и строит сетку фотографий.
@@ -94,8 +95,13 @@ public partial class BarberProfileView : ContentView
         _viewModel.EditServiceRequested += OnEditServiceRequested;
         _viewModel.PreviewRequested += OnPreviewRequested;
         _viewModel.ShareProfileRequested += OnShareProfileRequested;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
         RebuildPhotoTiles();
+
+        // Карточку могли прочитать до создания раздела: событие об изменении тогда уже
+        // не придёт, а адрес аватара в ViewModel уже есть.
+        _ = RefreshAvatarImageAsync();
     }
 
     /// <summary>
@@ -345,6 +351,37 @@ public partial class BarberProfileView : ContentView
     }
 
     /// <summary>
+    /// Удаляет аватар после подтверждения: файл исчезает безвозвратно, инициалы остаются.
+    /// </summary>
+    /// <remarks>
+    /// Подтверждение спрашивает экран, а не ViewModel: диалог — часть показа, и команда
+    /// удаления вызывается только после утвердительного ответа. Причина отказа ляжет
+    /// в <c>AvatarError</c>, который раздел показывает отдельной строкой.
+    /// </remarks>
+    /// <param name="sender">Кнопка «Удалить».</param>
+    /// <param name="e">Аргументы события.</param>
+    private async void OnDeleteAvatarClicked(object? sender, EventArgs e)
+    {
+        var page = DialogPage;
+
+        if (page is null)
+        {
+            return;
+        }
+
+        var confirmed = await page.DisplayAlertAsync(
+            Loc.T("Удалить аватар?"),
+            Loc.T("Аватар исчезнет из карточки и кабинета. Файл удаляется безвозвратно."),
+            Loc.T("Удалить"),
+            Loc.T("Отмена"));
+
+        if (confirmed)
+        {
+            await _viewModel.DeleteAvatarCommand.ExecuteAsync(null);
+        }
+    }
+
+    /// <summary>
     /// Возвращает скрытую услугу в прайс с её ценой и длительностью.
     /// </summary>
     private async void OnRestoreServiceClicked(object? sender, EventArgs e)
@@ -561,6 +598,123 @@ public partial class BarberProfileView : ContentView
         {
             // Отмена транспорта: показывать нечего, как и у очередей модерации.
         }
+    }
+
+    /// <summary>
+    /// Адрес, состояние проверки или блокировка аватара изменились: картинку пора перечитать.
+    /// </summary>
+    /// <param name="sender">ViewModel раздела.</param>
+    /// <param name="e">Имя изменившегося свойства.</param>
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(BarberCabinetProfileViewModel.AvatarUrl)
+            or nameof(BarberCabinetProfileViewModel.AvatarStatusKind)
+            or nameof(BarberCabinetProfileViewModel.IsAvatarBlocked))
+        {
+            _ = RefreshAvatarImageAsync();
+        }
+    }
+
+    /// <summary>
+    /// Показывает аватар: свой неодобренный кадр читается с Bearer, остальные — по адресу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Инициалы лежат под картинкой и остаются запасным вариантом: пока кадр не пришёл,
+    /// отклонён или скрыт администратором, круг не пустеет. Раздача отвечает на анонимный
+    /// запрос <c>404</c> для неодобренного файла, поэтому «на проверке» и «отклонено»
+    /// читаются тем же путём, что превью очередей модерации.
+    /// </para>
+    /// <para>
+    /// Счётчик поколений отбрасывает устаревшие ответы: смена адреса или статуса запускает
+    /// новую загрузку, и прежняя не должна перезаписать свежую картинку. Ошибки глушатся —
+    /// аватар украшение карточки, а не данные; причина видна по бейджу состояния.
+    /// </para>
+    /// </remarks>
+    /// <returns>Задача чтения.</returns>
+    private async Task RefreshAvatarImageAsync()
+    {
+        var generation = ++_avatarGeneration;
+        var rawUrl = _viewModel.AvatarUrl;
+
+        if (string.IsNullOrWhiteSpace(rawUrl) || _viewModel.IsAvatarBlocked)
+        {
+            ApplyAvatarImage(source: null);
+
+            return;
+        }
+
+        string imageUrl;
+
+        try
+        {
+            imageUrl = MediaUrl.Resolve(_apiOptions.BaseAddress, MediaUrl.Resize(rawUrl, "md"));
+        }
+        catch (ArgumentException)
+        {
+            ApplyAvatarImage(source: null);
+
+            return;
+        }
+
+        ImageSource? source = null;
+
+        try
+        {
+            if (IsApiMediaUrl(imageUrl) && _viewModel.AvatarStatusKind is "pending" or "rejected")
+            {
+                var bytes = await _mediaApi.GetBytesAsync(imageUrl, CancellationToken.None);
+
+                if (generation != _avatarGeneration)
+                {
+                    return;
+                }
+
+                if (bytes.Length > 0)
+                {
+                    source = ImageSource.FromStream(() => new MemoryStream(bytes, writable: false));
+                }
+            }
+            else
+            {
+                // Одобренный свой файл и внешняя ссылка доступны анонимно: платформа
+                // загрузит их по адресу и закеширует.
+                source = ImageSource.FromUri(new Uri(imageUrl));
+            }
+        }
+        catch (BarberSearchApiException)
+        {
+            // Кадр не пришёл: остаются инициалы, состояние проверки видно бейджем.
+        }
+        catch (HttpRequestException)
+        {
+            // Сеть недоступна: заглушка с инициалами остаётся на месте.
+        }
+        catch (OperationCanceledException)
+        {
+            // Отмена транспорта: показывать нечего, как и у очередей модерации.
+        }
+        catch (ArgumentException)
+        {
+            // Адрес не сложился в URI: картинка не показывается, инициалы остаются.
+        }
+
+        if (generation != _avatarGeneration)
+        {
+            return;
+        }
+
+        ApplyAvatarImage(source);
+    }
+
+    /// <summary>
+    /// Применяет картинку аватара: <c>null</c> возвращает заглушку с инициалами.
+    /// </summary>
+    /// <param name="source">Готовая картинка либо <c>null</c>, если показывать нечего.</param>
+    private void ApplyAvatarImage(ImageSource? source)
+    {
+        AvatarImage.Source = source;
+        AvatarImage.IsVisible = source is not null;
     }
 
     /// <summary>

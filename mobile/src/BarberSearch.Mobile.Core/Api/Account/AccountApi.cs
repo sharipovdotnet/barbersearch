@@ -1,15 +1,17 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using BarberSearch.Contracts.Auth.ChangePassword;
 using BarberSearch.Contracts.Auth.EmailChange;
 using BarberSearch.Contracts.Auth.Me;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Contracts.Users.UpdateUserProfile;
+using BarberSearch.Mobile.Core.Media;
 
 namespace BarberSearch.Mobile.Core.Api.Account;
 
 /// <summary>
-/// HTTP-клиент аккаунта: сессия, профиль, смена пароля и заявка на смену email.
+/// HTTP-клиент аккаунта: сессия, профиль, аватар, смена пароля и заявка на смену email.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,11 +22,18 @@ namespace BarberSearch.Mobile.Core.Api.Account;
 /// именно его.
 /// </para>
 /// <para>
-/// <c>204</c> тело не читает: успех — это отсутствие ошибки. Тело запроса собирается из
-/// контрактов бэкенда, чтобы расхождение ломало сборку, а не отправку.
+/// Аватар живёт в агрегате пользователя, а не в профиле барбера: <c>api/users/me/avatar</c>
+/// загружает и удаляет кадр аккаунта, который у барбера показывается в открытой карточке.
+/// Загрузка — <c>multipart/form-data</c> с одной частью <c>file</c>; сервер принимает её в
+/// премодерацию, поэтому ответ <c>201</c> несёт ещё и статус проверки.
+/// </para>
+/// <para>
+/// <c>204</c> тело не читает: успех — это отсутствие ошибки. Единственное исключение —
+/// загрузка аватара: её <c>201</c> читается после проверки статуса. Тело запроса собирается
+/// из контрактов бэкенда, чтобы расхождение ломало сборку, а не отправку.
 /// </para>
 /// </remarks>
-public sealed class AccountApi : IAccountApi
+public sealed class AccountApi : IAccountApi, IAccountAvatarApi
 {
     private readonly HttpClient _httpClient;
 
@@ -100,6 +109,48 @@ public sealed class AccountApi : IAccountApi
     }
 
     /// <inheritdoc />
+    public async Task<AvatarUploadResponse> UploadAvatarAsync(
+        PortfolioImage image,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+
+        using var form = new MultipartFormDataContent();
+
+        var fileContent = new ByteArrayContent(image.Bytes);
+
+        // Имя части задаёт вызывающий код: сервер ищет файл по имени file, а MIME-тип
+        // перепроверяет по сигнатуре, поэтому заголовок — подсказка, а не доверие.
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(image.ContentType);
+        form.Add(fileContent, "file", image.FileName);
+
+        using var response = await _httpClient
+            .PostAsync("api/users/me/avatar", form, cancellationToken)
+            .ConfigureAwait(false);
+
+        await ThrowIfFailedAsync(response, cancellationToken).ConfigureAwait(false);
+
+        // 201 несёт адрес нового кадра и статус премодерации: без него экран не покажет
+        // бейдж «На проверке», поэтому пустой ответ — ошибка клиента, а не успех.
+        var uploaded = await response.Content
+            .ReadFromJsonAsync<AvatarUploadResponse>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        return uploaded ?? throw new InvalidOperationException("The API returned an empty avatar response.");
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAvatarAsync(CancellationToken cancellationToken = default)
+    {
+        // Идемпотентно: 204 приходит и когда аватара не было, тело не читается.
+        using var response = await _httpClient
+            .DeleteAsync("api/users/me/avatar", cancellationToken)
+            .ConfigureAwait(false);
+
+        await ThrowIfFailedAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task ChangePasswordAsync(
         string currentPassword,
         string newPassword,
@@ -156,8 +207,9 @@ public sealed class AccountApi : IAccountApi
     /// Бросает разобранную ошибку, если ответ неуспешный.
     /// </summary>
     /// <remarks>
-    /// Успешные ответы здесь только <c>204</c>: тело не читается ни у одного из запросов,
-    /// поэтому общая проверка статуса — единственное, что нужно.
+    /// Успех проверяется до чтения тела: <c>204</c> у большинства запросов и <c>201</c> у
+    /// загрузки аватара. Единая проверка освобождает вызывающий код от повторов и не даёт
+    /// прочитать ProblemDetails как успешный ответ.
     /// </remarks>
     private static async Task ThrowIfFailedAsync(
         HttpResponseMessage response,

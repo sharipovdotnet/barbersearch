@@ -1,8 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
+using BarberSearch.Contracts.Users.Me;
+using BarberSearch.Domain.Common;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
@@ -34,6 +38,13 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// запрашивается лениво — только когда пикер впервые открыли — и тоже лечится
 /// автоповтором, но своим: он живёт, пока пикер открыт, и останавливается вместе с ним.
 /// </para>
+/// <para>
+/// Аватар — отдельный срез: карточка мастера отдаёт только одобренный и не скрытый кадр,
+/// поэтому состояние проверки и сырой URL читаются из профиля аккаунта
+/// (<c>GET api/users/me</c>). Сбой этого чтения не превращает прочитанную карточку в
+/// ошибку: раздел остаётся с тем, что дала карточка. Загрузка и удаление — записи, они
+/// не повторяются автоматически.
+/// </para>
 /// </remarks>
 public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IBarberCabinetSection
 {
@@ -46,6 +57,8 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
     private readonly IBarberProfileApi _profileApi;
     private readonly IBarberSearchApi _searchApi;
+    private readonly IAccountAvatarApi _avatarApi;
+    private readonly IPortfolioPhotoPicker _photoPicker;
     private readonly TimeProvider _timeProvider;
     private readonly AutoRetryLoop _autoRetry;
     private readonly AutoRetryLoop _specializationsAutoRetry;
@@ -55,11 +68,22 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private bool _isPageVisible;
     private bool _isCatalogLoaded;
 
+    // Аватар из /me: null, пока профиль аккаунта не прочитан. Карточка даёт только
+    // одобренный кадр, поэтому её URL — запасной вариант на случай сбоя этого чтения.
+    private AccountAvatar? _accountAvatar;
+    private string? _cardAvatarUrl;
+    private bool _isAvatarUploading;
+    private bool _isAvatarDeleting;
+    private string? _avatarError;
+    private string? _avatarAnnouncement;
+
     /// <summary>
     /// Создаёт раздел профиля.
     /// </summary>
     /// <param name="profileApi">Собственная карточка и мутации прайса.</param>
     /// <param name="searchApi">Публичный справочник специализаций.</param>
+    /// <param name="avatarApi">Аватар аккаунта: состояние проверки, загрузка и удаление.</param>
+    /// <param name="photoPicker">Системный выбор файла с подготовкой кадра в приложении.</param>
     /// <param name="timeProvider">Часы: время последнего чтения показывает шапка.</param>
     /// <param name="autoRetry">
     /// Цикл автоповтора карточки; <c>null</c> — собственный цикл с обычным расписанием.
@@ -72,16 +96,22 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     public BarberCabinetProfileViewModel(
         IBarberProfileApi profileApi,
         IBarberSearchApi searchApi,
+        IAccountAvatarApi avatarApi,
+        IPortfolioPhotoPicker photoPicker,
         TimeProvider timeProvider,
         AutoRetryLoop? autoRetry = null,
         AutoRetryLoop? specializationsAutoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(profileApi);
         ArgumentNullException.ThrowIfNull(searchApi);
+        ArgumentNullException.ThrowIfNull(avatarApi);
+        ArgumentNullException.ThrowIfNull(photoPicker);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _profileApi = profileApi;
         _searchApi = searchApi;
+        _avatarApi = avatarApi;
+        _photoPicker = photoPicker;
         _timeProvider = timeProvider;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
@@ -370,6 +400,165 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     public bool HasAvailableSpecializations => AvailableSpecializations.Count > 0;
 
     /// <summary>
+    /// Сырой URL аватара: состояние аккаунта важнее карточки, пока оно прочитано.
+    /// </summary>
+    /// <remarks>
+    /// Адрес остаётся относительным: в абсолютный его разворачивает <c>MediaUrl.Resolve</c>
+    /// на стороне представления, как и у фотографий портфолио.
+    /// </remarks>
+    public string? AvatarUrl => _accountAvatar is not null
+        ? _accountAvatar.Url
+        : _cardAvatarUrl;
+
+    /// <summary>
+    /// Аватар есть и не скрыт администратором: вместо инициалов показывается кадр.
+    /// </summary>
+    public bool HasAvatar => !IsAvatarBlocked && AvatarUrl is not null;
+
+    /// <summary>
+    /// Вместо кадра показываются инициалы.
+    /// </summary>
+    public bool ShowInitials => !HasAvatar;
+
+    /// <summary>
+    /// Фото скрыто администратором: публично его не видно, но владелец видит состояние.
+    /// </summary>
+    public bool IsAvatarBlocked => _accountAvatar?.IsBlocked == true;
+
+    /// <summary>
+    /// Есть что сказать о проверке: кадр не скрыт и ждёт решения либо отклонён.
+    /// </summary>
+    public bool HasAvatarStatus =>
+        VisibleAvatarStatus is PhotoModerationStatus.Pending or PhotoModerationStatus.Rejected;
+
+    /// <summary>
+    /// Состояние проверки: «На проверке», «Отклонено» или <c>null</c>.
+    /// </summary>
+    public string? AvatarStatusText => VisibleAvatarStatus switch
+    {
+        PhotoModerationStatus.Pending => Loc.T("На проверке"),
+        PhotoModerationStatus.Rejected => Loc.T("Отклонено"),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Машинный код состояния проверки для триггеров XAML: <c>pending</c>, <c>rejected</c>
+    /// или пустая строка.
+    /// </summary>
+    public string AvatarStatusKind => VisibleAvatarStatus switch
+    {
+        PhotoModerationStatus.Pending => "pending",
+        PhotoModerationStatus.Rejected => "rejected",
+        _ => string.Empty,
+    };
+
+    /// <summary>
+    /// Администратор отклонил кадр и назвал причину.
+    /// </summary>
+    public bool HasAvatarRejection =>
+        VisibleAvatarStatus == PhotoModerationStatus.Rejected
+        && !string.IsNullOrWhiteSpace(_accountAvatar?.RejectionReason);
+
+    /// <summary>
+    /// Причина отказа администратора: «Причина: …»; <c>null</c>, если её нет.
+    /// </summary>
+    public string? AvatarRejectionText => HasAvatarRejection
+        ? Loc.T("Причина: {0}", _accountAvatar?.RejectionReason ?? string.Empty)
+        : null;
+
+    /// <summary>
+    /// Пояснение к скрытому администратором фото.
+    /// </summary>
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Свойство связано XAML: статическое свойство сломало бы привязку.")]
+    public string AvatarBlockedText => Loc.T("Фото скрыто администратором");
+
+    /// <summary>
+    /// Что делать со скрытым фото: новое появится публично после проверки.
+    /// </summary>
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Свойство связано XAML: статическое свойство сломало бы привязку.")]
+    public string AvatarBlockedHint => Loc.T(
+        "Его не видно публично. Новое фото появится публично после проверки, а вернуть старое может только администратор.");
+
+    /// <summary>
+    /// Аватар можно удалить: показан хотя бы один сырой адрес.
+    /// </summary>
+    public bool CanDeleteAvatar => AvatarUrl is not null;
+
+    /// <summary>
+    /// Подпись кнопки аватара: «Загрузить фото», «Изменить фото» или «Загрузить другое фото».
+    /// </summary>
+    public string AvatarActionText =>
+        IsAvatarBlocked || VisibleAvatarStatus == PhotoModerationStatus.Rejected
+            ? Loc.T("Загрузить другое фото")
+            : AvatarUrl is not null
+                ? Loc.T("Изменить фото")
+                : Loc.T("Загрузить фото");
+
+    /// <summary>
+    /// Аватар можно менять: сейчас нет запроса.
+    /// </summary>
+    public bool CanChangeAvatar => !IsAvatarBusy;
+
+    /// <summary>
+    /// Идёт загрузка аватара.
+    /// </summary>
+    public bool IsAvatarUploading
+    {
+        get => _isAvatarUploading;
+        private set
+        {
+            if (SetProperty(ref _isAvatarUploading, value))
+            {
+                NotifyAvatarBusyState();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Идёт удаление аватара.
+    /// </summary>
+    public bool IsAvatarDeleting
+    {
+        get => _isAvatarDeleting;
+        private set
+        {
+            if (SetProperty(ref _isAvatarDeleting, value))
+            {
+                NotifyAvatarBusyState();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Идёт любое действие с аватаром: кнопки среза заблокированы.
+    /// </summary>
+    public bool IsAvatarBusy => IsAvatarUploading || IsAvatarDeleting;
+
+    /// <summary>
+    /// Причина сбоя действия с аватаром; <c>null</c>, когда ошибки нет.
+    /// </summary>
+    public string? AvatarError
+    {
+        get => _avatarError;
+        private set => SetProperty(ref _avatarError, value);
+    }
+
+    /// <summary>
+    /// Сообщение после успешного действия с аватаром.
+    /// </summary>
+    public string? AvatarAnnouncement
+    {
+        get => _avatarAnnouncement;
+        private set => SetProperty(ref _avatarAnnouncement, value);
+    }
+
+    /// <summary>
     /// Просит страницу открыть правку карточки.
     /// </summary>
     public event EventHandler? OpenEditRequested;
@@ -420,6 +609,13 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsSignInRequired = false;
         IsSpecializationPickerOpen = false;
         SpecializationError = null;
+        _accountAvatar = null;
+        _cardAvatarUrl = null;
+        IsAvatarUploading = false;
+        IsAvatarDeleting = false;
+        AvatarError = null;
+        AvatarAnnouncement = null;
+        NotifyAvatarState();
         Profile = null;
         ClearCollections();
     }
@@ -769,6 +965,107 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     }
 
     /// <summary>
+    /// Выбирает новое фото аватара и загружает его.
+    /// </summary>
+    /// <remarks>
+    /// Выбор и загрузка — одно действие: отмена пикера ничего не меняет и не показывает
+    /// ошибку. Любая загрузка ждёт проверки, поэтому успех сразу показывает «На проверке»,
+    /// а публично кадр появится только после решения администратора.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [RelayCommand]
+    private async Task ChangeAvatarAsync(CancellationToken cancellationToken)
+    {
+        if (IsAvatarBusy)
+        {
+            return;
+        }
+
+        AvatarError = null;
+        AvatarAnnouncement = null;
+        IsAvatarUploading = true;
+
+        try
+        {
+            var image = await _photoPicker.PickAsync(cancellationToken);
+
+            if (image is null)
+            {
+                return;
+            }
+
+            var uploaded = await _avatarApi.UploadAvatarAsync(image, cancellationToken);
+
+            _accountAvatar = new(
+                uploaded.AvatarUrl,
+                IsBlocked: false,
+                uploaded.ModerationStatus,
+                RejectionReason: null);
+
+            AvatarAnnouncement = Loc.T("Аватар загружен и ждёт проверки.");
+            NotifyAvatarState();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Человек ушёл со страницы: пикер закрыт, причина не показывается.
+        }
+        catch (PortfolioImageException exception)
+        {
+            AvatarError = PortfolioPhotoErrors.DescribePicker(exception.Kind).Message;
+        }
+        catch (Exception exception)
+        {
+            AvatarError = AvatarErrors.Describe(exception);
+        }
+        finally
+        {
+            IsAvatarUploading = false;
+        }
+    }
+
+    /// <summary>
+    /// Удаляет аватар: фото исчезает и публично, и в кабинете.
+    /// </summary>
+    /// <remarks>
+    /// Подтверждение — в интерфейсе: Core не показывает диалогов, а страница знает, как
+    /// спросить человека. Удаление необратимо: вернуть старый кадр может только администратор.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    [RelayCommand]
+    private async Task DeleteAvatarAsync(CancellationToken cancellationToken)
+    {
+        if (IsAvatarBusy || AvatarUrl is null)
+        {
+            return;
+        }
+
+        AvatarError = null;
+        AvatarAnnouncement = null;
+        IsAvatarDeleting = true;
+
+        try
+        {
+            await _avatarApi.DeleteAvatarAsync(cancellationToken);
+
+            _accountAvatar = new(null, false, PhotoModerationStatus.Approved, null);
+            AvatarAnnouncement = Loc.T("Аватар удалён.");
+            NotifyAvatarState();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Отмена вызывающим: кадр на сервере остался, ошибку не показываем.
+        }
+        catch (Exception exception)
+        {
+            AvatarError = AvatarErrors.Describe(exception);
+        }
+        finally
+        {
+            IsAvatarDeleting = false;
+        }
+    }
+
+    /// <summary>
     /// Пересчитывает поля, зависящие от карточки.
     /// </summary>
     partial void OnProfileChanged(BarberProfileResponse? value) => NotifyProfileState();
@@ -809,6 +1106,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             var profile = await _profileApi.GetOwnAsync(profileId, cancellationToken);
 
             ApplyProfile(profile);
+            await LoadAvatarAsync(cancellationToken);
             _lastFailureKind = ApiFailureKind.None;
             ErrorMessage = null;
 
@@ -901,7 +1199,46 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         AddRange(Goodies, profile.Goodies);
 
         RebuildAvailableSpecializations();
+        _cardAvatarUrl = profile.AvatarUrl;
         NotifyProfileState();
+        NotifyAvatarState();
+    }
+
+    /// <summary>
+    /// Дополняет карточку состоянием аватара из профиля аккаунта.
+    /// </summary>
+    /// <remarks>
+    /// Карточка мастера отдаёт только одобренный и не скрытый кадр, поэтому владелец не
+    /// увидел бы ни «На проверке», ни причину отказа. Сбой этого чтения — не ошибка раздела:
+    /// состояние остаётся прежним, а карточка уже показана. Автоповтор сюда не относится:
+    /// он лечит чтение самой карточки, а не дополнение к ней.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Задача чтения.</returns>
+    private async Task LoadAvatarAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var me = await _avatarApi.GetMyProfileAsync(cancellationToken);
+
+            _accountAvatar = new AccountAvatar(
+                me.AvatarUrl,
+                me.IsAvatarBlocked,
+                me.AvatarModerationStatus,
+                me.AvatarRejectionReason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Отмена вызывающим: состояние аватара не перечитано, прежнее остаётся на экране.
+        }
+        catch (Exception)
+        {
+            // Профиль аккаунта — дополнение: без него остаётся одобренный кадр карточки.
+        }
+        finally
+        {
+            NotifyAvatarState();
+        }
     }
 
     /// <summary>
@@ -1130,6 +1467,65 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         OnPropertyChanged(nameof(CanAddPhoto));
         OnPropertyChanged(nameof(IsPhotoLimitReached));
     }
+
+    /// <summary>
+    /// Состояние проверки аватара, которое видно владельцу: скрытый кадр статуса не имеет.
+    /// </summary>
+    private PhotoModerationStatus? VisibleAvatarStatus =>
+        IsAvatarBlocked ? null : _accountAvatar?.Status;
+
+    /// <summary>
+    /// Сообщает обо всех вычисляемых полях среза аватара.
+    /// </summary>
+    /// <remarks>
+    /// Один вызов на любое изменение состояния — прочитанный <c>/me</c>, ответ карточки,
+    /// успешная загрузка или удаление: иначе представление показало бы старый кадр с новым
+    /// бейджем.
+    /// </remarks>
+    private void NotifyAvatarState()
+    {
+        OnPropertyChanged(nameof(AvatarUrl));
+        OnPropertyChanged(nameof(HasAvatar));
+        OnPropertyChanged(nameof(ShowInitials));
+        OnPropertyChanged(nameof(IsAvatarBlocked));
+        OnPropertyChanged(nameof(HasAvatarStatus));
+        OnPropertyChanged(nameof(AvatarStatusText));
+        OnPropertyChanged(nameof(AvatarStatusKind));
+        OnPropertyChanged(nameof(HasAvatarRejection));
+        OnPropertyChanged(nameof(AvatarRejectionText));
+        OnPropertyChanged(nameof(AvatarBlockedText));
+        OnPropertyChanged(nameof(AvatarBlockedHint));
+        OnPropertyChanged(nameof(CanDeleteAvatar));
+        OnPropertyChanged(nameof(AvatarActionText));
+        OnPropertyChanged(nameof(CanChangeAvatar));
+        OnPropertyChanged(nameof(IsAvatarUploading));
+        OnPropertyChanged(nameof(IsAvatarDeleting));
+        OnPropertyChanged(nameof(IsAvatarBusy));
+        OnPropertyChanged(nameof(AvatarError));
+        OnPropertyChanged(nameof(AvatarAnnouncement));
+    }
+
+    /// <summary>
+    /// Сообщает о занятости среза аватара: от неё зависят доступность и подсказка действий.
+    /// </summary>
+    private void NotifyAvatarBusyState()
+    {
+        OnPropertyChanged(nameof(IsAvatarBusy));
+        OnPropertyChanged(nameof(CanChangeAvatar));
+    }
+
+    /// <summary>
+    /// Аватар из <c>GET api/users/me</c>: сырой URL и состояние проверки.
+    /// </summary>
+    /// <param name="Url">Относительный media-URL; <c>null</c>, если фото нет.</param>
+    /// <param name="IsBlocked">Фото скрыто администратором.</param>
+    /// <param name="Status">Допуск к публикации.</param>
+    /// <param name="RejectionReason">Причина отказа администратора либо <c>null</c>.</param>
+    private sealed record AccountAvatar(
+        string? Url,
+        bool IsBlocked,
+        PhotoModerationStatus Status,
+        string? RejectionReason);
 
     /// <summary>
     /// Куда адресована мутация: по этому выбирается текст отказа <c>403</c>.
