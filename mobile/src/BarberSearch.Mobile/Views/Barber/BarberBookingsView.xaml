@@ -155,6 +155,17 @@
                                 LineBreakMode="WordWrap"
                                 Text="{Binding TodayTruncatedText}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <!--
+                                Записать клиента: в дне — сразу под сводкой, в «Ближайших» —
+                                перед первой карточкой. Обе вкладки начинают список действием,
+                                а свежесть списка осталась внизу, в футере.
+                            -->
+                            <Button
+                                Margin="0,8,0,0"
+                                Command="{Binding CreateBookingCommand}"
+                                IsVisible="{Binding ShowCreateBooking}"
+                                Text="{loc:Translate Key='Записать клиента'}" />
                         </VerticalStackLayout>
                     </CollectionView.Header>
 
@@ -451,14 +462,6 @@
                                             LineBreakMode="WordWrap"
                                             Text="{Binding ActionError}"
                                             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                                        <Button
-                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                                            Clicked="OnReloadRowClicked"
-                                            HorizontalOptions="Start"
-                                            IsVisible="{Binding CanReloadAfterError}"
-                                            Text="{loc:Translate Key='Повторить'}"
-                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-
                                     </VerticalStackLayout>
                                 </Border>
 
@@ -481,7 +484,10 @@
                                     VerticalOptions="Center" />
                             </HorizontalStackLayout>
 
-                            <!-- Ошибка следующей страницы: показанные строки остаются. -->
+                            <!--
+                                Ошибка следующей страницы: показанные строки остаются. Отдельной
+                                кнопки нет — повторяет «Дальше» в пейджере ниже.
+                            -->
                             <VerticalStackLayout Spacing="8">
                                 <VerticalStackLayout.Triggers>
                                     <DataTrigger
@@ -495,12 +501,6 @@
                                     LineBreakMode="WordWrap"
                                     Text="{Binding PageError}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                                <Button
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                                    Command="{Binding LoadMoreCommand}"
-                                    HorizontalOptions="Start"
-                                    Text="{loc:Translate Key='Повторить'}"
-                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                             </VerticalStackLayout>
 
                             <!-- Страницы: «История» и «Ближайшие» листаются, день — нет. -->
@@ -527,11 +527,6 @@
                                     Text="{loc:Translate Key='Дальше'}"
                                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                             </Grid>
-
-                            <!-- Записать клиента вручную: главное действие раздела. -->
-                            <Button
-                                Command="{Binding CreateBookingCommand}"
-                                Text="{loc:Translate Key='Записать клиента'}" />
 
                             <!-- Подпись свежести списка; до первого ответа её нет. -->
                             <Label FontSize="12" Text="{Binding UpdatedAtText}">
@@ -571,6 +566,7 @@
                     <Button
                         Command="{Binding CreateBookingCommand}"
                         HorizontalOptions="Center"
+                        IsVisible="{Binding ShowCreateBooking}"
                         Text="{loc:Translate Key='Записать клиента'}" />
                 </VerticalStackLayout>
             </ScrollView>

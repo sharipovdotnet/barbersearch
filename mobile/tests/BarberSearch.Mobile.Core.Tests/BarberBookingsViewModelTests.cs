@@ -114,6 +114,24 @@ public sealed class BarberBookingsViewModelTests
     }
 
     [Fact]
+    public async Task ShowCreateBooking_HiddenInHistoryOnly()
+    {
+        var harness = new Harness();
+
+        await harness.LoadSingleUpcomingAsync();
+
+        Assert.True(harness.ViewModel.ShowCreateBooking);
+
+        await harness.ViewModel.SelectPastCommand.ExecuteAsync(null);
+
+        Assert.False(harness.ViewModel.ShowCreateBooking);
+
+        await harness.ViewModel.SelectUpcomingCommand.ExecuteAsync(null);
+
+        Assert.True(harness.ViewModel.ShowCreateBooking);
+    }
+
+    [Fact]
     public async Task Pagination_GoNextThenGoPrev_LoadsSecondPageOnceAndReturnsCache()
     {
         var harness = new Harness();
@@ -238,14 +256,13 @@ public sealed class BarberBookingsViewModelTests
         Assert.False(confirmed);
         Assert.Equal("Запись не найдена.", item.ActionError);
         Assert.True(item.HasActionError);
-        Assert.False(item.CanReloadAfterError);
         Assert.Null(harness.ViewModel.Announcement);
         Assert.False(item.IsBusy);
         Assert.NotEqual(ConfirmFailedText, item.ActionError);
     }
 
     [Fact]
-    public async Task CancelAsync_Conflict_ShowsConflictTextAndAsksToReload()
+    public async Task CancelAsync_Conflict_ShowsConflictText()
     {
         var harness = new Harness();
         var item = await harness.LoadSingleUpcomingAsync(BookingStatus.Pending);
@@ -257,7 +274,6 @@ public sealed class BarberBookingsViewModelTests
 
         Assert.False(cancelled);
         Assert.Equal("Запись уже изменилась — обновите список.", item.ActionError);
-        Assert.True(item.CanReloadAfterError);
         Assert.Null(harness.ViewModel.Announcement);
     }
 

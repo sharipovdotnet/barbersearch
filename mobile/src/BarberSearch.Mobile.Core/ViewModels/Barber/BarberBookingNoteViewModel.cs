@@ -182,7 +182,7 @@ public sealed partial class BarberBookingNoteViewModel : ObservableObject
         }
         catch (BarberSearchApiException exception)
         {
-            ErrorMessage = BarberCabinetText.ActionError(exception, SaveFailedText).Message;
+            ErrorMessage = BarberCabinetText.ActionError(exception, SaveFailedText);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -393,12 +393,6 @@ public partial class BarberBookingsView : ContentView
     }
 
     /// <summary>
-    /// Перечитывает список после <c>409</c>: строка разошлась с сервером.
-    /// </summary>
-    private async void OnReloadRowClicked(object? sender, EventArgs e) =>
-        await _viewModel.ReloadAsync();
-
-    /// <summary>
     /// Звонит клиенту: телефон в строке — единственное место, где PII становится ссылкой.
     /// </summary>
     private async void OnPhoneClicked(object? sender, EventArgs e)

@@ -228,104 +228,90 @@ public static class BarberCabinetText
     }
 
     /// <summary>
-    /// Причина неудачного действия с записью и признак «перечитать список».
+    /// Причина неудачного действия с записью.
     /// </summary>
     /// <param name="exception">Исключение запроса.</param>
     /// <param name="fallback">Запасной текст действия.</param>
-    /// <returns>Текст и необходимость перечитать строку.</returns>
-    public static BarberActionFailure ActionError(Exception? exception, string fallback)
+    /// <returns>Текст для человека.</returns>
+    public static string ActionError(Exception? exception, string fallback)
     {
         if (exception is HttpRequestException or OperationCanceledException)
         {
-            return new BarberActionFailure(NetworkErrorText, false);
+            return NetworkErrorText;
         }
 
         if (exception is not BarberSearchApiException apiException)
         {
-            return new BarberActionFailure(fallback, false);
+            return fallback;
         }
 
         if (HasCode(apiException, MarkNoShowTooEarlyCode))
         {
-            return new BarberActionFailure(
-                Loc.T("Неявку нельзя отметить до начала визита."),
-                false);
+            return Loc.T("Неявку нельзя отметить до начала визита.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.BarberNoteTooLong))
         {
-            return new BarberActionFailure(
-                Loc.T("Слишком длинная заметка — максимум 1000 символов."),
-                false);
+            return Loc.T("Слишком длинная заметка — максимум 1000 символов.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.CancelReasonRequired))
         {
-            return new BarberActionFailure(Loc.T("Укажите причину отмены."), false);
+            return Loc.T("Укажите причину отмены.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.CancelReasonTooLong))
         {
-            return new BarberActionFailure(
-                Loc.T("Слишком длинная причина — максимум 500 символов."),
-                false);
+            return Loc.T("Слишком длинная причина — максимум 500 символов.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.PriceRequired))
         {
-            return new BarberActionFailure(Loc.T("Укажите цену."), false);
+            return Loc.T("Укажите цену.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.PriceNegative))
         {
-            return new BarberActionFailure(Loc.T("Цена не может быть отрицательной."), false);
+            return Loc.T("Цена не может быть отрицательной.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.PriceTooLarge))
         {
-            return new BarberActionFailure(
-                Loc.T("Слишком большая цена — максимум 99 999 999,99 ₽."),
-                false);
+            return Loc.T("Слишком большая цена — максимум 99 999 999,99 ₽.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.PricePrecision))
         {
-            return new BarberActionFailure(
-                Loc.T("Цена — не больше двух знаков после запятой."),
-                false);
+            return Loc.T("Цена — не больше двух знаков после запятой.");
         }
 
         if (HasCode(apiException, ApiErrorCodes.Booking.PriceStatus))
         {
-            return new BarberActionFailure(
-                Loc.T("Цену нельзя изменить у отменённой записи или у неявки."),
-                false);
+            return Loc.T("Цену нельзя изменить у отменённой записи или у неявки.");
         }
 
         if (apiException.StatusCode == HttpStatusCode.NotFound
             || HasCode(apiException, ApiErrorCodes.Booking.NotFound))
         {
-            return new BarberActionFailure(Loc.T("Запись не найдена."), false);
+            return Loc.T("Запись не найдена.");
         }
 
         if (apiException.StatusCode == HttpStatusCode.Forbidden
             || HasCode(apiException, ApiErrorCodes.Auth.Forbidden))
         {
-            return new BarberActionFailure(Loc.T("Это запись другого мастера."), false);
+            return Loc.T("Это запись другого мастера.");
         }
 
         if (apiException.StatusCode == HttpStatusCode.Conflict)
         {
-            return new BarberActionFailure(
-                Loc.T("Запись уже изменилась — обновите список."),
-                true);
+            return Loc.T("Запись уже изменилась — обновите список.");
         }
 
         return apiException.StatusCode switch
         {
-            HttpStatusCode.Unauthorized => new BarberActionFailure(SessionExpiredText, false),
-            HttpStatusCode.TooManyRequests => new BarberActionFailure(TooManyRequestsText, false),
-            _ => new BarberActionFailure(fallback, false),
+            HttpStatusCode.Unauthorized => SessionExpiredText,
+            HttpStatusCode.TooManyRequests => TooManyRequestsText,
+            _ => fallback,
         };
     }
 
@@ -554,16 +540,6 @@ public static class BarberCabinetText
     private static bool HasCode(BarberSearchApiException exception, string code) =>
         exception.ErrorCodes.Contains(code, StringComparer.Ordinal);
 }
-
-/// <summary>
-/// Результат неудачного действия мастера с записью.
-/// </summary>
-/// <param name="Message">Текст для человека.</param>
-/// <param name="CanReload">
-/// <c>true</c> для <c>409</c>: запись уже изменилась, и помочь может только перечитывание
-/// списка. Кнопка «Обновить» показывается лишь при этом признаке.
-/// </param>
-public sealed record BarberActionFailure(string Message, bool CanReload);
 
 /// <summary>
 /// Результат неудачного создания записи клиента мастером.

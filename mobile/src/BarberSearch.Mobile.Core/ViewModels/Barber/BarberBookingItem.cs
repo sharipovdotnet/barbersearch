@@ -198,12 +198,6 @@ public sealed partial class BarberBookingItem : ObservableObject
     private string? _actionError;
 
     /// <summary>
-    /// Ошибка действия значит «перечитай список» (<c>409</c>).
-    /// </summary>
-    [ObservableProperty]
-    private bool _canReloadAfterError;
-
-    /// <summary>
     /// Дата строки в поясе устройства: «сб, 15 нояб.».
     /// </summary>
     public string DateText => IsGap
@@ -426,12 +420,7 @@ public sealed partial class BarberBookingItem : ObservableObject
     /// Очищает или ставит ошибку действия.
     /// </summary>
     /// <param name="message">Текст ошибки; <c>null</c> очищает её.</param>
-    /// <param name="canReload">Список стоит перечитать (<c>409</c>).</param>
-    public void SetActionError(string? message, bool canReload = false)
-    {
-        ActionError = message;
-        CanReloadAfterError = canReload;
-    }
+    public void SetActionError(string? message) => ActionError = message;
 
     /// <summary>
     /// Применяет подтверждение: <c>Pending → Confirmed</c>.

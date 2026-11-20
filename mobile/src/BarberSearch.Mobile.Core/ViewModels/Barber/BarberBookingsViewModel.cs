@@ -65,8 +65,10 @@ public sealed record BarberGapRequest(DateOnly Date, DateTimeOffset StartAt);
 /// </para>
 /// <para>
 /// Действия не оптимистичны: сервер отвечает <c>204</c> без тела, и строка применяет
-/// результат только после успеха. <c>409</c> возвращает признак «перечитать список»;
-/// список перечитывается по кнопке, а не молча, потому что строка уже разошлась с сервером.
+/// результат только после успеха. <c>409</c> показывает причину в строке — «Запись уже
+/// изменилась — обновите список.»; список перечитывается свайпом-обновлением
+/// (<c>RefreshView</c>/<c>RefreshCommand</c>) или тридцатисекундным обновлением, отдельной
+/// кнопки для этого нет.
 /// </para>
 /// </remarks>
 public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberCabinetSection
@@ -213,6 +215,12 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
     /// Видна ли «История».
     /// </summary>
     public bool IsPast => View == BarberBookingsView.Past;
+
+    /// <summary>
+    /// Показывать действие «Записать клиента»: в «Истории» его нет — новая запись всё равно
+    /// попадёт в «Ближайшие», а прошлое читают, а не дописывают.
+    /// </summary>
+    public bool ShowCreateBooking => !IsPast;
 
     /// <summary>
     /// Заголовок дня рисуется только на «Сегодня».
@@ -651,7 +659,7 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
     }
 
     /// <summary>
-    /// Повторяет упавшее первое чтение — сразу, по кнопке.
+    /// Повторяет упавшее первое чтение — сразу, без паузы.
     /// </summary>
     [RelayCommand]
     private async Task RetryAsync()
@@ -722,12 +730,6 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
     [RelayCommand]
     private async Task SelectPastAsync() =>
         await SelectViewAsync(BarberBookingsView.Past);
-
-    /// <summary>
-    /// Догружает или показывает следующую страницу активного списка.
-    /// </summary>
-    [RelayCommand]
-    private async Task LoadMoreAsync() => await GoNextCoreAsync();
 
     /// <summary>
     /// Показывает следующую страницу: из кэша или с сервера.
@@ -1284,9 +1286,7 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
         Exception exception,
         string fallback)
     {
-        var failure = BarberCabinetText.ActionError(exception, fallback);
-
-        item.SetActionError(failure.Message, failure.CanReload);
+        item.SetActionError(BarberCabinetText.ActionError(exception, fallback));
     }
 
     /// <summary>
@@ -1502,6 +1502,7 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
         OnPropertyChanged(nameof(IsToday));
         OnPropertyChanged(nameof(IsUpcoming));
         OnPropertyChanged(nameof(IsPast));
+        OnPropertyChanged(nameof(ShowCreateBooking));
         OnPropertyChanged(nameof(ShowDayHeader));
         OnPropertyChanged(nameof(DayHeadingText));
         OnPropertyChanged(nameof(DaySubtitleText));
